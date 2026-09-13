@@ -993,6 +993,36 @@
       "status_note": "Successor to CALEXITS-TIMING-HYGIENE (closed 2026-08-22 with the audit as deliverable). Items are independent and land through the normal gauntlet; top two by yield are H1 origin pinning and H6 witness-cache ownership.",
       "stop_card": null
     },
+    "CALEXITS-RACE-FLAKE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-08-handoff-redo/99gl-terminal-review-d176.md (first hosted failure of test_forced_auto_maintenance_mutation_reproduces_cleanup_race on 3.14 at 7d1cffb0; passed locally in the same replay)",
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/32-replay-5-integ-ee82373b.md (second hosted failure, 3.11, run 34762906269 at c59bdc57; passed on main 64fc4e27, on PR #334's run, locally in replays 5 and 6, and on rerun)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALEXITS-RACE-FLAKE-01/acceptance",
+          "label": "CALEXITS-RACE-FLAKE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A root cause for the intermittent hosted failure of tests.test_calibration_exits.CalibrationExitReliabilityTests.test_forced_auto_maintenance_mutation_reproduces_cleanup_race (a race-reproduction positive control that must observe the forced cleanup race) is recorded with the failing assertion's exact expectation, and one of: the reproduction is strengthened so the race is observed deterministically on hosted runners (preferred), or the positive control is bounded by a documented retry with the counterfactual it still kills, or it is confined to the bench with a named hosted skip whose reason is the recorded root cause; two consecutive green hosted matrices on 3.11 and 3.14 after the cure; no test deleted (D-101 addendum II)."
+      },
+      "authority": {
+        "label": "2026-09-13 activation 24b9d3dd (magistrate registration from records 99gl and 32: two hosted failures in six days)",
+        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/32-replay-5-integ-ee82373b.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Stop the hosted-only intermittent failure of the calibration-exits race-reproduction positive control (two failures in six days, each green on rerun and green locally) from blocking merge waves: find why the forced cleanup race is sometimes not observed on ubuntu-latest and cure it without deleting the test.",
+      "id": "CALEXITS-RACE-FLAKE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 195,
+      "status": "queued",
+      "status_note": "2026-09-13: registered from activation 24b9d3dd after the second hosted failure (run 34762906269, 3.11) of a test that passes locally and on rerun; part of the deliberately racy maintenance-ON family the GIT-FIXTURE-MAINTENANCE-SWEEP-01 fence keeps excluded by name. Not started; not night-critical.",
+      "stop_card": null
+    },
     "CANONICAL-JSON-ONE-HOME-01": {
       "acceptance": {
         "evidence": [
