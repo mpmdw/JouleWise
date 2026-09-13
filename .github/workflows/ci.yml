@@ -11,10 +11,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # F2 state generation, F3 explicit docs freshness, F4 historical receipt
-  # semantics, and F5 CLI/strict mock smokes ran identically inside every
-  # matrix job; they run once here instead. Every job below runs on every
-  # push to main and every pull request.
+  # F2 state generation, F4 historical receipt semantics, and F5 CLI/strict
+  # mock smokes ran identically inside every ordinary test-matrix shard; they
+  # run once here instead, and F3 docs freshness is run explicitly here too.
+  # Every job below runs on every push to main and every pull request.
   fences:
     runs-on: ubuntu-latest
     steps:
