@@ -737,7 +737,7 @@ come from the named event log and CSV bytes (registry DG-131/132).
 | r08 | 363 | 0.799845 | 0.9133315 | 0.007586 |
 | r08 | 364 | 0.9133313 | 1.0261726 | 0 |
 
-The event-duration statistic subtracts binary64 epoch values before rounding;
+The event-duration statistic subtracts binary64 (the usual 64-bit floating-point format) epoch values before rounding;
 these displayed relative endpoints use exact subtraction of stored decimal
 strings. Their last digits need not equal the binary64 duration statistic.
 

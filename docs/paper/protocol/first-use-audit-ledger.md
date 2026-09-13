@@ -2,7 +2,7 @@
 
 `built-before` means the body constructs the referent from physical inputs before its first named use.
 `glossed-at-first-use` means the first named use supplies a plain-word definition or an equivalent calculation in the same sentence or paragraph.
-`audience-vocabulary` means a textbook-statistics or plain-English expression the intended metrology/CS professor uses without definition; that class here is exactly: repeatability, repetition, random scatter, complete, completeness, sampler cadence, refused, refuses, missing, malformed, corpus range, degrees of freedom, threshold, exact equality, null hypothesis, tail area, quarantine, append-only, run bundle, full-history checkout, third-party dependencies, cumulative counter, linear programme, infeasible, argmin, and detected.
+`audience-vocabulary` means a textbook-statistics or plain-English expression the intended metrology/CS professor uses without definition; that class here is exactly: repeatability, repetition, random scatter, complete, completeness, sampler cadence, refused, refuses, missing, malformed, corpus range, degrees of freedom, threshold, exact equality, null hypothesis, tail area, quarantine, append-only, run bundle, full-history checkout, third-party dependencies, cumulative counter, linear programme, infeasible, argmin, detected, and measurement interval.
 `forward-pointer-next-paragraph` means the first use carries an explicit cross-reference to a definition in the immediately following paragraph.
 `FAILS` means the term is neither built before nor glossed at first use and therefore requires a prose cure or deletion.
 The inventory excludes literal field names and reason names inside quoted omission sentences, and all text inside `<!-- -->` build notes.
@@ -138,7 +138,8 @@ it is copied into a contract.
 | reintegrate | Combining shared movements and local widths | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
 | onset set / offset set / zero-shift value | Combining shared movements and local widths | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
 | shared lower and upper energy swings | Combining shared movements and local widths | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
-| binary64 / member-envelope integral sum | Record support in two historical model stacks | audience-vocabulary | Binary64 is the usual 64-bit float format; Appendix A.3 defines the nonnegative four-member joule scale that covers the integrals before contrast. |
+| binary64 | Record support in two historical model stacks | glossed-at-first-use | Glossed at its first main-text use as the usual 64-bit floating-point format; Appendix A.3 restates the convention. |
+| member-envelope integral sum | A.3 Formal calibration algorithms | glossed-at-first-use | Named and defined in one sentence of Appendix A.3.10 as the four member integrals summed with absolute contrast weights; used twice after that sentence. |
 | ulp | A.3 Formal calibration algorithms | glossed-at-first-use | The gap between 1 and the next larger representable number. |
 | local sign | Combining shared movements and local widths | glossed-at-first-use | The comparative replay chooses one separately for each block. |
 | local half-width / shared sign | Combining shared movements and local widths | glossed-at-first-use | One sign for energy allowances across all blocks; Section 3 constructs the local half-width from four member residuals. |
@@ -146,7 +147,7 @@ it is copied into a contract.
 | \(R_{cm}\) | Combining shared movements and local widths | glossed-at-first-use | Shared-energy-sign/local-corner sensitivity diagnostic with one shared sign for block-level energy allowances and one local sign per block; it does not replay the same timing shift in every block. |
 | shared-energy-sign/local-corner sensitivity diagnostic / shared-energy-sign/local-corner ratio | Combining shared movements and local widths | glossed-at-first-use | Registered comparative diagnostic that retains scalar energy-allowance signs without claiming that its limit covers the effect of the same timing shift in every block. |
 | two-block fixture / Student-\(t\) critical | Combining shared movements and local widths | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
-| resolution bound | Adding publication safeguards after the ratio | audience-vocabulary | Registered operational resolution guard for assigned-energy differences in one cell. |
+| resolution bound | Adding publication safeguards after the ratio | glossed-at-first-use | Registered operational resolution guard for assigned-energy differences in one cell; its first use in the protocol supplies that definition. |
 | cell floor | Combining shared movements and local widths | glossed-at-first-use | Final gate value for assigned-energy differences in a cell after the publication safeguards of protocol Section P.3. |
 | small-sample multiplier / \(g(n)\) | Comparing the moved-edge limit and point-only value | glossed-at-first-use | A factor that widens a result to allow for limited repetition; its formula follows under publication safeguards. |
 | directional comparison / directional comparisons | Directional comparison | glossed-at-first-use | The expected direction is fixed before collection. |
@@ -163,7 +164,7 @@ it is copied into a contract.
 | measurement interval | Benchmark and metrology lineage | audience-vocabulary | Analyzer reporting duration in the benchmark methodology; distinct from the statistical measurement interval defined in protocol P.3. |
 | statistical measurement interval | Directional comparison | glossed-at-first-use | Protocol P.3 forms this interval from the repeat standard error for the gross phase-energy path. |
 | decision interval | Directional comparison | forward-pointer-next-paragraph | The sign-check interval; the next paragraph in protocol P.3 defines its endpoints by extending the statistical measurement interval by the sum of authenticated deterministic bounds. |
-| deterministic bound | Adding publication safeguards after the ratio | audience-vocabulary | A non-random maximum displacement; the first use denies such a guarantee for unobserved between-reference excursions. Protocol P.3’s Directional comparison defines the authenticated block-record bound used to widen a statistical interval. |
+| deterministic bound | Adding publication safeguards after the ratio | glossed-at-first-use | A non-random maximum displacement; the first use denies such a guarantee for unobserved between-reference excursions. Protocol P.3’s Directional comparison defines the authenticated block-record bound used to widen a statistical interval. |
 | deterministic-bound kinds / interpolation edge | Directional comparison | glossed-at-first-use | Native interval-average records integrate constant reported power and have zero interpolation-bound term; the named interpolation edge belongs to the point-sample fallback, while timing uses separate boundary envelopes. |
 | close-out artifact | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | Post-campaign artifact that checks every required ratio. |
 | signed clearance or shortfall | Directional comparison | glossed-at-first-use | Absolute point estimate minus cell floor, with positive clearance and nonpositive shortfall. |
@@ -293,4 +294,4 @@ The audit also searched the reader-facing draft for empirical outcome branches,
 prospective result-fill markers, the false between-record pause mechanism,
 and the retired any-exceedance falsifier. Historical calibration and record
 support retain their explicit era labels; fixtures retain their arithmetic-only
-labels. Any uncured first use is a failure. Terms inventoried: 262; FAILS: 0.
+labels. Any uncured first use is a failure. Terms inventoried: 263; FAILS: 0.
