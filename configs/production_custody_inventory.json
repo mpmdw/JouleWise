@@ -4,7 +4,7 @@
     "measurement_root": "/Users/edr/code/JouleWise",
     "custody_root": null,
     "ledger_path": "/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl",
-    "notes": "D-176 §10.4 canonical runs root is measurement_root/runs; ledger home is calibration_ledger.DEFAULT_LEDGER_PATH. No separate custody root is attested."
+    "notes": "D-176 \u00a710.4 canonical runs root is measurement_root/runs; ledger home is calibration_ledger.DEFAULT_LEDGER_PATH. No separate custody root is attested."
   },
   {
     "deployment_id": "JouleWise-measurement-20260813",
@@ -40,5 +40,12 @@
     "custody_root": null,
     "ledger_path": "/Users/edr/JouleWise-measurement-20260915-derivation/runs/calibration_observation_ledger.jsonl",
     "notes": "ACCEPTANCE-EPOCH-25G83-01 equivalence night d079-epoch-25g83-derivation-n1-20260915 (DIAGNOSTIC_NO_PACK, t0 2026-09-15 02:56 PDT), successor of the 20260913 plan refused at t0; fresh GitHub clone detached at the handback and inventory commit H. Restore the canonical 76-record ledger byte-exact and authenticate its absolute iCloud custody locators with verify_custody=True; no separate deployment custody root is attested."
+  },
+  {
+    "deployment_id": "JouleWise-measurement-20260916-derivation",
+    "measurement_root": "/Users/edr/JouleWise-measurement-20260916-derivation",
+    "custody_root": null,
+    "ledger_path": "/Users/edr/JouleWise-measurement-20260916-derivation/runs/calibration_observation_ledger.jsonl",
+    "notes": "ACCEPTANCE-EPOCH-25G83-01 equivalence night d079-epoch-25g83-derivation-n1-20260916 (DIAGNOSTIC_NO_PACK, t0 2026-09-16 02:56 PDT), successor of the 20260915 plan that was staged but not armed (census foreign through its install cutoff); fresh GitHub clone detached at the handback and inventory commit H. Restore the canonical 76-record ledger byte-exact and authenticate its absolute iCloud custody locators with verify_custody=True; no separate deployment custody root is attested."
   }
 ]

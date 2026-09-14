@@ -41,22 +41,24 @@ have been assigned to later processes.
 
 ## Purpose of this night
 
-This plan is the SUCCESSOR of `d079-epoch-25g83-derivation-n1-20260913`, which
-fired on 2026-09-13 and was refused at its own t0 census (an interactive
-`claude` session and the ChatGPT desktop app's Codex helper were alive; see
-§Executed below). Same purpose, same rule, same chain and pre-registration;
-its own plan id, session id, night root, desk inputs and wrapper. Precondition
-that only the operator can meet: no interactive agent session, no ChatGPT
-desktop app and no Claude desktop app (quit both apps from their menu bar; a
-running app refuses the night, so no chain starts) alive from the plan span
-(02:31 PDT on 2026-09-15) through t0.
+This plan is the SUCCESSOR of `d079-epoch-25g83-derivation-n1-20260916`, which
+was staged on 2026-09-14 and NOT ARMED: the census stayed foreign through the
+06:05 cutoff of its install span (Ed's interactive `claude` session, the
+ChatGPT desktop app's Codex helpers and the Claude desktop app's helpers;
+see §Executed below), and that plan was itself the successor of the 20260913
+night refused at its own t0 census on the same set. Same purpose, same rule,
+same chain and pre-registration; its own plan id, session id, night root,
+desk inputs and wrapper. Precondition that only the operator can meet: no
+interactive agent session, no ChatGPT desktop app and no Claude desktop app
+(quit both apps from their menu bar; a running app refuses the night, so no
+chain starts) alive from the plan span (02:31 PDT on 2026-09-16) through t0.
 
-Plan `d079-epoch-25g83-derivation-n1-20260915`, class `DIAGNOSTIC_NO_PACK`,
-is planned for 2026-09-15 at 02:56:00 PDT (`t0`, epoch 1789466160) with a
+Plan `d079-epoch-25g83-derivation-n1-20260916`, class `DIAGNOSTIC_NO_PACK`,
+is planned for 2026-09-16 at 02:56:00 PDT (`t0`, epoch 1789552560) with a
 9000-second window (`window_max_s`; the acquisition allocation ends at
-05:26:00 PDT, epoch 1789475160). The courier deadline is
-`t0 + 9000 + 300`, epoch 1789475460, 05:31:00 PDT; the next 07:00 dead-man
-minute is epoch 1789480800, 89 minutes after it. This notice describes the
+05:26:00 PDT, epoch 1789561560). The courier deadline is
+`t0 + 9000 + 300`, epoch 1789561860, 05:31:00 PDT; the next 07:00 dead-man
+minute is epoch 1789567200, 89 minutes after it. This notice describes the
 planned night; the arm record establishes whether installation happened.
 
 **What the night does.** It is the epoch-equivalence check that Ed's
@@ -98,18 +100,18 @@ row for the measurement root, and fills the pre-registration's five
 commit-time fields (authoring day 10, MLX 0.31.2, head pin 76 /
 `08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`, chain
 digest above). The measurement root is
-`/Users/edr/JouleWise-measurement-20260915-derivation`, a fresh GitHub clone
+`/Users/edr/JouleWise-measurement-20260916-derivation`, a fresh GitHub clone
 detached at H whose `.venv/bin/python` is Python 3.13 built from
 `env/mac-measurement-lock.txt`; both LaunchAgents are installed FROM it and
 name that interpreter by absolute path; its
 `runs/calibration_observation_ledger.jsonl` is the canonical 76-record
 ledger restored byte-exact and authenticated against its committed head pin
 with custody verification. The night root (`custody_root`) is
-`/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915`; the runs
+`/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916`; the runs
 root is `<night root>/runs`; the chain's own log is
 `<night root>/operator_logs/derivation-chain.log`. The session id equals the
 plan id. The evidence root id is
-`evidence-d079-epoch-25g83-derivation-n1-20260915`, registered by this
+`evidence-d079-epoch-25g83-derivation-n1-20260916`, registered by this
 night's arm record (the runbook names no derivable default; the form follows
 the G2-a runbook's `evidence-<window id>`). The frozen calibration plan is
 the committed bytes of
@@ -121,13 +123,13 @@ reads nothing else from it. The two desk inputs `identity-epoch.json` and
 `scripts/write_derivation_night_inputs.py` at the arm and their digests are
 baked into the wrapper.
 
-**Timeline.** Both agents are installed on 2026-09-14 inside 03:00–06:30
-PDT, the calendar day before `t0`. The 07:00 dead-man firing on 09-14 stands
+**Timeline.** Both agents are installed on 2026-09-15 inside 03:00–06:30
+PDT, the calendar day before `t0`. The 07:00 dead-man firing on 09-15 stands
 down with one log line and writes nothing else into `night/`; that line is
 expected evidence. The watchdog's plan span opens, and its stand-down request
-lands, at `t0 − 25 minutes`, 02:31:00 PDT on 09-15 (epoch 1789464660); TERM
-is `t0 − 16 minutes` (1789465200) and KILL is `t0 − 15 minutes`
-(1789465260); `t0` sits inside the fixed 02:45–03:30 belt, which is correct
+lands, at `t0 − 25 minutes`, 02:31:00 PDT on 09-16 (epoch 1789551060); TERM
+is `t0 − 16 minutes` (1789551600) and KILL is `t0 − 15 minutes`
+(1789551660); `t0` sits inside the fixed 02:45–03:30 belt, which is correct
 for a night. The consolidated notice with these pins is sent after commit H
 and before the plan is moved into its discoverable place; Ed's NO on the
 notice thread stands the night down. The arming activation exits after
@@ -212,9 +214,30 @@ night are complete; nothing is armed; the successor plan is
 `d079-epoch-25g83-derivation-n1-20260915` once this file's §Purpose /
 §Where the results are / §Next lane are rewritten for it.
 
+## Executed — d079-epoch-25g83-derivation-n1-20260915 (2026-09-14, NOT ARMED)
+
+The plan was never published. Activation `24b9d3dd` was the activation alive
+for the 2026-09-14 03:00–06:30 PDT install span: it retired the refused
+20260913 root out of the watchdog's discovery glob (bytes archived, 20/20
+checksums), ran runbook §0.3–§1.1b at 00:03 (desk inputs, staged plan,
+wrapper `356a0810…` VERIFIED, preflight ok; record 48), and then held with a
+census poll every 20 s. From 00:02 through the 06:05 cutoff the census never
+cleared — Ed's interactive `claude` pid 24974 with its Codex MCP servers, the
+ChatGPT desktop app's Codex helpers, the Claude desktop app's helpers and a
+`Codex Computer Use` service — and no reply, NO or directive arrived. §1.4 was
+therefore not executed: no notice, no publication, no install (`launchctl
+list` showed only the magistrate throughout). At 06:06 the session removed its
+own staged plan and night root after copying the wrapper, sidecars, desk
+inputs and staged plan into
+[record 49](../process_traces/2026-09-13-activation-24b9d3dd/49-no-arm-record-n1-20260915.md)'s
+evidence; the clone at H `27957b60` is retained. RECORD: nothing was armed;
+the plan id carries its date and is not reused; the successor is
+`d079-epoch-25g83-derivation-n1-20260916` (this file's §Purpose / §Where the
+results are / §Next lane, rewritten by the commit that is its H).
+
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915`;
+- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916`;
   driver records in `night/` — `result.json` (expected verdict `GO` for
   this class when every gate row passes, `chain_exit_code` 0),
   `receipt.json` or `refusal.json` as `result.json` directs (C1 PASS with the
@@ -223,9 +246,9 @@ night are complete; nothing is armed; the successor plan is
   `chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log`,
   `chain.stderr.log` (the wrapper's `FAIL <reason>` lines, if any),
   `courier.sent`, `courier.json`, `courier.heartbeat`.
-- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night.log`.
-  At harvest, look for the 09-14 07:00 dead-man stand-down line, then
-  `night driver started` and a `night gate verdict=` line for 09-15.
+- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night.log`.
+  At harvest, look for the 09-15 07:00 dead-man stand-down line, then
+  `night driver started` and a `night gate verdict=` line for 09-16.
 - Chain log: `<custody root>/operator_logs/derivation-chain.log` —
   `session_open kind=derivation slots=12`, `chain_start` (its timestamp
   minus `t0` is the realized Δ), `settle_complete`, twelve `slot_start`
@@ -240,14 +263,14 @@ night are complete; nothing is armed; the successor plan is
   removed.
 - Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
   `launchd.night.err` must be EMPTY.
-- Results branch: `night-results/20260915` on `origin`, if the driver's push
+- Results branch: `night-results/20260916` on `origin`, if the driver's push
   succeeded — verify, do not presume.
 
 ## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`d079-epoch-25g83-derivation-n1-20260915` /
-`/Users/edr/JouleWise-measurement-20260915-derivation` / this commit) harvests
+`d079-epoch-25g83-derivation-n1-20260916` /
+`/Users/edr/JouleWise-measurement-20260916-derivation` / this commit) harvests
 only after the plan span's completion boundary has passed and `courier.sent`
 exists. It follows runbook §2 in order: §2.0 rebuilds the night's
 coordinates from the frozen triple and verifies the wrapper against its
@@ -274,7 +297,7 @@ before the settle, or a `slot_refused` line is a finding to cure before any
 further night.
 
 After the harvest, run `scripts/install_night_agent.sh --plan
-/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night_plan.json
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
 --hour 2 --minute 56 --uninstall` FROM the clone. Do NOT remove the clone or
 the night root: the ledger session and the captures live there and the clone
 is a production inventory row. Never re-arm this plan; every further night is
