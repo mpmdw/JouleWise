@@ -69,7 +69,7 @@
       "priority": "p2_next_slice",
       "rank": 193,
       "status": "queued",
-      "status_note": "2026-09-13: registered from activation 24b9d3dd after the Opus pairing refuter on cold-gate ruling 05/10 probed the browser argv live. Blocks the first pack night, not the 09-15 DIAGNOSTIC_NO_PACK equivalence night (that class never evaluates the arm-readiness census). Blocked on a ruling; not started. 2026-09-13 (activation 24b9d3dd): RULED and INSTALLED (PR #335, merge 58edfa29); the monitor class was found to share the defect (the bare token watch matched /usr/libexec/watchdogd) and is cured in the same install. OPEN in the ed_external lane pending the Ed-hands desk proof named in the acceptance (a queued external step, not agent work). Recorded limitation: the S-0 clone-proof's 'eleven-kind census PASS' (2026-08-22) established that the census kinds executed and were bound, not that this predicate passed on the current macOS; the real pgrep for this row was only ever bound by a test, never gated, and the August receipt is not on disk in any searched root. Follow-up notes (not lanes): optional -lx caffeinate so a keep-awake refusal records what it saw; the two-character agent token t3 is fragile on principle (no live exposure); Firefox's launchd-parented crashhelper no longer matches; G4's decoy list comprehension precedes its try (a spawn failure could leave one sleep 30 unreaped; delta 43 F1).",
+      "status_note": "2026-09-13: registered from activation 24b9d3dd after the Opus pairing refuter on cold-gate ruling 05/10 probed the browser argv live. Blocks the first pack night, not the 09-15 DIAGNOSTIC_NO_PACK equivalence night (that class never evaluates the arm-readiness census). Blocked on a ruling; not started. 2026-09-13 (activation 24b9d3dd): RULED and INSTALLED (PR #335, merge 58edfa29); the monitor class was found to share the defect (the bare token watch matched /usr/libexec/watchdogd) and is cured in the same install. OPEN in the ed_external lane pending the Ed-hands desk proof named in the acceptance (a queued external step, not agent work). Recorded limitation: the S-0 clone-proof's 'eleven-kind census PASS' (2026-08-22) established that the census kinds executed and were bound, not that this predicate passed on the current macOS; the real pgrep for this row was only ever bound by a test, never gated, and the August receipt is not on disk in any searched root. Follow-up notes (not lanes): optional -lx caffeinate so a keep-awake refusal records what it saw; the two-character agent token t3 is fragile on principle (no live exposure); Firefox's launchd-parented crashhelper no longer matches; G4's decoy list comprehension precedes its try (a spawn failure could leave one sleep 30 unreaped; delta 43 F1). 2026-09-14: D-181 cl.3 (Ed, directive #337): the magistrate prepares the pack root and window-custody root and emails Ed the exact command; Ed runs it at the next idle moment; this step must not be the reason the first G2-a pack window waits.",
       "stop_card": null
     },
     "ARM-CENSUS-IDLE-INTERACTIVE-01": {
@@ -85,20 +85,30 @@
         "summary": "Runbook step-3b preconditions classify an interactive session as not foreign only when its process tree holds no test, measurement, or capture child; REHEARSAL_STUB only; plan-span refusal night_refused_agent_present untouched and pinned by a counterfactual test; refuters on the classifier."
       },
       "authority": {
-        "label": "D-180 (Ed, 2026-09-10): arm recoverability and steerability",
-        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
+        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "D-181 cl.1 order: third of the three lanes; takes rank 0 of the agent lane when ARM-RETRY-CLASS-01 closes",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ARM-RETRY-CLASS-01"
+        }
+      ],
       "fallback": null,
       "fences": [],
       "flags": [],
       "goal": "For REHEARSAL_STUB plans, classify idle interactive claude/T3 sessions as not foreign at the arm-time census (D-180 cl.3); plan-span census unchanged.",
       "id": "ARM-CENSUS-IDLE-INTERACTIVE-01",
       "lane": "agent",
-      "priority": "p2_next_slice",
+      "priority": "p1_phase_gate",
       "rank": 173,
-      "status": "queued",
-      "status_note": "2026-09-10: ruled by Ed (D-180 cl.3); a session left open through t0 still refuses the night. Sequenced after G2-a instrument validation (Ed 2026-09-10 ~03:45: remote direction of experiments is the goal once the instrument is validated).",
+      "status": "blocked",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337): third in the promoted order; starts when ARM-RETRY-CLASS-01 closes and takes the agent lane's rank 0 in that bookkeeping. A session left open through t0 still refuses the night (plan-span census unchanged).",
       "stop_card": null
     },
     "ARM-PACKET-01": {
@@ -154,20 +164,30 @@
         "summary": "NIGHT_HANDBACK and the arm runbook template carry the enumerated retry class (idle interactive session at arm-time census, stale/mismatched notice hash, CLOCK_UNCERTAIN/NETWORK_UNCERTAIN tick, transport failure) with the refreshed-notice rule and the explicit list of refusals that stay on the cold-gate path; a test pins the enumeration."
       },
       "authority": {
-        "label": "D-180 (Ed, 2026-09-10): arm recoverability and steerability",
-        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
+        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "D-181 cl.1 order: second of the three lanes; takes rank 0 of the agent lane when INSTALL-WINDOWS-MULTI-01 closes",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "INSTALL-WINDOWS-MULTI-01"
+        }
+      ],
       "fallback": null,
       "fences": [],
       "flags": [],
       "goal": "Install D-180 cl.2's pre-authorized retry class for non-physics arm aborts into NIGHT_HANDBACK and the runbook template.",
       "id": "ARM-RETRY-CLASS-01",
       "lane": "agent",
-      "priority": "p2_next_slice",
+      "priority": "p1_phase_gate",
       "rank": 172,
-      "status": "queued",
-      "status_note": "2026-09-10: ruled by Ed (D-180 cl.2); docs + test lane. Sequenced after G2-a instrument validation (Ed 2026-09-10 ~03:45: remote direction of experiments is the goal once the instrument is validated).",
+      "status": "blocked",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337): second in the promoted order; starts when INSTALL-WINDOWS-MULTI-01 closes and takes the agent lane's rank 0 in that bookkeeping (the rank field moves; the dependency edge holds the order). Supersedes the D-180 sequencing note. Docs + test lane.",
       "stop_card": null
     },
     "AUD-FOLLOWUPS": {
@@ -2962,23 +2982,23 @@
           "label": "INSTALL-WINDOWS-MULTI-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Plan writer, runbook template and watchdog constants accept a list of install spans, each with the never-install-after-close dead-man rule; tests pin the span list and the dead-man per span; NIGHT_HANDBACK notice text names every span. Lands under the twelve-row gate."
+        "summary": "Plan writer, runbook template and watchdog constants accept a list of install spans, each with the never-install-after-close dead-man rule; the plan's t0 may be any clock time (launchd hour/minute derived from the plan, not a fixed belt); a second plan may be armed as soon as the previous harvest is done; tests pin the span list, the dead-man per span and the any-clock-time t0; NIGHT_HANDBACK notice text names every span. Lands under the twelve-row gate."
       },
       "authority": {
-        "label": "D-180 (Ed, 2026-09-10): arm recoverability and steerability",
-        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
+        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Let the night schedule name several bounded install spans per day (D-180 cl.1) instead of the single 03:00–06:30 block.",
+      "goal": "Let the night schedule name several bounded install spans per day (D-180 cl.1) instead of the single 03:00–06:30 block, with a dead-man per span; a plan may carry a t0 at any clock time and a second window may be armed as soon as the previous harvest is done (D-181 cl.1).",
       "id": "INSTALL-WINDOWS-MULTI-01",
       "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 171,
+      "priority": "p1_phase_gate",
+      "rank": 0,
       "status": "queued",
-      "status_note": "2026-09-10: ruled by Ed (D-180 cl.1); until landed the ruled 03:00–06:30 window stands. Sequenced after G2-a instrument validation (Ed 2026-09-10 ~03:45: remote direction of experiments is the goal once the instrument is validated).",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; work starts immediately after the 09-15 equivalence night's harvest and its runbook §2.5 outcome action (that night, armed under directive #336, is untouched). Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until landed the ruled single install span stands.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
@@ -7973,5 +7993,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-13"
+  "updated": "2026-09-14"
 }
