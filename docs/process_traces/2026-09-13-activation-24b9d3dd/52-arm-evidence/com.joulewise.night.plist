@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joulewise.night</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/edr/JouleWise-measurement-20260915-derivation/.venv/bin/python</string>
+    <string>/Users/edr/JouleWise-measurement-20260915-derivation/scripts/run_night.py</string>
+    <string>run</string>
+    <string>--plan</string>
+    <string>/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night_plan.json</string>
+    <string>--courier-bin</string>
+    <string>/Users/edr/.local/share/claude/versions/2.1.271</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/edr/JouleWise-measurement-20260915-derivation</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>56</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night/launchd.night.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night/launchd.night.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
