@@ -3,14 +3,6 @@
  "unknown_module_weight_seconds": 29.834,
  "_unknown_module_weight_rationale": "Arithmetic MEAN of the measured hosted weights, used by scripts/shard_tests.py's conservative_unknown_weight() for a module that is discovered but not yet measured. The historical fallback was the MEDIAN (0.868 s); on a distribution this heavy-tailed the median asserts that an unmeasured module is free, so a newly added heavy module is packed into an already-full shard and the job overruns silently. The mean reserves the cost of an average module instead. default_module_weight() retains median semantics because tests/test_shard_tests.py pins them.",
  "_zero_observation_floor": "2 modules completed faster than the runner's millisecond print resolution and were recorded as 0.000 s; they are floored to 0.001 s because load_timing_map() requires a strictly positive weight. The floor is scheduling-irrelevant (these modules are ~0% of a 4117-second suite). Floored: tests.test_audit_clock, tests.test_audit_report",
- "pr_fast_tier": {
-  "max_module_seconds": 30.0,
-  "shards": 2,
-  "python_version": "3.11",
-  "_what_this_is": "Module-selection criterion for the ADDITIVE pull-request fast tier. It is NOT a gate and never substitutes for the full suite: every job that gates a merge still runs every test. The fast tier exists only to surface an obvious breakage in ~4 minutes instead of ~17.",
-  "_selection_rule": "Include every discovered ordinary module whose weight in seconds_by_module is <= max_module_seconds. The list is DERIVED AT RUN TIME rather than checked in, so adding a test module cannot silently drop it from the fast tier. A module that is discovered but not yet measured takes unknown_module_weight_seconds (29.834), which is below the 30.0 cutoff, so a NEW MODULE IS INCLUDED BY DEFAULT. That direction is deliberate: for a tier that only ever adds signal, the safe failure is running too much, not too little.",
-  "_measured_selectivity": "At the 2026-08-23 hosted weights this keeps 126 of 138 ordinary modules and 2848 of 3804 test methods (74.9% of the suite's tests) for 442 of 4117 seconds (10.7% of its cost). The 12 excluded modules are the measured heavy tail, led by tests.test_reduce (1544.5 s), tests.test_p2038_production_path (652.1 s) and tests.test_whole_window_selection (498.9 s). Cost per unit of signal is the whole point: the excluded 12 carry 25.1% of the tests but 89.3% of the runtime."
- },
  "exclusive_modules": {
   "tests.test_calibration_exits": {
    "seconds": 2036.0,

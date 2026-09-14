@@ -1,0 +1,2 @@
+Ruling 34 written (12,154 bytes, validator PASS after the deliberate-typo refusal): Q1 rules option (i) for both classes with the anchored argv `/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)` and `…|tail -f|(^|/)watch( |$)` (live: only Firefox pid 24781 and zero monitor hits; not a contract change), Q2 finds the real pgrep was only ever bound, never gated, so the S-0 "eleven-kind census PASS" is a limitation to record, and Q3 specifies regressions R1–R4 plus the mandatory desk proof.
+rc=0

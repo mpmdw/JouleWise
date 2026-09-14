@@ -1,0 +1,7 @@
+# 31 — Disposition of post-merge review 29 (PR #329 on main `64fc4e27`)
+
+Activation `24b9d3dd`, 07:45 PDT. Review 29 (Astra, cross-unit lens) found no archive-induced runtime break: 310 R100 / 17 M / 7 A as merged; `gen_state --check` rc 0; `tests.test_docs_freshness`, `tests.test_gen_state`, the three paper modules OK; the derivation-night runsheet `docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md` live; the five magistrate/courier process docs cite no archived path.
+
+Its one "BLOCKER" (B1) is an artefact of the brief: I asked for `test -e` on EVERY `docs/...` literal in code and tests, and 36 such literals do not exist as files — fixture names, glob and interpolation expressions, placeholder paths in `scripts/build_site.py`, an optional directory guarded by `exists()` in `scripts/claims_lint.py:854`, a conditional stop-card prefix in `scripts/gen_state.py:249`, and one test that asserts absence (`tests/test_rpt001_report_slice.py:591`). The reviewer checked all 36 at the pre-merge parent `27957b60`: all absent there too. Disposition: NOT a defect of PR #329 or of main; no action. Lesson for the next brief: the runtime-reader criterion is "a path the code READS at run time still exists", which the reviewer applied separately and found clean; a bare literal-existence sweep over-collects.
+
+Row 11 (post-merge cross-unit integration review) for PR #329 is therefore satisfied by review 29 as read here.

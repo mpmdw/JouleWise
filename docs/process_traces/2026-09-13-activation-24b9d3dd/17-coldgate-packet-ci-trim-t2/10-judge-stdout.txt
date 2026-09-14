@@ -1,0 +1,2 @@
+Ruling written (12,099 bytes, only new file in the tree): Q1 AFFIRM option A with exact `ci.yml` line deletions; Q2 (a) no fence narrowing, (b) addendum follows as bookkeeping with text supplied, (c) delete `pr_fast_tier` in this PR; Q3 escalation AFFIRMED, G's widening proven a round-three cure (misses 2 of F's 15 plus the exclusive module).
+rc=0

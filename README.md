@@ -9,7 +9,7 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-**Now (2026-09-12):** the first epoch-equivalence measurement night is armed for 02:56 PDT on 2026-09-13 from a frozen clone; today's desk work merged four test-and-fixture fixes (a git-fixture hygiene census, a new desk-tool refusal code for window-exhausted sessions, an uptime-proof readiness fixture, and a CI-safe controller sentinel regression) under the twelve-row gate, with two cold-gate rulings on the way. **Next:** harvest the night on 2026-09-13 and apply the pre-registered equivalence rule.
+**Now (2026-09-13):** the first epoch-equivalence measurement night fired at 02:56 and was refused by its own safety check before any measurement, because an interactive assistant session and the ChatGPT desktop app were still running on the laptop; nothing was captured, the night's records were harvested and its timers removed, and the same night is re-planned for 02:56 on 2026-09-15 from a fresh clone (its timers are installed Monday morning only if the laptop is free of other assistant sessions). Today's desk work landed three housekeeping changes: an archive of 310 historical documents, a leaner CI workflow that still runs the full test suite on every change (a written ruling rejected skipping tests on documentation-only changes, because tests read documentation in ways no filter can enumerate), a written ruling that the night's safety check keeps treating the ChatGPT app's bundled agent as an assistant session, and a repair to the pre-flight check for full measurement nights, which had been matching Apple's own background services (Safari helpers and the system watchdog) as if a browser or monitor were open and would have refused every such night on this laptop.
 
 **Status:** The fallback methods/diagnostic paper is merged: it describes the measurement
 honestly as energy assigned to inference phases from interval-average power records, with
@@ -109,7 +109,7 @@ sentinel shape and emitted 1,280 generated output tokens per bundle.
 These points differ in model scale, architecture, tokenizer, and
 quantization, so they do not establish a controlled scaling relation,
 architecture effect, or efficiency comparison. The
-[bundle-cited extraction](docs/process_traces/2026-07-17-exploratory-block/results.md)
+[bundle-cited extraction](docs/legacy/process_traces/2026-07-17-exploratory-block/results.md)
 preserves the original figures as historical evidence only; D-078 bars their
 quotation or claim use.
 

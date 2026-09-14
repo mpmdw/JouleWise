@@ -1,0 +1,2 @@
+Ruling 47 written (11.7 KB, validator PASS after the typo REFUSE): Q1 rules option (ii), one shared scale-aware predicate `abs_tol = max(1e-12, 64u×S)` at both sites, (iii) rejected because stored member energies are reducer summary fields, not the re-integration; Q2 addendum drafted; Q3 not G2-a-blocking (first refusal ~16.5 kJ per member, provably sound below 2,048 J), lane closes on recording with the code change as a non-blocking follow-up.
+rc=0

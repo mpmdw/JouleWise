@@ -8,6 +8,7 @@ import inspect
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -851,6 +852,30 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
         fileno=mock.Mock(side_effect=io.UnsupportedOperation("fileno")),
         isatty=mock.Mock(return_value=False),
     )
+
+
+# Packet 34, Exhibit C: eight Apple executables across ten recorded lines,
+# plus watchdogd. Preserve the captured truncation and strip only the PID.
+_RECORDED_CENSUS_SERVICE_ARGV = (
+    '/System/Cryptexes/App/usr/libexec/SafariBookmarksSyncAgent',
+    '/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/Extensions/SafariWidgetExtension.appex/Contents/MacOS/SafariWidgetExtension -',
+    '/System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.appl',
+    '/System/Library/PrivateFrameworks/SafariFoundation.framework/Versions/A/XPCServices/CredentialProviderExtensionHelper.xpc/Contents/MacOS/CredentialProvider',
+    '/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/Extensions/SafariLinkExtension.appex/Contents/MacOS/SafariLinkExtension -Laun',
+    '/System/Library/PrivateFrameworks/SafariSafeBrowsing.framework/com.apple.Safari.SafeBrowsing.Service',
+    '/System/Cryptexes/App/usr/libexec/SafariLaunchAgent',
+    '/System/Library/PrivateFrameworks/SafariFoundation.framework/Versions/A/XPCServices/SafariConfigurationSubscriber.xpc/Contents/MacOS/SafariConfigurationSu',
+    '/System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.app',
+    '/System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.app',
+    "/usr/libexec/watchdogd",
+)
+_RECORDED_FIREFOX_LINE = "24781 /Applications/Firefox.app/Contents/MacOS/firefox"
+_RECORDED_CENSUS_SERVICE_BASENAMES = (
+    "SafariBookmarksSyncAgent", "SafariWidgetExtension",
+    "com.apple.SafariPlatformSupport.Helper", "CredentialProviderExtensionHelper",
+    "SafariLinkExtension", "com.apple.Safari.SafeBrowsing.Service",
+    "SafariLaunchAgent", "SafariConfigurationSubscriber", "watchdogd",
+)
 
 
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
@@ -2510,15 +2535,179 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 (
                     "/usr/bin/pgrep",
                     "-lf",
-                    "Safari|Google Chrome|Chromium|Firefox|browser automation",
+                    "/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)",
                 ),
                 (
                     "/usr/bin/pgrep",
                     "-lf",
-                    "powermetrics|window-chain|run_campaign|tail -f|watch",
+                    "powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)",
                 ),
             ),
         )
+
+    def test_g1_ruled_census_patterns_ignore_recorded_macos_services(self) -> None:
+        """G1 (packet 34 ruling 10 Q3): the recorded Apple services never match.
+
+        Kills M1 (old browser alternation), M2 (no ``( |$)`` tail), M4 (bare
+        ``watch``); M5 is killed by G2. M-numbers name the ruling's mutations.
+        """
+        for pattern in (t0._BROWSER_CENSUS_PATTERN, t0._MONITOR_CENSUS_PATTERN):
+            for line in _RECORDED_CENSUS_SERVICE_ARGV:
+                with self.subTest(pattern=pattern, line=line):
+                    self.assertIsNone(re.search(pattern, line))
+
+    def test_g2_ruled_census_patterns_refuse_real_browsers_and_monitors(self) -> None:
+        """G2 (packet 34 ruling 10 Q3): real browsers and monitors match.
+
+        Kills M3 (one browser name), M5 (no ``/Contents/MacOS/`` anchor), M6
+        (a lost monitor token), M7 (``Firefox`` case-fold).
+        """
+        for line in (
+            _RECORDED_FIREFOX_LINE.split(" ", 1)[1],
+            "/Applications/Safari.app/Contents/MacOS/Safari",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --x",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium --headless=new",
+            "/Applications/Firefox.app/Contents/MacOS/firefox https://example.com",
+            "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing --headless=new",
+            "/Applications/Safari Technology Preview.app/Contents/MacOS/Safari Technology Preview",
+        ):
+            with self.subTest(browser=line):
+                self.assertIsNotNone(re.search(t0._BROWSER_CENSUS_PATTERN, line))
+        for line in (
+            "/Applications/Firefox.app/Contents/MacOS/plugin-container -isForBrowser",
+            "/usr/bin/env Safari",
+        ):
+            with self.subTest(nonbrowser=line):
+                self.assertIsNone(re.search(t0._BROWSER_CENSUS_PATTERN, line))
+        for line in (
+            "/usr/bin/powermetrics -i 200 -n 1",
+            "tail -f /var/log/system.log",
+            "watch -n 5 pmset -g therm",
+            "/opt/homebrew/bin/watch -n 1 date",
+            "python3 scripts/window-chain.py",
+            "python3 scripts/run_campaign.py",
+        ):
+            with self.subTest(monitor=line):
+                self.assertIsNotNone(re.search(t0._MONITOR_CENSUS_PATTERN, line))
+
+    def test_g3_browser_and_monitor_probes_gate_the_row(self) -> None:
+        """G3 (packet 34 ruling 10 Q3): a browser or monitor hit refuses authoring.
+
+        Kills M8 (an unchecked probe output) and M9 (a reordered or missing
+        probe); the mocked probe stands in for pgrep on the authoring path.
+        """
+        commands = (
+            ("/usr/bin/pgrep", "-x", "caffeinate"),
+            ("/usr/bin/pgrep", "-lf", "codex|claude|t3"),
+            ("/usr/bin/pgrep", "-lf", t0._BROWSER_CENSUS_PATTERN),
+            ("/usr/bin/pgrep", "-lf", t0._MONITOR_CENSUS_PATTERN),
+        )
+        for selected, output in (
+            (commands[1], "123 codex\n"),
+            (commands[2], _RECORDED_FIREFOX_LINE + "\n"),
+            (commands[3], "574 /usr/bin/powermetrics -i 200\n"),
+            (None, ""),
+        ):
+            with self.subTest(command=selected):
+                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+                with temporary:
+                    seen = []
+
+                    def probe(argv, *, cwd):
+                        command = tuple(argv)
+                        if command in commands:
+                            seen.append(command)
+                        if command == selected:
+                            return _probe_result(argv, cwd, exit_code=0, stdout=output)
+                        return passing_probe(argv, cwd=cwd)
+
+                    with author_environment(repository, probe=probe):
+                        if selected is None:
+                            result = author_arm_readiness_evidence_t0(pack, custody)
+                            self.assertEqual(result["status"], "PASS")
+                        else:
+                            with self.assertRaises(T0EvidenceAuthoringError) as caught:
+                                author_arm_readiness_evidence_t0(pack, custody)
+                            self.assertEqual(caught.exception.kind, "PROCESS_CENSUS")
+                            self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
+                            self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+                    self.assertEqual(seen, list(commands))
+
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's POSIX extended regular expressions"
+    )
+    def test_g4_real_ruled_census_pgrep_dialect(self) -> None:
+        r"""G4 kills M10: a construct pgrep rejects or silently never matches.
+
+        Authority: packet 34 ruling 10 Q3 as amended by pairing refuter 12 (A2)
+        and the synthesis-13 addendum (the decoy instrument). A *probe* is one
+        recorded command execution; a *decoy* is a ``sleep`` child this test
+        spawns whose argv0 carries a marker command line; the *dialect* is the
+        regular-expression syntax pgrep's own engine interprets. Every
+        alternative of each ruled pattern gets a positive decoy that MUST be
+        reported by the real pgrep, and the recorded Apple services get
+        negative decoys that MUST NOT be, so a Python-only construct (``\b``,
+        ``\d``, ``(?:...)``) or a narrowed alternative fails closed with no
+        browser or monitor running (bench-proven: ``\bwatch\b`` yields exit 1
+        and zero lines against a live decoy). Bench-only: CI runs Linux.
+        """
+        cases = (
+            (
+                t0._BROWSER_CENSUS_PATTERN,
+                (
+                    "/Applications/Safari.app/Contents/MacOS/Safari",
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                    "/Applications/Firefox.app/Contents/MacOS/firefox",
+                ),
+                (
+                    "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/Extensions/SafariWidgetExtension.appex/Contents/MacOS/SafariWidgetExtension",
+                    "/System/Cryptexes/App/usr/libexec/SafariLaunchAgent",
+                    "/Applications/Firefox.app/Contents/MacOS/plugin-container",
+                ),
+            ),
+            (
+                t0._MONITOR_CENSUS_PATTERN,
+                (
+                    "/usr/bin/powermetrics",
+                    "/usr/bin/tail -f",
+                    "scripts/window-chain",
+                    "scripts/run_campaign",
+                    "/opt/homebrew/bin/watch",
+                ),
+                ("/usr/libexec/watchdogd", "/usr/local/bin/stopwatch"),
+            ),
+        )
+        for pattern, positives, negatives in cases:
+            with self.subTest(pattern=pattern):
+                decoys = [
+                    subprocess.Popen([marker, "30"], executable="/bin/sleep")
+                    for marker in positives + negatives
+                ]
+                try:
+                    time.sleep(0.5)
+                    probes, _source = self._real_probe_source(
+                        "PROCESS_CENSUS", (("/usr/bin/pgrep", "-lf", pattern),)
+                    )
+                    probe = probes[0]
+                    self.assertEqual(probe.exit_code, 0, probe.stderr)
+                    lines = probe.stdout.splitlines()
+                    reported = {int(line.split(" ", 1)[0]) for line in lines}
+                    for decoy, marker in zip(decoys, positives + negatives, strict=True):
+                        with self.subTest(marker=marker):
+                            if marker in positives:
+                                self.assertIn(decoy.pid, reported, probe.stdout)
+                            else:
+                                self.assertNotIn(decoy.pid, reported, probe.stdout)
+                    for line in lines:
+                        self.assertIsNotNone(re.search(pattern, line))
+                        for basename in _RECORDED_CENSUS_SERVICE_BASENAMES:
+                            self.assertNotIn(basename, line)
+                finally:
+                    for decoy in decoys:
+                        decoy.terminate()
+                    for decoy in decoys:
+                        decoy.wait(timeout=5)
 
     @unittest.skipUnless(
         sys.platform == "darwin", "requires Darwin's real sysctl command"

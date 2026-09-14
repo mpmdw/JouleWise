@@ -52,6 +52,10 @@ _MIN_IDLE_NS = 600 * 1_000_000_000
 _MAX_T0_SEQUENCE_AGE_NS = 60 * 60 * 1_000_000_000
 _MIN_BACKUP_FREE_BYTES = 20 * 1024**3
 _PROBE_TIMEOUT_SECONDS = 45
+# Census browser executables in app bundles, rather than every command line
+# mentioning a browser name; OS extensions and services must not block the row.
+_BROWSER_CENSUS_PATTERN = r"/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)"
+_MONITOR_CENSUS_PATTERN = r"powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)"
 _RUNNING_REPOSITORY = _Path(__file__).resolve().parents[1]
 _AUTHORING_ARTIFACTS = (
     "joulewise/clock_reference.py",
@@ -1722,8 +1726,8 @@ def _derive_process_census(context: _Context) -> _DerivedRow:
     probes = (
         _fresh_probe(context, kind, "keep-awake", ("/usr/bin/pgrep", "-x", "caffeinate")),
         _fresh_probe(context, kind, "agent", ("/usr/bin/pgrep", "-lf", "codex|claude|t3")),
-        _fresh_probe(context, kind, "browser", ("/usr/bin/pgrep", "-lf", "Safari|Google Chrome|Chromium|Firefox|browser automation")),
-        _fresh_probe(context, kind, "monitor", ("/usr/bin/pgrep", "-lf", "powermetrics|window-chain|run_campaign|tail -f|watch")),
+        _fresh_probe(context, kind, "browser", ("/usr/bin/pgrep", "-lf", _BROWSER_CENSUS_PATTERN)),
+        _fresh_probe(context, kind, "monitor", ("/usr/bin/pgrep", "-lf", _MONITOR_CENSUS_PATTERN)),
     )
     for label, probe in zip(("keep-awake", "agent", "browser", "monitor"), probes, strict=True):
         _expect_absent(probe, kind=kind, label=label)
