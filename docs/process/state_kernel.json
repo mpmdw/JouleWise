@@ -4822,7 +4822,7 @@
       "priority": "p1_phase_gate",
       "rank": 196,
       "status": "queued",
-      "status_note": "2026-09-14: registered from cold gate 65 (desk-proof packet) — found while preparing the Ed-hands desk proof (records 64/66); not a fence on the DIAGNOSTIC_NO_PACK equivalence night; blocks the first G2-a pack window's T-0. Design question for the seat: build the ALPHA/BETA packs from their generate_configs.py under the freeze/registry contracts, or rule the roster. 2026-09-15 (activation d6888966, scout record 04 docs/process_traces/2026-09-15-activation-d6888966/04-pack-root-scout-report.md): BUILD is the ruled route and waits for the issued G2-a pin (V5-DESK-DAY-01 owns production pack generation; floor generators accept only the 512 rung); roster replacement is Ed's ruling (cold gate 65 Q1), not an agent action; the GAMMA contrast generator emits roots.claim_leaf/bound_leaf where the T-0 reader (joulewise/arm_readiness_evidence_t0.py:1017-1018) requires claim_root_leaf/bound_root_leaf — under repair on fix/2026-09-15-gamma-root-keys (brief 06); the scout's Q2 (generator replay) and Q5 (clean-clone A5 replay) were blocked by its read-only sandbox and are re-run in a writable checkout after the GAMMA fix lands; the 37 custody files per root (arm_readiness.sources/evidence/freeze.receipts, identity_pin_projection.receipts) are never copied from historical roots.",
+      "status_note": "2026-09-14: registered from cold gate 65 (desk-proof packet) — found while preparing the Ed-hands desk proof (records 64/66); not a fence on the DIAGNOSTIC_NO_PACK equivalence night; blocks the first G2-a pack window's T-0. Design question for the seat: build the ALPHA/BETA packs from their generate_configs.py under the freeze/registry contracts, or rule the roster. 2026-09-15 (activation d6888966, scout record 04 docs/process_traces/2026-09-15-activation-d6888966/04-pack-root-scout-report.md): BUILD is the ruled route and waits for the issued G2-a pin (V5-DESK-DAY-01 owns production pack generation; floor generators accept only the 512 rung); roster replacement is Ed's ruling (cold gate 65 Q1), not an agent action; the GAMMA contrast generator emits roots.claim_leaf/bound_leaf where the T-0 reader (joulewise/arm_readiness_evidence_t0.py:1017-1018) requires claim_root_leaf/bound_root_leaf — under repair on fix/2026-09-15-gamma-root-keys (brief 06); the scout's Q2 (generator replay) and Q5 (clean-clone A5 replay) were blocked by its read-only sandbox and are re-run in a writable checkout after the GAMMA fix lands; the 37 custody files per root (arm_readiness.sources/evidence/freeze.receipts, identity_pin_projection.receipts) are never copied from historical roots. 2026-09-15 (activation d6888966): the GAMMA root-key repair MERGED as PR #339 (merge commit on main; records 11–20 under docs/process_traces/2026-09-15-activation-d6888966/); the scout's Q2/Q5 replays remain to run in a writable checkout; production pack generation still waits for the issued G2-a pin.",
       "stop_card": null
     },
     "PAPER-CUSTODY-SEAM-01": {
@@ -7648,6 +7648,37 @@
       "rank": 73,
       "status": "queued",
       "status_note": "Installed by D-167 from the WORKLOAD-SCORED-01 delta-audit F4 disposition. It is required before any _v6 collection but does not block _v5.",
+      "stop_card": null
+    },
+    "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/19-gamma-replay-804eb394.md (section \"The one red module, diagnosed at the bench\")",
+          "scripts/magistrate_watchdog.py:259: self.root.parent.glob(\"*/night_plan.json\") discovers plans in the parent of the custody root",
+          "tests/test_magistrate_watchdog_cli.py:104: --custody-root receives the TemporaryDirectory directly in HandoffCliDefectTests.test_corrupt_lock_cli_refusal_survives_unreadable_state_and_repeated_hold (harness setup at :88-89)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-CLI-TEST-TMP-DISCOVERY-01/acceptance",
+          "label": "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every watchdog CLI/harness test nests its custody root at least one level below its temporary directory (e.g. <tmp>/custody/magistrate) so discovery sees only fixtures the test authored. A regression plants a foreign <tmp-parent>/*/night_plan.json sibling and proves the test's tick ignores it. tests.test_magistrate_watchdog_cli and tests.test_magistrate_watchdog pass at the bench with a deliberately planted stale plan under /tmp. No change to production discovery semantics: the parent-directory glob is the production contract for ~/night-custody/<plan>/."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 record 19; magistrate registration from a bench replay finding (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/19-gamma-replay-804eb394.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "scripts/magistrate_watchdog.py:259 discovers night plans with self.root.parent.glob(\"*/night_plan.json\"), the parent of the custody root. tests/test_magistrate_watchdog_cli.py:104 passes --custody-root <TemporaryDirectory>, whose parent at the bench is /private/tmp, so a stale /tmp/*/night_plan.json fixture left by another session makes the tick go HOLD_UNSAFE with night_plan_malformed (authored_epoch_s is in the future against the harness's fixed 2026-09-04 clock) before the corrupt-lock notice is appended. Twelve subtests fail at the bench while CI's clean runner passes; seen 2026-09-15 on the PR #339 replay (record 19), and the same module fails identically on clean main at that bench.",
+      "id": "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 201,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered by the magistrate from the record 19 PR #339 bench replay finding; not a ruling; not started. Sibling lanes REPLAY-FIXTURE-LEAK-01 and FIXTURE-FAKE-VLLM-LEAK-01 cover stale fixture residue and remain separate rows. Production parent-directory discovery semantics stay unchanged.",
       "stop_card": null
     },
     "WATCHDOG-NITS-01": {
