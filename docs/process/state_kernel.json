@@ -2407,6 +2407,37 @@
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
+    "FIXTURE-FAKE-VLLM-LEAK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-decae362/00-launch-record.md section \"State found\" (35 orphaned test-fixture processes) and \"Follow-up (lane to register, not this slice)\" (FIXTURE-FAKE-VLLM-LEAK-01)",
+          "tests/test_node_worker_subprocess.py:145-155 (prepare starts the fixture before server_pid is captured), :314-316 (finally kills only a known live server_pid), :375-434 (_write_fake_vllm writes the server; :428-430 installs SIGTERM handling and serves forever)",
+          "docs/process_traces/2026-09-15-activation-d6888966/00-launch-record.md section \"State found\" (35 orphaned vllm serve /fake/model fixture processes still present)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-FAKE-VLLM-LEAK-01/acceptance",
+          "label": "FIXTURE-FAKE-VLLM-LEAK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The fixture teardown terminates the fake server on every exit path using addCleanup/finally, with a SIGKILL fallback after a bounded wait. An interrupted-test regression starts the fixture, aborts mid-test, and proves no survivor by PID. The tests/test_node_worker_subprocess.py module tests pass. Not night-critical."
+      },
+      "authority": {
+        "label": "2026-09-15 activation decae362 record 00 Follow-up plus activation d6888966 registration; registered by the magistrate (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-decae362/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "tests/test_node_worker_subprocess.py writes a fake vllm server into a temp venv with _write_fake_vllm and starts it as a subprocess; some exit path fails to reap it. The magistrate found 35 orphaned python /var/folders/…/T/tmp*/bin/vllm serve /fake/model … --served-model-name nv5-fake-model processes (parent PID 1, 0 % CPU, launched 2026-09-03 through 2026-09-05 per ps -o lstart), outside the claude/codex/t3 agent census but holding memory and ports. This is a separate fixture and file from REPLAY-FIXTURE-LEAK-01.",
+      "id": "FIXTURE-FAKE-VLLM-LEAK-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 198,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered from activation decae362 record 00 Follow-up and the d6888966 State found census; not started; not night-critical. Sibling of REPLAY-FIXTURE-LEAK-01, kept separate because it covers a different fixture and file. Separate ed_external note: culling the existing orphan processes is Ed's call; no orphan cull is authorized by this agent lane.",
+      "stop_card": null
+    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -7580,6 +7611,37 @@
       "rank": 158,
       "status": "queued",
       "status_note": "H2; Traces 23 F2-F4, 24 and 99: nonblocking follow-ups; preserve fail-closed refusal semantics.",
+      "stop_card": null
+    },
+    "WATCHDOG-STALE-EXIT-CLASS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/00-launch-record.md section \"Correction 06:41 PDT\" at commit 2ec6ee139ba7f1efb631a623568c22868653ef60 (called \"Correction 06:50 PDT\" in the registration brief): clean exits and stale last_exit_class; correction absent at registration base 17c80571",
+          "scripts/magistrate_watchdog.py:1444-1450 (launch predicate selects BACKOFF_USAGE from last_exit_class), :1636-1672 (_finish_child; clean-exit branch :1655-1662 resets indices and sets the 300 s cooldown without clearing last_exit_class, then persists state.json)",
+          "/Users/edr/night-custody/magistrate/events.jsonl sequences 132-137: clean activation exits at 132/136 and stale BACKOFF_USAGE transitions at 133/137; last real usage exit at sequence 37 (2026-09-09), as reported in activation d6888966 record 00 correction and the registration brief; custody file not copied"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-STALE-EXIT-CLASS-01/acceptance",
+          "label": "WATCHDOG-STALE-EXIT-CLASS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The clean-exit branch sets last_exit_class to \"clean\" (or the launch predicate keys the waiting-state label on the exit that set the deadline, not a stale field). A regression drives one real usage exit followed by one clean exit through the child-finish handler and asserts state.json reads last_exit_class == \"clean\" and the waiting transition is BACKOFF, not BACKOFF_USAGE. The existing classify_exit tests remain unchanged. Lands under the twelve-row gate; not night-critical; no change to the 300 s cooldown or the usage ladder."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 record 00 correction; registered by the magistrate (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The clean-exit branch in scripts/magistrate_watchdog.py resets the backoff indices and sets a fixed 300 s cooldown but leaves last_exit_class stale; the launch predicate labels the cooldown BACKOFF_USAGE and state.json still reports usage_exhausted after clean exits. Activations decae362 and d6888966 on 2026-09-15 misread that field as a previous usage exit, although both prior exits were exit 0 with stop_reason end_turn (events.jsonl sequences 132 and 136); the last real usage exit was sequence 37 on 2026-09-09.",
+      "id": "WATCHDOG-STALE-EXIT-CLASS-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 197,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered from record 00 correction; not started. Not night-critical; lands under the twelve-row gate. Corrects stale exit-state reporting without changing the 300 s cooldown or usage ladder.",
       "stop_card": null
     },
     "WHOLE-WINDOW-STOP-RECEIPT-01": {
