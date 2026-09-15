@@ -21,3 +21,16 @@ Addendum 17:50 PDT — PR #330 merged first (main `9e7ca12b`, then the cold-gate
 
 Addendum 17:58 PDT — Record 69 (terse delta on round 3, rc 0): CURED in D-181; same class found at `state_kernel.json` INSTALL-WINDOWS-MULTI-01.status_note ("Until landed the ruled single install span stands." — my own 16:5x text) and its two generated renderings; the seat's same-signature answer: yes for owner-proposition fidelity vs round 1. Under rule 11 (another missed call site of the same class) the next spend was a CONSULT, not round four by reflex: record 70 (Opus) enumerated the diff exhaustively — one authored defect (that sentence) plus its two renderings; D-181's round-3 wording correct; D-180's own entry out of scope (dated addendum convention); structural cause = the "decided ≠ done / prior rule stands" boilerplate copied from D-180 into the kernel row; cure must be a class sweep gated by a widened grep, not another site-at-a-time patch; a fourth bench round proportionate, no cold-gate trigger. Fix round 4 (`23911de3`): the one sentence replaced with the consult's text (33 words, cell-text clean), regeneration; the widened grep over the whole diff returns only the cured D-181 Status line (pasted in the commit's bench log and re-run by record 71). The replay was re-run on 23911de3 (row 9 literal); record 71 is the delta on round 4.
 
+Addendum 18:45 PDT — Record 71 (terse delta on round 4, rc 0): CURED, no findings; the widened grep returns only the cured D-181 line; heads equal main's. Row 9 replay on 23911de3 (16:57–18:42): 6053 tests, ONE failure — `tests.test_docs_freshness.test_decision_index_matches_decision_bodies`: the decision log's `## Index` table lacked a D-181 row (body ids ≠ index ids). Summary lines:
+
+```
+SHARD SUMMARY index=1/4 modules=52 tests=1041 failures=0 errors=0 skipped=7 result=PASS
+SHARD SUMMARY index=2/4 modules=61 tests=1311 failures=1 errors=0 skipped=75 result=FAIL
+SHARD SUMMARY index=3/4 modules=59 tests=1953 failures=0 errors=0 skipped=18 result=PASS
+SHARD SUMMARY index=4/4 modules=61 tests=1748 failures=0 errors=0 skipped=3 result=PASS
+WORKERS SUMMARY shards=4 modules=233 tests=6053 failures=1 errors=0 skipped=103 failed_shards=2 result=FAIL
+REPLAY RC=1
+```
+
+A genuine catch by the replay (no reviewer had run the docs-freshness module; the seats ran only the focused generator module). Fix round 5 at the bench (`a9695fec`, decision_log.md only): one Index row for D-181 after D-180's, status cell "ratified by Ed (2026-09-14, directive issue #337; recorded verbatim, nothing installed by the entry)" (leading token `ratified`, the same vocabulary as D-180's row); `tests.test_docs_freshness` 31 OK at the bench; `--check` rc 0; the class-sweep grep unchanged (only the cured line). Same-signature judgment (lead): index freshness is a new class (a mechanical consistency check the reviewers' focused suite did not cover), not a recurrence of rounds 1–4; record 72 is asked to answer independently. Replay re-run on a9695fec (row 9 literal); CI on a9695fec.
+
