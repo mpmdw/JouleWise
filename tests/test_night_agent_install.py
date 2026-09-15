@@ -2,8 +2,8 @@
 
 The fake is a subprocess, never a wrapper around real launchctl. Its marker
 files are the liveness oracle; query diagnostics and mutator return codes are
-independent of those files. Installer matrix/porting awaits the render-only
-rollback ruling; the tests here characterize the instrument itself.
+independent of those files. These tests characterize the instrument and pin the
+system-Python package imports required by the uninstall entrypoint.
 """
 
 import json
@@ -225,6 +225,61 @@ class FakeLaunchctlTests(unittest.TestCase):
                          [self.fake.invoke("print", label).returncode for _ in range(4)])
         self.assertEqual(113, self.fake.invoke("print", other).returncode)
         self.assertFalse(any(self.fake.loaded(item) for item in LABELS))
+
+
+class SystemPythonImportTests(unittest.TestCase):
+    @unittest.skipUnless(Path("/usr/bin/python3").is_file(), "requires system Python")
+    def test_package_import_requires_only_stdlib_and_package_on_system_python(self):
+        """Pin the package initialization required by uninstall's -m entrypoint.
+
+        -S disables site initialization and both user and global site packages.
+        The origin check also catches dependencies imported from the checkout or
+        from a path added by package initialization itself. Running the import
+        under the system interpreter catches incompatible syntax and APIs.
+        """
+        repo = Path(__file__).resolve().parents[1]
+        script = r'''
+import json
+from pathlib import Path
+import sys
+import sysconfig
+
+repo = Path(sys.argv[1]).resolve()
+stdlib = {Path(sysconfig.get_path(name)).resolve()
+          for name in ("stdlib", "platstdlib")}
+allowed = stdlib | {repo / "joulewise"}
+sys.path.insert(0, str(repo))
+import joulewise
+
+unexpected = {}
+for name, module in tuple(sys.modules.items()):
+    origin = getattr(module, "__file__", None)
+    if origin is None:
+        continue  # Built-in and frozen modules have no filesystem dependency.
+    path = Path(origin).resolve()
+    if (not any(path == root or root in path.parents for root in allowed)
+            or "site-packages" in path.parts or "dist-packages" in path.parts):
+        unexpected[name] = str(path)
+assert not unexpected, unexpected
+assert "site" not in sys.modules
+assert "scripts.run_night" not in sys.modules
+print(json.dumps({"version": list(sys.version_info[:3]),
+                  "package_modules": sorted(name for name in sys.modules
+                                            if name == "joulewise"
+                                            or name.startswith("joulewise."))}))
+'''
+        with tempfile.TemporaryDirectory(prefix="iw-txn-system-python-", dir="/tmp") as root:
+            completed = subprocess.run(
+                ["/usr/bin/python3", "-B", "-S", "-c", script, str(repo)],
+                cwd=root,
+                env={"PATH": "/usr/bin:/bin", "HOME": root,
+                     "PYTHONPATH": str(repo), "PYTHONNOUSERSITE": "1",
+                     "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/tmp"},
+                capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        evidence = json.loads(completed.stdout)
+        self.assertIn("joulewise", evidence["package_modules"])
+        self.assertIn("joulewise.schemas", evidence["package_modules"])
 
 
 if __name__ == "__main__":
