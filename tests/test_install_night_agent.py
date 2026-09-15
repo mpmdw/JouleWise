@@ -20,6 +20,7 @@ from scripts import run_night
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
+from tests.test_night_agent_install import FakeLaunchctl, LABELS
 from tests.test_magistrate_watchdog import Harness
 from scripts import magistrate_watchdog as wd
 
@@ -61,7 +62,7 @@ def _init_repo(root: Path) -> str:
 
 class InstallNightAgentTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
+        self.temporary = tempfile.TemporaryDirectory(dir="/tmp")
         self.root = Path(self.temporary.name).resolve()
         self.measurement_root = self.root / "measurement checkout"
         self.measurement_head = _init_repo(self.measurement_root)
@@ -71,17 +72,9 @@ class InstallNightAgentTests(unittest.TestCase):
         self.courier = self.bin_dir / "claude"
         self.courier.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
         self.courier.chmod(0o755)
-        self.launch_log = self.root / "launchctl.log"
-        self.launchctl = self.bin_dir / "launchctl-stub"
-        self.launchctl.write_text(
-            '#!/bin/zsh\nprint -r -- "$*" >> "$LAUNCH_LOG"\n'
-            'label="${${3:-$2}:t:r}"\n'
-            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
-            '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
-            '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
-            'exit 0\n', encoding="utf-8",
-        )
-        self.launchctl.chmod(0o755)
+        self.fake = FakeLaunchctl(self.bin_dir / "fake")
+        self.launch_log = self.fake.log
+        self.launchctl = self.fake.executable
         self.environment = os.environ.copy()
         self.environment["HOME"] = str(self.root / "home")
         self.environment["PATH"] = f"{self.bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -143,7 +136,7 @@ class InstallNightAgentTests(unittest.TestCase):
             "--launchctl-bin",
             str(self.launchctl),
         ]
-        if render_only:
+        if render_only and not uninstall:
             argv.extend(["--render-only", str(self.rendered)])
         if uninstall:
             argv.append("--uninstall")
@@ -172,13 +165,15 @@ class InstallNightAgentTests(unittest.TestCase):
             "sys.argv = args\n"
             "if args[0] == '-':\n"
             "    exec(compile(sys.stdin.read(), '<installer-stdin>', 'exec'))\n"
-            "else:\n"
-            "    source = Path(args[0]).read_text()\n"
+            "elif args[0] == '-m':\n"
+            f"    sys.path.insert(0, {str(REPO_ROOT)!r})\n"
+            "    from scripts import run_night\n"
             f"    spans = {spans!r}\n"
-            "    if spans is not None and 'schedule' in args:\n"
-            "        source = source.replace('INSTALL_SPANS: tuple[tuple[str, str], ...] = "
-            "((\"00:00\", \"24:00\"),)', 'INSTALL_SPANS: tuple[tuple[str, str], ...] = ' + repr(spans))\n"
-            "    exec(compile(source, args[0], 'exec'), {'__name__': '__main__', '__file__': args[0]})\n",
+            "    if spans is not None: run_night.INSTALL_SPANS = spans\n"
+            "    module = args[1]; sys.argv = args[1:]\n"
+            "    runpy.run_module(module, run_name='__main__')\n"
+            "else:\n"
+            "    runpy.run_path(args[0], run_name='__main__')\n",
             encoding="utf-8",
         )
         wrapper.chmod(0o755)
@@ -288,7 +283,7 @@ class InstallNightAgentTests(unittest.TestCase):
         self._assert_refused_without_outputs(self._run(plan, render_only=False), "plan_t0_in_the_past")
 
     def test_installer_refuses_when_a_night_agent_is_already_loaded(self) -> None:
-        Path(str(self.launch_log) + ".com.joulewise.night").touch()
+        self.fake.set_loaded(LABELS[0], True)
         plan = self._write_plan()
         self._assert_refused_without_outputs(self._run(plan, render_only=False), "night_agent_already_loaded", 3)
         # Rendering is explicitly exempt from querying occupied labels.
@@ -307,16 +302,13 @@ class InstallNightAgentTests(unittest.TestCase):
         close = run_night.install_close_epoch(plan)
         python = self._controlled_python(close - 1)
         # Move the subprocess clock at the first successful bootstrap.
-        source = self.launchctl.read_text()
-        source = source.replace('exit 0\n',
-            f'[[ "$1" == bootstrap ]] && print -- {close} > "{self.clock_file}"\nexit 0\n')
-        self.launchctl.write_text(source)
+        self.fake.directive(LABELS[0], "bootstrap", clock_file=str(self.clock_file), clock=close)
         completed = self._run(plan_path, python=str(python), render_only=False)
         self.assertEqual(2, completed.returncode, completed.stderr)
         self.assertIn("install_span_closed", completed.stderr)
         self.assertNotIn("validated pins:", completed.stdout)
         calls = self.launch_log.read_text().splitlines()
-        self.assertEqual(1, sum(line.startswith("bootstrap ") for line in calls))
+        self.assertEqual(2, sum(line.startswith("bootstrap ") for line in calls))
         self.assertEqual([
             f"{action} gui/{os.getuid()}/{label}"
             for action in ("bootout", "print")
@@ -337,37 +329,27 @@ class InstallNightAgentTests(unittest.TestCase):
     def _assert_no_installed_outputs(self) -> None:
         self.assertEqual([], list((self.root / "home/Library/LaunchAgents").glob("*.plist")))
         for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
-            self.assertFalse(Path(f"{self.launch_log}.{label}").exists())
+            self.assertFalse(self.fake.loaded(label))
 
-    def test_span_close_120101_during_bootout_or_first_bootstrap_rolls_back(self) -> None:
+    def test_span_close_120101_during_first_bootstrap_rolls_back(self) -> None:
         now = datetime(2026, 9, 15, 12).timestamp()
-        original = self.launchctl.read_text()
-        for advance_at in ("bootout", "bootstrap"):
-            with self.subTest(advance_at=advance_at):
-                # Isolate both counterfactuals even when the unfixed installer
-                # leaves loaded fixture labels after the first assertion fails.
-                for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
-                    Path(f"{self.launch_log}.{label}").unlink(missing_ok=True)
-                plan = self._write_plan(authored_epoch_s=now - 60, t0_epoch_s=now + 86400)
-                python = self._controlled_python(now, spans=(("00:00", "12:01"), ("12:01", "24:00")))
-                self.launchctl.write_text(original.replace('exit 0\n',
-                    f'[[ "$1" == {advance_at} ]] && print -- {now + 61} > "{self.clock_file}"\nexit 0\n'))
-                completed = self._run(plan, python=str(python), render_only=False)
-                self.assertEqual(2, completed.returncode, completed.stderr)
-                self.assertIn("install_span_closed", completed.stderr)
-                self._assert_no_installed_outputs()
+        plan = self._write_plan(authored_epoch_s=now - 60, t0_epoch_s=now + 86400)
+        python = self._controlled_python(now, spans=(("00:00", "12:01"), ("12:01", "24:00")))
+        self.fake.directive(LABELS[0], "bootstrap", clock_file=str(self.clock_file), clock=now + 61)
+        completed = self._run(plan, python=str(python), render_only=False)
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn("install_span_closed", completed.stderr)
+        self._assert_no_installed_outputs()
 
     def test_failed_night_or_deadman_bootstrap_removes_plists_and_does_not_fence(self) -> None:
-        original = self.launchctl.read_text()
         now = datetime(2026, 9, 15, 12).timestamp()
         for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
             with self.subTest(failed_label=label):
                 plan_path = self._write_plan(authored_epoch_s=now - 60, t0_epoch_s=now + 86400)
                 python = self._controlled_python(now)
-                self.launchctl.write_text(original.replace(
-                    '[[ "$1" == bootstrap ]] && /usr/bin/touch',
-                    f'[[ "$1" == bootstrap && "$label" == {label} ]] && exit 1\n'
-                    '[[ "$1" == bootstrap ]] && /usr/bin/touch'))
+                for item in LABELS:
+                    self.fake.directive(item, "bootstrap", rc=1 if item == label else 0,
+                                        loaded=item != label)
                 completed = self._run(plan_path, python=str(python), render_only=False)
                 self.assertEqual(3, completed.returncode, completed.stderr)
                 harness = Harness(self.root / "magistrate", datetime.fromtimestamp(now + 86400).astimezone())
@@ -385,9 +367,7 @@ class InstallNightAgentTests(unittest.TestCase):
                  ("com.joulewise.night", "com.joulewise.night.deadman")}
         for label, payload in prior.items():
             (directory / f"{label}.plist").write_bytes(payload)
-        self.launchctl.write_text(self.launchctl.read_text().replace(
-            '[[ "$1" == bootstrap ]] && /usr/bin/touch',
-            '[[ "$1" == bootstrap ]] && exit 1\n[[ "$1" == bootstrap ]] && /usr/bin/touch'))
+        self.fake.directive(LABELS[0], "bootstrap", rc=1, loaded=False)
         completed = self._run(self._write_plan(), render_only=False)
         self.assertEqual(3, completed.returncode, completed.stderr)
         for label, payload in prior.items():
@@ -665,6 +645,31 @@ class InstallNightAgentTests(unittest.TestCase):
                 argv = document["ProgramArguments"]
                 self.assertEqual(str(plan.resolve()), argv[argv.index("--plan") + 1])
 
+    def test_relative_plan_and_render_directory_survive_script_cwd_binding(self) -> None:
+        plan = self._write_plan()
+        completed = subprocess.run(
+            ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan.relative_to(self.root)),
+             "--render-only", "relative rendered", "--python", sys.executable,
+             "--launchctl-bin", str(self.launchctl)],
+            cwd=self.root, env=self.environment, capture_output=True, text=True, check=False)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        paths = sorted((self.root / "relative rendered").glob("*.plist"))
+        self.assertEqual(2, len(paths))
+        for path in paths:
+            document = plistlib.loads(path.read_bytes())
+            self.assertIn(str(plan), document["ProgramArguments"])
+            self.assertEqual(str(REPO_ROOT), document["WorkingDirectory"])
+        self.assertFalse(self.launch_log.exists())
+
+    def test_relative_launchctl_path_survives_script_cwd_binding(self) -> None:
+        plan = self._write_plan()
+        completed = subprocess.run(
+            ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan.relative_to(self.root)),
+             "--python", sys.executable, "--launchctl-bin", str(self.launchctl.relative_to(self.root))],
+            cwd=self.root, env=self.environment, capture_output=True, text=True, check=False)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertTrue(all(self.fake.loaded(label) for label in LABELS))
+
     def test_install_rejects_v2_pack_and_invalid_v3_before_creating_custody(self) -> None:
         for changes in (
             {"schema": "joulewise.night_plan.v2", "schema_version": 2},
@@ -752,16 +757,29 @@ class InstallNightAgentTests(unittest.TestCase):
         uninstalled = self._run(plan, uninstall=True)
         self.assertEqual(0, uninstalled.returncode, uninstalled.stderr)
 
+    def test_uninstall_and_render_only_refuse_before_launchctl(self) -> None:
+        plan = self._write_plan()
+        result = subprocess.run(["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan),
+            "--uninstall", "--render-only", str(self.rendered),
+            "--launchctl-bin", str(self.launchctl)], env=self.environment,
+            capture_output=True, text=True, check=False)
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertIn("mutually exclusive", result.stderr)
+        self.assertEqual([], self.fake.calls())
+        self.assertFalse(self.rendered.exists())
+
     def test_uninstall_ignores_both_pin_mismatches_and_invokes_launchctl(self) -> None:
         self.courier.unlink()
         self.assertFalse((self.measurement_root / ".venv").exists())
-        # No run_night.py or joulewise package: uninstall must not import them.
+        # No run_night.py: uninstall uses the system-compatible package entrypoint (R5).
         driver = self.root / "uninstall-only"
         for relative in ("scripts/install_night_agent.sh",
                          "configs/launchd/com.joulewise.night.plist.template"):
             target = driver / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO_ROOT / relative, target)
+        shutil.copytree(REPO_ROOT / "joulewise", driver / "joulewise",
+                        ignore=shutil.ignore_patterns("__pycache__"))
         completed = self._run(
             self._write_plan(
                 repo_head="b" * 40,
@@ -788,370 +806,6 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual([f"{action} gui/{os.getuid()}/{label}"
                           for action in ("bootout", "print")
                           for label in ("com.joulewise.night", "com.joulewise.night.deadman")] * 2, calls)
-
-
-class InstallTeardownTests(unittest.TestCase):
-    LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
-
-    def _prepare(self, *, fault="", priors=False, spans=None, advance=61,
-                 cutoff=None, retained_labels=None, render_only=False):
-        fixture = InstallNightAgentTests()
-        fixture.setUp()
-        self.addCleanup(fixture.tearDown)
-        self.fixture = fixture
-        self.retained_labels = self.LABELS if retained_labels is None else retained_labels
-        fixture.environment["TZ"] = "America/Los_Angeles"
-        fixture.environment["TMPDIR"] = "/tmp"
-        now = datetime(2026, 9, 15, 12, tzinfo=ZoneInfo("America/Los_Angeles")).timestamp()
-        t0 = (now + 86400 if cutoff is None else
-              now + cutoff + wd.PLAN_LEAD_S + run_night.INSTALL_CLOSE_MARGIN_S)
-        self.plan = fixture._write_plan(authored_epoch_s=now - 60, t0_epoch_s=t0)
-        self.python = fixture._controlled_python(now, spans=spans)
-        self.directory = (fixture.rendered if render_only else
-                          fixture.root / "home/Library/LaunchAgents")
-        self.prior_bytes = {}
-        if priors:
-            prior_plan = fixture._write_plan(plan_id="prior-install-night-agent-test",
-                authored_epoch_s=now - 60, t0_epoch_s=t0)
-            self.directory.mkdir(parents=True)
-            for label in self.LABELS:
-                payload = plistlib.dumps({"Label": label, "ProgramArguments":
-                    [sys.executable, "run_night.py", "--plan", str(prior_plan)]})
-                self.prior_bytes[label] = payload
-                (self.directory / f"{label}.plist").write_bytes(payload)
-        if fault == "render":
-            (self.directory / f"{self.LABELS[1]}.plist").chmod(0o400)
-        self.fence_time = datetime.fromtimestamp(t0, ZoneInfo("America/Los_Angeles"))
-        self.backup_log = fixture.root / "backups"
-        fixture.environment["BACKUP_LOG"] = str(self.backup_log)
-        mktemp = fixture.bin_dir / "mktemp"
-        mktemp.write_text('#!/bin/zsh\ncreated="$(/usr/bin/mktemp "$@")" || exit $?\n'
-                          'print -r -- "$created" >> "$BACKUP_LOG"\nprint -r -- "$created"\n')
-        mktemp.chmod(0o755)
-        # Reclaim only this fixture's deliberately retained/baseline backups.
-        backup_log = self.backup_log
-        def clean_backups():
-            if backup_log.exists():
-                for path in backup_log.read_text().splitlines():
-                    shutil.rmtree(path, ignore_errors=True)
-        self.addCleanup(clean_backups)
-        fixture.launchctl.write_text(
-            f"#!{sys.executable}\n"
-            "import os, signal, sys\nfrom pathlib import Path\n"
-            f"labels = {self.LABELS!r}\nfault = {fault!r}\n"
-            f"retained_labels = {self.retained_labels!r}\n"
-            f"directory = Path({str(self.directory)!r})\n"
-            "log = Path(os.environ['LAUNCH_LOG'])\n"
-            "args = sys.argv[1:]\naction = args[0]\n"
-            "label = Path(args[-1]).name.removesuffix('.plist')\n"
-            "marker = Path(str(log) + '.' + label)\n"
-            "with log.open('a') as stream: stream.write(' '.join(args) + '\\n')\n"
-            "if action == 'bootout':\n"
-            "    present = all((directory / (item + '.plist')).is_file() for item in labels)\n"
-            "    if not present:\n"
-            "        with Path(str(log) + '.violations').open('a') as stream:\n"
-            "            stream.write('bootout_before_remove: ' + label + '\\n')\n"
-            "    assert present, 'both plists must exist at bootout'\n"
-            "    if fault == 'retained' and label in retained_labels and marker.exists(): sys.exit(1)\n"
-            "    marker.unlink(missing_ok=True)\n"
-            "elif action == 'bootstrap':\n"
-            "    marker.touch()\n"
-            "    if label == labels[0]:\n"
-            "        if fault in ('TERM', 'INT', 'HUP'):\n"
-            "            os.kill(os.getppid(), getattr(signal, 'SIG' + fault))\n"
-            "        if fault == 'night': sys.exit(1)\n"
-            "    else:\n"
-            f"        Path({str(fixture.clock_file)!r}).write_text(str({now + advance!r}))\n"
-            "        if fault in ('deadman', 'retained'): sys.exit(1)\n"
-            "elif action == 'print':\n"
-            "    if fault == 'verification' and all(Path(str(log) + '.' + item).exists() for item in labels):\n"
-            "        sys.exit(1)\n"
-            "    sys.exit(0 if marker.exists() else 1)\n"
-        )
-
-    def _run(self):
-        # Bound a trap-reentry defect instead of hanging the test process.
-        original = subprocess.run
-        with mock.patch.object(subprocess, "run", side_effect=lambda *args, **kwargs:
-                               original(*args, timeout=15, **kwargs)):
-            return self.fixture._run(self.plan, python=str(self.python), render_only=False)
-
-    def _assert_teardown(self, completed, expected_rc):
-        self.assertEqual(expected_rc, completed.returncode, completed.stderr)
-        self.assertFalse(Path(f"{self.fixture.launch_log}.violations").exists(),
-                         "bootout_before_remove: both plists must exist at every bootout")
-        calls = self.fixture.launch_log.read_text().splitlines()
-        uid = os.getuid()
-        expected = [f"{action} gui/{uid}/{label}" for action in ("bootout", "print")
-                    for label in self.LABELS]
-        self.assertEqual(expected, calls[-4:], "teardown must end with both bootouts then both prints")
-        self.assertEqual(1, sum(calls[i:i + 4] == expected for i in range(len(calls) - 3)),
-                         "EXIT teardown must run once, including when it exits 4")
-        backups = [Path(path) for path in self.backup_log.read_text().splitlines()]
-        self.assertEqual(1, len(backups))
-        if expected_rc == 4:
-            for label in self.LABELS:
-                self.assertEqual(label in self.retained_labels,
-                                 Path(f"{self.fixture.launch_log}.{label}").exists())
-                plist = self.directory / f"{label}.plist"
-                self.assertTrue(plist.is_file(), "retained branch must preserve both plists")
-                self.assertIn(str(self.plan), plistlib.loads(plist.read_bytes())["ProgramArguments"])
-                self.assertIn(label, completed.stderr)
-                self.assertIn(str(plist), completed.stderr)
-            self.assertTrue(backups[0].is_dir(), "retained branch must preserve the backup")
-            for label, payload in self.prior_bytes.items():
-                self.assertEqual(payload, (backups[0] / f"{label}.plist").read_bytes())
-            self.assertEqual(1, completed.stderr.count("retained plists:"))
-            expected_plan = "install-night-agent-test"
-        else:
-            self.assertNotEqual(4, completed.returncode)
-            for label in self.LABELS:
-                self.assertFalse(Path(f"{self.fixture.launch_log}.{label}").exists())
-                plist = self.directory / f"{label}.plist"
-                if label in self.prior_bytes:
-                    self.assertEqual(self.prior_bytes[label], plist.read_bytes())
-                else:
-                    self.assertFalse(plist.exists())
-            self.assertFalse(backups[0].exists(), "no leaked night-agent-install backup")
-            expected_plan = "prior-install-night-agent-test" if self.prior_bytes else None
-        reason = wd.installed_agent_fence(self.fence_time, wd.Storage(self.fixture.root),
-                                         launch_agents_dir=self.directory)
-        expected_reason = ("; ".join([f"installed_plan:{expected_plan}"] * 2)
-                           if expected_plan else None)
-        self.assertEqual(expected_reason, reason)
-
-    def _assert_commit_gate(self, *, spans, advance, cutoff=None):
-        self._prepare(spans=spans, advance=advance, cutoff=cutoff)
-        completed = self._run()
-        self._assert_teardown(completed, 2)
-        self.assertIn("install_span_closed", completed.stderr)
-        self.assertNotIn("validated pins:", completed.stdout)
-        self.assertEqual(2, sum(line.startswith("bootstrap ")
-            for line in self.fixture.launch_log.read_text().splitlines()))
-
-    def test_commit_gate_one_boundary(self):
-        self._assert_commit_gate(spans=(("00:00", "12:01"), ("12:01", "24:00")), advance=61)
-
-    def test_commit_gate_two_boundaries(self):
-        self._assert_commit_gate(spans=(("00:00", "12:01"), ("12:01", "12:02"),
-                                      ("12:02", "24:00")), advance=121)
-
-    def test_commit_gate_plan_cutoff_first(self):
-        self._assert_commit_gate(spans=(("00:00", "12:02"), ("12:02", "24:00")),
-                                 advance=61, cutoff=60)
-
-    def test_commit_gate_selected_close_first(self):
-        self._assert_commit_gate(spans=(("00:00", "12:01"), ("12:01", "24:00")),
-                                 advance=61, cutoff=120)
-
-    def test_commit_gate_exactly_at_close(self):
-        self._assert_commit_gate(spans=(("00:00", "12:01"), ("12:01", "24:00")), advance=60)
-
-    def test_teardown_failure_matrix(self):
-        cells = (("TERM", 143), ("INT", 130), ("HUP", 129), ("render", 1),
-                 ("night", 3), ("deadman", 3), ("verification", 3),
-                 ("close", 2), ("retained", 4))
-        for cell, (fault, expected_rc) in enumerate(cells, 1):
-            for priors in ((True,) if fault == "render" else (False, True)):
-                with self.subTest(cell=cell, fault=fault, priors=priors):
-                    spans = (("00:00", "12:01"), ("12:01", "24:00")) if fault == "close" else None
-                    self._prepare(fault=fault, priors=priors, spans=spans)
-                    completed = self._run()
-                    self._assert_teardown(completed, expected_rc)
-                    if fault == "render":
-                        self.assertIn("PermissionError", completed.stderr)
-                        self.assertIn(str(self.directory / f"{self.LABELS[1]}.plist"), completed.stderr)
-                        self.assertFalse(any(line.startswith("bootstrap ")
-                            for line in self.fixture.launch_log.read_text().splitlines()))
-
-    def test_teardown_is_idempotent_after_restoring_prior_plists(self):
-        self._prepare(fault="deadman", priors=True)
-        self._assert_teardown(self._run(), 3)
-        calls = self.fixture.launch_log.read_bytes()
-        # Replay the actual function through an EXIT trap with the already
-        # removed backup. It must neither delete the restored priors nor reload.
-        source = SCRIPT_PATH.read_text()
-        teardown = "teardown() {" + source.split("teardown() {", 1)[1].split("\ntrap teardown EXIT", 1)[0]
-        shell = ('set -euo pipefail\n'
-                 'launchctl_bin="$1"; plist_backup="$2"; launch_dir="$3"; uid="$4"\n'
-                 'night_label=com.joulewise.night; deadman_label=com.joulewise.night.deadman\n'
-                 'night_plist="$launch_dir/$night_label.plist"\n'
-                 'deadman_plist="$launch_dir/$deadman_label.plist"\n' + teardown +
-                 '\ntrap teardown EXIT\nexit 3\n')
-        completed = subprocess.run(["/bin/zsh", "-c", shell, "teardown-replay",
-            str(self.fixture.launchctl), self.backup_log.read_text().strip(),
-            str(self.directory), str(os.getuid())], env=self.fixture.environment,
-            capture_output=True, text=True, timeout=15, check=False)
-        self.assertEqual(3, completed.returncode, completed.stderr)
-        self.assertEqual(calls, self.fixture.launch_log.read_bytes())
-        self._assert_teardown(completed, 3)
-
-    def test_teardown_retains_plists_when_only_one_label_stays_loaded(self):
-        for label in self.LABELS:
-            with self.subTest(retained_label=label):
-                self._prepare(fault="retained", priors=True, retained_labels=(label,))
-                self._assert_teardown(self._run(), 4)
-
-    def _assert_render_only_preserves_preloaded_labels(self, *, fault=""):
-        self._prepare(fault=fault, priors=True, render_only=True)
-        for label in self.LABELS:
-            Path(f"{self.fixture.launch_log}.{label}").touch()
-        completed = self.fixture._run(self.plan, python=str(self.python), render_only=True)
-        self.assertEqual(1 if fault else 0, completed.returncode, completed.stderr)
-        if fault:
-            self.assertIn("PermissionError", completed.stderr)
-            self.assertIn(str(self.directory / f"{self.LABELS[1]}.plist"), completed.stderr)
-        for label in self.LABELS:
-            with self.subTest(label=label, assertion="preloaded label preserved"):
-                self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
-            with self.subTest(label=label, assertion="rendered file contents"):
-                payload = (self.directory / f"{label}.plist").read_bytes()
-                if fault:
-                    self.assertEqual(self.prior_bytes[label], payload)
-                else:
-                    self.assertIn(str(self.plan), plistlib.loads(payload)["ProgramArguments"])
-        with self.subTest(assertion="zero launchctl calls for the whole run"):
-            calls = (self.fixture.launch_log.read_text().splitlines()
-                     if self.fixture.launch_log.exists() else [])
-            self.assertEqual([], calls)
-        backups = [Path(path) for path in self.backup_log.read_text().splitlines()]
-        self.assertEqual(1, len(backups))
-        self.assertFalse(backups[0].exists(), "no leaked /tmp/night-agent-install backup")
-
-    def test_render_only_second_render_failure_preserves_preloaded_labels(self):
-        self._assert_render_only_preserves_preloaded_labels(fault="render")
-
-    def test_render_only_success_preserves_preloaded_labels(self):
-        self._assert_render_only_preserves_preloaded_labels()
-
-    def test_success_removes_backup_without_teardown(self):
-        for render_only in (False, True):
-            with self.subTest(render_only=render_only):
-                self._prepare()
-                completed = self.fixture._run(self.plan, python=str(self.python),
-                                               render_only=render_only)
-                self.assertEqual(0, completed.returncode, completed.stderr)
-                self.assertFalse(Path(self.backup_log.read_text().strip()).exists())
-                if render_only:
-                    self.assertFalse(self.fixture.launch_log.exists())
-                else:
-                    for label in self.LABELS:
-                        self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
-                    self.assertEqual(1, sum(line.startswith("bootout ")
-                        for line in self.fixture.launch_log.read_text().splitlines()))
-
-    def test_backup_removal_failure_after_commit_gate_preserves_verified_arm(self):
-        """after the commit gate, no statement may fire `teardown`'s failure branch"""
-        self._prepare(priors=True)
-        snapshot = self.fixture.root / "calls-at-backup-removal"
-        rm = self.fixture.bin_dir / "rm"
-        rm.write_text(
-            f"#!{sys.executable}\n"
-            "import subprocess, sys\nfrom pathlib import Path\n"
-            f"snapshot = Path({str(snapshot)!r})\n"
-            "if sys.argv[1] == '-rf' and not snapshot.exists():\n"
-            f"    snapshot.write_bytes(Path({str(self.fixture.launch_log)!r}).read_bytes())\n"
-            "    sys.exit(1)\n"
-            "sys.exit(subprocess.call(['/bin/rm', *sys.argv[1:]]))\n"
-        )
-        rm.chmod(0o755)
-        completed = self._run()
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("validated pins:", completed.stdout)
-        backup = Path(self.backup_log.read_text().strip())
-        self.assertEqual([f"warning: backup directory not removed: {backup}"],
-                         completed.stderr.splitlines())
-        self.assertTrue(backup.is_dir())
-        for label in self.LABELS:
-            self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
-            plist = self.directory / f"{label}.plist"
-            self.assertTrue(plist.is_file())
-            self.assertIn(str(self.plan), plistlib.loads(plist.read_bytes())["ProgramArguments"])
-        self.assertEqual([f"print gui/{os.getuid()}/{label}" for label in self.LABELS],
-                         snapshot.read_text().splitlines()[-2:])
-        self.assertEqual(snapshot.read_bytes(), self.fixture.launch_log.read_bytes(),
-                         "no launchctl call after the two verification prints")
-
-    def test_clock_advancing_during_backup_removal_preserves_verified_arm(self):
-        self._prepare(priors=True, advance=0,
-                      spans=(("00:00", "12:01"), ("12:01", "24:00")))
-        after_close = float(self.fixture.clock_file.read_text()) + 61
-        rm = self.fixture.bin_dir / "rm"
-        rm.write_text(
-            f"#!{sys.executable}\n"
-            "import subprocess, sys\nfrom pathlib import Path\n"
-            "if sys.argv[1] == '-rf':\n"
-            f"    Path({str(self.fixture.clock_file)!r}).write_text({str(after_close)!r})\n"
-            "sys.exit(subprocess.call(['/bin/rm', *sys.argv[1:]]))\n"
-        )
-        rm.chmod(0o755)
-        completed = self._run()
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertEqual(after_close, float(self.fixture.clock_file.read_text()))
-        self.assertFalse(Path(self.backup_log.read_text().strip()).exists())
-        for label in self.LABELS:
-            self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
-            plist = self.directory / f"{label}.plist"
-            self.assertTrue(plist.is_file())
-            self.assertIn(str(self.plan), plistlib.loads(plist.read_bytes())["ProgramArguments"])
-
-    def test_uninstall_retains_plists_when_bootout_leaves_loaded_labels(self):
-        for retained_labels in (self.LABELS, self.LABELS[:1], self.LABELS[1:]):
-            with self.subTest(retained_labels=retained_labels):
-                self._prepare(fault="retained", priors=True, retained_labels=retained_labels)
-                for label in self.LABELS:
-                    Path(f"{self.fixture.launch_log}.{label}").touch()
-                completed = self.fixture._run(self.plan, uninstall=True, render_only=False)
-                self.assertEqual(4, completed.returncode, completed.stderr)
-                self.assertEqual(
-                    f"uninstall: still loaded after bootout: {' '.join(retained_labels)}; "
-                    f"retained plists: {self.directory / (self.LABELS[0] + '.plist')} "
-                    f"{self.directory / (self.LABELS[1] + '.plist')}\n", completed.stderr)
-                for label in self.LABELS:
-                    self.assertEqual(label in retained_labels,
-                                     Path(f"{self.fixture.launch_log}.{label}").exists())
-                    self.assertEqual(self.prior_bytes[label],
-                                     (self.directory / f"{label}.plist").read_bytes())
-                calls = self.fixture.launch_log.read_text().splitlines()
-                self.assertEqual([f"{action} gui/{os.getuid()}/{label}"
-                                  for action in ("bootout", "print") for label in self.LABELS],
-                                 calls[-4:])
-                self.assertEqual("; ".join(["installed_plan:prior-install-night-agent-test"] * 2),
-                    wd.installed_agent_fence(self.fence_time, wd.Storage(self.fixture.root),
-                                             launch_agents_dir=self.directory))
-
-    def test_deadman_only_preloaded_refuses_install_without_bootstraps(self):
-        self._prepare(priors=True)
-        Path(f"{self.fixture.launch_log}.{self.LABELS[1]}").touch()
-        completed = self._run()
-        self.assertEqual(3, completed.returncode, completed.stderr)
-        self.assertIn("night_agent_already_loaded:", completed.stderr)
-        self.assertIn(f"label={self.LABELS[1]}", completed.stderr)
-        self.assertFalse(any(line.startswith("bootstrap ")
-            for line in self.fixture.launch_log.read_text().splitlines()))
-        for label in self.LABELS:
-            self.assertEqual(self.prior_bytes[label],
-                             (self.directory / f"{label}.plist").read_bytes())
-        self.assertTrue(Path(f"{self.fixture.launch_log}.{self.LABELS[1]}").exists())
-
-    def test_term_during_first_restore_preserves_both_priors_and_original_status(self):
-        self._prepare(fault="deadman", priors=True)
-        sent = self.fixture.root / "restore-term-sent"
-        cp = self.fixture.bin_dir / "cp"
-        cp.write_text(
-            f"#!{sys.executable}\n"
-            "import os, signal, subprocess, sys\nfrom pathlib import Path\n"
-            f"sent = Path({str(sent)!r})\n"
-            "if sys.argv[1] == '-pf' and not sent.exists():\n"
-            "    sent.write_text(sys.argv[2])\n"
-            "    os.kill(os.getppid(), signal.SIGTERM)\n"
-            "sys.exit(subprocess.call(['/bin/cp', *sys.argv[1:]]))\n"
-        )
-        cp.chmod(0o755)
-        completed = self._run()
-        self.assertTrue(sent.is_file())
-        self.assertEqual(self.LABELS[0] + ".plist", Path(sent.read_text()).name)
-        self._assert_teardown(completed, 3)
 
 
 if __name__ == "__main__":
