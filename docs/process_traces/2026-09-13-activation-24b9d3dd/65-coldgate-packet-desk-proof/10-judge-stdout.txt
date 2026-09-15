@@ -1,0 +1,2 @@
+Ruling written to `10-coldgate-fable-ruling.md` (13,316 bytes): validator PASS after refusing the typo sha; Q1 AFFIRM (a) under five conditions as a bench decision; Q2 AFFIRM (iii) with replacement acceptance text, (ii) REJECTED because the tool writes nothing and exposes no probe output on refusal; Q3 probe block any idle time, tool run only after the 09-15 07:00 dead-man with agents closed, A5 dry gate plus bench-proven ledger steps before booking Ed.
+rc=0
