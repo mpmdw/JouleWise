@@ -2916,7 +2916,7 @@
       "priority": "p1_phase_gate",
       "rank": 0,
       "status": "blocked",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until landed the ruled single install span stands.",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until this lands, the machinery still supports only one install span and one fixed launchd minute — a mechanism limit, not a rule; D-181 cl.1 is in force and no timing rule survives it.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
