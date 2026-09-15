@@ -7744,6 +7744,37 @@
       "status_note": "2026-09-15 activation d6888966: registered by the magistrate from the record 19 PR #339 bench replay finding; not a ruling; not started. Sibling lanes REPLAY-FIXTURE-LEAK-01 and FIXTURE-FAKE-VLLM-LEAK-01 cover stale fixture residue and remain separate rows. Production parent-directory discovery semantics stay unchanged.",
       "stop_card": null
     },
+    "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/12-opus-pairing-refuter-on-ruling-10.md (Q2: the same class exists at scripts/install_magistrate_watchdog.sh:199-201)",
+          "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/10-coldgate-fable-ruling.md (Q2 verified-bootout dictation for the night-agent installer; shape to mirror)",
+          "scripts/install_magistrate_watchdog.sh:199-202 (uninstall bootout failure is ignored, plist deleted, success printed, exit 0; lines read verbatim by the magistrate on main)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01/acceptance",
+          "label": "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The uninstall path re-reads launchctl print gui/$uid/<label> after bootout; if the job is still loaded, it retains the plist, prints the label and plist path, and exits 4; only when not loaded does it remove the plist and exit 0. A regression using the fake-launchctl pattern of tests/test_install_magistrate_watchdog.py stubs bootout rc 1 leaving the loaded marker and asserts rc 4, plist present, and the last two launchctl calls bootout/print. Mutation: deleting the exit 4 line turns the regression RED. Lands after INSTALL-WINDOWS-MULTI-01 in its own small PR. Never run against the live LaunchAgent: the running magistrate is under it."
+      },
+      "authority": {
+        "label": "cold gate 28 Q2 (night-agent installer) applied to the sibling script by magistrate registration, not a ruling",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/12-opus-pairing-refuter-on-ruling-10.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "scripts/install_magistrate_watchdog.sh:199-202 (--uninstall) ignores bootout failure, then runs rm -f \"$plist\", prints \"uninstalled $label\", and exits 0. A failed bootout can leave com.joulewise.magistrate loaded with its plist deleted and a success exit: the same class-2 state cold gate 28 Q2 cured in the night-agent installer. Apply verified bootout to this sibling: bootout, re-read launchctl print, retain the plist and exit non-zero if still loaded. Bench-verified by the magistrate on main by reading the lines verbatim.",
+      "id": "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 204,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966, cold gate 28 Q2: registered by the magistrate from the Opus pairing refuter's sibling finding; the night-agent installer ruling is applied to the watchdog sibling by registration, not a new ruling; not started. No dependency: do not block this task on the night-agent lane. Lands after INSTALL-WINDOWS-MULTI-01 in its own small PR. Use fake-launchctl fixtures only; never run against the live LaunchAgent because the running magistrate is under it.",
+      "stop_card": null
+    },
     "WATCHDOG-NITS-01": {
       "acceptance": {
         "evidence": [
