@@ -1,9 +1,10 @@
 """Transactional installer instrument (D10).
 
 The fake is a subprocess, never a wrapper around real launchctl. Its marker
-files are the liveness oracle; query diagnostics and mutator return codes are
-independent of those files. These tests characterize the instrument and pin the
-system-Python package imports required by the uninstall entrypoint.
+files track physical job state; its query outcomes determine whether absence
+is proven. UNKNOWN requires retention even without a marker. These tests
+characterize the instrument and pin the system-Python package imports required
+by the uninstall entrypoint.
 """
 
 import json
@@ -62,6 +63,13 @@ if isinstance(directive, list):
 
 if action == "print":
     fault = directive.get("fault")
+    # Record the fake's query outcome independently of the engine's classifier.
+    # A missing marker is not absence evidence when the query itself fails.
+    kind = ("LOADED" if fault == "0-with-junk-stderr" else
+            "UNKNOWN" if fault in ("hang", 9, 64, 112, "113-with-wrong-label") else
+            "LOADED" if marker.exists() else "ABSENT")
+    with (root / "queries.jsonl").open("a") as stream:
+        stream.write(json.dumps({"label": label, "kind": kind}) + "\n")
     if fault == "hang":
         time.sleep(directive.get("hang_s", 30))
     elif fault in (9, 64, 112):
@@ -152,6 +160,10 @@ class FakeLaunchctl:
     def calls(self):
         return self.log.read_text().splitlines() if self.log.exists() else []
 
+    def queries(self):
+        path = self.root / "queries.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
     def invoke(self, action, label, uid=None, timeout=5):
         domain = "gui/" + str(os.getuid() if uid is None else uid)
         args = ([domain, str(self.root / (label + ".plist"))]
@@ -179,6 +191,8 @@ class FakeLaunchctlTests(unittest.TestCase):
                                       label + '" in domain for user gui: 501\n'))
                     self.assertEqual(expected, (observed.returncode, observed.stdout,
                                                 observed.stderr))
+                    self.assertEqual({"label": label, "kind": "LOADED" if loaded else "ABSENT"},
+                                     self.fake.queries()[-1])
                     self.assertEqual(loaded, self.fake.loaded(label))
         self.assertEqual(["print gui/501/" + label for label in LABELS for _ in range(2)],
                          self.fake.calls())
@@ -204,6 +218,9 @@ class FakeLaunchctlTests(unittest.TestCase):
                                         " = {\n}\n", "injected junk diagnostic\n")
                         self.assertEqual(expected, (observed.returncode, observed.stdout,
                                                     observed.stderr))
+                        self.assertEqual({"label": label, "kind": "LOADED"
+                                          if fault == "0-with-junk-stderr" else "UNKNOWN"},
+                                         self.fake.queries()[-1])
                         self.assertEqual(loaded, self.fake.loaded(label))
                         self.assertEqual(not loaded, self.fake.loaded(other))
                         self.assertEqual(before + 1, len(self.fake.calls()))
@@ -409,6 +426,7 @@ class TransactionFixture:
     def run(self, **options):
         self.options = options
         self.call_start = len(self.fake.calls())
+        self.query_start = len(self.fake.queries())
         self.bootout_files = self.fake.expect_plists(
             self.directory, uninstall=options.get("uninstall", False))
         self.before = {label: (path.read_bytes(), path.stat().st_mtime_ns)
@@ -676,15 +694,20 @@ class TransactionTests(unittest.TestCase):
             self.assertEqual([], observations)
 
         retained_lines = [line for line in result.stderr.splitlines() if "retained plists:" in line]
+        queries = fixture.fake.queries()[fixture.query_start:]
+        outcomes = {query["label"]: query["kind"] for query in queries}
+        unresolved = tuple(label for label in LABELS if outcomes.get(label) in ("LOADED", "UNKNOWN"))
         if rc == 4:
+            self.assertEqual(set(LABELS), set(outcomes), "retention must query both labels")
+            self.assertTrue(unresolved, "retention requires a LOADED or UNKNOWN query outcome")
             paths = " ".join(str(fixture.directory / (label + ".plist")) for label in LABELS)
             if uninstall_mode:
                 expected = "uninstall: still loaded after bootout: {}; retained plists: {}".format(
-                    " ".join(loaded), paths)
+                    " ".join(unresolved), paths)
                 self.assertEqual(fixture.before, actual_files, "uninstall retention must preserve both files")
             else:
                 expected = "teardown: {}; retained plists: {}".format(
-                    "; ".join(f"{label} loaded={int(label in loaded)}" for label in LABELS), paths)
+                    "; ".join(f"{label} loaded={int(label in unresolved)}" for label in LABELS), paths)
             self.assertEqual([expected], retained_lines, "exact retained diagnostic, emitted once")
             self.assertTrue(all(actual_files.values()), "retention must keep BOTH published plists")
         else:
@@ -710,6 +733,7 @@ class TransactionTests(unittest.TestCase):
                 # queries after bootout, both labels absent and files removed.
                 self.assertEqual([], trace["commits"])
                 self.assertEqual((), actual_loaded)
+                self.assertEqual(dict.fromkeys(LABELS, "ABSENT"), outcomes)
                 self.assertEqual(dict.fromkeys(LABELS), actual_files)
                 self.assertEqual(sequence, calls)
             else:
@@ -789,17 +813,28 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(len(STATE_PRODUCT) * len(FAULT_PRODUCT), len(executed) + len(UNREACHABLE_CELLS))
 
     def test_retention_product(self):
+        self.retention_product(marker_loaded=True,
+                               faults=(None, 9, 64, 112, "113-with-wrong-label", "hang"))
+
+    def test_absent_unknown_retention_product(self):
+        # Successful bootout removes both markers, but a failed query still
+        # cannot authorize rollback restoration or uninstall deletion (D2).
+        self.retention_product(marker_loaded=False,
+                               faults=(9, 64, 112, "113-with-wrong-label", "hang"))
+
+    def retention_product(self, *, marker_loaded, faults):
         for uninstall_mode in (False, True):
             for retained_labels in (LABELS[:1], LABELS[1:], LABELS):
-                for fault in (None, 9, 64, 112, "113-with-wrong-label", "hang"):
+                for fault in faults:
                     for priors in (False, True):
-                        with self.subTest(uninstall=uninstall_mode, labels=retained_labels, fault=fault, priors=priors):
+                        with self.subTest(uninstall=uninstall_mode, labels=retained_labels,
+                                          fault=fault, priors=priors, marker_loaded=marker_loaded):
                             fixture = self.fixture(priors)
                             if uninstall_mode:
                                 # Begin from a complete successful publication.
                                 self.assert_tuple(fixture, fixture.run(), 0, LABELS, "published")
                             for label in retained_labels:
-                                fixture.fake.directive(label, "bootout", rc=0, loaded=True)
+                                fixture.fake.directive(label, "bootout", rc=0, loaded=marker_loaded)
                                 if fault is not None:
                                     fixture.fake.sequence(label, "print", ([{"fault": fault, "hang_s": 3}] if uninstall_mode
                                         else [{}, {"fault": fault, "hang_s": 3}]))
@@ -808,7 +843,12 @@ class TransactionTests(unittest.TestCase):
                             before = {item: (fixture.directory / (item + ".plist")).read_bytes()
                                       for item in LABELS} if uninstall_mode else None
                             result = fixture.run(uninstall=uninstall_mode)
-                            self.assert_tuple(fixture, result, 4, retained_labels, "published")
+                            self.assertEqual(
+                                [{"label": label, "kind": ("UNKNOWN" if fault is not None else "LOADED")
+                                  if label in retained_labels else "ABSENT"} for label in LABELS],
+                                fixture.fake.queries()[-2:])
+                            self.assert_tuple(fixture, result, 4,
+                                              retained_labels if marker_loaded else (), "published")
                             if fault is not None:
                                 for label in retained_labels:
                                     self.assertIn("liveness_unknown: " + label, result.stderr)
