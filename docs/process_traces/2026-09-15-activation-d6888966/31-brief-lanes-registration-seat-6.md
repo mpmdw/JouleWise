@@ -1,0 +1,14 @@
+# Seat brief — register WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01 (sibling of cold gate 28 Q2, found by the Opus pairing refuter)
+
+SESSION_MODE: delegated
+WRITE_SCOPE: ["docs/process/state_kernel.json","tests/test_gen_state.py","TASK_QUEUE.md","RUN_STATE.md"]
+
+Worktree `/Users/edr/code/JouleWise-wt-lanes-d6888966`, branch `chore/2026-09-15-lanes-d6888966` at origin/main (cite `git rev-parse --short HEAD`). Do NOT commit. Never touch `/Users/edr/code/JouleWise`, other worktrees, `/Users/edr/JouleWise-measurement-*`, `~/Library/LaunchAgents`, `/Users/edr/night-custody`. No network. `RUN_STATE.md`/`TASK_QUEUE.md` change ONLY inside the generator-owned fences via `python3 scripts/gen_state.py`.
+
+Register ONE task, rank 204, lane `agent`, status `queued`, priority `p3_hardening_candidates`, in the shape of today's rows (`git show b08eb7a6 -- docs/process/state_kernel.json tests/test_gen_state.py`). Row count 177 + 1 = 178 with the dated comment convention.
+Goal: `scripts/install_magistrate_watchdog.sh:199-202` (`--uninstall`): `bootout … || true`, then `rm -f "$plist"`, then `print "uninstalled …"`, `exit 0` — a failed bootout leaves the `com.joulewise.magistrate` job loaded with its plist deleted and a success exit, the same class-2 state cold gate 28 Q2 cured in the night-agent installer (verified bootout: bootout, re-read `launchctl print`, retain the plist and exit non-zero if still loaded). Bench-verified by the magistrate on main (lines read verbatim).
+Acceptance summary: the uninstall path re-reads `launchctl print gui/$uid/<label>` after the bootout; if still loaded it retains the plist, prints the label and path, and exits 4; only when not loaded does it remove the plist and exit 0; a regression with the fake-launchctl pattern of `tests/test_install_magistrate_watchdog.py` (stub bootout rc 1 leaving the marker) asserts rc 4, plist present, and the last two launchctl calls bootout/print; mutation: deleting the exit line turns it RED; lands after INSTALL-WINDOWS-MULTI-01 in its own small PR; never run against the live LaunchAgent (the running magistrate is under it).
+Evidence: `docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/12-opus-pairing-refuter-on-ruling-10.md` (Q2 "the same class exists at install_magistrate_watchdog.sh:199-201"); `10-coldgate-fable-ruling.md` (Q2 dictation, the shape to mirror); `scripts/install_magistrate_watchdog.sh:199-202`.
+Authority label: cold gate 28 Q2 (night-agent installer) applied to the sibling script by magistrate registration, not a ruling. Dependency: none (do not block it on the night-agent lane; say so in status_note).
+
+Verification to paste: `python3 scripts/gen_state.py && python3 scripts/gen_state.py --check; echo rc=$?`; `python3 -m unittest tests.test_gen_state 2>&1 | tail -3`; `git status --short`; `git diff --stat`. Report in the claude-codex-report/v1 envelope; NEEDS_RULING on any schema conflict.
