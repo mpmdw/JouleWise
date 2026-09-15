@@ -13,11 +13,14 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import run_night
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
+from tests.test_magistrate_watchdog import Harness
+from scripts import magistrate_watchdog as wd
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -277,6 +280,89 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual({"Hour", "Minute"}, set(deadman["StartCalendarInterval"]))
         self.assertFalse(night["RunAtLoad"])
         self.assertFalse(deadman["RunAtLoad"])
+
+    def _assert_no_installed_outputs(self) -> None:
+        self.assertEqual([], list((self.root / "home/Library/LaunchAgents").glob("*.plist")))
+        for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
+            self.assertFalse(Path(f"{self.launch_log}.{label}").exists())
+
+    def test_span_close_120101_during_bootout_or_first_bootstrap_rolls_back(self) -> None:
+        now = datetime(2026, 9, 15, 12).timestamp()
+        original = self.launchctl.read_text()
+        for advance_at in ("bootout", "bootstrap"):
+            with self.subTest(advance_at=advance_at):
+                # Isolate both counterfactuals even when the unfixed installer
+                # leaves loaded fixture labels after the first assertion fails.
+                for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
+                    Path(f"{self.launch_log}.{label}").unlink(missing_ok=True)
+                plan = self._write_plan(authored_epoch_s=now - 60, t0_epoch_s=now + 86400)
+                python = self._controlled_python(now, spans=(("00:00", "12:01"), ("12:01", "24:00")))
+                self.launchctl.write_text(original.replace('exit 0\n',
+                    f'[[ "$1" == {advance_at} ]] && print -- {now + 61} > "{self.clock_file}"\nexit 0\n'))
+                completed = self._run(plan, python=str(python), render_only=False)
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertIn("install_span_closed", completed.stderr)
+                self._assert_no_installed_outputs()
+
+    def test_failed_night_or_deadman_bootstrap_removes_plists_and_does_not_fence(self) -> None:
+        original = self.launchctl.read_text()
+        now = datetime(2026, 9, 15, 12).timestamp()
+        for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
+            with self.subTest(failed_label=label):
+                plan_path = self._write_plan(authored_epoch_s=now - 60, t0_epoch_s=now + 86400)
+                python = self._controlled_python(now)
+                self.launchctl.write_text(original.replace(
+                    '[[ "$1" == bootstrap ]] && /usr/bin/touch',
+                    f'[[ "$1" == bootstrap && "$label" == {label} ]] && exit 1\n'
+                    '[[ "$1" == bootstrap ]] && /usr/bin/touch'))
+                completed = self._run(plan_path, python=str(python), render_only=False)
+                self.assertEqual(3, completed.returncode, completed.stderr)
+                harness = Harness(self.root / "magistrate", datetime.fromtimestamp(now + 86400).astimezone())
+                with mock.patch.object(wd.Path, "home", return_value=self.root / "home"), mock.patch.object(
+                    harness.storage, "glob_plans", return_value=[]
+                ):
+                    decision = wd.decide(harness.storage, harness.deps, wd.initial_state())
+                self.assertNotEqual("FENCED", decision.state, decision.reason)
+                self._assert_no_installed_outputs()
+
+    def test_failed_bootstrap_restores_overwritten_plist_bytes(self) -> None:
+        directory = self.root / "home/Library/LaunchAgents"
+        directory.mkdir(parents=True)
+        prior = {label: f"prior bytes for {label}\n".encode() for label in
+                 ("com.joulewise.night", "com.joulewise.night.deadman")}
+        for label, payload in prior.items():
+            (directory / f"{label}.plist").write_bytes(payload)
+        self.launchctl.write_text(self.launchctl.read_text().replace(
+            '[[ "$1" == bootstrap ]] && /usr/bin/touch',
+            '[[ "$1" == bootstrap ]] && exit 1\n[[ "$1" == bootstrap ]] && /usr/bin/touch'))
+        completed = self._run(self._write_plan(), render_only=False)
+        self.assertEqual(3, completed.returncode, completed.stderr)
+        for label, payload in prior.items():
+            self.assertEqual(payload, (directory / f"{label}.plist").read_bytes())
+
+    def test_now_exactly_span_open_is_accepted_and_exactly_close_is_refused(self) -> None:
+        opening = datetime(2026, 9, 15, 12).timestamp()
+        for now, expected in ((opening, 0), (opening + 60, 2)):
+            with self.subTest(now=now):
+                plan = self._write_plan(authored_epoch_s=opening - 60, t0_epoch_s=opening + 86400)
+                python = self._controlled_python(now, spans=(("12:00", "12:01"),))
+                completed = self._run(plan, python=str(python), render_only=False)
+                self.assertEqual(expected, completed.returncode, completed.stderr)
+                if expected == 0:
+                    self.assertEqual(0, self._run(plan, uninstall=True, render_only=False).returncode)
+                else:
+                    self.assertIn("install_outside_span", completed.stderr)
+                    self._assert_no_installed_outputs()
+
+    def test_now_exactly_t0_reports_install_span_closed_not_past(self) -> None:
+        now = datetime(2026, 9, 15, 12).timestamp()
+        plan = self._write_plan(authored_epoch_s=now - 60, t0_epoch_s=now)
+        python = self._controlled_python(now)
+        completed = self._run(plan, python=str(python), render_only=False)
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn("install_span_closed", completed.stderr)
+        self.assertNotIn("plan_t0_in_the_past", completed.stderr)
+        self._assert_no_installed_outputs()
 
     def test_install_with_both_pins_matching_renders_both_plists(self) -> None:
         completed = self._run(self._write_plan())

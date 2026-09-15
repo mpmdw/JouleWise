@@ -161,7 +161,7 @@ fi
 uid="$(id -u)"
 
 check_schedule() {
-  "$python" -B - "$schedule_json" "$plan" "$custody_root" "$1" <<'SCHEDULE_CHECK'
+  "$python" -B - "$schedule_json" "$plan" "$custody_root" "$1" "${2:-}" <<'SCHEDULE_CHECK'
 import json
 import sys
 import time
@@ -189,15 +189,18 @@ if sys.argv[4] == "initial":
         refuse("plan_t0_in_the_past")
 if now >= schedule["install_close_epoch_s"]:
     refuse("install_span_closed")
+if sys.argv[4] == "close" and now >= float(sys.argv[5]):
+    refuse("install_span_closed", stamp("selected_span_close_epoch_s", float(sys.argv[5])))
 if sys.argv[4] == "initial":
     spans = schedule["install_spans_today"]
-    if not any(opening <= now < closing for opening, closing in spans):
+    selected = next(((opening, closing) for opening, closing in spans if opening <= now < closing), None)
+    if selected is None:
         refuse("install_outside_span", "install_spans_today=" + repr([
             (stamp("open", opening), stamp("close", closing)) for opening, closing in spans]))
     night = schedule["night_calendar"]
     deadman = schedule["deadman_calendar"]
     for value in (night["Month"], night["Day"], night["Hour"], night["Minute"],
-                  deadman["Hour"], deadman["Minute"], summary):
+                  deadman["Hour"], deadman["Minute"], summary, selected[1]):
         print(value)
 SCHEDULE_CHECK
 }
@@ -287,6 +290,7 @@ minute="$timing_fields[4]"
 deadman_hour="$timing_fields[5]"
 deadman_minute="$timing_fields[6]"
 schedule_summary="$timing_fields[7]"
+selected_span_close="$timing_fields[8]"
 if [[ -z "$render_only" ]] && "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1; then
   print "night_agent_already_loaded: $schedule_summary; label=$night_label" >&2
   exit 3
@@ -295,6 +299,33 @@ fi
 # All install refusals above are read-only. Only now create output/custody.
 mkdir -p "$launch_dir" "$custody_root/night"
 
+# Keep prior bytes until the entire install (including verification) succeeds.
+# EXIT also covers render errors and any other unsuccessful post-render exit.
+plist_backup="$(mktemp -d "${TMPDIR:-/tmp}/night-agent-install.XXXXXXXX")"
+for plist in "$night_plist" "$deadman_plist"; do
+  if [[ -e "$plist" || -L "$plist" ]]; then
+    cp -p "$plist" "$plist_backup/${plist:t}" || { rm -rf "$plist_backup"; exit 1; }
+  fi
+done
+rollback_install_files() {
+  local result=$?
+  if (( result != 0 )); then
+    for plist in "$night_plist" "$deadman_plist"; do
+      if [[ -e "$plist_backup/${plist:t}" ]]; then
+        cp -p "$plist_backup/${plist:t}" "$plist"
+      else
+        rm -f "$plist"
+      fi
+    done
+  fi
+  rm -rf "$plist_backup"
+  return "$result"
+}
+trap rollback_install_files EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
 render "$night_label" run "$night_plist" "$hour" "$minute" "launchd.night"
 render "$deadman_label" dead-man "$deadman_plist" "$deadman_hour" "$deadman_minute" "launchd.deadman"
 if [[ -n "$render_only" ]]; then
@@ -302,14 +333,14 @@ if [[ -n "$render_only" ]]; then
   exit 0
 fi
 
-check_schedule close || exit $?
+check_schedule close "$selected_span_close" || exit $?
 "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
-check_schedule close || exit $?
+check_schedule close "$selected_span_close" || exit $?
 if ! "$launchctl_bin" bootstrap "gui/$uid" "$night_plist"; then
   print "failed to bootstrap $night_label" >&2
   exit 3
 fi
-if ! check_schedule close; then
+if ! check_schedule close "$selected_span_close"; then
   "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
   print "install_span_closed; rolled back $night_label before dead-man bootstrap" >&2
   exit 2

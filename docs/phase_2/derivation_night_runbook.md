@@ -302,8 +302,9 @@ absolute paths (record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/1
 set -euo pipefail
 : "${H:?}"
 export NIGHT_DATE=<YYYYMMDD>
+export WINDOW_ID=<unique attempt identifier, e.g. n1-a>
 export REMOTE_URL=https://github.com/mpmdw/JouleWise
-export MEASUREMENT_ROOT="/Users/edr/JouleWise-measurement-$NIGHT_DATE-derivation"
+export MEASUREMENT_ROOT="/Users/edr/JouleWise-measurement-$NIGHT_DATE-derivation-$WINDOW_ID"
 remote_main="$(git ls-remote --exit-code "$REMOTE_URL" refs/heads/main)"
 test "${remote_main%%$'\t'*}" = "$H"
 test ! -e "$MEASUREMENT_ROOT"
@@ -340,9 +341,11 @@ executable (§1.1a step 1).
 `<NIGHT_DATE>` is the eight-digit `YYYYMMDD` of the calendar date `t0` falls
 on. Installation may be on that date or an earlier date, provided §1.3's
 listed span, exclusive plan cutoff and existing gates all permit it.
-Every dated name below is built from this one value so that the plan id,
-the night root and the clone cannot
-disagree about which night they belong to.
+`WINDOW_ID` distinguishes attempts/windows on that real date; choose a fresh
+identifier for each attempt, including a same-day successor. Use letters,
+digits and hyphens, and satisfy the census check below. Every name below uses
+the same date and window identifier so the plan, session, custody and clone
+stay together. The fresh-path checks remain mandatory for every attempt.
 
 The production ledger lives in this clone's own
 `runs/calibration_observation_ledger.jsonl`, restored byte-exact from the
@@ -360,9 +363,9 @@ value by the rule in the table that follows, then run the block.
 
 ```zsh
 set -euo pipefail
-: "${H:?}" "${NIGHT_DATE:?}" "${MEASUREMENT_ROOT:?}"
-export PLAN_ID="d079-epoch-25g83-derivation-n1-$NIGHT_DATE"
-export SESSION_ID="d079-epoch-25g83-derivation-n1-$NIGHT_DATE"
+: "${H:?}" "${NIGHT_DATE:?}" "${WINDOW_ID:?}" "${MEASUREMENT_ROOT:?}"
+export PLAN_ID="d079-epoch-25g83-derivation-$WINDOW_ID-$NIGHT_DATE"
+export SESSION_ID="$PLAN_ID"
 export EVIDENCE_ROOT_ID=<the registered evidence root id, no derivable default>
 export NIGHT_ROOT="/Users/edr/night-custody/$PLAN_ID"
 export STAGE="/Users/edr/night-plan-staging/$PLAN_ID"
@@ -389,9 +392,10 @@ test "$(stat -f %d "$NIGHT_ROOT")" = "$(stat -f %d "$STAGE")"
 
 | Variable | One line, and the rule for choosing it |
 |---|---|
-| `NIGHT_DATE` | `YYYYMMDD` of the date `t0` falls on. Chosen first; everything dated is built from it. |
-| `PLAN_ID` | The night plan's `plan_id` (§1.1). One per night, so nights 2 and 3 get `-n2-`/`-n3-`. It names the night root, so it is fixed BEFORE any directory exists. |
-| `SESSION_ID` | The ledger session this night opens, passed to the generator as `--session-id` and baked into the wrapper. One per night; the three together are the registration (§3). It also prefixes every slot attempt id (`<SESSION_ID>-d01`…), so it is an emitted literal and must survive the census check. |
+| `NIGHT_DATE` | `YYYYMMDD` of the real date `t0` falls on; never change the date to avoid a path collision. |
+| `WINDOW_ID` | One explicit, unique attempt/window identifier on that date, such as `n1-a` or `n1-b`; shared by all derived names. |
+| `PLAN_ID` | The night plan's `plan_id` (§1.1), derived from `WINDOW_ID` and `NIGHT_DATE`. It names the night root, so it is fixed BEFORE any directory exists. |
+| `SESSION_ID` | The ledger session this attempt opens, equal to `PLAN_ID`, passed as `--session-id` and baked into the wrapper. The FAIL-route registration still follows §3. It also prefixes every slot attempt id (`<SESSION_ID>-d01`…), so it must survive the census check. |
 | `EVIDENCE_ROOT_ID` | The identifier of the evidence root the night's bundles are filed under. **It has no derivable default**: take the literal from the record that registers it and record both in the arm materials (§1.1b step 3). |
 | `NIGHT_ROOT` | The night root (§Terms) — `/Users/edr/night-custody/<PLAN_ID>` by convention, and the value the plan's `custody_root` must carry. It is the directory the watchdog's discovery glob looks one level inside (§0.7). |
 | `STAGE` | The staging directory the plan is AUTHORED in, deliberately outside the watchdog's discovery path, so that authoring a plan does not arm a night (§0.7, §1.1b step 2). |
@@ -399,6 +403,17 @@ test "$(stat -f %d "$NIGHT_ROOT")" = "$(stat -f %d "$STAGE")"
 | `CALIBRATION_PLAN` | The **frozen calibration plan**: the committed capture plan a night's captures are taken under, a `calibration_plan.json` from a frozen campaign pack in the clone (`docs/phase_2/window_runbook.md`, §the ALPHA `window.env` example, calls the same file `FROZEN_PLAN` and notes it is not a custody reservation plan). Copy those committed bytes to `$CALIBRATION_PLAN` before §1.1b step 3; the path must be absolute, and the wrapper re-checks the file's `plan_id` and SHA-256 at launch (§1.1a step 3), so a wrong copy fails before the settle rather than at `d01`. |
 | `CALIBRATION_LEDGER` | The ledger the night opens its session against — **the clone's own**, never the canonical one. This is exactly the generator's `--ledger` default, written out so the harvest (§2.0) can rebuild it. |
 | `LEDGER_HEAD_PIN` | The committed head pin the ledger is authenticated against — again the clone's, and exactly the generator's `--head-pin` default. |
+
+Two worked inputs for the same real date, `NIGHT_DATE=20260916`, produce
+distinct names with the assignments above:
+
+| Invocation input | `MEASUREMENT_ROOT` | `PLAN_ID` = `SESSION_ID` | `NIGHT_ROOT` / `STAGE` |
+|---|---|---|---|
+| `WINDOW_ID=n1-a` | `/Users/edr/JouleWise-measurement-20260916-derivation-n1-a` | `d079-epoch-25g83-derivation-n1-a-20260916` | `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-a-20260916` / `/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-a-20260916` |
+| `WINDOW_ID=n1-b` | `/Users/edr/JouleWise-measurement-20260916-derivation-n1-b` | `d079-epoch-25g83-derivation-n1-b-20260916` | `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-b-20260916` / `/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-b-20260916` |
+
+These are naming examples; a successor still requires harvest and uninstall,
+all no-reuse checks, and the applicable registration constraints of §3.
 
 Two notes on the block itself. `stat -f %d` prints a filesystem device number;
 the night root and the staging directory must share one, because §1.4 publishes
@@ -1372,19 +1387,26 @@ can refuse first.
 
 | Refusal | Exit code | Condition / recovery |
 |---|---|---|
-| `install_span_closed` | 2 | `now >= install_close_epoch(plan)`; do not install this plan late. Re-plan under the handback procedure. |
+| `install_span_closed` | 2 | `now >= install_close_epoch(plan)` or a later check reaches the initially selected span's close; do not install this plan late. Re-plan under the handback procedure. |
 | `install_outside_span` | 2 | `now` is outside every listed `INSTALL_SPANS` entry; use an allowed span before the plan's close. |
 | `plan_t0_in_the_past` | 2 | `t0 < now`; author a future plan. |
 | `night_agent_already_loaded` | 3 | `launchctl print gui/<uid>/com.joulewise.night` succeeds; finish the prior harvest and documented uninstall before another arm. `--render-only` skips this loaded-job check. |
 | `plan_outside_custody_root` | 2 | Resolved `--plan` is not the plan's `<custody_root>/night_plan.json`; publish through §1.4 before installing. |
+| `night_plan_malformed` | 2 from `schedule`; 3 from the installer's earlier plan validation | Missing/malformed `t0_epoch_s`, `window_max_s` or `authored_epoch_s` (or another invalid plan field); the detail identifies the validation failure. |
+| `plan_schedule_unrepresentable` | 2 | `schedule` cannot load the plan or represent derived arithmetic/calendar values, including `window_max_s=10**15` or `10**400`; detail preserves the underlying error. This is representability, with no maximum-window policy ceiling. |
+| `install_spans_unresolvable_on_day` | 2 | A day's resolved spans have nonpositive duration, are out of order, or overlap after DST resolution; detail names the day and offending span/pair. No span is repaired, reordered or dropped. |
 
-The close is rechecked immediately before each bootstrap (launchd's job-load
-operation). If the per-plan cutoff is reached after the night bootstrap,
+The plan cutoff and the initially selected span's close are rechecked before
+each bootstrap (launchd's job-load operation); a later span cannot replace
+the selected one. If either close is reached after the night bootstrap,
 it prints `install_span_closed; rolled back com.joulewise.night before dead-man bootstrap`,
 unloads the night job and exits 2. A dead-man bootstrap failure prints
 `failed to bootstrap com.joulewise.night.deadman; rolled back com.joulewise.night`
 and exits 3. Failure to verify either loaded job prints
 `launch agent verification failed; rolled back both agents` and exits 3.
+Every unsuccessful exit after rendering also removes this attempt's plists
+and restores prior bytes for any plist it overwrote. This prevents a failed
+install's leftover files from fencing the watchdog.
 Follow §1.4 recovery and never report a successful arm after these failures.
 
 The night job uses the local Month/Day/Hour/Minute from `t0`. The dead-man
@@ -1606,8 +1628,8 @@ successor activation does not choose the list and this runbook cannot widen it:
 
 | Field | This night's value |
 |---|---|
-| `plan_id` | `$PLAN_ID` — e.g. `d079-epoch-25g83-derivation-n1-<YYYYMMDD>` (§0.2) |
-| `root` | `$MEASUREMENT_ROOT` — the fresh clone of §0.2, `/Users/edr/JouleWise-measurement-<NIGHT_DATE>-derivation` |
+| `plan_id` | `$PLAN_ID` — `d079-epoch-25g83-derivation-<WINDOW_ID>-<NIGHT_DATE>` (§0.2) |
+| `root` | `$MEASUREMENT_ROOT` — the fresh clone of §0.2, `/Users/edr/JouleWise-measurement-<NIGHT_DATE>-derivation-<WINDOW_ID>` |
 | `head` | `$H` — the 40-character reviewed head of §0.1 |
 
 The triple's purpose is a fence, not a handover: the prompt forbids Git
@@ -2455,7 +2477,7 @@ numbered record.
 | The plan is an INPUT to the generator, and the wrapper's bytes depend on the plan's CONTENT not its path | `scripts/gen_derivation_night.py`: `--plan`'s help text ("frozen v2 night plan JSON (emit mode)"), and `build_spec`, which renders every wrapper literal from the decoded plan fields |
 | The wrapper's `WINDOW_CUSTODY_ROOT` is `plan.custody_root`, its `RUNS_ROOT` defaults to `<custody_root>/runs`, its `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN` to the clone's ledger and head pin — the derivations §2.0 uses | `scripts/gen_derivation_night.py`: `WrapperSpec`, `build_spec`, and the `--runs-root` / `--ledger` / `--head-pin` defaults in `build_parser` |
 | The frozen checkout triple is exactly `(plan_id, root, head)`, rendered by the watchdog into the relaunch prompt, and fences those checkouts against movement | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`, the `@@FENCED_CHECKOUTS@@` line and the line after it; `docs/process/MAGISTRATE_WATCHDOG.md`, §"Complete write inventory" |
-| A fence forbids LAUNCHING OR ADOPTING a magistrate agent session during a plan span; the night agents run during that span | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Safety model and state machine" and §"Fence and deadlines" |
+| A fence prevents new magistrate launches during a plan span; a discovered active span permits supervision adoption to DRAIN an owned session (`STANDDOWN_<phase>`, `adopt=True`). An installed-only fence has `adopt=False`; the night agents run during the span | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Safety model and state machine" and §"Fence and deadlines" |
 | The frozen calibration plan is a committed pack-relative `calibration_plan.json`, not a custody reservation plan | `docs/phase_2/window_runbook.md`, the ALPHA `window.env` example and its `FROZEN_PLAN` gloss |
 | `[DD]` is the registration's authoring day | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, §"Fields filled at commit" |
 | The clone's environment must equal `env/mac-measurement-lock.txt` | record 12, §"Block A", its closing `pip freeze` diff |
@@ -2513,7 +2535,7 @@ means. A term is listed only if it does technical work.
 | blind / blindness | §Terms, bounded §2.3 | Every rule that could be chosen after seeing values is fixed in writing BEFORE the data exists — "every rule fixed before data", not "no one may look". Nothing is read while a night runs; the equivalence night's retained values are read once its own session is terminal, and on the FAIL route no corpus statistic is computed before the last registration session is terminal. |
 | driver preflight | §Terms, §1.4 | The install-time check of the driver module, its module-scope project imports and the plan under the job's interpreter and PATH; it does not exercise lazy imports inside project functions or the chain's input checks. |
 | dead-man | §Terms, §1.2–§1.3 | Daily job at the local hour/minute of completion plus 3600 s rounded up to a minute; pre-completion stand-down and post-`courier.sent` skip preserve existing recovery checks. |
-| fence (watchdog sense) | §Terms, §1.3 | A discovered or installed plan's span during which no magistrate agent session may launch or be adopted; completion, courier delivery and chain records govern its end. |
+| fence (watchdog sense) | §Terms, §1.3 | A discovered or installed plan's span prevents new magistrate launches. A discovered active span permits supervision adoption to DRAIN an owned session; an installed-only fence has `adopt=False`. Completion, courier delivery and chain records govern its end. |
 | blindness fence | §Terms, enforced §2.3 item 3 | The code-enforced refusal of `prepare-candidate` while any session named in the registration is not terminal — the FAIL route's fence on computing a corpus statistic early. Not an interval; no clock clears it, and it does not govern the equivalence check, whose rule is fixed before capture instead. |
 | handback | §Terms | `docs/process/NIGHT_HANDBACK.md`, rewritten and committed with every armed night. |
 | email-then-arm | §Terms, §1.4 | Email Ed the notice, arm without waiting for a reply; Ed's NO overrides. |
@@ -2529,7 +2551,7 @@ means. A term is listed only if it does technical work.
 | night root | §Terms, exported §0.2 | `<NIGHT_ROOT>`, the custody directory the plan calls `custody_root`; the three emitted files and the night's two desk inputs live in it. |
 | tracked chain | §Terms | `scripts/night_chains/calibration_derivation_only.zsh`, the committed script that runs the twelve captures — identical in every clone at `H`, unlike the per-night wrapper. |
 | capture writer | §0.8 | `scripts/validate_powermetrics_fiducial.py`, run twelve times by the chain during the night. Distinguished from the desk-inputs writer everywhere in this file; a bare "writer" survives only inside a tool's own quoted message, where it means this one. |
-| `<NIGHT_DATE>` | §0.2 | The eight-digit `YYYYMMDD` of the date `t0` falls on; every dated name in the arm is built from it. |
+| `<NIGHT_DATE>` / `WINDOW_ID` | §0.2 | The real eight-digit `YYYYMMDD` date of `t0`, plus one unique attempt/window identifier; together they determine the clone, plan, session and custody names. |
 | staging path / `$STAGED_PLAN` | §0.2, §1.1b step 2 | `/Users/edr/night-plan-staging/<PLAN_ID>/night_plan.json`, where the plan is authored, generated from and `--verify`-ed. Outside the watchdog's discovery glob, so authoring a plan arms nothing. |
 | published (plan) | §1.4 | The one instant a night becomes discoverable: `os.replace` of the staged bytes into `<NIGHT_ROOT>/night_plan.json`, a target that must not pre-exist. Everything before it is undone by doing nothing. |
 | sidecar | §1.1a | A small companion file holding another file's SHA-256 in `shasum` output form — the digest, two spaces, a name. |

@@ -41,6 +41,14 @@ The durable states are:
 
 Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, drain-start, and plan diagnostics are separate typed events. Plan events use `plan_dir` (never the plan-declared `custody_root`) and are de-duplicated only for an identical activation-id/spawn-epoch/plan-directory/kind/detail-digest key.
 
+Unrepresentable derived epochs (for example `window_max_s=10**400`) enter
+`HOLD_UNSAFE` with `adopt=False`: installed-plan failures use the reason prefix
+`installed_agent_fence:`, while discovery uses `night_plan_malformed`.
+The detail names `t0_epoch_s/window_max_s`; `decide()` returns a decision
+instead of allowing the arithmetic exception to escape. These are watchdog
+states, not `schedule` exit codes; the install/refusal inventory in the
+derivation-night runbook lists the CLI's exit-2 refusals.
+
 ## Fence and deadlines
 
 **Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01.** All watchdog plan

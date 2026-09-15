@@ -1385,6 +1385,91 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(plan.t0_epoch_s - PLAN_LEAD_S - self.driver.install_close_epoch(plan),
                          self.driver.INSTALL_CLOSE_MARGIN_S)
 
+    def test_fixed_epoch_install_close_is_1799994900(self) -> None:
+        plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
+                       window_max_s=9000)
+        self.assertEqual(1799994900, self.driver.install_close_epoch(plan))
+
+    def test_fixed_epoch_deadman_is_1800012900(self) -> None:
+        plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
+                       window_max_s=9000)
+        self.assertEqual(1800012900, self.driver.deadman_epoch(plan))
+        self.assertEqual(1800012960, self.driver.deadman_epoch(replace(plan, t0_epoch_s=1800000001)))
+
+    def test_reversed_0500_0400_spans_are_rejected_at_fresh_import(self) -> None:
+        # Change only the configuration literal; execute the actual module's
+        # import-time validation in a fresh interpreter.
+        code = (
+            "from pathlib import Path\n"
+            f"path = Path({str(SCRIPT_PATH)!r})\n"
+            "source = path.read_text().replace('((\"00:00\", \"24:00\"),)', '((\"05:00\", \"04:00\"),)', 1)\n"
+            "exec(compile(source, str(path), 'exec'), {'__file__': str(path), '__name__': 'span_import_probe'})\n"
+        )
+        completed = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True)
+        self.assertNotEqual(0, completed.returncode)
+        self.assertIn("install spans must be ordered, disjoint, and close > open", completed.stderr)
+
+    def test_schedule_missing_malformed_fields_and_unrepresentable_windows_refuse(self) -> None:
+        original = json.loads(self.plan_path.read_text())
+        cases = [(field, value) for field in ("t0_epoch_s", "window_max_s", "authored_epoch_s")
+                 for value in (None, "malformed")]
+        cases += [("window_max_s", 10**15), ("window_max_s", 10**400)]
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                mapping = original.copy()
+                if value is None:
+                    del mapping[field]
+                else:
+                    mapping[field] = value
+                self.plan_path.write_text(json.dumps(mapping))
+                completed = subprocess.run([sys.executable, "-B", str(SCRIPT_PATH), "schedule",
+                    "--plan", str(self.plan_path)], capture_output=True, text=True)
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertIn("plan_schedule_unrepresentable" if isinstance(value, int)
+                              else "night_plan_malformed", completed.stderr)
+                self.assertEqual(1, len(completed.stderr.splitlines()))
+                self.assertNotIn("Traceback", completed.stdout + completed.stderr)
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "requires POSIX local timezone")
+    def test_schedule_rejects_dst_inverted_and_overlapping_resolved_spans(self) -> None:
+        cases = ((date(2026, 3, 8), (("02:45", "03:15"),)),
+                 (date(2026, 11, 1), (("01:15", "01:45"), ("01:45", "02:00"))))
+        try:
+            with mock.patch.dict(os.environ, {"TZ": "America/Los_Angeles"}):
+                time.tzset()
+                plan = self.driver._load_plan(self.plan_path)
+                for day, spans in cases:
+                    with self.subTest(day=day), mock.patch.object(self.driver, "INSTALL_SPANS", spans), mock.patch.object(
+                        self.driver.time, "time", return_value=datetime.combine(day, datetime.min.time()).timestamp()
+                    ):
+                        with self.assertRaises(night_gate.PlanError) as refusal:
+                            self.driver.schedule(plan)
+                        self.assertEqual("install_spans_unresolvable_on_day", refusal.exception.reason)
+                        self.assertIn(str(day), refusal.exception.detail)
+                        code = (
+                            "import sys, time\nfrom pathlib import Path\n"
+                            f"path = Path({str(SCRIPT_PATH)!r})\n"
+                            f"time.time = lambda: {datetime.combine(day, datetime.min.time()).timestamp()!r}\n"
+                            "source = path.read_text().replace('((\"00:00\", \"24:00\"),)', "
+                            f"{repr(spans)!r}, 1)\n"
+                            f"sys.argv = [str(path), 'schedule', '--plan', {str(self.plan_path)!r}]\n"
+                            "exec(compile(source, str(path), 'exec'), {'__file__': str(path), '__name__': '__main__'})\n"
+                        )
+                        completed = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True)
+                        self.assertEqual(2, completed.returncode, completed.stderr)
+                        self.assertIn("install_spans_unresolvable_on_day", completed.stderr)
+                        self.assertIn(str(day), completed.stderr)
+                        self.assertNotIn("Traceback", completed.stderr)
+                for day, seconds in ((date(2026, 3, 8), 82800), (date(2026, 11, 1), 90000)):
+                    with self.subTest(default_day=day), mock.patch.object(self.driver.time, "time",
+                        return_value=datetime.combine(day, datetime.min.time()).timestamp()
+                    ):
+                        spans = self.driver.schedule(plan)["install_spans_today"]
+                        self.assertEqual(1, len(spans))
+                        self.assertEqual(seconds, spans[0][1] - spans[0][0])
+        finally:
+            time.tzset()
+
     def test_install_spans_default_is_the_whole_day_and_validates_shape(self) -> None:
         self.assertEqual((("00:00", "24:00"),), self.driver.INSTALL_SPANS)
         self.driver._validate_install_spans((("01:00", "02:00"), ("02:00", "04:00")))

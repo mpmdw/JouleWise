@@ -953,10 +953,13 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
 
 def deadman_epoch(plan: NightPlan) -> float:
     """The plan's completion plus recovery grace, rounded up to a minute."""
-    return float(math.ceil(
-        (plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S + DEADMAN_GRACE_S)
-        / 60
-    ) * 60)
+    try:
+        return float(math.ceil(
+            (plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S + DEADMAN_GRACE_S)
+            / 60
+        ) * 60)
+    except (OverflowError, ValueError) as exc:
+        raise ValueError(f"t0_epoch_s/window_max_s cannot derive deadman_epoch_s: {exc}") from exc
 
 
 def install_close_epoch(plan: NightPlan) -> float:
@@ -1006,11 +1009,17 @@ def _local_span_boundary(day: date, minute: int, *, close: bool) -> float:
 
 
 def install_spans_for_day(day: date) -> list[tuple[float, float]]:
-    return [
+    spans = [
         (_local_span_boundary(day, _span_minute(opening), close=False),
          _local_span_boundary(day, _span_minute(closing, close=True), close=True))
         for opening, closing in INSTALL_SPANS
     ]
+    for index, (opening, closing) in enumerate(spans):
+        if closing <= opening or (index and opening < spans[index - 1][1]):
+            raise PlanError("install_spans_unresolvable_on_day",
+                f"{day}: offending span {INSTALL_SPANS[index]!r} resolves to {spans[index]!r}; "
+                f"previous span={None if index == 0 else (INSTALL_SPANS[index - 1], spans[index - 1])!r}")
+    return spans
 
 
 def install_span_containing(now_epoch_s: float) -> tuple[float, float] | None:
@@ -1936,7 +1945,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "schedule":
-        print(json.dumps(schedule(_load_plan(args.plan)), sort_keys=True))
+        try:
+            derived = schedule(_load_plan(args.plan))
+        except (OSError, ValueError, OverflowError, TypeError) as exc:
+            reason = exc.reason if isinstance(exc, PlanError) else "plan_schedule_unrepresentable"
+            detail = " ".join(str(exc).split())
+            print(f"{reason}: {detail}", file=sys.stderr)
+            return 2
+        print(json.dumps(derived, sort_keys=True))
         return EXIT_GO
     if args.command == "preflight":
         _load_plan(args.plan)

@@ -697,12 +697,13 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
                 raise PlanError(
                     "night_plan_malformed", "plan authored_epoch_s is in the future"
                 )
-        except PlanError as exc:
-            detail = f"{type(exc).__name__}: {exc.detail}"
+            deadman_epoch(plan)
+        except (PlanError, OverflowError, ValueError) as exc:
+            detail = f"{type(exc).__name__}: {exc}"
             diagnostics.append(
                 PlanDiagnostic("plan_malformed", "night_plan_malformed", path, detail)
             )
-            errors.append(f"night_plan_malformed {path}: {exc.detail}")
+            errors.append(f"night_plan_malformed {path}: {exc}")
             continue
         plans.append(plan)
     return PlanSnapshot(tuple(plans), tuple(errors), tuple(diagnostics))
@@ -739,9 +740,10 @@ def installed_agent_fence(
             plan = NightPlan.from_mapping(json.loads(storage.read_text(plan_path)))
             if plan.authored_epoch_s > now.timestamp():
                 raise ValueError("installed plan authored_epoch_s is in the future")
+            deadman_epoch(plan)
             if plan_span_active(plan, now.timestamp(), storage):
                 reasons.append(f"installed_plan:{plan.plan_id}")
-        except (OSError, ValueError, TypeError, KeyError, IndexError, PlanError,
+        except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
                 plistlib.InvalidFileException, ExpatError) as exc:
             raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
     return "; ".join(reasons) or None
@@ -1408,11 +1410,14 @@ def decide(
 
     snapshot = plan_snapshot or load_plans(storage, now_epoch_s=wall.timestamp())
     plans = list(snapshot.plans)
-    armed = armed_plans(plans, wall.timestamp(), storage)
+    try:
+        armed = armed_plans(plans, wall.timestamp(), storage)
+        conflicts = plan_conflicts(armed)
+    except (OverflowError, ValueError) as exc:
+        return Decision("HOLD_UNSAFE", f"night_plan_malformed: t0_epoch_s/window_max_s: {exc}")
     state["fenced_checkouts"] = fenced_checkout_rows(armed)
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
-    conflicts = plan_conflicts(armed)
     if conflicts:
         return Decision("HOLD_UNSAFE", "plan_conflict: " + "; ".join(conflicts))
 
@@ -1442,7 +1447,7 @@ def decide(
 
     try:
         installed = installed_agent_fence(wall, storage)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, OverflowError) as exc:
         return Decision("HOLD_UNSAFE", f"installed_agent_fence: {exc}")
     active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage)]
     try:
