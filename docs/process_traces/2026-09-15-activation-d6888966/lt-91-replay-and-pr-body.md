@@ -112,3 +112,28 @@ Runbook §3 byte-identical, SHA-256
 
 None were merged, none were pushed except the int branch, and nothing was
 committed from the two refuter worktrees.
+
+
+---
+
+# REVISION, 10:08 PDT 2026-09-15
+
+**The replay above is STALE for merge purposes.** It was run at `df86cee6`; the
+head is now `9a7bacdf` after fix round 2 (three commits) and a merge of
+`origin/main dfb627c1` that carried code. Row 9 must be re-run at whatever head
+the F1/F2 ruling produces.
+
+What I did run at `9a7bacdf` (lieutenant, 10:06 PDT, each module separately):
+`tests.test_install_night_agent`, `tests.test_run_night`,
+`tests.test_magistrate_watchdog`, `tests.test_night_gate`,
+`tests.test_docs_freshness`, `tests.test_gen_state` — **all six OK**. That
+establishes the main merge did not break the lane; it is not a full-suite replay
+and must not be recorded as one.
+
+## PR body draft — amendments for the current state
+
+The draft above stands, with these changes to its Summary and Verification:
+
+- The blocker paragraph is replaced by: **two blockers open.** `install_night_agent.sh:372-374` — the success path runs `rm -rf "$plist_backup" || exit 1` AFTER its own commit gate and after printing success, so a failed temp-directory cleanup exits non-zero with the EXIT trap armed and tears down a correctly armed night; and `:267-272` — `--uninstall` swallows bootout failures with `|| true`, deletes both plists and exits 0, leaving a loaded job with no plist and the fence blind (pre-existing, outside this lane's scope, live in the harvest flow).
+- Add to Summary: the lane stopped on the SECOND same-signature verdict; no round 3 was launched; the cold-gate ruling 25 mechanisms (commit gate, verified-bootout teardown) are in and are proven load-bearing by isolated reversion.
+- Verification becomes the six-module run at `9a7bacdf` plus the round-2 evidence in `lt-15`, with row 9 explicitly marked stale.
