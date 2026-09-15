@@ -861,6 +861,39 @@
       "status_note": "2026-09-08: READY; refreshes the existing S2 synthesis ruling 8 follow-up (99be/13), also registered in 99co; owner: bridge runner maintainer.",
       "stop_card": null
     },
+    "BRIDGE-BASELINE-COMPLIANCE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/lt-24-T1-rulings-and-protocol-finding.md (F3: lieutenant acknowledges omitted baseline anchors; xhigh seat refused before writes)",
+          "docs/process_traces/2026-09-15-activation-d6888966/lt-27-refuters-fixes-delta.md (refuters, fixes, delta re-audits and lead bench replays; the brief cites protocol findings, but no section with that heading exists at registration HEAD 22f70bf2)",
+          "docs/contracts/bridge_protocol.md:574-575,601-602,615-618,624-635 (§7: baseline before every workspace-write session; prompt anchors; external digest verification; governing lease required for SCOPE_OK)",
+          "docs/process_traces/2026-09-15-activation-d6888966/manifests/ (scope_action field: not_enforced in 05-pack-root-scout-astra.manifest.jsonl, 09-seat-A-astra.manifest.jsonl, 10-seat-D-astra.manifest.jsonl and 11-lanes-astra.manifest.jsonl)",
+          "2026-09-15 activation d6888966 magistrate registration brief (four harvest seats, GAMMA repair seat, six lanes seats, lieutenant seats until mid-afternoon; historical bridge lease-list showed zero leases; attribution indeterminate)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BRIDGE-BASELINE-COMPLIANCE-01/acceptance",
+          "label": "BRIDGE-BASELINE-COMPLIANCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The council or cold gate rules, under rule 11 (a process rule is not the magistrate's or lieutenant's to ratify), whether the detached launcher pattern used by the magistrate and lieutenant must carry scripts/bridge baseline plus lease-acquire for every workspace-write seat, and whether codex-run-v3 without --base may be used at all for editing seats. Record the ruling in the decision log by dated addendum and update the launcher template in the codex-delegation skill / docs/orchestration.md accordingly. Until that ruling, every new editing seat carries baseline plus lease; the lieutenant already does."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 (magistrate registration of the lieutenant's protocol finding; the ruling itself is the council's/cold gate's)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/lt-24-T1-rulings-and-protocol-finding.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Resolve the bridge baseline/lease compliance finding: docs/contracts/bridge_protocol.md §7 requires scripts/bridge baseline and BASE_HEAD/BASELINE_MANIFEST/BASELINE_DIGEST in the prompt before every workspace-write Codex session, and a governing lease for scope-check. On 2026-09-15 every seat launched by the magistrate in activation d6888966 (four harvest seats, the GAMMA repair seat, six lanes seats) and by its Opus lieutenant until mid-afternoon ran through ~/.local/bin/codex-run-v3 without --base. Manifests record scope_action: not_enforced, and the historical bridge lease-list showed zero leases (ATTRIBUTION_INDETERMINATE). An xhigh seat read the contract and refused; earlier seats did not. Compensating controls were the lead's pathspec commits, independent refuters and delta re-audits, and bench re-runs; nothing was re-run to cure the protocol omission.",
+      "id": "BRIDGE-BASELINE-COMPLIANCE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 205,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: magistrate registration of the lieutenant's transactional-installer protocol finding, not a ruling; not started. The council/cold gate owns process-policy ratification under rule 11. Until then every new editing seat carries baseline plus lease (the lieutenant already does). Prior work was not re-run to cure the omission; compensating controls do not establish retrospective scope attribution.",
+      "stop_card": null
+    },
     "C3-RECOGNIZER-EXACT-01": {
       "acceptance": {
         "evidence": [
