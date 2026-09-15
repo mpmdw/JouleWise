@@ -11851,7 +11851,9 @@ way issue #316 became D-180 (Ed's words: "Record this ruling as a dated decision
 entry through a PR under the normal gate, the same way #316 became D-180; do not amend
 rule text yourself outside that PR"); nothing below is installed in code, runbooks or
 the night machinery by this entry — each clause names its implementation lane, and
-until that lane lands the prior rule stands (decided ≠ done). The ruling is standing;
+until that lane lands the existing mechanism's limits remain facts, not rules (decided
+≠ done: the ruling is in force from the moment it names; what the machinery cannot yet
+do is a mechanism limit, as Ed's clause 1 says). The ruling is standing;
 by its own text it applies after the night armed under directive #336
 (`d079-epoch-25g83-derivation-n1-20260915`, t0 2026-09-15 02:56 PDT) and to every
 window after it, and it does not touch that night. Forcing context (factual, no rule):
