@@ -32,7 +32,7 @@ The durable states are:
 - `LAUNCHING`: launch predicates passed and a resident supervisor is being forked.
 - `ACTIVE`: the recorded child PID, start time, and activation are live in both `state.json` and `magistrate.lock`. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
 - `STANDDOWN_REQUESTED`, `STANDDOWN_TERM`, and the terminal `FENCED`/`HOLD_CENSUS`: the resident supervisor executes the request, TERM, KILL, and verification sequence below.
-- `FENCED`: a plan span, discovered from `*/night_plan.json` OR read from the installed night plists, forbids launch or adoption. `installed_agent_fence` reads `~/Library/LaunchAgents/com.joulewise.night.plist` and `com.joulewise.night.deadman.plist`, extracts `--plan` from `ProgramArguments`, parses that plan with `NightPlan.from_mapping`, and uses the same `plan_span_active` arithmetic as discovery. An unreadable LaunchAgents directory, unparseable plist or unreadable/invalid referenced plan enters `HOLD_UNSAFE`. The installer also requires the resolved plan path to be its own `<custody_root>/night_plan.json`.
+- `FENCED`: a discovered or installed plan's active span forbids launch. A discovered active span with an already-owned session instead returns `STANDDOWN_<phase>` with `adopt=True` to drain that session; an installed-only fence returns `FENCED` with `adopt=False` after the stop checks clear. `installed_agent_fence` reads `~/Library/LaunchAgents/com.joulewise.night.plist` and `com.joulewise.night.deadman.plist`, extracts `--plan` from `ProgramArguments`, parses that plan with `NightPlan.from_mapping`, and uses the same `plan_span_active` arithmetic as discovery. An unreadable LaunchAgents directory, unparseable plist or unreadable/invalid referenced plan enters `HOLD_UNSAFE`. The installer also requires the resolved plan path to be its own `<custody_root>/night_plan.json`.
 - `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the same nine-minute/TERM/one-minute/KILL ladder. If that supervisor dies, each replacement tick validates and records `resident_adopted`, performs the next due ladder action, and persists the stage for the following tick; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
 - `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
@@ -44,8 +44,8 @@ Every state transition appends exactly one transition event. Re-evaluating the s
 ## Fence and deadlines
 
 **Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01.** All watchdog plan
-arithmetic is epoch seconds (seconds since 1970-01-01 00:00 UTC); only launchd
-calendar rendering uses local time. `scripts/run_night.py` owns
+arithmetic uses epoch seconds (seconds since 1970-01-01 00:00 UTC);
+recurring install spans and launchd calendar fields resolve local time. `scripts/run_night.py` owns
 `deadman_epoch(plan) = 60 × ceil((t0 + window_max_s + COURIER_DEADLINE_S + DEADMAN_GRACE_S) / 60)`.
 Here `ceil` rounds upward to an integer, `COURIER_DEADLINE_S = 300 = 5 × 60 s`
 and `DEADMAN_GRACE_S = 3600 = 60 × 60 s`. Thus the dead-man is completion
@@ -60,16 +60,36 @@ For each valid plan:
 1. The plan span begins at the closed boundary `t0 - 25 minutes`.
 2. It remains open through the closed completion boundary `t0 + window_max_s + COURIER_DEADLINE_S`.
 3. After completion it closes when `night/courier.sent` exists. Without that marker it remains open through the closed boundary `deadman_epoch(plan) + COURIER_LOCK_FRESH_S`, where `COURIER_LOCK_FRESH_S = 300 + max(60, 180, 600) = 900 s` (15 minutes).
-4. At any time, `chain.started` without `chain.exited` extends the span without a clock limit.
-5. During that span the exact production census must be empty before the state can be merely `FENCED`. A nonempty or failed census is `HOLD_CENSUS` and is never killed as an unowned match.
+4. Once the span has begun, `chain.started` without `chain.exited` extends it without a clock limit; it does not move the start earlier.
+5. For a discovered active span, `decide()` invokes the exact production census. With an owned session it returns `STANDDOWN_<phase>` with `adopt=True`; without one, a nonempty or failed census returns `HOLD_CENSUS`, otherwise `FENCED`. An installed-only span does not take this census branch. Unowned census matches are never kill targets.
 
 Equality at the plan-span start, completion, and dead-man-plus-lock-fresh
 boundaries is unsafe. A plan absent from sibling discovery still fences via
 its installed plist when the referenced plan is readable and valid; a missing
-referenced plan holds `HOLD_UNSAFE`. Inside that installed-plan fence, the short
-tick returns `FENCED` with `adopt=False`; it does not launch or adopt a
-supervisor. Re-adoption waits for `plan_span_active` to become false, subject
-to all other launch predicates. No clock hour alone creates a fence.
+referenced plan holds `HOLD_UNSAFE`. No clock hour alone creates a fence.
+
+The short tick's `decide()` evaluates these checks in source order:
+
+1. Reset reboot-bound backoff, then return `CLOCK_UNCERTAIN` on an unsafe clock.
+2. Load sibling plans; unreadable/malformed plans and armed-plan conflicts return
+   `HOLD_UNSAFE`. Validate lock ownership, holding unsafe on unavailable process
+   evidence or an unresolved lock/twin condition.
+3. Read both installed plists through `installed_agent_fence`. Unreadable or
+   malformed installed inputs return `HOLD_UNSAFE` with the detail prefix
+   `installed_agent_fence:`. A valid active installed plan records a fence reason
+   `installed_plan:<plan_id>` for the later check.
+4. Compute discovered active spans and probe remote stop state; local `STOP`
+   overrides that observation. A discovered active span then takes the census /
+   owned-session branch above before either stop result is returned.
+5. Without a discovered active span, return `STOPPED` or `NETWORK_UNCERTAIN`
+   when applicable, with `adopt=True` only if there is an owned session.
+6. If stop checks clear, an active installed-plan fence returns `FENCED` with
+   `adopt=False`, even when its plan is absent from sibling discovery.
+7. Otherwise adopt a live owner as `ACTIVE`, enforce backoff, check for a
+   remaining lock, and only then return `LAUNCHING`.
+
+Thus an installed-only `FENCED` return does not launch or adopt a supervisor;
+re-adoption is subject to the earlier branches and all other predicates.
 
 For the earliest relevant parseable plan, the resident supervisor re-reads plans and evaluates its stand-down phase on every poll, including while a clock or unsafe-plan drain is latched. Each drain action is due at the earlier of its cooperative-ladder time and the plan boundary, so REQUEST is no later than `t0 - 25 min`, TERM no later than `t0 - 16 min`, and KILL no later than `t0 - 15 min`. Plan-boundary enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
 
@@ -90,7 +110,7 @@ If the PID is absent or its start token differs, the tick records `already_gone`
 
 ## Kill switch
 
-Every launchd tick that acquires the service lock first proves remote transport with anonymous `git ls-remote --exit-code` against `refs/heads/main`, then probes the glob `refs/heads/ops/stop*`. It seeds the resident with that observation. While a child is resident, one daemon thread refreshes the cached observation at most every five minutes; a slow or unreachable GitHub probe never blocks the 10-second enforcement loop, and no second probe begins while one is live. Control rc 0 plus stop rc 2 means clear; a stop match means stopped. Control rc 128, any other nonzero control result, a stop-probe result other than 0/2, timeout, or exception means `NETWORK_UNCERTAIN`, never clear. The commands disable credential helpers and terminal prompts and never fetch or mutate a checkout.
+A launchd tick that reaches the stop-probe step of `decide()` proves remote transport with anonymous `git ls-remote --exit-code` against `refs/heads/main`, then probes the glob `refs/heads/ops/stop*`. It seeds the resident with that observation. While a child is resident, one daemon thread refreshes the cached observation at most every five minutes; a slow or unreachable GitHub probe never blocks the 10-second enforcement loop, and no second probe begins while one is live. Control rc 0 plus stop rc 2 means clear; a stop match means stopped. Control rc 128, any other nonzero control result, a stop-probe result other than 0/2, timeout, or exception means `NETWORK_UNCERTAIN`, never clear. The commands disable credential helpers and terminal prompts and never fetch or mutate a checkout.
 
 The local switch is `~/night-custody/magistrate/STOP`. It works without GitHub and wins over the remote result. Removing both switches permits a later safe launch; neither switch can rescue a wedged watchdog process, and there is intentionally no watchdog-for-the-watchdog. Because this is a user LaunchAgent, it does not load before GUI login after a reboot; unattended reboot before login is an accepted limitation for this week because Ed's machine stays logged in. Operational liveness is strict: no `state.json` write for more than 15 minutes means the watchdog is dead, and the courier email for the next window must say so.
 

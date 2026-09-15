@@ -183,8 +183,12 @@ at arm time.
 §1.4's email-then-arm order. Send one notice email per plan, never one notice
 for several arms. From the plan's measurement checkout, use its interpreter:
 `<absolute-interpreter-path> scripts/run_night.py schedule --plan <staged-plan-path>`. The JSON
-prints `t0_epoch_s`, `install_close_epoch_s`, `deadman_epoch_s`, both jobs'
-calendar fields and `install_spans_today`. Convert each epoch to a local
+prints `t0_epoch_s`, `install_close_epoch_s`, `deadman_epoch_s`, `night_calendar`,
+`deadman_calendar` and `install_spans_today`. With the shipped whole-day list,
+the observed `install_spans_today` for 2026-09-15 is
+`[[1789455600.0, 1789542000.0]]`: the notice must name that entire pair,
+2026-09-15 00:00:00−07:00 through 2026-09-16 00:00:00−07:00 (close excluded).
+Convert each epoch to a local
 ISO-8601 date/time with offset using
 `datetime.fromtimestamp(epoch).astimezone().isoformat()`. For a different
 install day, call `install_spans_for_day(date.fromisoformat("YYYY-MM-DD"))`
@@ -357,7 +361,8 @@ results are / §Next lane, rewritten by the commit that is its H).
 - Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
   `launchd.night.err` must be EMPTY.
 - Results branch: `night-results/<plan_id>` (here `night-results/d079-epoch-25g83-derivation-n1-20260916`) on `origin`, if the driver's push
-  succeeded — verify, do not presume.
+  succeeded — verify, do not presume. Its trace directory is
+  `docs/process_traces/night-results/<plan_id>/`; both use the full plan ID.
 
 ## Next lane
 
