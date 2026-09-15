@@ -285,11 +285,7 @@ EXPECTED_IDS = {
     "SKILL-DISTILL-01",
     # Ruling 43 ratified ruling 17 as amended and opened six paper lanes.
     "DECISION-LOG-RATIFY",
-    "ESTIMAND-ENCLOSURE-01",
-    "FB-PLANNING-METADATA-01",
-    "D165-RELABEL-01",
     "D166-PROMPT0-01",
-    "PAPER-K",
     # PR #285 closed MODULARITY-01 v2; the non-submission residue is retained
     # as a D-174-shelved successor record.
     "MODULARITY-FOLLOWUPS-01",
@@ -304,7 +300,8 @@ EXPECTED_IDS = {
     "ED-DATES-01", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
-TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
+TERMINAL_IDS = {"ESTIMAND-ENCLOSURE-01", "FB-PLANNING-METADATA-01", "D165-RELABEL-01", "PAPER-K",
+                "CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
                 "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP",
                 "FLOOR-LABEL-01", "STACK-ID-BIND-01", "P2-015",
                 "COOLDOWN-JOIN-DA1-01", "MET-VERDICT-ADJ-01",
@@ -747,7 +744,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 174)  # Activation 24b9d3dd (2026-09-13) registers CALEXITS-RACE-FLAKE-01 (hosted race flake, p3): 173 + 1 = 174; the same day it closes NIGHT-CENSUS-CHATGPT-APP-01 (PR #334) and GATE-SENSIBILITY-SWEEP-01 (cold gate 47), registers GATE-B1-PROVENANCE-BAND-01: 174 - 2 + 1 = 173; earlier it registered ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 (ruling-first, from the pairing refuter on cold gate 05): 173 + 1 = 174. Activation c5048879 (2026-09-13) registers NIGHT-CENSUS-CHATGPT-APP-01 (ruling-first): 172 + 1 = 173. Activation f0d28baa (2026-09-12) closes FIXTURE-SENTINEL-CONTROLLER-01 (PR #324), RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01 (PR #325) and GIT-FIXTURE-MAINTENANCE-SWEEP-01 (PR #326): 175 - 3 = 172; ARM-READINESS-FIXTURE-CLOCK-ORIGIN-01 (PR #327) was registered and closed in the same activation without a kernel row. Activation 36d3a823 adds four follow-ups; handback gloss evidence supplied.  T38l+ adds CONTRACT-TEMPORAL-HEDGE-GUARD-01; T38l adds EPOCH-CONTINUATION-01 and ISSUER-CHECK-CONTINUATION-AWARE-01; Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
+        self.assertEqual(len(self.tasks), 170)  # 2026-09-14 (PR #330 merge of main): closes ESTIMAND-ENCLOSURE-01, FB-PLANNING-METADATA-01, D165-RELABEL-01 and PAPER-K (merged 2026-09-05/06, PRs #288/#290/#292/#293/#294): 174 - 4 = 170. Activation 24b9d3dd (2026-09-13) registers CALEXITS-RACE-FLAKE-01 (hosted race flake, p3): 173 + 1 = 174; the same day it closes NIGHT-CENSUS-CHATGPT-APP-01 (PR #334) and GATE-SENSIBILITY-SWEEP-01 (cold gate 47), registers GATE-B1-PROVENANCE-BAND-01: 174 - 2 + 1 = 173; earlier it registered ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 (ruling-first, from the pairing refuter on cold gate 05): 173 + 1 = 174. Activation c5048879 (2026-09-13) registers NIGHT-CENSUS-CHATGPT-APP-01 (ruling-first): 172 + 1 = 173. Activation f0d28baa (2026-09-12) closes FIXTURE-SENTINEL-CONTROLLER-01 (PR #324), RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01 (PR #325) and GIT-FIXTURE-MAINTENANCE-SWEEP-01 (PR #326): 175 - 3 = 172; ARM-READINESS-FIXTURE-CLOCK-ORIGIN-01 (PR #327) was registered and closed in the same activation without a kernel row. Activation 36d3a823 adds four follow-ups; handback gloss evidence supplied.  T38l+ adds CONTRACT-TEMPORAL-HEDGE-GUARD-01; T38l adds EPOCH-CONTINUATION-01 and ISSUER-CHECK-CONTINUATION-AWARE-01; Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,
@@ -814,29 +811,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.assertIn(f"| {tid} |", completed)
 
     def test_ruling_43_paper_lanes_and_d174_scope_freeze(self):
-        active = {
-            "DECISION-LOG-RATIFY",
-            "ESTIMAND-ENCLOSURE-01",
-            "FB-PLANNING-METADATA-01",
-            "D165-RELABEL-01",
-            "D166-PROMPT0-01",
-            "PAPER-K",
-        }
+        active = {"DECISION-LOG-RATIFY", "D166-PROMPT0-01"}
         self.assertEqual(
             {tid for tid in active if self.tasks[tid]["status"] == "active"},
             active,
-        )
-        self.assertIn(
-            "exactly one DERIVE registry row",
-            " ".join(self.tasks["ESTIMAND-ENCLOSURE-01"]["acceptance"]["evidence"]),
-        )
-        self.assertIn(
-            "all ten exact-equality object sites",
-            " ".join(self.tasks["FB-PLANNING-METADATA-01"]["acceptance"]["evidence"]),
-        )
-        self.assertIn(
-            "eight independent and four comparative ratios",
-            " ".join(self.tasks["D165-RELABEL-01"]["acceptance"]["evidence"]),
         )
         prompt_acceptance = " ".join(
             self.tasks["D166-PROMPT0-01"]["acceptance"]["evidence"]
@@ -847,10 +825,6 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertIn(
             "D-174",
             " ".join(self.tasks["DECISION-LOG-RATIFY"]["acceptance"]["evidence"]),
-        )
-        self.assertIn(
-            "source-to-estimand table",
-            " ".join(self.tasks["PAPER-K"]["acceptance"]["evidence"]),
         )
 
         parked = {

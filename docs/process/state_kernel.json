@@ -46,14 +46,15 @@
         "evidence": [
           "docs/process_traces/2026-09-13-activation-24b9d3dd/05-coldgate-packet-night-census-chatgpt/12-opus-pairing-refuter-on-ruling-10.md section 5: the arm-time browser probe (the pgrep alternation over Safari, Google Chrome, Chromium, Firefox and browser automation) matched five always-present Apple XPC services with no browser open; _expect_absent refuses on any match; row t0.no_stray_keepawake is ALWAYS-applicable and required in all three profiles",
           "joulewise/arm_readiness_evidence_t0.py:1720-1735 (_derive_process_census) and scripts/run_night.py:1498-1511 (TRANSACTION_PACK path): the census is evaluated at a pack night's t0 and by the desk tool, not for DIAGNOSTIC_NO_PACK or REHEARSAL_STUB",
-          "docs/process_traces/2026-09-13-activation-24b9d3dd/34-coldgate-packet-arm-census-browser-probe/10-coldgate-fable-ruling.md (ruling), 12-opus-pairing-refuter-on-ruling-10.md (A1-A4), 13-magistrate-synthesis-ruling-10-with-opus-amendments.md (adopted; decoy-control addendum); PR #335 merge 58edfa29 (head 7909cf2e); bench run 40; refuter 41; counter-review 42; delta 43; terminal review 44"
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/34-coldgate-packet-arm-census-browser-probe/10-coldgate-fable-ruling.md (ruling), 12-opus-pairing-refuter-on-ruling-10.md (A1-A4), 13-magistrate-synthesis-ruling-10-with-opus-amendments.md (adopted; decoy-control addendum); PR #335 merge 58edfa29 (head 7909cf2e); bench run 40; refuter 41; counter-review 42; delta 43; terminal review 44",
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/65-coldgate-packet-desk-proof/13-magistrate-synthesis-ruling-10-with-opus-amendments.md (cold gate 65: Q1 desk-only patched clone permitted under five conditions for the optional full run; Q2 closure bar = the standalone probe block with positive controls; Q3 outside any armed plan span only); 64 research and 66 scaffolding (clone /Users/edr/JouleWise-desk-proof-20260915 at 3b53478a, roots under /Users/edr/desk-proof-arm-census)"
         ],
         "pointer": {
           "json_pointer": "/tasks/ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01/acceptance",
           "label": "ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "RULED (cold gate packet 34 ruling 10, pairing refuter 12, synthesis 13): the browser probe anchors to real top-level executables (the path fragment /Contents/MacOS/ followed by exactly Safari, Google Chrome, Chromium or firefox and then a space or end of line) and the monitor probe anchors its watch token (watch only at the start of the line or after a slash, followed by a space or end of line); installed in joulewise/arm_readiness_evidence_t0.py with regressions G1-G4 (PR #335). REMAINING for closure, an Ed-hands step (refuter 12 A3): run scripts/author_arm_evidence_t0.py against a TRANSACTION_PACK pack root built from this checkout plus a window-custody root, with no browser open, Claude Code, the Claude and ChatGPT desktop apps and every codex MCP server closed, and no caffeinate running; the emitted t0.no_stray_keepawake source record must show the two new argv with exit 1 and empty stdout. A refusal on an earlier T-0 row is reported, not read as a census failure. G1-G4 prove the patterns; only that run proves the row."
+        "summary": "RULED (cold gate packet 34 ruling 10, pairing refuter 12, synthesis 13): the browser probe anchors to real top-level executables (the path fragment /Contents/MacOS/ followed by exactly Safari, Google Chrome, Chromium or firefox and then a space or end of line) and the monitor probe anchors its watch token (watch only at the start of the line or after a slash, followed by a space or end of line); installed in joulewise/arm_readiness_evidence_t0.py with regressions G1-G4 (PR #335). REMAINING for closure, an Ed-hands step (cold gate packet 65: ruling 10 as amended by pairing refuter 12, synthesis 13, 2026-09-14 — the verbatim command block lives in that synthesis and in the email of 2026-09-14 17:40): with no browser open, Claude Code, the Claude and ChatGPT desktop apps and every codex MCP server closed, and no caffeinate running, Ed runs the four census probe argv exactly as _derive_process_census executes them at a named main commit — pgrep -x caffeinate, the agent pattern (joulewise/night_gate.py:42), the browser and monitor patterns (joulewise/arm_readiness_evidence_t0.py lines 57-58) — in order, patterns in single quotes, prefixed LANG=C LC_ALL=C, each followed by echo $?; then two positive controls proving the typed patterns reached pgrep intact (the browser pattern with Finder added as a fifth alternative MUST exit 0 and print the Finder line; the monitor pattern with watch replaced by watchdogd MUST exit 0 and print /usr/libexec/watchdogd); if either control prints nothing the run is VOID and the lane stays open. The lane closes when the browser and monitor probes each print nothing and exit 1, recorded verbatim with date, sw_vers -productVersion and the commit sha whose constants were copied, by Ed's hands (a trace file or a paste into the directive issue, recorded BEFORE any browser is reopened); before marking the lane closed the magistrate diffs the recorded command lines byte-for-byte against that sha's lines 57-58, and a diff voids the run. The keep-awake and agent probe results are recorded as observations and do not gate this lane. The block runs only OUTSIDE an armed plan span (its agent-probe argv contains the literal codex, which the night's own census matches). The full-row proof (the tool's t0.no_stray_keepawake source record showing the two argv with exit 1 and empty stdout) is delivered by the first TRANSACTION_PACK night's own T-0, or earlier by a full run of scripts/author_arm_evidence_t0.py if Ed chooses, from a desk-only clone under the five ruled conditions; a refusal on an earlier T-0 row is reported, not read as a census failure."
       },
       "authority": {
         "label": "2026-09-13 activation 24b9d3dd packet 05 synthesis 13 (magistrate registration from pairing refuter 12 section 5; rule change needs a ruling)",
@@ -69,7 +70,7 @@
       "priority": "p2_next_slice",
       "rank": 193,
       "status": "queued",
-      "status_note": "2026-09-13: registered from activation 24b9d3dd after the Opus pairing refuter on cold-gate ruling 05/10 probed the browser argv live. Blocks the first pack night, not the 09-15 DIAGNOSTIC_NO_PACK equivalence night (that class never evaluates the arm-readiness census). Blocked on a ruling; not started. 2026-09-13 (activation 24b9d3dd): RULED and INSTALLED (PR #335, merge 58edfa29); the monitor class was found to share the defect (the bare token watch matched /usr/libexec/watchdogd) and is cured in the same install. OPEN in the ed_external lane pending the Ed-hands desk proof named in the acceptance (a queued external step, not agent work). Recorded limitation: the S-0 clone-proof's 'eleven-kind census PASS' (2026-08-22) established that the census kinds executed and were bound, not that this predicate passed on the current macOS; the real pgrep for this row was only ever bound by a test, never gated, and the August receipt is not on disk in any searched root. Follow-up notes (not lanes): optional -lx caffeinate so a keep-awake refusal records what it saw; the two-character agent token t3 is fragile on principle (no live exposure); Firefox's launchd-parented crashhelper no longer matches; G4's decoy list comprehension precedes its try (a spawn failure could leave one sleep 30 unreaped; delta 43 F1). 2026-09-14: D-181 cl.3 (Ed, directive #337): the magistrate prepares the pack root and window-custody root and emails Ed the exact command; Ed runs it at the next idle moment; this step must not be the reason the first G2-a pack window waits.",
+      "status_note": "2026-09-13: registered from activation 24b9d3dd after the Opus pairing refuter on cold-gate ruling 05/10 probed the browser argv live. Blocks the first pack night, not the 09-15 DIAGNOSTIC_NO_PACK equivalence night (that class never evaluates the arm-readiness census). Blocked on a ruling; not started. 2026-09-13 (activation 24b9d3dd): RULED and INSTALLED (PR #335, merge 58edfa29); the monitor class was found to share the defect (the bare token watch matched /usr/libexec/watchdogd) and is cured in the same install. OPEN in the ed_external lane pending the Ed-hands desk proof named in the acceptance (a queued external step, not agent work). Recorded limitation: the S-0 clone-proof's 'eleven-kind census PASS' (2026-08-22) established that the census kinds executed and were bound, not that this predicate passed on the current macOS; the real pgrep for this row was only ever bound by a test, never gated, and the August receipt is not on disk in any searched root. Follow-up notes (not lanes): optional -lx caffeinate so a keep-awake refusal records what it saw; the two-character agent token t3 is fragile on principle (no live exposure); Firefox's launchd-parented crashhelper no longer matches; G4's decoy list comprehension precedes its try (a spawn failure could leave one sleep 30 unreaped; delta 43 F1). 2026-09-14 17:45: cold gate 65 re-specified the closure bar (standalone probe block with positive controls; full-row proof via the first pack night's T-0); command block emailed to Ed (1a0a27b2b9d8024c); waits for Ed's recorded run outside an armed plan span. 2026-09-14: D-181 cl.3 (Ed, directive #337): the magistrate prepares the pack root and window-custody root and emails Ed the exact command; Ed runs it at the next idle moment; this step must not be the reason the first G2-a pack window waits.",
       "stop_card": null
     },
     "ARM-CENSUS-IDLE-INTERACTIVE-01": {
@@ -1737,37 +1738,6 @@
       "status_note": "The renderer branch reached the same caller-authority custody failure and is blocked on PAPER-CUSTODY-SEAM-01. WHOLE-WINDOW-STOP-RECEIPT-01 and CLAIM-NONISSUANCE-RECEIPT-01 remain separate queued producers.",
       "stop_card": null
     },
-    "D165-RELABEL-01": {
-      "acceptance": {
-        "evidence": [
-          "The successor rule id is d165_shared_sign_local_corner_replay.v2",
-          "The physical common-time and absolute-cancellation rationales are replaced by shared-energy-sign and local-corner sensitivity language",
-          "The eight independent and four comparative ratios, thresholds, census, arithmetic, and branch restrictions remain unchanged, and no submission-time rebuild occurs"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/D165-RELABEL-01/acceptance",
-          "label": "D165-RELABEL-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "D-165 is relabelled as a shared-energy-sign and local-corner sensitivity diagnostic without changing values or claiming physical common-time robustness."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate seat state",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Apply the ratified D-165 semantic relabel while preserving the issued arithmetic, thresholds, census, and historical bytes.",
-      "id": "D165-RELABEL-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 152,
-      "status": "active",
-      "status_note": "In flight on feat/2026-09-05-d165-relabel; Ed's estimand-relabel veto question remains outstanding while the ruled default proceeds.",
-      "stop_card": null
-    },
     "D166-PROMPT0-01": {
       "acceptance": {
         "evidence": [
@@ -2467,68 +2437,6 @@
       "rank": 185,
       "status": "queued",
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
-      "stop_card": null
-    },
-    "ESTIMAND-ENCLOSURE-01": {
-      "acceptance": {
-        "evidence": [
-          "A pinned desk script produces the appendix enclosure figure and exactly one DERIVE registry row from authenticated inputs",
-          "Every source record is counted exactly once",
-          "Negative and unsupported domains refuse, and no reducer field or frozen-bound composition is introduced"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ESTIMAND-ENCLOSURE-01/acceptance",
-          "label": "ESTIMAND-ENCLOSURE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A pinned desk script reports the nonnegative partial-record enclosure as a diagnostic without changing stored summaries or any frozen bound."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate seat state",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Replace the rejected reducer-field approach with the pinned desk script for the paper's partial-record enclosure diagnostic.",
-      "id": "ESTIMAND-ENCLOSURE-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 150,
-      "status": "active",
-      "status_note": "In flight on feat/2026-09-04-estimand-enclosure after ruling 43 rejected the reducer field and selected the desk-script shape.",
-      "stop_card": null
-    },
-    "FB-PLANNING-METADATA-01": {
-      "acceptance": {
-        "evidence": [
-          "SINGLE_COUNT_DISCIPLINE_ID migrates to a .v2 rule with version-aware consumers while legacy objects retain exact bytes and historical meaning",
-          "The migration covers all ten exact-equality object sites, the key in four of seventeen fill-rehearsal JSON objects, and the df-ph-decode-floor-mint1.json and docs/site/adapter_contracts.html consumers",
-          "Both roles remain mandatory, planning_sizing_formula is non-gating, max(F,h+B) uses strict inequalities at both boundaries, and asymmetric intervals use actual endpoints"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FB-PLANNING-METADATA-01/acceptance",
-          "label": "FB-PLANNING-METADATA-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Versioned planning metadata preserves both mandatory gates while making F+B explicitly non-gating and migration-safe."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate seat state",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Migrate the F+B planning metadata to a version-aware .v2 rule across the complete exact-equality and paper-consumer census.",
-      "id": "FB-PLANNING-METADATA-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 151,
-      "status": "active",
-      "status_note": "In flight on feat/2026-09-04-fb-metadata, re-briefed from the rejected exact-equality-breaking first round to ruling 43's .v2 migration.",
       "stop_card": null
     },
     "FLOOR-BIND-01": {
@@ -4923,37 +4831,6 @@
       "rank": 139,
       "status": "active",
       "status_note": "In progress on feat/2026-09-04-paper-custody-seam. Landing and two refuters were followed by fix round 1, a residual delta, and bounded fix round 2; a repeated signature routes back to a consult. All four supplier lanes wait on this seam.",
-      "stop_card": null
-    },
-    "PAPER-K": {
-      "acceptance": {
-        "evidence": [
-          "The paper consistently names interval-overlap-assigned energy and its conditional timing sensitivity without claiming an unconditional physical phase-energy bound",
-          "D-165, F+B planning metadata, and TR-01 use the ratified semantics; TR-01 is a fixed limitation and not a submission predicate",
-          "The source-to-estimand table distinguishes same-model repeats, same-model null A/B/B/A blocks, and the two-model science contrast, and the methods text matches the current implementation and statistical assumptions"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PAPER-K/acceptance",
-          "label": "PAPER-K acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The methods paper incorporates the peer-audit corrections, ratified semantic relabels, honest source-to-estimand mapping, and qualified statistical claims."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate Paper-K seat",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Finish the paper corrections selected by the three peer audits and ruling 43, including the estimand, D-165, planning metadata, transfer limitation, source mapping, and statistical qualifications.",
-      "id": "PAPER-K",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 154,
-      "status": "active",
-      "status_note": "Fix round 1 is in flight on feat/2026-09-04-paper-k after the first delta found late-built terms and a stale transfer note.",
       "stop_card": null
     },
     "PASS-ROUTE-RUNBOOK-CONTINUATION-01": {
