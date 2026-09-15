@@ -1064,3 +1064,5 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 
 **UPDATE 2026-09-14 19:40 PDT (activation `24b9d3dd`) — D-181 MERGED (PR #338 → main `66483dcd`); #337 CLOSED; PACK-ROOT-SUCCESSOR-V5-01 registered (171 rows); NIGHT ARMED, untouched (t0 02:56).** NEXT EXACT ACTION: (this activation) hold resident, no children; stand down on the watchdog request before 02:31; diff Ed's probe record if it arrives. (After the night) §2 harvest → §2.5 verdict → one action → uninstall from the clone → release the kernel event `N1-20260915-HARVESTED-AND-S2-5-ACTION-TAKEN` → INSTALL-WINDOWS-MULTI-01 first → PACK-ROOT-SUCCESSOR-V5-01 before any pack arm.
 
+**UPDATE 2026-09-14 21:05 PDT (activation `24b9d3dd`) — ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 CLOSED on Ed's probe record (75); night ARMED, census clean; 170 live rows.** NEXT EXACT ACTION: idle hold → stand down on the watchdog request before 02:31; after the night: §2 harvest → §2.5 verdict → one action → uninstall from the clone → release `N1-20260915-HARVESTED-AND-S2-5-ACTION-TAKEN` → INSTALL-WINDOWS-MULTI-01 → PACK-ROOT-SUCCESSOR-V5-01 before any pack arm.
+

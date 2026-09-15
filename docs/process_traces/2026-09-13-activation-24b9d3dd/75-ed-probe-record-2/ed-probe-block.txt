@@ -1,0 +1,8 @@
+date; sw_vers -productVersion; echo "constants from main sha 998724613a25214162c9db2e771f9c2e1aaf6132 (joulewise/arm_readiness_evidence_t0.py lines 57-58)"
+LANG=C LC_ALL=C /usr/bin/pgrep -x caffeinate; echo "rc=$?"
+LANG=C LC_ALL=C /usr/bin/pgrep -lf 'codex|claude|t3'; echo "rc=$?"
+LANG=C LC_ALL=C /usr/bin/pgrep -lf '/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)'; echo "rc=$?"
+LANG=C LC_ALL=C /usr/bin/pgrep -lf 'powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)'; echo "rc=$?"
+echo "--- positive controls (MUST print a line and rc=0)"
+LANG=C LC_ALL=C /usr/bin/pgrep -lf '/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox|Finder)( |$)'; echo "rc=$?"
+LANG=C LC_ALL=C /usr/bin/pgrep -lf 'powermetrics|window-chain|run_campaign|tail -f|(^|/)watchdogd( |$)'; echo "rc=$?"
