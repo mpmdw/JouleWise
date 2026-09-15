@@ -30,12 +30,18 @@ Rule only the questions above; do not amend any rule, decision-log entry or skil
 
 ## Charter pin
 
-`docs/process/coldgate_charter.md` sha256 `099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81`.
+Charter: `docs/process/coldgate_charter.md`
+sha256:
+099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81
+
+The judge independently checks this digest against the separately supplied pin in the convening prompt.
 
 ## Exhibit manifest
 
-- `exhibit-A-research-report-64.md` sha256 `3f251e3a90d9f10f9e040849c8cd0b11f473387eececdb0be30f0933330ac3c2`
-- `exhibit-B-kernel-lane-row.md` sha256 `5cf62a154a61b45bed04db9c1b1d565234e600b2fa44c39c8a72d28d16db6228`
-- `exhibit-C-registry-and-packs.md` sha256 `59ca4a57f43e22881f0b82b9e44ba22369e28f1a96288fd66d8cbad12e447634`
-- `exhibit-D-directive-337-ruling-3.md` sha256 `ab3b4211a7a4b497cc5c61edd39e65581ef7fb01e74b61f6be2181bb3118df73`
-- `exhibit-E-d161-threat-model.md` sha256 `70bc1de36c6cf983744035fac3aaab1ddaa8fd3161d809c665d9aa982a70aa55`
+```
+3f251e3a90d9f10f9e040849c8cd0b11f473387eececdb0be30f0933330ac3c2  exhibit-A-research-report-64.md
+5cf62a154a61b45bed04db9c1b1d565234e600b2fa44c39c8a72d28d16db6228  exhibit-B-kernel-lane-row.md
+59ca4a57f43e22881f0b82b9e44ba22369e28f1a96288fd66d8cbad12e447634  exhibit-C-registry-and-packs.md
+ab3b4211a7a4b497cc5c61edd39e65581ef7fb01e74b61f6be2181bb3118df73  exhibit-D-directive-337-ruling-3.md
+70bc1de36c6cf983744035fac3aaab1ddaa8fd3161d809c665d9aa982a70aa55  exhibit-E-d161-threat-model.md
+```
