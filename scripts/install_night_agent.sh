@@ -314,18 +314,20 @@ teardown() {
   [[ -d "$plist_backup" ]] || return "$result"
   # exit 4 must override the original status without re-entering this trap.
   trap - EXIT
-  "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
-  "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
-  local night_loaded=0 deadman_loaded=0
-  if "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1; then
-    night_loaded=1
-  fi
-  if "$launchctl_bin" print "gui/$uid/$deadman_label" >/dev/null 2>&1; then
-    deadman_loaded=1
-  fi
-  if (( night_loaded || deadman_loaded )); then
-    print "teardown: $night_label loaded=$night_loaded; $deadman_label loaded=$deadman_loaded; retained plists: $night_plist $deadman_plist; backup=$plist_backup" >&2
-    exit 4
+  if [[ -z "$render_only" ]]; then
+    "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
+    "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
+    local night_loaded=0 deadman_loaded=0
+    if "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1; then
+      night_loaded=1
+    fi
+    if "$launchctl_bin" print "gui/$uid/$deadman_label" >/dev/null 2>&1; then
+      deadman_loaded=1
+    fi
+    if (( night_loaded || deadman_loaded )); then
+      print "teardown: $night_label loaded=$night_loaded; $deadman_label loaded=$deadman_loaded; retained plists: $night_plist $deadman_plist; backup=$plist_backup" >&2
+      exit 4
+    fi
   fi
   for plist in "$night_plist" "$deadman_plist"; do
     if [[ -e "$plist_backup/${plist:t}" ]]; then

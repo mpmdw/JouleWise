@@ -793,7 +793,7 @@ class InstallTeardownTests(unittest.TestCase):
     LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
 
     def _prepare(self, *, fault="", priors=False, spans=None, advance=61,
-                 cutoff=None, retained_labels=None):
+                 cutoff=None, retained_labels=None, render_only=False):
         fixture = InstallNightAgentTests()
         fixture.setUp()
         self.addCleanup(fixture.tearDown)
@@ -806,7 +806,8 @@ class InstallTeardownTests(unittest.TestCase):
               now + cutoff + wd.PLAN_LEAD_S + run_night.INSTALL_CLOSE_MARGIN_S)
         self.plan = fixture._write_plan(authored_epoch_s=now - 60, t0_epoch_s=t0)
         self.python = fixture._controlled_python(now, spans=spans)
-        self.directory = fixture.root / "home/Library/LaunchAgents"
+        self.directory = (fixture.rendered if render_only else
+                          fixture.root / "home/Library/LaunchAgents")
         self.prior_bytes = {}
         if priors:
             prior_plan = fixture._write_plan(plan_id="prior-install-night-agent-test",
@@ -989,6 +990,38 @@ class InstallTeardownTests(unittest.TestCase):
             with self.subTest(retained_label=label):
                 self._prepare(fault="retained", priors=True, retained_labels=(label,))
                 self._assert_teardown(self._run(), 4)
+
+    def _assert_render_only_preserves_preloaded_labels(self, *, fault=""):
+        self._prepare(fault=fault, priors=True, render_only=True)
+        for label in self.LABELS:
+            Path(f"{self.fixture.launch_log}.{label}").touch()
+        completed = self.fixture._run(self.plan, python=str(self.python), render_only=True)
+        self.assertEqual(1 if fault else 0, completed.returncode, completed.stderr)
+        if fault:
+            self.assertIn("PermissionError", completed.stderr)
+            self.assertIn(str(self.directory / f"{self.LABELS[1]}.plist"), completed.stderr)
+        for label in self.LABELS:
+            with self.subTest(label=label, assertion="preloaded label preserved"):
+                self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
+            with self.subTest(label=label, assertion="rendered file contents"):
+                payload = (self.directory / f"{label}.plist").read_bytes()
+                if fault:
+                    self.assertEqual(self.prior_bytes[label], payload)
+                else:
+                    self.assertIn(str(self.plan), plistlib.loads(payload)["ProgramArguments"])
+        with self.subTest(assertion="zero launchctl calls for the whole run"):
+            calls = (self.fixture.launch_log.read_text().splitlines()
+                     if self.fixture.launch_log.exists() else [])
+            self.assertEqual([], calls)
+        backups = [Path(path) for path in self.backup_log.read_text().splitlines()]
+        self.assertEqual(1, len(backups))
+        self.assertFalse(backups[0].exists(), "no leaked /tmp/night-agent-install backup")
+
+    def test_render_only_second_render_failure_preserves_preloaded_labels(self):
+        self._assert_render_only_preserves_preloaded_labels(fault="render")
+
+    def test_render_only_success_preserves_preloaded_labels(self):
+        self._assert_render_only_preserves_preloaded_labels()
 
     def test_success_removes_backup_without_teardown(self):
         for render_only in (False, True):
