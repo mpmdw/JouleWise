@@ -5132,6 +5132,39 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row. AMENDED 2026-08-28 in the T27 second kernel wave per D-162 R-1: the diagnostic-family path (Path A) that the corrected live-proof gate declined to build pre-campaign moves into this row's acceptance; PIPELINE-SMOKE-LIVE-01 is re-scoped to G1/G2/G3 and carries no family design.",
       "stop_card": null
     },
+    "PLAN-TREE-ROOTS-CONTRACT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/16-gamma-opus-counter-review.md (F2)",
+          "docs/process_traces/2026-09-15-activation-d6888966/13-gamma-apex-gate-and-prune.md (Q4a)",
+          "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md (Row 3 table)",
+          "joulewise/arm_readiness_evidence_t0.py:1014-1020 and joulewise/arm_readiness.py:8505-8527: canonical roots readers and refusal paths",
+          "configs/arm_readiness/d117_row_registry_v2.json successor_pack_ids: live generator roster for the repo-wide regression"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PLAN-TREE-ROOTS-CONTRACT-01/acceptance",
+          "label": "PLAN-TREE-ROOTS-CONTRACT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A short plan-tree schema section in the owning contract under docs/contracts/ names roots.claim_root_leaf / roots.bound_root_leaf as the sole canonical pair and documents both reader refusals: the T-0 author raises \"arm roots do not derive from frozen leaves\" and the receipt reader returns readiness_root_binding_invalid. A repo-wide regression asserts every generator named by the live arm-readiness registry roster (configs/arm_readiness/d117_row_registry_v2.json successor_pack_ids) emits exactly that pair. The contract text itself goes through a cold-gate or Ed step because creating contract text is process-bearing (rule 11). Historical v1-v3 trees remain byte-identical (D-134/D-139)."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 records 13/15; registered by the magistrate from the Opus counter-review (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The plan-tree roots key set (claim_root_leaf / bound_root_leaf) has no ONE home in docs/contracts/ or docs/specs/; it lives only in the two readers joulewise/arm_readiness_evidence_t0.py:1014-1020 and joulewise/arm_readiness.py:8505-8521 and one emitter per campaign generator (configs/campaigns/*/generate_configs.py). This allowed the GAMMA _v5 generator to drift to claim_leaf / bound_leaf unnoticed, fixed in PR #339.",
+      "id": "PLAN-TREE-ROOTS-CONTRACT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 199,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered from Opus counter-review F2 and magistrate records 13/15; not started. Contract text requires a cold-gate or Ed step under rule 11; historical v1-v3 trees remain frozen (D-134/D-139).",
+      "stop_card": null
+    },
     "POWERMODE-PREFLIGHT-RECORD-01": {
       "acceptance": {
         "evidence": [
@@ -5588,6 +5621,39 @@
       "rank": 191,
       "status": "queued",
       "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started.",
+      "stop_card": null
+    },
+    "ROOT-NAMESPACE-FALLBACK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/16-gamma-opus-counter-review.md (F3)",
+          "docs/process_traces/2026-09-15-activation-d6888966/13-gamma-apex-gate-and-prune.md (Q4b)",
+          "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md (Row 3 table)",
+          "joulewise/arm_readiness.py:8505-8522: canonical roots read followed by root_namespace claim_leaf / bound_leaf overrides at :8511-8514 before frozen-leaf validation",
+          "joulewise/arm_readiness_evidence_t0.py:1014-1020: canonical roots binding with no root_namespace fallback"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ROOT-NAMESPACE-FALLBACK-01/acceptance",
+          "label": "ROOT-NAMESPACE-FALLBACK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The root_namespace fallback is deleted (preferred) or mirrored identically in both readers, decided by the implementing seat with a written reason. A regression feeds a tree with canonical roots plus a conflicting root_namespace to BOTH readers and asserts the same verdict. Paired contract and execution refuters review the change because it is live code under a fail-closed binding. Not night-critical; no change to refusal strings."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 records 13/15; registered by the magistrate from the Opus counter-review (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "joulewise/arm_readiness.py:8511-8514 lets a tree[\"root_namespace\"] mapping (claim_leaf / bound_leaf) override the canonical roots pair in receipt-side frozen-leaf binding. The counter-review found no repository producer (no root_namespace matches under configs/), and the T-0 reader has no fallback. A hand-written tree can therefore pass the receipt binding and be refused by the T-0 author: a split verdict between two gates on one fact inside a fail-closed evidence binding.",
+      "id": "ROOT-NAMESPACE-FALLBACK-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 200,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered from Opus counter-review F3 and magistrate records 13/15; not started; not night-critical. Delete-or-mirror choice belongs to the implementing seat with a written reason; paired contract and execution refuters required; refusal strings unchanged.",
       "stop_card": null
     },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
