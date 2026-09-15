@@ -4792,6 +4792,37 @@
       "status": "blocked",
       "stop_card": null
     },
+    "PACK-ROOT-SUCCESSOR-V5-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/65-coldgate-packet-desk-proof/10-coldgate-fable-ruling.md §3 (severity note: MATERIAL for the first pack night's own T-0, independent of the desk-proof lane) and 12-opus-pairing-refuter-on-ruling-10.md (hygiene: the ALPHA/BETA _v5 directories hold only generate_configs.py; the GAMMA directory is absent)",
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/66-r3-desk-proof-scaffolding-opus-report.md §4 (dry-gate refusals: readiness_row_registry_mismatch for d117_floor_qwen25_1p5b_v3; readiness_pack_unreadable for d117_floor_qwen3-1p7b_v5)",
+          "joulewise/arm_readiness.py:4446-4472 (_plan_profile resolves the pack through the registry's successor_pack_ids), configs/arm_readiness/d117_row_registry_v2.json:532-536 (ALPHA d117_floor_qwen3-1p7b_v5, BETA d117_floor_qwen3-8b_v5, GAMMA d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PACK-ROOT-SUCCESSOR-V5-01/acceptance",
+          "label": "PACK-ROOT-SUCCESSOR-V5-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The three successor packs the live arm-readiness registry installs (ALPHA/BETA/GAMMA, all _v5 Qwen3) exist as complete TRANSACTION_PACK pack roots on main — plan_tree.json with claim_root_leaf/bound_root_leaf, calibration_plan.json, arm_readiness.evidence — so scripts/author_arm_evidence_t0.py and the pack-night T-0 resolve a profile from a clean clone at main; or the registry names packs that do exist, by a ruling on the roster (a roster change is Ed's to decide on its own merits, cold gate 65 Q1). Proven by the A5 dry gate from a clean clone at main refusing with evidence_author_t0_clock_attestation_missing (not readiness_row_registry_mismatch or readiness_pack_unreadable), recorded in a trace. Lands under the twelve-row gate; sequenced before the first TRANSACTION_PACK arm."
+      },
+      "authority": {
+        "label": "Cold gate packet 65 ruling 10 §3 severity note (2026-09-14): no usable pack root on main is MATERIAL for the first pack night's own T-0; registered by the magistrate (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/65-coldgate-packet-desk-proof/10-coldgate-fable-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The live arm-readiness registry's successor_pack_ids name three _v5 Qwen3 packs whose directories hold no plan tree (two) or do not exist (one), so no committed pack root on main resolves through the T-0 author; the first TRANSACTION_PACK night cannot pass its T-0 until a real successor pack exists or the roster is ruled.",
+      "id": "PACK-ROOT-SUCCESSOR-V5-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 196,
+      "status": "queued",
+      "status_note": "2026-09-14: registered from cold gate 65 (desk-proof packet) — found while preparing the Ed-hands desk proof (records 64/66); not a fence on the DIAGNOSTIC_NO_PACK equivalence night; blocks the first G2-a pack window's T-0. Design question for the seat: build the ALPHA/BETA packs from their generate_configs.py under the freeze/registry contracts, or rule the roster.",
+      "stop_card": null
+    },
     "PAPER-CUSTODY-SEAM-01": {
       "acceptance": {
         "evidence": [
