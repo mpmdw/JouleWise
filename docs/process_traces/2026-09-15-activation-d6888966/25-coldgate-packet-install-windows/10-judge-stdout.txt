@@ -1,0 +1,4 @@
+Ruling written at 12.5 KB (under the 14 KB cap), tree untouched apart from the packet directory, no leaked fixture backups.
+
+Ruling filed: Q1 (c) single commit gate at the sole success exit, Q2 no new constant, Q3 bootout-then-remove via one EXIT-trap teardown with explicit exits, Q4 (i) blocker must close (F3 is live under the default span), Q5 AFFIRM with kernel text, Q6 (i) no conflict with two runbook sentences; all three exhibit-B classes reproduced on df86cee6.
+rc=0
