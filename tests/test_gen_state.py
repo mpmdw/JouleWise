@@ -1271,7 +1271,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_run_state_gate_suppresses_lane_heads_but_active_work_continues(self):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
-        head_oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
+        head_oracle["expected_selectable_task_ids"][0] = "INSTALL-WINDOWS-MULTI-01"  # 2026-09-15 (activation 1acf2aee): N1-20260915 event released; INSTALL-WINDOWS-MULTI-01 is the agent head at rank 0 (D-181 cl.1)
         _adapt_retired_lane_heads(head_oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(gate_oracle["active_global_gates"])
         rendered = gen_state.render_run_state(kernel)
@@ -1322,7 +1322,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")
-        oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
+        oracle["expected_selectable_task_ids"][0] = "INSTALL-WINDOWS-MULTI-01"  # 2026-09-15 (activation 1acf2aee): N1-20260915 event released; INSTALL-WINDOWS-MULTI-01 is the agent head at rank 0 (D-181 cl.1)
         _adapt_retired_lane_heads(oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
@@ -1482,7 +1482,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             {
                 "ED-DATES-01",
                 "V5-G2A-PREFILL-PROBE-01",
-                "WO-LAUNCH-BINDING",
+                "INSTALL-WINDOWS-MULTI-01",  # 2026-09-15 (activation 1acf2aee): agent head at rank 0 after the N1-20260915 event release (D-181 cl.1); WO-LAUNCH-BINDING follows it
             },
         )
         self.assertNotIn("excluded by:", run_state)

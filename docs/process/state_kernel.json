@@ -2866,11 +2866,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "night n1-20260915 REFUSED at t0 (night_refused_not_quiet, load 2.55 > 2.0, census clean); harvested, §2.5 nothing to judge, one action = re-plan never re-arm; agents uninstalled 05:43 09-15",
+            "path": "docs/process_traces/2026-09-15-activation-1acf2aee/01-equivalence-night-20260915-harvest-record.md"
+          },
           "kind": "event",
           "required": "D-181 cl.1 (Ed, directive #337): the promoted work starts immediately after the 09-15 equivalence night's harvest (runbook §2) and its §2.5 outcome action; released in the bookkeeping that records both, with the harvest record and the §2.5 action as evidence",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "N1-20260915-HARVESTED-AND-S2-5-ACTION-TAKEN"
         }
@@ -2883,8 +2886,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 0,
-      "status": "blocked",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until this lands, the machinery still supports only one install span and one fixed launchd minute — a mechanism limit, not a rule; D-181 cl.1 is in force and no timing rule survives it.",
+      "status": "queued",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until this lands, the machinery still supports only one install span and one fixed launchd minute — a mechanism limit, not a rule; D-181 cl.1 is in force and no timing rule survives it. 2026-09-15: the 09-15 night fired and was REFUSED at the gate on load average alone (agent census clean); harvested and its §2.5 action taken (record 01 of activation 1acf2aee) — the event dependency is satisfied and this lane is QUEUED at agent rank 0.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
@@ -7879,5 +7882,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-14"
+  "updated": "2026-09-15"
 }
