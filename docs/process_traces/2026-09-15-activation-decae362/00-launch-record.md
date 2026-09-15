@@ -56,3 +56,15 @@ have accumulated across sessions. Zero CPU, so not a load contributor, but
 they hold ports and memory and would confuse any future process census that
 widens beyond agent names. Find the fixture, add teardown-on-any-exit, and
 kill the orphans once Ed says so.
+
+## Addendum 06:40 PDT — first relaunch ran read-only; relaunched again with the write sandbox
+
+The 06:19–06:21 relaunches omitted `-s workspace-write`; `codex-run-v3` defaults
+to `read-only`, so seat D returned `blocked/partial` at 06:33 (F1: "filesystem
+policy is read-only … no temporary directory is writable"; its D-5 inspection
+stands: `MAGISTRATE_RELAUNCH_PROMPT.md` needs no change) and seat A was working
+read-only. Seat A was terminated at 06:37 (pids 53404/53443; worktree still
+clean); both seats relaunched at 06:38–06:39 with `-s workspace-write`
+(manifests record `workspace-write`). The read-only attempts are kept as
+`*.readonly-attempt.{md,log}` under `/tmp/magistrate-decae362/`. The scout
+(read-only by design) was unaffected and keeps running.
