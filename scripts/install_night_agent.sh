@@ -301,34 +301,51 @@ mkdir -p "$launch_dir" "$custody_root/night"
 
 # Keep prior bytes until the entire install (including verification) succeeds.
 # EXIT also covers render errors and any other unsuccessful post-render exit.
-plist_backup="$(mktemp -d "${TMPDIR:-/tmp}/night-agent-install.XXXXXXXX")"
+plist_backup="$(mktemp -d "${TMPDIR:-/tmp}/night-agent-install.XXXXXXXX")" || exit 1
 for plist in "$night_plist" "$deadman_plist"; do
   if [[ -e "$plist" || -L "$plist" ]]; then
     cp -p "$plist" "$plist_backup/${plist:t}" || { rm -rf "$plist_backup"; exit 1; }
   fi
 done
-rollback_install_files() {
+teardown() {
   local result=$?
-  if (( result != 0 )); then
-    for plist in "$night_plist" "$deadman_plist"; do
-      if [[ -e "$plist_backup/${plist:t}" ]]; then
-        cp -p "$plist_backup/${plist:t}" "$plist"
-      else
-        rm -f "$plist"
-      fi
-    done
+  (( result != 0 )) || return 0
+  # A completed teardown has already restored the prior files.
+  [[ -d "$plist_backup" ]] || return "$result"
+  # exit 4 must override the original status without re-entering this trap.
+  trap - EXIT
+  "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
+  "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
+  local night_loaded=0 deadman_loaded=0
+  if "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1; then
+    night_loaded=1
   fi
-  rm -rf "$plist_backup"
+  if "$launchctl_bin" print "gui/$uid/$deadman_label" >/dev/null 2>&1; then
+    deadman_loaded=1
+  fi
+  if (( night_loaded || deadman_loaded )); then
+    print "teardown: $night_label loaded=$night_loaded; $deadman_label loaded=$deadman_loaded; retained plists: $night_plist $deadman_plist; backup=$plist_backup" >&2
+    exit 4
+  fi
+  for plist in "$night_plist" "$deadman_plist"; do
+    if [[ -e "$plist_backup/${plist:t}" ]]; then
+      cp -pf "$plist_backup/${plist:t}" "$plist" || exit 1
+    else
+      rm -f "$plist" || exit 1
+    fi
+  done
+  rm -rf "$plist_backup" || exit 1
   return "$result"
 }
-trap rollback_install_files EXIT
+trap teardown EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-render "$night_label" run "$night_plist" "$hour" "$minute" "launchd.night"
-render "$deadman_label" dead-man "$deadman_plist" "$deadman_hour" "$deadman_minute" "launchd.deadman"
+render "$night_label" run "$night_plist" "$hour" "$minute" "launchd.night" || exit 1
+render "$deadman_label" dead-man "$deadman_plist" "$deadman_hour" "$deadman_minute" "launchd.deadman" || exit 1
 if [[ -n "$render_only" ]]; then
+  rm -rf "$plist_backup" || exit 1
   print "validated pins: repo_head=$plan_head measurement_root=$measurement_root measurement_head=$plan_measurement_head"
   exit 0
 fi
@@ -340,21 +357,16 @@ if ! "$launchctl_bin" bootstrap "gui/$uid" "$night_plist"; then
   print "failed to bootstrap $night_label" >&2
   exit 3
 fi
-if ! check_schedule close "$selected_span_close"; then
-  "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
-  print "install_span_closed; rolled back $night_label before dead-man bootstrap" >&2
-  exit 2
-fi
+check_schedule close "$selected_span_close" || exit $?
 if ! "$launchctl_bin" bootstrap "gui/$uid" "$deadman_plist"; then
-  "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
-  print "failed to bootstrap $deadman_label; rolled back $night_label" >&2
+  print "failed to bootstrap $deadman_label" >&2
   exit 3
 fi
 if ! "$launchctl_bin" print "gui/$uid/$night_label" || \
    ! "$launchctl_bin" print "gui/$uid/$deadman_label"; then
-  "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
-  "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
-  print "launch agent verification failed; rolled back both agents" >&2
+  print "launch agent verification failed" >&2
   exit 3
 fi
+check_schedule close "$selected_span_close" || exit $?
 print "validated pins: repo_head=$plan_head measurement_root=$measurement_root measurement_head=$plan_measurement_head"
+rm -rf "$plist_backup" || exit 1
