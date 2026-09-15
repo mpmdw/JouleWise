@@ -18,7 +18,11 @@ process.
 
 ## Safety model and state machine
 
-The tick reads every sibling `*/night_plan.json` with the production `NightPlan.from_mapping`, the associated `night/chain.started`, `night/chain.exited`, and `night/courier.sent` markers, the local service state and locks, the local `STOP` file, the remote stop refs, local civil time, monotonic time, and the process table. A v2 plan carries both schema `joulewise.night_plan.v2` and integer `schema_version: 2`; a missing or different version is malformed. Only a decoded mapping whose complete key shape exactly matches the golden retired-v1 fixture is ignored, with a `plan_retired_v1` event; a v1 label attached to any v2-only key is not retired evidence. Unreadable JSON holds as `night_plan_unreadable`; an invalid v2 or future authorship holds as `night_plan_malformed`. Each diagnostic is keyed by the activation id and spawn epoch, plan directory, kind, and detail digest, so changed failures and later activations are reported independently. Every spawn mints a fresh activation id and spawn epoch. The watchdog's valid-plan set intentionally contains every plan the night gate could run and may conservatively contain a stale plan the gate would refuse. Inside a valid-v2 plan span the watchdog invokes the exact production `agent_census`; outside a span, an unrelated census hit does not prevent daytime work. A live `magistrate.lock` is validated by both PID and the process's start-time token so PID reuse grants no authority.
+**Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01, D-180 clause 1 / D-181
+clause 1 adopted design:** plan spans replace the fixed-clock relaunch fences;
+the night driver's timing functions own their derived boundaries.
+
+The tick reads every sibling `*/night_plan.json` with the production `NightPlan.from_mapping` and the plans referenced by `--plan` in the installed night plists (launchd job files), the associated `night/chain.started`, `night/chain.exited`, and `night/courier.sent` markers, the local service state and locks, the local `STOP` file, the remote stop refs, wall-clock epoch seconds, monotonic time, and the process table. A v2 plan carries both schema `joulewise.night_plan.v2` and integer `schema_version: 2`; a missing or different version is malformed. Only a decoded mapping whose complete key shape exactly matches the golden retired-v1 fixture is ignored, with a `plan_retired_v1` event; a v1 label attached to any v2-only key is not retired evidence. Unreadable JSON holds as `night_plan_unreadable`; an invalid v2 or future authorship holds as `night_plan_malformed`. Each diagnostic is keyed by the activation id and spawn epoch, plan directory, kind, and detail digest, so changed failures and later activations are reported independently. Every spawn mints a fresh activation id and spawn epoch. The watchdog's valid-plan set intentionally contains every plan the night gate could run and may conservatively contain a stale plan the gate would refuse. Inside a valid-v2 plan span the watchdog invokes the exact production `agent_census`; outside a span, an unrelated census hit does not prevent daytime work. A live `magistrate.lock` is validated by both PID and the process's start-time token so PID reuse grants no authority.
 
 Process identity uses PID plus seconds-resolution `lstart`; XNU's unique PID would provide a stronger identity guarantee.
 
@@ -28,7 +32,7 @@ The durable states are:
 - `LAUNCHING`: launch predicates passed and a resident supervisor is being forked.
 - `ACTIVE`: the recorded child PID, start time, and activation are live in both `state.json` and `magistrate.lock`. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
 - `STANDDOWN_REQUESTED`, `STANDDOWN_TERM`, and the terminal `FENCED`/`HOLD_CENSUS`: the resident supervisor executes the request, TERM, KILL, and verification sequence below.
-- `FENCED`: a plan span, the 02:45–03:30 belt, or the 07:00 minute forbids launch.
+- `FENCED`: a plan span, discovered from `*/night_plan.json` OR read from the installed night plists, forbids launch or adoption. `installed_agent_fence` reads `~/Library/LaunchAgents/com.joulewise.night.plist` and `com.joulewise.night.deadman.plist`, extracts `--plan` from `ProgramArguments`, parses that plan with `NightPlan.from_mapping`, and uses the same `plan_span_active` arithmetic as discovery. An unreadable LaunchAgents directory, unparseable plist or unreadable/invalid referenced plan enters `HOLD_UNSAFE`. The installer also requires the resolved plan path to be its own `<custody_root>/night_plan.json`.
 - `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the same nine-minute/TERM/one-minute/KILL ladder. If that supervisor dies, each replacement tick validates and records `resident_adopted`, performs the next due ladder action, and persists the stage for the following tick; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
 - `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
@@ -39,21 +43,35 @@ Every state transition appends exactly one transition event. Re-evaluating the s
 
 ## Fence and deadlines
 
-All plan arithmetic is epoch seconds. Only the fixed belt and dead-man minute use `datetime.now().astimezone()` local time.
+**Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01.** All watchdog plan
+arithmetic is epoch seconds (seconds since 1970-01-01 00:00 UTC); only launchd
+calendar rendering uses local time. `scripts/run_night.py` owns
+`deadman_epoch(plan) = 60 × ceil((t0 + window_max_s + COURIER_DEADLINE_S + DEADMAN_GRACE_S) / 60)`.
+Here `ceil` rounds upward to an integer, `COURIER_DEADLINE_S = 300 = 5 × 60 s`
+and `DEADMAN_GRACE_S = 3600 = 60 × 60 s`. Thus the dead-man is completion
+plus 60 minutes rounded up to a minute. The night job renders local
+Month/Day/Hour/Minute from `t0`; the dead-man renders only Hour/Minute from
+that derived epoch and repeats daily. Before completion it logs a stand-down;
+after `night/courier.sent` it skips. The install-day local spans are resolved
+by the driver/installer, not by the watchdog's fence arithmetic.
 
 For each valid plan:
 
 1. The plan span begins at the closed boundary `t0 - 25 minutes`.
 2. It remains open through the closed completion boundary `t0 + window_max_s + COURIER_DEADLINE_S`.
-3. After completion it closes when `night/courier.sent` exists. Without that marker it remains open through the closed boundary `_next_deadman_epoch(t0) + COURIER_LOCK_FRESH_S`.
+3. After completion it closes when `night/courier.sent` exists. Without that marker it remains open through the closed boundary `deadman_epoch(plan) + COURIER_LOCK_FRESH_S`, where `COURIER_LOCK_FRESH_S = 300 + max(60, 180, 600) = 900 s` (15 minutes).
 4. At any time, `chain.started` without `chain.exited` extends the span without a clock limit.
 5. During that span the exact production census must be empty before the state can be merely `FENCED`. A nonempty or failed census is `HOLD_CENSUS` and is never killed as an unowned match.
 
-The local fixed fences are half-open: `[02:45:00, 03:30:00)` and `[07:00:00, 07:01:00)`. Equality at the plan-span start, completion, and dead-man-plus-lock-fresh boundaries is unsafe.
+Equality at the plan-span start, completion, and dead-man-plus-lock-fresh
+boundaries is unsafe. A plan absent from sibling discovery still fences via
+its installed plist when the referenced plan is readable and valid; a missing
+referenced plan holds `HOLD_UNSAFE`. Inside that installed-plan fence, the short
+tick returns `FENCED` with `adopt=False`; it does not launch or adopt a
+supervisor. Re-adoption waits for `plan_span_active` to become false, subject
+to all other launch predicates. No clock hour alone creates a fence.
 
-Inside either fixed fence, a live PID+start-time-owned session whose resident supervisor is absent remains fenced: the short tick returns `FENCED` with `adopt=False` and does not launch or adopt a supervisor. Re-adoption waits until the fixed fence clears, at most 45 minutes for the belt and at most one minute for the 07:00 fence.
-
-For the earliest relevant parseable plan, the resident supervisor re-reads plans and evaluates its stand-down phase on every poll, including while a clock or unsafe-plan drain is latched. Each drain action is due at the earlier of its cooperative-ladder time and the plan boundary, so REQUEST is no later than `t0 - 25 min`, TERM no later than `t0 - 16 min`, and KILL no later than `t0 - 15 min`. Plan and local-clock enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
+For the earliest relevant parseable plan, the resident supervisor re-reads plans and evaluates its stand-down phase on every poll, including while a clock or unsafe-plan drain is latched. Each drain action is due at the earlier of its cooperative-ladder time and the plan boundary, so REQUEST is no later than `t0 - 25 min`, TERM no later than `t0 - 16 min`, and KILL no later than `t0 - 15 min`. Plan-boundary enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
 
 | Boundary | Action |
 |---|---|

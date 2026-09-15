@@ -13,7 +13,8 @@ the result record directs.
 
 Email Ed at claude.ai.copper531@passmail.net. Use plain words. State the
 verdict, the chain exit code, any refusal reason and detail, and the results
-branch name `night-results/<night-date>`. After the email is accepted, write
+branch name `night-results/<plan_id>` (updated 2026-09-15,
+INSTALL-WINDOWS-MULTI-01: one branch per plan). After the email is accepted, write
 `{custody_root}/night/courier.sent`.
 
 Continue with the handback's next lane under the standing loop rules.

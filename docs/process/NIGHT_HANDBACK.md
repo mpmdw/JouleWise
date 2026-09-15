@@ -39,6 +39,13 @@ gives the exact record checks, shared custody-parent settings, decision table,
 and operator repair for records whose processes have ended or whose numbers
 have been assigned to later processes.
 
+**Live-template timing update — 2026-09-15, INSTALL-WINDOWS-MULTI-01.**
+The live schedule, procedure, notice and harvest instructions below use the
+D-180 clause 1 / D-181 clause 1 adopted design. They require a measurement
+head containing that implementation; they do not establish an arm. Every
+Executed section and prior dated addendum remains historical evidence,
+verbatim. The arm record identifies the code and schedule actually installed.
+
 ## Purpose of this night
 
 This plan is the SUCCESSOR of `d079-epoch-25g83-derivation-n1-20260916`, which
@@ -57,9 +64,14 @@ Plan `d079-epoch-25g83-derivation-n1-20260916`, class `DIAGNOSTIC_NO_PACK`,
 is planned for 2026-09-16 at 02:56:00 PDT (`t0`, epoch 1789552560) with a
 9000-second window (`window_max_s`; the acquisition allocation ends at
 05:26:00 PDT, epoch 1789561560). The courier deadline is
-`t0 + 9000 + 300`, epoch 1789561860, 05:31:00 PDT; the next 07:00 dead-man
-minute is epoch 1789567200, 89 minutes after it. This notice describes the
-planned night; the arm record establishes whether installation happened.
+`t0 + 9000 + 300`, epoch 1789561860, 05:31:00 PDT. This is also the
+**completion boundary**, the plan's window end plus the 300 s (5 × 60 s)
+courier allowance. The **dead-man**, the second launchd job that recovers
+missing delivery after completion, is scheduled by `deadman_epoch(plan)`:
+`60 × ceil((1789561860 + 3600) / 60) = 1789565460`, 06:31:00 PDT on
+2026-09-16. Here `ceil` rounds upward to an integer; `DEADMAN_GRACE_S = 3600`
+is 60 × 60 s after completion. The job repeats daily at that local minute.
+This notice describes the planned night; the arm record establishes whether installation happened.
 
 **What the night does.** It is the epoch-equivalence check that Ed's
 directive issue 316 ruled on 2026-09-10, transcribed as revision 2 of
@@ -123,18 +135,95 @@ reads nothing else from it. The two desk inputs `identity-epoch.json` and
 `scripts/write_derivation_night_inputs.py` at the arm and their digests are
 baked into the wrapper.
 
-**Timeline.** Both agents are installed on 2026-09-15 inside 03:00–06:30
-PDT, the calendar day before `t0`. The 07:00 dead-man firing on 09-15 stands
-down with one log line and writes nothing else into `night/`; that line is
-expected evidence. The watchdog's plan span opens, and its stand-down request
-lands, at `t0 − 25 minutes`, 02:31:00 PDT on 09-16 (epoch 1789551060); TERM
-is `t0 − 16 minutes` (1789551600) and KILL is `t0 − 15 minutes`
-(1789551660); `t0` sits inside the fixed 02:45–03:30 belt, which is correct
-for a night. The consolidated notice with these pins is sent after commit H
+**Timeline — updated 2026-09-15, INSTALL-WINDOWS-MULTI-01.** An
+**install span** is an interval in which installation is allowed. The plan's
+install span opens when its notice email is sent and closes exclusively at
+`install_close_epoch(plan) = t0 − PLAN_LEAD_S − INSTALL_CLOSE_MARGIN_S`.
+`PLAN_LEAD_S = 1500 = 25 × 60 s` and `INSTALL_CLOSE_MARGIN_S = 3600 = 60 × 60 s`,
+so close is `t0 − 85 min`. Installation must also be inside one entry of
+`INSTALL_SPANS` in `scripts/run_night.py`, a recurring list of local per-day
+spans, with opening included and closing excluded. The shipped list is
+`(("00:00", "24:00"),)`; Ed may narrow it. Install any day satisfying both
+bounds and the existing gates; the acquisition window need not be inside an
+install span.
+
+For the plan coordinates above and a proposed install day of 2026-09-15,
+fill the notice-send row from the actual send acceptance. Times below are
+local PDT, UTC−07:00; **epoch seconds** count from 1970-01-01 00:00 UTC.
+
+| Boundary | Local date/time | Epoch seconds / arithmetic |
+|---|---|---|
+| Plan install open | `<actual notice-send local date/time and offset>` | `<actual notice-send epoch>`; never invent a send time |
+| Plan install close (exclusive) | 2026-09-16 01:31:00 PDT | `1789552560 − 1500 − 3600 = 1789547460` |
+| Every listed span for install day 2026-09-15: shipped entry 1 | 2026-09-15 00:00:00 PDT … 2026-09-16 00:00:00 PDT (close excluded) | `1789455600 … 1789542000`; `INSTALL_SPANS` = `00:00 … 24:00` |
+| Plan span opens; request / activation exit boundary | 2026-09-16 02:31:00 PDT | `1789552560 − 1500 = 1789551060` |
+| TERM deadline | 2026-09-16 02:40:00 PDT | `1789552560 − 16 × 60 = 1789551600` |
+| KILL deadline | 2026-09-16 02:41:00 PDT | `1789552560 − 15 × 60 = 1789551660` |
+| `t0` | 2026-09-16 02:56:00 PDT | `1789552560` |
+| Acquisition window end | 2026-09-16 05:26:00 PDT | `1789552560 + 9000 = 1789561560` |
+| Completion / courier deadline | 2026-09-16 05:31:00 PDT | `1789561560 + 300 = 1789561860` |
+| Derived dead-man D | 2026-09-16 06:31:00 PDT | `60 × ceil((1789561860 + 3600) / 60) = 1789565460` |
+
+The **plan span** forbids magistrate agent sessions from its opening through
+completion, both boundaries included. After completion, `courier.sent` closes
+it; absent that record, it extends through D plus the courier-lock allowance
+`300 + max(60, 180, 600) = 900 s` (15 min). A started chain without an exit
+record extends it without a clock limit. TERM asks the owned processes to
+terminate; KILL forcibly ends survivors under the watchdog's ownership checks.
+These stand-down deadlines do not let the arming activation remain past the
+exit boundary.
+
+The consolidated notice with these pins is sent after commit H
 and before the plan is moved into its discoverable place; Ed's NO on the
 notice thread stands the night down. The arming activation exits after
 recording the arm. Power source, powermode and the timer probe are recorded
 at arm time.
+
+**Procedure — updated 2026-09-15, INSTALL-WINDOWS-MULTI-01.** Follow runbook
+§1.4's email-then-arm order. Send one notice email per plan, never one notice
+for several arms. From the plan's measurement checkout, use its interpreter:
+`<absolute-interpreter-path> scripts/run_night.py schedule --plan <staged-plan-path>`. The JSON
+prints `t0_epoch_s`, `install_close_epoch_s`, `deadman_epoch_s`, both jobs'
+calendar fields and `install_spans_today`. Convert each epoch to a local
+ISO-8601 date/time with offset using
+`datetime.fromtimestamp(epoch).astimezone().isoformat()`. For a different
+install day, call `install_spans_for_day(date.fromisoformat("YYYY-MM-DD"))`
+from `scripts.run_night` (runbook §1.3 supplies the complete print block);
+enumerate every returned pair in the notice and
+this timeline, including spans the proposed arm will not use. Recompute for
+any changed day or span list; the table above is only the shipped-list example.
+
+After notice acceptance, record its local time and epoch as the install open.
+Publish the reviewed plan to `<custody_root>/night_plan.json` through the
+runbook's atomic move, then run
+`scripts/install_night_agent.sh --plan <custody_root>/night_plan.json --python <absolute-interpreter-path>`.
+Both bootstraps (launchd job-load operations) must pass the immediate
+pre-bootstrap close check. The installer refuses
+`install_span_closed` (exit 2), `install_outside_span` (2),
+`plan_t0_in_the_past` (2), `night_agent_already_loaded` (3), and
+`plan_outside_custody_root` (2); runbook §1.3 gives each predicate and recovery.
+Check the installed night job's Month/Day/Hour/Minute against `t0`, and the
+daily dead-man's Hour/Minute against D. Record the schedule JSON, job files
+and actual installation result, then exit before the plan span opens.
+
+**Notice-text template — updated 2026-09-15, INSTALL-WINDOWS-MULTI-01.**
+Fill all fields for one plan. The first email describes open as its own send
+acceptance; put the actual accepted time in the notice evidence and arm record.
+
+> Plan `<plan_id>`, class `<receipt_class>`, will run from `<measurement_root>`
+> at H `<full head>`; handback commit `<same full head>`. Custody `<custody_root>`;
+> runs `<runs_root>`; wrapper `<path, digest, sidecar>`; tracked chain
+> `<path, digest>`; desk inputs `<each path and digest>`. Install opens when
+> this notice is accepted for sending (that local time and epoch will be
+> recorded) and closes at `<install_close local + epoch>`. Listed install
+> spans on `<install day>`: `<EVERY open/close pair, local + epoch>`.
+> Plan span: `<t0 − 25 min local + epoch>` through `<completion local + epoch>`,
+> subject to the courier/chain extensions in this handback. `t0` is
+> `<local + UTC + epoch>`; `window_max_s = <seconds and duration arithmetic>`.
+> Courier deadline: `<completion local + epoch>`. Daily dead-man minute:
+> `<D local + epoch>`, completion plus 3600 s rounded up to a minute.
+> The arming activation exits before `<t0 − 25 min local + epoch>`.
+> Launch needs no action from Ed unless he replies NO; Ed's NO overrides.
 
 ## Executed — rehearsal-20260909 (history)
 
@@ -249,8 +338,10 @@ results are / §Next lane, rewritten by the commit that is its H).
   `chain.stderr.log` (the wrapper's `FAIL <reason>` lines, if any),
   `courier.sent`, `courier.json`, `courier.heartbeat`.
 - Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night.log`.
-  At harvest, look for the 09-15 07:00 dead-man stand-down line, then
-  `night driver started` and a `night gate verdict=` line for 09-16.
+  Harvest text updated 2026-09-15 (INSTALL-WINDOWS-MULTI-01): a dead-man
+  line dated before completion is expected evidence if its daily minute
+  occurred after install; after `courier.sent` the dead-man skips. Read
+  `night driver started` and the plan's `night gate verdict=` line.
 - Chain log: `<custody root>/operator_logs/derivation-chain.log` —
   `session_open kind=derivation slots=12`, `chain_start` (its timestamp
   minus `t0` is the realized Δ), `settle_complete`, twelve `slot_start`
@@ -265,7 +356,7 @@ results are / §Next lane, rewritten by the commit that is its H).
   removed.
 - Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
   `launchd.night.err` must be EMPTY.
-- Results branch: `night-results/20260916` on `origin`, if the driver's push
+- Results branch: `night-results/<plan_id>` (here `night-results/d079-epoch-25g83-derivation-n1-20260916`) on `origin`, if the driver's push
   succeeded — verify, do not presume.
 
 ## Next lane
@@ -300,7 +391,8 @@ further night.
 
 After the harvest, run `scripts/install_night_agent.sh --plan
 /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
---hour 2 --minute 56 --uninstall` FROM the clone. Do NOT remove the clone or
+--uninstall` FROM the clone (command updated 2026-09-15,
+INSTALL-WINDOWS-MULTI-01). Do NOT remove the clone or
 the night root: the ledger session and the captures live there and the clone
 is a production inventory row. Never re-arm this plan; every further night is
 its own plan, session id, night root, desk inputs and wrapper.
