@@ -2694,7 +2694,7 @@ def build_tree(
             "sha256": generator_sha,
         },
         "window_identity": {"window_id": PLAN_ID, "evidence_root_id": EVIDENCE_ROOT_ID},
-        "roots": {"claim_leaf": CLAIM_ROOT_LEAF, "bound_leaf": BOUND_ROOT_LEAF},
+        "roots": {"claim_root_leaf": CLAIM_ROOT_LEAF, "bound_root_leaf": BOUND_ROOT_LEAF},
         "reference_cadence": {
             "authority": REFERENCE_CADENCE_AUTHORITY,
             "binding_40_member_rule": (

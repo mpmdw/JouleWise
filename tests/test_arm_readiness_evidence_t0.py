@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -902,6 +903,56 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         clock_patcher.start()
         self.addCleanup(clock_patcher.stop)
         self.addCleanup(publication_patcher.stop)
+
+    def test_generated_gamma_roots_pass_and_legacy_keys_are_refused(self) -> None:
+        from tests import test_d117_contrast_v5_pack as gamma_fixture
+
+        helper = gamma_fixture.D117ContrastV5PackTests()
+        helper.setUp()
+        with tempfile.TemporaryDirectory(prefix="t0-gamma-roots-") as temporary:
+            root = Path(temporary)
+            helper.configure(helper.write_prefill_pin(root))
+            pack = helper.generate_pack(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            arm = {
+                "claim_runs_root": str(root / helper.generator.CLAIM_ROOT_LEAF),
+                "bound_runs_root": str(root / helper.generator.BOUND_ROOT_LEAF),
+                "custody_root": str(root / "custody"),
+                "quarantine_root": str(root / "quarantine"),
+            }
+            for path in arm.values():
+                Path(path).mkdir()
+            waiver_path = root / "waivers.json"
+            _write_json(waiver_path, [])
+            arm["waiver_path"] = str(waiver_path)
+            arm_identity = {"path": "synthetic-arm-context"}
+
+            def context(roots):
+                # Seed only the validated arm input; exercise the real root check.
+                return SimpleNamespace(
+                    tree={"roots": roots},
+                    values={"arm_context": (arm, arm_identity)},
+                )
+
+            legacy_roots = {
+                "claim_leaf": helper.generator.CLAIM_ROOT_LEAF,
+                "bound_leaf": helper.generator.BOUND_ROOT_LEAF,
+            }
+            with self.assertRaisesRegex(
+                T0EvidenceAuthoringError, "arm roots do not derive from frozen leaves"
+            ):
+                t0._root_observation(context(legacy_roots), kind="ROOTS")
+
+            observation, observed_identity = t0._root_observation(
+                context(tree["roots"]), kind="ROOTS"
+            )
+            self.assertEqual(observed_identity, arm_identity)
+            self.assertEqual(
+                observation["resolved_roots"],
+                [str(Path(arm[name]).resolve()) for name in (
+                    "claim_runs_root", "bound_runs_root", "custody_root", "quarantine_root"
+                )],
+            )
 
     def _author_with_r1_age(self, age_ns: int) -> dict[str, object]:
         temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
