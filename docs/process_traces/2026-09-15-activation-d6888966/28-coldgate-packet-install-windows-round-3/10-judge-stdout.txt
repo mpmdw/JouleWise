@@ -1,0 +1,2 @@
+Ruling written to `10-coldgate-fable-ruling.md` (12.4 KB): validator PASS on the correct sha; Q1 = option (a) with dictation (F1's clock half ruled definitional, its rm-failure half a blocker, both executed); Q2 = option (i) scope expansion with dictation plus a both-labels `:294` guard (Q2a/Q2c' executed); Q3 = round 3 authorised with stop condition (no round 4, redesign consult, magistrate decides, Ed informed); Q4 = F3 fold / F4 register; Q5 = REFUSE (packet names no survivors); Q6 = AFFIRM all three, no render-only refusal.
+rc=0
