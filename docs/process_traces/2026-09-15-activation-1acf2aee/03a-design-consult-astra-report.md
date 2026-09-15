@@ -1,4 +1,4 @@
-# 03a — Design consult, ASTRA seat report (gpt-6-astra xhigh, genre scout, blind, read-only, worktree `3d5b7623`), status OK/findings/complete, harvested 06:16 PDT 2026-09-15
+# 03a — Design consult, ASTRA seat report (gpt-6-astra xhigh, genre scout, blind, read-only, worktree `3d5b7623`), status OK/findings/complete, harvested 05:58 PDT 2026-09-15 (out-file mtime 05:57:58)
 
 Verbatim out-file of the Astra design seat on brief 02 (`/tmp/magistrate-1acf2aee/03-design-astra.md`). Model output; the magistrate adjudicates in record 06.
 

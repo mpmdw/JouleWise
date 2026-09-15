@@ -1,4 +1,4 @@
-# 03c — Design consult, FABLE seat report (fresh Fable 5.1 subagent, blind, read-only, HEAD `3d5b7623`), received 06:20 PDT 2026-09-15
+# 03c — Design consult, FABLE seat report (fresh Fable 5.1 subagent, blind, read-only, HEAD `3d5b7623`), received 06:01 PDT 2026-09-15
 
 Verbatim hand-back of the Fable design seat on brief 02. Model output; the magistrate adjudicates in record 06.
 

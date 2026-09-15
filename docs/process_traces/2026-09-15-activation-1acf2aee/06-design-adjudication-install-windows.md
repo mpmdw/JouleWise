@@ -1,4 +1,4 @@
-# 06 — Magistrate adjudication of the three-seat design consult, INSTALL-WINDOWS-MULTI-01 (06:25 PDT 2026-09-15)
+# 06 — Magistrate adjudication of the three-seat design consult, INSTALL-WINDOWS-MULTI-01 (written 06:03 PDT 2026-09-15; seats A and D launched 06:05)
 
 Seats: Astra xhigh (03a), Opus (03b), Fable 5.1 fresh (03c); brief 02. All three were blind to each other. The magistrate (this activation) synthesizes; it is not one of the seats. Nothing below amends a rule: D-180 cl.1 and D-181 cl.1 are the authority, the kernel acceptance is the bar, and every choice is a mechanism choice under them.
 
