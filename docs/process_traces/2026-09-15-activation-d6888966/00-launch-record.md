@@ -86,7 +86,7 @@ workspace-write relaunches started 06:22:41 (A) and 06:22:48 (D), not
 06:38–06:39. The substance of the addendum (read-only default; `-s
 workspace-write` required for editing seats) stands.
 
-## Correction 06:50 PDT (dated addendum; the section above is left as written)
+## Correction 06:41 PDT (clock-read; dated addendum; the section above is left as written)
 
 The "Why the last two activations died" section names the wrong watchdog
 mechanism. Bench-verified this slice against the attempt streams,
