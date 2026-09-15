@@ -1,0 +1,60 @@
+# DESIGN-33c — blind Fable seat report (transactional night-agent installer)
+
+Seat: Fable 5.1, fresh non-interactive session, foreground only, no subagents, 2026-09-15, checkout `073a9763`. Nothing written except this file.
+
+**Disclosure.** Auto-loaded before I read anything: `~/.claude/CLAUDE.md`, this worktree's `CLAUDE.md`, the memory index `MEMORY.md` (index lines only). Not read: `CLAUDE.local.md`, `RUN_STATE.md`, `TASK_QUEUE.md`, narrative docs. Packet 28, `lt-15`, `lt-21` are NOT in this checkout's tree; read via `git show` from `refs/heads/bookkeeping/2026-09-15-activation-d6888966-lt`. Read: brief, 25/10, 25/13, 28/10, 28/13, lt-21, lt-15, `scripts/install_night_agent.sh`, `installed_agent_fence` (`scripts/magistrate_watchdog.py:712-749`), `run_night.py:68-69,968-1057`, tests `:62-200,:793-935`. NOT EXECUTED: any test module; any real `bootstrap`/`bootout`.
+
+## Q3 first — executed liveness evidence (read-only, macOS 26.6.2, `launchctl print`)
+
+| Target | rc | stdout | stderr (verbatim) |
+|---|---:|---|---|
+| `gui/$UID/com.joulewise.design33.nonexistent.probe` | **113** | empty | `Bad request.` ⏎ `Could not find service "com.joulewise.design33.nonexistent.probe" in domain for user gui: 501` |
+| `gui/$UID/com.apple.Finder` (loaded control) | **0** | `gui/501/com.apple.Finder = {` … | empty |
+| `nonsense/gui` (malformed target) | **64** | `Unrecognized target specifier.` + usage | — |
+| `gui/999999/<label>` (no such domain) | **112** | — | `Bad request.` ⏎ `Could not find domain for user gui: 999999` |
+| `launchctl error 113` | 0 | `113: Could not find specified service` | |
+
+**Predicate (three-valued, unknown ⇒ loaded):** `LOADED` iff rc == 0. `ABSENT` iff rc == 113 AND stderr contains `Could not find service "<exact label>"`. Everything else — 64, 112, rc 9 (lt-21's stub), a timeout, OSError spawning launchctl, rc 113 with the wrong label in stderr — is `UNKNOWN`, and every consumer treats `UNKNOWN` as loaded (retain files, non-zero exit). Both signals are required for ABSENT: 113 is launchd's generic ENOSERVICE; the label text proves the query addressed the right service. Rejected: "any non-zero ⇒ loaded" with no 113 carve-out — a clean uninstall could then never exit 0 (the post-bootout read is 113 on success). Rejected: "any non-zero ⇒ absent" — the head (`:273,:335,:338`), lt-21's executed class-2 site.
+
+**Fake launchctl in tests:** rc 0 + a `gui/<uid>/<label> = {` line when the marker exists; rc 113 + the verbatim two-line stderr naming the queried label when absent; a `fault=query` family {9, 64, 112, 113-wrong-label, hang past the adapter timeout} the matrix expects to classify UNKNOWN. The zsh stub at `tests/test_install_night_agent.py:76-84` (rc 1 for absent) must change: rc 1 is UNKNOWN under the new predicate. Real `bootstrap` of an already-loaded label: NOT EXECUTED (forbidden); the stub models it as failure by default (conservative) with a permissive variant for the occupancy test.
+
+## Q1 — Shape: **(B)**, Python state machine; the shell keeps argv parsing and the interpreter-version check only.
+
+(A) cannot make I2/I3 true by construction: zsh has no `finally`; cold gate 25 measured that errexit inside a function skips the EXIT trap and `always` blocks do not run under TERM, so every statement in the mutation region is a site, and each round reopened the class one line further (`:374` in round 2, the `&&` reads in round 3). (B) gives one `try/finally` (teardown runs on every exception, every signal converted to an exception, and on success), one commit predicate evaluated once, and an adapter whose every call returns `Outcome(kind ∈ {LOADED, ABSENT, UNKNOWN, OK, FAILED}, rc, stdout, stderr)`, so no caller ever sees a raw exit code. I1–I4 become properties of one function, not of an enumeration.
+
+The shell keeps `:15-24` (argv) and `:43-84` (the `MIN_PYTHON` literal check, which must run before any project import — the 2026-09-11 defect), then `exec "$python" -B "$repo/scripts/night_agent_install.py" "$@"`; everything from `:85` moves to `joulewise/night_agent_install.py`. Same argv, exit codes and strings, so every Q4 caller is unchanged.
+
+Rejected (C): a launchd-native transaction — launchd offers none. Rejected (A): the invariant it cannot guarantee is I2 (any future failable statement re-enters the failure branch; ruling 28 Q1's positive rule holds only by inspection).
+
+## Q2 — The state machine
+
+States: `PARSED → VALIDATED → STAGED → NIGHT_LOADED → DEADMAN_LOADED → VERIFIED → COMMITTED`; terminal `SUCCESS`, `REFUSED`, `ROLLED_BACK`, `RETAINED`.
+
+- `VALIDATED`: everything at `:85-154,:283-307` — plan/pins/courier/preflight/schedule, existing-records refusal, occupancy of BOTH labels (`:302-307`, keep), span selection. Read-only; today's codes and strings. I3 for "a prior job was loaded" collapses to **refuse**: occupancy covers both labels, so no install runs with a loaded prior, and the `:370` pre-bootout is deleted. A load racing the check fails the bootstrap and takes the teardown path.
+- `STAGED`: prior plist bytes (plus mode/mtime) read into memory, then both plists rendered to their final paths. No TMPDIR backup directory: the `mktemp`/`rm -rf`/F4 class disappears. On the RETAINED branch only, priors are written beside the plists as `<label>.plist.prior` (launchd and the fence read only `<label>.plist`, `:727-728`).
+- `NIGHT_LOADED`, `DEADMAN_LOADED`: the only two launchd mutations. `VERIFIED`: both liveness reads == LOADED (UNKNOWN fails verification).
+- **Single commit predicate**, evaluated exactly once after VERIFIED: `clock_read_after_last_mutation < min(selected_span_close, install_close_epoch)`, `>=` refusing as at `:190-193`. Passing sets `state = COMMITTED` **before** any stdout write; then `validated pins: …`. I1: the only path to exit 0 passes this predicate and nothing after it mutates launchd state.
+- **Single teardown** = the `finally` block, branching on `state`, not on whether an exception is in flight (ruling 28's positive rule made structural: a `BrokenPipeError` from the success print lands in the success branch). Success: no launchctl call, no file change, exit 0. Failure: mask INT/TERM/HUP (`SIG_IGN`, the `:322` equivalent); if any bootstrap was attempted, `bootout` both labels (outcomes recorded, never trusted), read liveness for both; if either is LOADED or UNKNOWN → write `.prior` files, keep both plists, print the `:342` `teardown: … retained plists: …` line, exit 4; else restore each prior byte-for-byte (with mtime) or unlink, exit with the original code (143/130/129/1/2/3, today's matrix at `:950`). Runs once, from one `finally`.
+- Signals: handlers installed after VALIDATED raise `Interrupted(code)`; before that the default action stands.
+- What each failure leaves: ≤VALIDATED → nothing (`:309-310` order kept). STAGED render failure → priors restored, no jobs. Bootstrap/verification/gate failure → booted out and restored, or RETAINED (files present, fence sees the new plan: I3's conservative half). Never files-gone-jobs-loaded: a file is removed only after an ABSENT read for its label.
+- `--uninstall`: same adapter and the same `verified_bootout(labels)` routine; exit 0 only when both labels read ABSENT after bootout; `:276` string verbatim; exit 4 otherwise. `--render-only`: constructs the machine with a `NullAdapter` that raises on any call (I4 is a type, not a branch); no occupancy check (28 Q6.3 kept).
+
+Rejected: keep the TMPDIR backup plus a `.done` marker — it keeps the classes behind F4 and 28-Q1b and adds a file whose absence is ambiguous.
+
+## Q4 — Migration
+
+- Callers: runbook `:1559,:1606`, NIGHT_HANDBACK `:203,:397,:405`, `tests/test_run_night.py:1737-2022`, `MAGISTRATE_RELAUNCH_PROMPT.md` — same argv, **no change**. `run_night.py schedule`: CLI unchanged; the module imports `install_close_epoch`/`install_spans_for_day` (`run_night.py:968-1057`) in-process; the `_controlled_python` clock seam (`tests:166-197`) still works because the module runs under `$python`.
+- Strings that survive verbatim: `install_span_closed`, `install_outside_span`, `plan_t0_in_the_past`, `night_agent_already_loaded`, `plan_outside_custody_root`, `plan_t0_not_minute_aligned`, `plan_t0_ambiguous_local_time`, `failed to bootstrap <label>`, `launch agent verification failed`, `uninstall: still loaded after bootout: …; retained plists: …`, `teardown: … retained plists: …`, `validated pins: …`. One new string: `liveness_unknown: <label> rc=<n> stderr=<first line>` on the RETAINED branch (exit 4), documented in the runbook §1.3 table (`:1392-1396`) and the handback list (`:206-208`). Stale today, fix in the same lane: runbook `:1405-1412` still describes `rolled back com.joulewise.night before dead-man bootstrap` and `rolled back both agents`, which the head no longer prints (teardown at `:320-355` prints neither).
+- Twelve-row gate on the landing: (i) parametric matrix = states {STAGED, NIGHT_LOADED, DEADMAN_LOADED, VERIFIED, gate} × faults {TERM, INT, HUP, launchctl FAILED, launchctl UNKNOWN (9, 64, 112, wrong-label 113, timeout), render PermissionError, clock advance to exactly close and past close}, asserting rc, markers, plist bytes, `.prior` only when RETAINED, and the fence result; (ii) FIX-1..10 and FIX-A ported unchanged in argv and expectation (backup-dir assertions at `:1027-1096` become "no TMPDIR entry created"; the clock-advance case renamed a control per lt-21); (iii) mutation must-die: UNKNOWN→ABSENT in the predicate; drop the label check from ABSENT; delete or move the commit gate before the last mutation; `>=`→`>` at the gate; set `COMMITTED` after the print; success branch calling `bootout`; unlink before the ABSENT read; drop signal masking in teardown; occupancy on one label; `NullAdapter` replaced by the real one under `--render-only`; (iv) replay = the lt-21 `reproduce.py` re-run at the landing head expecting `class_1: NO`, `class_2: NO`, with the stop-condition text amended to ruling 28 Q1's definition ("clock read after the last launchd mutation"), so F1's carve-out is a ruling, not a judgment call.
+
+Rejected: keep the `check_schedule` heredoc subprocess (`:163-206`) — it reads the clock in another interpreter and is why the head needs four re-checks.
+
+## Q5 — Scope
+
+`scripts/install_magistrate_watchdog.sh:199-200` has the identical class-2 shape (`bootout … || true; rm -f`). Recommend **later** (lane A204), reusing `LaunchctlAdapter` + `verified_bootout` from this module rather than a second predicate; its preconditions (`:73` canonical checkout, `:93` handoff retirement, the magistrate lock at `:175`) are a different transaction and test module. Rejected: fold now — widens WRITE_SCOPE and the matrix under a lane whose stop condition names the night installer. Default span list `(("00:00","24:00"),)` at `run_night.py:69` and `INSTALL_CLOSE_MARGIN_S` at `:68`: unchanged (I5); the module reads them, never restates them.
+
+## Q6 — Preserved verbatim vs discarded
+
+Preserve: commit-gate semantics with `>=` refusal (`:190-193`); verified bootout "both bootouts, both reads, retain + exit 4 on any doubt" (`:332-344`, `:269-278`) with both messages; `trap '' INT TERM HUP` at teardown entry (`:322`); render-only never invokes launchctl, never refuses loaded labels (`:302,:331,:363-367`); occupancy for both labels (`:302-307`); read-only refusals before any `mkdir` (`:309-310`); byte-identical prior restore with mtime (`:317,:348`; the `946684800` pin); success branch never calls launchctl or changes status (`:323-326`); the positive rule, now a branch on `state`; every FIX-1..10 / FIX-A regression with the same argv and rc; the Q5 whole-minute refusals.
+
+Discard: the TMPDIR backup directory and everything about it (`:314-319,:324,:353,:364`, F4, 28-Q1b); the three mid-sequence `check_schedule close` rechecks (`:369,:371,:376`) — the gate is one call; the pre-bootout of the dead-man (`:370`); `trap - EXIT` / `exit 4` re-entry mechanics (`:330,:343`); every `print … && loaded=1` read (`:273,:335,:338`); `check_schedule` as a heredoc subprocess (`:163-206`).

@@ -1,0 +1,2 @@
+`DESIGN-33c-fable-seat-report.md` written (12.1 KB): Q1 rules (B) Python state machine with one commit and one `finally` teardown; Q3 executed: missing label = rc 113 + `Could not find service "<label>"` (loaded = 0, malformed = 64, bad domain = 112), ABSENT only on both signals, all else UNKNOWN ⇒ loaded; test modules and real bootstrap NOT EXECUTED; checkout untouched.
+rc=0
