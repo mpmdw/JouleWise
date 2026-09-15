@@ -2889,7 +2889,7 @@
           "label": "INSTALL-WINDOWS-MULTI-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Plan writer, runbook template and watchdog constants accept a list of install spans, each with the never-install-after-close dead-man rule; the plan's t0 may be any clock time (launchd hour/minute derived from the plan, not a fixed belt); a second plan may be armed as soon as the previous harvest is done; tests pin the span list, the dead-man per span and the any-clock-time t0; NIGHT_HANDBACK notice text names every span. Lands under the twelve-row gate."
+        "summary": "Plan writer, runbook template and watchdog constants accept a list of install spans, each with the never-install-after-close dead-man rule; the plan's t0 may be any clock time launchd can name: any whole minute (`t0_epoch_s % 60 == 0`) whose local wall-clock reading occurs exactly once (refusals `plan_t0_not_minute_aligned`, `plan_t0_ambiguous_local_time`); launchd Month/Day/Hour/Minute derived from the plan, not a fixed belt; a second plan may be armed as soon as the previous harvest is done; tests pin the span list, the dead-man per span and the whole-minute unambiguous t0 (both refusals, an ordinary control, and a spring-gap control); NIGHT_HANDBACK notice text names every span. Lands under the twelve-row gate."
       },
       "authority": {
         "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
@@ -2918,7 +2918,7 @@
       "priority": "p1_phase_gate",
       "rank": 0,
       "status": "queued",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until this lands, the machinery still supports only one install span and one fixed launchd minute — a mechanism limit, not a rule; D-181 cl.1 is in force and no timing rule survives it. 2026-09-15: the 09-15 night fired and was REFUSED at the gate on load average alone (agent census clean); harvested and its §2.5 action taken (record 01 of activation 1acf2aee) — the event dependency is satisfied and this lane is QUEUED at agent rank 0.",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until this lands, the machinery still supports only one install span and one fixed launchd minute — a mechanism limit, not a rule; D-181 cl.1 is in force and no timing rule survives it. 2026-09-15: the 09-15 night fired and was REFUSED at the gate on load average alone (agent census clean); harvested and its §2.5 action taken (record 01 of activation 1acf2aee) — the event dependency is satisfied and this lane is QUEUED at agent rank 0. 2026-09-15 (activation d6888966, cold gate 25 Q5): acceptance clause (c) narrowed to the whole-minute unambiguous t0 (FIX-5 affirmed); blocker at int head df86cee6 under fix round 2 per ruling 10 Q1(c)/Q3-as-amended.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
@@ -4822,7 +4822,7 @@
       "priority": "p1_phase_gate",
       "rank": 196,
       "status": "queued",
-      "status_note": "2026-09-14: registered from cold gate 65 (desk-proof packet) — found while preparing the Ed-hands desk proof (records 64/66); not a fence on the DIAGNOSTIC_NO_PACK equivalence night; blocks the first G2-a pack window's T-0. Design question for the seat: build the ALPHA/BETA packs from their generate_configs.py under the freeze/registry contracts, or rule the roster. 2026-09-15 (activation d6888966, scout record 04 docs/process_traces/2026-09-15-activation-d6888966/04-pack-root-scout-report.md): BUILD is the ruled route and waits for the issued G2-a pin (V5-DESK-DAY-01 owns production pack generation; floor generators accept only the 512 rung); roster replacement is Ed's ruling (cold gate 65 Q1), not an agent action; the GAMMA contrast generator emits roots.claim_leaf/bound_leaf where the T-0 reader (joulewise/arm_readiness_evidence_t0.py:1017-1018) requires claim_root_leaf/bound_root_leaf — under repair on fix/2026-09-15-gamma-root-keys (brief 06); the scout's Q2 (generator replay) and Q5 (clean-clone A5 replay) were blocked by its read-only sandbox and are re-run in a writable checkout after the GAMMA fix lands; the 37 custody files per root (arm_readiness.sources/evidence/freeze.receipts, identity_pin_projection.receipts) are never copied from historical roots.",
+      "status_note": "2026-09-14: registered from cold gate 65 (desk-proof packet) — found while preparing the Ed-hands desk proof (records 64/66); not a fence on the DIAGNOSTIC_NO_PACK equivalence night; blocks the first G2-a pack window's T-0. Design question for the seat: build the ALPHA/BETA packs from their generate_configs.py under the freeze/registry contracts, or rule the roster. 2026-09-15 (activation d6888966, scout record 04 docs/process_traces/2026-09-15-activation-d6888966/04-pack-root-scout-report.md): BUILD is the ruled route and waits for the issued G2-a pin (V5-DESK-DAY-01 owns production pack generation; floor generators accept only the 512 rung); roster replacement is Ed's ruling (cold gate 65 Q1), not an agent action; the GAMMA contrast generator emits roots.claim_leaf/bound_leaf where the T-0 reader (joulewise/arm_readiness_evidence_t0.py:1017-1018) requires claim_root_leaf/bound_root_leaf — under repair on fix/2026-09-15-gamma-root-keys (brief 06); the scout's Q2 (generator replay) and Q5 (clean-clone A5 replay) were blocked by its read-only sandbox and are re-run in a writable checkout after the GAMMA fix lands; the 37 custody files per root (arm_readiness.sources/evidence/freeze.receipts, identity_pin_projection.receipts) are never copied from historical roots. 2026-09-15 (activation d6888966): the GAMMA root-key repair MERGED as PR #339 (merge commit on main; records 11–20 under docs/process_traces/2026-09-15-activation-d6888966/); the scout's Q2/Q5 replays remain to run in a writable checkout; production pack generation still waits for the issued G2-a pin.",
       "stop_card": null
     },
     "PAPER-CUSTODY-SEAM-01": {
@@ -5130,6 +5130,39 @@
       "rank": 106,
       "status": "blocked",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row. AMENDED 2026-08-28 in the T27 second kernel wave per D-162 R-1: the diagnostic-family path (Path A) that the corrected live-proof gate declined to build pre-campaign moves into this row's acceptance; PIPELINE-SMOKE-LIVE-01 is re-scoped to G1/G2/G3 and carries no family design.",
+      "stop_card": null
+    },
+    "PLAN-TREE-ROOTS-CONTRACT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/16-gamma-opus-counter-review.md (F2)",
+          "docs/process_traces/2026-09-15-activation-d6888966/13-gamma-apex-gate-and-prune.md (Q4a)",
+          "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md (Row 3 table)",
+          "joulewise/arm_readiness_evidence_t0.py:1014-1020 and joulewise/arm_readiness.py:8505-8527: canonical roots readers and refusal paths",
+          "configs/arm_readiness/d117_row_registry_v2.json successor_pack_ids: live generator roster for the repo-wide regression"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PLAN-TREE-ROOTS-CONTRACT-01/acceptance",
+          "label": "PLAN-TREE-ROOTS-CONTRACT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A short plan-tree schema section in the owning contract under docs/contracts/ names roots.claim_root_leaf / roots.bound_root_leaf as the sole canonical pair and documents both reader refusals: the T-0 author raises \"arm roots do not derive from frozen leaves\" and the receipt reader returns readiness_root_binding_invalid. A repo-wide regression asserts every generator named by the live arm-readiness registry roster (configs/arm_readiness/d117_row_registry_v2.json successor_pack_ids) emits exactly that pair. The contract text itself goes through a cold-gate or Ed step because creating contract text is process-bearing (rule 11). Historical v1-v3 trees remain byte-identical (D-134/D-139)."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 records 13/15; registered by the magistrate from the Opus counter-review (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The plan-tree roots key set (claim_root_leaf / bound_root_leaf) has no ONE home in docs/contracts/ or docs/specs/; it lives only in the two readers joulewise/arm_readiness_evidence_t0.py:1014-1020 and joulewise/arm_readiness.py:8505-8521 and one emitter per campaign generator (configs/campaigns/*/generate_configs.py). This allowed the GAMMA _v5 generator to drift to claim_leaf / bound_leaf unnoticed, fixed in PR #339.",
+      "id": "PLAN-TREE-ROOTS-CONTRACT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 199,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered from Opus counter-review F2 and magistrate records 13/15; not started. Contract text requires a cold-gate or Ed step under rule 11; historical v1-v3 trees remain frozen (D-134/D-139).",
       "stop_card": null
     },
     "POWERMODE-PREFLIGHT-RECORD-01": {
@@ -5588,6 +5621,70 @@
       "rank": 191,
       "status": "queued",
       "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started.",
+      "stop_card": null
+    },
+    "ROOT-NAMESPACE-FALLBACK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/16-gamma-opus-counter-review.md (F3)",
+          "docs/process_traces/2026-09-15-activation-d6888966/13-gamma-apex-gate-and-prune.md (Q4b)",
+          "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md (Row 3 table)",
+          "joulewise/arm_readiness.py:8505-8522: canonical roots read followed by root_namespace claim_leaf / bound_leaf overrides at :8511-8514 before frozen-leaf validation",
+          "joulewise/arm_readiness_evidence_t0.py:1014-1020: canonical roots binding with no root_namespace fallback"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ROOT-NAMESPACE-FALLBACK-01/acceptance",
+          "label": "ROOT-NAMESPACE-FALLBACK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The root_namespace fallback is deleted (preferred) or mirrored identically in both readers, decided by the implementing seat with a written reason. A regression feeds a tree with canonical roots plus a conflicting root_namespace to BOTH readers and asserts the same verdict. Paired contract and execution refuters review the change because it is live code under a fail-closed binding. Not night-critical; no change to refusal strings."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 records 13/15; registered by the magistrate from the Opus counter-review (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/15-gamma-findings-triage-delta-fresh-eyes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "joulewise/arm_readiness.py:8511-8514 lets a tree[\"root_namespace\"] mapping (claim_leaf / bound_leaf) override the canonical roots pair in receipt-side frozen-leaf binding. The counter-review found no repository producer (no root_namespace matches under configs/), and the T-0 reader has no fallback. A hand-written tree can therefore pass the receipt binding and be refused by the T-0 author: a split verdict between two gates on one fact inside a fail-closed evidence binding.",
+      "id": "ROOT-NAMESPACE-FALLBACK-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 200,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered from Opus counter-review F3 and magistrate records 13/15; not started; not night-critical. Delete-or-mirror choice belongs to the implementing seat with a written reason; paired contract and execution refuters required; refusal strings unchanged.",
+      "stop_card": null
+    },
+    "RUNBOOK-S3-FAIL-ROUTE-CROSSREF-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/25-coldgate-packet-install-windows/10-coldgate-fable-ruling.md (Q6)",
+          "docs/process_traces/2026-09-15-activation-d6888966/25-coldgate-packet-install-windows/12-opus-pairing-refuter-on-ruling-10.md (Q6 amendment)",
+          "docs/process_traces/2026-09-15-activation-d6888966/25-coldgate-packet-install-windows/13-magistrate-synthesis-ruling-10-with-opus-amendments.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RUNBOOK-S3-FAIL-ROUTE-CROSSREF-01/acceptance",
+          "label": "RUNBOOK-S3-FAIL-ROUTE-CROSSREF-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed sees and approves (or declines) the replacement text for §3 item 3 exactly as ruling 10 Q6 gives it: \"**Distinct calendar days.** The registration (`configs/calibration/preregistration_d079_epoch_25g83_rev1.md:143`) requires the three FAIL-route windows to fall on distinct calendar days. D-181 cl.1 and `INSTALL_SPANS` let the machinery install and arm several plans on one day; that capability does not apply to these three windows. A same-day FAIL-route successor is refused by this step, not by the installer, unless Ed amends the registration before the first FAIL-route capture.\"; the registration file itself is untouched; docs-only PR; not night-critical."
+      },
+      "authority": {
+        "label": "cold gate 25 ruling 10 Q6 as amended by pairing 12, synthesis 13 (magistrate registration)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/25-coldgate-packet-install-windows/13-magistrate-synthesis-ruling-10-with-opus-amendments.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "docs/phase_2/derivation_night_runbook.md §3 item 3 (lines ~2085–2086; §3 byte-identical, SHA-256 71337a836df21f1f3668bcb46e7ffe6e487a247f7ce51368b459b9516612072b) carries the pre-registered \"three FAIL-route windows on distinct calendar days\" constraint (configs/calibration/preregistration_d079_epoch_25g83_rev1.md:143); with INSTALL-WINDOWS-MULTI-01 the machinery can install several plans per day, so the item needs a cross-reference saying that capability does not apply to those three windows — an Ed-visible docs edit to a registration-carrying section, kept OUT of the INSTALL-WINDOWS diff by cold gate 25 (Opus amendment to Q6).",
+      "id": "RUNBOOK-S3-FAIL-ROUTE-CROSSREF-01",
+      "lane": "ed_external",
+      "priority": "p3_hardening_candidates",
+      "rank": 202,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966, cold gate 25 Q6: registered by the magistrate from ruling 10 as amended by Opus pairing 12 and synthesis 13; recording a ruling, not issuing one; not started. Separate Ed-visible docs-only item; §3 item 3 stays OUT of the INSTALL-WINDOWS-MULTI-01 diff. Ed approves or declines the proposed text; the registration file itself stays untouched; not night-critical.",
       "stop_card": null
     },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
@@ -7582,6 +7679,37 @@
       "rank": 73,
       "status": "queued",
       "status_note": "Installed by D-167 from the WORKLOAD-SCORED-01 delta-audit F4 disposition. It is required before any _v6 collection but does not block _v5.",
+      "stop_card": null
+    },
+    "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/19-gamma-replay-804eb394.md (section \"The one red module, diagnosed at the bench\")",
+          "scripts/magistrate_watchdog.py:259: self.root.parent.glob(\"*/night_plan.json\") discovers plans in the parent of the custody root",
+          "tests/test_magistrate_watchdog_cli.py:104: --custody-root receives the TemporaryDirectory directly in HandoffCliDefectTests.test_corrupt_lock_cli_refusal_survives_unreadable_state_and_repeated_hold (harness setup at :88-89)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-CLI-TEST-TMP-DISCOVERY-01/acceptance",
+          "label": "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every watchdog CLI/harness test nests its custody root at least one level below its temporary directory (e.g. <tmp>/custody/magistrate) so discovery sees only fixtures the test authored. A regression plants a foreign <tmp-parent>/*/night_plan.json sibling and proves the test's tick ignores it. tests.test_magistrate_watchdog_cli and tests.test_magistrate_watchdog pass at the bench with a deliberately planted stale plan under /tmp. No change to production discovery semantics: the parent-directory glob is the production contract for ~/night-custody/<plan>/."
+      },
+      "authority": {
+        "label": "2026-09-15 activation d6888966 record 19; magistrate registration from a bench replay finding (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/19-gamma-replay-804eb394.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "scripts/magistrate_watchdog.py:259 discovers night plans with self.root.parent.glob(\"*/night_plan.json\"), the parent of the custody root. tests/test_magistrate_watchdog_cli.py:104 passes --custody-root <TemporaryDirectory>, whose parent at the bench is /private/tmp, so a stale /tmp/*/night_plan.json fixture left by another session makes the tick go HOLD_UNSAFE with night_plan_malformed (authored_epoch_s is in the future against the harness's fixed 2026-09-04 clock) before the corrupt-lock notice is appended. Twelve subtests fail at the bench while CI's clean runner passes; seen 2026-09-15 on the PR #339 replay (record 19), and the same module fails identically on clean main at that bench.",
+      "id": "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 201,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966: registered by the magistrate from the record 19 PR #339 bench replay finding; not a ruling; not started. Sibling lanes REPLAY-FIXTURE-LEAK-01 and FIXTURE-FAKE-VLLM-LEAK-01 cover stale fixture residue and remain separate rows. Production parent-directory discovery semantics stay unchanged.",
       "stop_card": null
     },
     "WATCHDOG-NITS-01": {

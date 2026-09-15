@@ -1,0 +1,38 @@
+```json
+{
+  "schema":"claude-codex-report/v1",
+  "genre":"review",
+  "status":"clean",
+  "completion":"complete",
+  "summary":"CLEAN at e7cf1fe3: all seven requested module runs and gen_state --check pass; no new integration finding.",
+  "workspace":{"base_requested":"e7cf1fe3","base_mode":"exact","head_start":"e7cf1fe3e2251939309f200f0293e5f58ee66bdd","head_end":"e7cf1fe3e2251939309f200f0293e5f58ee66bdd","upstream_end":"6773df23b93540482dd91ad1b0e6c6ffef7a7c99","branch":null},
+  "pathspec":[],
+  "unowned_dirty":[],
+  "verdict":{
+    "label":"CLEAN",
+    "findings":[],
+    "integration":"242 tests reported across seven separate module runs: 241 passed, one automatically skipped; G4 additionally excluded by name. The 174-row state fidelity and generated regions pass on this exact head.",
+    "registry":"No contradicted generator or GAMMA-v5 tree digest. configs/arm_readiness/d117_row_registry_v2.json:532-535 names GAMMA; :212-250 contains allowed artifact paths, not digest values. The GAMMA pack directory and configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json are absent. configs/campaigns/d117_contrast_v5 contains only its generator and two D-166 registration JSONs. configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json:11-14,174-177,336-339 pins historical Qwen2.5 contrast trees; all three match their tree bytes and sidecars. V9 finds neither pre-merge nor merged generator SHA-256 in operational files; the whole-repository repeat finds only the old hash quoted in docs/process_traces/2026-09-15-activation-d6888966/16-gamma-opus-counter-review.md:150. V10 finds no v5 identity in existing pinsets/analysis registries. Fresh generation hashes emitted generator bytes at configs/campaigns/d117_contrast_v5/generate_configs.py:3059-3063; scripts/build_v4_histsem_pinset.py:231 hashes supplied tree bytes.",
+    "scripts":"V11 finds no legacy or canonical root-key references under scripts/. The broader roots-word census contains unrelated custody/path uses, including scripts/calibration_ledger_bootstrap.py:485 and scripts/calibration_ledger_backfill.py:122. scripts/author_arm_evidence_t0.py:17-20 delegates to the canonical reader at joulewise/arm_readiness_evidence_t0.py:1014-1020. The known root_namespace fallback is in joulewise/arm_readiness.py:8511-8514, already registered as A200 (TASK_QUEUE.md:991).",
+    "merge":"Read git show --stat HEAD, git diff HEAD^1..HEAD and git diff 804eb394..HEAD -- configs tests joulewise scripts. The merge adds exactly the emitter rename and two regressions over its first parent. Relative to 804eb394, only tests/test_gen_state.py changes: two IDs at :50-52 and count 172 -> 174 at :754. No configs/joulewise/scripts delta. A197-A200 and generated queue bookkeeping are consistent; A199/A200 remain separate follow-ups."
+  },
+  "verification":[
+    {"id":"V1","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_d117_contrast_v5_pack > /tmp/postmerge-339-pack.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 45 tests in 15.623s","","OK"]},"expected":{"exit_code":0,"tail_regex":"OK$"}},
+    {"id":"V2","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_d165_dominance_closeout > /tmp/postmerge-339-d165_dominance_closeout.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 59 tests in 12.809s","","OK"]},"expected":{"exit_code":0,"tail_regex":"OK$"}},
+    {"id":"V3","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_gamma_unit_roster_guard > /tmp/postmerge-339-gamma_unit_roster_guard.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 1 test in 0.639s","","OK"]},"expected":{"exit_code":0,"tail_regex":"OK$"}},
+    {"id":"V4","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_issue_g2a_prefill_prompt_pin > /tmp/postmerge-339-issue_g2a_prefill_prompt_pin.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 11 tests in 0.404s","","OK"]},"expected":{"exit_code":0,"tail_regex":"OK$"}},
+    {"id":"V5","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_campaign_generator_core > /tmp/postmerge-339-campaign_generator_core.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 7 tests in 4.049s","","OK"]},"expected":{"exit_code":0,"tail_regex":"OK$"}},
+    {"id":"V6","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_gen_state > /tmp/postmerge-339-gen_state.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 44 tests in 5.811s","","OK"]},"expected":{"exit_code":0,"tail_regex":"OK$"}},
+    {"id":"V7","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest $(TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import unittest; from tests.test_arm_readiness_evidence_t0 import ArmReadinessEvidenceT0Tests as T; print(\" \".join(\"tests.test_arm_readiness_evidence_t0.ArmReadinessEvidenceT0Tests.\"+n for n in unittest.defaultTestLoader.getTestCaseNames(T) if n != \"test_g4_real_ruled_census_pgrep_dialect\"))') > /tmp/postmerge-339-t0.log 2>&1","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 75 tests in 469.516s","","OK (skipped=1)"]},"expected":{"exit_code":0,"tail_regex":"OK \\(skipped=1\\)$"}},
+    {"id":"V8","kind":"inspection","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/gen_state.py --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":[]},"expected":{"exit_code":0,"tail_regex":"^$"}},
+    {"id":"V9","kind":"inspection","cmd":"rg -n -F -e ac2c974620cb87ba58e6e74b8abd4202c47061aee539717908816398e5d821b9 -e 717a81a79d038931e2352661473fc3fe202c7c0b4ed8f3579bcf7cb635f349a4 configs scripts joulewise tests","cwd":".","observed":{"result":"pass","exit_code":1,"tail":[]},"expected":{"exit_code":1,"tail_regex":"^$"}},
+    {"id":"V10","kind":"inspection","cmd":"rg -n 'd117_contrast_v5|d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5' configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json scripts/floor_mint_pinsets configs/analysis_registry","cwd":".","observed":{"result":"pass","exit_code":1,"tail":[]},"expected":{"exit_code":1,"tail_regex":"^$"}},
+    {"id":"V11","kind":"inspection","cmd":"rg -n 'claim_leaf|bound_leaf|claim_root_leaf|bound_root_leaf|root_namespace' scripts","cwd":".","observed":{"result":"pass","exit_code":1,"tail":[]},"expected":{"exit_code":1,"tail_regex":"^$"}},
+    {"id":"V12","kind":"inspection","cmd":"git diff --numstat 804eb394..HEAD -- configs tests joulewise scripts","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["4\t1\ttests/test_gen_state.py"]},"expected":{"exit_code":0,"tail_regex":"^4\\t1\\ttests/test_gen_state.py$"}}
+  ],
+  "flags":[
+    {"id":"F1","kind":"verification_gap","level":"nonblocking","text":"pgrep returned exit 3: sysmon request failed with error: sysmond service not found; pgrep: Cannot get process list. Excluded test_g4_real_ruled_census_pgrep_dialect as authorized. test_acid_real_boot_session_then_real_arm_generator_reaches_go automatically skipped for unavailable Darwin boot-session sysctl. No full suite, network or live hardware validation was performed, per scope.","needs":"Lead retains live census/boot-session verification."},
+    {"id":"F2","kind":"baseline_drift","level":"nonblocking","text":"Local origin/main advanced concurrently from e7cf1fe3 to 6773df23 (A201 bookkeeping). Detached HEAD and working tree stayed unchanged; this verdict covers requested e7cf1fe3 only.","needs":""}
+  ]
+}
+```

@@ -949,6 +949,20 @@ class D117ContrastV5PackTests(unittest.TestCase):
         ]["threshold"] = 2.01
         self.assertNotEqual(analysis_semantics_sha256_v1(mutated), observed_hash)
 
+    def test_generated_plan_tree_uses_canonical_root_leaf_keys(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-roots-") as temporary:
+            root = Path(temporary)
+            self.configure(self.write_prefill_pin(root))
+            pack = self.generate_pack(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                tree["roots"],
+                {
+                    "claim_root_leaf": self.generator.CLAIM_ROOT_LEAF,
+                    "bound_root_leaf": self.generator.BOUND_ROOT_LEAF,
+                },
+            )
+
     def test_unstubbed_generation_is_reproducible_and_leaves_no_staging(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-repeat-") as temporary:
             root = Path(temporary)
