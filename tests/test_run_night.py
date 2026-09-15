@@ -1833,7 +1833,13 @@ runpy.run_path(script, run_name='__main__')
         launch_log = root / "launch.log"
         launcher = root / "launchctl-stub"
         launcher.write_text(
-            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            '#!/bin/zsh\n'
+            'print -r -- "$*" >> "$LAUNCH_LOG"\n'
+            'label="${${3:-$2}:t:r}"\n'
+            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
+            '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
+            'exit 0\n',
             encoding="utf-8",
         )
         launcher.chmod(0o755)
@@ -1869,7 +1875,13 @@ runpy.run_path(script, run_name='__main__')
         launch_log = root / "launch.log"
         launcher = root / "launchctl-stub"
         launcher.write_text(
-            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            '#!/bin/zsh\n'
+            'print -r -- "$*" >> "$LAUNCH_LOG"\n'
+            'label="${${3:-$2}:t:r}"\n'
+            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
+            '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
+            'exit 0\n',
             encoding="utf-8",
         )
         launcher.chmod(0o755)
@@ -1903,7 +1915,13 @@ runpy.run_path(script, run_name='__main__')
         launch_log = root / "launch.log"
         launcher = root / "launchctl-stub"
         launcher.write_text(
-            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            '#!/bin/zsh\n'
+            'print -r -- "$*" >> "$LAUNCH_LOG"\n'
+            'label="${${3:-$2}:t:r}"\n'
+            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
+            '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
+            'exit 0\n',
             encoding="utf-8",
         )
         launcher.chmod(0o755)
@@ -1925,6 +1943,10 @@ runpy.run_path(script, run_name='__main__')
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         calls = launch_log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(
+            [line.split()[0] for line in calls[-4:]],
+            ["bootout", "bootout", "print", "print"],
+        )
         self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
         self.assertTrue(any(line.endswith("com.joulewise.night.deadman") for line in calls))
 
@@ -1935,7 +1957,13 @@ runpy.run_path(script, run_name='__main__')
         launch_log = root / "launch.log"
         launcher = root / "launchctl-stub"
         launcher.write_text(
-            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            '#!/bin/zsh\n'
+            'print -r -- "$*" >> "$LAUNCH_LOG"\n'
+            'label="${${3:-$2}:t:r}"\n'
+            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
+            '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
+            'exit 0\n',
             encoding="utf-8",
         )
         launcher.chmod(0o755)
@@ -1960,6 +1988,10 @@ runpy.run_path(script, run_name='__main__')
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         calls = launch_log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(
+            [line.split()[0] for line in calls[-4:]],
+            ["bootout", "bootout", "print", "print"],
+        )
         self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
         self.assertTrue(any(line.endswith("com.joulewise.night.deadman") for line in calls))
 
@@ -1974,11 +2006,14 @@ runpy.run_path(script, run_name='__main__')
         launch_log = root / "launch.log"
         launcher = root / "launchctl-stub"
         launcher.write_text(
-            "#!/bin/zsh\n"
-            "print -r -- \"$*\" >> \"$LAUNCH_LOG\"\n"
-            'if [[ "$1" == print ]]; then exit 1; fi\n'
-            "if [[ \"$1\" == bootstrap && \"$*\" == *deadman* ]]; then exit 1; fi\n"
-            "exit 0\n",
+            '#!/bin/zsh\n'
+            'print -r -- "$*" >> "$LAUNCH_LOG"\n'
+            'label="${${3:-$2}:t:r}"\n'
+            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            'if [[ "$1" == bootstrap && "$*" == *deadman* ]]; then exit 1; fi\n'
+            '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
+            '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
+            'exit 0\n',
             encoding="utf-8",
         )
         launcher.chmod(0o755)
