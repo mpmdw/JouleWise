@@ -14,3 +14,5 @@ Dispositions and closures (lead, at the bench — each fix smaller than a delega
 Bench after round 2: `gen_state.py --check` rc 0; `tests.test_gen_state` 44 OK; kernel live rows 174 (unchanged); selectable heads unchanged from main.
 
 Rows 4/5 (delta re-audit of both fix rounds, same-signature statement), rows 1/2/10 (compliant fresh-eyes seat on the final head), row 9 (replay on the integration tree), row 11 (CI), row 12 (terminal review) follow in record 63.
+
+Addendum 17:15 PDT — record 63 (Astra delta + fresh-eyes on the final head 239fbae7): status `clean`, all six defect classes CURED, same-signature statement: none recurs after round 2; fix regressions: none; kernel field allowlist, generated-only views, scratch regeneration diff empty, `tests/` unchanged vs main, selectable heads equal main's. The wrapper again recorded rc 65 (envelope 8,702 bytes over the 8,192 bound) — protocol failure for ledger purposes; a terse compliant seat is re-run on the integration head after PR #330 lands (rows 1/2/10), the delta content stands as audit input (rows 4/5 evidence is the delta table in record 63, verified by the lead against the two fix diffs).
