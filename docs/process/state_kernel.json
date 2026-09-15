@@ -2921,6 +2921,38 @@
       "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until this lands, the machinery still supports only one install span and one fixed launchd minute — a mechanism limit, not a rule; D-181 cl.1 is in force and no timing rule survives it. 2026-09-15: the 09-15 night fired and was REFUSED at the gate on load average alone (agent census clean); harvested and its §2.5 action taken (record 01 of activation 1acf2aee) — the event dependency is satisfied and this lane is QUEUED at agent rank 0. 2026-09-15 (activation d6888966, cold gate 25 Q5): acceptance clause (c) narrowed to the whole-minute unambiguous t0 (FIX-5 affirmed); blocker at int head df86cee6 under fix round 2 per ruling 10 Q1(c)/Q3-as-amended.",
       "stop_card": null
     },
+    "INSTALLER-BACKUP-WINDOW-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/10-coldgate-fable-ruling.md (Q4 F4)",
+          "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/12-opus-pairing-refuter-on-ruling-10.md (Q4)",
+          "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/13-magistrate-synthesis-ruling-10-with-opus-amendments.md (Q4)",
+          "docs/process_traces/2026-09-15-activation-d6888966/lt-15-delta-re-audit-round-2.md (F4)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/INSTALLER-BACKUP-WINDOW-01/acceptance",
+          "label": "INSTALLER-BACKUP-WINDOW-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The trap block is installed before mktemp, with plist_backup=\"\" initialised so teardown's early return handles the no-backup case; a regression sends TERM during the backup cp (fake cp on the fixture PATH) and asserts no /tmp/night-agent-install.* survives, both priors are byte-identical, and no job is loaded; lands after INSTALL-WINDOWS-MULTI-01 merges, in its own small PR; not night-critical."
+      },
+      "authority": {
+        "label": "cold gate 28 ruling 10 Q4 + Opus pairing 12 + synthesis 13 (magistrate registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/13-magistrate-synthesis-ruling-10-with-opus-amendments.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "In scripts/install_night_agent.sh (integration branch int/2026-09-15-install-windows, round 2 head 9a7bacdf; lines ~304–309), the prior-plist backup cp runs before trap teardown EXIT is installed, so a signal in that window leaves prior plists intact, no job loaded, and one leaked backup directory under TMPDIR — a conservative half-state (the fence still sees the prior plan) but a leak. Close this unguarded backup window.",
+      "id": "INSTALLER-BACKUP-WINDOW-01",
+      "lane": "agent",
+      "priority": "p4_polish",
+      "rank": 203,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966, cold gate 28 Q4 F4: registered by the magistrate from ruling 10 Q4, Opus pairing 12 and synthesis 13; recording a ruling, not issuing one; not started; not night-critical. Starts and lands only after INSTALL-WINDOWS-MULTI-01 merges, in its own small PR. The pending hard start dependency is omitted under the seat brief's explicit fallback because the schema requires status=blocked for that edge, while this registration requires status=queued; the post-merge ordering remains in this note and acceptance.",
+      "stop_card": null
+    },
     "INSTRUMENT-PATH-PIN-01": {
       "acceptance": {
         "evidence": [
@@ -7710,6 +7742,37 @@
       "rank": 201,
       "status": "queued",
       "status_note": "2026-09-15 activation d6888966: registered by the magistrate from the record 19 PR #339 bench replay finding; not a ruling; not started. Sibling lanes REPLAY-FIXTURE-LEAK-01 and FIXTURE-FAKE-VLLM-LEAK-01 cover stale fixture residue and remain separate rows. Production parent-directory discovery semantics stay unchanged.",
+      "stop_card": null
+    },
+    "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/12-opus-pairing-refuter-on-ruling-10.md (Q2: the same class exists at scripts/install_magistrate_watchdog.sh:199-201)",
+          "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/10-coldgate-fable-ruling.md (Q2 verified-bootout dictation for the night-agent installer; shape to mirror)",
+          "scripts/install_magistrate_watchdog.sh:199-202 (uninstall bootout failure is ignored, plist deleted, success printed, exit 0; lines read verbatim by the magistrate on main)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01/acceptance",
+          "label": "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The uninstall path re-reads launchctl print gui/$uid/<label> after bootout; if the job is still loaded, it retains the plist, prints the label and plist path, and exits 4; only when not loaded does it remove the plist and exit 0. A regression using the fake-launchctl pattern of tests/test_install_magistrate_watchdog.py stubs bootout rc 1 leaving the loaded marker and asserts rc 4, plist present, and the last two launchctl calls bootout/print. Mutation: deleting the exit 4 line turns the regression RED. Lands after INSTALL-WINDOWS-MULTI-01 in its own small PR. Never run against the live LaunchAgent: the running magistrate is under it."
+      },
+      "authority": {
+        "label": "cold gate 28 Q2 (night-agent installer) applied to the sibling script by magistrate registration, not a ruling",
+        "path": "docs/process_traces/2026-09-15-activation-d6888966/28-coldgate-packet-install-windows-round-3/12-opus-pairing-refuter-on-ruling-10.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "scripts/install_magistrate_watchdog.sh:199-202 (--uninstall) ignores bootout failure, then runs rm -f \"$plist\", prints \"uninstalled $label\", and exits 0. A failed bootout can leave com.joulewise.magistrate loaded with its plist deleted and a success exit: the same class-2 state cold gate 28 Q2 cured in the night-agent installer. Apply verified bootout to this sibling: bootout, re-read launchctl print, retain the plist and exit non-zero if still loaded. Bench-verified by the magistrate on main by reading the lines verbatim.",
+      "id": "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 204,
+      "status": "queued",
+      "status_note": "2026-09-15 activation d6888966, cold gate 28 Q2: registered by the magistrate from the Opus pairing refuter's sibling finding; the night-agent installer ruling is applied to the watchdog sibling by registration, not a new ruling; not started. No dependency: do not block this task on the night-agent lane. Lands after INSTALL-WINDOWS-MULTI-01 in its own small PR. Use fake-launchctl fixtures only; never run against the live LaunchAgent because the running magistrate is under it.",
       "stop_card": null
     },
     "WATCHDOG-NITS-01": {
