@@ -1296,9 +1296,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_run_state_gate_suppresses_lane_heads_but_active_work_continues(self):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
-        # 2026-09-14 D-181 cl.1 (Ed, directive #337): INSTALL-WINDOWS-MULTI-01 holds the
-        # agent lane's rank 0 and is the lane head ahead of WO-LAUNCH-BINDING (rank 1).
-        head_oracle["expected_selectable_task_ids"][0] = "INSTALL-WINDOWS-MULTI-01"
+        head_oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
         _adapt_retired_lane_heads(head_oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(gate_oracle["active_global_gates"])
         rendered = gen_state.render_run_state(kernel)
@@ -1349,8 +1347,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")
-        # 2026-09-14 D-181 cl.1: the agent-lane head is INSTALL-WINDOWS-MULTI-01 (rank 0).
-        oracle["expected_selectable_task_ids"][0] = "INSTALL-WINDOWS-MULTI-01"
+        oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
         _adapt_retired_lane_heads(oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
@@ -1510,8 +1507,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             {
                 "ED-DATES-01",
                 "V5-G2A-PREFILL-PROBE-01",
-                # 2026-09-14 D-181 cl.1: agent-lane head at rank 0 (was WO-LAUNCH-BINDING).
-                "INSTALL-WINDOWS-MULTI-01",
+                "WO-LAUNCH-BINDING",
             },
         )
         self.assertNotIn("excluded by:", run_state)

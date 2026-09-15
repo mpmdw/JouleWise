@@ -11786,14 +11786,20 @@ a minimum viable paper ("i just want a minimum viable paper already").
 machine), verbatim in
 `docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md`.
 Recorded by the headless magistrate (activation `24b9d3dd`) through this PR, the same
-way issue #316 became D-180; nothing below is installed in code, runbooks or the
-night machinery by this entry — each clause names its implementation lane, and until
-that lane lands the prior rule stands (decided ≠ done). The ruling applies after the
-night armed under directive #336 (`d079-epoch-25g83-derivation-n1-20260915`, t0
-2026-09-15 02:56 PDT), which it does not touch. Forcing problem: the equivalence
-night was refused on 2026-09-13 and not armed on 2026-09-14 morning because the
-arm-time census stayed foreign, and the only mechanism for a second attempt was the
-next calendar night; Ed rules that the spacing was never a scientific requirement.
+way issue #316 became D-180 (Ed's words: "Record this ruling as a dated decision-log
+entry through a PR under the normal gate, the same way #316 became D-180; do not amend
+rule text yourself outside that PR"); nothing below is installed in code, runbooks or
+the night machinery by this entry — each clause names its implementation lane, and
+until that lane lands the prior rule stands (decided ≠ done). The ruling is standing;
+by its own text it applies after the night armed under directive #336
+(`d079-epoch-25g83-derivation-n1-20260915`, t0 2026-09-15 02:56 PDT) and to every
+window after it, and it does not touch that night. Forcing context (factual, no rule):
+the 2026-09-13 night fired and was refused by its own t0 census (an interactive session
+and agent desktop apps present); the 2026-09-14 morning install span closed without an
+arm because the arm-time census never cleared; the ordinary documented recovery was a
+new plan for the next calendar night, until directive #336's one-night owner
+authorization of an evening install. Ed rules that the spacing was never a scientific
+requirement.
 
 1. **Windows run as soon as the machine is quiet; no cadence rule.** Whenever the
    census is clean, day or night, several windows per day if the gates pass, with no
@@ -11806,15 +11812,18 @@ next calendar night; Ed rules that the spacing was never a scientific requiremen
    is a rule. Implementation: the current machinery pins one plan at a fixed daily
    launchd minute inside the 02:45–03:30 belt with a single 07:00 dead-man and a
    calendar-day install span — a mechanism limit, not a scientific one. Lanes
-   `INSTALL-WINDOWS-MULTI-01`, `ARM-RETRY-CLASS-01` and `ARM-CENSUS-IDLE-INTERACTIVE-01`
-   move to the top of the queue in that order, to start immediately after the 09-15
-   night's harvest and its runbook §2.5 outcome action; they are designed so a plan
-   can carry a t0 at any clock time and so a second window can be armed as soon as the
-   previous harvest is done. (This supersedes the D-180 sequencing note "after G2-a
-   instrument validation" on those three rows.) Queue mechanism: `INSTALL-WINDOWS-MULTI-01`
-   takes the agent lane's rank 0 (the lane head, ahead of every rank-1-and-up row); the
-   other two are blocked on their predecessor by a hard start dependency and take rank 0
-   in the bookkeeping that closes it, so the kernel enforces the order.
+   `INSTALL-WINDOWS-MULTI-01` (install spans as a list, dead-man per span),
+   `ARM-RETRY-CLASS-01` and `ARM-CENSUS-IDLE-INTERACTIVE-01` are promoted to the top of
+   the queue in that order, immediately after tonight's harvest and the §2.5 outcome
+   action; they are designed so a plan can carry a t0 at any clock time and so a second
+   window can be armed as soon as the previous harvest is done. (This supersedes the D-180 sequencing note "after G2-a
+   instrument validation" on those three rows.) Queue mechanism, describing the kernel
+   edit: `INSTALL-WINDOWS-MULTI-01` takes the agent lane's rank 0 (the lane head, ahead
+   of every rank-1-and-up row) and is blocked on a hard start EVENT dependency — the
+   09-15 night harvested and its §2.5 action taken — released in the bookkeeping that
+   records both; the other two are blocked on their predecessor by a hard start
+   dependency and take rank 0 in the bookkeeping that closes it, so the kernel, not
+   prose, enforces both the start condition and the order.
 2. **Fable 5.1 is the final eyes on every merge.** Every PR that merges carries a
    terminal review by Fable 5.1 — the magistrate at the pinned model, reading the final
    head itself, not a delegate's summary — as its last review before merge. The
@@ -11830,9 +11839,12 @@ next calendar night; Ed rules that the spacing was never a scientific requiremen
    at the next moment the machine is otherwise idle. This step must not be the reason
    the first G2-a pack window waits.
 
-Housekeeping recorded with the rulings: PR #330 (its conflicts resolved at
-`d80e5e37`; body lacked the gate ledger) goes through the twelve-row gate and merges
-under the Fable terminal review.
+Housekeeping recorded with the rulings, in Ed's words: "PR #330's conflicts are resolved
+at d80e5e37 (kernel 170 rows, tests OK); its body still lacks the gate ledger. Take it
+through the gate and merge it under Fable's terminal review." (170 is that PR's kernel
+row count after its four closures, not the live count at this entry.) Obligation
+recorded, not yet performed at the time of this entry: "Comment the outcome of each
+ruling on this issue and close it when all three are recorded."
 
 ### D-124 dated addendum — 2026-09-13 (cold gate 47, GATE-SENSIBILITY-SWEEP-01 B1): the zero-point provenance band is scale-bounded, and its re-set is ruled but not yet installed
 

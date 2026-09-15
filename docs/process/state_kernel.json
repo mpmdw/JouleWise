@@ -2988,7 +2988,17 @@
         "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
         "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "D-181 cl.1 (Ed, directive #337): the promoted work starts immediately after the 09-15 equivalence night's harvest (runbook §2) and its §2.5 outcome action; released in the bookkeeping that records both, with the harvest record and the §2.5 action as evidence",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "N1-20260915-HARVESTED-AND-S2-5-ACTION-TAKEN"
+        }
+      ],
       "fallback": null,
       "fences": [],
       "flags": [],
@@ -2997,8 +3007,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 0,
-      "status": "queued",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; work starts immediately after the 09-15 equivalence night's harvest and its runbook §2.5 outcome action (that night, armed under directive #336, is untouched). Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until landed the ruled single install span stands.",
+      "status": "blocked",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until landed the ruled single install span stands.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
