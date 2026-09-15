@@ -1295,6 +1295,7 @@ inputs: stop and resolve it before arming. Never hand-edit the dead-man time.
 clause 1.** Install BOTH agents on any day after the notice email is sent,
 before the plan's **install close** (the last allowed installation boundary),
 and inside a listed **install span** (a recurring local-time interval).
+Same-day successors are a machinery capability; for the three FAIL-route registration nights §3 item 3 still requires distinct calendar days.
 The admissible interval opens with the notice send and closes exclusively at:
 
 ```
