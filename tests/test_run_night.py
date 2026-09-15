@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -887,8 +888,52 @@ runpy.run_path(script, run_name='__main__')
         self.assertIn("@@COURIER_BIN@@", template)
         self.assertNotIn("<key>KeepAlive</key>", template)
         self.assertIn("<key>RunAtLoad</key>\n  <false/>", template)
-        self.assertIn('/usr/bin/grep -q "KeepAlive"', installer)
-        self.assertIn("schedule --plan", installer)
+        root = self.root / "keepalive-install"
+        root.mkdir()
+        plan = self._installer_plan(root)
+        environment, _courier = self._installer_environment(root)
+        driver = root / "driver"
+        driver_head = _init_git_repo(driver)
+        shutil.copytree(REPO_ROOT / "joulewise", driver / "joulewise",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(REPO_ROOT / "scripts", driver / "scripts",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(REPO_ROOT / "tests/fixtures", driver / "tests/fixtures")
+        bad_template = driver / "configs/launchd/com.joulewise.night.plist.template"
+        bad_template.parent.mkdir(parents=True)
+        bad_template.write_text(
+            template.replace("<key>RunAtLoad</key>",
+                             "<key>KeepAlive</key><true/>\n  <key>RunAtLoad</key>"),
+            encoding="utf-8",
+        )
+        mapping = json.loads(plan.read_text())
+        mapping["repo_head"] = driver_head
+        plan.write_text(json.dumps(mapping), encoding="utf-8")
+        launch_log = root / "launch.log"
+        launcher = root / "launchctl-stub"
+        launcher.write_text(
+            '#!/bin/zsh\nprint -r -- "$*" >> "$LAUNCH_LOG"\nexit 0\n',
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        environment["LAUNCH_LOG"] = str(launch_log)
+        completed = subprocess.run(
+            ["/bin/zsh", str(driver / "scripts/install_night_agent.sh"),
+             "--plan", str(plan), "--launchctl-bin", str(launcher)],
+            env=environment, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(completed.returncode, 3, completed.stderr)
+        self.assertIn("template must not contain KeepAlive", completed.stderr)
+        self.assertFalse((root / "home/Library/LaunchAgents").exists())
+        self.assertFalse((root / "custody/night").exists())
+        self.assertFalse(launch_log.exists())
+        # The installer DERIVES its timing from the plan rather than hardcoding it.
+        # That derivation moved from a shell `schedule --plan` subprocess into the
+        # engine (INSTALL-WINDOWS-MULTI-01 transactional redesign), so the property
+        # is asserted where it now lives; the behaviour asserted is unchanged.
+        engine = (REPO_ROOT / "joulewise" / "night_agent_install.py").read_text()
+        self.assertIn("install_close_epoch_s", engine)
+        self.assertIn("t0_epoch_s", engine)
         self.assertIn("@@MONTH@@", template)
         self.assertIn("@@DAY@@", template)
         self.assertNotIn("<integer>7</integer>", template)
@@ -1918,7 +1963,14 @@ runpy.run_path(script, run_name='__main__')
             '#!/bin/zsh\n'
             'print -r -- "$*" >> "$LAUNCH_LOG"\n'
             'label="${${3:-$2}:t:r}"\n'
-            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            'if [[ "$1" == print ]]; then\n'
+            '  if [[ -f "$LAUNCH_LOG.${2:t}" ]]; then\n'
+            '    print -r -- "$2 = {"; print -r -- "}"; exit 0\n'
+            '  fi\n'
+            '  print -r -- "Bad request." >&2\n'
+            '  print -r -- "Could not find service \\"${2:t}\\" in domain for user gui: ${${2:h}:t}" >&2\n'
+            '  exit 113\n'
+            'fi\n'
             '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
             '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
             'exit 0\n',
@@ -1960,7 +2012,14 @@ runpy.run_path(script, run_name='__main__')
             '#!/bin/zsh\n'
             'print -r -- "$*" >> "$LAUNCH_LOG"\n'
             'label="${${3:-$2}:t:r}"\n'
-            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            'if [[ "$1" == print ]]; then\n'
+            '  if [[ -f "$LAUNCH_LOG.${2:t}" ]]; then\n'
+            '    print -r -- "$2 = {"; print -r -- "}"; exit 0\n'
+            '  fi\n'
+            '  print -r -- "Bad request." >&2\n'
+            '  print -r -- "Could not find service \\"${2:t}\\" in domain for user gui: ${${2:h}:t}" >&2\n'
+            '  exit 113\n'
+            'fi\n'
             '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
             '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
             'exit 0\n',
@@ -2009,7 +2068,14 @@ runpy.run_path(script, run_name='__main__')
             '#!/bin/zsh\n'
             'print -r -- "$*" >> "$LAUNCH_LOG"\n'
             'label="${${3:-$2}:t:r}"\n'
-            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            'if [[ "$1" == print ]]; then\n'
+            '  if [[ -f "$LAUNCH_LOG.${2:t}" ]]; then\n'
+            '    print -r -- "$2 = {"; print -r -- "}"; exit 0\n'
+            '  fi\n'
+            '  print -r -- "Bad request." >&2\n'
+            '  print -r -- "Could not find service \\"${2:t}\\" in domain for user gui: ${${2:h}:t}" >&2\n'
+            '  exit 113\n'
+            'fi\n'
             'if [[ "$1" == bootstrap && "$*" == *deadman* ]]; then exit 1; fi\n'
             '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
             '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
@@ -2049,6 +2115,10 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue(any(line.startswith("bootstrap ") and "com.joulewise.night.plist" in line for line in calls))
         self.assertTrue(any(line.startswith("bootstrap ") and "deadman.plist" in line for line in calls))
         self.assertTrue(any(line.startswith("bootout ") and line.endswith("com.joulewise.night") for line in calls))
+        self.assertEqual(
+            [line.split()[0] for line in calls[-4:]],
+            ["bootout", "bootout", "print", "print"],
+        )
 
 
 
