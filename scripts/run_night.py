@@ -1035,6 +1035,17 @@ def calendar_fields(epoch_s: float) -> dict[str, int]:
 
 
 def schedule(plan: NightPlan) -> dict[str, Any]:
+    if plan.t0_epoch_s % 60 != 0:
+        raise PlanError("plan_t0_not_minute_aligned",
+                        f"t0_epoch_s={plan.t0_epoch_s} must fall on a whole minute")
+    # Keep the host-local datetime naive: astimezone() attaches a fixed offset
+    # and would hide the alternative epoch for a repeated wall-clock minute.
+    local_t0 = datetime.fromtimestamp(plan.t0_epoch_s)
+    candidates = {local_t0.replace(fold=fold).timestamp() for fold in (0, 1)}
+    valid = {epoch for epoch in candidates if datetime.fromtimestamp(epoch) == local_t0}
+    if len(valid) > 1:
+        raise PlanError("plan_t0_ambiguous_local_time",
+                        f"t0_epoch_s={plan.t0_epoch_s}: {local_t0.isoformat()} occurs twice in local time")
     deadman = deadman_epoch(plan)
     return {
         "t0_epoch_s": plan.t0_epoch_s,

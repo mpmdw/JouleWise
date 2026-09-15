@@ -1395,6 +1395,10 @@ can refuse first.
 | `night_plan_malformed` | 2 from `schedule`; 3 from the installer's earlier plan validation | Missing/malformed `t0_epoch_s`, `window_max_s` or `authored_epoch_s` (or another invalid plan field); the detail identifies the validation failure. |
 | `plan_schedule_unrepresentable` | 2 | `schedule` cannot load the plan or represent derived arithmetic/calendar values, including `window_max_s=10**15` or `10**400`; detail preserves the underlying error. This is representability, with no maximum-window policy ceiling. |
 | `install_spans_unresolvable_on_day` | 2 | A day's resolved spans have nonpositive duration, are out of order, or overlap after DST resolution; detail names the day and offending span/pair. No span is repaired, reordered or dropped. |
+| `plan_t0_not_minute_aligned` | 2 | `t0_epoch_s` is not aligned to a whole minute; `schedule` and the installer refuse before rendering or bootstrapping. Author a minute-aligned plan. |
+| `plan_t0_ambiguous_local_time` | 2 | The local wall-clock minute at `t0` maps to two distinct epochs during a DST fold; both occurrences are refused by `schedule` and the installer before rendering or bootstrapping. Choose an unambiguous minute. |
+
+A plan's `t0` must fall on a whole minute that occurs exactly once in local time.
 
 The plan cutoff and the initially selected span's close are rechecked before
 each bootstrap (launchd's job-load operation); a later span cannot replace

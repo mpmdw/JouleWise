@@ -14,6 +14,7 @@ import time
 import unittest
 from pathlib import Path
 from unittest import mock
+from zoneinfo import ZoneInfo
 
 from scripts import run_night
 from joulewise.night_gate import NightPlan
@@ -97,7 +98,7 @@ class InstallNightAgentTests(unittest.TestCase):
         plan = NightPlan(
             plan_id="install-night-agent-test",
             receipt_class="TRANSACTION_PACK",
-            t0_epoch_s=time.time() + 24 * 3600,
+            t0_epoch_s=(int(time.time()) // 60 + 24 * 60) * 60,
             window_max_s=1,
             authored_epoch_s=time.time(),
             repo_head=self.repo_head,
@@ -214,6 +215,56 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual(2, sum(line.startswith("bootstrap ") for line in calls))
         self.assertEqual(3, sum(line.startswith("print ") for line in calls))
 
+    def _install_local_t0(self, local: datetime, *, render_only: bool = False):
+        self.environment["TZ"] = "America/Los_Angeles"
+        t0 = local.replace(tzinfo=ZoneInfo("America/Los_Angeles")).timestamp()
+        now = t0 - 12 * 3600
+        plan = self._write_plan(t0_epoch_s=t0, authored_epoch_s=now - 60)
+        python = self._controlled_python(now)
+        return self._run(plan, python=str(python), render_only=render_only)
+
+    def _assert_local_t0_refused(self, local: datetime, reason: str) -> None:
+        for render_only in (False, True):
+            with self.subTest(render_only=render_only):
+                completed = self._install_local_t0(local, render_only=render_only)
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertIn(reason, completed.stderr)
+                self.assertNotIn("Traceback", completed.stderr)
+                self.assertFalse(self.rendered.exists())
+                self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
+                self.assertFalse(list(self.root.glob("custody*/night")))
+                self.assertFalse(self.launch_log.exists())
+
+    def test_installer_refuses_132017_t0_instead_of_rendering_1320(self) -> None:
+        self._assert_local_t0_refused(datetime(2026, 9, 16, 13, 20, 17),
+                                      "plan_t0_not_minute_aligned")
+
+    def test_installer_refuses_first_20261101_0130_occurrence(self) -> None:
+        self._assert_local_t0_refused(datetime(2026, 11, 1, 1, 30, fold=0),
+                                      "plan_t0_ambiguous_local_time")
+
+    def test_installer_refuses_second_20261101_0130_occurrence(self) -> None:
+        self._assert_local_t0_refused(datetime(2026, 11, 1, 1, 30, fold=1),
+                                      "plan_t0_ambiguous_local_time")
+
+    def _assert_installed_calendar(self, local: datetime, expected: dict[str, int]) -> None:
+        completed = self._install_local_t0(local)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        directory = self.root / "home/Library/LaunchAgents"
+        self.assertEqual(2, len(list(directory.glob("*.plist"))))
+        night = plistlib.loads((directory / "com.joulewise.night.plist").read_bytes())
+        self.assertEqual(expected, night["StartCalendarInterval"])
+        self.assertEqual(2, sum(line.startswith("bootstrap ")
+                               for line in self.launch_log.read_text().splitlines()))
+
+    def test_installer_accepts_ordinary_20260916_0256_whole_minute(self) -> None:
+        self._assert_installed_calendar(datetime(2026, 9, 16, 2, 56),
+            {"Month": 9, "Day": 16, "Hour": 2, "Minute": 56})
+
+    def test_installer_accepts_spring_20260308_0430_after_gap(self) -> None:
+        self._assert_installed_calendar(datetime(2026, 3, 8, 4, 30),
+            {"Month": 3, "Day": 8, "Hour": 4, "Minute": 30})
+
     def test_installer_refuses_after_the_plan_install_close(self) -> None:
         plan_path = self._write_plan()
         plan = NightPlan.from_mapping(json.loads(plan_path.read_text()))
@@ -233,7 +284,7 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn("18:00", completed.stderr)
 
     def test_installer_refuses_a_t0_in_the_past(self) -> None:
-        plan = self._write_plan(t0_epoch_s=time.time() - 60)
+        plan = self._write_plan(t0_epoch_s=(int(time.time()) // 60 - 1) * 60)
         self._assert_refused_without_outputs(self._run(plan, render_only=False), "plan_t0_in_the_past")
 
     def test_installer_refuses_when_a_night_agent_is_already_loaded(self) -> None:

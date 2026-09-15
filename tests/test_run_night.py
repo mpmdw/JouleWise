@@ -19,6 +19,7 @@ from contextlib import redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
+from zoneinfo import ZoneInfo
 
 from joulewise.measurement_liveness import Identity
 from joulewise import night_gate
@@ -1502,6 +1503,46 @@ runpy.run_path(script, run_name='__main__')
         finally:
             time.tzset()
 
+    def _schedule_local_t0(self, local: datetime) -> subprocess.CompletedProcess[str]:
+        t0 = local.replace(tzinfo=ZoneInfo("America/Los_Angeles")).timestamp()
+        self._write_plan(t0_epoch_s=t0)
+        return subprocess.run(
+            [sys.executable, "-B", str(SCRIPT_PATH), "schedule", "--plan", str(self.plan_path)],
+            env={**os.environ, "TZ": "America/Los_Angeles"}, capture_output=True, text=True,
+        )
+
+    def _assert_t0_schedule_refused(self, local: datetime, reason: str) -> None:
+        completed = self._schedule_local_t0(local)
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn(reason, completed.stderr)
+        self.assertEqual("", completed.stdout)
+        self.assertEqual(1, len(completed.stderr.splitlines()))
+        self.assertFalse((self.custody / "night").exists())
+
+    def test_schedule_refuses_132017_t0_instead_of_rendering_1320(self) -> None:
+        self._assert_t0_schedule_refused(datetime(2026, 9, 16, 13, 20, 17),
+                                         "plan_t0_not_minute_aligned")
+
+    def test_schedule_refuses_first_20261101_0130_occurrence(self) -> None:
+        self._assert_t0_schedule_refused(datetime(2026, 11, 1, 1, 30, fold=0),
+                                         "plan_t0_ambiguous_local_time")
+
+    def test_schedule_refuses_second_20261101_0130_occurrence(self) -> None:
+        self._assert_t0_schedule_refused(datetime(2026, 11, 1, 1, 30, fold=1),
+                                         "plan_t0_ambiguous_local_time")
+
+    def test_schedule_accepts_ordinary_20260916_0256_whole_minute(self) -> None:
+        completed = self._schedule_local_t0(datetime(2026, 9, 16, 2, 56))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual({"Month": 9, "Day": 16, "Hour": 2, "Minute": 56},
+                         json.loads(completed.stdout)["night_calendar"])
+
+    def test_schedule_accepts_spring_20260308_0430_after_gap(self) -> None:
+        completed = self._schedule_local_t0(datetime(2026, 3, 8, 4, 30))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual({"Month": 3, "Day": 8, "Hour": 4, "Minute": 30},
+                         json.loads(completed.stdout)["night_calendar"])
+
     def test_schedule_subcommand_prints_calendar_fields_from_the_plan(self) -> None:
         completed = subprocess.run([sys.executable, "-B", str(SCRIPT_PATH), "schedule",
                                     "--plan", str(self.plan_path)], capture_output=True, text=True)
@@ -1646,7 +1687,7 @@ runpy.run_path(script, run_name='__main__')
         python.symlink_to(sys.executable)
         plan["custody_root"] = str(root / "custody")
         plan["authored_epoch_s"] = time.time()  # bench fix: fixture authored "now" so the installer age check passes
-        plan["t0_epoch_s"] = time.time() + 24 * 3600
+        plan["t0_epoch_s"] = (int(time.time()) // 60 + 24 * 60) * 60
         path = root / "custody/night_plan.json"
         path.parent.mkdir()
         path.write_text(json.dumps(plan), encoding="utf-8")
