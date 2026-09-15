@@ -11780,72 +11780,6 @@ observability for the issue channel ("KILL as long as you can keep experimenting
 have all the tools to keep running windows until you have a paper"), and the target is
 a minimum viable paper ("i just want a minimum viable paper already").
 
-## D-181: Windows run whenever the machine is quiet; Fable 5.1 is the final eyes on every merge; the owner's hands step is prepared now (Ed, 2026-09-14)
-
-**Status:** ratified by Ed, 2026-09-14 16:43 PDT, as directive issue #337 (owner, at the
-machine), verbatim in
-`docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md`.
-Recorded by the headless magistrate (activation `24b9d3dd`) through this PR, the same
-way issue #316 became D-180 (Ed's words: "Record this ruling as a dated decision-log
-entry through a PR under the normal gate, the same way #316 became D-180; do not amend
-rule text yourself outside that PR"); nothing below is installed in code, runbooks or
-the night machinery by this entry — each clause names its implementation lane, and
-until that lane lands the prior rule stands (decided ≠ done). The ruling is standing;
-by its own text it applies after the night armed under directive #336
-(`d079-epoch-25g83-derivation-n1-20260915`, t0 2026-09-15 02:56 PDT) and to every
-window after it, and it does not touch that night. Forcing context (factual, no rule):
-the 2026-09-13 night fired and was refused by its own t0 census (an interactive session
-and agent desktop apps present); the 2026-09-14 morning install span closed without an
-arm because the arm-time census never cleared; the ordinary documented recovery was a
-new plan for the next calendar night, until directive #336's one-night owner
-authorization of an evening install. Ed rules that the spacing was never a scientific
-requirement.
-
-1. **Windows run as soon as the machine is quiet; no cadence rule.** Whenever the
-   census is clean, day or night, several windows per day if the gates pass, with no
-   artificial spacing (no "one night in three", no "only at 02:56", no minimum gap
-   between windows). Ed keeps the machine quiet whenever he is not using it and will
-   close every interactive session and quit the agent desktop apps on request; a
-   notice email is enough. The soundness fences stay exactly as they are: physics and
-   evidence refusals, pre-registration before data, the census at arm and at t0, the
-   twelve-row gate, email-then-arm with Ed's NO overriding. Nothing else about timing
-   is a rule. Implementation: the current machinery pins one plan at a fixed daily
-   launchd minute inside the 02:45–03:30 belt with a single 07:00 dead-man and a
-   calendar-day install span — a mechanism limit, not a scientific one. Lanes
-   `INSTALL-WINDOWS-MULTI-01` (install spans as a list, dead-man per span),
-   `ARM-RETRY-CLASS-01` and `ARM-CENSUS-IDLE-INTERACTIVE-01` are promoted to the top of
-   the queue in that order, immediately after tonight's harvest and the §2.5 outcome
-   action; they are designed so a plan can carry a t0 at any clock time and so a second
-   window can be armed as soon as the previous harvest is done. (This supersedes the D-180 sequencing note "after G2-a
-   instrument validation" on those three rows.) Queue mechanism, describing the kernel
-   edit: `INSTALL-WINDOWS-MULTI-01` takes the agent lane's rank 0 (the lane head, ahead
-   of every rank-1-and-up row) and is blocked on a hard start EVENT dependency — the
-   09-15 night harvested and its §2.5 action taken — released in the bookkeeping that
-   records both; the other two are blocked on their predecessor by a hard start
-   dependency and take rank 0 in the bookkeeping that closes it, so the kernel, not
-   prose, enforces both the start condition and the order.
-2. **Fable 5.1 is the final eyes on every merge.** Every PR that merges carries a
-   terminal review by Fable 5.1 — the magistrate at the pinned model, reading the final
-   head itself, not a delegate's summary — as its last review before merge. The
-   twelve-row gate already requires this (row 7, the apex Fable code-reading diff gate;
-   row 12, the magistrate's non-delegable terminal review of the final head sha). Both
-   rows stay exactly as they are; never downgraded or delegated; the final head sha is
-   cited in row 12 on every PR. No lane: this clause changes no text.
-3. **Clear the owner's hands step for the first pack night now.** Lane
-   `ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01` (lane `ed_external`) needs a desk
-   proof by Ed (`author_arm_evidence_t0` against a `TRANSACTION_PACK` pack root with
-   no browser, no agents, no caffeinate). The magistrate prepares that pack root and
-   window-custody root and emails Ed the exact command and when to run it; Ed runs it
-   at the next moment the machine is otherwise idle. This step must not be the reason
-   the first G2-a pack window waits.
-
-Housekeeping recorded with the rulings, in Ed's words: "PR #330's conflicts are resolved
-at d80e5e37 (kernel 170 rows, tests OK); its body still lacks the gate ledger. Take it
-through the gate and merge it under Fable's terminal review." (170 is that PR's kernel
-row count after its four closures, not the live count at this entry.) Obligation
-recorded, not yet performed at the time of this entry: "Comment the outcome of each
-ruling on this issue and close it when all three are recorded."
-
 ### D-124 dated addendum — 2026-09-13 (cold gate 47, GATE-SENSIBILITY-SWEEP-01 B1): the zero-point provenance band is scale-bounded, and its re-set is ruled but not yet installed
 
 Round 4's `isclose(rel_tol=1e-9, abs_tol=1e-12)` band compares the stored ABBA delta
@@ -11906,3 +11840,71 @@ verdicts, and audited heads; zero test deletions", and the goal sentence drops
 "and the PR-fast/full tier split". The fence is unchanged and remains literally
 true. Cold gate 17 (2026-09-13) ruled option A on PR #317 T2, so no path-based
 skipping narrows it. Levers 1 and 3 are unaffected.
+
+## D-181: Windows run whenever the machine is quiet; Fable 5.1 is the final eyes on every merge; the owner's hands step is prepared now (Ed, 2026-09-14)
+
+**Status:** ratified by Ed, 2026-09-14 16:43 PDT, as directive issue #337 (owner, at the
+machine), verbatim in
+`docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md`.
+Recorded by the headless magistrate (activation `24b9d3dd`) through this PR, the same
+way issue #316 became D-180 (Ed's words: "Record this ruling as a dated decision-log
+entry through a PR under the normal gate, the same way #316 became D-180; do not amend
+rule text yourself outside that PR"); nothing below is installed in code, runbooks or
+the night machinery by this entry — each clause names its implementation lane, and
+until that lane lands the prior rule stands (decided ≠ done). The ruling is standing;
+by its own text it applies after the night armed under directive #336
+(`d079-epoch-25g83-derivation-n1-20260915`, t0 2026-09-15 02:56 PDT) and to every
+window after it, and it does not touch that night. Forcing context (factual, no rule):
+the 2026-09-13 night fired and was refused by its own t0 census (an interactive session
+and agent desktop apps present); the 2026-09-14 morning install span closed without an
+arm because the arm-time census never cleared; the ordinary documented recovery was a
+new plan for the next calendar night, until directive #336's one-night owner
+authorization of an evening install. Ed rules that the spacing was never a scientific
+requirement.
+
+1. **Windows run as soon as the machine is quiet; no cadence rule.** Whenever the
+   census is clean, day or night, several windows per day if the gates pass, with no
+   artificial spacing (no "one night in three", no "only at 02:56", no minimum gap
+   between windows). Ed keeps the machine quiet whenever he is not using it and will
+   close every interactive session and quit the agent desktop apps on request; a
+   notice email is enough. The soundness fences stay exactly as they are: physics and
+   evidence refusals, pre-registration before data, the census at arm and at t0, the
+   twelve-row gate, email-then-arm with Ed's NO overriding. Nothing else about timing
+   is a rule. Implementation: the current machinery pins one plan at a fixed daily
+   launchd minute inside the 02:45–03:30 belt with a single 07:00 dead-man and a
+   calendar-day install span — a mechanism limit, not a scientific one. Lanes
+   `INSTALL-WINDOWS-MULTI-01` (install spans as a list, dead-man per span),
+   `ARM-RETRY-CLASS-01` and `ARM-CENSUS-IDLE-INTERACTIVE-01` are promoted to the top of
+   the queue in that order, immediately after tonight's harvest and the §2.5 outcome
+   action; they are designed so a plan can carry a t0 at any clock time and so a second
+   window can be armed as soon as the previous harvest is done. (This supersedes the D-180 sequencing note "after G2-a
+   instrument validation" on those three rows.) Queue mechanism, describing the kernel
+   edit: `INSTALL-WINDOWS-MULTI-01` takes the agent lane's rank 0 (the lane head, ahead
+   of every rank-1-and-up row) and is blocked on a hard start EVENT dependency — the
+   09-15 night harvested and its §2.5 action taken — released in the bookkeeping that
+   records both; the other two are blocked on their predecessor by a hard start
+   dependency and take rank 0 in the bookkeeping that closes it — so the kernel refuses
+   the first lane before the harvest event and refuses a successor before its
+   predecessor closes; the head position of each successor is carried by the rank edit
+   in that closing bookkeeping, not by the kernel on its own.
+2. **Fable 5.1 is the final eyes on every merge.** Every PR that merges carries a
+   terminal review by Fable 5.1 — the magistrate at the pinned model, reading the final
+   head itself, not a delegate's summary — as its last review before merge. The
+   twelve-row gate already requires this (row 7, the apex Fable code-reading diff gate;
+   row 12, the magistrate's non-delegable terminal review of the final head sha). Both
+   rows stay exactly as they are; never downgraded or delegated; the final head sha is
+   cited in row 12 on every PR. No lane: this clause changes no text.
+3. **Clear the owner's hands step for the first pack night now.** Lane
+   `ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01` (lane `ed_external`) needs a desk
+   proof by Ed (`author_arm_evidence_t0` against a `TRANSACTION_PACK` pack root with
+   no browser, no agents, no caffeinate). The magistrate prepares that pack root and
+   window-custody root and emails Ed the exact command and when to run it; Ed runs it
+   at the next moment the machine is otherwise idle. This step must not be the reason
+   the first G2-a pack window waits.
+
+Housekeeping recorded with the rulings, in Ed's words: "PR #330's conflicts are resolved
+at d80e5e37 (kernel 170 rows, tests OK); its body still lacks the gate ledger. Take it
+through the gate and merge it under Fable's terminal review." (170 is that PR's kernel
+row count after its four closures, not the live count at this entry.) Obligation
+recorded, not yet performed at the time of this entry: "Comment the outcome of each
+ruling on this issue and close it when all three are recorded."

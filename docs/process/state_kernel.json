@@ -108,7 +108,7 @@
       "priority": "p1_phase_gate",
       "rank": 173,
       "status": "blocked",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337): third in the promoted order; starts when ARM-RETRY-CLASS-01 closes and takes the agent lane's rank 0 in that bookkeeping. A session left open through t0 still refuses the night (plan-span census unchanged).",
+      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337): third in the promoted order; starts when ARM-RETRY-CLASS-01 closes and takes the agent lane's rank 0 in that bookkeeping. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. A session left open through t0 still refuses the night (plan-span census unchanged).",
       "stop_card": null
     },
     "ARM-PACKET-01": {
