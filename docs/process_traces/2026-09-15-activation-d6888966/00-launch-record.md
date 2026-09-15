@@ -85,3 +85,34 @@ returned `blocked/partial` at 06:21:17 (manifest `finished_at 13:21:17Z`), not
 workspace-write relaunches started 06:22:41 (A) and 06:22:48 (D), not
 06:38–06:39. The substance of the addendum (read-only default; `-s
 workspace-write` required for editing seats) stands.
+
+## Correction 06:50 PDT (dated addendum; the section above is left as written)
+
+The "Why the last two activations died" section names the wrong watchdog
+mechanism. Bench-verified this slice against the attempt streams,
+`events.jsonl` and `scripts/magistrate_watchdog.py` (main `17c80571`):
+
+- The last 4096 bytes of both streams (the `_output_tail` the classifier
+  scans) contain NO usage pattern; `\brate_limit\b` did not fire. Retract that
+  claim and the lane text derived from it.
+- Both exits were exit code 0. `events.jsonl` sequences 132 and 136 record
+  `ACTIVE → IDLE, "clean activation exit"` for `1acf2aee` (06:06:49) and
+  `decae362` (06:24:07). The clean path resets the backoff indices and sets a
+  fixed 300 s cooldown (`next_eligible = now + 300`) — that is the watchdog's
+  design, not a usage backoff.
+- The label `BACKOFF_USAGE` on sequences 133 and 137 ("backoff has not
+  expired") is chosen by the launch-predicate path from
+  `state["last_exit_class"]`, which the clean path never resets; it still
+  holds `usage_exhausted` from the real usage exit at sequence 37 (2026-09-09,
+  `session exit=1 class=usage_exhausted`). So `state.json` shows a stale
+  `last_exit_class` after every clean exit, and two magistrates (decae362 and
+  this one, pre-correction) read it as "exited on usage".
+- What did happen is unchanged: both sessions ended their turn
+  (`stop_reason end_turn`, exit 0) with seats running in the background, and
+  the process exit killed the seats.
+
+Lane candidate, corrected: WATCHDOG-STALE-EXIT-CLASS-01 — the clean-exit path
+should set `last_exit_class = "clean"` (and the launch predicate should not
+label a clean cooldown `BACKOFF_USAGE`); cosmetic for the loop, material for
+the records that read `state.json`. The lane WATCHDOG-EXIT-CLASS-TELEMETRY-01
+named above is withdrawn before registration.
