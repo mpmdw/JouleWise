@@ -42,6 +42,13 @@ else:
     print("unsupported fake launchctl action", file=sys.stderr)
     sys.exit(64)
 
+if action == "bootout" and (root / "plist-expectations.json").exists():
+    expected = json.loads((root / "plist-expectations.json").read_text())
+    observed = {path: Path(path).is_file() for path in expected}
+    with (root / "bootout-plists.jsonl").open("a") as stream:
+        stream.write(json.dumps({"label": label, "files": observed}) + "\n")
+    assert observed == expected, "bootout_before_remove: both plists must survive every bootout"
+
 marker = root / (label + ".loaded")
 directives = json.loads((root / "directives.json").read_text(encoding="utf-8"))
 directive = directives.get(label, {}).get(action, {})
@@ -110,6 +117,15 @@ class FakeLaunchctl:
 
     def directive(self, label, action, **values):
         self.sequence(label, action, values)
+
+    def expect_plists(self, directory, *, uninstall=False):
+        paths = [Path(directory) / (label + ".plist") for label in LABELS]
+        # D7 permits repeated uninstall after both files are already absent.
+        # Freeze the starting presence there; a fresh install must publish both.
+        expected = {str(path): path.is_file() if uninstall else True for path in paths}
+        (self.root / "plist-expectations.json").write_text(json.dumps(expected))
+        (self.root / "bootout-plists.jsonl").write_text("")
+        return expected
 
     def sequence(self, label, action, values):
         directives = json.loads(self.directives_path.read_text(encoding="utf-8"))
@@ -375,10 +391,13 @@ class TransactionFixture:
         self.prior_mtime = 1_600_000_000_123_456_789
         if priors:
             import plistlib
+            self.prior_plan_path = producer._write_plan(
+                plan_id="prior-install-night-agent-test", t0_epoch_s=self.now + 86400,
+                authored_epoch_s=self.now - 60)
             for label in LABELS:
                 path = self.directory / (label + ".plist")
                 payload = plistlib.dumps({"Label": label, "ProgramArguments":
-                    [sys.executable, "prior-run_night.py", "--plan", str(self.plan_path)]})
+                    [sys.executable, "prior-run_night.py", "--plan", str(self.prior_plan_path)]})
                 path.write_bytes(payload)
                 path.chmod(0o640)
                 os.utime(path, ns=(self.prior_mtime, self.prior_mtime))
@@ -388,6 +407,14 @@ class TransactionFixture:
         self.template = (REPO_ROOT / "configs/launchd/com.joulewise.night.plist.template").read_text()
 
     def run(self, **options):
+        self.options = options
+        self.call_start = len(self.fake.calls())
+        self.bootout_files = self.fake.expect_plists(
+            self.directory, uninstall=options.get("uninstall", False))
+        self.before = {label: (path.read_bytes(), path.stat().st_mtime_ns)
+                       for label in LABELS
+                       if (path := self.directory / (label + ".plist")).exists()}
+        (self.root / "trace.json").write_text(json.dumps({"states": [], "commits": []}))
         options_path = self.root / "options.json"
         options_path.write_text(json.dumps(options))
         command = [sys.executable, "-B", "-c",
@@ -453,6 +480,22 @@ def run_transaction_cell(root):
     fake.log = fake.root / "calls.log"
     fake.directives_path = fake.root / "directives.json"
     machine = engine.Transaction(adapter, lambda: prepared, clock=clock)
+    trace = {"states": [], "commits": []}
+    def save_trace():
+        (root / "trace.json").write_text(json.dumps(trace))
+    original_commit = machine._commit
+    def commit():
+        record = {"now": clock(), "selected": machine.selected_span_close,
+                  "cutoff": prepared.schedule["install_close_epoch_s"], "passed": False}
+        trace["commits"].append(record)
+        try:
+            if options.get("commit_refusal"):
+                raise engine.Refused(2, "commit predicate refusal witness")
+            return original_commit()
+        finally:
+            record["passed"] = machine.state is engine.State.COMMITTED
+            save_trace()
+    machine._commit = commit
     state, fault = options.get("state"), options.get("fault")
     if state == "COMMITTED" and fault == "FAILED":
         # Arm the output fault BEFORE run(), independently of when COMMITTED
@@ -467,6 +510,8 @@ def run_transaction_cell(root):
     original_enter = machine._enter
     def enter(value):
         original_enter(value)
+        trace["states"].append(value.name)
+        save_trace()
         if value is engine.State.VERIFIED and fault == "BrokenPipeError_at_shutdown":
             import time
             (root / "stdout-ready").touch()
@@ -564,7 +609,12 @@ class TransactionTests(unittest.TestCase):
         return TransactionFixture(temporary.name, priors)
 
     def assert_tuple(self, fixture, result, rc, loaded, files, *, fence_directory=None):
-        """ONE oracle for every executed cell: rc, stub state, bytes+mtime, fence."""
+        """Every cell checks state, files, fence, teardown, diagnostics and recovery.
+
+        Bootout checks cover all post-bootstrap rollback/retention cells and
+        each uninstall; earlier refusals, render and commit require no bootout.
+        D7's repeated uninstall explicitly preserves already-absent files.
+        """
         from datetime import datetime
         from scripts import magistrate_watchdog as wd
         actual_loaded = tuple(label for label in LABELS if fixture.fake.loaded(label))
@@ -595,9 +645,106 @@ class TransactionTests(unittest.TestCase):
                 self.assertIsNotNone(observed)
             else:
                 self.fail("unknown file expectation")
-        expected_present = fence_directory is not None or files in ("published", "retained") or bool(fixture.prior)
-        self.assertEqual(expected_present, fence is not None)
+        expected_plan = (fixture.plan.plan_id if fence_directory is not None or files == "published"
+                         else "prior-install-night-agent-test" if fixture.prior else None)
+        self.assertEqual("; ".join(["installed_plan:" + expected_plan] * len(LABELS))
+                         if expected_plan else None, fence)
+
+        options = fixture.options
+        trace = json.loads((fixture.root / "trace.json").read_text())
+        self.assertLessEqual(len(trace["commits"]), 1, "the commit predicate is evaluated at most once")
+        calls = fixture.fake.calls()[fixture.call_start:]
+        states = trace["states"]
+        uninstall_mode = options.get("uninstall", False)
+        needs_bootout = uninstall_mode or (rc != 0 and any(
+            state in ("NIGHT_LOADED", "DEADMAN_LOADED", "VERIFIED") for state in states)
+            and not options.get("render"))
+        sequence = [f"{action} gui/{os.getuid()}/{label}"
+                    for action in ("bootout", "print") for label in LABELS]
+        bootouts = [call for call in calls if call.startswith("bootout ")]
+        observations = [json.loads(line) for line in
+                        (fixture.fake.root / "bootout-plists.jsonl").read_text().splitlines()]
+        if needs_bootout:
+            self.assertEqual(sequence, calls[-4:], "both bootouts must precede both absence queries")
+            self.assertEqual(1, sum(calls[i:i + 4] == sequence for i in range(len(calls) - 3)),
+                             "exactly one complete teardown per invocation")
+            self.assertEqual(sequence[:2], bootouts)
+            self.assertEqual([{"label": label, "files": fixture.bootout_files} for label in LABELS],
+                             observations, "the fake must inspect both files at EVERY bootout")
+        else:
+            self.assertEqual([], bootouts)
+            self.assertEqual([], observations)
+
+        retained_lines = [line for line in result.stderr.splitlines() if "retained plists:" in line]
+        if rc == 4:
+            paths = " ".join(str(fixture.directory / (label + ".plist")) for label in LABELS)
+            if uninstall_mode:
+                expected = "uninstall: still loaded after bootout: {}; retained plists: {}".format(
+                    " ".join(loaded), paths)
+                self.assertEqual(fixture.before, actual_files, "uninstall retention must preserve both files")
+            else:
+                expected = "teardown: {}; retained plists: {}".format(
+                    "; ".join(f"{label} loaded={int(label in loaded)}" for label in LABELS), paths)
+            self.assertEqual([expected], retained_lines, "exact retained diagnostic, emitted once")
+            self.assertTrue(all(actual_files.values()), "retention must keep BOTH published plists")
+        else:
+            self.assertEqual([], retained_lines)
+
+        # Ordinary rollback and successful cleanup leave only the two plists
+        # (or an empty directory), never a .prior, .tmp, or backup directory.
+        recovery_retained = (options.get("fault") == "restore_IOError" or rc == 4
+                             or options.get("cleanup_baseexception"))
+        extras = {path.name for path in fixture.directory.iterdir()
+                  if path.name not in {label + ".plist" for label in LABELS}}
+        if recovery_retained and fixture.prior and not uninstall_mode:
+            self.assertEqual({label + ".plist.prior" for label in LABELS}, extras)
+            for label in LABELS:
+                prior = fixture.directory / (label + ".plist.prior")
+                self.assertEqual(fixture.prior[label], (prior.read_bytes(), prior.stat().st_mtime_ns))
+        else:
+            self.assertEqual(set(), extras, "no leaked backup, sidecar or temporary publication")
+
+        if rc == 0:
+            if uninstall_mode:
+                # D7's sole success exception: no commit gate, both absence
+                # queries after bootout, both labels absent and files removed.
+                self.assertEqual([], trace["commits"])
+                self.assertEqual((), actual_loaded)
+                self.assertEqual(dict.fromkeys(LABELS), actual_files)
+                self.assertEqual(sequence, calls)
+            else:
+                self.assertEqual(1, len(trace["commits"]), "exit 0 requires the single commit predicate")
+                gate = trace["commits"][0]
+                self.assertTrue(gate["passed"])
+                self.assertLess(gate["now"], min(gate["selected"], gate["cutoff"]))
+                self.assertEqual(1, states.count("COMMITTED"))
         return actual_files, fence
+
+    def test_zero_exit_routes_require_commit_or_verified_uninstall(self):
+        import ast
+        from joulewise import night_agent_install as engine
+        tree = ast.parse(Path(engine.__file__).read_text())
+        zero_returns = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+                        for child in ast.walk(node) if isinstance(child, ast.Return)
+                        and isinstance(child.value, ast.Constant) and child.value.value == 0]
+        self.assertEqual(["uninstall"], zero_returns, "D7 is the only direct return-0 exception")
+        teardown = next(node for node in ast.walk(tree)
+                        if isinstance(node, ast.FunctionDef) and node.name == "_teardown")
+        zero_assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                            and any(isinstance(target, ast.Attribute) and target.attr == "result"
+                                    for item in node.targets for target in ast.walk(item))
+                            and any(isinstance(value, ast.Constant) and value.value == 0
+                                    for value in ast.walk(node.value))]
+        self.assertEqual(1, len(zero_assignments))
+        branch = teardown.body[0]
+        self.assertEqual("self.state is State.COMMITTED", ast.unparse(branch.test))
+        self.assertIn(zero_assignments[0], branch.body)
+        for render in (False, True):
+            fixture = self.fixture(True)
+            self.assert_tuple(fixture, fixture.run(render=render, commit_refusal=True), 2, (), "prior")
+        fixture = self.fixture()
+        self.assert_tuple(fixture, fixture.run(), 0, LABELS, "published")
+        self.assert_tuple(fixture, fixture.run(uninstall=True, commit_refusal=True), 0, (), "prior")
 
     def test_state_fault_product(self):
         import signal
@@ -643,27 +790,28 @@ class TransactionTests(unittest.TestCase):
 
     def test_retention_product(self):
         for uninstall_mode in (False, True):
-            for label in LABELS:
+            for retained_labels in (LABELS[:1], LABELS[1:], LABELS):
                 for fault in (None, 9, 64, 112, "113-with-wrong-label", "hang"):
                     for priors in (False, True):
-                        with self.subTest(uninstall=uninstall_mode, label=label, fault=fault, priors=priors):
+                        with self.subTest(uninstall=uninstall_mode, labels=retained_labels, fault=fault, priors=priors):
                             fixture = self.fixture(priors)
                             if uninstall_mode:
                                 # Begin from a complete successful publication.
                                 self.assert_tuple(fixture, fixture.run(), 0, LABELS, "published")
-                            fixture.fake.directive(label, "bootout", rc=0, loaded=True)
-                            if fault is not None:
-                                fixture.fake.sequence(label, "print", ([{"fault": fault, "hang_s": 3}] if uninstall_mode
-                                    else [{}, {"fault": fault, "hang_s": 3}]))
+                            for label in retained_labels:
+                                fixture.fake.directive(label, "bootout", rc=0, loaded=True)
+                                if fault is not None:
+                                    fixture.fake.sequence(label, "print", ([{"fault": fault, "hang_s": 3}] if uninstall_mode
+                                        else [{}, {"fault": fault, "hang_s": 3}]))
                             if not uninstall_mode:
                                 fixture.fake.directive(LABELS[1], "bootstrap", rc=1, loaded=True)
                             before = {item: (fixture.directory / (item + ".plist")).read_bytes()
                                       for item in LABELS} if uninstall_mode else None
                             result = fixture.run(uninstall=uninstall_mode)
-                            self.assert_tuple(fixture, result, 4, (label,), "published")
-                            self.assertIn("retained plists:", result.stderr)
+                            self.assert_tuple(fixture, result, 4, retained_labels, "published")
                             if fault is not None:
-                                self.assertIn("liveness_unknown: " + label, result.stderr)
+                                for label in retained_labels:
+                                    self.assertIn("liveness_unknown: " + label, result.stderr)
                             if before:
                                 for item in LABELS:
                                     self.assertEqual(before[item], (fixture.directory / (item + ".plist")).read_bytes())

@@ -142,6 +142,7 @@ class InstallNightAgentTests(unittest.TestCase):
             argv.append("--uninstall")
         elif python is not None:
             argv.extend(["--python", python])
+        self.fake.expect_plists(self.root / "home/Library/LaunchAgents", uninstall=uninstall)
         return subprocess.run(
             argv,
             env=self.environment,
@@ -190,6 +191,26 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertFalse((self.root / "custody/night").exists())
         if self.launch_log.exists():
             self.assertTrue(all(line.startswith("print ") for line in self.launch_log.read_text().splitlines()))
+
+    def test_help_and_unknown_flags_use_shell_usage_and_exit_two(self) -> None:
+        usage = (" --plan PLAN.json [--python ABS_PATH] [--uninstall] "
+                 "[--render-only DIR] [--launchctl-bin PATH]\n")
+        # Exercise both real entrypoints; the shell already had this contract.
+        for entrypoint in (["/bin/zsh", str(SCRIPT_PATH)],
+                           [sys.executable, "-B", "-m", "joulewise.night_agent_install"]):
+            for flag in ("--help", "-h", "--unknown-flag", "--pla"):
+                for supplied_plan in (False, True):
+                    with self.subTest(entrypoint=entrypoint, flag=flag, plan=supplied_plan):
+                        args = ["--plan", str(self.root / "unused.json")] if supplied_plan else []
+                        result = subprocess.run(entrypoint + args + [flag], cwd=REPO_ROOT,
+                            env=self.environment, capture_output=True, text=True, timeout=15)
+                        self.assertEqual(2, result.returncode, result.stderr)
+                        self.assertEqual("", result.stdout)
+                        self.assertEqual(1, len(result.stderr.splitlines()))
+                        self.assertTrue(result.stderr.startswith("usage: "), result.stderr)
+                        self.assertTrue(result.stderr.endswith(usage), result.stderr)
+                        self.assertEqual([], self.fake.calls())
+                        self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
 
     def test_installer_derives_calendar_fields_from_plan_without_hour_flags(self) -> None:
         # Production argv, real schedule subprocess, real plist rendering;

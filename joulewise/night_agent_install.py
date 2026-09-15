@@ -634,7 +634,14 @@ def validate_install(args, repo):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser()
+    class UsageParser(argparse.ArgumentParser):
+        def error(self, message):
+            self.print_usage(sys.stderr)
+            self.exit(2)
+
+    parser = UsageParser(add_help=False, allow_abbrev=False,
+        usage="%(prog)s --plan PLAN.json [--python ABS_PATH] [--uninstall] "
+              "[--render-only DIR] [--launchctl-bin PATH]")
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--python")
     parser.add_argument("--uninstall", action="store_true")
