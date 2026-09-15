@@ -137,3 +137,23 @@ The draft above stands, with these changes to its Summary and Verification:
 - The blocker paragraph is replaced by: **two blockers open.** `install_night_agent.sh:372-374` — the success path runs `rm -rf "$plist_backup" || exit 1` AFTER its own commit gate and after printing success, so a failed temp-directory cleanup exits non-zero with the EXIT trap armed and tears down a correctly armed night; and `:267-272` — `--uninstall` swallows bootout failures with `|| true`, deletes both plists and exits 0, leaving a loaded job with no plist and the fence blind (pre-existing, outside this lane's scope, live in the harvest flow).
 - Add to Summary: the lane stopped on the SECOND same-signature verdict; no round 3 was launched; the cold-gate ruling 25 mechanisms (commit gate, verified-bootout teardown) are in and are proven load-bearing by isolated reversion.
 - Verification becomes the six-module run at `9a7bacdf` plus the round-2 evidence in `lt-15`, with row 9 explicitly marked stale.
+
+
+---
+
+# REVISION 2, 11:42 PDT 2026-09-15
+
+**Row 9 is still not satisfied at the final head.** The 6094-test replay was run
+at `df86cee6`, now five commits behind. At `073a9763` I ran the seven modules
+individually — `test_install_night_agent`, `test_run_night`,
+`test_magistrate_watchdog`, `test_night_gate`, `test_docs_freshness`,
+`test_gen_state` (plus `test_gen_derivation_night` via the auditor) — **all OK**.
+A full sharded replay was deliberately NOT spent: delta 3 fired the stop
+condition, so this head is not the merge candidate.
+
+## PR body — further amendments
+
+- Blockers now read: **class_1 and class_2 both reproduce at `073a9763`** (delta 3). The load-bearing one is that a failed `launchctl print` is treated as proof of unload at all three re-read sites (`:273`, `:335`, `:338`), so `--uninstall` exits 0 having deleted both plists with a label still loaded. The class_1 case is the post-gate backup removal, which cold gate 28 Q1 had already ruled definitional — flagged for the magistrate as a possible over-fire of the predicate, not adjudicated by the lieutenant.
+- Add: one binding must-die mutation, removal of `trap - EXIT`, **SURVIVED** (F3).
+- Add the two scope expansions as a scope note.
+- Add: the lane stopped a third time, now against two executed predicates rather than a judgment call, and the next spend is the magistrate's redesign consult.

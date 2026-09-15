@@ -83,3 +83,40 @@ second same-signature verdict, no round 3.
 | `cb35e9aa` | fix round 2: commit gate (Q1c) + verified-bootout teardown (Q3 amended) |
 | `5649d494` | render-only exemption (seat F3) |
 | `9a7bacdf` | merge of `origin/main dfb627c1` (GAMMA fix + bookkeeping) |
+
+
+---
+
+# REVISION 2, 11:42 PDT 2026-09-15 — after round 3 and delta 3
+
+Final int head **`073a9763`**, pushed, **green on all seven modules**
+(lieutenant-run). **NOT merge-ready:** delta 3 answered class_1 YES and class_2
+YES at this head (`lt-21`), the stop condition fired, and one binding must-die
+mutation (`trap - EXIT`) survives.
+
+| # | Gate item | Evidence | State |
+| --- | --- | --- | --- |
+| 1 | Independent audit by a fresh non-author reviewer | RUN docs/process_traces/2026-09-15-activation-d6888966/lt-21-delta-3-stop.md | SATISFIED |
+| 2 | Paired distinct lenses | RUN docs/process_traces/2026-09-15-activation-d6888966/lt-02-refuter-round-1.md | SATISFIED; rounds 2 and 3 additionally carry cold gates 25 and 28 with Opus pairing refuters |
+| 3 | Lead-written FIX contract with dictated closure shapes | RUN docs/process_traces/2026-09-15-activation-d6888966/lt-18-round-3-dictation.md | SATISFIED |
+| 4 | Delta re-audit of every fix round | RUN docs/process_traces/2026-09-15-activation-d6888966/lt-21-delta-3-stop.md | SATISFIED — three rounds, three deltas |
+| 5 | Same-signature statement; a surviving class escalates | RUN docs/process_traces/2026-09-15-activation-d6888966/lt-21-delta-3-stop.md | SATISFIED AND FIRED A THIRD TIME — now against two executed predicates rather than a judgment call |
+| 6 | Opus counter-review on the near-final head | NOT-RUN | OPEN — gated on a clean delta |
+| 7 | Apex Fable code-reading diff gate | NOT-RUN | OPEN — magistrate-owned |
+| 8 | Overbuild / merge-ability prune | RUN docs/process_traces/2026-09-15-activation-d6888966/lt-21-delta-3-stop.md | PARTIAL |
+| 9 | Lead unpiped full-suite replay on the integration tree | NOT-RUN at this head | OPEN — the df86cee6 replay is stale by five commits; seven modules run individually at `073a9763`, all OK |
+| 10 | Final-head fresh-eyes review after every post-review commit | NOT-RUN | OPEN — gated on a clean delta |
+| 11 | CI green on final head + post-merge cross-unit review | NOT-RUN | OPEN — no PR opened |
+| 12 | Magistrate terminal review of the exact merge candidate | NOT-RUN | OPEN — not a merge candidate |
+
+**Scope note for the PR body (not a contract change):** this lane's WRITE_SCOPE
+was expanded twice by the magistrate — the uninstall path (cold gate 28 Q2, same
+three files) and `tests/test_run_night.py` limited to its launchctl stub text and
+the assertions that repair makes true. Both are recorded in `lt-20`.
+
+## Commit series since the last revision
+
+| Sha | What |
+|---|---|
+| `d74b5ff1` | round 3: the three dictated edits from cold gate 28 (committed knowingly red on the run_night stub) |
+| `073a9763` | granted scope expansion: the run_night launchctl stub made faithful; tree green |
