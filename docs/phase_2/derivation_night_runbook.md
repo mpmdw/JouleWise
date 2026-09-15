@@ -1382,7 +1382,8 @@ rendering plists. Timing/location diagnostics print `<reason>: <summary>; <detai
 the summary names `now_epoch_s`, `t0_epoch_s`, `install_close_epoch_s` and
 `deadman_epoch_s`, each with a local ISO-8601 time. `install_outside_span`
 also prints `install_spans_today`; `plan_outside_custody_root` prints `plan`
-and `expected`. The loaded-job diagnostic ends with `label=com.joulewise.night`.
+and `expected`. The loaded-job diagnostic ends with `label=com.joulewise.night`
+or `label=com.joulewise.night.deadman`, naming the loaded label.
 Earlier interpreter, plan, pin, courier, preflight and existing-record checks
 can refuse first.
 
@@ -1391,7 +1392,7 @@ can refuse first.
 | `install_span_closed` | 2 | `now >= install_close_epoch(plan)` or a later check reaches the initially selected span's close; do not install this plan late. Re-plan under the handback procedure. |
 | `install_outside_span` | 2 | `now` is outside every listed `INSTALL_SPANS` entry; use an allowed span before the plan's close. |
 | `plan_t0_in_the_past` | 2 | `t0 < now`; author a future plan. |
-| `night_agent_already_loaded` | 3 | `launchctl print gui/<uid>/com.joulewise.night` succeeds; finish the prior harvest and documented uninstall before another arm. `--render-only` skips this loaded-job check. |
+| `night_agent_already_loaded` | 3 | `launchctl print` succeeds for `gui/<uid>/com.joulewise.night` or `gui/<uid>/com.joulewise.night.deadman`; finish the prior harvest and documented uninstall before another arm. `--render-only` skips this loaded-job check. |
 | `plan_outside_custody_root` | 2 | Resolved `--plan` is not the plan's `<custody_root>/night_plan.json`; publish through §1.4 before installing. |
 | `night_plan_malformed` | 2 from `schedule`; 3 from the installer's earlier plan validation | Missing/malformed `t0_epoch_s`, `window_max_s` or `authored_epoch_s` (or another invalid plan field); the detail identifies the validation failure. |
 | `plan_schedule_unrepresentable` | 2 | `schedule` cannot load the plan or represent derived arithmetic/calendar values, including `window_max_s=10**15` or `10**400`; detail preserves the underlying error. This is representability, with no maximum-window policy ceiling. |
@@ -1614,6 +1615,10 @@ proves the bytes that were briefly discoverable are the bytes that were
 reviewed, so the failed attempt is documentable rather than merely undone. If
 recovery itself fails, record the surviving labels and the discoverable plan
 and escalate; never claim nothing was armed.
+
+`--uninstall` verifies both labels after the two bootouts. If either remains
+loaded, it exits 4, retains both plists, and prints
+`uninstall: still loaded after bootout: <loaded labels>; retained plists: <night plist> <deadman plist>`.
 
 ### 1.5 Record and exit
 

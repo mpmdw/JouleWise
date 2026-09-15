@@ -268,6 +268,14 @@ if (( uninstall )); then
   mkdir -p "$launch_dir"
   "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
   "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
+  uninstall_loaded=()
+  for label in "$night_label" "$deadman_label"; do
+    "$launchctl_bin" print "gui/$uid/$label" >/dev/null 2>&1 && uninstall_loaded+=("$label")
+  done
+  if (( ${#uninstall_loaded[@]} )); then
+    print "uninstall: still loaded after bootout: ${uninstall_loaded[*]}; retained plists: $night_plist $deadman_plist" >&2
+    exit 4
+  fi
   rm -f "$night_plist" "$deadman_plist"
   exit 0
 fi
@@ -291,8 +299,10 @@ deadman_hour="$timing_fields[5]"
 deadman_minute="$timing_fields[6]"
 schedule_summary="$timing_fields[7]"
 selected_span_close="$timing_fields[8]"
-if [[ -z "$render_only" ]] && "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1; then
-  print "night_agent_already_loaded: $schedule_summary; label=$night_label" >&2
+if [[ -z "$render_only" ]] && { "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1 || "$launchctl_bin" print "gui/$uid/$deadman_label" >/dev/null 2>&1; }; then
+  label="$night_label"
+  "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1 || label="$deadman_label"
+  print "night_agent_already_loaded: $schedule_summary; label=$label" >&2
   exit 3
 fi
 
@@ -309,7 +319,11 @@ for plist in "$night_plist" "$deadman_plist"; do
 done
 teardown() {
   local result=$?
-  (( result != 0 )) || return 0
+  trap '' INT TERM HUP
+  if (( result == 0 )); then
+    rm -rf "$plist_backup" 2>/dev/null || print "warning: backup directory not removed: $plist_backup" >&2
+    return 0
+  fi
   # A completed teardown has already restored the prior files.
   [[ -d "$plist_backup" ]] || return "$result"
   # exit 4 must override the original status without re-entering this trap.
@@ -371,4 +385,3 @@ if ! "$launchctl_bin" print "gui/$uid/$night_label" || \
 fi
 check_schedule close "$selected_span_close" || exit $?
 print "validated pins: repo_head=$plan_head measurement_root=$measurement_root measurement_head=$plan_measurement_head"
-rm -rf "$plist_backup" || exit 1

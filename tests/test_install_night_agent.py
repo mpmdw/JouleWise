@@ -213,7 +213,7 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn(str(plan_path), night["ProgramArguments"])
         calls = self.launch_log.read_text().splitlines()
         self.assertEqual(2, sum(line.startswith("bootstrap ") for line in calls))
-        self.assertEqual(3, sum(line.startswith("print ") for line in calls))
+        self.assertEqual(4, sum(line.startswith("print ") for line in calls))
 
     def _install_local_t0(self, local: datetime, *, render_only: bool = False):
         self.environment["TZ"] = "America/Los_Angeles"
@@ -784,9 +784,10 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual("--python ignored on uninstall\n", ignored_python.stderr)
         self.assertNotIn("preflight", ignored_python.stdout)
         calls = self.launch_log.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(4, len(calls))
-        self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
-        self.assertTrue(any(line.endswith("com.joulewise.night.deadman") for line in calls))
+        self.assertEqual(8, len(calls))
+        self.assertEqual([f"{action} gui/{os.getuid()}/{label}"
+                          for action in ("bootout", "print")
+                          for label in ("com.joulewise.night", "com.joulewise.night.deadman")] * 2, calls)
 
 
 class InstallTeardownTests(unittest.TestCase):
@@ -1038,6 +1039,119 @@ class InstallTeardownTests(unittest.TestCase):
                         self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
                     self.assertEqual(1, sum(line.startswith("bootout ")
                         for line in self.fixture.launch_log.read_text().splitlines()))
+
+    def test_backup_removal_failure_after_commit_gate_preserves_verified_arm(self):
+        """after the commit gate, no statement may fire `teardown`'s failure branch"""
+        self._prepare(priors=True)
+        snapshot = self.fixture.root / "calls-at-backup-removal"
+        rm = self.fixture.bin_dir / "rm"
+        rm.write_text(
+            f"#!{sys.executable}\n"
+            "import subprocess, sys\nfrom pathlib import Path\n"
+            f"snapshot = Path({str(snapshot)!r})\n"
+            "if sys.argv[1] == '-rf' and not snapshot.exists():\n"
+            f"    snapshot.write_bytes(Path({str(self.fixture.launch_log)!r}).read_bytes())\n"
+            "    sys.exit(1)\n"
+            "sys.exit(subprocess.call(['/bin/rm', *sys.argv[1:]]))\n"
+        )
+        rm.chmod(0o755)
+        completed = self._run()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("validated pins:", completed.stdout)
+        backup = Path(self.backup_log.read_text().strip())
+        self.assertEqual([f"warning: backup directory not removed: {backup}"],
+                         completed.stderr.splitlines())
+        self.assertTrue(backup.is_dir())
+        for label in self.LABELS:
+            self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
+            plist = self.directory / f"{label}.plist"
+            self.assertTrue(plist.is_file())
+            self.assertIn(str(self.plan), plistlib.loads(plist.read_bytes())["ProgramArguments"])
+        self.assertEqual([f"print gui/{os.getuid()}/{label}" for label in self.LABELS],
+                         snapshot.read_text().splitlines()[-2:])
+        self.assertEqual(snapshot.read_bytes(), self.fixture.launch_log.read_bytes(),
+                         "no launchctl call after the two verification prints")
+
+    def test_clock_advancing_during_backup_removal_preserves_verified_arm(self):
+        self._prepare(priors=True, advance=0,
+                      spans=(("00:00", "12:01"), ("12:01", "24:00")))
+        after_close = float(self.fixture.clock_file.read_text()) + 61
+        rm = self.fixture.bin_dir / "rm"
+        rm.write_text(
+            f"#!{sys.executable}\n"
+            "import subprocess, sys\nfrom pathlib import Path\n"
+            "if sys.argv[1] == '-rf':\n"
+            f"    Path({str(self.fixture.clock_file)!r}).write_text({str(after_close)!r})\n"
+            "sys.exit(subprocess.call(['/bin/rm', *sys.argv[1:]]))\n"
+        )
+        rm.chmod(0o755)
+        completed = self._run()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual(after_close, float(self.fixture.clock_file.read_text()))
+        self.assertFalse(Path(self.backup_log.read_text().strip()).exists())
+        for label in self.LABELS:
+            self.assertTrue(Path(f"{self.fixture.launch_log}.{label}").exists())
+            plist = self.directory / f"{label}.plist"
+            self.assertTrue(plist.is_file())
+            self.assertIn(str(self.plan), plistlib.loads(plist.read_bytes())["ProgramArguments"])
+
+    def test_uninstall_retains_plists_when_bootout_leaves_loaded_labels(self):
+        for retained_labels in (self.LABELS, self.LABELS[:1], self.LABELS[1:]):
+            with self.subTest(retained_labels=retained_labels):
+                self._prepare(fault="retained", priors=True, retained_labels=retained_labels)
+                for label in self.LABELS:
+                    Path(f"{self.fixture.launch_log}.{label}").touch()
+                completed = self.fixture._run(self.plan, uninstall=True, render_only=False)
+                self.assertEqual(4, completed.returncode, completed.stderr)
+                self.assertEqual(
+                    f"uninstall: still loaded after bootout: {' '.join(retained_labels)}; "
+                    f"retained plists: {self.directory / (self.LABELS[0] + '.plist')} "
+                    f"{self.directory / (self.LABELS[1] + '.plist')}\n", completed.stderr)
+                for label in self.LABELS:
+                    self.assertEqual(label in retained_labels,
+                                     Path(f"{self.fixture.launch_log}.{label}").exists())
+                    self.assertEqual(self.prior_bytes[label],
+                                     (self.directory / f"{label}.plist").read_bytes())
+                calls = self.fixture.launch_log.read_text().splitlines()
+                self.assertEqual([f"{action} gui/{os.getuid()}/{label}"
+                                  for action in ("bootout", "print") for label in self.LABELS],
+                                 calls[-4:])
+                self.assertEqual("; ".join(["installed_plan:prior-install-night-agent-test"] * 2),
+                    wd.installed_agent_fence(self.fence_time, wd.Storage(self.fixture.root),
+                                             launch_agents_dir=self.directory))
+
+    def test_deadman_only_preloaded_refuses_install_without_bootstraps(self):
+        self._prepare(priors=True)
+        Path(f"{self.fixture.launch_log}.{self.LABELS[1]}").touch()
+        completed = self._run()
+        self.assertEqual(3, completed.returncode, completed.stderr)
+        self.assertIn("night_agent_already_loaded:", completed.stderr)
+        self.assertIn(f"label={self.LABELS[1]}", completed.stderr)
+        self.assertFalse(any(line.startswith("bootstrap ")
+            for line in self.fixture.launch_log.read_text().splitlines()))
+        for label in self.LABELS:
+            self.assertEqual(self.prior_bytes[label],
+                             (self.directory / f"{label}.plist").read_bytes())
+        self.assertTrue(Path(f"{self.fixture.launch_log}.{self.LABELS[1]}").exists())
+
+    def test_term_during_first_restore_preserves_both_priors_and_original_status(self):
+        self._prepare(fault="deadman", priors=True)
+        sent = self.fixture.root / "restore-term-sent"
+        cp = self.fixture.bin_dir / "cp"
+        cp.write_text(
+            f"#!{sys.executable}\n"
+            "import os, signal, subprocess, sys\nfrom pathlib import Path\n"
+            f"sent = Path({str(sent)!r})\n"
+            "if sys.argv[1] == '-pf' and not sent.exists():\n"
+            "    sent.write_text(sys.argv[2])\n"
+            "    os.kill(os.getppid(), signal.SIGTERM)\n"
+            "sys.exit(subprocess.call(['/bin/cp', *sys.argv[1:]]))\n"
+        )
+        cp.chmod(0o755)
+        completed = self._run()
+        self.assertTrue(sent.is_file())
+        self.assertEqual(self.LABELS[0] + ".plist", Path(sent.read_text()).name)
+        self._assert_teardown(completed, 3)
 
 
 if __name__ == "__main__":
