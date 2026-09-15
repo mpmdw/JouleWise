@@ -2,13 +2,11 @@
 set -euo pipefail
 
 usage() {
-  print "usage: $0 --plan PLAN.json --hour H --minute M [--python ABS_PATH] [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
+  print "usage: $0 --plan PLAN.json [--python ABS_PATH] [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
   exit 2
 }
 
 plan=""
-hour=""
-minute=""
 python=""
 python_given=0
 uninstall=0
@@ -17,8 +15,6 @@ launchctl_bin="launchctl"
 while (( $# )); do
   case "$1" in
     --plan) plan="${2:-}"; shift 2 ;;
-    --hour) hour="${2:-}"; shift 2 ;;
-    --minute) minute="${2:-}"; shift 2 ;;
     --python) python="${2:-}"; python_given=1; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
     --render-only) render_only="${2:-}"; shift 2 ;;
@@ -29,9 +25,7 @@ done
 if (( uninstall && python_given )); then
   print -- "--python ignored on uninstall" >&2
 fi
-[[ -n "$plan" && -n "$hour" && -n "$minute" ]] || usage
-[[ "$hour" == <-> && "$minute" == <-> ]] || usage
-(( hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 )) || usage
+[[ -n "$plan" ]] || usage
 [[ -f "$plan" ]] || { print "plan not found: $plan" >&2; exit 2; }
 
 script_dir="${0:A:h}"
@@ -156,15 +150,7 @@ if (( ! uninstall )); then
   # Match the job's PATH and HOME, without inherited Python import overrides.
   /usr/bin/env -i PATH="$courier_path" HOME="$HOME" \
     "$python" -B "$repo/scripts/run_night.py" preflight --plan "$plan" || exit 2
-  deadman_fields="$(
-    cd "$repo"
-    "$python" -B -c 'from scripts.run_night import DEADMAN_HOUR, DEADMAN_MINUTE; print(DEADMAN_HOUR, DEADMAN_MINUTE)'
-  )" || exit 2
-  read -r deadman_hour deadman_minute <<< "$deadman_fields"
-  if (( hour == deadman_hour )); then
-    print "refusing --hour $hour: it is the dead-man hour (DEADMAN_HOUR=$deadman_hour); arm the night in another hour" >&2
-    exit 2
-  fi
+  schedule_json="$("$python" -B "$repo/scripts/run_night.py" schedule --plan "$plan")" || exit 2
 fi
 
 if [[ -n "$render_only" ]]; then
@@ -172,12 +158,49 @@ if [[ -n "$render_only" ]]; then
 else
   launch_dir="$HOME/Library/LaunchAgents"
 fi
-mkdir -p "$launch_dir"
-if [[ "${uninstall:-0}" != "1" ]]; then
-  # Only an install may create custody; uninstall must never touch the plan's custody root.
-  mkdir -p "$custody_root/night"
-fi
 uid="$(id -u)"
+
+check_schedule() {
+  "$python" -B - "$schedule_json" "$plan" "$custody_root" "$1" <<'SCHEDULE_CHECK'
+import json
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+schedule = json.loads(sys.argv[1])
+now = time.time()
+def stamp(name, epoch):
+    return f"{name}={epoch} ({datetime.fromtimestamp(epoch).astimezone().isoformat()})"
+summary = "; ".join(stamp(name, epoch) for name, epoch in (
+    ("now_epoch_s", now), ("t0_epoch_s", schedule["t0_epoch_s"]),
+    ("install_close_epoch_s", schedule["install_close_epoch_s"]),
+    ("deadman_epoch_s", schedule["deadman_epoch_s"])))
+def refuse(code, detail=""):
+    print(f"{code}: {summary}; {detail}", file=sys.stderr)
+    raise SystemExit(2)
+
+if sys.argv[4] == "initial":
+    expected = (Path(sys.argv[3]) / "night_plan.json").resolve()
+    if Path(sys.argv[2]).resolve() != expected:
+        refuse("plan_outside_custody_root", f"plan={sys.argv[2]}; expected={expected}")
+    # A past t0 necessarily also misses the close; report its specific defect.
+    if schedule["t0_epoch_s"] < now:
+        refuse("plan_t0_in_the_past")
+if now >= schedule["install_close_epoch_s"]:
+    refuse("install_span_closed")
+if sys.argv[4] == "initial":
+    spans = schedule["install_spans_today"]
+    if not any(opening <= now < closing for opening, closing in spans):
+        refuse("install_outside_span", "install_spans_today=" + repr([
+            (stamp("open", opening), stamp("close", closing)) for opening, closing in spans]))
+    night = schedule["night_calendar"]
+    deadman = schedule["deadman_calendar"]
+    for value in (night["Month"], night["Day"], night["Hour"], night["Minute"],
+                  deadman["Hour"], deadman["Minute"], summary):
+        print(value)
+SCHEDULE_CHECK
+}
 
 render() {
   local label="$1"
@@ -186,27 +209,32 @@ render() {
   local entry_hour="$4"
   local entry_minute="$5"
   local log_stem="$6"
-  "$python" -B - "$template" "$out" "$label" "$mode" "$repo" "$plan" "$custody_root" "$entry_hour" "$entry_minute" "$courier_bin" "$courier_path" "$log_stem" "$python" <<'PY'
+  "$python" -B - "$template" "$out" "$label" "$mode" "$repo" "$plan" "$custody_root" "$entry_hour" "$entry_minute" "$courier_bin" "$courier_path" "$log_stem" "$python" "$month" "$day" <<'PY'
 from pathlib import Path
 import re
 import sys
 from xml.sax.saxutils import escape
 
-template, output, label, mode, repo, plan, custody, hour, minute, courier, path, log_stem, python = sys.argv[1:]
+template, output, label, mode, repo, plan, custody, hour, minute, courier, path, log_stem, python, month, day = sys.argv[1:]
 replacements = {
     "com.joulewise.night": label,
     "@@PYTHON@@": escape(python),
     "@@MODE@@": mode,
-    "@@REPO@@": repo,
-    "@@PLAN@@": plan,
-    "@@CUSTODY_ROOT@@": custody,
+    "@@REPO@@": escape(repo),
+    "@@PLAN@@": escape(plan),
+    "@@CUSTODY_ROOT@@": escape(custody),
+    "@@MONTH@@": month,
+    "@@DAY@@": day,
     "@@HOUR@@": hour,
     "@@MINUTE@@": minute,
-    "@@COURIER_BIN@@": courier,
-    "@@PATH@@": path,
+    "@@COURIER_BIN@@": escape(courier),
+    "@@PATH@@": escape(path),
     "@@LOG_STEM@@": log_stem,
 }
 text = Path(template).read_text(encoding="utf-8")
+if mode == "dead-man":
+    for field in ("Month", "Day"):
+        text = re.sub(r"    <key>" + field + r"</key>\n    <integer>@@[A-Z]+@@</integer>\n", "", text)
 # One pass over the TEMPLATE only: an inserted value (for example an interpreter
 # path that happens to contain "@@MODE@@") is never rescanned for tokens, so the
 # rendered argv[0] is byte-identical to the validated interpreter (re-audit 04 R1).
@@ -234,6 +262,7 @@ if [[ -z "$render_only" ]]; then
   launchctl_bin="${launchctl_bin:A}"
 fi
 if (( uninstall )); then
+  mkdir -p "$launch_dir"
   "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
   "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
   rm -f "$night_plist" "$deadman_plist"
@@ -250,6 +279,22 @@ if (( ${#existing_night_records[@]} )); then
   exit 3
 fi
 
+timing_fields=("${(@f)$(check_schedule initial)}") || exit $?
+month="$timing_fields[1]"
+day="$timing_fields[2]"
+hour="$timing_fields[3]"
+minute="$timing_fields[4]"
+deadman_hour="$timing_fields[5]"
+deadman_minute="$timing_fields[6]"
+schedule_summary="$timing_fields[7]"
+if [[ -z "$render_only" ]] && "$launchctl_bin" print "gui/$uid/$night_label" >/dev/null 2>&1; then
+  print "night_agent_already_loaded: $schedule_summary; label=$night_label" >&2
+  exit 3
+fi
+
+# All install refusals above are read-only. Only now create output/custody.
+mkdir -p "$launch_dir" "$custody_root/night"
+
 render "$night_label" run "$night_plist" "$hour" "$minute" "launchd.night"
 render "$deadman_label" dead-man "$deadman_plist" "$deadman_hour" "$deadman_minute" "launchd.deadman"
 if [[ -n "$render_only" ]]; then
@@ -257,11 +302,17 @@ if [[ -n "$render_only" ]]; then
   exit 0
 fi
 
-"$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
+check_schedule close || exit $?
 "$launchctl_bin" bootout "gui/$uid/$deadman_label" 2>/dev/null || true
+check_schedule close || exit $?
 if ! "$launchctl_bin" bootstrap "gui/$uid" "$night_plist"; then
   print "failed to bootstrap $night_label" >&2
   exit 3
+fi
+if ! check_schedule close; then
+  "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true
+  print "install_span_closed; rolled back $night_label before dead-man bootstrap" >&2
+  exit 2
 fi
 if ! "$launchctl_bin" bootstrap "gui/$uid" "$deadman_plist"; then
   "$launchctl_bin" bootout "gui/$uid/$night_label" 2>/dev/null || true

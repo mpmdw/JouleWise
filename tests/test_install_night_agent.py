@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 import plistlib
@@ -13,6 +14,7 @@ import time
 import unittest
 from pathlib import Path
 
+from scripts import run_night
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
@@ -68,8 +70,12 @@ class InstallNightAgentTests(unittest.TestCase):
         self.launch_log = self.root / "launchctl.log"
         self.launchctl = self.bin_dir / "launchctl-stub"
         self.launchctl.write_text(
-            '#!/bin/zsh\nprint -r -- "$*" >> "$LAUNCH_LOG"\nexit 0\n',
-            encoding="utf-8",
+            '#!/bin/zsh\nprint -r -- "$*" >> "$LAUNCH_LOG"\n'
+            'label="${${3:-$2}:t:r}"\n'
+            '[[ "$1" == print ]] && { [[ -f "$LAUNCH_LOG.${2:t}" ]]; exit $?; }\n'
+            '[[ "$1" == bootstrap ]] && /usr/bin/touch "$LAUNCH_LOG.$label"\n'
+            '[[ "$1" == bootout ]] && /bin/rm -f "$LAUNCH_LOG.${2:t}"\n'
+            'exit 0\n', encoding="utf-8",
         )
         self.launchctl.chmod(0o755)
         self.environment = os.environ.copy()
@@ -77,15 +83,18 @@ class InstallNightAgentTests(unittest.TestCase):
         self.environment["PATH"] = f"{self.bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
         self.environment["LAUNCH_LOG"] = str(self.launch_log)
         self.repo_head = _git_head(REPO_ROOT)
+        self.plan_counter = 0
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
     def _write_plan(self, **changes: object) -> Path:
+        custody = self.root / ("custody" if self.plan_counter == 0 else f"custody-{self.plan_counter}")
+        self.plan_counter += 1
         plan = NightPlan(
             plan_id="install-night-agent-test",
             receipt_class="TRANSACTION_PACK",
-            t0_epoch_s=1.0,
+            t0_epoch_s=time.time() + 24 * 3600,
             window_max_s=1,
             authored_epoch_s=time.time(),
             repo_head=self.repo_head,
@@ -93,7 +102,7 @@ class InstallNightAgentTests(unittest.TestCase):
             measurement_head=self.measurement_head,
             chain_path="/bin/true",
             chain_sha256_path="/tmp/install-night-agent-test.sha256",
-            custody_root=str(self.root / "custody"),
+            custody_root=str(custody),
             registration_path=None,
             pack_night={
                 "pack_id": "install-pack",
@@ -101,16 +110,17 @@ class InstallNightAgentTests(unittest.TestCase):
                 "pack_sha256": "a" * 64,
                 "attempt_ordinal": 1,
                 "authorization_record": {
-                    "path": str(self.root / "custody" / "authorization.json"),
+                    "path": str(custody / "authorization.json"),
                     "sha256": "b" * 64,
                 },
                 "confirmation_record": {
-                    "path": str(self.root / "custody" / "step6_confirmation_record.json"),
+                    "path": str(custody / "step6_confirmation_record.json"),
                     "sha256": "c" * 64,
                 },
             },
         )
-        path = self.root / f"plan-{len(list(self.root.glob('plan-*.json')))}.json"
+        path = custody / "night_plan.json"
+        path.parent.mkdir(exist_ok=True)
         write_night_plan(path, plan)
         if changes:
             mapping = json.loads(path.read_text(encoding="utf-8"))
@@ -126,10 +136,6 @@ class InstallNightAgentTests(unittest.TestCase):
             str(script),
             "--plan",
             str(plan),
-            "--hour",
-            "1",
-            "--minute",
-            "2",
             "--launchctl-bin",
             str(self.launchctl),
         ]
@@ -146,6 +152,131 @@ class InstallNightAgentTests(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def _controlled_python(self, now: float, *, spans: tuple | None = None) -> Path:
+        """A subprocess clock seam; no production environment override exists."""
+        self.clock_file = self.root / "clock"
+        self.clock_file.write_text(str(now))
+        wrapper = self.bin_dir / "controlled-python"
+        wrapper.write_text(
+            f"#!{sys.executable}\n"
+            "import sys, time, runpy\nfrom pathlib import Path\n"
+            "sys.dont_write_bytecode = True\n"
+            f"time.time = lambda: float(Path({str(self.clock_file)!r}).read_text())\n"
+            "args = sys.argv[1:]\n"
+            "if args[0] == '-B': args = args[1:]\n"
+            "sys.argv = args\n"
+            "if args[0] == '-':\n"
+            "    exec(compile(sys.stdin.read(), '<installer-stdin>', 'exec'))\n"
+            "else:\n"
+            "    source = Path(args[0]).read_text()\n"
+            f"    spans = {spans!r}\n"
+            "    if spans is not None and 'schedule' in args:\n"
+            "        source = source.replace('INSTALL_SPANS: tuple[tuple[str, str], ...] = "
+            "((\"00:00\", \"24:00\"),)', 'INSTALL_SPANS: tuple[tuple[str, str], ...] = ' + repr(spans))\n"
+            "    exec(compile(source, args[0], 'exec'), {'__name__': '__main__', '__file__': args[0]})\n",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        return wrapper
+
+    def _assert_refused_without_outputs(self, completed, code: str, exit_code: int = 2) -> None:
+        self.assertEqual(exit_code, completed.returncode, completed.stderr)
+        self.assertIn(code, completed.stderr)
+        for name in ("now_epoch_s", "t0_epoch_s", "install_close_epoch_s", "deadman_epoch_s"):
+            self.assertIn(name + "=", completed.stderr)
+        self.assertRegex(completed.stderr, r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
+        self.assertFalse(self.rendered.exists())
+        self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
+        self.assertFalse((self.root / "custody/night").exists())
+        if self.launch_log.exists():
+            self.assertTrue(all(line.startswith("print ") for line in self.launch_log.read_text().splitlines()))
+
+    def test_installer_derives_calendar_fields_from_plan_without_hour_flags(self) -> None:
+        # Production argv, real schedule subprocess, real plist rendering;
+        # only launchctl and courier binaries are fixture executables.
+        plan_path = self._write_plan()
+        completed = self._run(plan_path, render_only=False)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        schedule = subprocess.run([sys.executable, "-B", str(REPO_ROOT / "scripts/run_night.py"),
+            "schedule", "--plan", str(plan_path)], text=True, capture_output=True, check=True)
+        expected = json.loads(schedule.stdout)
+        directory = self.root / "home/Library/LaunchAgents"
+        night = plistlib.loads((directory / "com.joulewise.night.plist").read_bytes())
+        deadman = plistlib.loads((directory / "com.joulewise.night.deadman.plist").read_bytes())
+        self.assertEqual(expected["night_calendar"], night["StartCalendarInterval"])
+        self.assertEqual(expected["deadman_calendar"], deadman["StartCalendarInterval"])
+        self.assertIn(str(plan_path), night["ProgramArguments"])
+        calls = self.launch_log.read_text().splitlines()
+        self.assertEqual(2, sum(line.startswith("bootstrap ") for line in calls))
+        self.assertEqual(3, sum(line.startswith("print ") for line in calls))
+
+    def test_installer_refuses_after_the_plan_install_close(self) -> None:
+        plan_path = self._write_plan()
+        plan = NightPlan.from_mapping(json.loads(plan_path.read_text()))
+        for offset in (0, 1):
+            with self.subTest(offset=offset):
+                python = self._controlled_python(run_night.install_close_epoch(plan) + offset)
+                self._assert_refused_without_outputs(self._run(plan_path, python=str(python), render_only=False),
+                                                     "install_span_closed")
+
+    def test_installer_refuses_outside_a_listed_install_span(self) -> None:
+        now = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0).timestamp()
+        plan = self._write_plan(authored_epoch_s=now - 60, t0_epoch_s=now + 86400)
+        python = self._controlled_python(now, spans=(("00:00", "01:00"), ("18:00", "19:00")))
+        completed = self._run(plan, python=str(python), render_only=False)
+        self._assert_refused_without_outputs(completed, "install_outside_span")
+        self.assertIn("install_spans_today", completed.stderr)
+        self.assertIn("18:00", completed.stderr)
+
+    def test_installer_refuses_a_t0_in_the_past(self) -> None:
+        plan = self._write_plan(t0_epoch_s=time.time() - 60)
+        self._assert_refused_without_outputs(self._run(plan, render_only=False), "plan_t0_in_the_past")
+
+    def test_installer_refuses_when_a_night_agent_is_already_loaded(self) -> None:
+        Path(str(self.launch_log) + ".com.joulewise.night").touch()
+        plan = self._write_plan()
+        self._assert_refused_without_outputs(self._run(plan, render_only=False), "night_agent_already_loaded", 3)
+        # Rendering is explicitly exempt from querying occupied labels.
+        rendered = self._run(plan)
+        self.assertEqual(0, rendered.returncode, rendered.stderr)
+
+    def test_installer_refuses_a_plan_outside_its_custody_root(self) -> None:
+        original = self._write_plan()
+        outside = self.root / "outside.json"
+        outside.write_bytes(original.read_bytes())
+        self._assert_refused_without_outputs(self._run(outside, render_only=False), "plan_outside_custody_root")
+
+    def test_installer_rolls_back_when_the_close_passes_between_bootstraps(self) -> None:
+        plan_path = self._write_plan()
+        plan = NightPlan.from_mapping(json.loads(plan_path.read_text()))
+        close = run_night.install_close_epoch(plan)
+        python = self._controlled_python(close - 1)
+        # Move the subprocess clock at the first successful bootstrap.
+        source = self.launchctl.read_text()
+        source = source.replace('exit 0\n',
+            f'[[ "$1" == bootstrap ]] && print -- {close} > "{self.clock_file}"\nexit 0\n')
+        self.launchctl.write_text(source)
+        completed = self._run(plan_path, python=str(python), render_only=False)
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn("install_span_closed", completed.stderr)
+        self.assertIn("rolled back", completed.stderr)
+        self.assertNotIn("validated pins:", completed.stdout)
+        calls = self.launch_log.read_text().splitlines()
+        self.assertEqual(1, sum(line.startswith("bootstrap ") for line in calls))
+        self.assertTrue(calls[-1].startswith("bootout "))
+        self.assertTrue(calls[-1].endswith("com.joulewise.night"))
+        self.assertFalse(Path(str(self.launch_log) + ".com.joulewise.night").exists())
+
+    def test_dead_man_plist_fires_daily_and_night_plist_once(self) -> None:
+        completed = self._run(self._write_plan())
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        night = plistlib.loads((self.rendered / "com.joulewise.night.plist").read_bytes())
+        deadman = plistlib.loads((self.rendered / "com.joulewise.night.deadman.plist").read_bytes())
+        self.assertEqual({"Month", "Day", "Hour", "Minute"}, set(night["StartCalendarInterval"]))
+        self.assertEqual({"Hour", "Minute"}, set(deadman["StartCalendarInterval"]))
+        self.assertFalse(night["RunAtLoad"])
+        self.assertFalse(deadman["RunAtLoad"])
 
     def test_install_with_both_pins_matching_renders_both_plists(self) -> None:
         completed = self._run(self._write_plan())
@@ -200,7 +331,7 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn("3.9", completed.stderr)
         self.assertIn("minimum is 3.11", completed.stderr)
         self.assertFalse(self.rendered.exists())
-        self.assertFalse((self.root / "custody").exists())
+        self.assertFalse((self.root / "custody/night").exists())
 
     def test_python_39_message_survives_newer_syntax_in_the_driver(self) -> None:
         # Refuter 08 F1: the version check must not parse the whole driver under
@@ -290,8 +421,7 @@ class InstallNightAgentTests(unittest.TestCase):
         for name, (plan, environment) in cases.items():
             with self.subTest(case=name):
                 completed = subprocess.run(
-                    ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan), "--hour", "1",
-                     "--minute", "2", "--render-only", str(self.rendered)],
+                    ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan), "--render-only", str(self.rendered)],
                     env=environment, capture_output=True, text=True, check=False,
                 )
                 self.assertEqual(2, completed.returncode, completed.stderr)
@@ -328,7 +458,6 @@ class InstallNightAgentTests(unittest.TestCase):
                 f"HOME={self.environment['HOME']}",
                 "/bin/zsh", str(SCRIPT_PATH),
                 "--plan", str(self._v2_plan()),
-                "--hour", "1", "--minute", "2",
                 "--render-only", str(self.rendered),
             ],
             capture_output=True,
@@ -349,7 +478,7 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn(str(self.measurement_root / ".venv/bin/python"), completed.stderr)
         self.assertIn("pass --python", completed.stderr)
         self.assertFalse(self.rendered.exists())
-        self.assertFalse((self.root / "custody").exists())
+        self.assertFalse((self.root / "custody/night").exists())
 
     def test_failed_import_preflight_refuses_install_and_render(self) -> None:
         driver = self.root / "broken-driver"
@@ -380,7 +509,7 @@ class InstallNightAgentTests(unittest.TestCase):
                 self.assertIn("Traceback", completed.stderr)
                 self.assertNotIn('"preflight": "ok"', completed.stdout)
                 self.assertFalse(self.rendered.exists())
-                self.assertFalse((self.root / "custody").exists())
+                self.assertFalse((self.root / "custody/night").exists())
                 self.assertFalse(self.launch_log.exists())
                 self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
 
@@ -408,7 +537,7 @@ class InstallNightAgentTests(unittest.TestCase):
                 self.assertEqual(3, completed.returncode, completed.stderr)
                 self.assertIn("night_plan_malformed", completed.stderr)
                 self.assertFalse(self.rendered.exists())
-                self.assertFalse((self.root / "custody").exists())
+                self.assertFalse((self.root / "custody/night").exists())
 
     def test_install_refuses_plan_authored_40_hours_ago_as_stale(self) -> None:
         completed = self._run(
@@ -504,7 +633,7 @@ class InstallNightAgentTests(unittest.TestCase):
             script=driver / "scripts/install_night_agent.sh",
         )
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertFalse((self.root / "custody").exists())
+        self.assertFalse((self.root / "custody/night").exists())
         self.assertNotIn("preflight", completed.stdout)
         # Recovery can reuse install arguments, even if that interpreter is
         # now missing. Uninstall must still avoid interpreter validation.

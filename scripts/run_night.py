@@ -16,7 +16,7 @@ import time
 import uuid
 import math
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -64,8 +64,9 @@ CENSUS_INTERVAL_S = 30
 COURIER_DEADLINE_S = 300
 COURIER_BACKOFF_S = (60, 180, 600)
 COURIER_LOCK_FRESH_S = COURIER_DEADLINE_S + max(COURIER_BACKOFF_S)
-DEADMAN_HOUR = 7
-DEADMAN_MINUTE = 0
+DEADMAN_GRACE_S = 3600
+INSTALL_CLOSE_MARGIN_S = 3600
+INSTALL_SPANS: tuple[tuple[str, str], ...] = (("00:00", "24:00"),)
 COURIER_ALLOWED_TOOLS = (
     "Read,Glob,Grep,Bash,Edit,Write,mcp__claude_ai_Gmail__send_message"
 )
@@ -546,11 +547,6 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
     ]
 
 
-def _night_date(plan: NightPlan) -> str:
-    # Use local time, like _next_deadman_epoch: one civil-time base for launchd.
-    return datetime.fromtimestamp(plan.t0_epoch_s).strftime("%Y%m%d")
-
-
 def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> None:
     """Best-effort results-branch publish; failure is logged but never fatal."""
 
@@ -571,7 +567,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
                 timeout=120,
                 check=True,
             )
-        branch = f"night-results/{_night_date(plan)}"
+        branch = f"night-results/{plan.plan_id}"
         subprocess.run(
             ["git", "-C", str(clone), "checkout", "-B", branch],
             capture_output=True,
@@ -579,7 +575,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
             timeout=30,
             check=True,
         )
-        destination = clone / "docs" / "process_traces" / "night-results" / _night_date(plan)
+        destination = clone / "docs" / "process_traces" / "night-results" / plan.plan_id
         destination.mkdir(parents=True, exist_ok=True)
         for artifact in _artifact_list(custody_root, night_dir):
             source = custody_root / artifact["path"]
@@ -592,7 +588,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
             check=True,
         )
         subprocess.run(
-            ["git", "-C", str(clone), "commit", "-m", f"record night {_night_date(plan)}"],
+            ["git", "-C", str(clone), "commit", "-m", f"record night {plan.plan_id}"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -955,17 +951,91 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
     )
 
 
-def _next_deadman_epoch(t0_epoch_s: float) -> float:
-    t0 = datetime.fromtimestamp(t0_epoch_s)
-    deadman = t0.replace(
-        hour=DEADMAN_HOUR,
-        minute=DEADMAN_MINUTE,
-        second=0,
-        microsecond=0,
-    )
-    if deadman <= t0:
-        deadman += timedelta(days=1)
-    return deadman.timestamp()
+def deadman_epoch(plan: NightPlan) -> float:
+    """The plan's completion plus recovery grace, rounded up to a minute."""
+    return float(math.ceil(
+        (plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S + DEADMAN_GRACE_S)
+        / 60
+    ) * 60)
+
+
+def install_close_epoch(plan: NightPlan) -> float:
+    # The watchdog owns this existing stand-down lead and imports this driver.
+    # Resolve it only when needed, after module initialization on either path.
+    from scripts.magistrate_watchdog import PLAN_LEAD_S
+
+    return plan.t0_epoch_s - PLAN_LEAD_S - INSTALL_CLOSE_MARGIN_S
+
+
+def _span_minute(value: str, *, close: bool = False) -> int:
+    if close and value == "24:00":
+        return 24 * 60
+    if not isinstance(value, str) or re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", value) is None:
+        raise ValueError(f"invalid local install span time: {value!r}")
+    hour, minute = map(int, value.split(":"))
+    return hour * 60 + minute
+
+
+def _validate_install_spans(spans: tuple[tuple[str, str], ...]) -> None:
+    if not isinstance(spans, tuple):
+        raise ValueError("INSTALL_SPANS must be a tuple of (open, close) tuples")
+    previous_close = 0
+    for span in spans:
+        if not isinstance(span, tuple) or len(span) != 2:
+            raise ValueError("each install span must be an (open, close) tuple")
+        opening = _span_minute(span[0])
+        closing = _span_minute(span[1], close=True)
+        if opening < previous_close or closing <= opening:
+            raise ValueError("install spans must be ordered, disjoint, and close > open")
+        previous_close = closing
+
+
+_validate_install_spans(INSTALL_SPANS)
+
+
+def _local_span_boundary(day: date, minute: int, *, close: bool) -> float:
+    local = datetime.combine(day, wall_time()) + timedelta(minutes=minute)
+    # Resolve EACH wall-clock boundary in the host timezone, not in the fixed
+    # UTC offset returned by astimezone() for the start of the day. Repeated
+    # minutes open on their first occurrence and close on their last; missing
+    # spring-forward minutes normalize forward using fold=0.
+    candidates = [local.replace(fold=fold).timestamp() for fold in (0, 1)]
+    valid = [epoch for epoch in candidates if datetime.fromtimestamp(epoch) == local]
+    epoch = (max(valid) if close else min(valid)) if valid else candidates[0]
+    return datetime.fromtimestamp(epoch).astimezone().timestamp()
+
+
+def install_spans_for_day(day: date) -> list[tuple[float, float]]:
+    return [
+        (_local_span_boundary(day, _span_minute(opening), close=False),
+         _local_span_boundary(day, _span_minute(closing, close=True), close=True))
+        for opening, closing in INSTALL_SPANS
+    ]
+
+
+def install_span_containing(now_epoch_s: float) -> tuple[float, float] | None:
+    day = datetime.fromtimestamp(now_epoch_s).astimezone().date()
+    return next((span for span in install_spans_for_day(day)
+                 if span[0] <= now_epoch_s < span[1]), None)
+
+
+def calendar_fields(epoch_s: float) -> dict[str, int]:
+    local = datetime.fromtimestamp(epoch_s).astimezone()
+    return {"Month": local.month, "Day": local.day,
+            "Hour": local.hour, "Minute": local.minute}
+
+
+def schedule(plan: NightPlan) -> dict[str, Any]:
+    deadman = deadman_epoch(plan)
+    return {
+        "t0_epoch_s": plan.t0_epoch_s,
+        "install_close_epoch_s": install_close_epoch(plan),
+        "deadman_epoch_s": deadman,
+        "night_calendar": calendar_fields(plan.t0_epoch_s),
+        "deadman_calendar": {key: value for key, value in calendar_fields(deadman).items()
+                             if key in {"Hour", "Minute"}},
+        "install_spans_today": install_spans_for_day(datetime.fromtimestamp(time.time()).astimezone().date()),
+    }
 
 
 def _completion_epoch_s(plan: NightPlan) -> float:
@@ -1467,7 +1537,7 @@ def run_night(
             courier_bin_substitution=courier_substitution,
         )
 
-    deadman_epoch_s = _next_deadman_epoch(plan.t0_epoch_s)
+    deadman_epoch_s = deadman_epoch(plan)
     completion_epoch_s = _completion_epoch_s(plan)
     if completion_epoch_s >= deadman_epoch_s:
         _write_standard_refusal_result(
@@ -1852,6 +1922,8 @@ def build_parser() -> argparse.ArgumentParser:
         command = subcommands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
         command.add_argument("--courier-bin", type=Path, metavar="ABSOLUTE_PATH")
+    scheduling = subcommands.add_parser("schedule")
+    scheduling.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
     preflight = subcommands.add_parser("preflight")
     preflight.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
     control = subcommands.add_parser("g7-control")
@@ -1863,6 +1935,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "schedule":
+        print(json.dumps(schedule(_load_plan(args.plan)), sort_keys=True))
+        return EXIT_GO
     if args.command == "preflight":
         _load_plan(args.plan)
         print(json.dumps({

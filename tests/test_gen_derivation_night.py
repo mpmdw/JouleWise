@@ -387,23 +387,12 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.assertIn("not an exact v2 plan", result.stderr)
         self.assertFalse(self.fixture.out.exists())
 
-    def test_a_plan_that_overruns_the_dead_man_refuses(self) -> None:
-        """`t0 + window_max_s + 300` must be before the next local 07:00.
-
-        The gate refuses such a plan at launch (run_night.py:1463-1474); the
-        arm must learn it at the desk, not at 03:00 with the night burned.
-        """
-
-        deadman = GEN._next_deadman_epoch(T0_EPOCH_S)
-        exact = int(deadman - T0_EPOCH_S - GEN.COURIER_DEADLINE_S)
-        self.fixture.write_plan(window_max_s=exact)
+    def test_gen_derivation_night_uses_the_driver_deadman_function(self) -> None:
+        from scripts.run_night import deadman_epoch
+        self.assertIs(GEN.deadman_epoch, deadman_epoch)
+        self.fixture.write_plan(window_max_s=9000)
         result = self.fixture.emit()
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("overruns the dead-man", result.stderr)
-        self.assertFalse(self.fixture.out.exists())
-        # One second less is admissible: the comparison is strict, not fuzzy.
-        self.fixture.write_plan(window_max_s=exact - 1)
-        self.assertEqual(self.fixture.emit().returncode, 0)
+        self.assertEqual(0, result.returncode, result.stderr)
 
     def test_a_census_substring_anywhere_in_the_night_refuses(self) -> None:
         """`pgrep -lf "codex|claude|t3"` aborts the night on its own argv.

@@ -14,7 +14,7 @@ import tempfile
 import time
 import types
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from contextlib import redirect_stdout
 from dataclasses import replace
 from pathlib import Path
@@ -747,6 +747,8 @@ runpy.run_path(script, run_name='__main__')
 
         calls, spawn = self._popen_recorder()
         with mock.patch.object(
+            self.driver, "deadman_epoch", return_value=t0_epoch_s + 3900
+        ), mock.patch.object(
             self.driver, "evaluate_night", side_effect=record_evaluate
         ), mock.patch.object(self.driver.subprocess, "Popen", spawn):
             self.assertEqual(self.driver.run_night(self.plan_path), 3)
@@ -763,7 +765,10 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(calls, [])
 
     def test_deadman_boundary_refuses_equality_and_allows_one_second_before(self) -> None:
-        deadman_epoch_s = self.driver._next_deadman_epoch(self.t0_epoch_s)
+        deadman_epoch_s = self.driver.deadman_epoch(self.driver._load_plan(self.plan_path))
+        fixed_deadman = mock.patch.object(self.driver, "deadman_epoch", return_value=deadman_epoch_s)
+        fixed_deadman.start()
+        self.addCleanup(fixed_deadman.stop)
         equal_window_s = int(
             deadman_epoch_s - self.t0_epoch_s - self.driver.COURIER_DEADLINE_S
         )
@@ -864,7 +869,6 @@ runpy.run_path(script, run_name='__main__')
         self.assertIn("Watchdog last decision: HOLD_UNSAFE", argv[2])
         self.assertIn("include these watchdog fields in the email body", argv[2])
         source = SCRIPT_PATH.read_text(encoding="utf-8")
-        self.assertNotIn("scripts.magistrate_watchdog", source)
         self.assertNotIn("from scripts import magistrate_watchdog", source)
 
     def test_launch_agent_template_disables_restart_and_installer_rejects_keepalive(self) -> None:
@@ -883,8 +887,9 @@ runpy.run_path(script, run_name='__main__')
         self.assertNotIn("<key>KeepAlive</key>", template)
         self.assertIn("<key>RunAtLoad</key>\n  <false/>", template)
         self.assertIn('/usr/bin/grep -q "KeepAlive"', installer)
-        self.assertIn("DEADMAN_HOUR", installer)
-        self.assertIn("DEADMAN_MINUTE", installer)
+        self.assertIn("schedule --plan", installer)
+        self.assertIn("@@MONTH@@", template)
+        self.assertIn("@@DAY@@", template)
         self.assertNotIn("<integer>7</integer>", template)
         self.assertNotIn("<integer>7</integer>", installer)
         self.assertEqual(installer.count("sudo"), 0)
@@ -910,6 +915,7 @@ runpy.run_path(script, run_name='__main__')
             if '"night_' in line
             and "_CODES" not in line
             and 'startswith("night_")' not in line
+            and '"night_calendar":' not in line  # schedule field, not a refusal code
         ]
         self.assertTrue(set(self.driver._CODES.values()) <= registered)
         self.assertEqual(literal_lines, [])
@@ -1238,10 +1244,14 @@ runpy.run_path(script, run_name='__main__')
             self.real_durable_record(self.custody, night, plan)
         clone = next(argv for argv in argvs if argv[:4] == ["git", "clone", "--depth", "1"])
         pushes = [argv for argv in argvs if "push" in argv]
-        branch = f"night-results/{self.driver._night_date(plan)}"
+        branch = f"night-results/{plan.plan_id}"
         self.assertEqual(clone, ["git", "clone", "--depth", "1", "example-origin", str(self.custody / "results-clone")])
         self.assertEqual(len(pushes), 2)
         self.assertTrue(all(argv[-1] == f"HEAD:{branch}" for argv in pushes))
+        destination = self.custody / "results-clone/docs/process_traces/night-results" / plan.plan_id
+        self.assertTrue((destination / "night.log").is_file())
+        commits = [argv for argv in argvs if "commit" in argv]
+        self.assertTrue(all(argv[-1] == f"record night {plan.plan_id}" for argv in commits))
 
     def test_courier_deadline_is_derived_from_the_measured_artifact(self) -> None:
         artifact = json.loads(
@@ -1320,10 +1330,106 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue(sleeps)
         self.assertLessEqual(max(sleeps), 0.3)
 
-    def test_night_date_uses_the_same_local_civil_day_as_dead_man(self) -> None:
-        self._write_plan(t0_epoch_s=datetime(2026, 9, 2, 20, 0).timestamp())
+    def test_results_branch_and_trace_dir_are_keyed_by_plan_id(self) -> None:
         plan = self.driver._load_plan(self.plan_path)
-        self.assertEqual(self.driver._night_date(plan), "20260902")
+        night = self.custody / "night"
+        night.mkdir()
+        (self.custody / "night.log").write_text("record\n")
+        calls = []
+
+        def fake_run(argv, **kwargs):
+            calls.append(argv)
+            if argv[:4] == ["git", "clone", "--depth", "1"]:
+                Path(argv[-1]).mkdir(parents=True)
+            return types.SimpleNamespace(stdout="fixture-origin\n", returncode=0)
+
+        with mock.patch.object(self.driver.subprocess, "run", side_effect=fake_run):
+            for plan_id in ("same-day-a", "same-day-b"):
+                self.real_durable_record(self.custody, night, replace(plan, plan_id=plan_id))
+                destination = self.custody / "results-clone/docs/process_traces/night-results" / plan_id
+                self.assertTrue((destination / "night.log").is_file())
+        self.assertEqual({"HEAD:night-results/same-day-a", "HEAD:night-results/same-day-b"},
+                         {argv[-1] for argv in calls if "push" in argv})
+        self.assertEqual({"record night same-day-a", "record night same-day-b"},
+                         {argv[-1] for argv in calls if "commit" in argv})
+
+    def test_deadman_epoch_is_completion_plus_grace_at_a_midday_t0(self) -> None:
+        for second in (0, 17):
+            with self.subTest(second=second):
+                plan = replace(self.driver._load_plan(self.plan_path),
+                               t0_epoch_s=datetime(2026, 9, 15, 13, 20, second).timestamp(),
+                               window_max_s=9000)
+                completion = self.driver._completion_epoch_s(plan)
+                rounded = (-completion) % 60
+                self.assertEqual(self.driver.deadman_epoch(plan) - completion,
+                                 self.driver.DEADMAN_GRACE_S + rounded)
+
+    def test_deadman_grace_covers_every_courier_attempt_and_backoff(self) -> None:
+        self.assertGreaterEqual(self.driver.DEADMAN_GRACE_S,
+            self.driver.COURIER_DEADLINE_S * (len(self.driver.COURIER_BACKOFF_S) + 1)
+            + sum(self.driver.COURIER_BACKOFF_S))
+
+    def test_driver_accepts_a_t0_in_the_former_dead_man_hour(self) -> None:
+        t0 = datetime(2026, 9, 2, 7, 20).timestamp()
+        self._write_plan(t0_epoch_s=t0, window_max_s=9000)
+        self.source.now_epoch_s = t0 + 1
+        result, calls = self._run_night()
+        self.assertEqual(self.driver.EXIT_GO, result)
+        self.assertEqual([["/bin/zsh", str(self.chain)]], calls)
+        self.assertEqual(self.driver.deadman_epoch(self.driver._load_plan(self.plan_path)),
+                         self.driver.run_courier.call_args.kwargs["deadman_epoch_s"])
+
+    def test_install_close_precedes_the_plan_span_by_the_margin(self) -> None:
+        from scripts.magistrate_watchdog import PLAN_LEAD_S
+        plan = self.driver._load_plan(self.plan_path)
+        self.assertEqual(plan.t0_epoch_s - PLAN_LEAD_S - self.driver.install_close_epoch(plan),
+                         self.driver.INSTALL_CLOSE_MARGIN_S)
+
+    def test_install_spans_default_is_the_whole_day_and_validates_shape(self) -> None:
+        self.assertEqual((("00:00", "24:00"),), self.driver.INSTALL_SPANS)
+        self.driver._validate_install_spans((("01:00", "02:00"), ("02:00", "04:00")))
+        for spans in ([('00:00', '24:00')], (("24:00", "24:00"),),
+                      (("1:00", "02:00"),), (("02:00", "02:00"),),
+                      (("23:00", "01:00"),), (("01:00", "02:00"), ("01:59", "03:00")),
+                      (("12:00", "13:00"), ("10:00", "11:00")), (("00:00",),)):
+            with self.subTest(spans=spans), self.assertRaises(ValueError):
+                self.driver._validate_install_spans(spans)
+        with mock.patch.object(self.driver, "INSTALL_SPANS", (("09:00", "10:00"),)):
+            self.assertIsNone(self.driver.install_span_containing(datetime(2026, 9, 15, 10).timestamp()))
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "requires POSIX local timezone")
+    def test_install_span_containing_resolves_local_time_across_dst(self) -> None:
+        try:
+            with mock.patch.dict(os.environ, {"TZ": "America/Los_Angeles"}):
+                time.tzset()
+                for day, hours in ((date(2026, 3, 8), 23), (date(2026, 11, 1), 25)):
+                    with self.subTest(day=day):
+                        opening, closing = self.driver.install_spans_for_day(day)[0]
+                        self.assertEqual(hours * 3600, closing - opening)
+                        self.assertEqual((opening, closing), self.driver.install_span_containing(opening))
+                        self.assertEqual((opening, closing), self.driver.install_span_containing(closing - 1))
+                        self.assertNotEqual((opening, closing), self.driver.install_span_containing(closing))
+                with mock.patch.object(self.driver, "INSTALL_SPANS", (("01:15", "01:45"),)):
+                    span = self.driver.install_spans_for_day(date(2026, 11, 1))[0]
+                    for fold in (0, 1):
+                        now = datetime(2026, 11, 1, 1, 30, fold=fold).timestamp()
+                        self.assertEqual(span, self.driver.install_span_containing(now))
+        finally:
+            time.tzset()
+
+    def test_schedule_subcommand_prints_calendar_fields_from_the_plan(self) -> None:
+        completed = subprocess.run([sys.executable, "-B", str(SCRIPT_PATH), "schedule",
+                                    "--plan", str(self.plan_path)], capture_output=True, text=True)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        schedule = json.loads(completed.stdout)
+        self.assertEqual({"Month": 9, "Day": 2, "Hour": 1, "Minute": 0}, schedule["night_calendar"])
+        self.assertEqual({"Hour": 2, "Minute": 6}, schedule["deadman_calendar"])
+        plan = self.driver._load_plan(self.plan_path)
+        self.assertEqual(self.driver.install_close_epoch(plan), schedule["install_close_epoch_s"])
+        self.assertEqual(self.driver.deadman_epoch(plan), schedule["deadman_epoch_s"])
+        self.assertEqual(plan.t0_epoch_s, schedule["t0_epoch_s"])
+        self.assertEqual([list(span) for span in self.driver.install_spans_for_day(date.today())],
+                         schedule["install_spans_today"])
 
     def test_exclusive_record_writers_and_markers_are_fsynced(self) -> None:
         night = self.custody / "night"
@@ -1455,7 +1561,9 @@ runpy.run_path(script, run_name='__main__')
         python.symlink_to(sys.executable)
         plan["custody_root"] = str(root / "custody")
         plan["authored_epoch_s"] = time.time()  # bench fix: fixture authored "now" so the installer age check passes
-        path = root / "install-plan.json"
+        plan["t0_epoch_s"] = time.time() + 24 * 3600
+        path = root / "custody/night_plan.json"
+        path.parent.mkdir()
         path.write_text(json.dumps(plan), encoding="utf-8")
         return path
 
@@ -1503,10 +1611,6 @@ runpy.run_path(script, run_name='__main__')
                 str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
                 "--plan",
                 str(plan),
-                "--hour",
-                "1",
-                "--minute",
-                "2",
                 "--render-only",
                 str(rendered),
             ],
@@ -1544,10 +1648,6 @@ runpy.run_path(script, run_name='__main__')
                 str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
                 "--plan",
                 str(plan),
-                "--hour",
-                "1",
-                "--minute",
-                "2",
                 "--render-only",
                 str(rendered),
             ],
@@ -1585,10 +1685,6 @@ runpy.run_path(script, run_name='__main__')
                 str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
                 "--plan",
                 str(plan),
-                "--hour",
-                "1",
-                "--minute",
-                "2",
                 "--render-only",
                 str(root / "rendered"),
             ],
@@ -1599,42 +1695,6 @@ runpy.run_path(script, run_name='__main__')
         )
         self.assertEqual(completed.returncode, 2)
         self.assertIn("courier unavailable", completed.stderr)
-
-    def test_installer_refuses_the_dead_man_hour_before_rendering(self) -> None:
-        root = self.root / "dead-man-hour"
-        root.mkdir()
-        plan = self._installer_plan(root)
-        environment, _courier = self._installer_environment(root)
-        launcher = root / "launchctl-stub"
-        launcher.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
-        launcher.chmod(0o755)
-        completed = subprocess.run(
-            [
-                "/bin/zsh",
-                str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
-                "--plan",
-                str(plan),
-                "--hour",
-                str(self.driver.DEADMAN_HOUR),
-                "--minute",
-                "2",
-                "--launchctl-bin",
-                str(launcher),
-            ],
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(completed.returncode, 2)
-        self.assertIn(
-            f"refusing --hour {self.driver.DEADMAN_HOUR}: it is the dead-man hour "
-            f"(DEADMAN_HOUR={self.driver.DEADMAN_HOUR})",
-            completed.stderr,
-        )
-        launch_dir = root / "home" / "Library" / "LaunchAgents"
-        self.assertFalse((launch_dir / "com.joulewise.night.plist").exists())
-        self.assertFalse((launch_dir / "com.joulewise.night.deadman.plist").exists())
 
     def test_installer_refuses_a_stale_courier_sent_before_bootstrap(self) -> None:
         root = self.root / "stale-courier"
@@ -1658,10 +1718,6 @@ runpy.run_path(script, run_name='__main__')
                 str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
                 "--plan",
                 str(plan),
-                "--hour",
-                "1",
-                "--minute",
-                "2",
                 "--launchctl-bin",
                 str(launcher),
             ],
@@ -1698,10 +1754,6 @@ runpy.run_path(script, run_name='__main__')
                 str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
                 "--plan",
                 str(plan),
-                "--hour",
-                "1",
-                "--minute",
-                "2",
                 "--launchctl-bin",
                 str(launcher),
             ],
@@ -1736,10 +1788,6 @@ runpy.run_path(script, run_name='__main__')
                 str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
                 "--plan",
                 str(plan),
-                "--hour",
-                str(self.driver.DEADMAN_HOUR),
-                "--minute",
-                "2",
                 "--uninstall",
                 "--launchctl-bin",
                 str(launcher),
@@ -1771,10 +1819,6 @@ runpy.run_path(script, run_name='__main__')
                 str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
                 "--plan",
                 str(plan),
-                "--hour",
-                str(self.driver.DEADMAN_HOUR),
-                "--minute",
-                "2",
                 "--uninstall",
                 "--launchctl-bin",
                 str(launcher),
@@ -1806,6 +1850,7 @@ runpy.run_path(script, run_name='__main__')
         launcher.write_text(
             "#!/bin/zsh\n"
             "print -r -- \"$*\" >> \"$LAUNCH_LOG\"\n"
+            'if [[ "$1" == print ]]; then exit 1; fi\n'
             "if [[ \"$1\" == bootstrap && \"$*\" == *deadman* ]]; then exit 1; fi\n"
             "exit 0\n",
             encoding="utf-8",
@@ -1816,10 +1861,6 @@ runpy.run_path(script, run_name='__main__')
             str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
             "--plan",
             str(plan),
-            "--hour",
-            "1",
-            "--minute",
-            "2",
             "--launchctl-bin",
             str(launcher),
         ]

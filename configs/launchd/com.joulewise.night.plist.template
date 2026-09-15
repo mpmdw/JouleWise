@@ -23,6 +23,10 @@
   </dict>
   <key>StartCalendarInterval</key>
   <dict>
+    <key>Month</key>
+    <integer>@@MONTH@@</integer>
+    <key>Day</key>
+    <integer>@@DAY@@</integer>
     <key>Hour</key>
     <integer>@@HOUR@@</integer>
     <key>Minute</key>
