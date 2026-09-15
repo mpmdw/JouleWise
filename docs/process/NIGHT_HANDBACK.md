@@ -397,7 +397,20 @@ further night.
 After the harvest, run `scripts/install_night_agent.sh --plan
 /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
 --uninstall` FROM the clone (command updated 2026-09-15,
-INSTALL-WINDOWS-MULTI-01). Do NOT remove the clone or
+INSTALL-WINDOWS-MULTI-01). Record its exit code before any retirement (removing
+the old night's checkout or files from service) or successor arming. **Only
+exit 0 permits uninstall-dependent steps.** Exit 4 means **retained**: a
+launchd job name (label) is still loaded, or its query is **UNKNOWN**, meaning
+the installer cannot determine whether it is loaded. It changes no files and
+keeps the job files (plists) and any `.prior` sidecars holding their previous
+bytes. This is a deliberate stop, not a crash or a partial install. **Exit 4
+STOPS retirement and successor arming until a human resolves the loaded or
+UNKNOWN label and `--uninstall` exits 0.** Re-running `--uninstall` is safe and
+**idempotent**: repeating it does not undo a successful uninstall, and a loaded
+or UNKNOWN label continues to protect the files from removal. Any other
+nonzero exit also stops uninstall-dependent steps.
+
+Do NOT remove the clone or
 the night root: the ledger session and the captures live there and the clone
 is a production inventory row. Never re-arm this plan; every further night is
 its own plan, session id, night root, desk inputs and wrapper.

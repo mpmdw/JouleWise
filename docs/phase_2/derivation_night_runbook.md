@@ -1382,8 +1382,16 @@ rendering plists. Timing/location diagnostics print `<reason>: <summary>; <detai
 the summary names `now_epoch_s`, `t0_epoch_s`, `install_close_epoch_s` and
 `deadman_epoch_s`, each with a local ISO-8601 time. `install_outside_span`
 also prints `install_spans_today`; `plan_outside_custody_root` prints `plan`
-and `expected`. The loaded-job diagnostic ends with `label=com.joulewise.night`
-or `label=com.joulewise.night.deadman`, naming the loaded label.
+and `expected`. A job's **label** is its name in launchd. The installer reads
+each label as **LOADED** (the query finds the job), **ABSENT** (the query
+establishes that the job is not loaded), or **UNKNOWN** (the query cannot
+establish either state). A query error alone does not establish absence.
+UNKNOWN counts as loaded for safety: the installer refuses admission or
+file removal. It prints `liveness_unknown: <label> rc=<n> stderr=<first line>`
+with the query's exit code and first stderr line; admission can then refuse
+with `night_agent_already_loaded … state=unknown` (exit 3).
+The loaded-job diagnostic names `label=com.joulewise.night`
+or `label=com.joulewise.night.deadman` and identifies an unknown state when applicable.
 Earlier interpreter, plan, pin, courier, preflight and existing-record checks
 can refuse first.
 
@@ -1392,7 +1400,7 @@ can refuse first.
 | `install_span_closed` | 2 | `now >= install_close_epoch(plan)` or a later check reaches the initially selected span's close; do not install this plan late. Re-plan under the handback procedure. |
 | `install_outside_span` | 2 | `now` is outside every listed `INSTALL_SPANS` entry; use an allowed span before the plan's close. |
 | `plan_t0_in_the_past` | 2 | `t0 < now`; author a future plan. |
-| `night_agent_already_loaded` | 3 | `launchctl print` succeeds for `gui/<uid>/com.joulewise.night` or `gui/<uid>/com.joulewise.night.deadman`; finish the prior harvest and documented uninstall before another arm. `--render-only` skips this loaded-job check. |
+| `night_agent_already_loaded` | 3 | `launchctl print` succeeds for `gui/<uid>/com.joulewise.night` or `gui/<uid>/com.joulewise.night.deadman`, or either query is UNKNOWN; finish the prior harvest and documented uninstall before another arm. Resolve an UNKNOWN query with a human before proceeding. `--render-only` skips this loaded-job check. |
 | `plan_outside_custody_root` | 2 | Resolved `--plan` is not the plan's `<custody_root>/night_plan.json`; publish through §1.4 before installing. |
 | `night_plan_malformed` | 2 from `schedule`; 3 from the installer's earlier plan validation | Missing/malformed `t0_epoch_s`, `window_max_s` or `authored_epoch_s` (or another invalid plan field); the detail identifies the validation failure. |
 | `plan_schedule_unrepresentable` | 2 | `schedule` cannot load the plan or represent derived arithmetic/calendar values, including `window_max_s=10**15` or `10**400`; detail preserves the underlying error. This is representability, with no maximum-window policy ceiling. |
@@ -1404,16 +1412,31 @@ A plan's `t0` must fall on a whole minute that occurs exactly once in local time
 
 The plan cutoff and the initially selected span's close are rechecked before
 each bootstrap (launchd's job-load operation); a later span cannot replace
-the selected one. If either close is reached after the night bootstrap,
-it prints `install_span_closed; rolled back com.joulewise.night before dead-man bootstrap`,
-unloads the night job and exits 2. A dead-man bootstrap failure prints
-`failed to bootstrap com.joulewise.night.deadman; rolled back com.joulewise.night`
-and exits 3. Failure to verify either loaded job prints
-`launch agent verification failed; rolled back both agents` and exits 3.
-Every unsuccessful exit after rendering also removes this attempt's plists
-and restores prior bytes for any plist it overwrote. This prevents a failed
-install's leftover files from fencing the watchdog.
-Follow §1.4 recovery and never report a successful arm after these failures.
+the selected one. A failed install may already have loaded a job, so deleting
+its job file (a **plist**) immediately would leave a loaded job without its
+file. Before replacing or deleting files during failure cleanup, the installer
+requires **proof of unloading**: queries must establish ABSENT for BOTH labels.
+UNKNOWN is insufficient. Prior plists are saved alongside their replacements
+in **`.prior` sidecars**, files holding the previous bytes for recovery.
+These conditions give an install exactly one of three outcomes:
+
+| Outcome (meaning) | Exit code | What remains on disk | Operator's next action |
+|---|---|---|---|
+| **committed** — both agents are loaded and verified | 0 | The installed plists remain; prior plists' `.prior` sidecars are cleaned up. | Complete the arm record and exit by the boundary below. |
+| **restored** — failure before or during loading leaves the pre-attempt files in place, or puts them back after both labels are established absent | Original failure code: 143 (SIGTERM), 130 (SIGINT), 129 (SIGHUP), 1, 2 or 3 | Any overwritten prior plist is restored byte-for-byte with its original modification time (`mtime`); newly created plists are removed. An admission refusal leaves existing files untouched. | Record the original failure and follow §1.4 recovery; do not report a successful arm. |
+| **retained** — cleanup cannot establish that both labels are unloaded | 4 | Nothing is changed by file cleanup: the plists and their `.prior` sidecars are kept as they stand. | Stop. Treat the machine as still holding a loaded label, including when its state is UNKNOWN. A human must resolve it; no retirement, unpublishing or successor arm may follow until `--uninstall` exits 0. |
+
+Retained cleanup prints
+`teardown: <night> loaded=…; <deadman> loaded=…; retained plists: …`.
+Exit 4 is a deliberate refusal to change files, not a crash or a partial install.
+For example, if the night job loads but the selected span closes before
+the dead-man bootstrap, the installer reports `install_span_closed`: if cleanup
+establishes both labels absent, it restores the prior files and exits 2; if a
+label remains loaded or UNKNOWN, it keeps the plists and sidecars and exits 4.
+A bootstrap failure still reports `failed to bootstrap <label>` (for example,
+`failed to bootstrap com.joulewise.night.deadman`), and a loaded-job verification
+failure reports `launch agent verification failed`; their original exit code
+is 3 when restoration succeeds, overridden by 4 when files must be retained.
 
 The night job uses the local Month/Day/Hour/Minute from `t0`. The dead-man
 uses only Hour/Minute from `deadman_epoch(plan)` (§1.2), so it fires daily at
@@ -1598,15 +1621,18 @@ in the arm record. The installer derives these fields; pass no `--hour` or
 `--render-only` and `--launchctl-bin`. An unknown flag, including `--help`,
 prints usage to stderr and exits 2 before any installation work.
 
-**If any step AFTER publication fails**, recover in this exact order and record
-every return code — the same `--uninstall` / preserve / compare / unpublish
-sequence record 12 §"Block B" uses:
+**If any step AFTER publication fails**, run `--uninstall` first and record
+its return code. Continue with preserve / compare / unpublish **only if
+uninstall exits 0**. Exit 4 means a label is still loaded or UNKNOWN and the
+plists were deliberately kept; stop for human resolution. Any other nonzero
+exit also stops recovery. The block below gates each command on the preceding
+command's success; record every return code:
 
 ```zsh
 scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
-  --uninstall
-cp "$NIGHT_ROOT/night_plan.json" "$STAGE/failed-night_plan.json"
-cmp "$STAGE/failed-night_plan.json" "$STAGE/arm-night_plan.json"
+  --uninstall &&
+cp "$NIGHT_ROOT/night_plan.json" "$STAGE/failed-night_plan.json" &&
+cmp "$STAGE/failed-night_plan.json" "$STAGE/arm-night_plan.json" &&
 rm "$NIGHT_ROOT/night_plan.json"
 ```
 
@@ -1616,9 +1642,14 @@ reviewed, so the failed attempt is documentable rather than merely undone. If
 recovery itself fails, record the surviving labels and the discoverable plan
 and escalate; never claim nothing was armed.
 
-`--uninstall` verifies both labels after the two bootouts. If either remains
-loaded, it exits 4, retains both plists, and prints
+`--uninstall` verifies both labels after the two bootouts (requests to unload
+the jobs). If either remains loaded or UNKNOWN, it exits 4, changes no files,
+keeps both plists and any `.prior` sidecars, and prints
 `uninstall: still loaded after bootout: <loaded labels>; retained plists: <night plist> <deadman plist>`.
+Re-running `--uninstall` is safe and **idempotent**: repeating it does not
+undo a successful uninstall, and files remain protected while either label
+is loaded or UNKNOWN. Retry after human resolution; only exit 0 opens the
+remaining recovery steps.
 
 ### 1.5 Record and exit
 
