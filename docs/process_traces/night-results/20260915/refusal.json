@@ -1,0 +1,143 @@
+{
+  "authored_monotonic_ns": 891357336645416,
+  "conditions": [
+    {
+      "basis": null,
+      "condition_id": "C1",
+      "evidence": [],
+      "measured": {
+        "detail": "not evaluated after refusal"
+      },
+      "status": "FAIL"
+    },
+    {
+      "basis": "no_pack_by_design",
+      "condition_id": "C2",
+      "evidence": [],
+      "measured": {},
+      "status": "NOT_APPLICABLE"
+    },
+    {
+      "basis": null,
+      "condition_id": "C3",
+      "evidence": [
+        "probe:/usr/bin/pgrep -lf codex|claude|t3",
+        "probe:/usr/bin/defaults -currentHost read com.apple.screensaver idleTime",
+        "probe:/usr/bin/pmset -g batt",
+        "probe:/usr/bin/pmset -g",
+        "probe:/usr/sbin/sysctl -n vm.loadavg"
+      ],
+      "measured": {
+        "ac_power_raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=36896867)\t80%; AC attached; not charging present: true\n",
+        "agent_census_exit_code": 1,
+        "agent_census_stdout": "",
+        "displaysleep": "0",
+        "hid_idle_raw": "0\n",
+        "load_1m": 2.55,
+        "load_average_raw": "{ 2.55 2.57 2.54 }\n",
+        "pmset_g_raw": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            10\n sleep                0 (sleep prevented by powerd)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         0\n tcpkeepalive         1\n powermode            0\n womp                 1\n"
+      },
+      "status": "FAIL"
+    },
+    {
+      "basis": null,
+      "condition_id": "C4",
+      "evidence": [],
+      "measured": {
+        "detail": "not evaluated after refusal"
+      },
+      "status": "FAIL"
+    },
+    {
+      "basis": null,
+      "condition_id": "C5",
+      "evidence": [
+        "chain:/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/chain.zsh",
+        "chain_sha256:/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/chain.zsh.sha256"
+      ],
+      "measured": {
+        "authored_epoch_s": 1789428403.262474,
+        "chain_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/chain.zsh",
+        "chain_sha256": "356a0810032539663aca548b1223ad55b4e49c89519cfa0a04b8ec6821dc70ac",
+        "chain_sha256_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/chain.zsh.sha256",
+        "detail": "window, plan freshness, measurement HEAD, and chain identity passed",
+        "driver_checkout_head": "27957b6066104fa470dded61a3db06e723c728f0",
+        "expected_chain_sha256": "356a0810032539663aca548b1223ad55b4e49c89519cfa0a04b8ec6821dc70ac",
+        "measurement_checkout_head": "27957b6066104fa470dded61a3db06e723c728f0",
+        "measurement_root": "/Users/edr/JouleWise-measurement-20260915-derivation",
+        "observed_epoch_s": 1789466163.52813,
+        "plan_measurement_head": "27957b6066104fa470dded61a3db06e723c728f0",
+        "plan_repo_head": "27957b6066104fa470dded61a3db06e723c728f0",
+        "t0_epoch_s": 1789466160.0,
+        "window_max_s": 9000
+      },
+      "status": "PASS"
+    }
+  ],
+  "plan_id": "d079-epoch-25g83-derivation-n1-20260915",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal": {
+    "detail": "load_average predicate failed (maximum 2.0)",
+    "evidence": [
+      {
+        "argv": [
+          "/usr/bin/pgrep",
+          "-lf",
+          "codex|claude|t3"
+        ],
+        "exit_code": 1,
+        "monotonic_ns": 891357131392958,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "argv": [
+          "/usr/bin/defaults",
+          "-currentHost",
+          "read",
+          "com.apple.screensaver",
+          "idleTime"
+        ],
+        "exit_code": 0,
+        "monotonic_ns": 891357290854166,
+        "stderr": "",
+        "stdout": "0\n"
+      },
+      {
+        "argv": [
+          "/usr/bin/pmset",
+          "-g",
+          "batt"
+        ],
+        "exit_code": 0,
+        "monotonic_ns": 891357317288875,
+        "stderr": "",
+        "stdout": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=36896867)\t80%; AC attached; not charging present: true\n"
+      },
+      {
+        "argv": [
+          "/usr/bin/pmset",
+          "-g"
+        ],
+        "exit_code": 0,
+        "monotonic_ns": 891357331081333,
+        "stderr": "",
+        "stdout": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            10\n sleep                0 (sleep prevented by powerd)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         0\n tcpkeepalive         1\n powermode            0\n womp                 1\n"
+      },
+      {
+        "argv": [
+          "/usr/sbin/sysctl",
+          "-n",
+          "vm.loadavg"
+        ],
+        "exit_code": 0,
+        "monotonic_ns": 891357336499250,
+        "stderr": "",
+        "stdout": "{ 2.55 2.57 2.54 }\n"
+      }
+    ],
+    "reason": "night_refused_not_quiet"
+  },
+  "schema": "joulewise.unattended_night_receipt.v2",
+  "verdict": "REFUSED"
+}
