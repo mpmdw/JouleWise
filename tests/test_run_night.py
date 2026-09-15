@@ -927,13 +927,16 @@ runpy.run_path(script, run_name='__main__')
         self.assertFalse((root / "home/Library/LaunchAgents").exists())
         self.assertFalse((root / "custody/night").exists())
         self.assertFalse(launch_log.exists())
-        # The installer DERIVES its timing from the plan rather than hardcoding it.
-        # That derivation moved from a shell `schedule --plan` subprocess into the
-        # engine (INSTALL-WINDOWS-MULTI-01 transactional redesign), so the property
-        # is asserted where it now lives; the behaviour asserted is unchanged.
-        engine = (REPO_ROOT / "joulewise" / "night_agent_install.py").read_text()
-        self.assertIn("install_close_epoch_s", engine)
-        self.assertIn("t0_epoch_s", engine)
+        # The old assertion here checked that the SHELL ran `schedule --plan`, i.e.
+        # that the installer derives its timing from the plan instead of hardcoding
+        # it. That derivation moved into the engine in the transactional redesign.
+        # A substring check on the engine source was tried and REMOVED: a delta
+        # auditor showed it survives replacing the derivation with `schedule = {}`,
+        # so it looked like coverage without being any. The property is covered
+        # behaviourally, by execution, in:
+        #   tests.test_run_night.test_schedule_subcommand_prints_calendar_fields_from_the_plan
+        #   tests.test_install_night_agent.test_installer_derives_calendar_fields_from_plan_without_hour_flags
+        # both of which fail if the derivation is removed.
         self.assertIn("@@MONTH@@", template)
         self.assertIn("@@DAY@@", template)
         self.assertNotIn("<integer>7</integer>", template)
