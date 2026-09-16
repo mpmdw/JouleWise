@@ -3391,6 +3391,58 @@ def _histsem_repository_and_pack(pack_root: Path) -> tuple[Path, str]:
     return repository, pack_relative
 
 
+def _histsem_batch_blobs(repository: Path, oids: Sequence[str]) -> list[bytes]:
+    """Read raw blobs in request order with one bounded Git process.
+
+    Batch mode applies no filters or text decoding.  Size-delimited payloads
+    can contain arbitrary bytes, including newlines and batch-looking headers.
+    ``run`` drains stdout while feeding stdin, avoiding pipe-buffer deadlocks.
+    """
+
+    try:
+        completed = subprocess.run(
+            ("git", "-C", str(repository), "cat-file", "--batch"),
+            input=b"".join(oid.encode("ascii") + b"\n" for oid in oids),
+            check=False,
+            capture_output=True,
+            timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HistoricalSemanticsError(
+            "histsem_git_unavailable", f"cannot execute historical blob batch: {exc}"
+        ) from exc
+    if completed.returncode != 0:
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable", "historical blob batch cannot be read"
+        )
+    stream = io.BytesIO(completed.stdout)
+    blobs: list[bytes] = []
+    try:
+        for oid in oids:
+            header = stream.readline().split(b" ")
+            if (
+                len(header) != 3
+                or header[0] != oid.encode("ascii")
+                or header[1] != b"blob"
+                or re.fullmatch(rb"[0-9]+\n", header[2]) is None
+            ):
+                raise ValueError(f"missing or unexpected blob header for {oid}")
+            size = int(header[2])
+            if size > len(completed.stdout):
+                raise ValueError(f"truncated blob {oid}")
+            blob = stream.read(size)
+            if len(blob) != size or stream.read(1) != b"\n":
+                raise ValueError(f"truncated blob or missing delimiter for {oid}")
+            blobs.append(blob)
+        if stream.read(1):
+            raise ValueError("unexpected trailing batch output")
+    except ValueError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable", f"historical blob batch is malformed: {exc}"
+        ) from exc
+    return blobs
+
+
 def _histsem_has_git_metadata(pack_root: Path) -> bool:
     """Return whether a pack is below a path that advertises Git metadata."""
 
@@ -3492,13 +3544,10 @@ def _historical_pack_tree(
         )
     framed = bytearray(PACK_DIGEST_DOMAIN)
     decoded_paths: list[str] = []
-    for relative_raw in sorted(entries):
-        mode, oid = entries[relative_raw]
-        code, blob, _stderr = _histsem_git(repo, "cat-file", "blob", oid)
-        if code != 0:
-            raise HistoricalSemanticsError(
-                "histsem_history_unavailable", f"historical blob {oid} cannot be read"
-            )
+    ordered_paths = sorted(entries)
+    blobs = _histsem_batch_blobs(repo, [entries[path][1] for path in ordered_paths])
+    for relative_raw, blob in zip(ordered_paths, blobs, strict=True):
+        mode, _oid = entries[relative_raw]
         framed.extend(relative_raw)
         framed.extend(b"\0")
         framed.extend(mode.encode("ascii"))

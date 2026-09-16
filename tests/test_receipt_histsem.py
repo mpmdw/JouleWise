@@ -2767,5 +2767,156 @@ class PackAuthenticationRegenerationTests(unittest.TestCase):
 
 
 
+class HistoricalBlobBatchTests(unittest.TestCase):
+    def test_every_governed_blob_matches_legacy_bytes_at_both_coordinates(self) -> None:
+        legacy: dict[str, bytes] = {}
+        original_batch = readiness._histsem_batch_blobs
+        real_run = subprocess.run
+
+        def compare(repository: Path, oids: list[str]) -> list[bytes]:
+            with mock.patch.object(readiness.subprocess, "run", wraps=real_run) as run:
+                blobs = original_batch(repository, oids)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.args[0][-2:], ("cat-file", "--batch"))
+            self.assertEqual(len(blobs), len(oids))
+            for oid, blob in zip(oids, blobs, strict=True):
+                # Repeated OIDs still get a byte comparison at every path;
+                # their legacy Git read need only happen once in this harness.
+                if oid not in legacy:
+                    code, raw, stderr = readiness._histsem_git(
+                        repository, "cat-file", "blob", oid
+                    )
+                    self.assertEqual(code, 0, stderr)
+                    legacy[oid] = raw
+                self.assertEqual(blob, legacy[oid], oid)
+            return blobs
+
+        for row in readiness._load_histsem_pinset(ROOT):
+            for head, expected in (
+                (row["head_commit"], row["historical_pack_sha256"]),
+                ("HEAD", row["current_pack_sha256"]),
+            ):
+                with self.subTest(pack=row["pack_id"], head=head):
+                    with mock.patch.object(
+                        readiness, "_histsem_batch_blobs", side_effect=compare
+                    ) as batch:
+                        digest = historical_pack_tree_sha256(
+                            ROOT, row["pack_path"], head
+                        )
+                    batch.assert_called_once()
+                    self.assertEqual(digest, expected)
+        self.assertTrue(legacy)
+
+    def test_batch_preserves_binary_empty_and_repeated_blobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            init_git_fixture(repository, "-q")
+            payloads = (b"", b"\x00\xff\n" + b"a" * 40 + b" blob 3\nxyz\n", b"tail")
+            oids = []
+            for payload in payloads:
+                result = subprocess.run(
+                    ("git", "-C", str(repository), "hash-object", "-w", "--stdin"),
+                    input=payload, check=True, capture_output=True,
+                )
+                oids.append(result.stdout.decode("ascii").strip())
+            self.assertEqual(
+                readiness._histsem_batch_blobs(repository, [*oids, oids[1]]),
+                [*payloads, payloads[1]],
+            )
+            with self.assertRaises(HistoricalSemanticsError) as missing:
+                readiness._histsem_batch_blobs(repository, ["0" * 40])
+            self.assertEqual(missing.exception.reason_code, "histsem_history_unavailable")
+
+    def test_batch_refuses_malformed_or_incomplete_responses(self) -> None:
+        oid = "a" * 40
+        prefix = oid.encode() + b" blob "
+        valid = prefix + b"3\nabc\n"
+        responses = (
+            b"", oid.encode() + b" missing\n",
+            b"b" * 40 + b" blob 3\nabc\n",
+            oid.encode() + b" tree 3\nabc\n",
+            prefix + b"-1\n", prefix + b"x\n", prefix + b"99999999999999999999\n",
+            prefix + b"3\nab", prefix + b"3\nabc", valid + b"extra",
+        )
+        for raw in responses:
+            with self.subTest(response=raw):
+                with mock.patch.object(
+                    readiness.subprocess, "run",
+                    return_value=subprocess.CompletedProcess([], 0, raw, b""),
+                ):
+                    with self.assertRaises(HistoricalSemanticsError) as caught:
+                        readiness._histsem_batch_blobs(ROOT, [oid])
+                self.assertEqual(caught.exception.reason_code, "histsem_history_unavailable")
+        with mock.patch.object(
+            readiness.subprocess, "run",
+            return_value=subprocess.CompletedProcess([], 0, valid, b""),
+        ):
+            with self.assertRaises(HistoricalSemanticsError):
+                readiness._histsem_batch_blobs(ROOT, [oid, oid])
+
+    def test_batch_process_failures_keep_governed_refusals(self) -> None:
+        for failure in (OSError("unavailable"), subprocess.TimeoutExpired("git", 20)):
+            with self.subTest(failure=failure):
+                with mock.patch.object(readiness.subprocess, "run", side_effect=failure):
+                    with self.assertRaises(HistoricalSemanticsError) as caught:
+                        readiness._histsem_batch_blobs(ROOT, ["a" * 40])
+                self.assertEqual(caught.exception.reason_code, "histsem_git_unavailable")
+        with mock.patch.object(
+            readiness.subprocess, "run",
+            return_value=subprocess.CompletedProcess([], 1, b"", b"unreadable"),
+        ):
+            with self.assertRaises(HistoricalSemanticsError) as caught:
+                readiness._histsem_batch_blobs(ROOT, ["a" * 40])
+        self.assertEqual(caught.exception.reason_code, "histsem_history_unavailable")
+
+    def test_pack_only_sparse_checkout_refuses_external_generator_reference(self) -> None:
+        # Exercise the proposed sparse set without enabling it in production:
+        # governed historical generators also require out-of-pack libraries.
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "repository"
+            repository.mkdir()
+            init_git_fixture(repository, "-q")
+            git(repository, "config", "user.email", "histsem@invalid")
+            git(repository, "config", "user.name", "histsem test")
+            pack = repository / "pack"
+            pack.mkdir()
+            external = repository / "outside/generate_configs.py"
+            external.parent.mkdir()
+            external.write_bytes(b"# committed external generator fixture\n")
+            tree = {"generator": {
+                "path": "outside/generate_configs.py",
+                "sha256": hashlib.sha256(external.read_bytes()).hexdigest(),
+            }}
+            raw = render_json(tree)
+            (pack / "plan_tree.json").write_bytes(raw)
+            (pack / "plan_tree.sha256").write_bytes(
+                gnu_sidecar(hashlib.sha256(raw).hexdigest(), "plan_tree.json")
+            )
+            git(repository, "add", "-A")
+            git(repository, "commit", "-qm", "pin an out-of-pack generator")
+            head = git(repository, "rev-parse", "HEAD").stdout.strip()
+            digest = committed_pack_tree_sha256(pack)
+            real_run = subprocess.run
+
+            def sparse_clone(command, *args, **kwargs):
+                result = real_run(command, *args, **kwargs)
+                if tuple(command[:2]) == ("git", "clone") and result.returncode == 0:
+                    real_run(
+                        ("git", "-C", command[-1], "sparse-checkout", "set",
+                         "--no-cone", "--stdin"),
+                        input=b"/pack/\n", check=True, capture_output=True, timeout=20,
+                    )
+                return result
+
+            with mock.patch.object(readiness.subprocess, "run", side_effect=sparse_clone):
+                with self.assertRaises(HistoricalSemanticsError) as caught:
+                    readiness._histsem_rederive_pack_authentication(
+                        repository, "pack", head, digest
+                    )
+            self.assertEqual(caught.exception.reason_code, "histsem_historical_digest_mismatch")
+            self.assertIn("primary artifact is unreadable", str(caught.exception))
+            self.assertIn("outside/generate_configs.py", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
