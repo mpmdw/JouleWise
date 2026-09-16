@@ -1,0 +1,4 @@
+Ruling written at 11.6 KB (under the 14 KB cap), validator PASS recorded, working tree otherwise untouched.
+
+Ruling filed: Q1 AMEND (dictation (b) incomplete — probes P2/P3 show an except-clause escape and a second-signal raise inside the masked unwind; handler-raises-at-most-once plus one outer catch dictated), Q2 F1 BLOCKER with D's cure sound plus a `render_given` flag, Q3 round 6 licensed as the last same-shape round with record-and-poll as the no-round-7 redesign, Q4 fold F3 in, Q5 NOT YET landable until an execution-lens seat drives real signals on both 3.14 and 3.9.
+rc=0
