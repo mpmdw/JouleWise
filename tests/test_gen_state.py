@@ -36,9 +36,6 @@ EXPECTED_IDS = {
     "CLONE-READINESS-01",
     "CONTRACT-PIN-DRIFT-01",
     # D-180 (Ed, 2026-09-10): arm recoverability and steerability lanes.
-    "INSTALL-WINDOWS-MULTI-01",
-    "ARM-RETRY-CLASS-01",
-    "ARM-CENSUS-IDLE-INTERACTIVE-01",
     "REMOTE-CONTROL-BETWEEN-WINDOWS-01",
     "GATE-B1-PROVENANCE-BAND-01",
     "CALEXITS-RACE-FLAKE-01",
@@ -61,17 +58,13 @@ EXPECTED_IDS = {
     # 2026-09-15 activation d6888966: lieutenant protocol finding, magistrate registration, not a ruling.
     "BRIDGE-BASELINE-COMPLIANCE-01",
     # 2026-09-15 activation 08ca8197 (restart census, registered at the
-    # interactive session b0ae8462's request): the three hygiene lanes behind
-    # the fseventsd blow-up -- worktree prune, temp-dir hygiene, orphan sentinel.
+    # interactive session b0ae8462's request): remaining hygiene lanes after
+    # the 2026-09-16 orphan-sentinel closure -- worktree prune and temp-dir hygiene.
     "WORKTREE-PRUNE-01",
     "TEMP-HYGIENE-IW-TMP-01",
-    "FIXTURE-ORPHAN-SENTINEL-01",
     # 2026-09-15 activation 08ca8197: Ed's standing data-offload instruction
     # (relayed by the interactive session b0ae8462), registered as a lane.
     "DATA-OFFLOAD-ICLOUD-01",
-    # 2026-09-15 activation 08ca8197: Ed's arm-to-t0 floor remark (relayed by
-    # the interactive session b0ae8462), registered as the install-pad lane.
-    "LEAD-MARGIN-01",
     # 2026-09-15 activation 08ca8197: record 16 flag F3 (tests reach the canonical
     # checkout by literal path), registered at the interactive session's request.
     "TEST-CANONICAL-PATH-DEPENDENCY-01",
@@ -789,7 +782,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 190)  # 2026-09-16 (activation 08ca8197, installer post-merge review): registers INSTALLER-FOLLOWUPS-REBASE-01 and RUNBOOK-SOURCE-MAP-01: 188 + 2 = 190. 2026-09-16 (activation 08ca8197, Ed meter purchase via the interactive session): registers WALL-METER-GAIN-01: 187 + 1 = 188. 2026-09-16 (activation 08ca8197, interactive nit): registers TEST-PGREP-DIALECT-MULTILINE-01: 186 + 1 = 187. 2026-09-16 (activation 08ca8197, Ed remark via the interactive session): registers REFUSAL-FAST-RETRY-01: 185 + 1 = 186. 2026-09-15 (activation 08ca8197, interactive record 16 F3): registers TEST-CANONICAL-PATH-DEPENDENCY-01: 184 + 1 = 185. 2026-09-15 (activation 08ca8197, Ed remark via the interactive session): registers LEAD-MARGIN-01: 183 + 1 = 184. 2026-09-15 (activation 08ca8197, Ed instruction via the interactive session): registers DATA-OFFLOAD-ICLOUD-01: 182 + 1 = 183. 2026-09-15 (activation 08ca8197, restart census): registers WORKTREE-PRUNE-01, TEMP-HYGIENE-IW-TMP-01 and FIXTURE-ORPHAN-SENTINEL-01: 179 + 3 = 182. 2026-09-15 (activation d6888966, lieutenant protocol finding): registers BRIDGE-BASELINE-COMPLIANCE-01: 178 + 1 = 179. 2026-09-15 (activation d6888966, cold gate 28 Q2 sibling): registers WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01: 177 + 1 = 178. 2026-09-15 (activation d6888966, cold gate 28 Q4 F4): registers INSTALLER-BACKUP-WINDOW-01: 176 + 1 = 177. 2026-09-15 (activation d6888966, cold gate 25 Q6): registers RUNBOOK-S3-FAIL-ROUTE-CROSSREF-01: 175 + 1 = 176. 2026-09-15 (activation d6888966, record 19 bench replay): registers WATCHDOG-CLI-TEST-TMP-DISCOVERY-01: 174 + 1 = 175. 2026-09-15 (activation d6888966, GAMMA counter-review): registers PLAN-TREE-ROOTS-CONTRACT-01 and ROOT-NAMESPACE-FALLBACK-01: 172 + 2 = 174. 2026-09-15 (activation d6888966): registers WATCHDOG-STALE-EXIT-CLASS-01 and FIXTURE-FAKE-VLLM-LEAK-01: 170 + 2 = 172. 2026-09-14 20:55 (activation 24b9d3dd): closes ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 on Ed's probe record (record 75): 171 - 1 = 170. 2026-09-14 (activation 24b9d3dd, cold gate 65): registers PACK-ROOT-SUCCESSOR-V5-01: 170 + 1 = 171. 2026-09-14 (PR #330 merge of main): closes ESTIMAND-ENCLOSURE-01, FB-PLANNING-METADATA-01, D165-RELABEL-01 and PAPER-K (merged 2026-09-05/06, PRs #288/#290/#292/#293/#294): 174 - 4 = 170. Activation 24b9d3dd (2026-09-13) registers CALEXITS-RACE-FLAKE-01 (hosted race flake, p3): 173 + 1 = 174; the same day it closes NIGHT-CENSUS-CHATGPT-APP-01 (PR #334) and GATE-SENSIBILITY-SWEEP-01 (cold gate 47), registers GATE-B1-PROVENANCE-BAND-01: 174 - 2 + 1 = 173; earlier it registered ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 (ruling-first, from the pairing refuter on cold gate 05): 173 + 1 = 174. Activation c5048879 (2026-09-13) registers NIGHT-CENSUS-CHATGPT-APP-01 (ruling-first): 172 + 1 = 173. Activation f0d28baa (2026-09-12) closes FIXTURE-SENTINEL-CONTROLLER-01 (PR #324), RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01 (PR #325) and GIT-FIXTURE-MAINTENANCE-SWEEP-01 (PR #326): 175 - 3 = 172; ARM-READINESS-FIXTURE-CLOCK-ORIGIN-01 (PR #327) was registered and closed in the same activation without a kernel row. Activation 36d3a823 adds four follow-ups; handback gloss evidence supplied.  T38l+ adds CONTRACT-TEMPORAL-HEDGE-GUARD-01; T38l adds EPOCH-CONTINUATION-01 and ISSUER-CHECK-CONTINUATION-AWARE-01; Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
+        self.assertEqual(len(self.tasks), 185)  # 2026-09-16 (interactive session b0ae8462, merge wave): closes INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, LEAD-MARGIN-01, FIXTURE-ORPHAN-SENTINEL-01 (PRs #341, #342, #343, #344, #345): 190 - 5 = 185. 2026-09-16 (activation 08ca8197, installer post-merge review): registers INSTALLER-FOLLOWUPS-REBASE-01 and RUNBOOK-SOURCE-MAP-01: 188 + 2 = 190. 2026-09-16 (activation 08ca8197, Ed meter purchase via the interactive session): registers WALL-METER-GAIN-01: 187 + 1 = 188. 2026-09-16 (activation 08ca8197, interactive nit): registers TEST-PGREP-DIALECT-MULTILINE-01: 186 + 1 = 187. 2026-09-16 (activation 08ca8197, Ed remark via the interactive session): registers REFUSAL-FAST-RETRY-01: 185 + 1 = 186. 2026-09-15 (activation 08ca8197, interactive record 16 F3): registers TEST-CANONICAL-PATH-DEPENDENCY-01: 184 + 1 = 185. 2026-09-15 (activation 08ca8197, Ed remark via the interactive session): registers LEAD-MARGIN-01: 183 + 1 = 184. 2026-09-15 (activation 08ca8197, Ed instruction via the interactive session): registers DATA-OFFLOAD-ICLOUD-01: 182 + 1 = 183. 2026-09-15 (activation 08ca8197, restart census): registers WORKTREE-PRUNE-01, TEMP-HYGIENE-IW-TMP-01 and FIXTURE-ORPHAN-SENTINEL-01: 179 + 3 = 182. 2026-09-15 (activation d6888966, lieutenant protocol finding): registers BRIDGE-BASELINE-COMPLIANCE-01: 178 + 1 = 179. 2026-09-15 (activation d6888966, cold gate 28 Q2 sibling): registers WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01: 177 + 1 = 178. 2026-09-15 (activation d6888966, cold gate 28 Q4 F4): registers INSTALLER-BACKUP-WINDOW-01: 176 + 1 = 177. 2026-09-15 (activation d6888966, cold gate 25 Q6): registers RUNBOOK-S3-FAIL-ROUTE-CROSSREF-01: 175 + 1 = 176. 2026-09-15 (activation d6888966, record 19 bench replay): registers WATCHDOG-CLI-TEST-TMP-DISCOVERY-01: 174 + 1 = 175. 2026-09-15 (activation d6888966, GAMMA counter-review): registers PLAN-TREE-ROOTS-CONTRACT-01 and ROOT-NAMESPACE-FALLBACK-01: 172 + 2 = 174. 2026-09-15 (activation d6888966): registers WATCHDOG-STALE-EXIT-CLASS-01 and FIXTURE-FAKE-VLLM-LEAK-01: 170 + 2 = 172. 2026-09-14 20:55 (activation 24b9d3dd): closes ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 on Ed's probe record (record 75): 171 - 1 = 170. 2026-09-14 (activation 24b9d3dd, cold gate 65): registers PACK-ROOT-SUCCESSOR-V5-01: 170 + 1 = 171. 2026-09-14 (PR #330 merge of main): closes ESTIMAND-ENCLOSURE-01, FB-PLANNING-METADATA-01, D165-RELABEL-01 and PAPER-K (merged 2026-09-05/06, PRs #288/#290/#292/#293/#294): 174 - 4 = 170. Activation 24b9d3dd (2026-09-13) registers CALEXITS-RACE-FLAKE-01 (hosted race flake, p3): 173 + 1 = 174; the same day it closes NIGHT-CENSUS-CHATGPT-APP-01 (PR #334) and GATE-SENSIBILITY-SWEEP-01 (cold gate 47), registers GATE-B1-PROVENANCE-BAND-01: 174 - 2 + 1 = 173; earlier it registered ARM-CENSUS-BROWSER-PROBE-SYSTEM-SERVICES-01 (ruling-first, from the pairing refuter on cold gate 05): 173 + 1 = 174. Activation c5048879 (2026-09-13) registers NIGHT-CENSUS-CHATGPT-APP-01 (ruling-first): 172 + 1 = 173. Activation f0d28baa (2026-09-12) closes FIXTURE-SENTINEL-CONTROLLER-01 (PR #324), RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01 (PR #325) and GIT-FIXTURE-MAINTENANCE-SWEEP-01 (PR #326): 175 - 3 = 172; ARM-READINESS-FIXTURE-CLOCK-ORIGIN-01 (PR #327) was registered and closed in the same activation without a kernel row. Activation 36d3a823 adds four follow-ups; handback gloss evidence supplied.  T38l+ adds CONTRACT-TEMPORAL-HEDGE-GUARD-01; T38l adds EPOCH-CONTINUATION-01 and ISSUER-CHECK-CONTINUATION-AWARE-01; Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,
@@ -1315,7 +1308,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_run_state_gate_suppresses_lane_heads_but_active_work_continues(self):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
-        head_oracle["expected_selectable_task_ids"][0] = "INSTALL-WINDOWS-MULTI-01"  # 2026-09-15 (activation 1acf2aee): N1-20260915 event released; INSTALL-WINDOWS-MULTI-01 is the agent head at rank 0 (D-181 cl.1)
+        head_oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"  # 2026-09-16 merge wave: installer closed; existing rank order restores WO-LAUNCH-BINDING.
         _adapt_retired_lane_heads(head_oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(gate_oracle["active_global_gates"])
         rendered = gen_state.render_run_state(kernel)
@@ -1366,7 +1359,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")
-        oracle["expected_selectable_task_ids"][0] = "INSTALL-WINDOWS-MULTI-01"  # 2026-09-15 (activation 1acf2aee): N1-20260915 event released; INSTALL-WINDOWS-MULTI-01 is the agent head at rank 0 (D-181 cl.1)
+        oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"  # 2026-09-16 merge wave: installer closed; existing rank order restores WO-LAUNCH-BINDING.
         _adapt_retired_lane_heads(oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
@@ -1526,7 +1519,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             {
                 "ED-DATES-01",
                 "V5-G2A-PREFILL-PROBE-01",
-                "INSTALL-WINDOWS-MULTI-01",  # 2026-09-15 (activation 1acf2aee): agent head at rank 0 after the N1-20260915 event release (D-181 cl.1); WO-LAUNCH-BINDING follows it
+                "WO-LAUNCH-BINDING",  # 2026-09-16 merge wave: installer closed; existing rank order restores WO-LAUNCH-BINDING.
             },
         )
         self.assertNotIn("excluded by:", run_state)

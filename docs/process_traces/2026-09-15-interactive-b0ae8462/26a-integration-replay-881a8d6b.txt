@@ -1,0 +1,8 @@
+       0
+881a8d6b
+MODULE PASS tests.test_validate_powermetrics_fiducial tests=12 failures=0 errors=0 skipped=0 seconds=8.428
+SHARD SUMMARY index=12/12 modules=30 tests=804 failures=0 errors=0 skipped=45 result=PASS
+WORKERS SUMMARY shards=12 modules=239 tests=6240 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+Wed Sep 16 01:26:19 PDT 2026
+
+[exited with code 0]

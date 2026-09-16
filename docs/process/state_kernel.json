@@ -41,45 +41,6 @@
       "status_note": "2026-09-10 23:35: Ed's ruling (issue 316) recorded on main (PR #319); night one = epoch-equivalence check; continuation mechanism (S10) in the gate on its branch; arm materials next",
       "stop_card": null
     },
-    "ARM-CENSUS-IDLE-INTERACTIVE-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ARM-CENSUS-IDLE-INTERACTIVE-01/acceptance",
-          "label": "ARM-CENSUS-IDLE-INTERACTIVE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Runbook step-3b preconditions classify an interactive session as not foreign only when its process tree holds no test, measurement, or capture child; REHEARSAL_STUB only; plan-span refusal night_refused_agent_present untouched and pinned by a counterfactual test; refuters on the classifier."
-      },
-      "authority": {
-        "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
-        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "D-181 cl.1 order: third of the three lanes; takes rank 0 of the agent lane when ARM-RETRY-CLASS-01 closes",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "ARM-RETRY-CLASS-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "For REHEARSAL_STUB plans, classify idle interactive claude/T3 sessions as not foreign at the arm-time census (D-180 cl.3); plan-span census unchanged.",
-      "id": "ARM-CENSUS-IDLE-INTERACTIVE-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 173,
-      "status": "blocked",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337): third in the promoted order; starts when ARM-RETRY-CLASS-01 closes and takes the agent lane's rank 0 in that bookkeeping. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. A session left open through t0 still refuses the night (plan-span census unchanged).",
-      "stop_card": null
-    },
     "ARM-PACKET-01": {
       "acceptance": {
         "evidence": [
@@ -118,45 +79,6 @@
       "rank": 75,
       "status": "blocked",
       "status_note": "DEPENDENCY RETARGETED 2026-09-03 to V5-TRANSACTION-01, on the magistrate's ruling. This row's hard-start dependency named V4-TRANSACTION-01, which the same batch retired by supersession: D-164 rules that the _v4 family is never collected, and D-167 installs V5-TRANSACTION-01 as the live successor. Left as it was, this row would have been blocked forever on a shelved predecessor and its packet would have been authored against a family that will never be measured. The sequencing intent is unchanged and is what carries over - the arm packet is authored only AFTER the reviewed head and its executed end-to-end T-0 pass exist - but it is now the _v5 head, not the _v4 one. The B-7 ordering from the sitting B-21 authority still binds. Prior note follows. Sequenced inside the _v4 program: after V4-TRANSACTION-01's evidence/attestation stages define the reviewed head.",
-      "stop_card": null
-    },
-    "ARM-RETRY-CLASS-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ARM-RETRY-CLASS-01/acceptance",
-          "label": "ARM-RETRY-CLASS-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "NIGHT_HANDBACK and the arm runbook template carry the enumerated retry class (idle interactive session at arm-time census, stale/mismatched notice hash, CLOCK_UNCERTAIN/NETWORK_UNCERTAIN tick, transport failure) with the refreshed-notice rule and the explicit list of refusals that stay on the cold-gate path; a test pins the enumeration."
-      },
-      "authority": {
-        "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
-        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "D-181 cl.1 order: second of the three lanes; takes rank 0 of the agent lane when INSTALL-WINDOWS-MULTI-01 closes",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "INSTALL-WINDOWS-MULTI-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Install D-180 cl.2's pre-authorized retry class for non-physics arm aborts into NIGHT_HANDBACK and the runbook template.",
-      "id": "ARM-RETRY-CLASS-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 172,
-      "status": "blocked",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337): second in the promoted order; starts when INSTALL-WINDOWS-MULTI-01 closes and takes the agent lane's rank 0 in that bookkeeping (the rank field moves; the dependency edge holds the order). Supersedes the D-180 sequencing note. Docs + test lane.",
       "stop_card": null
     },
     "AUD-FOLLOWUPS": {
@@ -2502,37 +2424,6 @@
       "status_note": "2026-09-15 activation d6888966: registered from activation decae362 record 00 Follow-up and the d6888966 State found census; not started; not night-critical. Sibling of REPLAY-FIXTURE-LEAK-01, kept separate because it covers a different fixture and file. Separate ed_external note: culling the existing orphan processes is Ed's call; no orphan cull is authorized by this agent lane.",
       "stop_card": null
     },
-    "FIXTURE-ORPHAN-SENTINEL-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md (State found: ps census at 20:09 PDT 2026-09-15, no orphan fixture processes after the 19:55 reboot)",
-          "docs/process/state_kernel.json /tasks/FIXTURE-FAKE-VLLM-LEAK-01 (35 orphaned fake vllm serve fixture processes, parent PID 1, launched 2026-09-03 to 2026-09-05, outside the claude/codex/t3 census)",
-          "docs/process_traces/2026-09-15-activation-d6888966/00-launch-record.md (State found: the 35 orphans still present at 06:30 PDT 2026-09-15)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FIXTURE-ORPHAN-SENTINEL-01/acceptance",
-          "label": "FIXTURE-ORPHAN-SENTINEL-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A helper (name chosen by the implementer) prints the orphan fixture census as JSON: for each match the PID, parent PID, start time, age, RSS and the signature it matched; exit 0 with an empty list when clean. The signature registry lives in one file that every fixture author extends. The magistrate launch record and prewindow_check's report both run it and record the count; prewindow_check treats a non-empty census as a refusal reason at t0 (an orphan is agent-adjacent load), the same class as the existing fixture-process refusals, without changing the codex, claude or t3 agent census. Culling is a separate documented command that kills only listed PIDs after re-reading their command lines, is run by Ed or by the magistrate outside any plan span, and is never automatic. A regression spawns a signature-matching decoy under PID 1 and proves the census lists it and the cull removes it while an unrelated process survives. Not night-critical."
-      },
-      "authority": {
-        "label": "2026-09-15 activation 08ca8197 launch record (magistrate registration at the interactive session's request; registration, not a ruling)",
-        "path": "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Detect and report orphaned test-fixture processes independently of any single fixture's teardown. FIXTURE-FAKE-VLLM-LEAK-01 fixes the fake vllm server's own exit paths; this lane adds the sentinel that catches every leak class: a census helper that lists processes whose parent is launchd (PID 1), whose command line matches a registry of known fixture signatures (the fake vllm serve line, the fake node worker, any future fixture that registers a signature), with age and RSS, so an orphan is seen at the next magistrate launch or prewindow_check instead of thirteen days later. Before the 2026-09-15 restart, 35 such orphans (launched 2026-09-03 to 2026-09-05) sat outside the night census, which matches only codex, claude or t3, and held memory and ports; after the reboot this activation's 20:09 PDT census found none.",
-      "id": "FIXTURE-ORPHAN-SENTINEL-01",
-      "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 208,
-      "status": "queued",
-      "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 from the restart census; not started; registration only. Distinct from FIXTURE-FAKE-VLLM-LEAK-01 (fix at the source) and REPLAY-FIXTURE-LEAK-01 (stale fixture residue): this row is the detector for every class. The cull stays a documented manual or magistrate command outside plan spans; no orphan cull is authorized by this registration.",
-      "stop_card": null
-    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -2974,48 +2865,6 @@
       "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started. Lead-owned (Fable magistrate; not delegable). Fixture or mock evidence cannot discharge this live verification.",
       "stop_card": null
     },
-    "INSTALL-WINDOWS-MULTI-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/INSTALL-WINDOWS-MULTI-01/acceptance",
-          "label": "INSTALL-WINDOWS-MULTI-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Plan writer, runbook template and watchdog constants accept a list of install spans, each with the never-install-after-close dead-man rule; the plan's t0 may be any clock time launchd can name: any whole minute (`t0_epoch_s % 60 == 0`) whose local wall-clock reading occurs exactly once (refusals `plan_t0_not_minute_aligned`, `plan_t0_ambiguous_local_time`); launchd Month/Day/Hour/Minute derived from the plan, not a fixed belt; a second plan may be armed as soon as the previous harvest is done; tests pin the span list, the dead-man per span and the whole-minute unambiguous t0 (both refusals, an ordinary control, and a spring-gap control); NIGHT_HANDBACK notice text names every span. Lands under the twelve-row gate."
-      },
-      "authority": {
-        "label": "D-181 (Ed, 2026-09-14, directive issue #337): windows run whenever the machine is quiet; the three D-180 lanes move to the top of the agent lane in order, starting after the 09-15 night's harvest and §2.5 action",
-        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/55-ed-directive-337-verbatim.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "night n1-20260915 REFUSED at t0 (night_refused_not_quiet, load 2.55 > 2.0, census clean); harvested, §2.5 nothing to judge, one action = re-plan never re-arm; agents uninstalled 05:43 09-15",
-            "path": "docs/process_traces/2026-09-15-activation-1acf2aee/01-equivalence-night-20260915-harvest-record.md"
-          },
-          "kind": "event",
-          "required": "D-181 cl.1 (Ed, directive #337): the promoted work starts immediately after the 09-15 equivalence night's harvest (runbook §2) and its §2.5 outcome action; released in the bookkeeping that records both, with the harvest record and the §2.5 action as evidence",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "N1-20260915-HARVESTED-AND-S2-5-ACTION-TAKEN"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Let the night schedule name several bounded install spans per day (D-180 cl.1) instead of the single 03:00–06:30 block, with a dead-man per span; a plan may carry a t0 at any clock time and a second window may be armed as soon as the previous harvest is done (D-181 cl.1).",
-      "id": "INSTALL-WINDOWS-MULTI-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 0,
-      "status": "queued",
-      "status_note": "2026-09-14: D-181 cl.1 (Ed, directive #337) moves this lane to the head of the agent lane (rank 0), first of the three in order INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01; blocked on the event dependency until the 09-15 equivalence night (armed under directive #336, untouched) is harvested and its runbook §2.5 outcome action is taken; then queued and selectable. Supersedes the D-180 sequencing note 'after G2-a instrument validation'. Until this lands, the machinery still supports only one install span and one fixed launchd minute — a mechanism limit, not a rule; D-181 cl.1 is in force and no timing rule survives it. 2026-09-15: the 09-15 night fired and was REFUSED at the gate on load average alone (agent census clean); harvested and its §2.5 action taken (record 01 of activation 1acf2aee) — the event dependency is satisfied and this lane is QUEUED at agent rank 0. 2026-09-15 (activation d6888966, cold gate 25 Q5): acceptance clause (c) narrowed to the whole-minute unambiguous t0 (FIX-5 affirmed); blocker at int head df86cee6 under fix round 2 per ruling 10 Q1(c)/Q3-as-amended.",
-      "stop_card": null
-    },
     "INSTALLER-BACKUP-WINDOW-01": {
       "acceptance": {
         "evidence": [
@@ -3319,49 +3168,6 @@
       "rank": 113,
       "status": "blocked",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-12 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
-      "stop_card": null
-    },
-    "LEAD-MARGIN-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-15-activation-08ca8197/02-lead-margin-lane-registration.md (registration record: Ed's remark as relayed verbatim by the interactive session b0ae8462 at ~23:20 PDT 2026-09-15 over the cross-session channel, not a directive issue; the constants and lines below re-read by this activation from the branch checkout at 69d668be and from main at b8719af7)",
-          "/Users/edr/code/JouleWise-wt-iw-txn/scripts/run_night.py:68 (INSTALL_CLOSE_MARGIN_S = 3600) and :965-970 (install_close_epoch = t0 - PLAN_LEAD_S - INSTALL_CLOSE_MARGIN_S) on feat/2026-09-15-install-windows-transactional at 69d668be; neither symbol exists on main at b8719af7, so the lane starts only after INSTALL-WINDOWS-MULTI-01 lands",
-          "scripts/magistrate_watchdog.py:67-70 (PLAN_LEAD_S = 25 * 60, REQUEST_LEAD_S = 25 * 60, TERM_LEAD_S = 16 * 60, KILL_LEAD_S = 15 * 60) and :71 (SUPERVISOR_POLL_S = 10) on main at d3ea0236; in scope after the 23:30 amendment",
-          "/Users/edr/code/JouleWise-wt-iw-txn/docs/phase_2/derivation_night_runbook.md:1305 (= t0 - 25 min - 60 min = t0 - 85 min) and :2630 (install_close_epoch(plan) = t0 - 85 min) at 69d668be",
-          "docs/process_traces/2026-09-15-activation-08ca8197/02-lead-margin-lane-registration.md (Amendment 23:30 PDT: Ed's second remark as relayed; the resident lead un-fenced; targets 5/5/3/2 minutes and about 2 minutes install pad; launchd StartInterval read from the installed agent = 300 s)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/LEAD-MARGIN-01/acceptance",
-          "label": "LEAD-MARGIN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A small PR that (1) states, from each constant's history and the D-180/D-181 records, what it physically protects, and derives every new value from that: the 1-minute load average must decay after the magistrate and its children exit (about 2-3 minutes), the t0 census needs the magistrate, its supervisor and every Codex child gone, and the watchdog must still be able to observe each deadline given its own tick cadence (the launchd StartInterval, 300 s on the installed agent at registration time, and SUPERVISOR_POLL_S = 10 s); if the interval bounds the chain the seat says so and adjusts the chain or the interval, never silently; (2) sets PLAN_LEAD_S / REQUEST_LEAD_S / TERM_LEAD_S / KILL_LEAD_S toward 5 / 5 / 3 / 2 minutes and INSTALL_CLOSE_MARGIN_S toward about 2 minutes, landing a different value only with the physical reason written down; (3) keeps the ordering invariant REQUEST > TERM > KILL > 0 and install_close before the request deadline, pinned by a test that fails if any constant or the derived install_close_epoch changes; (4) updates every runbook and handback line that quotes 85 minutes (branch runbook :1305 and :2630 at 69d668be) and the 25-minute lead to the new figures, glossed in plain words; (5) leaves every t0 gate (census, load threshold, HID idle, boot clock, custody) unchanged, shown by an empty grep for their thresholds in the diff. Science quality is the only gate on the speed-up: a number is refused only when the physical mechanism it protects would be violated, never for caution alone. Lands under the twelve-row gate."
-      },
-      "authority": {
-        "label": "2026-09-15 ~23:20 PDT: Ed's remark on the 85-minute arm-to-t0 floor (surely a way to speed this without weakening the science), relayed verbatim by the interactive session b0ae8462; registered by activation 08ca8197 (registration, not a ruling)",
-        "path": "docs/process_traces/2026-09-15-activation-08ca8197/02-lead-margin-lane-registration.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "INSTALL_CLOSE_MARGIN_S and install_close_epoch exist only on the transactional-installer branch; the lane edits them after that branch merges so there is one home for the constant",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "INSTALL-WINDOWS-MULTI-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Shorten the arm-to-t0 floor to about 10 minutes without touching any measurement gate. Today install_close_epoch = t0 - PLAN_LEAD_S - INSTALL_CLOSE_MARGIN_S = t0 - 25 min - 60 min = t0 - 85 min, where the 25-minute PLAN_LEAD_S is the resident-magistrate deadline chain (REQUEST 25, TERM 16, KILL 15 minutes before t0, scripts/magistrate_watchdog.py:67-70) and INSTALL_CLOSE_MARGIN_S = 3600 s is a flat pad on top of it. Ed, 2026-09-15 ~23:20 PDT, verbatim as relayed: \"surely a way to speed this without weakening the science\"; and at ~23:30, verbatim as relayed: \"can't do less than 30 safely? let's do a speed pass with science quality the only gate to speeding things up i want quick iterations fully ran by you looped and running new ones\". AMENDED at 23:30: the 25-minute resident lead is no longer fenced. Targets: PLAN_LEAD_S / REQUEST_LEAD_S / TERM_LEAD_S / KILL_LEAD_S = 5 / 5 / 3 / 2 minutes and INSTALL_CLOSE_MARGIN_S about 2 minutes, giving an arm-to-t0 floor of about 10 minutes. The floor multiplies directly into how many quiet windows fit in a day (the quiet-windows-any-time rule), so it is P1.",
-      "id": "LEAD-MARGIN-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 210,
-      "status": "blocked",
-      "status_note": "2026-09-15 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462, then AMENDED at ~23:30 PDT on Ed's second relayed remark: the 25-minute resident lead is in scope (targets 5/5/3/2 minutes) together with the install pad (about 2 minutes), floor about 10 minutes. Registration only; no constant changed. Status blocked until INSTALL-WINDOWS-MULTI-01 lands (hard start dependency; the install pad lives on that branch). Each number is justified by the mechanism it protects; the targets are Ed's direction, the physical derivation is the seat's, and only science quality may refuse a value.",
       "stop_card": null
     },
     "LINE-AUDIT-GUARD-01": {
@@ -5620,20 +5426,26 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #342 merge cb70e97f; ARM-RETRY-CLASS-01 implementation and fix-round record 03j",
+            "path": "docs/process_traces/2026-09-15-interactive-b0ae8462/03j-a172-fix-round-3-report.md"
+          },
           "kind": "task",
           "required": "part (b) classifies the zero-capture refusal codes inside the retry class that lane builds; the classifier must exist first",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "ARM-RETRY-CLASS-01"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #341 merge 2944a45d; terminal read 08n and live smoke PASS record 08k",
+            "path": "docs/process_traces/2026-09-15-interactive-b0ae8462/08n-row12-terminal-read-d5ec18bb.md"
+          },
           "kind": "task",
           "required": "the install and span rules this lane edits land with the transactional installer; one home for the constants",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "INSTALL-WINDOWS-MULTI-01"
         }
@@ -5646,8 +5458,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 212,
-      "status": "blocked",
-      "status_note": "2026-09-16 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; AMENDED 00:40 PDT with Ed's ruling of 00:35 (Ed, 2026-09-16 00:35 PDT, verbatim as relayed by the interactive session b0ae8462: \"unless there's a scientific reason that's an unsound decision absolutely reduce the hours to 20 min\"): part (b) is ruled, not ruling-gated; the ruling arrived by relay, not by directive issue, and the lane's decision-log addendum is where it is recorded for the doctrine. Registration only, nothing changed. Status blocked until ARM-RETRY-CLASS-01 and INSTALL-WINDOWS-MULTI-01 land (hard start dependencies). The D-161 evidence fence and every t0 gate are untouched.",
+      "status": "queued",
+      "status_note": "2026-09-16 (interactive session b0ae8462, merge wave): QUEUED; ARM-RETRY-CLASS-01 (PR #342, merge cb70e97f) and INSTALL-WINDOWS-MULTI-01 (PR #341, merge 2944a45d) are merged; both hard start dependencies are satisfied. Rank unchanged. Historical registration follows. 2026-09-16 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; AMENDED 00:40 PDT with Ed's ruling of 00:35 (Ed, 2026-09-16 00:35 PDT, verbatim as relayed by the interactive session b0ae8462: \"unless there's a scientific reason that's an unsound decision absolutely reduce the hours to 20 min\"): part (b) is ruled, not ruling-gated; the ruling arrived by relay, not by directive issue, and the lane's decision-log addendum is where it is recorded for the doctrine. Registration only, nothing changed. Status blocked until ARM-RETRY-CLASS-01 and INSTALL-WINDOWS-MULTI-01 land (hard start dependencies). The D-161 evidence fence and every t0 gate are untouched.",
       "stop_card": null
     },
     "REGISTRY-ID-NAMING-01": {
@@ -6972,7 +6784,7 @@
       "priority": "p2_next_slice",
       "rank": 12,
       "status": "queued",
-      "status_note": "Lever 1 (reduce memo) + lever 2 (crash-matrix parallelization, hosted-verified 23.1->6.5 min worst shard) + the ack backstop LANDED via PR #172; the exclusive crash-matrix job is no longer the CI critical path. Remaining to the <=12 min target: ordinary test shard 4 (~18 min worst) and calibration-exits-exclusive (~16.6 min); scripts/test_timings.json shard split needs re-declaration (unbalanced the other way). 2026-09-13 (activation 24b9d3dd): the PR-fast/full tier split is RETIRED by owner acceptance of PR #317 (merge 73bf1754) under cold gate 17; decision-log addendum of the same date; goal and evidence row 2 amended as the addendum specifies. Lever naming: this note's lever 2 (crash-matrix parallelization) is unaffected.",
+      "status_note": "Lever 1 (reduce memo) + lever 2 (crash-matrix parallelization, hosted-verified 23.1->6.5 min worst shard) + the ack backstop LANDED via PR #172; the exclusive crash-matrix job is no longer the CI critical path. Remaining to the <=12 min target: ordinary test shard 4 (~18 min worst) and calibration-exits-exclusive (~16.6 min); scripts/test_timings.json shard split needs re-declaration (unbalanced the other way). 2026-09-13 (activation 24b9d3dd): the PR-fast/full tier split is RETIRED by owner acceptance of PR #317 (merge 73bf1754) under cold gate 17; decision-log addendum of the same date; goal and evidence row 2 amended as the addendum specifies. Lever naming: this note's lever 2 (crash-matrix parallelization) is unaffected. 2026-09-16: HISTSEM H1 landed (PR #347, 73.5 → 59.7 s); fitter lever deferred behind the calibration acceptance source pins (record 12a)",
       "stop_card": null
     },
     "THREAT-MODEL-PRUNE-01": {
@@ -8544,5 +8356,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-15"
+  "updated": "2026-09-16"
 }
