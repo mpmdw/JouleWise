@@ -1511,6 +1511,8 @@ Order is fixed: **after H is committed and pushed, after any prior stub or plan
 root is retired, and BEFORE the plan is moved into its discoverable place.**
 There is no minimum notice interval beyond that ordering.
 
+Every arm attempt, including the first, runs §1.4a steps 4–6 (`ARM_ATTEMPT=1`, `attempts.json` = `[]`).
+
 Send one newly accepted notice for each actual arm attempt, including each retry of an unchanged plan. One notice never covers several attempts or several plans. Rechecking an uncleared cause is a waiting observation, not a new arm attempt, and needs no repeated email. A **refreshed notice** is a new accepted email describing the current approved candidate, its exact plan fingerprint, the attempt number and the earlier abort, with all existing plan, input and schedule fields filled again. Use the original plan's notice thread when available; a new thread does not cancel an earlier NO. A **fingerprint** here is the lowercase SHA-256 digest of the exact `night_plan.json` bytes that will be published. The full reviewed Git commit remains a separate field. No reply is needed; absence of a reply is not evidence that sending succeeded.
 Send Ed the night notice with the activation's mail tool, under its standing
 email authority, containing: plan ID; class `DIAGNOSTIC_NO_PACK`; the full H
@@ -1637,11 +1639,16 @@ Every actual attempt sends a newly accepted notice and repeats the existing noti
    output was lost; a timeout is not noncommit evidence. Retained/UNKNOWN jobs,
    failed restoration or missing completion proof stop for human resolution.
    Restore only this activation's exact saved candidate to `$STAGED_PLAN`,
-   exclusively if absent; otherwise require byte equality. Never regenerate
+   exclusively if absent: `cp -n "$ATTEMPT_DIR/plan.json" "$STAGED_PLAN"`, then
+   `cmp "$ATTEMPT_DIR/plan.json" "$STAGED_PLAN"` must exit 0. Never regenerate
    authoring timestamps, edit inputs or erase evidence to refresh a budget.
-3. **Recheck the unchanged prerequisites.** Repeat §0's input/science checks,
-   wrapper verification, clean reviewed checkout, directive/NO checks and
-   the unchanged census. The watchdog clears its own uncertain state. Wait
+3. **Recheck the unchanged prerequisites.** Repeat §0.1's reviewed-head check,
+   §0.3's epoch and pre-registration checks, §0.4's ledger authentication and
+   head-equals-pin check, §0.5's committed pre-registration checks, §0.6's
+   unchanged census, §0.7's directive/NO and ownership checks, and §0.8's
+   clean-tree and fixed desk-input checks. Verify the wrapper under §1.1b
+   step 4; do not rerun §0.2 or regenerate the desk inputs.
+   The watchdog clears its own uncertain state. Wait
    only for the actual bound or uncleared condition; no new delay follows a
    successful harvest. A wait observation is not an attempt and sends no mail.
 4. **Prepare each attempt before sending.** Set `ARM_ATTEMPT` to the next
@@ -1686,7 +1693,8 @@ Every actual attempt sends a newly accepted notice and repeats the existing noti
    R2's fresh same-class plan, leaving predecessor published directories alone.
 7. **Record each outcome.** Preserve `outcome.json`, all failure/cleanup codes,
    actual attempt time, digest, accepted notice locator and evidence inventory
-   in that attempt directory. The installer still checks its cutoff through
+   in that attempt directory. `outcome.json` carries exactly the step-5 record fields for this attempt; attempt N+1's `attempts.json` is the unmodified concatenation of attempts 1..N `outcome.json`.
+   The installer still checks its cutoff through
    commit. No measurement retry, new daemon or live validation is implied.
 
 For the exclusive directory and snapshot step (before sending):
@@ -1930,8 +1938,8 @@ reconstruction is the successor's floor, not a licence to record less.
 #### What the arm record must carry, every night
 
 Also retain each arm-attempt directory, A172 rulings R1–R3, cause and clearance
-records, exact plan digest, notice IDs/times, original and next resolved spans,
-actual plan-age/install-close checks, and any noncommit/uninstall/byte-comparison
+records, exact plan digest, notice IDs/times, the install-close and plan-age checks actually applied,
+and any noncommit/uninstall/byte-comparison
 proof. These supplement every scientific/input item below.
 
 **Timing evidence update — 2026-09-15, INSTALL-WINDOWS-MULTI-01.** Retain the

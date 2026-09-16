@@ -162,11 +162,6 @@ class ArmRetryTests(unittest.TestCase):
                               t0_epoch_s=self.now - 100 + night_gate.PLAN_MAX_AGE_S + 1)
         self.assertEqual(self.decide().reason, "plan_age")
 
-    def test_whole_day_install_spans_are_informational(self):
-        self.assertEqual(run_night.INSTALL_SPANS, (("00:00", "24:00"),))
-        for start, end in self.spans:
-            self.assertEqual(end - start, 24 * 3600)
-
     def test_midnight_retry_two_days_later_before_install_close(self):
         # Sep 15 23:49 attempt, Sep 17 00:05 retry, close at 00:15.
         # Whole-day spans must not discard the last 15 minutes of eligibility.
@@ -184,6 +179,31 @@ class ArmRetryTests(unittest.TestCase):
         self.assertTrue(self.decide().allowed)
         self.notice["latest_abort_epoch_s"] = int(aborted)
         self.assertEqual(self.decide(), arm_retry.Decision(False, "notice_abort_mismatch"))
+
+    def test_invalid_history_and_candidate_head_mismatch(self):
+        for case in ("abort_before_start", "abort_in_future", "overlapping_attempts",
+                     "repo_head", "measurement_head"):
+            with self.subTest(case=case):
+                self.setUp()
+                if case == "overlapping_attempts":
+                    self.attempts.insert(0, dict(
+                        self.attempts[0], attempt_epoch_s=self.now - 180,
+                        abort_epoch_s=self.now - 120, message_id="first-message"))
+                    self.attempts[1]["attempt"] = 2
+                    self.notice["attempt"] = 3
+                self.assertEqual(self.decide(), arm_retry.Decision(True, "allowed"))
+                if case == "abort_before_start":
+                    self.attempts[0]["abort_epoch_s"] = self.now - 61
+                elif case == "abort_in_future":
+                    self.attempts[0]["abort_epoch_s"] = self.now + 1
+                elif case == "overlapping_attempts":
+                    self.attempts[1]["attempt_epoch_s"] = self.now - 121
+                else:
+                    self.change_candidate(**{case: "b" * 40})
+                self.notice["latest_abort_epoch_s"] = self.attempts[-1]["abort_epoch_s"]
+                reason = ("candidate_head_mismatch" if case in ("repo_head", "measurement_head")
+                          else "invalid_history")
+                self.assertEqual(self.decide(), arm_retry.Decision(False, reason))
 
     def test_notice_well_formedness_precedes_reuse(self):
         self.attempts[0]["message_id"] = ""  # prior attempt never sent mail
