@@ -1,0 +1,60 @@
+=== §0.3 check (informational for a stub; rc 3 = acceptance-epoch mismatch is the known state)
+Desk epoch watch (identity comparison only; no capture authorization)
+ACTIVE acceptance: d079_calibration_acceptance_v2_n17_r6
+field                  expected                                                         observed                                                         status
+os_build               25F84                                                            25G83                                                            MISMATCH
+hardware_model         Mac15,9                                                          Mac15,9                                                          match
+powermetrics_sha256    d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5 MISMATCH
+mlx_version            0.31.2                                                           0.31.2                                                           match
+mismatched fields: os_build, powermetrics_sha256
+check rc=3
+Desk epoch watch (identity comparison only; no capture authorization)
+ACTIVE acceptance: d079_calibration_acceptance_v2_n17_r6
+field                  expected                                                         observed                                                         status
+os_build               25F84                                                            25G83                                                            MISMATCH
+hardware_model         Mac15,9                                                          Mac15,9                                                          match
+powermetrics_sha256    d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5 MISMATCH
+mlx_version            0.31.2                                                           0.31.2                                                           match
+mismatched fields: os_build, powermetrics_sha256
+pre-registered powermetrics sha256 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5: match
+check --preregistration rc=3
+=== §0.7 discoverable plans (REPORT ONLY at staging; must be empty at the arm — §1.4 precondition)
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night_plan.json
+=== §0.8 clean tree
+=== custody root (created EMPTY; no plan is placed under night-custody)
+=== §1.1b step 2: author the STAGED plan (REHEARSAL_STUB); t0 placeholder = now + floor, rounded up to 5 min
+T0_EPOCH_S=1789545000 (2026-09-16 00:50:00 PDT) derived at 1789539821
+/Users/edr/night-plan-staging/rehearsal-20260916/night_plan.json
+authored_epoch_s 1789539821.713088
+{
+  "authored_epoch_s": 1789539821.713088,
+  "chain_path": "/Users/edr/night-custody/rehearsal-20260916/chain.zsh",
+  "chain_sha256_path": "/Users/edr/night-custody/rehearsal-20260916/chain.zsh.sha256",
+  "custody_root": "/Users/edr/night-custody/rehearsal-20260916",
+  "measurement_head": "1f721fbf7b8f96b90c64c7fe576592e5dbda098a",
+  "measurement_root": "/Users/edr/JouleWise-measurement-rehearsal-20260916",
+  "plan_id": "rehearsal-20260916",
+  "receipt_class": "REHEARSAL_STUB",
+  "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json",
+  "repo_head": "1f721fbf7b8f96b90c64c7fe576592e5dbda098a",
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "t0_epoch_s": 1789545000.0,
+  "window_max_s": 900
+}
+53b021b2138b3d5021fd9ba11daff936177abe0885ce17e379cac6a57862be69  /Users/edr/night-plan-staging/rehearsal-20260916/night_plan.json
+=== driver preflight (desk, from the clone, against the STAGED path)
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-rehearsal-20260916/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+=== §0.7 again: the discoverable set is UNCHANGED by staging (the staged plan is not under night-custody)
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night_plan.json
+/Users/edr/night-custody/rehearsal-20260916:
+total 0
+drwxr-xr-x@ 2 edr  staff   64 Sep 15 23:23 .
+drwxr-xr-x@ 8 edr  staff  256 Sep 15 23:23 ..
+
+/Users/edr/night-plan-staging/rehearsal-20260916:
+total 8
+drwxr-xr-x@ 3 edr  staff   96 Sep 15 23:23 .
+drwxr-xr-x@ 5 edr  staff  160 Sep 15 23:23 ..
+-rw-------@ 1 edr  staff  762 Sep 15 23:23 night_plan.json
+STAGE BLOCK DONE 23:23:42 — STOPPED before notice, publish and install
