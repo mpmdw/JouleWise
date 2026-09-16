@@ -46,6 +46,102 @@ head containing that implementation; they do not establish an arm. Every
 Executed section and prior dated addendum remains historical evidence,
 verbatim. The arm record identifies the code and schedule actually installed.
 
+## Pre-authorized recovery before a night runs
+
+The **magistrate** is the headless lead agent that prepares and installs a night. A **candidate** is a prepared plan file together with its fixed input files. **Publication** moves the plan to the location where the supervisor discovers it. A **scheduled job** is a task registered with launchd, macOS's task scheduler. An **arm attempt** is one attempt to publish an approved candidate and install its two scheduled jobs. A **retry** repeats that preparation and installation after a recorded arm abort; it never repeats a measurement that started. A **cold gate** is an independent adjudication by a fresh review session. D-180 clause 2 permits the four causes below to be retried without a new cold gate, after the cause has cleared and a fresh notice email has been accepted. The **plan class** is the plan's `receipt_class` value, which selects its measurement or rehearsal path; it stays the same. **Pre-registration** is the scientific protocol fixed before data collection. Ed's NO still overrides. Every physics, evidence and pre-registration requirement still applies.
+
+The **watchdog** is the supervisor that starts and stops magistrate sessions around measurement windows. The **night gate** checks prerequisites before measurements; its **receipt** records the decision and observations. The **driver** is the program that runs that check, launches the measurement chain and arranges result delivery by the **courier**. A **ledger** is the capture-history record; **custody** means retaining the files that establish what ran and what it produced. A **measurement pack** is the fixed collection of experiment instructions and inputs required by a pack-class plan. A **reviewed head**, written H, is the full Git commit identifier of the reviewed code and instructions. A **fingerprint** is the lowercase SHA-256 digest of exact file bytes. A **binding** is a recorded equality tying a plan to its file bytes, head or other fixed input; a **pin** is the expected value in that equality. A **sidecar** is a companion file, such as a stored fingerprint or previous job-file bytes. An **API** is a programmatic service interface, such as the mail-send operation. A **committed installation** means both jobs were loaded, verified and accepted by the installer's final time check; this is separate from recording a Git commit. **Noncommit evidence** positively establishes that this installation did not reach that state. A missing response does not establish noncommit.
+
+The **arm-time census** is the process inventory before publication. The **plan span** is the agent-free interval beginning 25 minutes before `t0`, the plan's scheduled measurement start, and ending under the existing chain and courier completion rules. Permission to retry an arm abort does not excuse a process inside that span. `production_census` uses the night gate's raw process check. `handoff_census` checks departure of owned processes only, and `_is_interactive_claude` recognizes command shape only; neither proves the arm or plan-span census clean. A172 changes none of them.
+
+A **listed install span** is a local-time interval from `run_night.INSTALL_SPANS`,
+resolved for its local date; an **epoch second** counts from 1970-01-01 00:00 UTC.
+`install_close_epoch(plan)` is the exclusive install cutoff, `t0 − 85 minutes`;
+`PLAN_MAX_AGE_S` is the night gate's 36-hour plan-age limit. A **dead-man** is
+the scheduled recovery job after planned completion. A **plist** is a launchd
+job file; **UNKNOWN** means a query cannot establish whether a job is loaded.
+A **stub** is a rehearsal chain without scientific acquisition. `$STAGE` is the
+existing staging directory outside plan discovery. **Unpublication** removes
+only this activation's plan from discovery after documented successful cleanup.
+
+<!-- BEGIN ARM-RETRY-POLICY v1 -->
+
+D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact arm-event IDs are labels for recorded observations, not receipt codes.
+
+| Retry cause | Meaning and required clearance |
+|---|---|
+| `arm_idle_interactive` | Only an otherwise idle interactive agent session blocked the arm-time census. Its complete descendant process tree must establish no test, measurement or capture work; unknown activity is not idle. Repeat the unchanged census after the session closes; never signal a foreign process. A173 alone owns any future stub exemption. |
+| `arm_notice_mismatch` | The notice fingerprint or reviewed head differs from the approved candidate. Recheck preserved candidate bytes and all fixed inputs, then send a new notice. Changed science, custody or unexplained candidate bytes are evidence drift, not a notice-only fault. |
+| `arm_watchdog_uncertain` | A watchdog tick (one supervisor evaluation) returned CLOCK_UNCERTAIN (wall and elapsed clocks disagree) or NETWORK_UNCERTAIN (the remote stop check is inconclusive). Let the watchdog clear its hold: two sane clock samples, or a successful network positive control with the stop reference absent. Never clear its state by hand. |
+| `arm_transport` | A named mail/API/network/process-transport operation failed before publication, or installation transport failed with positive noncommit and completed cleanup evidence. A bare nonzero exit or lost response is insufficient. Restore transport and obtain accepted notice delivery; after publication require uninstall exit 0, preserved matching bytes and completed unpublication. Committed, retained, unknown or failed-restoration outcomes stop. |
+
+**Gate and driver refusals — cold-gate path.**
+
+| Exact cause | Why A172 grants no retry exception |
+|---|---|
+| `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. |
+| `night_refused_not_quiet` | Machine quietness failed; load, power and thermal thresholds stay fixed. |
+| `night_refused_hid_idle` | User-input inactivity guard failed. |
+| `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. |
+| `night_refused_registration` | Required registration did not validate. |
+| `night_window_expired` | Measurement window expired. |
+| `night_plan_stale` | Plan age or pinned head failed; not a stale notice. |
+| `night_plan_malformed` | Plan structure or fields failed their contract. |
+| `night_chain_digest_mismatch` | Executable chain bytes differ from their fixed fingerprint. |
+| `launch_go_receipt_missing` | Required measurement-pack launch authorization is absent. |
+| `launch_go_receipt_invalid` | Required measurement-pack launch authorization is invalid. |
+| `night_refused_class_unbuilt` | This gate cannot execute the requested plan class. |
+| `night_receipt_class_invalid` | Receipt class/condition contract is invalid. |
+| `night_probe_error` | An observation failed; missing evidence grants no permission. |
+| `night_aborted_agent_present` | An agent appeared while the chain ran. |
+| `night_chain_already_started` | The once-only chain-start record exists. |
+| `night_chain_alive` | The existing chain has not been proved ended. |
+| `night_chain_launch_failed` | Launch failed after the once-only start claim; not pre-arm transport. |
+| `night_courier_running` | The result-delivery process is still running. |
+| `night_courier_unavailable` | The driver's delivery executable is unavailable; not a failed notice send. |
+| `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
+| `night_record_exists` | A write-once night record proves invocation already occurred. |
+
+**Installer §1.3 refusals — cold-gate path.**
+
+| Exact cause | Why A172 grants no retry exception |
+|---|---|
+| `install_span_closed` | The selected transaction ended; never switch spans mid-install or bypass the plan cutoff. |
+| `install_outside_span` | Wait for an allowed span before the cutoff; scheduling wait is not a fifth retry cause. |
+| `plan_t0_in_the_past` | Author a future plan through ordinary planning. |
+| `night_agent_already_loaded` | A loaded or UNKNOWN job blocks admission; follow harvest/uninstall and human resolution. |
+| `plan_outside_custody_root` | Wrong published location; the existing installation rule still applies. |
+| `night_plan_malformed` | Invalid plan fields; not a notice-only fault. |
+| `plan_schedule_unrepresentable` | The schedule cannot be represented; no new duration ceiling is implied. |
+| `install_spans_unresolvable_on_day` | Local-date spans fail resolution; never repair or drop them silently. |
+| `plan_t0_not_minute_aligned` | t0 must name a whole minute. |
+| `plan_t0_ambiguous_local_time` | t0's local minute occurs twice; choose an unambiguous minute. |
+| `retained prior plist: <path>; re-run --uninstall` | A saved previous job file remains; follow the existing human-resolution/uninstall path. |
+| `unsupported plist destination: <path>` | The job-file destination is not a regular file; resolve it under the existing path. |
+| `--render-only directory must differ from launch_dir` | Use a separate directory for rendered job files. |
+
+**Other explicit refusals — cold-gate path.**
+
+| Exact cause | Why A172 grants no retry exception |
+|---|---|
+| `HOLD_CENSUS` | A supervisor census hold alone does not establish the narrowly evidenced idle arm cause. |
+| `slot_refused` | A measurement slot refused; cure the finding before any further night. |
+
+Unknown or mixed causes, any receipt refusal, and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
+
+R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
+
+Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.
+
+`prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.
+
+<!-- END ARM-RETRY-POLICY v1 -->
+
+A retry-class abort recorded by a prior activation authorises a successor's ordinary fresh-plan arm of the same class without a new cold gate; the predecessor's published plan directory, if any, stays untouched under the existing human-resolution path.
+
+Follow runbook §1.4a for classification, refreshed notice evidence, byte checks
+and cleanup. This applies to every plan class; pack authorization stays hard.
+
 ## Purpose of this night
 
 This plan is the SUCCESSOR of `d079-epoch-25g83-derivation-n1-20260916`, which
@@ -180,8 +276,9 @@ recording the arm. Power source, powermode and the timer probe are recorded
 at arm time.
 
 **Procedure — updated 2026-09-15, INSTALL-WINDOWS-MULTI-01.** Follow runbook
-§1.4's email-then-arm order. Send one notice email per plan, never one notice
-for several arms. From the plan's measurement checkout, use its interpreter:
+§1.4's email-then-arm order. Send one newly accepted notice for each actual arm attempt, including each retry of an unchanged plan. One notice never covers several attempts or several plans. Rechecking an uncleared cause is a waiting observation, not a new arm attempt, and needs no repeated email. A **refreshed notice** is a new accepted email describing the current approved candidate, its exact plan fingerprint, the attempt number and the earlier abort, with all existing plan, input and schedule fields filled again. Use the original plan's notice thread when available; a new thread does not cancel an earlier NO. A **fingerprint** here is the lowercase SHA-256 digest of the exact `night_plan.json` bytes that will be published. The full reviewed Git commit remains a separate field. No reply is needed; absence of a reply is not evidence that sending succeeded.
+
+From the plan's measurement checkout, use its interpreter:
 `<absolute-interpreter-path> scripts/run_night.py schedule --plan <staged-plan-path>`. The JSON
 prints `t0_epoch_s`, `install_close_epoch_s`, `deadman_epoch_s`, `night_calendar`,
 `deadman_calendar` and `install_spans_today`. With the shipped whole-day list,
@@ -214,9 +311,15 @@ daily dead-man's Hour/Minute against D. Record the schedule JSON, job files
 and actual installation result, then exit before the plan span opens.
 
 **Notice-text template — updated 2026-09-15, INSTALL-WINDOWS-MULTI-01.**
-Fill all fields for one plan. The first email describes open as its own send
+Fill all fields for one plan and one arm attempt. Each email describes open as its own send
 acceptance; put the actual accepted time in the notice evidence and arm record.
 
+> Arm attempt `<positive integer>`, retry cause `<policy ID, or initial>`;
+> earlier abort `<record locator, or none>`. Exact plan SHA-256 `<digest>`,
+> reviewed head `<full H>`, same plan class `<receipt_class>`. Replaces notice
+> `<message ID, or none>` for this attempt only; any earlier NO still stands.
+> Retries end at `<install_close local + epoch>`, subject to `PLAN_MAX_AGE_S`.
+>
 > Plan `<plan_id>`, class `<receipt_class>`, will run from `<measurement_root>`
 > at H `<full head>`; handback commit `<same full head>`. Custody `<custody_root>`;
 > runs `<runs_root>`; wrapper `<path, digest, sidecar>`; tracked chain
@@ -396,6 +499,11 @@ and the night is re-planned, never re-armed on the same plan. Any
 `night_probe_error`, crash, non-empty `launchd.night.err`, a wrapper `FAIL`
 before the settle, or a `slot_refused` line is a finding to cure before any
 further night.
+
+The pre-authorized recovery above applies only before any night invocation.
+A receipt, once-only start record, capture or failed scientific guard cannot be
+reclassified by another notice or plan ID. Follow this section's harvest and
+already ruled outcome action; A172 grants no additional measurement attempt.
 
 After the harvest, run `scripts/install_night_agent.sh --plan
 /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
