@@ -1239,17 +1239,37 @@ class CapabilityTests(unittest.TestCase):
                                  "all saved dispositions must precede the mask opening")
                 self._assert_signal_state(entry_mask, dispositions)
 
-    def test_unwind_teardown_exception_still_restores_signal_state(self):
+    def test_unwind_teardown_exception_returns_one_and_retains_files(self):
+        import signal
         from unittest import mock
+        e = self.engine
+        for label in LABELS:
+            self.target.path(label).write_bytes(b"prior")
+        self.fake.directive(LABELS[1], "bootstrap", rc=1)
         with self._signal_context() as (entry_mask, dispositions):
-            machine = self._signal_machine(refusal=True)
-            with mock.patch.object(machine, "_teardown", side_effect=RuntimeError("teardown witness")):
-                # Pin restoration independently of the unresolved ruling on
-                # how run() must translate an exception from its finally.
-                try:
-                    machine.run()
-                except RuntimeError as exc:
-                    self.assertEqual("teardown witness", str(exc))
+            machine = self._signal_machine()
+            bootout = self.adapter.bootout
+            teardown_masks = []
+
+            def failing_bootout(label):
+                teardown_masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, ()))
+                if label == LABELS[1]:
+                    raise RuntimeError("teardown witness")
+                return bootout(label)
+
+            with mock.patch.object(self.adapter, "bootout", side_effect=failing_bootout) as cleanup:
+                result = machine.run()
+            self.assertEqual(1, result)
+            self.assertIs(e.State.RETAINED, machine.state)
+            self.assertEqual([mock.call(label) for label in LABELS], cleanup.call_args_list)
+            self.assertEqual([entry_mask | set(e.SIGNALS)] * 2, teardown_masks)
+            self.assertFalse(self.fake.loaded(LABELS[0]), "the teardown partially completed")
+            for label in LABELS:
+                self.assertEqual(b"published", self.target.path(label).read_bytes())
+                self.assertEqual(b"prior", self.target.sidecar(label).read_bytes())
+            self.assertIn("teardown failed; retained: RuntimeError: teardown witness\n",
+                          machine.stderr.getvalue())
+            self.assertNotIn("Traceback", machine.stderr.getvalue())
             self._assert_signal_state(entry_mask, dispositions)
 
     def _assert_unwind_entry_signal(self, refusal):

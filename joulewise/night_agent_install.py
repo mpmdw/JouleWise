@@ -4,6 +4,8 @@ Only LaunchctlAdapter invokes launchctl. Liveness is a typed Outcome; only an
 exact absence result can mint a directory/label/generation-bound Absent proof.
 Plist publication, removal and restoration have separate, narrow capabilities.
 The transaction's one finally dispatches on state, including after output fails.
+Unexpected teardown errors return 1 with state RETAINED and the warning
+"teardown failed; retained: <exception type>: <message>".
 """
 
 import argparse
@@ -423,6 +425,9 @@ class Transaction:
                 continue  # the one raise landed here; the handler has already blocked the signals
         try:
             self._teardown()
+        except BaseException as exc:
+            self.state, self.result = State.RETAINED, 1
+            self._warn("teardown failed; retained: {}: {}".format(type(exc).__name__, exc))
         finally:
             # Discard queued repetitions while blocked. Restore every saved
             # disposition before opening the invocation's mask again.
