@@ -33,11 +33,11 @@ The durable states are:
 - `ACTIVE`: the recorded child PID, start time, and activation are live in both `state.json` and `magistrate.lock`. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
 - `STANDDOWN_REQUESTED`, `STANDDOWN_TERM`, and the terminal `FENCED`/`HOLD_CENSUS`: the resident supervisor executes the request, TERM, KILL, and verification sequence below.
 - `FENCED`: a discovered or installed plan's active span forbids launch. A discovered active span with an already-owned session instead returns `STANDDOWN_<phase>` with `adopt=True` to drain that session; an installed-only fence returns `FENCED` with `adopt=False` after the stop checks clear. `installed_agent_fence` reads `~/Library/LaunchAgents/com.joulewise.night.plist` and `com.joulewise.night.deadman.plist`, extracts `--plan` from `ProgramArguments`, parses that plan with `NightPlan.from_mapping`, and uses the same `plan_span_active` arithmetic as discovery. An unreadable LaunchAgents directory, unparseable plist or unreadable/invalid referenced plan enters `HOLD_UNSAFE`. The installer also requires the resolved plan path to be its own `<custody_root>/night_plan.json`.
-- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the same nine-minute/TERM/one-minute/KILL ladder. If that supervisor dies, each replacement tick validates and records `resident_adopted`, performs the next due ladder action, and persists the stage for the following tick; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
+- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the cooperative drain, clamped by any parseable plan to REQUEST/TERM/KILL at t0−8/−6/−5 minutes. If that supervisor dies, each replacement tick validates and records `resident_adopted`, performs the next due ladder action, and persists the stage for the following tick; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
-- `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
+- `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its cooperative drain on monotonic time, clamped by any parseable plan to the t0−8/−6/−5-minute ladder. Once that conservative drain begins, later sane samples do not cancel it.
 - `BACKOFF_USAGE`/`BACKOFF`: a classified usage failure or a generic launch failure is waiting for eligibility. The persisted deadline is a wall-clock epoch paired with the current boot identifier; a different boot discards it and records `backoff_reset_after_reboot`.
-- `STOP_REQUESTED`/`STOPPED`: the local file or remote branch has stopped launches; an already-owned child receives a nine-minute cooperative request before TERM and, 60 seconds later, KILL.
+- `STOP_REQUESTED`/`STOPPED`: the local file or remote branch has stopped launches; an already-owned child is asked to exit within five minutes; the standalone stop fallback enforces TERM after `STOP_COOPERATIVE_S` and KILL after another `STOP_TERM_GRACE_S`. Any parseable plan clamps enforcement to t0−8/−6/−5 minutes.
 
 Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, drain-start, and plan diagnostics are separate typed events. Plan events use `plan_dir` (never the plan-declared `custody_root`) and are de-duplicated only for an identical activation-id/spawn-epoch/plan-directory/kind/detail-digest key.
 
@@ -65,7 +65,7 @@ by the driver/installer, not by the watchdog's fence arithmetic.
 
 For each valid plan:
 
-1. The plan span begins at the closed boundary `t0 - 25 minutes`.
+1. The plan span begins at the closed boundary `t0 - 8 minutes`.
 2. It remains open through the closed completion boundary `t0 + window_max_s + COURIER_DEADLINE_S`.
 3. After completion it closes when `night/courier.sent` exists. Without that marker it remains open through the closed boundary `deadman_epoch(plan) + COURIER_LOCK_FRESH_S`, where `COURIER_LOCK_FRESH_S = 300 + max(60, 180, 600) = 900 s` (15 minutes).
 4. Once the span has begun, `chain.started` without `chain.exited` extends it without a clock limit; it does not move the start earlier.
@@ -99,22 +99,59 @@ The short tick's `decide()` evaluates these checks in source order:
 Thus an installed-only `FENCED` return does not launch or adopt a supervisor;
 re-adoption is subject to the earlier branches and all other predicates.
 
-For the earliest relevant parseable plan, the resident supervisor re-reads plans and evaluates its stand-down phase on every poll, including while a clock or unsafe-plan drain is latched. Each drain action is due at the earlier of its cooperative-ladder time and the plan boundary, so REQUEST is no later than `t0 - 25 min`, TERM no later than `t0 - 16 min`, and KILL no later than `t0 - 15 min`. Plan-boundary enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
+For the earliest relevant parseable plan, the resident supervisor re-reads plans and evaluates its stand-down phase on every poll, including while a clock or unsafe-plan drain is latched. Each drain action is due at the earlier of its cooperative-ladder time and the plan boundary, so the deadlines are REQUEST at `t0 - 8 min`, TERM at `t0 - 6 min`, and KILL at `t0 - 5 min`. Plan-boundary enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
 
 | Boundary | Action |
 |---|---|
-| `t0 - 25 min` | Atomically create `standdown.request`; the session stops new work, commits and pushes only in worktrees, emails Ed, stops its children, and exits. |
-| `t0 - 16 min` | Walk the recorded PID's complete PPID descendant tree until stable and send TERM to every descendant, then the root. |
-| `t0 - 15 min` | If still live, repeat the tree walk and send KILL to every descendant, then the root. Never substitute `killpg`. |
+| `t0 - 8 min` | Atomically create `standdown.request`; the session stops new work, commits and pushes only in worktrees, emails Ed, stops its children, and exits. |
+| `t0 - 6 min` | Walk the recorded PID's complete PPID descendant tree until stable and send TERM to every descendant, then the root. |
+| `t0 - 5 min` | If still live, repeat the tree walk and send KILL to every descendant, then the root. Never substitute `killpg`. |
 | immediately after KILL | Re-check PID+start-time ownership, invoke the production census, and enter `FENCED` only if the owned process is gone and the census is empty; otherwise retain ownership where applicable and write a `HOLD_CENSUS` report. |
+
+**LEAD-MARGIN-01 timing derivation.** PLAN and REQUEST share an eight-minute
+lead: fence new launches, then TERM at t0−6 and KILL at t0−5. The relaunch
+prompt asks for exit within five minutes of the request as a courtesy; TERM
+follows an on-time request by two minutes and overrides that courtesy. The
+absolute TERM/KILL deadlines still apply to late requests.
+The t0 census needs the magistrate, its supervisor and every Codex child gone.
+With five-second samples and `e^(−5/60)` decay, one-minute load-average excess
+falls to 0.674% after 300 s (KILL) and 0.248% after 360 s (TERM). Allowing ten
+seconds of poll slack and about five seconds for signalling/exit leaves
+285/345 effective seconds, retaining 0.865%/0.318% of excess. Under this
+model, KILL-only teardown at t0−5 clears the **2.0** gate for excess load below
+about **116–173**, at base load 1.0–0.5 (115.6 at base 1.0; 173.4 at base 0.5).
+TERM at t0−6 provides the larger settling margin. KILL is the five-minute
+floor, not a promise of passing t0; polling, descendant signalling, census
+and supervisor-exit latency consume the budget.
+The resident polls every ten seconds, so the 120/60-second gaps each
+contain at least six polls (12/6), with nominal observation slack of 110/50
+seconds. launchd's unchanged 300-second recovery interval cannot guarantee
+these phases after supervisor failure. Scheduling or blocked I/O can also
+delay enforcement. The unchanged t0 gates refuse a surviving tree or excess
+load: this is the fail-closed backstop, not a guaranteed settling interval.
+The two-minute installation pad precedes REQUEST, giving a ten-minute
+exclusive arm-to-t0 floor; it is not post-teardown settling time.
+
+D-171(b) ratified the old 25-minute lead so idle-triggered daemons (XProtect
+and kin) run during **at least ten minutes of untouched idle before the first
+capture**. The derivation chain's `SETTLE_S = 600 s` before d01
+(`scripts/night_chains/calibration_derivation_only.zsh:76`; derivation-night
+runbook §1.2's programmed span and `t0 + Δ + 600` schedule) combines with
+KILL at t0−5: quiet-to-first-capture **≥ 300 + 10 + 600 s ≈ 15.2 min ≥ 10 min**,
+using ten seconds of driver/start delay in that timing budget. Even without
+that delay, `KILL_LEAD_S + SETTLE_S >= 600`. The new chain therefore meets the
+idle duration rule, but the margin against a late-starting scan drops from
+roughly 25 to 15 minutes. Load is not rechecked per capture (thermal only).
+Ed **RATIFIED the conservative 8/8/6/5 chain on 2026-09-16 at 00:20 PDT**
+("do whichever is safest first quick second"); see the D-171(b) addendum (A210).
 
 The process-tree walk is deliberately independent of process groups because an agent host can escape its parent's PGID. Only descendants of the validated lock PID are signaled. An unrelated census hit is evidence for a hold, never authority to signal.
 
 ### Replacement-supervisor drain handoff
 
-Every successful spawn or ordinary supervisor adoption copies the complete owned-session record into `state.json`: PID, exact start-time token, activation, and launch metadata. If an unreadable, malformed, future-authored, or conflicting plan produces `HOLD_UNSAFE` after the resident supervisor has disappeared, the short tick compares that durable PID/start pair with the current process table before doing anything else to the child. A match appends `resident_adopted{pid,start_time,activation}` and executes one bounded drain step. The first such tick atomically creates `standdown.request`, records `resident_drain_started`, and persists `resident_hold_drain.stage = REQUEST`; later launchd ticks reuse the original request timestamps and persist `TERM` and `KILL` as those thresholds become due. They never rewrite the request time or restart the nine-minute allowance.
+Every successful spawn or ordinary supervisor adoption copies the complete owned-session record into `state.json`: PID, exact start-time token, activation, and launch metadata. If an unreadable, malformed, future-authored, or conflicting plan produces `HOLD_UNSAFE` after the resident supervisor has disappeared, the short tick compares that durable PID/start pair with the current process table before doing anything else to the child. A match appends `resident_adopted{pid,start_time,activation}` and executes one bounded drain step. The first such tick atomically creates `standdown.request`, records `resident_drain_started`, and persists `resident_hold_drain.stage = REQUEST`; later launchd ticks reuse the original request timestamps and persist `TERM` and `KILL` as those thresholds become due. They never rewrite the request time or restart the standalone cooperative allowance; any parseable plan clamps the actions to t0−8/−6/−5 minutes.
 
-If the PID is absent or its start token differs, the tick records `already_gone`, clears the durable session identity, and sends no signal. Thus PID reuse cannot inherit either adoption or signal authority. The ordinary 10-second resident loop and replacement-tick recovery share the same `STOP_COOPERATIVE_S = 540` and `STOP_TERM_GRACE_S = 60` ladder; only their polling cadence differs.
+If the PID is absent or its start token differs, the tick records `already_gone`, clears the durable session identity, and sends no signal. Thus PID reuse cannot inherit either adoption or signal authority. The ordinary 10-second resident loop and replacement-tick recovery share the same `STOP_COOPERATIVE_S = 540` and `STOP_TERM_GRACE_S = 60` ladder; only their polling cadence differs. These standalone stop/unsafe/clock fallback timers are unchanged; the plan ladder takes precedence whenever its deadlines are earlier. The five-minute exit instruction is a courtesy request, not an extension of an absolute plan deadline.
 
 ## Kill switch
 
@@ -376,7 +413,7 @@ The first real window must not be armed until a reviewed v2 plan pins its measur
 
 ## Bench rehearsal (no real night)
 
-Run the focused checks and create a fake `REHEARSAL_STUB` plan at `t0 = now + 10 minutes` under a fresh temporary custody parent. The Python block prints the exact `t0`; it does not write the repository or the default custody root:
+Run the focused checks and create a fake `REHEARSAL_STUB` plan at `t0 = now + 8 minutes` under a fresh temporary custody parent. The Python block prints the exact `t0`; it does not write the repository or the default custody root:
 
 ```sh
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/magistrate-watchdog.XXXXXX")"
@@ -395,9 +432,9 @@ custody = Path(os.environ["BENCH_CUSTODY"])
 plan_root = custody / "fake-night"
 plan_root.mkdir(parents=True)
 now = time.time()
-t0 = now + 10 * 60
+t0 = now + 8 * 60
 plan = NightPlan(
-    plan_id="watchdog-bench-now-plus-10m",
+    plan_id="watchdog-bench-now-plus-8m",
     receipt_class="REHEARSAL_STUB",
     t0_epoch_s=t0,
     window_max_s=600,
@@ -418,7 +455,7 @@ MAGISTRATE_WATCHDOG_CUSTODY_ROOT="$tmp_root/custody/magistrate" \
 test ! -e "$tmp_root/custody/magistrate"
 ```
 
-At the first instant, `now = t0 - 10 minutes`, so the plan span is already closed against launch. With the implementing/reviewing agent still live, the exact expected decision is `HOLD_CENSUS`; on an agent-free bench it is `FENCED`. In both cases the transcript must end in `WOULD_SPAWN none`, every mutation is printed only as `WOULD_WRITE`, and the final `test` proves no custody root was created. At `t0 - 25 minutes` an owned resident would enter `STANDDOWN_REQUEST`; at `t0 - 16 minutes`, `STANDDOWN_TERM`; and at `t0 - 15 minutes`, KILL followed by `FENCED` only when ownership and the production census are empty. Those three exact boundary instants are injected and pinned by `test_plan_fence_boundaries_request_term_kill_and_completion` and the resident supervisor tests.
+At the first instant, `now = t0 - 8 minutes`, so the plan span is already closed against launch. With the implementing/reviewing agent still live, the exact expected decision is `HOLD_CENSUS`; on an agent-free bench it is `FENCED`. In both cases the transcript must end in `WOULD_SPAWN none`, every mutation is printed only as `WOULD_WRITE`, and the final `test` proves no custody root was created. At `t0 - 8 minutes` an owned resident would enter `STANDDOWN_REQUEST`; at `t0 - 6 minutes`, `STANDDOWN_TERM`; and at `t0 - 5 minutes`, KILL followed by `FENCED` only when ownership and the production census are empty. Those three exact boundary instants are injected and pinned by `test_plan_fence_boundaries_request_term_kill_and_completion` and the resident supervisor tests.
 
 The no-TTY spawn bench is already recorded, including the exact argv and four stream-json records, in `docs/process_traces/2026-09-03-watchdog-build/02-bench-headless-spawn.md`. To replay it without a TTY, from the canonical checkout run this bounded command; it starts one real print-mode session, so run it only in the magistrate-authorized bench:
 
@@ -469,9 +506,9 @@ scripts/install_magistrate_watchdog.sh --install
 python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
 ```
 
-Expected lock: `first_install_adoption=true`; its PID/start token names the Terminal-hosted interactive root, and the first `supervisor_adopted` event names the same activation without a second launch. Arm only a reviewed `REHEARSAL_STUB` so its first stand-down exercises that tree. The cooperative request should make the interactive session stop its children and exit; if ignored, the resident must TERM every validated descendant at `t0 - 16 minutes` and KILL survivors at `t0 - 15 minutes`. After the stand-down, rerun the observer commands above. Expected after: `CensusObservation(empty=True, ...)`, no Terminal-hosted twin, no `claude daemon`, no spares, `magistrate.lock` absent, and a final `FENCED` transition. Any survivor is `HOLD_CENSUS` and fails the rehearsal. Do not arm a real window until this before/after record passes review.
+Expected lock: `first_install_adoption=true`; its PID/start token names the Terminal-hosted interactive root, and the first `supervisor_adopted` event names the same activation without a second launch. Arm only a reviewed `REHEARSAL_STUB` so its first stand-down exercises that tree. The cooperative request should make the interactive session stop its children and exit; if ignored, the resident must TERM every validated descendant at `t0 - 6 minutes` and KILL survivors at `t0 - 5 minutes`. After the stand-down, rerun the observer commands above. Expected after: `CensusObservation(empty=True, ...)`, no Terminal-hosted twin, no `claude daemon`, no spares, `magistrate.lock` absent, and a final `FENCED` transition. Any survivor is `HOLD_CENSUS` and fails the rehearsal. Do not arm a real window until this before/after record passes review.
 
-After the lock and adoption event pass inspection, the exact rehearsal arm below sets `t0 = now + 26 minutes`: the request is due about one minute later, TERM about ten minutes later, and KILL about eleven minutes later. Run it only with the observer recording and after the lead authorizes this destructive twin stand-down:
+After the lock and adoption event pass inspection, the exact rehearsal arm below sets `t0 = now + 13 minutes`: the request is due about five minutes later, TERM about seven minutes later, and KILL about eight minutes later. This leaves about three minutes before the exclusive ten-minute install cutoff. Run it only with the observer recording and after the lead authorizes this destructive twin stand-down:
 
 ```sh
 ADOPTION_PLAN_ROOT="$HOME/night-custody/watchdog-adoption-rehearsal" python3 - <<'PY'
@@ -489,7 +526,7 @@ now = time.time()
 plan = NightPlan(
     plan_id="first-tree-adoption-rehearsal",
     receipt_class="REHEARSAL_STUB",
-    t0_epoch_s=now + 26 * 60,
+    t0_epoch_s=now + 13 * 60,
     window_max_s=60,
     authored_epoch_s=now,
     repo_head="0" * 40,

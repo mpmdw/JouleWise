@@ -240,13 +240,34 @@ baked into the wrapper.
 **install span** is an interval in which installation is allowed. The plan's
 install span opens when its notice email is sent and closes exclusively at
 `install_close_epoch(plan) = t0 − PLAN_LEAD_S − INSTALL_CLOSE_MARGIN_S`.
-`PLAN_LEAD_S = 1500 = 25 × 60 s` and `INSTALL_CLOSE_MARGIN_S = 3600 = 60 × 60 s`,
-so close is `t0 − 85 min`. Installation must also be inside one entry of
+`PLAN_LEAD_S = 480 = 8 × 60 s` and `INSTALL_CLOSE_MARGIN_S = 120 = 2 × 60 s`,
+so close is `t0 − 10 min`. Installation must also be inside one entry of
 `INSTALL_SPANS` in `scripts/run_night.py`, a recurring list of local per-day
 spans, with opening included and closing excluded. The shipped list is
 `(("00:00", "24:00"),)`; Ed may narrow it. Install any day satisfying both
 bounds and the existing gates; the acquisition window need not be inside an
 install span.
+
+**LEAD-MARGIN-01:** the two-minute install pad and 8/8/6/5-minute
+plan/request/TERM/KILL leads give a **ten-minute exclusive install floor**.
+The request asks for exit within five minutes as a courtesy; TERM at t0−6
+follows an on-time request by two minutes and overrides that courtesy.
+KILL at t0−5 and both absolute deadlines still apply after a late request.
+The census needs the whole tree and supervisor gone. With `e^(−5/60)` per five-second sample,
+300/360 seconds after KILL/TERM retain 0.674%/0.248% of excess load; allowing
+15 seconds of latency retains 0.865%/0.318%. The modeled KILL-only bound for
+the 2.0 gate is excess below about 116–173 at base load 1.0–0.5.
+The 10-second resident poll fits both phase gaps (12/6 polls),
+but launchd's 300-second recovery cannot guarantee phases after supervisor
+failure. The unchanged t0 gates refuse a surviving tree or excess load as the
+fail-closed backstop. See the
+[runbook derivation](../phase_2/derivation_night_runbook.md#13-install-span-install-close-and-the-exit-boundary)
+for the history, physical budget and latency limits.
+
+An **INTERACTIVE arm (unowned session) is never TERM/KILLed by the watchdog**,
+so the operator must **close every agent before the t0 − 8 minute boundary**.
+The [watchdog adoption rehearsal example](MAGISTRATE_WATCHDOG.md#bench-rehearsal-no-real-night)
+uses **t0 = now + 13 minutes**, leaving about three minutes before install close.
 
 For the plan coordinates above and a proposed install day of 2026-09-15,
 fill the notice-send row from the actual send acceptance. Times below are
@@ -255,11 +276,11 @@ local PDT, UTC−07:00; **epoch seconds** count from 1970-01-01 00:00 UTC.
 | Boundary | Local date/time | Epoch seconds / arithmetic |
 |---|---|---|
 | Plan install open | `<actual notice-send local date/time and offset>` | `<actual notice-send epoch>`; never invent a send time |
-| Plan install close (exclusive) | 2026-09-16 01:31:00 PDT | `1789552560 − 1500 − 3600 = 1789547460` |
+| Plan install close (exclusive) | 2026-09-16 02:46:00 PDT | `1789552560 − 480 − 120 = 1789551960` |
 | Every listed span for install day 2026-09-15: shipped entry 1 | 2026-09-15 00:00:00 PDT … 2026-09-16 00:00:00 PDT (close excluded) | `1789455600 … 1789542000`; `INSTALL_SPANS` = `00:00 … 24:00` |
-| Plan span opens; request / activation exit boundary | 2026-09-16 02:31:00 PDT | `1789552560 − 1500 = 1789551060` |
-| TERM deadline | 2026-09-16 02:40:00 PDT | `1789552560 − 16 × 60 = 1789551600` |
-| KILL deadline | 2026-09-16 02:41:00 PDT | `1789552560 − 15 × 60 = 1789551660` |
+| Plan span opens; request / activation exit boundary | 2026-09-16 02:48:00 PDT | `1789552560 − 480 = 1789552080` |
+| TERM deadline | 2026-09-16 02:50:00 PDT | `1789552560 − 6 × 60 = 1789552200` |
+| KILL deadline | 2026-09-16 02:51:00 PDT | `1789552560 − 5 × 60 = 1789552260` |
 | `t0` | 2026-09-16 02:56:00 PDT | `1789552560` |
 | Acquisition window end | 2026-09-16 05:26:00 PDT | `1789552560 + 9000 = 1789561560` |
 | Completion / courier deadline | 2026-09-16 05:31:00 PDT | `1789561560 + 300 = 1789561860` |
@@ -332,12 +353,12 @@ acceptance; put the actual accepted time in the notice evidence and arm record.
 > this notice is accepted for sending (that local time and epoch will be
 > recorded) and closes at `<install_close local + epoch>`. Listed install
 > spans on `<install day>`: `<EVERY open/close pair, local + epoch>`.
-> Plan span: `<t0 − 25 min local + epoch>` through `<completion local + epoch>`,
+> Plan span: `<t0 − 8 min local + epoch>` through `<completion local + epoch>`,
 > subject to the courier/chain extensions in this handback. `t0` is
 > `<local + UTC + epoch>`; `window_max_s = <seconds and duration arithmetic>`.
 > Courier deadline: `<completion local + epoch>`. Daily dead-man minute:
 > `<D local + epoch>`, completion plus 3600 s rounded up to a minute.
-> The arming activation exits before `<t0 − 25 min local + epoch>`.
+> The arming activation exits before `<t0 − 8 min local + epoch>`.
 > Launch needs no action from Ed unless he replies NO; Ed's NO overrides.
 
 ## Executed — rehearsal-20260909 (history)

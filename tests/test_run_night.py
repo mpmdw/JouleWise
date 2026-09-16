@@ -1488,15 +1488,18 @@ runpy.run_path(script, run_name='__main__')
                          self.driver.run_courier.call_args.kwargs["deadman_epoch_s"])
 
     def test_install_close_precedes_the_plan_span_by_the_margin(self) -> None:
-        from scripts.magistrate_watchdog import PLAN_LEAD_S
+        from scripts.magistrate_watchdog import PLAN_LEAD_S, REQUEST_LEAD_S
         plan = self.driver._load_plan(self.plan_path)
+        self.assertEqual(self.driver.INSTALL_CLOSE_MARGIN_S, 120)
         self.assertEqual(plan.t0_epoch_s - PLAN_LEAD_S - self.driver.install_close_epoch(plan),
                          self.driver.INSTALL_CLOSE_MARGIN_S)
+        self.assertLess(self.driver.install_close_epoch(plan),
+                        plan.t0_epoch_s - REQUEST_LEAD_S)
 
-    def test_fixed_epoch_install_close_is_1799994900(self) -> None:
+    def test_fixed_epoch_install_close_is_1799999400(self) -> None:
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
                        window_max_s=9000)
-        self.assertEqual(1799994900, self.driver.install_close_epoch(plan))
+        self.assertEqual(1799999400, self.driver.install_close_epoch(plan))
 
     def test_fixed_epoch_deadman_is_1800012900(self) -> None:
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
