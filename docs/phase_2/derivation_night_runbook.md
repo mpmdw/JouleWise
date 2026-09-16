@@ -640,11 +640,11 @@ ruled behaviour, and the pattern is not narrowed to exclude them.
 first-use table (§8). Stop all own seats, delegated tasks and background jobs
 using the activation's real task controls; record their task IDs and results
 and invent none. After staging the plan, run the following from the reviewed
-measurement checkout, with `python3` resolving to that checkout's interpreter;
+measurement checkout, with `PY` naming that checkout's interpreter;
 repeat it immediately before publication in §1.4:
 
 ```zsh
-python3 -m joulewise.arm_census --plan "$STAGED_PLAN"
+"$PY" -B -m joulewise.arm_census --plan "$STAGED_PLAN"
 ```
 
 Preserve the command's output in the arm transcript, including its plan digest,
@@ -662,12 +662,16 @@ read as idle, with observation diagnostics retained. The exact recognition
 rules are in `joulewise/arm_census.py`; Node/T3 coverage is PROVISIONAL and
 Electron roots are not claimed.
 
-The caller's own PPID chain is exempt for every class; side branches are not
-own. For a stub, exit 3 stops publication on a busy tree or remaining foreign
+The caller's own PPID chain is exempt for every class. For a stub, its own
+interactive or headless root receives the same idle-tree exemption: idle MCP
+helpers, shells and other non-workload descendants are exempt, but workload
+descendants still make the census busy. A sibling seat outside that subtree
+remains foreign. For a stub, exit 3 stops publication on a busy tree or remaining foreign
 agent; exit 0 permits the next step. For `DIAGNOSTIC_NO_PACK` and
 `TRANSACTION_PACK`, the command exits 0 with diagnostics and grants no idle
 exemption: the existing all-agents-closed arm precondition still applies,
 without a new coded publication gate. Invalid plans exit 2 and must be repaired.
+Exit 1 means the census did not run — preserve the transcript; not a busy verdict.
 Do not signal foreign processes. Never run the chain, the driver, a full
 preflight or a calibration capture from the live activation as a quietness test.
 
@@ -1631,7 +1635,7 @@ PY
 
 # 4. The final arm-time census, immediately before publication (§0.6 step 3b).
 # Busy/foreign exit 3 is REHEARSAL_STUB-only; other valid classes are diagnostic.
-if python3 -m joulewise.arm_census --plan "$STAGED_PLAN"; then
+if "$PY" -B -m joulewise.arm_census --plan "$STAGED_PLAN"; then
   :
 else
   rc=$?
@@ -2691,7 +2695,7 @@ means. A term is listed only if it does technical work.
 | PID / PPID / process tree | §0.6 | A process's numeric identifier / its parent's identifier / all children and later descendants reached through those parent links. |
 | interactive session | §0.6 | A Claude executable named `claude` meeting the watchdog's interactive-role rules, or a Node process whose script operand ends in `/t3-code/dist/cli.js`. |
 | idle / busy (arm only) | §0.6 | No descendant matches the ruled workload table / at least one does; unknown helpers and unreadable observations count as idle. Neither low CPU usage nor a fixture filename decides this classification. |
-| exit code (arm census) | §0.6 | The command's integer result: 0 clear or diagnostic-only; 3 busy/foreign stub blocking publication; 2 invalid plan or invocation. |
+| exit code (arm census) | §0.6 | The command's integer result: 0 clear or diagnostic-only; 3 busy/foreign stub blocking publication; 2 invalid plan or invocation; 1 the census did not run — preserve the transcript; not a busy verdict. |
 | plan digest | §0.6 | The SHA-256 identifying the exact plan bytes read by the command. |
 | frozen checkout triple | §1.5 | Exactly `(plan_id, root, head)` — the three fields the watchdog renders into the relaunch prompt's `@@FENCED_CHECKOUTS@@` list. It fences those checkouts against movement; §2.0 reconstructs every further harvest coordinate from it. |
 | terminal (session) | §2.2 | The session's last declared slot is final, or the session was aborted. |

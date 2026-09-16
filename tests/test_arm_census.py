@@ -102,6 +102,8 @@ class ArmCensusTests(unittest.TestCase):
             ("/bin/claude", (), True),
             ("/bin/claude", ("--resume", "session"), True),
             ("/bin/node", ("--require", "loader", "/opt/t3-code/dist/cli.js"), True),
+            ("/bin/node", ("/opt/t3-code/dist/helper.js",), False),
+            ("/bin/node", ("/x/t3-code-fork/y.js",), False),
             ("/bin/node", ("other.js", "/opt/t3-code/dist/cli.js"), False),
             ("/Applications/T3 Code.app/Contents/MacOS/T3 Code", (), False),
             ("/fake/claude/versions/2.1.3", (), False),
@@ -189,15 +191,113 @@ class ArmCensusTests(unittest.TestCase):
         self.assertTrue(side.publication_blocked)
         self.assertEqual(((40, "unittest"),), side.workloads)
 
+    def test_own_idle_helpers_clear_but_sibling_seat_stays_foreign(self):
+        for sibling in (False, True):
+            with self.subTest(sibling=sibling):
+                rows = (
+                    row(20, 1, "/bin/claude", "-p", "magistrate"),
+                    row(30, 20, "/bin/zsh", "-c", "census"),
+                    row(90, 30, "/bin/python3", "-m", "joulewise.arm_census"),
+                    row(50, 20, "/bin/node", "/opt/bin/codex", "mcp-server"),
+                    row(60, 50, "/fake/codex-code-mode-host"),
+                )
+                if sibling:
+                    rows += (row(52207, 1, "/bin/codex", "exec", "task"),)
+                hits = (20, 50, 60, 52207) if sibling else (20, 50, 60)
+                with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
+                    arm_census.ARM_DISCOVERY_ARGV, 0, "".join(f"{pid}\n" for pid in hits), "")):
+                    observed = arm_census.observe_arm_census(
+                        caller_pid=90, reader=FakeReader(observation(*rows, hits=hits)))
+                verdict = self.classify(observed)
+                self.assertEqual(sibling, verdict.publication_blocked)
+                self.assertEqual((52207,) if sibling else (), verdict.foreign_pids)
+                self.assertEqual((20, 30, 90), verdict.own_pids)
+                self.assertEqual((), verdict.workloads)
+                self.assertTrue(verdict.sessions[0].exempt)
+
+    def test_own_helpers_with_unittest_descendant_are_busy(self):
+        fixture = observation(
+            row(20, 1, "/bin/claude", "-p", "magistrate"),
+            row(30, 20, "/bin/zsh", "-c", "census"),
+            row(90, 30, "/bin/python3", "-m", "joulewise.arm_census"),
+            row(50, 20, "/bin/node", "/opt/bin/codex", "mcp-server"),
+            row(60, 50, "/fake/codex-code-mode-host"),
+            row(70, 50, "/bin/python3", "-m", "unittest"), hits=(20, 50, 60),
+        )
+        with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
+            arm_census.ARM_DISCOVERY_ARGV, 0, "20\n50\n60\n", "")):
+            observed = arm_census.observe_arm_census(caller_pid=90, reader=FakeReader(fixture))
+        verdict = self.classify(observed)
+        self.assertTrue(verdict.publication_blocked)
+        self.assertEqual(((70, "unittest"),), verdict.workloads)
+        self.assertFalse(verdict.sessions[0].exempt)
+
+    def test_unreadable_hit_outside_exempt_tree_is_idle(self):
+        fixture = observation(row(20, 1, "/bin/codex", "exec", "task"))
+        with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
+            arm_census.ARM_DISCOVERY_ARGV, 0, "20\n", "")):
+            observed = arm_census.observe_arm_census(caller_pid=90, reader=FakeReader(fixture, (20,)))
+        verdict = self.classify(observed)
+        self.assertEqual((20,), observed.hit_pids)
+        self.assertEqual((), verdict.sessions)
+        self.assertEqual((), verdict.foreign_pids)
+        self.assertFalse(verdict.publication_blocked)
+        self.assertIn("fixture unreadable", verdict.diagnostics[0])
+
+    def test_discovery_timeout_is_bounded_and_diagnostic(self):
+        def timeout_probe(argv, **kwargs):
+            self.assertEqual(30, kwargs.get("timeout"))
+            raise subprocess.TimeoutExpired(argv, 30, output="20\n")
+
+        fixture = observation(row(20, 1, "/bin/codex", "exec", "task"))
+        with mock.patch.object(arm_census.subprocess, "run", side_effect=timeout_probe):
+            observed = arm_census.observe_arm_census(caller_pid=90, reader=FakeReader(fixture))
+        self.assertEqual((), observed.hit_pids)
+        self.assertFalse(self.classify(observed).publication_blocked)
+        self.assertEqual(1, len(observed.diagnostics))
+        self.assertIn("timed out after 30 seconds", observed.diagnostics[0])
+
+    def test_discovery_exit_two_stdout_is_diagnostic_never_hits(self):
+        fixture = observation(row(20, 1, "/bin/codex", "exec", "task"))
+        with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
+            arm_census.ARM_DISCOVERY_ARGV, 2, "20\n", "fixture error")):
+            observed = arm_census.observe_arm_census(caller_pid=90, reader=FakeReader(fixture))
+        self.assertEqual((), observed.hit_pids)
+        self.assertFalse(self.classify(observed).publication_blocked)
+        self.assertEqual(("discovery unknown: exit=2 stderr='fixture error'",), observed.diagnostics)
+
+    def test_multiline_argv_cannot_inject_hit_and_unknown_rows_are_counted(self):
+        fixture = observation(row(20, 1, "/bin/claude", "-p", "prompt"),
+                              row(52207, 1, "/bin/unrelated"))
+        multiline = "20 claude -p prompt\ncontinuation\n52207 injected text\nmore prompt\n"
+
+        def discovery_probe(argv, **kwargs):
+            # Model pgrep's two formats: only -l exposes multiline argv text.
+            output = multiline if "-lf" in argv else "20\n"
+            return subprocess.CompletedProcess(argv, 0, output, "")
+
+        with mock.patch.object(arm_census.subprocess, "run", side_effect=discovery_probe):
+            observed = arm_census.observe_arm_census(caller_pid=20, reader=FakeReader(fixture))
+        self.assertEqual((20,), observed.hit_pids)
+        self.assertEqual((), observed.diagnostics)
+        self.assertFalse(self.classify(observed, caller_pid=20).publication_blocked)
+        # Even malformed numeric-probe output cannot turn text into a hit.
+        with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
+            arm_census.ARM_DISCOVERY_ARGV, 0, "20\n" + multiline, "")):
+            observed = arm_census.observe_arm_census(caller_pid=20, reader=FakeReader(fixture))
+        self.assertEqual((20,), observed.hit_pids)
+        self.assertEqual(("discovery unknown row: count=4",), observed.diagnostics)
+        self.assertFalse(self.classify(observed, caller_pid=20).publication_blocked)
+
     def test_observation_uses_fake_inventory_and_exact_descendants_once(self):
         fixture = observation(row(20, 1, "/bin/claude"), row(30, 20, "/bin/zsh", "-c", "tool"),
             row(40, 30, "/bin/python3", "-m", "unittest"), row(60, 1, "/bin/unrelated"))
         reader = FakeReader(fixture)
         with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
-            night_gate.AGENT_CENSUS_ARGV, 0, "20 claude\n", "")) as run:
+            arm_census.ARM_DISCOVERY_ARGV, 0, "20\n", "")) as run:
             observed = arm_census.observe_arm_census(caller_pid=90, reader=reader)
-        run.assert_called_once_with(("/usr/bin/pgrep", "-lf", "codex|claude|t3"),
-                                    capture_output=True, text=True, check=False)
+        run.assert_called_once_with(("/usr/bin/pgrep", "-f", "codex|claude|t3"),
+                                    capture_output=True, text=True, check=False, timeout=30)
         self.assertEqual(1, reader.inventory_calls)
         self.assertEqual([20, 30, 40], reader.reads)
         self.assertEqual(((40, "unittest"),), self.classify(observed).workloads)
@@ -206,7 +306,7 @@ class ArmCensusTests(unittest.TestCase):
         fixture = observation(row(20, 1, "/bin/claude"), row(30, 20, "/bin/powermetrics"))
         reader = FakeReader(fixture, unreadable=(30,))
         with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
-            night_gate.AGENT_CENSUS_ARGV, 0, "20 claude\n", "")):
+            arm_census.ARM_DISCOVERY_ARGV, 0, "20\n", "")):
             observed = arm_census.observe_arm_census(caller_pid=90, reader=reader)
         self.assertFalse(self.classify(observed).publication_blocked)
         self.assertIn("fixture unreadable", observed.diagnostics[0])
@@ -245,7 +345,7 @@ class ArmCensusTests(unittest.TestCase):
                     row(90, 20, "/bin/python3", "-m", "joulewise.arm_census"),
                     row(30, 20, "/bin/powermetrics" if busy else "/bin/unknown"))
                 with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
-                    night_gate.AGENT_CENSUS_ARGV, 0, "20 claude -p magistrate\n", "")):
+                    arm_census.ARM_DISCOVERY_ARGV, 0, "20\n", "")):
                     observed = arm_census.observe_arm_census(caller_pid=90, reader=FakeReader(fixture, (20,)))
                 verdict = self.classify(observed)
                 self.assertEqual(busy, verdict.publication_blocked)

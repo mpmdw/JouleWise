@@ -21,6 +21,10 @@ from joulewise.quiet_guard_process import (
     SysctlDarwinProcessReader,
 )
 
+# Same discovery population as the night gate, but PID-only output prevents
+# multiline argv text from being mistaken for additional process hits.
+ARM_DISCOVERY_ARGV = (AGENT_CENSUS_ARGV[0], "-f", *AGENT_CENSUS_ARGV[2:])
+
 
 @dataclass(frozen=True)
 class Observation:
@@ -181,7 +185,7 @@ def classify_arm_census(plan: NightPlan, observation: Observation, *, caller_pid
         _ancestors(observation.inventory, pid) for pid in observation.hit_pids
     )) if observation.hit_pids else set()
     roots = {pid for pid in relevant if pid in records and _interactive_root(records[pid])}
-    # Own headless ancestors are allowed, but their side branches are not own.
+    # Own headless roots also qualify for the stub-only idle-tree exemption.
     roots.update(set(observation.hit_pids) & own)
     workloads: dict[int, str] = {}
     sessions = []
@@ -195,7 +199,7 @@ def classify_arm_census(plan: NightPlan, observation: Observation, *, caller_pid
         )
         workloads.update(work)
         idle_exemption = plan.receipt_class == "REHEARSAL_STUB" and not work and (
-            pid in records and _interactive_root(records[pid])
+            pid in own or (pid in records and _interactive_root(records[pid]))
         )
         if idle_exemption:
             exempt.update(descendants | {pid})
@@ -212,17 +216,20 @@ def observe_arm_census(*, caller_pid: int, reader: DarwinProcessReader | None = 
     diagnostics: list[str] = []
     hits: set[int] = set()
     try:
-        probe = subprocess.run(AGENT_CENSUS_ARGV, capture_output=True, text=True, check=False)
+        probe = subprocess.run(ARM_DISCOVERY_ARGV, capture_output=True, text=True, check=False, timeout=30)
         if probe.returncode not in {0, 1}:
             diagnostics.append(f"discovery unknown: exit={probe.returncode} stderr={probe.stderr!r}")
         else:
+            unknown_rows = 0
             for line in probe.stdout.splitlines():
-                pid, separator, _ = line.strip().partition(" ")
-                if pid.isdecimal() and int(pid) > 1 and separator:
+                pid = line.strip()
+                if pid.isdecimal() and int(pid) > 1:
                     hits.add(int(pid))
                 else:
-                    diagnostics.append(f"discovery unknown row: {line!r}")
-    except OSError as exc:
+                    unknown_rows += 1
+            if unknown_rows:
+                diagnostics.append(f"discovery unknown row: count={unknown_rows}")
+    except (OSError, subprocess.TimeoutExpired) as exc:
         diagnostics.append(f"discovery unknown: {exc}")
     try:
         inventory = reader.inventory()
@@ -270,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     observation = observe_arm_census(caller_pid=caller_pid)
     verdict = classify_arm_census(plan, observation, caller_pid=caller_pid)
     print(json.dumps({"plan_sha256": hashlib.sha256(raw).hexdigest(),
-                      "discovery_argv": AGENT_CENSUS_ARGV, **asdict(verdict)}, sort_keys=True))
+                      "discovery_argv": ARM_DISCOVERY_ARGV, **asdict(verdict)}, sort_keys=True))
     print("publication blocked" if verdict.publication_blocked else
           "arm census clear/idle-only" if plan.receipt_class == "REHEARSAL_STUB" else
           "diagnostic only; existing all-agents-closed rule still applies")

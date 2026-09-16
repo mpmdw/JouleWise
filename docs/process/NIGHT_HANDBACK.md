@@ -48,7 +48,7 @@ verbatim. The arm record identifies the code and schedule actually installed.
 
 ## Arm-time census for rehearsal plans
 
-Follow [runbook §0.6 step 3b and §1.4](../phase_2/derivation_night_runbook.md#06-census-clean-and-the-night-is-agent-free): only a parsed `REHEARSAL_STUB` plan may treat an idle interactive Claude or Node/T3 session as not foreign, unknown observations count as idle, the caller's own PPID chain is exempt, and the new census blocks publication only for that stub class while other classes retain the existing all-agents-closed rule with diagnostic output.
+Follow [runbook §0.6 step 3b and §1.4](../phase_2/derivation_night_runbook.md#06-census-clean-and-the-night-is-agent-free): only a parsed `REHEARSAL_STUB` plan may treat an idle interactive Claude or Node/T3 session as not foreign, unknown observations count as idle, the caller's own PPID chain is exempt, the own interactive or headless root receives the same stub-only idle-tree exemption (workload descendants still block; sibling seats outside its subtree remain foreign), and the new census blocks publication only for that stub class while other classes retain the existing all-agents-closed rule with diagnostic output.
 All agents must still close before the plan span: the unchanged night gate records `night_refused_agent_present` for an agent hit, real chains do not start on that refusal, and rehearsals retain their harmless-stub continuation and census-hit recording; the runbook's §8 owns the term definitions.
 
 ## Purpose of this night
