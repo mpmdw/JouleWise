@@ -65,11 +65,24 @@ STOP_REPOSITORY = "https://github.com/mpmdw/JouleWise.git"
 STOP_REF_GLOB = "refs/heads/ops/stop*"
 POSITIVE_CONTROL_REF = "refs/heads/main"
 
-# File 15 rows 3-4: these are local-time/fence and resident deadlines.
-PLAN_LEAD_S = 25 * 60
-REQUEST_LEAD_S = 25 * 60
-TERM_LEAD_S = 16 * 60
-KILL_LEAD_S = 15 * 60
+# LEAD-MARGIN-01: 2b4476cb / hands-free-week file 15 introduced the resident
+# fence and cooperative/TERM/KILL ladder plus an untouched-idle allowance.
+# D-180 retained the span; D-181 permits windows whenever the machine is quiet.
+# PLAN=REQUEST at t0-5 min fences launches and gives two minutes for handback;
+# TERM at t0-3 min starts teardown, with one minute before KILL at t0-2 min.
+# The t0 census needs the magistrate, supervisor, and every Codex child gone.
+# Load-average decay needs about 2-3 min AFTER teardown: TERM aims for three,
+# KILL leaves at most two, reduced by poll/signalling/census/exit latency.
+# This budget is an opportunity to settle, not a guarantee of passing t0.
+# The 10 s resident poll fits the 120/60 s phase gaps (12/6 polls; nominal
+# observation slack 110/50 s). launchd's 300 s StartInterval starts/recovers
+# the supervisor and cannot guarantee these phases after supervisor failure.
+# Blocked I/O or scheduling can also delay enforcement. The unchanged t0
+# gates refuse a surviving tree or excess load: this is the fail-closed backstop.
+PLAN_LEAD_S = 5 * 60
+REQUEST_LEAD_S = 5 * 60
+TERM_LEAD_S = 3 * 60
+KILL_LEAD_S = 2 * 60
 SUPERVISOR_POLL_S = 10
 REMOTE_STOP_PROBE_CADENCE_S = 5 * 60
 STOP_COOPERATIVE_S = 9 * 60
@@ -1721,7 +1734,8 @@ class ResidentSupervisor:
             "reason": reason,
             "requested_epoch_s": now.timestamp(),
             "requested_monotonic": self.deps.monotonic(),
-            "exit_within_s": STOP_COOPERATIVE_S,
+            # Courtesy only: a plan's absolute TERM/KILL deadlines still win.
+            "exit_within_s": REQUEST_LEAD_S - TERM_LEAD_S,
         }
         if plan is not None:
             value.update(

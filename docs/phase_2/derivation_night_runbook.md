@@ -224,7 +224,7 @@ default ruling and the continuation.
   convention is `/Users/edr/night-custody/<PLAN_ID>` (§0.2).
 - **Fence (watchdog sense)** — a period during which the relaunch watchdog
   prevents a new magistrate **agent** session from launching on this machine.
-  A valid plan's span fences, opening at the closed boundary `t0 − 25 min`
+  A valid plan's span fences, opening at the closed boundary `t0 − 5 min`
   and continuing through completion. After completion, the courier record
   and chain records determine when it closes; without delivery it extends
   through the derived dead-man plus the courier-lock allowance (§1.3).
@@ -615,11 +615,11 @@ proposed defaults adopted by cold gate 46 under an open Ed veto.
 
 ### 0.6 Census clean, and the night is agent-free
 
-`[QUIET-MAC]` nights are agent-free. The magistrate exits before `t0 − 25
+`[QUIET-MAC]` nights are agent-free. The magistrate exits before `t0 − 5
 minutes`; that boundary is the closed start of the plan span, and the resident
 supervisor's cooperative ladder enforces it: `standdown.request` at
-`t0 − 25 min`, TERM no later than `t0 − 16 min`, KILL no later than
-`t0 − 15 min` (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines", the boundary table).
+`t0 − 5 min`, TERM no later than `t0 − 3 min`, KILL no later than
+`t0 − 2 min` (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines", the boundary table).
 
 Desktop apps that bundle an agent runtime — a shipped command-line agent
 binary that the app runs as a local server — count as agents. The ChatGPT
@@ -1299,11 +1299,40 @@ Same-day successors are a machinery capability; for the three FAIL-route registr
 The admissible interval opens with the notice send and closes exclusively at:
 
 ```
-PLAN_LEAD_S = 1500 s = 25 × 60 s
-INSTALL_CLOSE_MARGIN_S = 3600 s = 60 × 60 s
+PLAN_LEAD_S = 300 s = 5 × 60 s
+INSTALL_CLOSE_MARGIN_S = 120 s = 2 × 60 s
 install_close_epoch(plan) = t0 - PLAN_LEAD_S - INSTALL_CLOSE_MARGIN_S
-                         = t0 - 25 min - 60 min = t0 - 85 min
+                         = t0 - 5 min - 2 min = t0 - 7 min
 ```
+
+**LEAD-MARGIN-01:** the flat one-hour install pad introduced by `391a194b`
+is now two minutes. It separates installation and handback from REQUEST,
+allowing twelve nominal ten-second resident polls to discover the plan; it is
+not a physical settling requirement. The exclusive cutoff and installer
+rechecks still apply. Installation must finish strictly more than **seven
+minutes** before t0 (five-minute plan lead plus two-minute pad).
+
+The resident ladder originated in `2b4476cb` and hands-free-week file 15 as a
+cooperative handback, TERM grace and untouched-idle allowance. D-180 retained
+that span; D-181 permits windows whenever the machine is quiet. The new
+PLAN/REQUEST/TERM/KILL leads are **5/5/3/2 minutes**: fence launches and request
+exit at t0−5, allow two minutes for cooperative handback, TERM at t0−3, then
+allow one minute before KILL at t0−2. The two-minute cooperative window is a
+courtesy, not a guarantee; absolute TERM/KILL boundaries win even after a late
+request. The arming activation still exits before the request boundary.
+
+The census needs the magistrate, supervisor and every Codex child gone.
+One-minute load-average decay needs about **two to three minutes after
+teardown**: TERM aims to leave three minutes; KILL leaves at most two, reduced
+by polling, descendant signalling, census and supervisor-exit latency. This is
+an opportunity to settle, not a promise of passing t0. The resident polls every
+ten seconds: the 120/60-second phase gaps contain 12/6 polls and leave nominal
+observation slack of 110/50 seconds. The launchd template's 300-second
+`StartInterval` starts or recovers the resident and **cannot guarantee these
+phases after supervisor failure**. Blocked I/O or scheduling may also delay
+enforcement. The unchanged t0 gates refuse a surviving tree or excess load;
+that is the fail-closed backstop. HID-idle, boot-clock and custody gates are
+unchanged too.
 
 `INSTALL_SPANS` in `scripts/run_night.py` is the one list of per-day local
 `("HH:MM", "HH:MM")` spans. The shipped list is `(("00:00", "24:00"),)`:
@@ -1485,8 +1514,8 @@ through `D + COURIER_LOCK_FRESH_S`, where the lock-fresh allowance is
 `300 + max(60, 180, 600) = 900 s = 15 min`; a started but unexited chain
 extends it without a clock limit.
 
-The activation's absolute exit boundary is `t0 − 25 minutes` (§0.6),
-60 minutes after install close. Finish recording and exit before it.
+The activation's absolute exit boundary is `t0 − 5 minutes` (§0.6),
+two minutes after install close. Finish recording and exit before it.
 Do not remain resident until `t0`.
 
 ### 1.4 Email, then arm
@@ -1597,7 +1626,7 @@ assert hashlib.sha256(
 ).hexdigest() == night_gate.D166_REGISTRATION_SHA256
 assert 0 <= time.time() - plan.authored_epoch_s <= 36 * 3600
 assert 0 <= plan.t0_epoch_s - plan.authored_epoch_s <= 36 * 3600
-assert time.time() < install_close_epoch(plan)     # t0 - 1500 - 3600 seconds
+assert time.time() < install_close_epoch(plan)     # t0 - 300 - 120 seconds
 assert Path(os.environ['STAGE']).stat().st_dev == Path(os.environ['NIGHT_ROOT']).stat().st_dev
 print('staged plan checks PASS')
 PY
@@ -1692,7 +1721,7 @@ sidecar by hand first if you need the old plist back.
 ### 1.5 Record and exit
 
 Write the arm record and its evidence directory in the authorized linked
-bookkeeping worktree, commit, push, and exit before `t0 − 25 min`. No own
+bookkeeping worktree, commit, push, and exit before `t0 − 5 min`. No own
 background work may remain alive.
 
 **The frozen checkout triple, exactly as the contract defines it.** It is three
@@ -1723,7 +1752,7 @@ reconstruction is the successor's floor, not a licence to record less.
 
 **Timing evidence update — 2026-09-15, INSTALL-WINDOWS-MULTI-01.** Retain the
 schedule JSON and both installed plist dumps with the actual notice-send open,
-install close, every listed install-day span, `t0 − 25 min`, `t0`, completion
+install close, every listed install-day span, `t0 − 5 min`, `t0`, completion
 (the courier deadline) and D, all as local date/time plus epoch seconds.
 
 The arm record is the committed account of the plan and fixed inputs before
@@ -2542,7 +2571,7 @@ numbered record.
 | Three nights × 12 slots, retained n ≥ 19, the 16.95/25.4 projections, the 128 min schedule, blindness, the screen challenge, the D-125 envelope, the halt on `S >= C`, `0.04262208300415633`, `0.010818`, the predecessor ceiling `0.010164834757777545` | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` |
 | The three durations reconciled — programmed span 7680 s (128 min), generator minimum 7980 s (133 min), armed `window_max_s` 9000 s (150 min) | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, §"Why three nights of twelve slots"; its old install-span comparison is historical, superseded for installation by §1.3 |
 | Display state at `t0` is unconstrained by the night gate, recorded as a known condition and not a rule | same file, §"Known conditions (recorded, not rules)" |
-| Plan spans discovered from sibling plans or installed night plists, starting at `t0 − 25 min`; the stand-down ladder −25/−16/−15, 15-minute watchdog liveness, email-then-arm with Ed's NO overriding, and measurement-checkout install rule | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines" and §"Install handoff"; `installed_agent_fence` in `scripts/magistrate_watchdog.py` |
+| Plan spans discovered from sibling plans or installed night plists, starting at `t0 − 5 min`; the stand-down ladder −5/−3/−2, 15-minute watchdog liveness, email-then-arm with Ed's NO overriding, and measurement-checkout install rule | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines" and §"Install handoff"; `installed_agent_fence` in `scripts/magistrate_watchdog.py` |
 | The handback's role, the courier's reading order, the campaign/chain process checks | `docs/process/NIGHT_HANDBACK.md`, its opening sections |
 | v2 plan required keys, `night_plan_overruns_deadman`, `registration_path`, the 36-hour authoring age | `joulewise/night_gate.py`: `_PLAN_KEYS`, `NightPlan.from_mapping`, `NIGHT_GATE_REASON_CODES`, `NIGHT_DRIVER_REASON_CODES`, `PLAN_MAX_AGE_S` |
 | Generation-time parsing of the two JSON inputs (six exact `IDENTITY_EPOCH_FIELDS`, scalar non-empty values, `power_policy == ac_high_power`; T1 bindings parsed as an object only), `MAX_DECLARED_SESSION_SLOTS = 99` as a desk-time ceiling, and the `CHAIN_ANCHORS` anchor-text discipline | `scripts/gen_derivation_night.py`: `_validated_identity_epoch`, `_validated_json_object`, `CHAIN_POWER_POLICY`, `CHAIN_ANCHORS`, and the slot-count and window checks in `build_spec`; `MAX_DECLARED_SESSION_SLOTS` from `joulewise/calibration_ledger.py` |
@@ -2560,7 +2589,7 @@ numbered record.
 | The frozen calibration plan is a committed pack-relative `calibration_plan.json`, not a custody reservation plan | `docs/phase_2/window_runbook.md`, the ALPHA `window.env` example and its `FROZEN_PLAN` gloss |
 | `[DD]` is the registration's authoring day | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, §"Fields filled at commit" |
 | The clone's environment must equal `env/mac-measurement-lock.txt` | record 12, §"Block A", its closing `pip freeze` diff |
-| Install close `t0 − 1500 − 3600`, whole-day shipped `INSTALL_SPANS`, and dead-man `60 × ceil((t0 + window_max_s + 300 + 3600) / 60)` | D-180 clause 1 and D-181 clause 1; INSTALL-WINDOWS-MULTI-01 adopted design record 06; `scripts/run_night.py`: `install_close_epoch`, `INSTALL_CLOSE_MARGIN_S`, `INSTALL_SPANS`, `deadman_epoch`, `DEADMAN_GRACE_S` |
+| Install close `t0 − 300 − 120`, whole-day shipped `INSTALL_SPANS`, and dead-man `60 × ceil((t0 + window_max_s + 300 + 3600) / 60)` | D-180 clause 1 and D-181 clause 1; INSTALL-WINDOWS-MULTI-01 adopted design record 06; `scripts/run_night.py`: `install_close_epoch`, `INSTALL_CLOSE_MARGIN_S`, `INSTALL_SPANS`, `deadman_epoch`, `DEADMAN_GRACE_S` |
 | The supersession banner shape and the "read the newest activation records" instruction | record 13 |
 | Epoch↔local conversions and strict maximum in §1.2 | §1.2 arithmetic, converted with `datetime.fromtimestamp(epoch, ZoneInfo("America/Los_Angeles"))`; the example applies the current design to earlier coordinates |
 | Driver hands the chain four variables and no argv (`_run_chain_once` in `scripts/run_night.py`, pinned by the argv assertion in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
@@ -2644,10 +2673,10 @@ means. A term is listed only if it does technical work.
 | start-to-start cadence | §1.2 | Slot `d(k+1)` starts 600 s after `dk` STARTED; a long capture is never caught up by compressing a later slot. |
 | window_max_s / `WINDOW_END_EPOCH_S` | §1.2 | The plan's window length in seconds, and the exclusive window end the chain enforces. |
 | courier / courier deadline / courier allowance | §1.2, §2.1 | The process that emails the night's result; the 300 s the deadline arithmetic reserves for it AFTER the window ends. Distinct from the pre-settle allowance, which is spent inside the window; the two share a number by coincidence. |
-| install span / install close | §1.3 | Recurring local interval in `INSTALL_SPANS`; the separate per-plan exclusive cutoff `install_close_epoch(plan) = t0 − 85 min`. Installation also requires a sent notice. |
+| install span / install close | §1.3 | Recurring local interval in `INSTALL_SPANS`; the separate per-plan exclusive cutoff `install_close_epoch(plan) = t0 − 7 min`. Installation also requires a sent notice. |
 | completion / D | §Terms, §1.2 | Completion is `t0 + window_max_s + 300`; D is `deadman_epoch(plan)`, completion plus 3600 s rounded up to a minute. |
 | Δ (delta) | §1.2 | The elapsed time from the plan's `t0` to the moment the chain's settle begins: driver gate work + chain preflight + session reservation. `d12` is admitted only while Δ ≤ 1320 s. |
-| plan span / exit boundary | §0.6, §1.3 | The interval from `t0 − 25 min` in which no agent may be resident; the activation's hard exit time. |
+| plan span / exit boundary | §0.6, §1.3 | The interval from `t0 − 5 min` in which no agent may be resident; the activation's hard exit time. |
 | census | §0.6 | The enumerated process inventory proving no foreign or own agent is live. |
 | frozen checkout triple | §1.5 | Exactly `(plan_id, root, head)` — the three fields the watchdog renders into the relaunch prompt's `@@FENCED_CHECKOUTS@@` list. It fences those checkouts against movement; §2.0 reconstructs every further harvest coordinate from it. |
 | terminal (session) | §2.2 | The session's last declared slot is final, or the session was aborted. |
