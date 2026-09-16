@@ -1,5 +1,119 @@
 # CI-TRIM-02 — measured plan and implementation
 
+## Step 2 — PR interpreter dedupe (current; 2026-09-15 23:10 PDT ruling)
+
+Ed explicitly ruled that PRs run one interpreter and main pushes keep all
+three roles: supported floor 3.11, production nights 3.13 (measurement venv
+3.13.1, per the delegation), and local dev 3.14. The system-3.9 uninstall
+path retains its own tests. This changes interpreter duplication only: every
+selected interpreter still receives all six ordinary shards, the exclusive
+calibration-exit module, and both crash-matrix shards. No path-based skipping.
+
+Step-2 base is `b11fdd502d2180c1a28c45348fcae3a839fff115`, branch
+`chore/2026-09-15-ci-trim-2`, PR #340. Only `.github/workflows/ci.yml` and
+this plan are authorized writes. Intake: no active stop card; baseline clean,
+prompt-supplied canonical digest validated, lease
+`lease-7bd51d468a9d4c61a1cf5cf07813e342` active. This is the explicitly
+assigned [AGENT] task; queue, run-state and decision-log updates are lead-owned.
+The sections below this step-2 record describe the prior step-1 implementation
+and measurements; their two-interpreter statements are historical.
+
+### Workflow hunks
+
+- Add `changes` (absent at this base), with one Bash step and no checkout,
+  setup or third-party action. Default to `["3.11","3.13","3.14"]`; select
+  `["3.13"]` only for exact `GITHUB_EVENT_NAME=pull_request`. Missing,
+  unknown and non-PR event names retain the full list. The job output also
+  defaults to the full list if the step output is empty. A runner/job failure
+  still fails CI; this fallback does not mask infrastructure failure.
+- Add `needs: changes` to `test`, `calibration-exits-exclusive`, and
+  `calibration-writer-crash-matrix-exclusive`; set each `python-version`
+  axis to `${{ fromJSON(needs.changes.outputs.pythons) }}`. No matrix-dependent
+  job-level `if`. Preserve shard axes, test commands, names, triggers,
+  concurrency, fences/build/wheel behavior and timeouts.
+- Replace the old Python-role comment and the stale “Both interpreters”
+  comment with the production/floor/dev roles and the PR rule.
+
+### Counts and expected wall time
+
+Counts here cover `ci.yml` only, excluding site, gate-ledger and production-proof.
+
+| Job family | Before (PR or main) | After PR | After main push |
+|---|---:|---:|---:|
+| changes | 0 | 1 | 1 |
+| test | 12 | 6 | 18 |
+| calibration-exits-exclusive | 2 | 1 | 3 |
+| calibration-writer-crash-matrix-exclusive | 4 | 2 | 6 |
+| fences / build / installed-wheel | 3 | 3 | 3 |
+| **Total** | **21** | **13** | **31** |
+
+PR test jobs halve (18→9); total PR jobs drop by 8 (38%). After the
+selector completes, at most 11 jobs from one PR can execute together
+(9 test jobs + fences + build-or-wheel), versus 20 before. Two PRs offer
+18 long test jobs instead of 36, leaving more room under the observed
+20-job occupancy, although short jobs and other workflows still compete.
+The added selector costs one runner allocation and serializes test release.
+
+Expected PR wall with runners available remains approximately **19–20 minutes
+plus selector latency**, using the existing ~18.62-minute calibration-exit
+estimate and ~13.83-minute ordinary shards. Dedupe lowers queue pressure,
+not the indivisible critical path; it makes that low-queue envelope more
+plausible than the observed 32–40 minutes under contention. Python 3.13
+has no hosted timings in this evidence, so this is an estimate, not a
+measured speedup. A PR behind saturated main runs can still take ~29–39
+minutes or longer. Main now has 27 test jobs (previously 18), exceeding
+20-way occupancy itself and potentially worsening main/PR contention.
+Actual scheduling, Python-3.13 performance and net wall savings require hosted
+measurements; 20 is observed occupancy, not a confirmed concurrency quota.
+
+### Check-name migration for magistrate / branch protection
+
+All six existing job IDs and every existing step NAME are preserved.
+`rg` across `.github/workflows/*.yml` found no cross-workflow dependency on
+these CI matrix check names. The workflow name remains `ci`. The displayed
+matrix checks change as follows (each entry is an exact check name):
+
+| Disappears from PRs (remains on main) | Appears on PRs and main |
+|---|---|
+| `test (3.11, 1)`, `test (3.14, 1)` | `test (3.13, 1)` |
+| `test (3.11, 2)`, `test (3.14, 2)` | `test (3.13, 2)` |
+| `test (3.11, 3)`, `test (3.14, 3)` | `test (3.13, 3)` |
+| `test (3.11, 4)`, `test (3.14, 4)` | `test (3.13, 4)` |
+| `test (3.11, 5)`, `test (3.14, 5)` | `test (3.13, 5)` |
+| `test (3.11, 6)`, `test (3.14, 6)` | `test (3.13, 6)` |
+| `calibration-exits-exclusive (3.11)`, `calibration-exits-exclusive (3.14)` | `calibration-exits-exclusive (3.13)` |
+| `calibration-writer-crash-matrix-exclusive (3.11, 1)`, `calibration-writer-crash-matrix-exclusive (3.14, 1)` | `calibration-writer-crash-matrix-exclusive (3.13, 1)` |
+| `calibration-writer-crash-matrix-exclusive (3.11, 2)`, `calibration-writer-crash-matrix-exclusive (3.14, 2)` | `calibration-writer-crash-matrix-exclusive (3.13, 2)` |
+
+New non-matrix check: `changes`. Unchanged: `fences`, `build`,
+`installed-wheel`, plus the separate `gate-ledger` workflow. The magistrate
+must inspect current branch protection/rulesets and replace any required
+3.11/3.14 matrix contexts with the nine PR-emitted 3.13 contexts before
+merging. Protection was not queried or modified in this step.
+
+### Step-2 verification and next exact step
+
+The `CHECK:yaml` replay below is updated for step 2: YAML parsing, unchanged
+existing job/step names and bodies (except the three matrix axes/dependencies),
+Bash syntax, event-to-JSON dry evaluation, and matrix cardinalities. It executes
+no test bodies. The first dry attempt could not append to `/dev/stdout` in
+this sandbox; the replay now redirects the one output write to the inherited
+stdout descriptor without opening a file. GitHub's actual output-file plumbing
+remains a hosted check. Step-1 partition/inline replay blocks are historical and were
+not rerun for step 2. No local suites, commits, pushes or hosted triggers.
+
+Only hosted runs can verify GitHub's output/fromJSON scheduling and emitted
+check contexts, successful full-suite execution on 3.13, the three-interpreter
+main matrix, unchanged test census/skip behavior, and real queue/wall savings.
+Next: magistrate reviews the two-file diff, adjusts required check contexts as
+needed, commits/pushes through its authorized route, and inspects PR #340 CI;
+then verifies the full main-push matrix. Final scope/diff checks belong in the
+step-2 return envelope; prior scope results below belong to step 1.
+
+---
+
+## Step 1 — historical measured plan and implementation
+
 2026-09-15 PDT; hosted timestamps are 2026-09-16 UTC.
 Base: f4d55d664a8df7937a52f807066b42ee01db6a12; branch chore/2026-09-15-ci-trim-2.
 Delegated writes limited to ci.yml, test_timings.json, shard_tests.py, and this plan. No commits, local suite, live hardware work, or writes to another worktree. Baseline digest matches the prompt; baseline clean. ACTIVE_STOP_CARD: NONE. This owner-requested [AGENT] tooling lane is selected explicitly; queue/run-state bookkeeping remains lead-owned.
@@ -646,20 +760,49 @@ These commands only inspect/partition; they do not execute test bodies. The work
 
 <!-- CHECK:yaml -->
 ```sh
-ruby -rjson -ryaml - <<'RB'
+ruby -rjson -ryaml -ropen3 - <<'RB'
 p = '.github/workflows/ci.yml'
-a = YAML.load(`git show HEAD:#{p}`)
+a = YAML.load(`git show b11fdd502d2180c1a28c45348fcae3a839fff115:#{p}`)
 b = YAML.load_file(p)
-raise 'job IDs changed' unless a['jobs'].keys == b['jobs'].keys
+ids = %w[test calibration-exits-exclusive calibration-writer-crash-matrix-exclusive]
+expr = '${{ fromJSON(needs.changes.outputs.pythons) }}'
+raise 'job IDs changed' unless b['jobs'].keys.sort == (a['jobs'].keys + ['changes']).sort
+raise 'workflow metadata changed' unless a.reject { |k, _| k == 'jobs' } == b.reject { |k, _| k == 'jobs' }
 a['jobs'].each do |id, job|
-  raise "step names changed: #{id}" unless job['steps'].map { |s| s['name'] } == b['jobs'][id]['steps'].map { |s| s['name'] }
+  current = Marshal.load(Marshal.dump(b['jobs'][id]))
+  if ids.include?(id)
+    raise 'dependency changed' unless current.delete('needs') == 'changes'
+    raise 'matrix expression changed' unless current['strategy']['matrix']['python-version'] == expr
+    current['strategy']['matrix']['python-version'] = job['strategy']['matrix']['python-version']
+  end
+  raise "existing job body/names changed: #{id}" unless current == job
 end
-raise 'triggers changed' unless a[true] == b[true] && a['on'] == b['on']
-raise 'concurrency changed' unless a['concurrency'] == b['concurrency']
-t = b['jobs']['test']
-raise 'matrix mismatch' unless t['strategy']['matrix']['shard'] == (1..Integer(t['env']['SHARD_COUNT'])).to_a
-raise 'interpreters changed' unless t['strategy']['matrix']['python-version'] == ['3.11', '3.14']
-puts 'YAML PASS; all 6 job IDs and existing named steps preserved; full interpreter matrix and triggers preserved'
+selector = b['jobs']['changes']
+full = '["3.11","3.13","3.14"]'
+raise 'output fallback changed' unless selector['outputs']['pythons'] == "${{ steps.interpreters.outputs.pythons || '#{full}' }}"
+raise 'unexpected selector steps' unless selector['steps'].size == 1
+step = selector['steps'].first
+raise 'selector not pure Bash' unless step['shell'] == 'bash' && step['id'] == 'interpreters' && !step.key?('uses')
+script = step.fetch('run')
+_, err, status = Open3.capture3('bash', '-n', stdin_data: script)
+raise err unless status.success?
+sink = '>> "$GITHUB_OUTPUT"'
+raise 'unexpected output sink' unless script.scan(sink).size == 1
+dry_script = script.sub(sink, '>&1')
+events = ['pull_request', 'push', 'workflow_dispatch', 'pull_request_target', 'unknown', '', nil]
+events.each do |event|
+  expected = event == 'pull_request' ? ['3.13'] : JSON.parse(full)
+  out, err, status = Open3.capture3({'GITHUB_EVENT_NAME' => event}, 'bash', '--noprofile', '--norc', '-euo', 'pipefail', '-c', dry_script)
+  raise err unless status.success?
+  raise 'invalid output record' unless out.lines.size == 1 && out.start_with?('pythons=')
+  versions = JSON.parse(out.delete_prefix('pythons='))
+  raise 'wrong interpreter selection' unless versions == expected
+  counts = ids.map { |id| versions.size * b['jobs'][id]['strategy']['matrix'].fetch('shard', [1]).size }
+  raise 'wrong matrix cardinality' unless counts == (event == 'pull_request' ? [6, 1, 2] : [18, 3, 6])
+  raise 'wrong total jobs' unless counts.sum + 4 == (event == 'pull_request' ? 13 : 31)
+end
+puts 'YAML PASS; six existing jobs and steps preserved; only matrix axes/dependencies changed'
+puts 'MATRIX DRY PASS; seven event cases; PR 13 jobs; non-PR 31 jobs; no test bodies executed'
 RB
 ```
 
@@ -733,3 +876,10 @@ Final scope check: **SCOPE_OK**, active lease lease-239b475119db449cb1926ebfd884
 ```sh
 python3 -B scripts/bridge scope-check --baseline .codex-bridge/baselines/mag-ci2-20260915.json --expect-digest sha256:a2f626a87cba9f54533dcf36d093759e011310ef82cf6d399b000fd0e9a0a472 --lease-id lease-239b475119db449cb1926ebfd884e60f --scope .github/workflows/ci.yml scripts/test_timings.json scripts/shard_tests.py docs/process_traces/2026-09-15-interactive-b0ae8462/10-ci-trim-2-astra-plan.md
 ```
+
+## Measurement 1 (magistrate, run 35060083430 on PR #340 at b11fdd50: 6×2 shards, both interpreters)
+
+success, wall 35.1 min. Shard execution 6.9–15.3 min (was 10–24); queue waits 8–21 min on every job (21 jobs).
+Conclusion: execution is now under the calibration-exits floor; the queue is the wall clock. Next commit: PRs run
+Python 3.13 only (13 jobs), main pushes 3.11 + 3.13 (Ed's ruling 23:10; 3.14 is exercised by every seat's local
+module runs, not by CI).
