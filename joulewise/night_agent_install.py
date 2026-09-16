@@ -479,12 +479,15 @@ class Transaction:
                         if exc.liveness.kind is Kind.UNKNOWN:
                             detail += " state=unknown rc={} stderr={}".format(exc.liveness.rc, exc.liveness.stderr)
                         raise Refused(3, self.prepared.timing("night_agent_already_loaded", self.clock(), detail))
-            self.selected_span_close = self.prepared.admit(self.clock())
+            require_published = isinstance(self.target, LaunchdTarget)
+            self.selected_span_close = self.prepared.admit(
+                self.clock(), require_published=require_published)
             self._enter(State.ADMITTED)
             self._enter(State.STAGED)
             self.target.stage()
             self.prepared.custody_night.mkdir(parents=True, exist_ok=True)
-            for label, payload in self.prepared.render(self.target.labels):
+            for label, payload in self.prepared.render(
+                    self.target.labels, require_published=require_published):
                 self._poll()
                 result = self.adapter.write_plist(label, payload)
                 if result.kind is not Kind.SUCCEEDED:
@@ -580,8 +583,8 @@ class Prepared:
                     datetime.fromtimestamp(epoch).astimezone().isoformat()) for name, epoch in epochs)
         return "{}: {}; {}".format(reason, summary, detail)
 
-    def admit(self, now):
-        if self.plan_path != (Path(self.plan.custody_root) / "night_plan.json").resolve():
+    def admit(self, now, require_published=True):
+        if require_published and self.plan_path != (Path(self.plan.custody_root) / "night_plan.json").resolve():
             raise Refused(2, self.timing("plan_outside_custody_root", now,
                           "plan={}; expected={}".format(self.plan_path,
                           (Path(self.plan.custody_root) / "night_plan.json").resolve())))
@@ -601,7 +604,10 @@ class Prepared:
                       for epoch in span) for span in spans])))
         return selected
 
-    def render(self, labels):
+    def render(self, labels, require_published=True):
+        # Validate the future installed argv even when reading staged plan bytes.
+        plan_path = (self.plan_path if require_published else
+                     (Path(self.plan.custody_root) / "night_plan.json").resolve())
         for index, label in enumerate(labels):
             mode = "run" if index == 0 else "dead-man"
             calendar = self.schedule["night_calendar" if index == 0 else "deadman_calendar"]
@@ -610,7 +616,7 @@ class Prepared:
                 for field in ("Month", "Day"):
                     text = re.sub(r"    <key>" + field + r"</key>\n    <integer>@@[A-Z]+@@</integer>\n", "", text)
             values = {"com.joulewise.night": label, "@@PYTHON@@": self.python,
-                      "@@MODE@@": mode, "@@REPO@@": str(self.repo), "@@PLAN@@": str(self.plan_path),
+                      "@@MODE@@": mode, "@@REPO@@": str(self.repo), "@@PLAN@@": str(plan_path),
                       "@@CUSTODY_ROOT@@": self.plan.custody_root, "@@COURIER_BIN@@": self.courier,
                       "@@PATH@@": self.courier_path,
                       "@@LOG_STEM@@": "launchd.deadman" if index else "launchd.night"}
@@ -669,7 +675,8 @@ def validate_install(args, repo):
                "chain.exited", "courier.json", "courier.sent") if os.path.lexists(prepared.custody_night / name)]
     if records:
         raise Refused(3, "refusing install: existing night records: " + " ".join(records))
-    prepared.admit(time.time())  # All read-only refusals precede admission and mkdir.
+    # All read-only refusals precede admission and mkdir.
+    prepared.admit(time.time(), require_published=args.render_only is None)
     return prepared
 
 
