@@ -206,9 +206,12 @@ No member value is read by anyone before the session is terminal; the desk
 tool `scripts/epoch_equivalence_check.py` applies the rule at harvest.
 
 **Pins.** `repo_head = measurement_head = H`, where H is **this commit**: the
-main commit that rewrites this handback and refreshes the note on the
+main commit that rewrites this handback, refreshes the note on the
 production inventory row for the measurement root (the row itself was
-appended by `3c8bd220`). The pre-registration's five commit-time fields
+appended by `3c8bd220`) and pins the two kernel lane ids registered on
+2026-09-16 in `tests/test_gen_state.py` (the first authoring of this text,
+`aef09471`, was superseded before any notice because that fidelity test was
+red at it; no plan was published on it). The pre-registration's five commit-time fields
 (authoring day 10, MLX 0.31.2, head pin 76 /
 `08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`, chain
 digest above) are unchanged from the 2026-09-13 sealing; the file's SHA-256
