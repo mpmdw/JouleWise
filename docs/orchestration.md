@@ -195,6 +195,27 @@ This procedure does not expand commit, push, merge, or deployment authority.
     post-large-workload meta-reassessment (owned by operation-loop §10)
     always fires, and it runs LAST.
 
+### Session-end fixture census
+
+- Run `python3 scripts/fixture_orphan_census.py --fail-on-orphans` before
+  handing off a session and record its JSON rows and count. Exit 0 means an
+  empty census, 1 means registered fixtures with parent PID 1 were found,
+  and 2 means observation or registry validation failed (not a clean census).
+  Without `--fail-on-orphans`, successful observation exits 0 even with matches.
+- Fixture authors extend `tests/fixture_signatures.json` with a unique `id`,
+  a `command_regex` specific to the fixture's displayed argv, and a `source`
+  pointing to its launcher. Add positive and non-fixture negative cases to
+  `tests/test_fixture_orphan_census.py`. Do not register generic production
+  worker or model commands. The NV5 fixture runs the real node worker against
+  a fake vLLM; its task path distinguishes it from production workers.
+- The watchdog records the same census and count in its launch-time
+  `fixture_orphan_census` event in `events.jsonl`. An acquisition error has
+  null count/rows and an error message. This is informational: launch refusals
+  and the codex/claude/t3 census are unchanged. This bounded sentinel increment
+  does not wire prewindow refusal or culling. It never signals a process;
+  any future culling workflow needs separate authorization and identity
+  revalidation outside plan spans. A ps snapshot is observation, not kill authority.
+
 ### Stop cards and paused work
 
 When a session stops with live work in progress, the lead creates or updates
