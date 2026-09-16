@@ -2471,6 +2471,37 @@
       "status_note": "2026-09-15 activation d6888966: registered from activation decae362 record 00 Follow-up and the d6888966 State found census; not started; not night-critical. Sibling of REPLAY-FIXTURE-LEAK-01, kept separate because it covers a different fixture and file. Separate ed_external note: culling the existing orphan processes is Ed's call; no orphan cull is authorized by this agent lane.",
       "stop_card": null
     },
+    "FIXTURE-ORPHAN-SENTINEL-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md (State found: ps census at 20:09 PDT 2026-09-15, no orphan fixture processes after the 19:55 reboot)",
+          "docs/process/state_kernel.json /tasks/FIXTURE-FAKE-VLLM-LEAK-01 (35 orphaned fake vllm serve fixture processes, parent PID 1, launched 2026-09-03 to 2026-09-05, outside the claude/codex/t3 census)",
+          "docs/process_traces/2026-09-15-activation-d6888966/00-launch-record.md (State found: the 35 orphans still present at 06:30 PDT 2026-09-15)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-ORPHAN-SENTINEL-01/acceptance",
+          "label": "FIXTURE-ORPHAN-SENTINEL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A helper (name chosen by the implementer) prints the orphan fixture census as JSON: for each match the PID, parent PID, start time, age, RSS and the signature it matched; exit 0 with an empty list when clean. The signature registry lives in one file that every fixture author extends. The magistrate launch record and prewindow_check's report both run it and record the count; prewindow_check treats a non-empty census as a refusal reason at t0 (an orphan is agent-adjacent load), the same class as the existing fixture-process refusals, without changing the codex, claude or t3 agent census. Culling is a separate documented command that kills only listed PIDs after re-reading their command lines, is run by Ed or by the magistrate outside any plan span, and is never automatic. A regression spawns a signature-matching decoy under PID 1 and proves the census lists it and the cull removes it while an unrelated process survives. Not night-critical."
+      },
+      "authority": {
+        "label": "2026-09-15 activation 08ca8197 launch record (magistrate registration at the interactive session's request; registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Detect and report orphaned test-fixture processes independently of any single fixture's teardown. FIXTURE-FAKE-VLLM-LEAK-01 fixes the fake vllm server's own exit paths; this lane adds the sentinel that catches every leak class: a census helper that lists processes whose parent is launchd (PID 1), whose command line matches a registry of known fixture signatures (the fake vllm serve line, the fake node worker, any future fixture that registers a signature), with age and RSS, so an orphan is seen at the next magistrate launch or prewindow_check instead of thirteen days later. Before the 2026-09-15 restart, 35 such orphans (launched 2026-09-03 to 2026-09-05) sat outside the night census, which matches only codex, claude or t3, and held memory and ports; after the reboot this activation's 20:09 PDT census found none.",
+      "id": "FIXTURE-ORPHAN-SENTINEL-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 208,
+      "status": "queued",
+      "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 from the restart census; not started; registration only. Distinct from FIXTURE-FAKE-VLLM-LEAK-01 (fix at the source) and REPLAY-FIXTURE-LEAK-01 (stale fixture residue): this row is the detector for every class. The cull stays a documented manual or magistrate command outside plan spans; no orphan cull is authorized by this registration.",
+      "stop_card": null
+    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -6622,6 +6653,37 @@
       "status_note": "Bridge §8 currently validates only self-reported headers; consumption-side fail-closed is the actual protection until this row supplies real enforcement.",
       "stop_card": null
     },
+    "TEMP-HYGIENE-IW-TMP-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md (State found: 154 /private/tmp/iw-txn-* directories at 20:12 PDT 2026-09-15, 0 older than 60 minutes, all created 20:10-20:12; $TMPDIR held 131 entries including 3 codex-run-v3-scope* directories; the pre-restart figures of about 540 iw-* directories and 39 GB $TMPDIR are as reported by the interactive session joulewise-31, not re-measured by this activation)",
+          "/Users/edr/code/JouleWise-wt-iw-txn/tests/test_night_agent_install.py:180,314,631,1080 (tempfile.TemporaryDirectory with prefixes iw-txn-instrument-, iw-txn-system-python-, iw-txn-matrix-, iw-txn-capability- and dir=\"/tmp\"; read from the feat/2026-09-15-install-windows-transactional checkout at 20:12 PDT; that branch is not yet on main, so the path resolves on main only after its PR merges)",
+          "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md (UPDATE 2026-09-15 19:50 PDT: stand-down for the restart; fseventsd about 61 GB RSS)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEMP-HYGIENE-IW-TMP-01/acceptance",
+          "label": "TEMP-HYGIENE-IW-TMP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every test fixture that creates a directory under /tmp or $TMPDIR registers its removal with addCleanup or a context manager AND is also removable by an age-based sweep: a documented sweep helper lists and removes iw-* and codex-run-v3 scope directories older than a bounded age (default one hour) that no live process holds open, refuses anything under a measurement root or a night-custody path, and runs as a step in the magistrate launch record and in prewindow_check's report (report only at t0; deletion never happens inside a plan span). The test-matrix runner uses a per-run parent directory so one kill leaves one directory, not hundreds. A regression starts a fixture, kills the process mid-test, and proves the sweep removes the leftover while leaving a fresh directory alone. Sizes and counts are recorded in the launch record of the activation that lands it. Not night-critical. Deleting temp directories is reversible-by-regeneration and needs no cold gate, but the refusal list (measurement roots, night custody) is a fence."
+      },
+      "authority": {
+        "label": "2026-09-15 activation 08ca8197 launch record (magistrate registration at the interactive session's request; registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Stop the test matrices and seat runners from leaving temporary directories behind on the machine that runs the measurement nights. The transactional-installer test module on the pending branch (tests/test_night_agent_install.py in the wt-iw-txn checkout) creates its fixtures with tempfile.TemporaryDirectory(prefix=\"iw-txn-...\", dir=\"/tmp\"); the directory is removed only when the test process exits normally, so a seat that is killed mid-run (headless turn-end, a restart, a timeout) leaks every directory it had open. At 20:12 PDT on 2026-09-15, 154 iw-txn-* directories existed under /private/tmp, all created between 20:10 and 20:12 by the interactive session's running seats; the interactive session reported about 540 iw-* directories (406 older than one hour) and a 39 GB $TMPDIR (codex-run-v3 scope data, night-plan delta audits) before the restart. fseventsd indexes /private/tmp and $TMPDIR, so this churn was one of the drivers of the 61 GB fseventsd leak that forced the restart.",
+      "id": "TEMP-HYGIENE-IW-TMP-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 207,
+      "status": "queued",
+      "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 from the restart census; not started; registration only, nothing was deleted. Depends in practice on INSTALL-WINDOWS-MULTI-01 landing first, because the leaking module lives on that branch. Sibling lanes WORKTREE-PRUNE-01 and FIXTURE-ORPHAN-SENTINEL-01.",
+      "stop_card": null
+    },
     "TEST-SPEED-01": {
       "acceptance": {
         "evidence": [
@@ -8165,6 +8227,37 @@
       "rank": 16,
       "status": "shelved",
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). t3-thread-bridge shelved: phone-visible delegated rounds are the exact convenience the descope declines to pay for. Reopen only on Ed's word.",
+      "stop_card": null
+    },
+    "WORKTREE-PRUNE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md (State found: git worktree list from the linked worktree at 20:12 PDT 2026-09-15 = 314 entries, 121 detached, 0 prunable; 303 local branches, 194 merged into origin/main; 154 worktrees check out an already-merged branch; 313 /Users/edr/code/JouleWise-wt-* directories)",
+          "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md (UPDATE 2026-09-15 19:50 PDT: activation d6888966 stood down for Ed's machine restart, fseventsd about 61 GB RSS)",
+          "docs/process_traces/2026-09-15-activation-d6888966/00-launch-record.md (State found census the previous activation recorded; the worktree population predates this activation)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WORKTREE-PRUNE-01/acceptance",
+          "label": "WORKTREE-PRUNE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "An agent-produced prune manifest lists every worktree with its branch, HEAD, dirty state, whether the branch is merged into origin/main, and the last commit date, and classifies each as KEEP (named live owner), RETIRE-CLEAN (clean tree, branch merged or pushed) or HOLD (dirty or unpushed work, listed by path for Ed). Deleting worktrees is irreversible, so the RETIRE-CLEAN set is removed only after a cold-gate ruling or Ed's YES on the manifest (rule 11: irreversible actions are not the magistrate's or lieutenant's to decide alone); dirty or unpushed trees are never deleted by an agent. After the prune, git worktree list shows only KEEP entries and the worktree-launch step in the codex-delegation launcher template records the owner and the retirement trigger (merge of the branch, or end of activation) so seats retire their own trees. Not night-critical; no measurement root is touched (frozen checkouts are KEEP by definition)."
+      },
+      "authority": {
+        "label": "2026-09-15 activation 08ca8197 launch record (magistrate registration at the interactive session's request; registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Reduce the linked git worktrees under /Users/edr/code from the current 314 (121 detached; 154 checking out a branch already merged into origin/main; 0 reported prunable by git) to the live handful, and give every seat/bookkeeping worktree a registered owner and a retirement step so the count cannot regrow. The 2026-09-15 restart was forced by fseventsd reaching about 61 GB RSS after thirteen days of watching hundreds of worktrees plus temp-dir churn; a worktree is a full checkout that fseventsd indexes, so every abandoned one is standing load on the machine that runs the measurement nights.",
+      "id": "WORKTREE-PRUNE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 206,
+      "status": "queued",
+      "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 (Ed at the machine) from the restart census; not started; registration only, no worktree was removed. The deletion step is gated on a cold-gate ruling or Ed's YES on the manifest because it is irreversible. Sibling lanes TEMP-HYGIENE-IW-TMP-01 and FIXTURE-ORPHAN-SENTINEL-01 cover the other two churn sources from the same restart.",
       "stop_card": null
     }
   },
