@@ -47,11 +47,17 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      # CI-TRIM-02: refreshed hosted weights balance six ordinary shards at
+      # ~14 min, below the ~19 min calibration-exit floor. Eight shards add
+      # queue pressure without lowering that floor (20 executing jobs were
+      # observed across concurrent main runs). Both interpreters stay full.
+      SHARD_COUNT: "6"
     strategy:
       matrix:
         # 3.11 is the supported floor (pyproject); 3.14 matches local dev.
         python-version: ["3.11", "3.14"]
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -77,7 +83,7 @@ jobs:
         # are intentionally absent here (both carry exclusive_modules
         # declarations): their evidence makes fallback-weight shard
         # placement unsound; each runs once in its exclusive job below,
-        # while the remaining four shards retain deterministic LPT balance
+        # while the remaining six shards retain deterministic LPT balance
         # from the ordinary timing map.
         env:
           SHARD_INDEX: ${{ matrix.shard }}
@@ -104,11 +110,10 @@ jobs:
               timings[module] = seconds
           ordinary = tuple(module for module in discovered if module not in exclusive)
 
-          # UNIT-atomic, not module-atomic. A shard's floor used to be the
-          # single largest MODULE, and tests.test_reduce alone is 1544 s --
-          # larger than an even four-way share -- so NO shard count could
-          # get below it. Modules named in split_modules are spread across
-          # shards at test granularity instead. This edits no test file and
+          # UNIT-atomic, not module-atomic. The original test_reduce module
+          # dominated the four-way partition; retain its audited split and
+          # refresh the weights from hosted evidence. Modules in split_modules
+          # are spread across shards at test granularity. This edits no test file and
           # skips nothing: expand_units emits one unit per declared heavy
           # test plus ONE remainder unit holding every other test in that
           # module, and verify_split_declaration fails the build closed if
@@ -122,15 +127,16 @@ jobs:
           units, weights = shard_tests.expand_units(
               ordinary, timings, splits, unknown_weight=unknown
           )
+          count = int(os.environ["SHARD_COUNT"])
           partitions = shard_tests.partition_modules(
-              units, weights, 4, unknown_weight=unknown
+              units, weights, count, unknown_weight=unknown
           )
           totals = shard_tests.partition_totals(
               partitions, weights, unknown_weight=unknown
           )
           print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
           index = int(os.environ["SHARD_INDEX"])
-          raise SystemExit(shard_tests.run_units(partitions[index - 1], 4, index))
+          raise SystemExit(shard_tests.run_units(partitions[index - 1], count, index))
           PY
 
   calibration-exits-exclusive:
@@ -158,7 +164,7 @@ jobs:
           payload = json.loads(Path("scripts/test_timings.json").read_text())
           row = payload["exclusive_modules"]["tests.test_calibration_exits"]
           assert row["evidence_range_seconds"] == [648.0, 2036.0]
-          assert row["seconds"] == 2036.0
+          assert row["seconds"] == 1117.310
           assert payload["seconds_by_module"]["tests.test_calibration_exits"] == row["seconds"]
           assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
           PY
@@ -189,7 +195,7 @@ jobs:
     # 2. THE JOB IS NOW SPLIT IN TWO. Two of the 15 tests are 95.5% of the
     #    cost, so max-job time is floored at ~1385 s for EVERY split count
     #    >= 2 — K=3 and beyond buy literally zero wall clock and only burn
-    #    concurrent-job budget, which is capped at 20. K=2 it is: ~33 min
+    #    concurrent-job budget. K=2 it was: ~33 min
     #    becomes ~23 min. The split is runner-side only, edits no test file,
     #    and skips nothing (see split_modules in scripts/test_timings.json:
     #    one declared heavy test, plus a remainder unit computed at run time
@@ -197,9 +203,10 @@ jobs:
     #    audited AND the K=2 split was executed with both shards running
     #    concurrently on one machine — harsher than CI — with both passing.
     #
-    # The residual ~23 min is ONE indivisible test method. No sharding
-    # strategy goes below it; removing it is WO-CRASHMATRIX-RELIABILITY,
-    # which changes test semantics and is out of TEST-SPEED-01's fence.
+    # CI-TRIM-02 (2026-09-15) refreshes those historical weights: current
+    # heavy/remainder maxima are 679.554/331.860 s (20 tests total). The
+    # ~11.3 min heavy method is still indivisible by this runner; K>2 buys
+    # nothing. Preserve both units, exclusivity, and the existing ceiling.
     # See docs/process_traces/2026-08-23-speed/.
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -224,7 +231,7 @@ jobs:
           module = "tests.test_calibration_writer_crash_matrix"
           row = payload["exclusive_modules"][module]
           assert row["evidence_range_seconds"] == [145.911, 2005.0]
-          assert row["seconds"] == 1990.65
+          assert row["seconds"] == 1011.414
           assert payload["seconds_by_module"][module] == row["seconds"]
           assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
           # The split must account for the whole module: one declared heavy
