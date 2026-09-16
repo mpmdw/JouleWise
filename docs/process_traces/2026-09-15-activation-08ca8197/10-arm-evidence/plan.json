@@ -1,0 +1,16 @@
+{
+  "authored_epoch_s": 1789549238.607986,
+  "chain_path": "/Users/edr/night-custody/rehearsal-20260916/chain.zsh",
+  "chain_sha256_path": "/Users/edr/night-custody/rehearsal-20260916/chain.zsh.sha256",
+  "custody_root": "/Users/edr/night-custody/rehearsal-20260916",
+  "measurement_head": "cf249594529cfecf068ca56e6ac8e8d97b78bc77",
+  "measurement_root": "/Users/edr/JouleWise-measurement-rehearsal-20260916b",
+  "plan_id": "rehearsal-20260916",
+  "receipt_class": "REHEARSAL_STUB",
+  "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json",
+  "repo_head": "cf249594529cfecf068ca56e6ac8e8d97b78bc77",
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "t0_epoch_s": 1789552800.0,
+  "window_max_s": 900
+}

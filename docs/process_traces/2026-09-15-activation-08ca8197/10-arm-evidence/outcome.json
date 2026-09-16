@@ -1,0 +1,11 @@
+{
+  "attempt": 1,
+  "attempt_epoch_s": 1789549249.0,
+  "abort_epoch_s": 1789549940.0,
+  "cause": "arm_transport",
+  "receipt_class": "REHEARSAL_STUB",
+  "plan_sha256": "dff929bc09039f72e0edc9f450d357657ec04847bb5b3a872d75b88069d42489",
+  "message_id": "",
+  "outcome": "not_published",
+  "detail": "Gmail MCP session expired on search_threads and on send_message (02:11:28 and 02:12 PDT); no notice accepted; nothing published; no installer run; staged plan retained at $STAGED_PLAN; intended message preserved under /Users/edr/night-custody/magistrate/"
+}

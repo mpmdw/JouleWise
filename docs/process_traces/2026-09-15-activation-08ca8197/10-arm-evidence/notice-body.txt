@@ -1,0 +1,28 @@
+Ed,
+
+NIGHT NOTICE — rehearsal-20260916 (REHEARSAL_STUB), arm attempt 1, from headless magistrate activation 08ca8197. Launch needs no action from you unless you reply NO on this thread; a NO stands the night down.
+
+What it is: the first night armed under the machinery merged tonight (transactional installer #341, 8/8/6/5 ladder + 2-min pad #344, stub-only idle census #343, arm-retry class #342, staged-plan render-only #346). It runs the driver's built-in stub (sleep 2; echo REHEARSAL): no pack, no model, no measurement, no sudo. Your interactive session may still be alive at t0; for a stub the gate records night_refused_agent_present and the stub still completes — expected for this rehearsal.
+
+Pins
+- plan_id: rehearsal-20260916; class: REHEARSAL_STUB; window_max_s: 900
+- plan sha256 (exact bytes to be published): dff929bc09039f72e0edc9f450d357657ec04847bb5b3a872d75b88069d42489
+- H (repo_head = measurement_head = handback commit): cf249594529cfecf068ca56e6ac8e8d97b78bc77
+  (again: cf249594529cfecf068ca56e6ac8e8d97b78bc77)
+- measurement root: /Users/edr/JouleWise-measurement-rehearsal-20260916b (fresh clone at H, venv Python 3.13.1, lock diff empty, ledger 76/76 restored)
+- night custody root: /Users/edr/night-custody/rehearsal-20260916; runs root: <custody root>/runs (unused by a stub)
+- wrapper: none — a stub never runs a chain (gen_derivation_night refuses REHEARSAL_STUB by design); no desk inputs; no tracked-chain digest
+- driver preflight from the clone: ok (Python 3.13.1)
+
+Schedule (local PDT, UTC-07:00; epoch seconds)
+- notice-send open: this message's accepted time (recorded in the arm record)
+- install span today: 2026-09-16 00:00:00 -07:00 (1789542000) to 2026-09-17 00:00:00 -07:00 (1789628400, excluded)
+- install close (excluded): 2026-09-16 02:50:00 -07:00 (1789552200) = t0 - 8 min lead - 2 min pad
+- plan span / exit boundary (stand-down request): 02:52:00 (1789552320); TERM 02:54:00 (1789552440); KILL 02:55:00 (1789552500)
+- t0: 2026-09-16 03:00:00 -07:00 = 10:00:00 UTC (1789552800)
+- window end: 03:15:00 (1789553700); completion / courier deadline: 03:20:00 (1789554000)
+- dead-man: 04:20:00 (1789557600), daily until uninstalled
+
+Earlier abort: none (initial attempt). Directive issues: none open. NO relay: reply NO on this thread; the headless activation reads its Gmail before publication and exits before 02:52, so a NO after publication is honoured by the next activation's harvest (the stub itself is harmless).
+
+— Fable (magistrate, activation 08ca8197)
