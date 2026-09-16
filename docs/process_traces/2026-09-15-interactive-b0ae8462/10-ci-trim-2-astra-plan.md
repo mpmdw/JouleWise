@@ -1,6 +1,146 @@
 # CI-TRIM-02 — measured plan and implementation
 
-## Step 2 — PR interpreter dedupe (current; 2026-09-15 23:10 PDT ruling)
+## Step 3 — restore docs-only skip (current; 2026-09-16 00:20 PDT ruling)
+
+Ed's verbatim ruling: "doc changes don't need to go through ci and clog the queue".
+This supersedes cold gate 17 option A's no-path-skipping requirement for
+docs-only pushes ([ruling synthesis](../2026-09-13-activation-24b9d3dd/17-coldgate-packet-ci-trim-t2/14-magistrate-synthesis-ruling-10-with-opus-amendments.md)).
+The one behaviour change is that proven docs-only ranges skip `quick`, `test`,
+`calibration-exits-exclusive`, and `calibration-writer-crash-matrix-exclusive`.
+As explicitly delegated, this classifier applies to both pushes and PRs.
+`fences`, `build`, and `installed-wheel` remain ungated, retaining the state
+kernel and documentation-freshness checks on every push. Existing job IDs,
+step names, interpreter selection and dependencies are preserved.
+
+Step-3 base: `bfa105d48064eb434e5b4bb532e0a6c046a682ca`, branch
+`feat/2026-09-15-quick-suite-2`. Intake: clean tree, no active stop card;
+canonical baseline digest and lease `lease-afd557f37db64aee8c31283661e54f33`
+validated. This is the lead-assigned [AGENT] queue-pressure fix; all other
+bookkeeping remains lead-owned under the two-path write scope.
+
+`changes` retains `pythons` and adds `code`. Checkout fetches full history;
+Bash compares push `before..GITHUB_SHA` or PR `base.sha..head.sha` using
+`git diff --name-only --no-renames`. Only a non-empty list consisting entirely
+of `docs/**` or top-level `*.md` yields `code=false`. Nested Markdown outside
+`docs/` still runs tests. Disabling rename detection exposes both the old and
+new paths, so moving code into docs cannot hide the deleted code path.
+Missing/zero/malformed SHAs, unavailable commit objects, unsupported events,
+empty diffs, checkout failure and Git detector errors yield `code=true`;
+missing detector output also defaults to `true`. A runner failure remains a
+CI infrastructure failure. Unusual Git-quoted filenames can conservatively
+run tests. No third-party path-filter action is used.
+
+Expected effect: a docs-only push runs approximately **4 short jobs instead
+of 21/31** in the observed/historical configurations: `changes`, `fences`,
+`build`, and `installed-wheel`. The exact current base has 23 jobs on code
+pushes (18 matrix jobs + quick + these four) and 14 on code PRs; both docs-only
+cases reduce to four. Full-history checkout adds some selector cost. Queue
+relief is expected, not yet a measured hosted speedup; measurement 2 below
+records the motivating observation.
+
+### Step-3 verification (no local suites)
+
+The replay below parses YAML, checks the unchanged job bodies/names and needs,
+and dry-evaluates the exact classifier with synthetic Git responses. The
+output sink is redirected to stdout; no checkout, fetch, test body, or suite
+runs. It covers docs-only, mixed and empty lists; nested Markdown; push/PR
+ranges; missing/zero/invalid/unavailable SHAs; unsupported/missing events;
+checkout failure; and Git errors including partial diff output.
+
+Observed: YAML and Bash syntax passed; all 21 dry cases passed; existing job
+bodies, names and dependencies were preserved after accounting for the four
+requested gates and the detector additions. `git diff --check` passed and
+the anchored bridge scope check returned `SCOPE_OK`, with HEAD unchanged and
+only the two authorized paths modified. No local suite, commit or push ran.
+Next exact step: lead reviews the two-file diff, then validates hosted docs-only
+and mixed-change runs through its authorized publication route.
+
+<!-- CHECK:docs-skip -->
+```sh
+ruby -ryaml -ropen3 - <<'RB'
+p = '.github/workflows/ci.yml'
+w = YAML.load_file(p)
+base, err, status = Open3.capture3('git', 'show', 'bfa105d48064eb434e5b4bb532e0a6c046a682ca:' + p)
+raise err unless status.success?
+a = YAML.load(base)
+raise 'metadata changed' unless a.reject { |k, _| k == 'jobs' } == w.reject { |k, _| k == 'jobs' }
+raise 'job IDs changed' unless a['jobs'].keys == w['jobs'].keys
+gated = %w[quick test calibration-exits-exclusive calibration-writer-crash-matrix-exclusive]
+a['jobs'].each do |id, job|
+  current = Marshal.load(Marshal.dump(w['jobs'][id]))
+  if gated.include?(id)
+    raise 'wrong gate' unless current.delete('if') == "needs.changes.outputs.code == 'true'"
+  elsif id == 'changes'
+    raise 'wrong output fallback' unless current['outputs'].delete('code') == "${{ steps.paths.outputs.code || 'true' }}"
+    added = current['steps'].slice!(job['steps'].length..-1)
+    raise 'checkout not fail-open/full-history' unless added[0]['uses'] == 'actions/checkout@v5' && added[0]['with']['fetch-depth'] == 0 && added[0]['continue-on-error'] == true
+    raise 'detector not Bash' unless added[1]['id'] == 'paths' && added[1]['shell'] == 'bash'
+  end
+  raise "existing job body/names/needs changed: #{id}" unless current == job
+end
+script = w['jobs']['changes']['steps'].find { |s| s['id'] == 'paths' }.fetch('run')
+_, err, status = Open3.capture3('bash', '-n', stdin_data: script)
+raise err unless status.success?
+sink = '>> "$GITHUB_OUTPUT"'
+raise 'unexpected output sink' unless script.scan(sink).size == 1
+script = script.sub(sink, '>&1')
+mock = <<'SH'
+git() {
+  case "$1" in
+    cat-file)
+      [[ "$2" == -e ]] || return 98
+      [[ "$3" != "${UNAVAILABLE:-}^{commit}" ]] || return 128
+      ;;
+    diff)
+      [[ "$*" == "diff --name-only --no-renames $EXPECTED_RANGE" ]] || return 98
+      printf '%s' "$FILES"
+      return "${DIFF_RC:-0}"
+      ;;
+    *) return 98 ;;
+  esac
+}
+SH
+env = {
+  'CHECKOUT_OUTCOME' => 'success', 'GITHUB_EVENT_NAME' => 'push',
+  'GITHUB_EVENT_BEFORE' => 'a' * 40, 'GITHUB_SHA' => 'b' * 40,
+  'PR_BASE_SHA' => 'c' * 40, 'PR_HEAD_SHA' => 'd' * 40,
+  'EXPECTED_RANGE' => ('a' * 40) + '..' + ('b' * 40),
+  'FILES' => "docs/guide.md\ndocs/assets/plot.svg\nREADME.md\n",
+  'DIFF_RC' => '0', 'UNAVAILABLE' => ''
+}
+cases = [
+  ['docs-only', {}, 'false'],
+  ['mixed', {'FILES' => "docs/guide.md\njoulewise/cli.py\n"}, 'true'],
+  ['empty', {'FILES' => ''}, 'true'],
+  ['nested-markdown', {'FILES' => "scripts/README.md\n"}, 'true'],
+  ['top-level-only', {'FILES' => "README.md\n"}, 'false'],
+  ['rename-outside-docs', {'FILES' => "docs/example.py\nexample.py\n"}, 'true'],
+  ['pr-docs', {'GITHUB_EVENT_NAME' => 'pull_request', 'EXPECTED_RANGE' => ('c' * 40) + '..' + ('d' * 40)}, 'false'],
+  ['missing-before', {'GITHUB_EVENT_BEFORE' => nil}, 'true'],
+  ['zero-before', {'GITHUB_EVENT_BEFORE' => '0' * 40}, 'true'],
+  ['malformed-before', {'GITHUB_EVENT_BEFORE' => 'bad'}, 'true'],
+  ['missing-head', {'GITHUB_SHA' => nil}, 'true'],
+  ['zero-head', {'GITHUB_SHA' => '0' * 40}, 'true'],
+  ['missing-pr-base', {'GITHUB_EVENT_NAME' => 'pull_request', 'PR_BASE_SHA' => nil}, 'true'],
+  ['missing-pr-head', {'GITHUB_EVENT_NAME' => 'pull_request', 'PR_HEAD_SHA' => nil}, 'true'],
+  ['unavailable-before', {'UNAVAILABLE' => 'a' * 40}, 'true'],
+  ['unavailable-head', {'UNAVAILABLE' => 'b' * 40}, 'true'],
+  ['unsupported-event', {'GITHUB_EVENT_NAME' => 'workflow_dispatch'}, 'true'],
+  ['missing-event', {'GITHUB_EVENT_NAME' => nil}, 'true'],
+  ['checkout-error', {'CHECKOUT_OUTCOME' => 'failure'}, 'true'],
+  ['diff-error-empty', {'DIFF_RC' => '128', 'FILES' => ''}, 'true'],
+  ['diff-error-partial', {'DIFF_RC' => '128'}, 'true']
+]
+cases.each do |name, overrides, expected|
+  out, err, status = Open3.capture3(env.merge(overrides), 'bash', '--noprofile', '--norc', '-euo', 'pipefail', '-c', mock + script)
+  raise "#{name}: #{out} #{err}" unless status.success? && out == "code=#{expected}\n"
+end
+puts 'YAML PASS; existing job bodies, step names and needs preserved; four gates installed'
+puts "CLASSIFIER DRY PASS; #{cases.size} cases; no test bodies executed"
+RB
+```
+
+## Step 2 — PR interpreter dedupe (historical; 2026-09-15 23:10 PDT ruling)
 
 Ed explicitly ruled that PRs run one interpreter and main pushes keep all
 three roles: supported floor 3.11, production nights 3.13 (measurement venv
@@ -883,3 +1023,12 @@ success, wall 35.1 min. Shard execution 6.9–15.3 min (was 10–24); queue wait
 Conclusion: execution is now under the calibration-exits floor; the queue is the wall clock. Next commit: PRs run
 Python 3.13 only (13 jobs), main pushes 3.11 + 3.13 (Ed's ruling 23:10; 3.14 is exercised by every seat's local
 module runs, not by CI).
+
+## Measurement 2 — docs-only queue pressure (lead-reported, 2026-09-16)
+
+Tonight's evidence supplied by the lead: approximately 30 docs-only bookkeeping
+pushes to main each triggered the full 21-job matrix and stalled the queue for
+30 minutes. This worker did not independently fetch run records or measure
+hosted execution. Ed's 00:20 PDT ruling above authorizes the step-3 skip;
+expected result is approximately four short jobs per docs-only push instead
+of the prior 21/31-job configurations. Hosted confirmation remains lead-owned.
