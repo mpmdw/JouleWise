@@ -523,7 +523,7 @@ def run_transaction_cell(root):
     root = Path(root).resolve()
     options = json.loads((root / "options.json").read_text())
     labels = LABELS
-    plan_path = root / "custody/night_plan.json"
+    plan_path = Path(options.get("plan_path", root / "custody/night_plan.json"))
     plan = SimpleNamespace(**json.loads(plan_path.read_text()))
     now = float((root / "clock").read_text())
     def clock():
@@ -605,8 +605,8 @@ def run_transaction_cell(root):
             (root / "clock").write_text(str(min(cutoff, selected) + (fault != "exactly_close")))
         elif fault == "render_PermissionError":
             original_render = prepared.render
-            def failed_render(items):
-                iterator = iter(original_render(items))
+            def failed_render(items, require_published=True):
+                iterator = iter(original_render(items, require_published=require_published))
                 yield next(iterator)
                 raise PermissionError("second render witness")
             prepared.render = failed_render
@@ -715,8 +715,8 @@ def run_signal_cell(machine, prepared, fake, root, options, trace, save_trace):
     wrap(machine, "_enter", before=lambda state: hit("enter_" + state.name),
          after=lambda state: hit("after_" + state.name))
     render = prepared.render
-    def rendering(labels):
-        for index, item in enumerate(render(labels), 1):
+    def rendering(labels, require_published=True):
+        for index, item in enumerate(render(labels, require_published=require_published), 1):
             hit("write_before_" + str(index))
             yield item
     prepared.render = rendering
@@ -1248,6 +1248,62 @@ class TransactionTests(unittest.TestCase):
                         self.assertEqual(before[label], (path.read_bytes(), path.stat().st_mtime_ns))
                     self.assertEqual([], fixture.fake.calls())
 
+    def test_staged_render_names_future_published_plan(self):
+        import plistlib
+        fixture = self.fixture()
+        staged = fixture.root / "staging/night_plan.json"
+        staged.parent.mkdir()
+        fixture.plan_path.rename(staged)
+        result = fixture.run(render=True, plan_path=str(staged))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(2, len(list(fixture.directory.glob("*.plist"))))
+        for label in LABELS:
+            payload = plistlib.loads((fixture.directory / (label + ".plist")).read_bytes())
+            argv = payload["ProgramArguments"]
+            self.assertEqual(str(fixture.plan_path), argv[argv.index("--plan") + 1])
+            self.assertNotIn(str(staged), argv)
+        self.assertTrue(staged.is_file())
+        self.assertFalse(fixture.plan_path.exists())
+        self.assertEqual([], fixture.fake.calls())
+
+    def test_real_install_refuses_staged_plan_at_transaction_admission(self):
+        fixture = self.fixture()
+        staged = fixture.root / "staged-plan.json"
+        fixture.plan_path.rename(staged)
+        result = fixture.run(plan_path=str(staged))
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertIn("plan_outside_custody_root", result.stderr)
+        self.assertEqual([], list(fixture.directory.iterdir()))
+        self.assertFalse((fixture.root / "custody/night").exists())
+        self.assertTrue(all(call.startswith("print ") for call in fixture.fake.calls()))
+
+    def test_published_and_staged_admission_keep_all_timing_checks(self):
+        from joulewise import night_agent_install as engine
+        fixture = self.fixture()
+        for require_published in (True, False):
+            plan_path = fixture.plan_path if require_published else fixture.root / "staged.json"
+            for reason, t0, close, spans in (
+                ("plan_t0_in_the_past", 90, 150, [(0, 200)]),
+                ("install_span_closed", 200, 100, [(0, 200)]),
+                ("install_outside_span", 200, 150, [(0, 100), (101, 200)]),
+                (None, 200, 150, [(0, 200)]),
+            ):
+                with self.subTest(require_published=require_published, reason=reason):
+                    prepared = engine.Prepared(fixture.plan, plan_path, fixture.root,
+                        sys.executable, fixture.template, "/bin/true", "/usr/bin:/bin",
+                        {"t0_epoch_s": t0, "install_close_epoch_s": close, "deadman_epoch_s": 300},
+                        lambda day: spans)
+                    if reason:
+                        with self.assertRaises(engine.Refused) as raised:
+                            prepared.admit(100, require_published=require_published)
+                        self.assertIn(reason, str(raised.exception))
+                    else:
+                        self.assertEqual(200, prepared.admit(100, require_published=require_published))
+                        if not require_published:
+                            with self.assertRaises(engine.Refused) as raised:
+                                prepared.admit(100)
+                            self.assertIn("plan_outside_custody_root", str(raised.exception))
+
     def test_verification_unknown_is_not_loaded(self):
         fixture = self.fixture(True)
         self.assert_tuple(fixture, fixture.run(verification_unknown=True), 3, (), "prior")
@@ -1500,9 +1556,10 @@ class CapabilityTests(SignalTestCase):
         from types import SimpleNamespace
         from unittest import mock
         e = self.engine
-        prepared = SimpleNamespace(admit=lambda now: 60, schedule={"install_close_epoch_s": 60},
+        prepared = SimpleNamespace(admit=lambda now, require_published=True: 60,
+            schedule={"install_close_epoch_s": 60},
             custody_night=self.root / "night", pins="pins",
-            render=lambda labels: ((label, b"published") for label in labels))
+            render=lambda labels, require_published=True: ((label, b"published") for label in labels))
         if refusal:
             prepared.render = mock.Mock(side_effect=e.Refused(3, "render refused"))
         return e.Transaction(self.adapter, lambda: prepared, clock=lambda: 10,

@@ -374,6 +374,34 @@ class InstallNightAgentTests(unittest.TestCase):
         outside.write_bytes(original.read_bytes())
         self._assert_refused_without_outputs(self._run(outside, render_only=False), "plan_outside_custody_root")
 
+    def test_render_only_accepts_staged_stub_and_names_published_plan(self) -> None:
+        from dataclasses import replace
+        for staged in (True, False):
+            with self.subTest(staged=staged):
+                published = self._write_plan()
+                plan = replace(NightPlan.from_mapping(json.loads(published.read_text())),
+                               receipt_class="REHEARSAL_STUB", pack_night=None,
+                               registration_path=str(self.root / "registration.json"))
+                published.unlink()
+                write_night_plan(published, plan)
+                plan_path = published
+                if staged:
+                    plan_path = self.root / "staging/night_plan.json"
+                    plan_path.parent.mkdir()
+                    published.rename(plan_path)
+                before = plan_path.read_bytes()
+                completed = self._run(plan_path, render_only=True)
+                self.assertEqual(0, completed.returncode, completed.stderr)
+                self.assertEqual(2, len(list(self.rendered.glob("*.plist"))))
+                for label in LABELS:
+                    payload = plistlib.loads((self.rendered / (label + ".plist")).read_bytes())
+                    argv = payload["ProgramArguments"]
+                    self.assertEqual(str(published), argv[argv.index("--plan") + 1])
+                self.assertEqual(before, plan_path.read_bytes())
+                self.assertEqual(not staged, published.exists())
+                self.assertEqual([], self.fake.calls())
+                self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
+
     def test_installer_rolls_back_when_the_close_passes_between_bootstraps(self) -> None:
         plan_path = self._write_plan()
         plan = NightPlan.from_mapping(json.loads(plan_path.read_text()))

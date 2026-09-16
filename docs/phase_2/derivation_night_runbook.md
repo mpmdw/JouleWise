@@ -1404,7 +1404,7 @@ can refuse first.
 | `install_outside_span` | 2 | `now` is outside every listed `INSTALL_SPANS` entry; use an allowed span before the plan's close. |
 | `plan_t0_in_the_past` | 2 | `t0 < now`; author a future plan. |
 | `night_agent_already_loaded` | 3 | `launchctl print` succeeds for `gui/<uid>/com.joulewise.night` or `gui/<uid>/com.joulewise.night.deadman`, or either query is UNKNOWN; finish the prior harvest and documented uninstall before another arm. Resolve an UNKNOWN query with a human before proceeding. `--render-only` skips this loaded-job check. |
-| `plan_outside_custody_root` | 2 | Resolved `--plan` is not the plan's `<custody_root>/night_plan.json`; publish through §1.4 before installing. |
+| `plan_outside_custody_root` | 2 | Real install only: resolved `--plan` is not the plan's `<custody_root>/night_plan.json`; publish through §1.4 before installing. `--render-only` accepts a staged plan and renders that future published path into both plists. |
 | `night_plan_malformed` | 2 from `schedule`; 3 from the installer's earlier plan validation | Missing/malformed `t0_epoch_s`, `window_max_s` or `authored_epoch_s` (or another invalid plan field); the detail identifies the validation failure. |
 | `plan_schedule_unrepresentable` | 2 | `schedule` cannot load the plan or represent derived arithmetic/calendar values, including `window_max_s=10**15` or `10**400`; detail preserves the underlying error. This is representability, with no maximum-window policy ceiling. |
 | `install_spans_unresolvable_on_day` | 2 | A day's resolved spans have nonpositive duration, are out of order, or overlap after DST resolution; detail names the day and offending span/pair. No span is repaired, reordered or dropped. |
@@ -1542,6 +1542,16 @@ path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py
 The chain's interpreter remains `<measurement_root>/.venv/bin/python`,
 independently of this driver pin.
 
+`--render-only DIR --plan "$STAGED_PLAN"` validates the staged plan before
+publication, including the same t0, install-close and install-span checks as
+a real install. Both rendered plists name the future
+`<custody_root>/night_plan.json`, so the validated agent arguments are the
+ones that will run after publication. It never calls launchctl. This also
+implements D-175's REHEARSAL_STUB procedure: stage outside the watchdog's
+glob, validate with `--render-only` from the pinned checkout, then publish.
+The atomic `os.replace` remains the single irreversible publication step;
+a real install still requires the published custody path.
+
 Before installation, the **driver preflight** loads the driver module and
 every project module it imports at module scope, under the job's interpreter
 and PATH, and parses the plan. Its JSON `modules` list names the driver and
@@ -1601,6 +1611,10 @@ assert time.time() < install_close_epoch(plan)     # t0 - 1500 - 3600 seconds
 assert Path(os.environ['STAGE']).stat().st_dev == Path(os.environ['NIGHT_ROOT']).stat().st_dev
 print('staged plan checks PASS')
 PY
+
+# Validate both future agent plists while the plan is still staged.
+scripts/install_night_agent.sh --render-only "$STAGE/rendered-agents" \
+  --plan "$STAGED_PLAN" --python "$PY"
 
 # 4. The final raw census, immediately before publication (§0.6).
 ps -axo pid,ppid,command | grep -E 'claude (daemon run|bg-spare|bg-pty-host)|--resume' || true
