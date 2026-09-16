@@ -1127,3 +1127,466 @@ Deferred/killed applications: carbon LABELS (needs wall meter + grid
 assumptions; see C5-2.9 for the surviving question), battery-runtime
 estimates without system-level calibration, local-vs-cloud ROUTING as a
 product (cloud side unmeasurable today).
+
+## New questions 2026-09-16 (Astra exploration)
+
+**Basis: Paper C already exists.** This is Ed's 2026-09-16 prospective
+research premise: the instrument is validated, the `_v5` phase-energy
+paper is published, and the entire Tier 1 mechanism bank is answered.
+The questions below spend those answers on second-order predictions and
+interventions. They do not reopen the shape grid, KV-growth curve, content
+sentinel, session-composition study, variance study, or basic model ladder.
+This premise is not a change to today's [coverage map](research_question_coverage-2026-09-04.md),
+[claims status](../CLAIMS_STATUS.md), or [current paper](paper/draft-v2-skeleton.md).
+`RQ-D-A01`–`RQ-D-A16` are bank-local proposal identifiers, not new canonical
+registry rows or promoted campaigns. Each extension names its existing owner.
+
+**Paper-C facts consumed below.** These labels identify the assumed published
+answers, including their intervals and limits; no direction or numerical
+coefficient is invented where the brief supplies none.
+
+- **PC-F:** `_v5` establishes the admitted phase-allocation method, its
+  labelled floors, and refusal rules (`RQ-METHOD-FLOOR`,
+  `RQ-SHORT-PREFILL-RESOLVABILITY`, `RQ-ATTRIBUTION-DOMINANCE`).
+- **PC-S:** the shape grid supplies fixed/prefill/decode coefficients and
+  their validated domain (`Q4`, `RQ-SHAPE-ENERGY`, `C5-1.2`, `C5-1.3`).
+- **PC-M:** the active-size contrasts, quantization decomposition, and
+  memory-fit frontier are known (`C5-1.1`, `C5-1.10`, `C5-1.12`), without
+  turning the old two-model observation into a scaling law.
+- **PC-K:** context-associated decode costs and exact prefix/cache-policy
+  economics are known (`RQ-KV-GROWTH`, `RQ-CACHE-PREFIX`).
+- **PC-W:** fixed-shape content/category residuals, token-fertility effects,
+  and natural-output-length effects are known (`RQ-CONTENT-SENTINEL`,
+  `C5-W.1`, `C5-W.2`, `C5-I.3`). A measured null stays bounded to its domain.
+- **PC-E:** session composition, order, recovery, and stochastic energy
+  distributions are known (`RQ-SESSION-SHAPE`, `RQ-ORDER-POSITION`,
+  `C5-1.5`, `RQ-ENERGY-VARIANCE`).
+- **PC-Q:** the controlled-envelope energy/correct result and denominator
+  guard are known (`C5-1.9`, AP-5); they confer no general capability claim.
+
+**Concrete model shelf, checked against primary sources on 2026-09-16.**
+The dense ladder is Qwen3-4B/8B/14B/[32B](https://huggingface.co/Qwen/Qwen3-32B)
+plus [Llama-3.3-70B-Instruct](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct),
+using pinned 4-bit MLX conversions. Sparse points include
+[Qwen3-30B-A3B](https://huggingface.co/Qwen/Qwen3-30B-A3B),
+[DeepSeek-V2-Lite/Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite)
+(16B total/2.4B active, MLA), and
+[Qwen3.5-122B-A10B](https://huggingface.co/Qwen/Qwen3.5-122B-A10B)
+(Gated DeltaNet/full-attention hybrid plus MoE). The latter's
+[local smoke](run_reports/2026-07-07-flagship-qwen35-122b.md) already established
+load/generation feasibility at about 68.9 GB peak; its historical energy
+numbers remain barred from claim use. Qwen3-4B is only an approximate
+active-size comparator for A3B; its architecture and training remain different.
+
+The attention shelf adds Gemma-3-27B-IT (local sliding windows plus global
+layers; [MLX implementation](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/models/gemma3_text.py)),
+[Kimi-Linear-48B-A3B-Instruct](https://huggingface.co/moonshotai/Kimi-Linear-48B-A3B-Instruct)
+(KDA/MLA hybrid), and
+[Nemotron-H-8B-Base-8K](https://research.nvidia.com/labs/adlr/nemotronh/)
+(Mamba-2/attention hybrid). Upstream MLX has
+[Kimi Linear](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/models/kimi_linear.py),
+[DeepSeek V2](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/models/deepseek_v2.py),
+and [Nemotron-H](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/models/nemotron_h.py)
+implementations. This is source-level candidacy, not an exercised JouleWise
+support verdict. Pin conversion, runtime, cache representation, and actual
+context/batch support before scheduling. KDA, Gated DeltaNet, and Mamba-2
+are distinct mechanisms; none is a synonym for the others.
+
+Weight-only arithmetic at four bits is `parameters / 2` bytes: 32B ≈ 16 GB,
+70B ≈ 35 GB, 30B ≈ 15 GB, 48B ≈ 24 GB, 122B ≈ 61 GB, before scales,
+unquantized tensors, caches, scratch, and the OS. These are plausible
+128 GB-resident candidates at bounded shapes, not promises of every long
+context fitting. Record actual peak and swap; never change wired-memory
+limits to rescue a cell. Use one large model at a time unless co-residency
+is the registered intervention. MLX is the Mac execution leg; existing
+vLLM adapters do not establish a native Mac or live second-device result.
+All proposed workloads here are text-only; disable vision processing and
+record which non-text weights remain loaded.
+
+**Common measurement and budget convention.** Gross request energy and
+admitted long-phase allocations on `M3 Max / MLX / powermetrics SoC rails`
+are primary. Follow the brief's approximately 1 s cadence, not the old
+smokes' approximately 9 Hz. A phase needs at least three overlapping records
+and every applicable duration/coverage gate; a short phase is unresolved.
+The standing attribution scale is about 1 J. The source describes an effective
+phase-contrast bar around 5 J after claim-side widening; use **6 J as a
+conservative planning example**, not as a newly issued floor. Every actual
+cell needs its own floor and claim interval. With `N` observed output tokens,
+`1/N` J/token describes the attribution scale and `6/N` the example claim
+bar: at N=1024, 0.98 and 5.86 mJ/token; at N=2048, 0.49 and 2.93; at
+N=4096, 0.24 and 1.46. These are averages over measured windows, never
+instantaneous token measurements. Summing separately bounded windows also
+sums their uncertainty; concatenation does not erase internal phase edges.
+For two contrast terms use a conservative 12 J planning bar unless their
+joint timing construction justifies less. No `1/sqrt(n)` erasure of shared
+attribution error. Sub-floor is `not resolvable`, not equivalence.
+
+Budgets below count calibrated collection **windows**, each provisionally
+60–120 minutes including brackets, admission, and recovery. `F` = new-cell
+floor/null/observability window; `C` = frozen paired/factorial contrasts;
+`H` = held-out validation window. Each C/H cell needs at least five independent
+whole-suite bundles, with interleaving and day/order blocks; items and tokens
+are not independent n. Fix n before outcomes, informed by PC-E. An F window
+may contain several cells only if the frozen manifest and time budget fit.
+Desk implementation and support gates are additional calendar time, not
+hidden inside a window estimate. Keep the north star's 3× projected-floor
+screen and reserve 20–25% of the week for refusals. At 4–5 windows/day,
+one week offers 28–35 windows, not enough for this entire portfolio.
+
+The [north star](strategy/HORIZONS.md) supplies the mechanism agenda.
+As the [fence audit](strategy/2026-08-06-impressiveness-roadmap.md) explains,
+D-041 owns benchmark interop and correctness quarantine; D-070/D-075 and
+the AXI contracts own mechanism observability and attribution limits.
+These candidates do not amend either fence. Every proposed runtime change,
+scored-source extension, and second-device path needs its own later admission.
+
+- **RQ-D-A01 Resident capacity versus active work:** Does increasing
+  resident-but-unread weight storage change the energy predicted from
+  Paper C's active-work coefficients before memory pressure begins? Ceiling L2.
+
+  **Status/Paper C:** Extension of `C5-1.1` and `C5-1.10`; consumes PC-M
+  and PC-S. **Mechanism:** residency consumes capacity but need not create
+  repeated weight reads; crossing a pressure boundary can cause compression,
+  migration, or faults. This separates the two physical interventions.
+  **Design:** run Qwen3-32B-4bit at 2048/2048 with 0/24/48 GB of separately
+  materialized, retained, unread weight buffers; load/touch outside measurement
+  and confirm residency/no swap. Repeat a smaller two-level intervention on
+  the 122B MoE within its measured headroom. Use the 4B/A3B near-active pair,
+  32B/122B, and 70B only as external prediction checks, not causal matches.
+  Hold executed graph, tokens, cache, and quantization fixed within each pair.
+  **Claim/budget:** request or long decode Δ >6 J gives >2.93 mJ/token over
+  2048 tokens; resident-idle and pressure results stay separate. 10 windows
+  = 2F+6C+2H (2–3 days). **Difficulty:** none. **Risk:** a lazy or compressed
+  buffer is not resident RAM; powermetrics cannot isolate DRAM-refresh joules.
+  A null bounds this residency intervention, not all total-parameter effects.
+
+- **RQ-D-A02 Function-preserving expert locality:** Can changing only
+  expert storage and dispatch order explain MoE energy residuals left by
+  Paper C's active-parameter result? Ceiling L2 on the named implementation.
+
+  **Status/Paper C:** NEW; follows `C5-1.1`, PC-M and PC-W.
+  **Mechanism:** identical expert arithmetic can require different gathers,
+  contiguous reads, and launches. Relabel experts with the inverse router
+  mapping, or sort/unsort dispatched token-expert pairs, preserving function.
+  **Design:** Qwen3-30B-A3B-4bit first, Qwen3.5-122B-A10B-4bit replication;
+  frozen code/JSON/reasoning-shaped token paths, 2048/2048, batch 1 and 4.
+  Compare native versus locality-ordered dispatch at identical routed IDs,
+  probabilities, quantized weights, output IDs, and numerical tolerance.
+  Instrument actual expert IDs/dispatch counts; a configuration label is
+  insufficient. Reordering support is proposed runtime work, not landed.
+  **Claim/budget:** >6 J/decode window = >2.93 mJ/output-token at batch 1;
+  for batch 4, >6/(4×2048)=0.73 mJ/committed token across the group.
+  12 windows = 2F+8C+2H (3 days). **Difficulty:** none. **Risk:** added sorting
+  and tracing can dominate; count their energy and validate trace perturbation.
+  Claim dispatch-layout effects, never an expert's individual joules.
+
+- **RQ-D-A03 The expert-union batching penalty:** Does the union of
+  experts touched by a batch predict whether batching reverses Paper C's
+  single-request dense-versus-sparse ordering? Ceiling L2; prospective Q4
+  holdouts only.
+
+  **Status/Paper C:** Extension of `C5-1.1`, `C5-2.2`; consumes PC-M,
+  PC-W and PC-E. **Mechanism:** overlapping routes permit weight reuse;
+  disjoint routes enlarge the batch working set despite equal active
+  parameters per token. **Design:** Qwen3-30B-A3B and 122B MoE, with Qwen3-32B
+  dense control; identical frozen request multiset partitioned into batches
+  of 1/2/4 by a precomputed routing trace, either high or low route overlap.
+  Match shape and position, rotate partitions, preserve each request's output
+  and clear prefix caches. Train an expert-byte-union predictor on two shape
+  cells; reserve a third cell and an unseen partition for validation.
+  **Claim/budget:** compare high-minus-low grouping benefits across batch
+  sizes; conservative interaction bar 12 J/group = 1.46 mJ/token for
+  4×2048 outputs. 14 windows = 3F+8C+3H (3–4 days). **Difficulty:** none.
+  **Risk:** grouping changes padding or cache reuse unless controlled; unique
+  expert count alone misses repeated fetches. No general MoE scaling law.
+
+- **RQ-D-A04 A held-out byte-and-work energy model:** Can a model of
+  weight/KV work and phase duration predict large-model energy beyond Paper C's
+  validated additive-shape domain? Ceiling L3 only through Q4/AP-1.
+
+  **Status/Paper C:** Extension of `Q4`, `C5-1.1`, `C-023-COEFF-TRANSPORT`;
+  consumes PC-S, PC-M and PC-K. **Mechanism:** weight reuse per batch and
+  growing state reads alter arithmetic intensity; compute and memory stalls
+  determine duration, which interacts with gross power. **Design:** calibrate
+  one predeclared traffic correction on the Qwen3-4B/8B/14B/32B family at
+  4-bit, context 2K/8K and batch 1/4; hold out 4K context, batch 2, and all
+  32B outcomes in the model-transfer leg. Test Llama-70B and A3B/122B as
+  explicit out-of-family challenges, not added fit covariates. Derive tensor
+  bytes from runtime shapes/quant metadata; distinguish compulsory-byte lower
+  bounds from measured bandwidth. Compare against frozen Paper-C predictions.
+  Predict duration from declared shapes and operations; held-out measured
+  duration, power, and energy cannot enter the predictor or tune its fit.
+  **Claim/budget:** N=4096 makes a 6 J prediction residual 1.46 mJ/token;
+  require joint prediction-plus-measurement intervals, not just a small RMSE.
+  16 windows = 3F+9C+4H (4 days). **Difficulty:** none. **Risk:** traffic is
+  not directly observed DRAM energy, and family changes confound transfer.
+  No active+total+KV multivariate fit to a handful of model points.
+
+- **RQ-D-A05 Attention-state crossover at a fixed problem profile:**
+  Do known context costs predict where the same retrieval-and-answer profile
+  changes energy ordering across GQA, MLA, sliding-window, and hybrid models?
+  Ceiling L2 named-pair characterization, not architecture causality.
+
+  **Status/Paper C:** Extension of `RQ-AXI-HYBRID-PAIR`, `RQ-KV-GROWTH`,
+  `Q5`; consumes PC-K, PC-S and PC-W. **Mechanism:** GQA state grows with
+  context; MLA changes its representation; local attention bounds some
+  histories; KDA/SSM stores recurrent state while remaining global layers
+  still grow. **Design:** Qwen3-32B, DeepSeek-V2-Lite-Chat, Gemma-3-27B-IT,
+  Kimi-Linear-48B-A3B, plus Nemotron-H-8B within its 8K limit; all 4-bit,
+  batch 1. Use the same frozen retrieval/summary texts and answer policy at
+  2K/8K, with 4K held out; a separate tokenizer-specific fixed-shape leg
+  audits fertility. Observe real cache layouts: an MLA-labelled model that
+  materializes expanded K/V is a different condition. Freeze the crossover
+  prediction before held-out runs. **Claim/budget:** >6 J/request or admitted
+  decode = >5.86 mJ/token over 1024 outputs. 18 windows = 5F+9C+4H
+  (4–5 days). **Difficulty:** none; retrieval distance is workload geometry.
+  **Risk:** training, base/instruct status, MoE, and quality differ; report
+  pairs separately. This design cannot isolate an architecture-class effect.
+
+- **RQ-D-A06 Recurrent-state prefill scheduling:** Does changing the
+  prefill chunk schedule of a hybrid model move the predicted prefill/decode
+  crossover without changing its recurrence or answers? Ceiling L2.
+
+  **Status/Paper C:** NEW; extends the design space around
+  `RQ-AXI-HYBRID-PAIR`; consumes PC-S and PC-K. **Mechanism:** chunking trades
+  parallel matrix work, recurrent-state handoffs, scratch traffic, and kernel
+  launches while preserving the same mathematical sequence computation.
+  **Design:** Kimi-Linear-48B-A3B and Qwen3.5-122B-A10B at 4-bit;
+  Qwen3-32B GQA control. At 8K/32K prompts and 1024 outputs compare pinned
+  256/1024/4096-token prefill chunks, keeping attention masks, position IDs,
+  cache policy, weights, and precision fixed. Validate state/output identity;
+  predict 16K held-out performance. A chunk setting is not a KDA on/off switch.
+  **Claim/budget:** phase Δ >6 J; a prefill/decode compensation comparison
+  needs the joint bound, conservatively 12 J = 11.72 mJ per 1024 outputs.
+  12 windows = 3F+6C+3H (3 days). **Difficulty:** none. **Risk:** numerical
+  accumulation or cache rebuilding may change outputs; report a changed
+  algorithm if equivalence fails. No joules per recurrent update.
+
+- **RQ-D-A07 Weight compression × state compression:** Are weight
+  quantization and KV quantization energy savings additive, or does one
+  remove the bottleneck that made the other useful? Ceiling L2.
+
+  **Status/Paper C:** Extension of `C5-2.11`, `C5-2.14`, `C5-1.12`;
+  consumes PC-M and PC-K. **Mechanism:** both compete to reduce memory
+  traffic, but unpacking and cache-update compute can become dominant.
+  **Design:** Qwen3-32B at weight 4/8-bit × KV 4/8-bit, 8K/32K contexts,
+  batch 1, output 2048; Llama-70B-4bit validates the predicted long-context
+  branch without promising its 8-bit scratch headroom. Use one source
+  revision per model, fixed replay paths for work matching, and separate
+  natural-generation output/quality checks. Freeze the difference-of-differences
+  before collection. **Claim/budget:** interaction >12 J = >5.86 mJ/token
+  at 2048; individual gains require their own >6 J gates. 10 windows =
+  2F+6C+2H (2–3 days). **Difficulty:** none. **Risk:** quantized paths need
+  not produce identical answers, and some cache classes reject quantization.
+  Byte savings alone are not efficiency or quality-neutrality evidence.
+
+- **RQ-D-A08 Acceptance distribution versus acceptance mean:** At the
+  same aggregate acceptance rate, do speculative decoding's burst pattern
+  and context length predict a different energy break-even? Ceiling L2.
+
+  **Status/Paper C:** Extension of `C5-2.5b/c`, not another on/off pilot;
+  consumes PC-S, PC-K, PC-E and PC-W. **Mechanism:** verification width,
+  rollback, and repeated target-weight reads depend on the distribution of
+  accepted prefixes, not just accepted/proposed totals. **Design:** fixed
+  Qwen3-32B-4bit target with tokenizer-compatible
+  [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) and 4B draft
+  candidates, after support/identity gates; off versus proposal caps 2/4/8,
+  contexts 2K/8K, 2048 committed outputs. Train on the runtime-observed
+  proposed/accepted/committed histograms of one frozen roster; predict a
+  held-out roster with matched mean acceptance but different burst spread.
+  Select that roster from disjoint non-energy traces before the energy plan
+  freezes; never select it by the resulting energy difference.
+  Natural differences yield conditional prediction, not randomized acceptance
+  causality. **Claim/budget:** >6 J/request = >2.93 mJ/committed token;
+  never divide the on/off headline by accepted-draft tokens alone.
+  12 windows = 2F+7C+3H (3 days). **Difficulty:** none. **Risk:** current
+  AXI-SC unsupported verdict persists until a new exercised counter-complete
+  path exists; drafter and lookup work must remain in the numerator.
+
+- **RQ-D-A09 MTP's state-sharing dividend:** Does native multi-token
+  prediction change the context-dependent verification cost predicted for
+  an external drafter on the same target? Ceiling L2, software-gated.
+
+  **Status/Paper C:** Extension of `C5-2.5c`; consumes PC-S, PC-K and PC-M.
+  **Mechanism:** native heads may reuse target representations whereas a
+  separate drafter needs its own weights/state; both still pay verification
+  and rejected-work costs. **Design:** Qwen3.5-122B-A10B-4bit target, native
+  heads on/off, then a separately qualified
+  [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B)-4bit draft candidate with
+  verified tokenizer compatibility; context 2K/8K, 2048 committed tokens,
+  held-out 4K.
+  Keep target bytes and verified outputs fixed; record actual head execution,
+  proposals, acceptance, state copies, and rollback. Fit separate mechanism
+  families, never pool MTP and external-draft rounds.
+  **Claim/budget:** contrast >6 J = >2.93 mJ/token; difference between
+  context-dependent benefits >12 J = >5.86 mJ/token. 12 windows = 3F+6C+3H
+  (3 days), **zero until support gates pass**. **Difficulty:** none.
+  **Risk:** the [official model card](https://huggingface.co/Qwen/Qwen3.5-122B-A10B)
+  documents MTP serving elsewhere, but [MLX source](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/models/qwen3_5.py)
+  strips MTP weights. This is a runtime-development candidate, not a currently
+  runnable Mac claim; a vLLM leg needs suitable second-device memory and gates.
+
+- **RQ-D-A10 Difficulty-conditioned crossover between resident models:**
+  Does Paper C's controlled energy/correct ordering predict which large
+  resident model is cheapest per correct answer in unseen published
+  difficulty strata at a fixed token envelope? Ceiling conditional L2.
+
+  **Status/Paper C:** Extension of `C5-1.9` and `C5-I.2`; consumes PC-Q,
+  PC-W and PC-M. **Mechanism:** at a matched attempt envelope, energy/correct
+  is attempt energy divided by empirical success probability; an ordering
+  can reverse through that denominator without extra arithmetic per attempt.
+  **Design:** Qwen3-32B, Llama-70B, Qwen3-30B-A3B and 122B MoE at 4-bit;
+  freeze a licensed MATH subset, balanced by source subject and published
+  level. Use within-tokenizer 2048/2048 envelopes, no question truncation,
+  a fixed answer-extraction policy, and reported padding/EOS effects. Keep
+  the same semantic item panel across models; reserve items and a level band
+  for prediction. External scoring is hashed, deterministic, and quarantined.
+  **Claim/budget:** if 32 attempts yield 16 correct, a 6 J aggregate energy
+  difference contributes 6/16=0.375 J/correct; with four correct it contributes
+  1.5 J/correct. These are energy-only sensitivities, not ratio thresholds:
+  compose correctness uncertainty and AP-5's binomial guard; zero or weak
+  denominators are not estimable. 16 windows = 4F+8C+4H (4 days).
+  **Difficulty:** original MATH Levels 1–5, `{axis,value,scale,label,source}`
+  preserved from the [dataset paper](https://arxiv.org/html/2103.03874v2),
+  never token length or this model's score. **Risk:** contamination and forced
+  answers. Extending AP-5 to this source requires a prospective policy ruling;
+  D-041 alone licenses only energy beside external scores, not this ratio.
+
+- **RQ-D-A11 Difficulty-conditioned execution residuals:** After applying
+  Paper C's length and content corrections, can routing or acceptance traces
+  predict residual energy on unseen published-difficulty strata? Ceiling L2.
+
+  **Status/Paper C:** Extension of `C5-I.2`, `RQ-ENERGY-VARIANCE`;
+  consumes PC-W, PC-E and PC-Q. **Mechanism:** dense fixed-shape inference
+  follows nearly the same graph, whereas changed expert access or speculative
+  rejection changes executed work; the source's difficulty label does no
+  physical work itself. **Design:** Qwen3-32B dense control, Qwen3-30B-A3B
+  and 122B MoE; frozen MATH levels/items, 2048/2048 per-tokenizer envelope,
+  fixed seeds and matched stop policy. Capture paths once, then replay the
+  identical paths under native and function-preserving grouped dispatch
+  from A02. Predict held-out-level residuals from observed routes; an optional
+  A08-supported leg adds acceptance traces. Hold score use to annotation.
+  **Claim/budget:** level-block residual >6 J over 8×2048=16384 outputs is
+  >0.37 mJ/token only if the whole-block bound is 6 J; eight separately
+  bounded 6 J items instead imply 48/16384=2.93 mJ/token. 12 windows =
+  3F+6C+3H (3 days). **Difficulty:** MATH's published Levels 1–5, as A10.
+  **Risk:** observational label mediation is not causal difficulty evidence;
+  only the dispatch intervention identifies an execution-policy effect.
+
+- **RQ-D-A12 Context × batch phase inversion:** Can Paper C's separate
+  context and phase costs predict where batching reverses the prefill/decode
+  energy split for large resident dense and sparse models? Ceiling L2;
+  L3 prediction only through a prospective Q4/AP-1 extension.
+
+  **Status/Paper C:** Extension of `C5-2.2`, `Q4`; consumes PC-S, PC-K
+  and PC-M. **Mechanism:** batching amortizes weight reads but enlarges
+  concurrent KV/state and changes matrix utilization; the dominant resource
+  can therefore change differently in prefill and decode. **Design:**
+  Qwen3-32B, Llama-70B, Qwen3-30B-A3B and 122B MoE, 4-bit; context
+  2K/8K/16K × static batch 1/2/4, 1024 outputs/request. Fix request multiset,
+  cache coldness, output policy, and prefill chunking; train on the matrix
+  edges, hold out interior combinations. Freeze latency constraints and
+  retain memory-fit failures. **Claim/budget:** prefill and decode each
+  need their own phase gate; a context-by-batch interaction >12 J/group
+  equals >3 J/request on the group-average basis or >2.93 mJ/output-token
+  for batch 4×1024: 12/4=3 J/request and 12/4096=2.93 mJ/token.
+  16 windows = 4F+8C+4H (4 days). **Difficulty:** none. **Risk:** static
+  batching is not continuous serving; unequal completion lengths create
+  a different workload. No allocation of batch energy to individual requests.
+
+- **RQ-D-A13 Prefix reuse × verification-state reuse:** Are the energy
+  benefits of prefix caching and speculative decoding composable once draft
+  and target state have to be initialized together? Ceiling L2.
+
+  **Status/Paper C:** Extension of `RQ-CACHE-PREFIX`, `C5-2.5`,
+  `RQ-SESSION-SHAPE`; consumes PC-K and PC-E. **Mechanism:** target-cache
+  reuse skips known prefill work, but a drafter may rebuild its prefix or
+  transfer/duplicate state; that changes the acceleration's fixed cost.
+  **Design:** A08's Qwen3-32B/0.6B pair with full observability; prefix cache
+  cold/warm × speculation off/on, shared prefix 2K/8K, identical 512-token
+  suffix and 2048 committed outputs. Pin both caches' identities separately;
+  include draft preparation inside the end-to-end measured service interval.
+  Train at 1/4/8 prefix reuses and predict held-out reuse count 2 from
+  Paper-C coefficients plus one measured draft-initialization term.
+  **Claim/budget:** interaction
+  >12 J/request = >5.86 mJ/output-token, with request-total evidence primary
+  if a warm prefill is unresolved. 10 windows = 2F+6C+2H (2–3 days).
+  **Difficulty:** none. **Risk:** a target-warm/draft-cold comparison can
+  silently change cache ecology; hybrid recurrent-state rollback may not be
+  supported, so the first experiment uses the dense target.
+
+- **RQ-D-A14 Energy compensation that a request total hides:** Can two
+  execution policies have an unresolved total-energy difference yet a
+  resolvable, predictively useful exchange between prefill and decode? Ceiling L2.
+
+  **Status/Paper C:** NEW synthesis of `Q4` and `RQ-METHOD-FLOOR`;
+  consumes PC-F and PC-S. **Mechanism:** cache representation or prefill
+  scheduling may spend extra work once to reduce later reads; a real phase
+  exchange must survive the opposite-signed reassignment caused by moving
+  a shared phase boundary. **Design:** take one predeclared A06 chunk pair
+  or A07 cache pair on Qwen3-32B, 16K prompt and outputs 512/2048/4096.
+  Predict the total-energy break-even output length from long-phase contrasts;
+  reserve one output length. Propagate the *same* admissible boundary through
+  both phases and the conserved request total, rather than treating phase
+  errors as independent. **Claim/budget:** illustrative +20 J prefill and
+  −20 J decode clears a 6 J bar for each phase, but 0 J total is unresolved;
+  −20/2048=−9.77 mJ/token is a window-average decode change. A 1 J exchange
+  cannot be attributed. 8 windows = 2F+4C+2H (2 days).
+  **Difficulty:** none. **Risk:** this measures phase-policy consequences,
+  not attention/FFN module shares; timing covariance can manufacture apparent
+  compensation. This is the strongest use of the instrument's labelled floor.
+
+- **RQ-D-A15 Transport the mechanism, not the fitted joules:** Does a
+  bandwidth/compute-normalized model trained on this Mac predict held-out
+  shapes on a second device after only a small local calibration? Ceiling
+  L3 per target; L4 only for an independently replicated scoped finding.
+
+  **Status/Paper C:** Extension of `C5-3.1`, `C5-2.7`, `Q4`; consumes
+  PC-S, PC-M and PC-K. **Mechanism:** a device change perturbs effective
+  bandwidth and compute throughput, offering an external falsifier for the
+  byte/work explanation rather than merely another ranking table.
+  **Design:** prefer a second 128 GB M-series Mac for the same 32B/70B/122B
+  artifacts and pinned MLX source; calibrate two registered shapes, freeze
+  the transport rule, then test six unseen context/batch combinations.
+  A CUDA/vLLM alternative starts with Qwen3-4B/8B models that actually fit;
+  kernel/runtime differences make it a separate stack-transport study, not
+  a pure hardware intervention. **Claim/budget:** each target mints its own
+  bound; if both illustrative bars are 6 J, a cross-target residual contrast
+  needs a conservative 12 J = 2.93 mJ/token over 4096 outputs. 16 windows
+  across devices = 4F+6C+6H (4 days at the combined 4–5/day budget).
+  **Difficulty:** none. **Risk:** two different chips are not unit-to-unit
+  population sampling; SoC and board joules cannot be ranked without boundary
+  calibration. A second device supplies a mechanism perturbation, not truth
+  about every device in its class.
+
+- **RQ-D-A16 Architecture-dependent state-transfer placement:** Does
+  replacing full-history KV with latent or recurrent state move the
+  energy-optimal prefill/decode placement predicted from Paper C's local costs?
+  Ceiling L2 measured placements; L3 only after held-out split validation.
+
+  **Status/Paper C:** Extension of `C5-2.3`, `C5-2.8`, `Q1`;
+  consumes PC-S, PC-K and PC-E. **Mechanism:** state representation changes
+  serialization, link bytes, and reconstruction, potentially shifting a
+  compute advantage's break-even; hybrid global layers retain growing state.
+  **Design:** two memory-sufficient Macs, same MLX build and 4-bit weights;
+  Qwen3-32B GQA, DeepSeek-V2-Lite MLA, Kimi-Linear-48B-A3B hybrid.
+  Compare monolithic and offline split at 8K/32K prompts, output 2048;
+  predict held-out 16K placement at measured 1/2.5GbE rates. Prove full
+  cache/state export, import, and greedy identity first; raw transfer alone
+  is not split inference. Account both endpoints' idle/resident intervals.
+  **Claim/budget:** if each endpoint's transfer interval carries a 6 J bar,
+  the transfer sum alone carries 12 J = 5.86 mJ/output-token; a difference
+  from an independently bounded 6 J monolithic reference can require 18 J
+  = 8.79 mJ/token, plus any other composed terms. 18 windows across devices
+  = 6F+8C+4H (4–5 days), after portability and cross-device timing gates.
+  **Difficulty:** none; same semantic task and separate token-shape controls.
+  **Risk:** incompatible state formats or below-floor network stages can
+  kill the placement claim; no module-energy inference from smaller payloads.
+
+**What one week of windows buys (ranked; alternatives, not additive promises):**
+
+1. **A04 + A14:** 16+8=24 windows, 6 reserve in a 30-window week; one held-out prediction story plus its phase-compensation explanation, if both runtime paths pass desk gates.
+2. **A02 + A03:** 12+14=26 windows, 7 reserve in a 33-window week; a routing-layout intervention plus an expert-union prediction, if audited dispatch exists first.
+3. **A10 + A11:** 16+12=28 windows, 7 reserve in a 35-window week; a difficulty-transfer paper only after the AP-5/source ruling; otherwise retain energy and external scores separately.
+4. **A08 + A13:** 12+10=22 windows, 6 reserve in a 28-window week; speculative burst and prefix-state interactions after observability support; A09 waits for executable MTP.
+5. **A15 or A16:** 16 or 18 windows plus at least 5 reserve; a second device buys coefficient transport or state-placement falsification, not both full studies or automatic generalization.
