@@ -3048,6 +3048,37 @@
       "status_note": "2026-09-15 activation d6888966, cold gate 28 Q4 F4: registered by the magistrate from ruling 10 Q4, Opus pairing 12 and synthesis 13; recording a ruling, not issuing one; not started; not night-critical. Starts and lands only after INSTALL-WINDOWS-MULTI-01 merges, in its own small PR. The pending hard start dependency is omitted under the seat brief's explicit fallback because the schema requires status=blocked for that edge, while this registration requires status=queued; the post-merge ordering remains in this note and acceptance.",
       "stop_card": null
     },
+    "INSTALLER-FOLLOWUPS-REBASE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process/state_kernel.json /tasks/INSTALLER-BACKUP-WINDOW-01 (:3019, queued, rank 203) and /tasks/NIGHT-STREAM-PATHS-01 (:3957, queued, rank 176) at main d2cc8b5e: both still reference scripts/install_night_agent.sh and its retired mechanics (EXIT trap before mktemp, fake cp, shell line 125)",
+          "docs/process/state_kernel.json /tasks/INSTALL-WINDOWS-MULTI-01 (:2977) still queued at rank 0 at main d2cc8b5e although PR #341 merged at 2944a45d",
+          "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md (registration record)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/INSTALLER-FOLLOWUPS-REBASE-01/acceptance",
+          "label": "INSTALLER-FOLLOWUPS-REBASE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The acceptance and goal text of INSTALLER-BACKUP-WINDOW-01 and NIGHT-STREAM-PATHS-01 is rebased onto the merged engine joulewise/night_agent_install.py: prior-plist backups are Target.stage sidecars (the .prior files), directory creation is Prepared.custody_night, and every line number and shell anchor is replaced by the engine's function names so the rows can be executed against the code that exists; each rebased row keeps its original finding and must-die shape or records why the engine already discharges it (then the row closes with that evidence). INSTALL-WINDOWS-MULTI-01 moves to done with its PR #341 merge sha and the dependent rows' blocked states recompute. gen_state --check rc 0 and tests.test_gen_state green."
+      },
+      "authority": {
+        "label": "2026-09-16 interactive session b0ae8462 post-merge cross-unit review of the transactional installer (its record 25; seat report postmerge-astra); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Bookkeeping follow-through of the transactional installer merge (PR #341 at 2944a45d): two queued kernel rows, INSTALLER-BACKUP-WINDOW-01 and NIGHT-STREAM-PATHS-01, still prescribe edits to the retired zsh installer (an EXIT trap before mktemp, a fake cp, a shell line 125) that no longer exists in that form; their acceptance text must be rebased onto joulewise/night_agent_install.py, where backups are Target.stage sidecars and directory creation is Prepared.custody_night, and the merged INSTALL-WINDOWS-MULTI-01 row itself must move to done.",
+      "id": "INSTALLER-FOLLOWUPS-REBASE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 215,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from its post-merge review; registration only; not started. The INSTALL-WINDOWS-MULTI-01 status flip is that session's post-merge batch unless it hands it here.",
+      "stop_card": null
+    },
     "INSTRUMENT-PATH-PIN-01": {
       "acceptance": {
         "evidence": [
@@ -5907,6 +5938,38 @@
       "rank": 202,
       "status": "queued",
       "status_note": "2026-09-15 activation d6888966, cold gate 25 Q6: registered by the magistrate from ruling 10 as amended by Opus pairing 12 and synthesis 13; recording a ruling, not issuing one; not started. Separate Ed-visible docs-only item; §3 item 3 stays OUT of the INSTALL-WINDOWS-MULTI-01 diff. Ed approves or declines the proposed text; the registration file itself stays untouched; not night-critical.",
+      "stop_card": null
+    },
+    "RUNBOOK-SOURCE-MAP-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/phase_2/derivation_night_runbook.md:2555 (cites check_schedule in scripts/install_night_agent.sh) at main d2cc8b5e; grep check_schedule scripts/install_night_agent.sh is empty on main",
+          "joulewise/night_agent_install.py:556 (class Prepared) and :583 (def admit) at main d2cc8b5e: the admission that replaced check_schedule",
+          "tests/test_run_night.py:1020 (comment: so its 07:00 local dead-man is in the past) at main d2cc8b5e",
+          "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md (registration record)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RUNBOOK-SOURCE-MAP-01/acceptance",
+          "label": "RUNBOOK-SOURCE-MAP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every runbook and handback line that names a function or file of the retired shell installer points at the merged engine instead (check_schedule becomes Prepared.admit in joulewise/night_agent_install.py, with the section 7 fact table row updated), verified by a grep over docs/phase_2/derivation_night_runbook.md and docs/process/NIGHT_HANDBACK.md for the retired names that comes back empty; the obsolete fixed-07:00 dead-man comment in tests/test_run_night.py is rewritten to describe the current dead-man derivation or removed; no behaviour changes and no test is deleted."
+      },
+      "authority": {
+        "label": "2026-09-16 interactive session b0ae8462 post-merge cross-unit review of the transactional installer (its record 25; seat report postmerge-astra); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Source-map drift after the installer merge: docs/phase_2/derivation_night_runbook.md:2555 cites check_schedule in scripts/install_night_agent.sh, which no longer exists (the admission is now Prepared.admit at joulewise/night_agent_install.py:583), and tests/test_run_night.py:1020 keeps an obsolete fixed-07:00 dead-man comment. A runbook a reader must replicate from cannot point at code that is gone.",
+      "id": "RUNBOOK-SOURCE-MAP-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 216,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from its post-merge review; registration only; not started; docs and one comment, not night-critical.",
       "stop_card": null
     },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
