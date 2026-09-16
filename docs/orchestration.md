@@ -211,7 +211,7 @@ This procedure does not expand commit, push, merge, or deployment authority.
 - The watchdog records the same census and count in its launch-time
   `fixture_orphan_census` event in `events.jsonl`. An acquisition error has
   null count/rows and an error message. This is informational: launch refusals
-  and the codex/claude/t3 census are unchanged. This bounded sentinel increment
+  and the night gate's agent census are unchanged. This bounded sentinel increment
   does not wire prewindow refusal or culling. It never signals a process;
   any future culling workflow needs separate authorization and identity
   revalidation outside plan spans. A ps snapshot is observation, not kill authority.
