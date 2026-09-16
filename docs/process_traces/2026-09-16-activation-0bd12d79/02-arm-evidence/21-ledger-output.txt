@@ -1,0 +1,5 @@
+aa80684848d0ce156ed2d14df47472006175840eda17f9025eff9754af694e3f  /Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
+aa80684848d0ce156ed2d14df47472006175840eda17f9025eff9754af694e3f  /Users/edr/JouleWise-measurement-20260916-derivation/runs/calibration_observation_ledger.jsonl
+PASS exact 76-record ledger restore
+PASS custody authentication sequence=76 digest=08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7
+LEDGER BLOCK DONE 04:11:01

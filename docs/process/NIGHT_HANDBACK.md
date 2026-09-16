@@ -384,6 +384,20 @@ installer, 8/8/6/5-minute leads, `t0 − 10 min` install close): the install
 transaction, the resident ladder (the watchdog's HOLD_CENSUS through the plan
 span, sequence 161) and the courier all behaved as specified.
 
+## Executed — d079-epoch-25g83-derivation-n1-20260916 (05:40 candidate, 2026-09-16, NOT ARMED)
+
+The first candidate for this plan id (H `82ea3eef`, t0 05:40:00 PDT) was
+staged, desk-checked and preflighted by activation `0bd12d79` at 04:15 but
+never noticed, published or installed: Ed's interactive Claude session (pid
+7066, with its codex MCP pair) stayed alive past its own 04:14 exit
+announcement because its terminal was never closed, the real-class census
+refuses on it, Ed did not answer the 04:21 email asking him to close it, and
+the candidate lapsed at its 05:30 install close. Staged plan and night root
+preserved unpublished under
+[record 02](../process_traces/2026-09-16-activation-0bd12d79/02-n1-20260916-arm-record.md)'s
+evidence. RECORD: nothing was armed; the same plan id is re-planned to a new
+t0 by the next handback commit once the census clears.
+
 ## Where the results are
 
 - Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916`;

@@ -1,0 +1,12 @@
+{
+  "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
+  "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+  "hardware_model": "Mac15,9",
+  "mlx_version": "0.31.2",
+  "os_build": "25G83",
+  "power_policy": "ac_high_power",
+  "powermetrics_sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+  "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+  "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+  "sampling_interval_ms": 100
+}
