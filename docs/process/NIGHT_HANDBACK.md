@@ -401,6 +401,8 @@ preserved unpublished under
 evidence. RECORD: nothing was armed; the same plan id is re-planned to a new
 t0 by the next handback commit once the census clears.
 
+**Dated addendum 2026-09-16 09:27 PDT (activation `0bd12d79`) — ARMED on H `32243adc` for t0 09:45:00 PDT.** Ed ran `/exit` (pid 7066 left the census 09:24:07; his reply `1a0ab095f3673122` 09:25); re-planned by `replan.py` to t0 1789577100, notice by email `1a0ab0a61def58d3` 09:26:18, published 1789576035.63, both agents installed rc 0 from the clone at H, final census `foreign_pids []`; frozen triple (`d079-epoch-25g83-derivation-n1-20260916`, `/Users/edr/JouleWise-measurement-20260916-derivation`, `32243adca1bfc8822e8001e4bac58000d591aa4f`); [record 02](../process_traces/2026-09-16-activation-0bd12d79/02-n1-20260916-arm-record.md). The activation exits before REQUEST 09:37.
+
 ## Where the results are
 
 - Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916`;

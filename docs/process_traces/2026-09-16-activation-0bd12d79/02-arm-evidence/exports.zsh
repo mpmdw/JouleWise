@@ -17,5 +17,5 @@ export CALIBRATION_PLAN="$NIGHT_ROOT/calibration_plan.json"
 export CALIBRATION_LEDGER="$MEASUREMENT_ROOT/runs/calibration_observation_ledger.jsonl"
 export LEDGER_SOURCE=/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
 export FROZEN_PLAN_SOURCE_REL=configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json
-export T0_EPOCH_S=1789562400   # 2026-09-16 05:40:00 PDT, fixed in the handback commit H
+export T0_EPOCH_S=1789577100   # 2026-09-16 09:45:00 PDT, fixed in the handback commit H
 export WINDOW_MAX_S=9000

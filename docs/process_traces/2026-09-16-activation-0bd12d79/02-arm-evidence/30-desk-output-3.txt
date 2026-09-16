@@ -1,0 +1,111 @@
+=== §0.3 check (rc 3 = acceptance-epoch mismatch is the expected state)
+Desk epoch watch (identity comparison only; no capture authorization)
+ACTIVE acceptance: d079_calibration_acceptance_v2_n17_r6
+field                  expected                                                         observed                                                         status
+os_build               25F84                                                            25G83                                                            MISMATCH
+hardware_model         Mac15,9                                                          Mac15,9                                                          match
+powermetrics_sha256    d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5 MISMATCH
+mlx_version            0.31.2                                                           0.31.2                                                           match
+mismatched fields: os_build, powermetrics_sha256
+check rc=3
+Desk epoch watch (identity comparison only; no capture authorization)
+ACTIVE acceptance: d079_calibration_acceptance_v2_n17_r6
+field                  expected                                                         observed                                                         status
+os_build               25F84                                                            25G83                                                            MISMATCH
+hardware_model         Mac15,9                                                          Mac15,9                                                          match
+powermetrics_sha256    d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5 MISMATCH
+mlx_version            0.31.2                                                           0.31.2                                                           match
+mismatched fields: os_build, powermetrics_sha256
+pre-registered powermetrics sha256 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5: match
+check --preregistration rc=3
+=== §0.5 digests
+b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf  /Users/edr/JouleWise-measurement-20260916-derivation/scripts/night_chains/calibration_derivation_only.zsh
+84b820b9069c5b7b34b35e1b8fcd1c436c54ded04cbb24c6c985bbc867ce0b5c  /Users/edr/JouleWise-measurement-20260916-derivation/configs/calibration/preregistration_d079_epoch_25g83_rev1.md
+87d4fb716b4b72ea3253261a2565726a0042ca5c
+=== §0.7 discoverable plans (expect none)
+
+=== §0.8 clean tree
+=== frozen calibration plan copy
+9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072  /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/calibration_plan.json
+plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3
+=== §0.8 desk inputs
+stale identity fields vs /Users/edr/JouleWise-measurement-20260916-derivation/configs/calibration/calibration_acceptance_d079_v2_n17_r6.json: os_build
+IDENTITY_EPOCH_JSON=/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/identity-epoch.json sha256=b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607
+T1_BINDINGS_JSON=/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/t1-bindings.json sha256=8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98
+write_derivation_night_inputs rc=0
+b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607  /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/identity-epoch.json
+8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98  /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/t1-bindings.json
+{
+  "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+  "hardware_model": "Mac15,9",
+  "os_build": "25G83",
+  "power_policy": "ac_high_power",
+  "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+  "sampling_interval_ms": 100
+}
+=== §1.1b step 2: author the staged plan
+arm-to-t0 floor from code: 600 s; T0_EPOCH_S=1789577100 (2026-09-16 09:45:00 PDT) now=1789575886 margin_to_install_close=614 s
+/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
+authored_epoch_s 1789575887.17411
+{
+  "authored_epoch_s": 1789575887.17411,
+  "chain_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/chain.zsh",
+  "chain_sha256_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/chain.zsh.sha256",
+  "custody_root": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916",
+  "measurement_head": "32243adca1bfc8822e8001e4bac58000d591aa4f",
+  "measurement_root": "/Users/edr/JouleWise-measurement-20260916-derivation",
+  "plan_id": "d079-epoch-25g83-derivation-n1-20260916",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json",
+  "repo_head": "32243adca1bfc8822e8001e4bac58000d591aa4f",
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "t0_epoch_s": 1789577100.0,
+  "window_max_s": 9000
+}
+5cc4e11aa2e0b6e15ac6e1337f6247397a015aa800139c7156ae2551f7c258a2  /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
+=== §1.1b step 3: generate the wrapper
+emitted /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/chain.zsh sha256=f3a7b4d3862678fd7128a0fcb71858bdd3952c1c65723adae87e9747658b7e90
+=== step 4: --verify
+VERIFIED /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/chain.zsh sha256=f3a7b4d3862678fd7128a0fcb71858bdd3952c1c65723adae87e9747658b7e90
+=== step 5: zsh -n
+zsh -n rc=0
+total 152
+drwxr-xr-x@ 8 edr  staff    256 Sep 16 09:24 .
+drwxr-xr-x@ 7 edr  staff    224 Sep 16 09:24 ..
+-rw-r--r--@ 1 edr  staff  45076 Sep 16 09:24 calibration_plan.json
+-rwxr-xr-x@ 1 edr  staff   8916 Sep 16 09:24 chain.zsh
+-rw-r--r--@ 1 edr  staff    119 Sep 16 09:24 chain.zsh.chain-source.sha256
+-rw-r--r--@ 1 edr  staff     76 Sep 16 09:24 chain.zsh.sha256
+-rw-r--r--@ 1 edr  staff    246 Sep 16 09:24 identity-epoch.json
+-rw-r--r--@ 1 edr  staff    541 Sep 16 09:24 t1-bindings.json
+f3a7b4d3862678fd7128a0fcb71858bdd3952c1c65723adae87e9747658b7e90  chain.zsh
+b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf  scripts/night_chains/calibration_derivation_only.zsh
+export GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1
+export MEASUREMENT_CHECKOUT="$MEASUREMENT_ROOT"
+export REPO="$MEASUREMENT_ROOT"
+export PY="$MEASUREMENT_ROOT/.venv/bin/python"
+export PYTHONPATH="$MEASUREMENT_ROOT"
+export SESSION_ID='d079-epoch-25g83-derivation-n1-20260916'
+export WINDOW_ID='d079-epoch-25g83-derivation-n1-20260916'
+export PLAN_ID='plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3'
+export PLAN_SHA256='9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072'
+export PLAN='/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/calibration_plan.json'
+export EVIDENCE_ROOT_ID='evidence-d079-epoch-25g83-derivation-n1-20260916'
+export RUNS_ROOT='/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/runs'
+export WINDOW_CUSTODY_ROOT='/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916'
+export CALIBRATION_LEDGER='/Users/edr/JouleWise-measurement-20260916-derivation/runs/calibration_observation_ledger.jsonl'
+export LEDGER_HEAD_PIN='/Users/edr/JouleWise-measurement-20260916-derivation/configs/calibration/calibration_ledger_head.json'
+export IDENTITY_EPOCH_JSON='/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/identity-epoch.json'
+export T1_BINDINGS_JSON='/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/t1-bindings.json'
+export WINDOW_END_EPOCH_S='1789586100'
+export SLOT_COUNT='12'
+export SETTLE_S='600'
+export SLOT_CADENCE_S='600'
+export SLOT_CAPTURE_BUDGET_S='480'
+export SLEEP='/bin/sleep'
+export DATE='/bin/date'
+=== driver preflight (desk, from the clone, against the STAGED path)
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260916-derivation/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+=== §0.7 again: discoverable set unchanged by staging
+DESK BLOCK DONE 09:24:47 — STOPPED before notice, publish and install

@@ -1,0 +1,82 @@
+ARM BLOCK START 2026-09-16T09:27:13-0700
+=== 0. stop files
+=== 1. pins + notice evidence
+=== 2. wrapper still re-derives to the installed bytes (§1.1b step 4)
+VERIFIED /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/chain.zsh sha256=f3a7b4d3862678fd7128a0fcb71858bdd3952c1c65723adae87e9747658b7e90
+=== 3. staged plan checks
+staged plan checks PASS; seconds to install close: 465
+=== 4. --render-only again from the pinned checkout
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260916-derivation/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+validated pins: repo_head=32243adca1bfc8822e8001e4bac58000d591aa4f measurement_root=/Users/edr/JouleWise-measurement-20260916-derivation measurement_head=32243adca1bfc8822e8001e4bac58000d591aa4f
+=== 5. final arm-time census immediately before publication (real class: any foreign process aborts)
+-	0	com.joulewise.magistrate
+{"diagnostics": [], "discovery_argv": ["/usr/bin/pgrep", "-f", "codex|claude|t3"], "foreign_pids": [], "own_pids": [12553, 12557, 20490, 20495, 20525], "plan_sha256": "5cc4e11aa2e0b6e15ac6e1337f6247397a015aa800139c7156ae2551f7c258a2", "receipt_class": "DIAGNOSTIC_NO_PACK", "sessions": [{"descendant_pids": [20490, 20495, 20498, 20525, 20526], "exempt": false, "root_pid": 12557, "workloads": []}], "workloads": []}
+diagnostic only; existing all-agents-closed rule still applies
+=== 6. publication (retry_allowed, then os.replace)
+retry_allowed: Decision(allowed=True, reason='allowed')
+PUBLISHED /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json at 1789576035.634872
+=== 7. install both agents FROM the clone
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260916-derivation/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+validated pins: repo_head=32243adca1bfc8822e8001e4bac58000d591aa4f measurement_root=/Users/edr/JouleWise-measurement-20260916-derivation measurement_head=32243adca1bfc8822e8001e4bac58000d591aa4f
+install rc=0
+=== 8. inspect
+-	0	com.joulewise.night
+-	0	com.joulewise.magistrate
+-	0	com.joulewise.night.deadman
+installed calendars match plan
+post-install night/ baseline: []
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night"
+  "ProgramArguments" => [
+    0 => "/Users/edr/JouleWise-measurement-20260916-derivation/.venv/bin/python"
+    1 => "/Users/edr/JouleWise-measurement-20260916-derivation/scripts/run_night.py"
+    2 => "run"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.273"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night/launchd.night.err"
+  "StandardOutPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night/launchd.night.out"
+  "StartCalendarInterval" => {
+    "Day" => 16
+    "Hour" => 9
+    "Minute" => 45
+    "Month" => 9
+  }
+  "WorkingDirectory" => "/Users/edr/JouleWise-measurement-20260916-derivation"
+}
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night.deadman"
+  "ProgramArguments" => [
+    0 => "/Users/edr/JouleWise-measurement-20260916-derivation/.venv/bin/python"
+    1 => "/Users/edr/JouleWise-measurement-20260916-derivation/scripts/run_night.py"
+    2 => "dead-man"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.273"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night/launchd.deadman.err"
+  "StandardOutPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night/launchd.deadman.out"
+  "StartCalendarInterval" => {
+    "Hour" => 13
+    "Minute" => 20
+  }
+  "WorkingDirectory" => "/Users/edr/JouleWise-measurement-20260916-derivation"
+}
+5cc4e11aa2e0b6e15ac6e1337f6247397a015aa800139c7156ae2551f7c258a2  /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
+f3a7b4d3862678fd7128a0fcb71858bdd3952c1c65723adae87e9747658b7e90  /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/chain.zsh
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=7274595)	80%; AC attached; not charging present: true
+ sleep                0 (sleep prevented by powerd)
+ powermode            0
+ARMED 09:27:16 plan=/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
