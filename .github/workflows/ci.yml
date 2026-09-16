@@ -13,6 +13,7 @@ concurrency:
 jobs:
   quick:
     needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -31,11 +32,12 @@ jobs:
       - name: Quick test tier
         run: python3 scripts/quick_suite.py --tier quick --workers 4
 
-  # Event-only interpreter selection; never skip tests based on changed paths.
+  # Select interpreters and skip expensive jobs only for proven docs-only ranges.
   changes:
     runs-on: ubuntu-latest
     outputs:
       pythons: ${{ steps.interpreters.outputs.pythons || '["3.11","3.13"]' }}
+      code: ${{ steps.paths.outputs.code || 'true' }}
     steps:
       - name: Select Python interpreters
         id: interpreters
@@ -47,11 +49,55 @@ jobs:
             pull_request) pythons='["3.13"]' ;;
           esac
           printf 'pythons=%s\n' "$pythons" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        id: source
+        continue-on-error: true
+        with:
+          fetch-depth: 0
+      - name: Detect code changes
+        id: paths
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.source.outcome }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Only a successful, non-empty docs-only diff may suppress tests.
+          # Check every fallible detector command explicitly: errors run CI.
+          docs_only() {
+            local before after paths path
+            [[ "${CHECKOUT_OUTCOME:-}" == success ]] || return 1
+            case "${GITHUB_EVENT_NAME:-}" in
+              push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
+              pull_request) before=${PR_BASE_SHA:-}; after=${PR_HEAD_SHA:-} ;;
+              *) return 1 ;;
+            esac
+            [[ "$before" =~ ^[0-9a-f]{40}$ && "$before" != 0000000000000000000000000000000000000000 ]] || return 1
+            [[ "$after" =~ ^[0-9a-f]{40}$ && "$after" != 0000000000000000000000000000000000000000 ]] || return 1
+            git cat-file -e "$before^{commit}" || return 1
+            git cat-file -e "$after^{commit}" || return 1
+            paths=$(git diff --name-only --no-renames "$before..$after") || return 1
+            [[ -n "$paths" ]] || return 1
+            while IFS= read -r path; do
+              case "$path" in
+                docs/*) ;;
+                */*) return 1 ;;
+                *.md) ;;
+                *) return 1 ;;
+              esac
+            done <<< "$paths"
+          }
+          code=true
+          if docs_only; then
+            code=false
+          fi
+          printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
 
   # F2 state generation, F4 historical receipt semantics, and F5 CLI/strict
   # mock smokes ran identically inside every ordinary test-matrix shard; they
   # run once here instead, and F3 docs freshness is run explicitly here too.
-  # Every job below runs on every push to main and every pull request.
+  # Fences, build and installed-wheel also run for docs-only changes.
   fences:
     runs-on: ubuntu-latest
     steps:
@@ -84,6 +130,7 @@ jobs:
 
   test:
     needs: [changes, quick]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     env:
       # CI-TRIM-02: refreshed hosted weights balance six ordinary shards at
@@ -182,6 +229,7 @@ jobs:
 
   calibration-exits-exclusive:
     needs: [changes, quick]
+    if: needs.changes.outputs.code == 'true'
     # Exclusive by design: this module already runs sequentially internally;
     # colocating it with an ordinary shard only adds scheduler starvation.
     # The module watchdog ceiling is 10 minutes per child and this hosted job
@@ -217,6 +265,7 @@ jobs:
 
   calibration-writer-crash-matrix-exclusive:
     needs: [changes, quick]
+    if: needs.changes.outputs.code == 'true'
     # Exclusive because fallback-weight shard placement is unsound for this
     # module: its hosted runtime is dominated by its own subprocess-heavy
     # cases — the same CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY
