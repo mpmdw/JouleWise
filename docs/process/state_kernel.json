@@ -5567,6 +5567,57 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-13 of the ruled-not-installed sweep (status C, cure RUNBOOK). Compounds with TRANSACTION-RULED-ARTIFACTS-01: two separate rulings point at the same absent section 11 step.",
       "stop_card": null
     },
+    "REFUSAL-FAST-RETRY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-08ca8197/06-refusal-fast-retry-lane-registration.md (registration record: Ed's remark as relayed verbatim by the interactive session b0ae8462 at ~00:05 PDT 2026-09-16 over the cross-session channel, not a directive issue; facts below re-read by this activation from main at 45f88f55)",
+          "scripts/magistrate_watchdog.py:718 (plan span end = t0_epoch_s + window_max_s + COURIER_DEADLINE_S) and :721 (plan_span_active), :817 and :1411 (the launch predicate and the active-plan filter that keep the magistrate away for the whole span, refused or not) at main 45f88f55",
+          "joulewise/night_gate.py:103-109 (refusal codes night_refused_agent_present, night_refused_class_unbuilt, night_refused_hid_idle, night_refused_not_quiet, night_refused_boot_clock, night_refused_registration) at main 45f88f55",
+          "docs/process_traces/2026-09-15-activation-1acf2aee/01-equivalence-night-20260915-harvest-record.md (the 09-15 night REFUSED at t0 on load alone with zero captures, then the full-span wait, harvest, uninstall and re-plan: the cost this lane removes)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REFUSAL-FAST-RETRY-01/acceptance",
+          "label": "REFUSAL-FAST-RETRY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Three parts, landing together as one PR after the two dependencies. (a) Watchdog span accounting: when the night's custody root holds a refusal record and NO capture ever started (refusal.json present, no chain.started record and no receipt with a capture), plan_span_active ends the span at the refusal record's time instead of t0 + window_max_s + COURIER_DEADLINE_S, so the resident magistrate relaunches on the next tick; a refusal after a chain started does NOT shorten the span (counterfactual test). (b) Retry classification, RULING-GATED: a zero-capture t0 refusal on machine state (night_refused_not_quiet, night_refused_agent_present, night_refused_hid_idle, night_refused_boot_clock) becomes a pre-authorized RETRY in the ARM-RETRY-CLASS-01 shape (at least 60 s spacing, bounded by the install_close of a fresh plan, every observed NO stops), on the reasoning that no data was taken and the same gate re-checks at the next t0; night_refused_registration and night_refused_class_unbuilt and every refusal after a capture started stay on the cold-gate path (the D-161 evidence fence is untouched). Part (b) is a process rule and is NOT the magistrate's or lieutenant's to ratify: it lands only after Ed's ruling (or the cold gate's, with Ed's sight) that zero-capture physics refusals are retryable, recorded as a dated decision-log addendum and written into NIGHT_HANDBACK and runbook section 1.4a in plain words. (c) Tests: span-closed-at-refusal in the watchdog; the retry classification for exactly the four zero-capture codes in the retry classifier once ARM-RETRY-CLASS-01 lands; the counterfactual that a refusal WITH a started chain keeps the full span and is not retried. Every t0 gate itself is unchanged: a refusal still refuses; only what happens afterwards is faster. Expected effect: the cost of a refused t0 drops from about three hours (full span, harvest, re-plan, arm lead) to about 15 to 20 minutes."
+      },
+      "authority": {
+        "label": "2026-09-16 ~00:05 PDT: Ed's remark on the cost of a t0 refusal (how have we not made this a lower cost to pay), relayed verbatim by the interactive session b0ae8462; registered by activation 08ca8197 (registration, not a ruling; part (b) awaits Ed's ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/06-refusal-fast-retry-lane-registration.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "part (b) classifies the zero-capture refusal codes inside the retry class that lane builds; the classifier must exist first",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ARM-RETRY-CLASS-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the install and span rules this lane edits land with the transactional installer; one home for the constants",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "INSTALL-WINDOWS-MULTI-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make a refused t0 cheap. Today a t0 refusal (night_refused_not_quiet, night_refused_agent_present, night_refused_hid_idle, night_refused_boot_clock) writes the refusal record, but the watchdog keeps the magistrate away for the full plan span, t0 + window_max_s (9000 s) + COURIER_DEADLINE_S, as if the night had run (scripts/magistrate_watchdog.py:718-721); then come harvest, section 2.5, a fresh plan and the arm lead, about three hours per refusal. Ed, 2026-09-16 ~00:05 PDT, verbatim as relayed: \"how have we not made this a lower cost to pay\". The lane ends the span at the refusal when no capture started, and, subject to Ed's ruling, treats a zero-capture machine-state refusal as a pre-authorized retry in the ARM-RETRY-CLASS-01 shape. P1 right after LEAD-MARGIN-01: together they set how many quiet windows a day can actually yield.",
+      "id": "REFUSAL-FAST-RETRY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 212,
+      "status": "blocked",
+      "status_note": "2026-09-16 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; registration only, nothing changed. Status blocked until INSTALL-WINDOWS-MULTI-01 and ARM-RETRY-CLASS-01 land (hard start dependencies). Part (b), retrying zero-capture physics refusals, is a process rule and waits for Ed's ruling under rule 11; parts (a) and (c) are mechanism and tests. The D-161 evidence fence and every t0 gate are untouched.",
+      "stop_card": null
+    },
     "REGISTRY-ID-NAMING-01": {
       "acceptance": {
         "evidence": [
