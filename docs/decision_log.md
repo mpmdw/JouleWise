@@ -11007,35 +11007,41 @@ session is ASKED to stop — and not at the physics margin the measurement
 needs.
 
 **D-171(b) dated addendum — 2026-09-16, A210 / LEAD-MARGIN-01.**
-**PENDING Ed's ratification (asked 2026-09-16 00:10 PDT); the conservative alternative 8/8/6/5 is recorded**
+**RATIFIED by Ed 2026-09-16 00:20 PDT ('do whichever is safest first quick second'): the conservative 8/8/6/5 chain; the 5/5/3/2 variant is recorded as the quick alternative for a later ruling**
 (PLAN/REQUEST/TERM/KILL leads in minutes). The original ruling above is
-retained as history; this addendum records the proposed reinterpretation,
-not a completed ratification.
+retained as history; this addendum installs the ratified timing amendment.
+The request asks for exit within five minutes as a courtesy, but TERM at
+t0−6 follows an on-time request at t0−8 by two minutes and overrides it;
+KILL follows at t0−5. The unchanged 120-second install pad gives an exclusive
+ten-minute install floor.
 
 D-171(b) ratified the 25-minute lead so that idle-triggered daemons
 (XProtect and kin) run during **≥ 10 minutes of untouched idle before the
-first capture**. Under A210's new 5/5/3/2 chain, KILL at t0−2 minutes plus
+first capture**. Under A210's ratified 8/8/6/5 chain, KILL at t0−5 minutes plus
 the derivation chain's `SETTLE_S = 600 s` before d01
 (`scripts/night_chains/calibration_derivation_only.zsh:76`;
 `docs/phase_2/derivation_night_runbook.md` programmed span and
 `t0 + Δ + 600` schedule, lines 1124–1145 and 1226–1244 at `e05e497a`)
-gives quiet-to-first-capture **≥ 120 + 10 + 600 s ≈ 12.2 min ≥ 10 min**,
+gives quiet-to-first-capture **≥ 300 + 10 + 600 s ≈ 15.2 min ≥ 10 min**,
 using ten seconds of driver/start delay in that timing budget. Even without
-crediting that delay, `KILL_LEAD_S + SETTLE_S >= 600`. The idle duration
+crediting that delay, `KILL_LEAD_S + SETTLE_S = 900 >= 600`. The idle duration
 rule is met under the new chain, but the margin against a late-starting scan
-is reduced from roughly **25 to 12 minutes**. Load is not rechecked per
-capture (thermal only). The conservative 8/8/6/5 alternative preserves more
-pre-t0 margin if the gate declines the shorter schedule.
+is reduced from roughly **25 to 15 minutes**. Load is not rechecked per
+capture (thermal only).
 
-With **5 s samples** and **`e^(−5/60)` decay**, 120 s retains 13.5% of excess
-one-minute load; 105 effective seconds (ten seconds poll slack plus about
-five seconds signalling/exit) retains 17.4%. A **KILL-only teardown at t0−2
-clears the 2.0 gate only for excess load ≲ 6–8**, at base load 0.5–1.0
-(about 8.6 at base 0.5; 5.7 at base 1.0). **TERM at t0−3 is the working
-teardown: 165 s → 6.4% of excess.** A surviving process tree or excess load
-still refuses at t0. The unchanged 300 s launchd recovery interval cannot
-guarantee these phases after supervisor failure; this amendment does not
-waive a physics refusal or authorize same-night recovery from one.
+With five-second samples and `e^(−5/60)` decay, one-minute load-average excess
+falls to 0.674% after 300 s (KILL) and 0.248% after 360 s (TERM). Allowing ten
+seconds of poll slack and about five seconds for signalling/exit leaves
+285/345 effective seconds, retaining 0.865%/0.318% of excess. Under this
+model, KILL-only teardown at t0−5 clears the **2.0** gate for excess load below
+about **116–173**, at base load 1.0–0.5 (115.6 at base 1.0; 173.4 at base 0.5).
+TERM at t0−6 provides the larger settling margin. KILL is the five-minute
+floor, not a promise of passing t0; polling, descendant signalling, census
+and supervisor-exit latency consume the budget.
+A surviving process tree or excess load still refuses at t0. The unchanged
+300 s launchd recovery interval cannot guarantee these phases after
+supervisor failure; this amendment does not waive a physics refusal or
+authorize same-night recovery from one.
 
 **Executed evidence.** Run 2026-09-03 by the lieutenant at
 `origin/main` = `46eaf18c`:
@@ -11468,8 +11474,8 @@ agents is arming, not alteration). Arming a REHEARSAL_STUB requires the eight co
 stage the plan outside the watchdog's `*/night_plan.json` glob, validate with `install_night_agent.sh
 --render-only` from the pinned measurement checkout, `os.replace` into the plan directory, agents installed from
 that checkout at t0's hour/minute, arm email with pins before the move, no OTHER agent session alive, pin
-reachability preserved, exit by t0 − 5 min (A210 / LEAD-MARGIN-01; D-171(b)'s
-2026-09-16 addendum records the pending ratification replacing the historical
+reachability preserved, exit by t0 − 8 min (A210 / LEAD-MARGIN-01; D-171(b)'s
+2026-09-16 addendum records Ed's ratification replacing the historical
 t0 − 25 min boundary). A `/private/tmp` detached checkout is a valid REHEARSAL_STUB root
 (MAGISTRATE_WATCHDOG.md line 258) and must never be reused by a real plan.
 
@@ -11800,8 +11806,8 @@ arm-time census, and the only documented recovery was a new plan for the next ni
    nights.** For REHEARSAL_STUB plans only, the runbook step-3b foreign-agent check may
    classify an interactive `claude`/T3 session as not foreign when it has no child test,
    measurement, or capture process. The plan-span census rule remains: any agent process from
-   t0 − 5 min until the chain exits refuses the night (A210 / LEAD-MARGIN-01;
-   D-171(b)'s 2026-09-16 addendum records the pending ratification replacing
+   t0 − 8 min until the chain exits refuses the night (A210 / LEAD-MARGIN-01;
+   D-171(b)'s 2026-09-16 addendum records Ed's ratification replacing
    the historical t0 − 25 min boundary), so a session left open through t0
    still refuses it. Lane `ARM-CENSUS-IDLE-INTERACTIVE-01`.
 4. **Remote control between windows.** Ed wants the magistrate reachable live between

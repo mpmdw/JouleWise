@@ -69,7 +69,7 @@ DEADMAN_GRACE_S = 3600
 # D-180/D-181 permit any quiet window; that pad is not a measurement gate.
 # Two minutes separate the exclusive installation cutoff from REQUEST (twelve
 # nominal 10 s resident polls to discover the published plan and hand back).
-# With the five-minute plan lead, the exclusive arm-to-t0 floor is seven minutes.
+# With the eight-minute plan lead, the exclusive arm-to-t0 floor is ten minutes.
 # This is an installation/handback allowance, not load-average settling time:
 # that belongs after agent teardown. The installer still rechecks its cutoff.
 INSTALL_CLOSE_MARGIN_S = 2 * 60

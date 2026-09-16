@@ -1437,10 +1437,10 @@ runpy.run_path(script, run_name='__main__')
         self.assertLess(self.driver.install_close_epoch(plan),
                         plan.t0_epoch_s - REQUEST_LEAD_S)
 
-    def test_fixed_epoch_install_close_is_1799999580(self) -> None:
+    def test_fixed_epoch_install_close_is_1799999400(self) -> None:
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
                        window_max_s=9000)
-        self.assertEqual(1799999580, self.driver.install_close_epoch(plan))
+        self.assertEqual(1799999400, self.driver.install_close_epoch(plan))
 
     def test_fixed_epoch_deadman_is_1800012900(self) -> None:
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,

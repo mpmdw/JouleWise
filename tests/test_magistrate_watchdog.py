@@ -417,10 +417,10 @@ class FenceTests(WatchdogTestCase):
     def test_plan_fence_boundaries_request_term_kill_and_completion(self) -> None:
         plan = self.make_plan()
         t0 = plan.t0_epoch_s
-        self.assertEqual(wd.PLAN_LEAD_S, 300)
-        self.assertEqual(wd.REQUEST_LEAD_S, 300)
-        self.assertEqual(wd.TERM_LEAD_S, 180)
-        self.assertEqual(wd.KILL_LEAD_S, 120)
+        self.assertEqual(wd.PLAN_LEAD_S, 480)
+        self.assertEqual(wd.REQUEST_LEAD_S, 480)
+        self.assertEqual(wd.TERM_LEAD_S, 360)
+        self.assertEqual(wd.KILL_LEAD_S, 300)
         self.assertFalse(wd.plan_span_active(plan, t0 - wd.PLAN_LEAD_S - 0.001, self.harness.storage))
         self.assertTrue(wd.plan_span_active(plan, t0 - wd.PLAN_LEAD_S, self.harness.storage))
         self.assertEqual(wd.standdown_phase(plan, t0 - wd.REQUEST_LEAD_S), "REQUEST")
@@ -552,10 +552,10 @@ class FenceTests(WatchdogTestCase):
     def test_reverse_chronological_disjoint_and_touching_endpoints(self) -> None:
         earlier = self.make_plan(name="z-earlier", t0=1800000000, window_max_s=9000,
                                  measurement_root=str(self.temp / "earlier"))
-        later = self.make_plan(name="a-later", t0=1800014160, window_max_s=9000,
+        later = self.make_plan(name="a-later", t0=1800014340, window_max_s=9000,
                                measurement_root=str(self.temp / "later"))
         self.assertEqual([], wd.plan_conflicts([later, earlier]))
-        touching = dataclasses.replace(later, t0_epoch_s=1800014100)
+        touching = dataclasses.replace(later, t0_epoch_s=1800014280)
         self.assertEqual(1, len(wd.plan_conflicts([touching, earlier])))
         self.assertIn("overlapping spans", wd.plan_conflicts([touching, earlier])[0])
 
@@ -657,7 +657,7 @@ class SupervisorTests(WatchdogTestCase):
         self.assertEqual(wd.SUPERVISOR_POLL_S, 10)
         self.assertEqual(
             (wd.PLAN_LEAD_S, wd.REQUEST_LEAD_S, wd.TERM_LEAD_S, wd.KILL_LEAD_S),
-            (300, 300, 180, 120),
+            (480, 480, 360, 300),
         )
         self.assertEqual(wd.PLAN_LEAD_S, wd.REQUEST_LEAD_S)
         self.assertGreater(wd.REQUEST_LEAD_S, wd.TERM_LEAD_S)
@@ -687,10 +687,10 @@ class SupervisorTests(WatchdogTestCase):
         # driver/preflight delay toward the ten-minute idle minimum.
         self.assertGreaterEqual(wd.KILL_LEAD_S + settle_s, 600)
 
-    def test_request_courtesy_is_two_minutes_but_late_plan_deadlines_win(self) -> None:
+    def test_request_courtesy_is_five_minutes_but_late_plan_deadlines_win(self) -> None:
         plan = self.make_plan()
         supervisor = self.supervisor(plan)
-        # A late first observation must not buy a new two-minute TERM grace.
+        # A late first observation must not buy a new five-minute TERM grace.
         self.harness.clock.wall = dt.datetime.fromtimestamp(
             plan.t0_epoch_s - wd.TERM_LEAD_S, tz=self.local_tz
         )
@@ -698,9 +698,9 @@ class SupervisorTests(WatchdogTestCase):
         request = json.loads(
             (self.harness.storage.root / "standdown.request").read_text(encoding="utf-8")
         )
-        self.assertEqual(request["exit_within_s"], 120)
-        self.assertEqual(request["term_epoch_s"], plan.t0_epoch_s - 180)
-        self.assertEqual(request["kill_epoch_s"], plan.t0_epoch_s - 120)
+        self.assertEqual(request["exit_within_s"], 300)
+        self.assertEqual(request["term_epoch_s"], plan.t0_epoch_s - 360)
+        self.assertEqual(request["kill_epoch_s"], plan.t0_epoch_s - 300)
         self.assertIn((100, signal.SIGTERM), self.harness.processes.signals)
         self.harness.clock.wall += dt.timedelta(seconds=60)
         self.harness.clock.mono += 60
@@ -853,7 +853,7 @@ class SupervisorTests(WatchdogTestCase):
         ]
         self.assertEqual(["resident_drain_started", "SIGTERM", "SIGKILL"], ladder)
 
-    def test_latched_drain_at_t0_minus_9_is_killed_by_t0_minus_2(self) -> None:
+    def test_latched_drain_at_t0_minus_9_is_killed_by_t0_minus_5(self) -> None:
         plan = self.make_plan(t0=self.base.timestamp() + 30 * 60)
         supervisor = self.supervisor(plan)
         supervisor.state["resident_hold_drain"] = {
@@ -870,7 +870,7 @@ class SupervisorTests(WatchdogTestCase):
         self.harness.clock.wall = dt.datetime.fromtimestamp(
             plan.t0_epoch_s - wd.KILL_LEAD_S, tz=self.local_tz
         )
-        self.harness.clock.mono += 7 * 60
+        self.harness.clock.mono += 4 * 60
 
         self.assertFalse(supervisor.step())
         self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
@@ -2000,7 +2000,7 @@ class ContractTests(WatchdogTestCase):
         self.assertLessEqual(len(prompt.splitlines()), 25)
         self.assertLess(prompt.index("First act"), prompt.index("Email Ed"))
         self.assertIn("notice_pending", prompt)
-        self.assertIn("exit within two minutes", prompt)
+        self.assertIn("exit within five minutes", prompt)
         self.assertIn("@@FENCED_CHECKOUTS@@", prompt)
         self.assertIn("(plan_id, root, head)", prompt)
         self.assertIn("never fast-forward, pull, checkout, or otherwise move", prompt)
