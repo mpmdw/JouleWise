@@ -3290,6 +3290,48 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-12 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
+    "LEAD-MARGIN-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-08ca8197/02-lead-margin-lane-registration.md (registration record: Ed's remark as relayed verbatim by the interactive session b0ae8462 at ~23:20 PDT 2026-09-15 over the cross-session channel, not a directive issue; the constants and lines below re-read by this activation from the branch checkout at 69d668be and from main at b8719af7)",
+          "/Users/edr/code/JouleWise-wt-iw-txn/scripts/run_night.py:68 (INSTALL_CLOSE_MARGIN_S = 3600) and :965-970 (install_close_epoch = t0 - PLAN_LEAD_S - INSTALL_CLOSE_MARGIN_S) on feat/2026-09-15-install-windows-transactional at 69d668be; neither symbol exists on main at b8719af7, so the lane starts only after INSTALL-WINDOWS-MULTI-01 lands",
+          "scripts/magistrate_watchdog.py:67 (PLAN_LEAD_S = 25 * 60) on main at b8719af7; the resident-magistrate deadline chain this lead protects is untouched by the lane",
+          "/Users/edr/code/JouleWise-wt-iw-txn/docs/phase_2/derivation_night_runbook.md:1305 (= t0 - 25 min - 60 min = t0 - 85 min) and :2630 (install_close_epoch(plan) = t0 - 85 min) at 69d668be"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/LEAD-MARGIN-01/acceptance",
+          "label": "LEAD-MARGIN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A small PR that (1) states, from the constant's own history and the D-180/D-181 records, what INSTALL_CLOSE_MARGIN_S protects (the pad between the last permitted night-agent install and the start of the 25-minute resident lead: the mechanism it guards is named, not assumed), (2) reduces it from 3600 s to the smallest value that still covers that mechanism with the reasoning written down (the relayed proposal is 5 minutes; the seat may land a different value if the history demands it, and says why), (3) leaves PLAN_LEAD_S = 25 min and the resident TERM/KILL deadline chain untouched, (4) pins the derived install_close_epoch with a test that fails if either constant changes, and (5) updates every runbook and handback line that quotes 85 minutes to the new figure, glossed in plain words. Every t0 gate (census, load, HID idle, boot clock, custody) is unchanged and a grep for their thresholds in the diff is empty. Lands under the twelve-row gate. The science is not weakened because no measurement-side gate or lead moves; only the flat install pad shrinks."
+      },
+      "authority": {
+        "label": "2026-09-15 ~23:20 PDT: Ed's remark on the 85-minute arm-to-t0 floor (surely a way to speed this without weakening the science), relayed verbatim by the interactive session b0ae8462; registered by activation 08ca8197 (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/02-lead-margin-lane-registration.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "INSTALL_CLOSE_MARGIN_S and install_close_epoch exist only on the transactional-installer branch; the lane edits them after that branch merges so there is one home for the constant",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "INSTALL-WINDOWS-MULTI-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Shorten the arm-to-t0 floor without touching any measurement gate. Today install_close_epoch = t0 - PLAN_LEAD_S - INSTALL_CLOSE_MARGIN_S: the 25-minute PLAN_LEAD_S is the resident-magistrate deadline chain (TERM at 16 minutes, KILL at 15, so the magistrate is provably gone before t0) and INSTALL_CLOSE_MARGIN_S = 3600 s is a flat mechanism pad on top of it, giving an 85-minute floor between the last permitted install and t0. Ed, 2026-09-15 ~23:20 PDT, verbatim as relayed: \"surely a way to speed this without weakening the science\". The floor multiplies directly into how many quiet windows fit in a day (the quiet-windows-any-time rule), so it is P1. The lane reduces the pad to a value justified by what it actually protects, keeps the 25-minute lead, and pins the result with tests and runbook text.",
+      "id": "LEAD-MARGIN-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 210,
+      "status": "blocked",
+      "status_note": "2026-09-15 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; registration only, no constant changed; status blocked until INSTALL-WINDOWS-MULTI-01 lands (hard start dependency on INSTALL-WINDOWS-MULTI-01 (the constant lives on that branch). The seat must read the pad's history before proposing the value; 5 minutes is the relayed proposal, not a ruling.)",
+      "stop_card": null
+    },
     "LINE-AUDIT-GUARD-01": {
       "acceptance": {
         "evidence": [
