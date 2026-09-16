@@ -1887,6 +1887,37 @@
       "status_note": "D-173 is proposed and provisional. The gate waits on the seam plus four reviewed re-landings; Ed has been notified and may veto.",
       "stop_card": null
     },
+    "DATA-OFFLOAD-ICLOUD-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-activation-08ca8197/01-data-offload-lane-registration.md (registration record: Ed's instruction as relayed verbatim by the interactive session b0ae8462 at ~22:15 PDT 2026-09-15 over the cross-session channel, not through a directive issue; the sizes and paths of the candidate archives as found by this activation)",
+          "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md (UPDATE 2026-09-15 19:50 PDT: the fseventsd blow-up and restart that make local data volume a machine-health concern)",
+          "docs/process_traces/2026-09-15-activation-08ca8197/00-launch-record.md (State found: /tmp/magistrate-* archives already moved to ~/night-archive/magistrate-tmp-20260915 by the interactive session before the restart)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/DATA-OFFLOAD-ICLOUD-01/acceptance",
+          "label": "DATA-OFFLOAD-ICLOUD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A first offload of ~/night-archive into iCloud Drive with a SHA-256 manifest written before the copy, every copied file's digest re-read from the iCloud location and matched against the manifest, and only then the local originals removed, leaving a local pointer file (the iCloud path plus the manifest digest) where the archive used to be; Ed's YES on the manifest precedes the first deletion because deleting originals is irreversible and the instruction arrived by relay, not by directive issue (rule 11); later offloads under the same procedure are standing. The procedure is written into the session-end bookkeeping step of docs/orchestration.md (step 7, Bookkeeping) as a checklist item, glossed in plain words, and that doc edit lands under the normal review gate (a process-doc change is not the magistrate's or lieutenant's to ratify alone). A never-sync list is part of the procedure and of the doc: live worktrees, the canonical repository, ~/night-custody, active measurement roots and any path a night plan pins are never placed under iCloud sync, because the sync client adds file-system churn during measurement windows (the fseventsd lesson). Not night-critical; no offload runs inside a plan span."
+      },
+      "authority": {
+        "label": "2026-09-15 ~22:15 PDT: Ed's instruction (remote control), relayed verbatim by the interactive session b0ae8462; registered by activation 08ca8197 (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/01-data-offload-lane-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Standing lane: at every session-end bookkeeping, move CLOSED local archives into iCloud Drive and leave only a pointer plus a verified SHA-256 manifest behind. Candidates: ~/night-archive/* (retired plan roots and magistrate temp archives), retired measurement bundles whose custody digests are already recorded in the repository, and old codex-run-v3 scope data. Ed, 2026-09-15 ~22:15 PDT, verbatim as relayed: \"Also, keep in mind: consistently offload as much local data onto iCloud as possible.\" The motive is machine health: the 2026-09-15 restart was forced by fseventsd growing to about 61 GB after thirteen days of watching hundreds of worktrees, tens of GB of temp data and archives; the measurement Mac must stay lean between windows.",
+      "id": "DATA-OFFLOAD-ICLOUD-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 209,
+      "status": "queued",
+      "status_note": "2026-09-15 activation 08ca8197: registered from Ed's instruction as relayed by the interactive session b0ae8462; registration only, nothing was copied or deleted. The first offload waits for Ed's YES on its manifest (irreversible deletion; instruction arrived by relay); after that the lane is standing at every session end. Related: WORKTREE-PRUNE-01, TEMP-HYGIENE-IW-TMP-01 (local churn sources), and the never-sync list above.",
+      "stop_card": null
+    },
     "DECISION-LOG-RATIFY": {
       "acceptance": {
         "evidence": [
