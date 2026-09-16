@@ -6758,6 +6758,38 @@
       "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 from the restart census; not started; registration only, nothing was deleted. Depends in practice on INSTALL-WINDOWS-MULTI-01 landing first, because the leaking module lives on that branch. Sibling lanes WORKTREE-PRUNE-01 and FIXTURE-ORPHAN-SENTINEL-01.",
       "stop_card": null
     },
+    "TEST-CANONICAL-PATH-DEPENDENCY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-interactive-b0ae8462/16-quick-suite-round-1-report.md (flag F3: tests reach the canonical checkout at run time regardless of the worktree they run in)",
+          "docs/process_traces/2026-09-15-activation-08ca8197/05-test-canonical-path-lane-registration.md (registration record: grep of tests/ and joulewise/ for the literal /Users/edr/code/JouleWise and ~/code/JouleWise at main 623a6c01 = 8 files, listed with line numbers; which of them touch the filesystem and which only assert a string is the seat's first deliverable)",
+          "tests/test_paper_round7_artifacts.py:43 (R7F_CORPUS_ROOT defaults to the canonical checkout), tests/test_admit_model_panel_entry.py:17 (PYTHON = the canonical .venv interpreter), tests/test_rpt001_report_slice.py:36 (CONTROLLED_RUNS under the canonical runs/), tests/test_floor_extraction.py:3197,4256, tests/test_run_campaign.py:76-77 (canonical campaign logs) at main 623a6c01",
+          "tests/test_install_magistrate_watchdog.py:26,94, tests/test_arm_readiness_schemas.py:1697,1752, tests/test_magistrate_watchdog.py:2102 at main 623a6c01 (the literal appears as an asserted STRING about inventory or launcher content, not as a path the test opens; the structural test must distinguish these)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-CANONICAL-PATH-DEPENDENCY-01/acceptance",
+          "label": "TEST-CANONICAL-PATH-DEPENDENCY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every test derives its repository root from its own file location (or from an explicit, documented environment override) and never opens, executes or imports anything under the canonical checkout by literal path; a structural test greps tests/ and joulewise/ for the literal /Users/edr/code/JouleWise and for expanduser forms of ~/code/JouleWise and fails on any occurrence outside a small allow-list of string-only assertions (inventory content, launcher text), each allow-listed line carrying a comment naming why the string is data and not a path. Proof of hermeticity: the quick and touched tiers run green from a linked worktree with the canonical checkout renamed away for the duration of the run (or with a fake canonical path that would fail loudly if touched), recorded in the landing run report. No test deleted (D-101 addendum II); fixtures that genuinely need corpus data get an explicit override with a skip whose reason names the override. Not night-critical."
+      },
+      "authority": {
+        "label": "2026-09-15 interactive session b0ae8462 record 16 flag F3 (quick-suite seat finding); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-interactive-b0ae8462/16-quick-suite-round-1-report.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make the test suite hermetic with respect to the checkout it runs in. Several tests reach the CANONICAL checkout /Users/edr/code/JouleWise at run time regardless of the worktree they run in: tests/test_paper_round7_artifacts defaults its corpus reads there (the R7F_CORPUS_ROOT override exists but is not the default), tests/test_admit_model_panel_entry invokes the canonical .venv Python, tests/test_rpt001_report_slice and tests/test_run_campaign read canonical runs/ paths, tests/test_floor_extraction builds evidence paths from it, and discovery imports check canonical corpus paths. A seat running tests in a worktree therefore reads state from a different checkout (never writes), so a full-suite or quick-tier run in a worktree is not hermetic and can pass or fail on the canonical tree's state rather than the branch under test. Found by the quick-suite seat (record 16 flag F3) while the interactive session b0ae8462 was building the seat-side quick/touched tiers.",
+      "id": "TEST-CANONICAL-PATH-DEPENDENCY-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 211,
+      "status": "queued",
+      "status_note": "2026-09-15 activation 08ca8197: registered at the interactive session b0ae8462's request from its record 16 flag F3; registration only; not started; not night-critical. First deliverable is the classification of the 8 literal-path files into filesystem-touching versus string-asserting, then the structural guard. Related: WORKTREE-PRUNE-01 (worktree hygiene) and the seat-side quick/touched tiers the interactive session is building.",
+      "stop_card": null
+    },
     "TEST-SPEED-01": {
       "acceptance": {
         "evidence": [
