@@ -340,6 +340,40 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue((night / "refusal.json").is_file())
         self.assertEqual(calls, [])
 
+    def test_real_idle_agent_hit_refuses_without_chain_or_pack_authoring(self) -> None:
+        self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n")
+        ]
+        events = []
+        original_run = self.source.run
+        def probe(argv):
+            events.append(tuple(argv))
+            return original_run(argv)
+        original_read = Path.read_bytes
+        def read(path):
+            if path == self.plan_path.resolve():
+                events.append("plan")
+            return original_read(path)
+        self.probes_mock.return_value = replace(self.source.probes(), run=probe)
+        with mock.patch.object(Path, "read_bytes", read), \
+             mock.patch.object(self.driver, "_prepare_pack_night") as prepare, \
+             mock.patch.object(self.driver, "_author_pack_arm") as author:
+            code, calls = self._run_night()
+        self.assertEqual(3, code)
+        self.assertEqual([], calls)
+        prepare.assert_not_called()
+        author.assert_not_called()
+        self.assertEqual(("/usr/bin/pgrep", "-lf", "codex|claude|t3"), events[0])
+        night = self.custody / "night"
+        for name in ("receipt.json", "refusal.json"):
+            record = json.loads((night / name).read_text())
+            self.assertEqual("night_refused_agent_present", record["refusal"]["reason"])
+            self.assertEqual("20 claude\n", record["refusal"]["evidence"][0]["stdout"])
+        result = json.loads((night / "result.json").read_text())
+        self.assertEqual("REFUSED", result["verdict"])
+        self.assertEqual("night_refused_agent_present", result["aborted_reason"])
+        self.assertFalse((night / "go_receipt.json").exists())
+
     def test_go_spawns_chain_once_even_if_the_chain_fails(self) -> None:
         exit_code, calls = self._run_night(return_code=17)
         self.assertEqual(exit_code, 5)
@@ -572,6 +606,28 @@ runpy.run_path(script, run_name='__main__')
         )
         self.assertEqual(exited["exit_code"], 0)
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+
+    def test_idle_agent_appearing_after_go_still_aborts_real_chain(self) -> None:
+        self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n"),
+        ]
+        calls, spawn = self._popen_recorder(running_once=True)
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn), \
+             mock.patch.object(self.driver.os, "killpg") as kill_group, \
+             mock.patch.object(self.driver.time, "sleep"):
+            self.assertEqual(4, self.driver.run_night(self.plan_path))
+        kill_group.assert_called_once_with(4242, self.driver.signal.SIGTERM)
+        self.assertEqual([["/bin/zsh", str(self.chain)]], calls)
+        night = self.custody / "night"
+        receipt = json.loads((night / "receipt.json").read_text())
+        result = json.loads((night / "result.json").read_text())
+        refusal = json.loads((night / "refusal.json").read_text())
+        self.assertEqual("GO", receipt["verdict"])
+        self.assertEqual("night_aborted_agent_present", result["aborted_reason"])
+        self.assertEqual("night_aborted_agent_present", refusal["refusal"]["reason"])
+        self.assertEqual("20 claude\n", result["census_hits"][0]["stdout"])
+        self.assertEqual(["/usr/bin/pgrep", "-lf", "codex|claude|t3"], result["census_hits"][0]["argv"])
 
     def test_courier_uses_one_launch_three_retries_and_every_backoff(self) -> None:
         plan = self.driver._load_plan(self.plan_path)
@@ -1239,6 +1295,9 @@ runpy.run_path(script, run_name='__main__')
             exit_code = self.driver.run_night(self.plan_path)
         night = self.custody / "night"
         result = json.loads((night / "result.json").read_text())
+        receipt = json.loads((night / "receipt.json").read_text())
+        self.assertEqual("REFUSED", receipt["verdict"])
+        self.assertEqual("night_refused_agent_present", receipt["refusal"]["reason"])
         self.assertEqual(exit_code, self.driver.EXIT_REFUSED)
         self.assertEqual(result["verdict"], "REHEARSAL_ONLY")
         self.assertGreater(result["census_count"], 0)
@@ -1429,15 +1488,18 @@ runpy.run_path(script, run_name='__main__')
                          self.driver.run_courier.call_args.kwargs["deadman_epoch_s"])
 
     def test_install_close_precedes_the_plan_span_by_the_margin(self) -> None:
-        from scripts.magistrate_watchdog import PLAN_LEAD_S
+        from scripts.magistrate_watchdog import PLAN_LEAD_S, REQUEST_LEAD_S
         plan = self.driver._load_plan(self.plan_path)
+        self.assertEqual(self.driver.INSTALL_CLOSE_MARGIN_S, 120)
         self.assertEqual(plan.t0_epoch_s - PLAN_LEAD_S - self.driver.install_close_epoch(plan),
                          self.driver.INSTALL_CLOSE_MARGIN_S)
+        self.assertLess(self.driver.install_close_epoch(plan),
+                        plan.t0_epoch_s - REQUEST_LEAD_S)
 
-    def test_fixed_epoch_install_close_is_1799994900(self) -> None:
+    def test_fixed_epoch_install_close_is_1799999400(self) -> None:
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
                        window_max_s=9000)
-        self.assertEqual(1799994900, self.driver.install_close_epoch(plan))
+        self.assertEqual(1799999400, self.driver.install_close_epoch(plan))
 
     def test_fixed_epoch_deadman_is_1800012900(self) -> None:
         plan = replace(self.driver._load_plan(self.plan_path), t0_epoch_s=1800000000,
@@ -2433,6 +2495,30 @@ class PackNightProducerTests(unittest.TestCase):
         self.author.author_arm_readiness_evidence_t0.assert_not_called()
         self.assertEqual([], calls)
         self.assertFalse((self.custody / "night/go_receipt.json").exists())
+
+    def test_idle_agent_hit_preserves_initial_refusal_code(self):
+        self.probe_source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="20 claude\n")
+        ]
+        with mock.patch.object(self.driver, "_prepare_pack_night") as prepare:
+            code, calls = self.run_driver()
+        self.assertEqual(3, code)
+        self.assertEqual([], calls)
+        self.assertEqual(["census", "PLAN_BYTES"], self.events[:2])
+        prepare.assert_not_called()
+        self.author.author_arm_readiness_evidence_t0.assert_not_called()
+        self.readiness.generate_arm_receipt.assert_not_called()
+        night = self.custody / "night"
+        for name in ("receipt.json", "refusal.json"):
+            record = json.loads((night / name).read_text())
+            self.assertEqual("night_refused_agent_present", record["refusal"]["reason"])
+        result = json.loads((night / "result.json").read_text())
+        self.assertEqual("REFUSED", result["verdict"])
+        self.assertEqual("night_refused_agent_present", result["aborted_reason"])
+        census = json.loads((night / "censuses.jsonl").read_text().splitlines()[0])
+        self.assertEqual(["/usr/bin/pgrep", "-lf", "codex|claude|t3"], census["argv"])
+        self.assertEqual("20 claude\n", census["stdout"])
+        self.assertFalse((night / "go_receipt.json").exists())
 
     def test_pack_digest_mismatch_at_preparation_and_go_refuses_without_go(self):
         self.readiness.committed_pack_tree_sha256.return_value = "f" * 64

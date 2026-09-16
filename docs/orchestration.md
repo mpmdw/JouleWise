@@ -195,6 +195,27 @@ This procedure does not expand commit, push, merge, or deployment authority.
     post-large-workload meta-reassessment (owned by operation-loop §10)
     always fires, and it runs LAST.
 
+### Session-end fixture census
+
+- Run `python3 scripts/fixture_orphan_census.py --fail-on-orphans` before
+  handing off a session and record its JSON rows and count. Exit 0 means an
+  empty census, 1 means registered fixtures with parent PID 1 were found,
+  and 2 means observation or registry validation failed (not a clean census).
+  Without `--fail-on-orphans`, successful observation exits 0 even with matches.
+- Fixture authors extend `tests/fixture_signatures.json` with a unique `id`,
+  a `command_regex` specific to the fixture's displayed argv, and a `source`
+  pointing to its launcher. Add positive and non-fixture negative cases to
+  `tests/test_fixture_orphan_census.py`. Do not register generic production
+  worker or model commands. The NV5 fixture runs the real node worker against
+  a fake vLLM; its task path distinguishes it from production workers.
+- The watchdog records the same census and count in its launch-time
+  `fixture_orphan_census` event in `events.jsonl`. An acquisition error has
+  null count/rows and an error message. This is informational: launch refusals
+  and the night gate's agent census are unchanged. This bounded sentinel increment
+  does not wire prewindow refusal or culling. It never signals a process;
+  any future culling workflow needs separate authorization and identity
+  revalidation outside plan spans. A ps snapshot is observation, not kill authority.
+
 ### Stop cards and paused work
 
 When a session stops with live work in progress, the lead creates or updates
@@ -410,6 +431,24 @@ Pointer map only; mechanics stay in their owning files.
   `session-close`; the reduced discussion header, tolerant return envelope,
   receipt anchoring, and recovery primitives are defined only in
   `docs/contracts/bridge_protocol.md` (`bridge-protocol/v1.1`).
+- Delegated-seat verification: run
+  `python3 scripts/quick_suite.py --tier touched --since <BASE_HEAD>` before
+  handing back; paste its summary. The default `--tier quick` runs the state
+  and documentation fences plus measured modules below `--max-seconds` (default
+  five seconds), excluding exclusive and split modules. A211
+  (`TEST-CANONICAL-PATH-DEPENDENCY-01`) modules with canonical-checkout
+  dependencies are explicitly denied in both tiers and single-module replays
+  until that lane fixes them; the worktree-local `R7F_CORPUS_ROOT` override
+  remains in force. Touched adds tests
+  naming changed paths/modules, matching test-name prefixes, edited tests, and
+  every module with an unknown weight. Every exclusion is listed. Each module
+  uses the shard runner in a fresh process with a temporary directory outside
+  the checkout; `--workers` bounds parallelism, and touched exclusive modules
+  run alone. Measurements above three times the timing-map weight print a
+  `STALE WEIGHT` finding. Failures include an exact single-module replay command.
+  CI runs quick first on Python 3.13 with four workers after interpreter
+  selection; ordinary and exclusive test jobs require its success. The lead
+  retains ownership of full-suite and live verification.
 - Skill-only mechanics on the operator's machine live under
   `~/.claude/skills`: `operation-loop` is the conductor,
   `codex-delegation` is the invocation/consumption contract,
