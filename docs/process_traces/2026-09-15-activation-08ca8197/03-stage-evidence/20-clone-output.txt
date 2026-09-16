@@ -1,0 +1,16 @@
+Cloning into '/Users/edr/JouleWise-measurement-rehearsal-20260916'...
+Updating files:  96% (7152/7440)Updating files:  97% (7217/7440)Updating files:  98% (7292/7440)Updating files:  99% (7366/7440)Updating files: 100% (7440/7440)Updating files: 100% (7440/7440), done.
+HEAD is now at 1f721fbf Activation 08ca8197: amend LEAD-MARGIN-01 (A210) — resident lead un-fenced per Ed's 23:30 relayed remark; targets 5/5/3/2 min + ~2 min install pad (floor ~10 min); science quality the only gate; record 02 amendment
+Python 3.13.1
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: /Users/edr/JouleWise-measurement-rehearsal-20260916/.venv/bin/python -m pip install --upgrade pip
+WARNING: The candidate selected for download or install is a yanked version: 'charset-normalizer' candidate (version 3.4.8 at https://files.pythonhosted.org/packages/11/49/fe5a8572a70cd9cba79f80af9388ac8c5c914ed4459b956f940244e499a5/charset_normalizer-3.4.8-cp313-cp313-macosx_10_13_universal2.whl (from https://pypi.org/simple/charset-normalizer/) (requires-python:>=3.7))
+Reason for being yanked: <none given>
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: /Users/edr/JouleWise-measurement-rehearsal-20260916/.venv/bin/python -m pip install --upgrade pip
+LOCK DIFF EMPTY rc=0
+joulewise from /Users/edr/JouleWise-measurement-rehearsal-20260916/joulewise/__init__.py
+mlx 0.31.2 mlx_lm 0.31.3
+CLONE BLOCK DONE 23:22:34
