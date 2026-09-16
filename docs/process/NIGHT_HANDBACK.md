@@ -149,75 +149,113 @@ All agents must still close before the plan span: the unchanged night gate recor
 
 ## Purpose of this night
 
-Plan `rehearsal-20260916c`, class `REHEARSAL_STUB`, is planned for 2026-09-16
-at 03:25:00 PDT (`t0`, epoch 1789554300) with a 900-second window
-(`window_max_s`; the window ends at 03:40:00 PDT, epoch 1789555200). The
-courier deadline is `t0 + 900 + 300`, epoch 1789555500, 03:45:00 PDT; this is
-also the **completion boundary**. The driver runs its built-in stub,
-`sleep 2; echo REHEARSAL`: no pack, no model, no measurement, no sudo. The
-**dead-man**, the second launchd job that recovers missing delivery after
-completion, is `60 × ceil((1789555500 + 3600) / 60) = 1789559100`, 04:45:00 PDT
-on 2026-09-16, repeating daily at that local minute until uninstalled. This
+This plan is the SUCCESSOR of `d079-epoch-25g83-derivation-n1-20260915`, which
+fired at 02:56:03 PDT on 2026-09-15 and was refused at its own t0 by the
+machine-quiet gate (`night_refused_not_quiet`: 1-minute load 2.55 against the
+fixed maximum 2.0, caused by `fseventsd` at ~184 % CPU; census clean; see
+§Executed). Same purpose, same rule, same chain and pre-registration; its own
+plan id, session id, night root, desk inputs and wrapper. The load cause was
+cleared by the 2026-09-15 19:55 PDT restart (`fseventsd` at 0.0 % CPU at
+03:55 PDT on 2026-09-16). The 2026-09-14 candidate with this plan id (H
+`3c8bd220`) was never authored as a plan; this commit re-plans the id.
+
+Plan `d079-epoch-25g83-derivation-n1-20260916`, class `DIAGNOSTIC_NO_PACK`,
+is planned for 2026-09-16 at 05:40:00 PDT (`t0`, epoch 1789562400,
+12:40:00 UTC) with a 9000-second window (`window_max_s`; the acquisition
+allocation ends at 08:10:00 PDT, epoch 1789571400). The courier deadline is
+`t0 + 9000 + 300`, epoch 1789571700, 08:15:00 PDT; this is also the
+**completion boundary**. The **dead-man**, the second launchd job that
+recovers missing delivery after completion, is
+`60 × ceil((1789571700 + 3600) / 60) = 1789575300`, 09:15:00 PDT on
+2026-09-16, repeating daily at that local minute until uninstalled. This
 notice describes the planned night; the arm record establishes whether
 installation happened.
 
-This stub is the first night armed under the machinery merged on 2026-09-16:
-the transactional installer (INSTALL-WINDOWS-MULTI-01, PR #341: several
-install spans per day, `t0` on any whole minute, record-and-poll signals), the
-shortened arm-to-t0 floor (LEAD-MARGIN-01, PR #344: PLAN/REQUEST/TERM/KILL leads
-of 8/8/6/5 minutes and a 2-minute install pad, so install close is
-`t0 − 10 min`), the stub-only idle-interactive arm census
-(ARM-CENSUS-IDLE-INTERACTIVE-01, PR #343), the pre-authorized arm-retry class
-(ARM-RETRY-CLASS-01, PR #342) and the staged-plan `--render-only` validation
-(PR #346). It rehearses, live under launchd and from a fresh clone: the install
-transaction, the resident ladder at the new leads, the driver's gate rows on a
-`REHEARSAL_STUB`, and the courier. It acquires nothing.
+**What the night does.** It is the epoch-equivalence check that Ed's
+directive issue 316 ruled on 2026-09-10, transcribed as revision 2 of
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the
+dated addendum under D-102. The 2026-09-02 macOS update moved `os_build`
+from 25F84 to 25G83 and replaced the `/usr/bin/powermetrics` binary, so the
+issued D-079 calibration acceptance (`d079_calibration_acceptance_v2_n17_r6`)
+no longer matches this machine and ordinary capture refuses. Night one asks
+one instrument question: did the update move the clock-anchor bound outside
+the envelope the instrument was already characterised against? The night
+opens one agent-free `derivation`-kind ledger session of 12 declared slots
+at head-equals-pin (ledger head sequence 76), settles once for 600 s, then
+takes twelve derivation-only `powermetrics` fiducial captures at a 600 s
+start-to-start cadence (programmed span 7680 s). No model runs, no
+measurement pack, no Git, no claim output. The plan's `chain_path` is the
+plan-pinned wrapper `<night root>/chain.zsh`, emitted by
+`scripts/gen_derivation_night.py`, which carries the night's environment as
+literals, verifies the tracked chain's bytes and `exec`s
+`scripts/night_chains/calibration_derivation_only.zsh` (SHA-256
+`b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf`, the value
+the pre-registration's chain-digest field already carries; unchanged since
+its sealing).
 
-Ed's interactive session (and its Codex seats) may still be alive at `t0`. For
-a stub the unfiltered t0 census then records `night_refused_agent_present`
-and the driver retains its harmless-stub continuation: the stub still runs and
-the hit is recorded. That is an expected, correct outcome for this rehearsal
-of the machinery; a real night refuses on the same hit and starts no chain.
+**What happens with the result, fixed before the night** (runbook
+`docs/phase_2/derivation_night_runbook.md` §2.5). Let m be the number of
+retained captures: ledger disposition `valid` and a stored anchor record
+that resolves. m < 6 is INCONCLUSIVE: one more equivalence night, nothing
+else. PASS is every retained `b_fiducial_s` at or below 0.032898493715362 s
+AND the retained range (largest minus smallest) at or below 0.009724 s; on
+PASS the dated D-102 continuation addendum is written and real G2-a windows
+follow under the ordinary window path. FAIL is anything else; on FAIL
+revision 1's three-night derivation proceeds with this night as night one.
+No member value is read by anyone before the session is terminal; the desk
+tool `scripts/epoch_equivalence_check.py` applies the rule at harvest.
 
-`repo_head = measurement_head = H`, where H is **this commit**, the main
-commit that rewrites this handback for this night. The fresh clone at H is
-`/Users/edr/JouleWise-measurement-rehearsal-20260916c` (a `.venv` whose
-`bin/python` is Python 3.13 from `env/mac-measurement-lock.txt`, the
-interpreter both LaunchAgents name by absolute path; the canonical 76-record
-ledger restored byte-exact for the desk checks). Both night agents are
-installed from that clone. It serves only this stub; it is retired with the
-plan root after harvest and never reused for a real plan.
+**Pins.** `repo_head = measurement_head = H`, where H is **this commit**: the
+main commit that rewrites this handback and refreshes the note on the
+production inventory row for the measurement root (the row itself was
+appended by `3c8bd220`). The pre-registration's five commit-time fields
+(authoring day 10, MLX 0.31.2, head pin 76 /
+`08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`, chain
+digest above) are unchanged from the 2026-09-13 sealing; the file's SHA-256
+is `84b820b9069c5b7b34b35e1b8fcd1c436c54ded04cbb24c6c985bbc867ce0b5c`. The
+measurement root is `/Users/edr/JouleWise-measurement-20260916-derivation`, a
+fresh GitHub clone detached at H whose `.venv/bin/python` is Python 3.13
+built from `env/mac-measurement-lock.txt` (the clone of the same name made
+on 2026-09-14 at `3c8bd220` was moved out of this path unused before the
+fresh clone); both LaunchAgents are installed FROM it and name that
+interpreter by absolute path; its
+`runs/calibration_observation_ledger.jsonl` is the canonical 76-record
+ledger restored byte-exact and authenticated against its committed head pin
+with custody verification. The night root (`custody_root`) is
+`/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916`; the runs
+root is `<night root>/runs`; the chain's own log is
+`<night root>/operator_logs/derivation-chain.log`. The session id equals the
+plan id. The evidence root id is
+`evidence-d079-epoch-25g83-derivation-n1-20260916`, registered by this
+night's arm record. The frozen calibration plan is the committed bytes of
+`configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json` copied to
+`<night root>/calibration_plan.json`: the ledger session records it by
+`plan_id` and SHA-256 as an identity binding, and a derivation-only capture
+reads nothing else from it. The two desk inputs `identity-epoch.json` and
+`t1-bindings.json` are written into the night root by
+`scripts/write_derivation_night_inputs.py` at the desk block and their
+digests are baked into the wrapper.
 
-The consolidated notice with these pins is sent after commit H and before the
-plan is moved into its discoverable place; Ed's NO on the notice thread stands
-the night down. The arming activation (headless magistrate `83d93f5a`) exits
-after recording the arm. The plan span opens, and the watchdog's stand-down
-request lands, at `t0 − 8 min` = 03:17:00 PDT (epoch 1789553820); TERM is
-`t0 − 6 min` (1789553940, 03:19:00) and KILL is `t0 − 5 min` (1789554000,
-03:20:00). Install close is `t0 − 10 min` = 03:15:00 PDT (1789553700). The
-install-span list is the shipped whole-day span (00:00–24:00 local).
+**Census.** This is a real night: the t0 census has no idle-interactive
+exemption (that exemption is stub-only, ARM-CENSUS-IDLE-INTERACTIVE-01), and
+the arm-time census classifies every `codex|claude|t3` match by ancestry and
+aborts on any foreign process. Ed's interactive session `joulewise-95` (pid
+7066) was alive when this commit was written; it estimated its own exit by
+05:00 PDT, and the notice is not sent, and nothing is published, while it
+lives. If it is still alive at 05:25 PDT the candidate is not armed and is
+re-planned under a new H with a later t0.
 
-The predecessor plan `d079-epoch-25g83-derivation-n1-20260915` was refused at
-its own t0 on 2026-09-15, harvested, its agents uninstalled, and its plan root
-retired to `~/night-archive` on 2026-09-15 at 23:25 PDT (activation
-`08ca8197`, record 04). The `20260916` successor prepared by record 50 was
-never authored as a plan; the equivalence science night is re-planned after
-this stub under §Next lane.
-
-The first candidate for this rehearsal, plan `rehearsal-20260916` at H
-`cf249594` (t0 03:00:00 PDT 2026-09-16), was staged and preflighted by
-activation `08ca8197` but NEVER published: arm attempt 1 aborted on
-`arm_transport` (the Gmail connector was expired in that process), activation
-`736e2aed` spawned without Gmail tools during the claude.ai connector outage,
-and the candidate lapsed unarmed at its install close (02:50). Its staged
-bytes and attempt evidence stay under `~/night-plan-staging/rehearsal-20260916`
-(no plan under night-custody; nothing was installed). This plan carries the
-`c` suffix so that it shares no path with that candidate. Ed's directive
-issue #349 (2026-09-16 02:40 PDT) rules that when the Gmail connector is
-unavailable the arm notice may be posted as a GitHub issue labelled
-`directive-notice` with the same content; the arm record names the transport
-used. Email remains primary and is the transport for this plan's notice when
-it sends.
+**Timeline.** Both agents are installed on 2026-09-16 inside the shipped
+whole-day install span (00:00–24:00 local, epoch 1789542000 → 1789628400
+excluded), after the notice and before install close `t0 − 10 min` =
+05:30:00 PDT (epoch 1789561800). The watchdog's plan span opens, and its
+stand-down request lands, at `t0 − 8 min` = 05:32:00 PDT (1789561920); TERM
+is `t0 − 6 min` (1789562040, 05:34:00) and KILL is `t0 − 5 min` (1789562100,
+05:35:00). The consolidated notice with these pins is sent after commit H
+and before the plan is moved into its discoverable place; Ed's NO on the
+notice thread stands the night down. The arming activation (headless
+magistrate `0bd12d79`) exits after recording the arm. Power source,
+powermode and the timer probe are recorded at arm time.
 
 ## Executed — rehearsal-20260909 (history)
 
@@ -345,55 +383,70 @@ span, sequence 161) and the courier all behaved as specified.
 
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/rehearsal-20260916c`; driver records
-  in `night/` — `result.json` (expected verdict `REHEARSAL_ONLY` with
-  `chain_exit_code` 0 on a clean census; if an agent session is alive at t0
-  the gate records `night_refused_agent_present` and the stub still completes),
-  `receipt.json` or `refusal.json` as `result.json` directs (C2
-  `NOT_APPLICABLE` / `no_pack_by_design`; no chain digest to bind, the stub has
-  no wrapper), `chain.started`, `chain.exited`, `censuses.jsonl`,
-  `chain.stdout.log` (`REHEARSAL`), `chain.stderr.log`, `courier.sent`,
-  `courier.json`, `courier.heartbeat`.
-- Driver log: `/Users/edr/night-custody/rehearsal-20260916c/night.log` — read
-  `night driver started` and the `night gate verdict=` line; a dead-man line
-  dated before completion is expected only if its daily minute occurred after
-  install (it does not: 04:45 is after completion).
+- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916`;
+  driver records in `night/` — `result.json` (expected verdict `GO` for
+  this class when every gate row passes, `chain_exit_code` 0),
+  `receipt.json` or `refusal.json` as `result.json` directs (C1 PASS with the
+  D-166 registration hash, C2 `NOT_APPLICABLE` / `no_pack_by_design`, C3, C4
+  and C5 PASS with C5's `chain_sha256` equal to the wrapper's digest),
+  `chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log`,
+  `chain.stderr.log` (the wrapper's `FAIL <reason>` lines, if any),
+  `courier.sent`, `courier.json`, `courier.heartbeat`.
+- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night.log`
+  — `night driver started` and a `night gate verdict=` line for 05:40 PDT;
+  no dead-man line is expected before completion (09:15 is after it).
+- Chain log: `<custody root>/operator_logs/derivation-chain.log` —
+  `session_open kind=derivation slots=12`, `chain_start` (its timestamp
+  minus `t0` is the realized Δ), `settle_complete`, twelve `slot_start`
+  lines each answered by `slot_end … disposition=valid`,
+  `slot_end … disposition=non-valid` or `slot_refused`, then
+  `derivation_night_complete slots=12` or `slot_unused … reason=window_exhausted`
+  followed by `session_abort`.
+- Captures: `<custody root>/runs/instrument_validation/<session id>-dNN/`
+  (`manifest.json`, `instrument_evidence.json`, raw trace); ledger rows in
+  the clone's `runs/calibration_observation_ledger.jsonl`. The clone and the
+  night root are production custody after this night and are RETAINED, not
+  removed.
 - Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
   `launchd.night.err` must be EMPTY.
-- Results branch: `night-results/rehearsal-20260916c` on `origin`, if the
-  driver's push succeeded — verify, do not presume; trace directory
-  `docs/process_traces/night-results/rehearsal-20260916c/`.
-- No captures, no ledger rows, no chain log: a stub acquires nothing.
+- Results branch: `night-results/d079-epoch-25g83-derivation-n1-20260916` on
+  `origin`, if the driver's push succeeded — verify, do not presume.
 
 ## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`rehearsal-20260916c` / `/Users/edr/JouleWise-measurement-rehearsal-20260916c` /
-this commit) harvests only after the completion boundary (03:45:00 PDT) has
-passed and `courier.sent` exists: read `result.json`, the receipt or refusal,
-`night.log` and both launchd streams; preserve the custody root byte-exact
-outside watchdog discovery with an `lstat` inventory before anything is moved.
-The acceptance for this stub is `result.json` verdict `REHEARSAL_ONLY` (or a
-recorded `night_refused_agent_present` hit with the stub still completing),
-`chain_exit_code` 0, and an EMPTY `launchd.night.err`. Any crash, a non-empty
-`launchd.night.err`, a `night_probe_error`, or an installer/launchd
-irregularity is a finding to cure before any further night.
+`d079-epoch-25g83-derivation-n1-20260916` /
+`/Users/edr/JouleWise-measurement-20260916-derivation` / this commit)
+harvests only after the completion boundary (08:15:00 PDT) has passed and
+`courier.sent` exists, per runbook §2: §2.0 rebuild the night's coordinates
+from the frozen triple; §2.1 read `result.json`, the receipt or refusal,
+`night.log`, the chain log and both launchd streams; preserve the custody
+root byte-exact outside watchdog discovery with an `lstat` inventory before
+anything is moved; §2.2 the ledger dry run (`check --session-ids` from the
+clone, counts and states only); §2.5 `scripts/epoch_equivalence_check.py`
+with `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json`, and
+the ONE action its outcome names (PASS → the dated D-102 continuation
+addendum through the normal gate, then real G2-a windows; FAIL → revision 1's
+three-night derivation with this night as night one; INCONCLUSIVE → one more
+equivalence night). A receipt refusing `night_refused_agent_present`,
+`night_refused_not_quiet` or `night_refused_hid_idle` is a correct refusal —
+the rows ran and refused — and the night is re-planned as a new plan, never
+re-armed on the same plan (REFUSAL-FAST-RETRY-01 is queued, not landed).
+Physics, evidence and pre-registration refusals stay on the cold-gate path;
+email Ed for those only.
 
 After the harvest, run `scripts/install_night_agent.sh --plan
-/Users/edr/night-custody/rehearsal-20260916c/night_plan.json --uninstall` FROM
-the clone and record its exit code. Only exit 0 permits retiring the plan root
-(byte-exact archive to `~/night-archive/rehearsal-20260916c-plan-root-retired-<epoch>`
-with `SHA256SUMS`, record-48 procedure) and removing the stub clone.
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json --uninstall`
+FROM the clone and record its exit code. The clone and the night root are
+production custody after a night that opened a session and are RETAINED;
+only a refused night's plan root is retired (byte-exact archive to
+`~/night-archive/<plan id>-plan-root-retired-<epoch>` with `SHA256SUMS`,
+record-48 procedure).
 
-Then the science: author the equivalence night per Ed's ruling in issue #316
-(night one = the equivalence check against the r6 operatives; the D-102
-addendum on PASS; the FAIL route's registration nights otherwise) as its own
-`DIAGNOSTIC_NO_PACK` plan under runbook §1.1–§1.5 on the merged main, with a
-clean all-agents-closed census (no stub exemption for that class), and arm it
-under this same handback procedure; loop under D-181 (windows whenever the
-machine is quiet). A t0 refusal on machine state follows REFUSAL-FAST-RETRY-01
-once it lands; until then it is harvested and re-planned. Physics, evidence and
-pre-registration refusals stay on the cold-gate path; email Ed for those only.
+Then loop under D-181 (windows whenever the machine is quiet): the next plan
+is authored as its own plan under runbook §1.1–§1.5 on the merged main, with
+a clean all-agents-closed census, and armed under this same handback
+procedure.
 
 For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
 named by the plan's `measurement_root`, with that checkout at the plan's
