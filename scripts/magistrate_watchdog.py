@@ -66,11 +66,27 @@ STOP_REPOSITORY = "https://github.com/mpmdw/JouleWise.git"
 STOP_REF_GLOB = "refs/heads/ops/stop*"
 POSITIVE_CONTROL_REF = "refs/heads/main"
 
-# File 15 rows 3-4: these are local-time/fence and resident deadlines.
-PLAN_LEAD_S = 25 * 60
-REQUEST_LEAD_S = 25 * 60
-TERM_LEAD_S = 16 * 60
-KILL_LEAD_S = 15 * 60
+# LEAD-MARGIN-01: 2b4476cb / hands-free-week file 15 introduced the resident
+# fence and cooperative/TERM/KILL ladder plus an untouched-idle allowance.
+# D-180 retained the span; D-181 permits windows whenever the machine is quiet.
+# PLAN=REQUEST at t0-8 min fences launches; the five-minute exit request is
+# a courtesy. TERM at t0-6 min overrides it after two minutes, then KILL at
+# t0-5 min follows one minute later.
+# The t0 census needs the magistrate, supervisor, and every Codex child gone.
+# With e^(-5/60) per 5 s sample, 300/360 s retain 0.674%/0.248% of excess
+# load. KILL/TERM leave 285/345 s after a nominal 15 s latency allowance:
+# 0.865%/0.318% remains; KILL clears load 2.0 for excess below about 116-173
+# at base 1.0-0.5. Poll/signalling/census/exit latency consumes this budget.
+# This budget is an opportunity to settle, not a guarantee of passing t0.
+# The 10 s resident poll fits the 120/60 s phase gaps (12/6 polls; nominal
+# observation slack 110/50 s). launchd's 300 s StartInterval starts/recovers
+# the supervisor and cannot guarantee these phases after supervisor failure.
+# Blocked I/O or scheduling can also delay enforcement. The unchanged t0
+# gates refuse a surviving tree or excess load: this is the fail-closed backstop.
+PLAN_LEAD_S = 8 * 60
+REQUEST_LEAD_S = 8 * 60
+TERM_LEAD_S = 6 * 60
+KILL_LEAD_S = 5 * 60
 SUPERVISOR_POLL_S = 10
 REMOTE_STOP_PROBE_CADENCE_S = 5 * 60
 STOP_COOPERATIVE_S = 9 * 60
@@ -1724,7 +1740,8 @@ class ResidentSupervisor:
             "reason": reason,
             "requested_epoch_s": now.timestamp(),
             "requested_monotonic": self.deps.monotonic(),
-            "exit_within_s": STOP_COOPERATIVE_S,
+            # Courtesy only: a plan's absolute TERM/KILL deadlines still win.
+            "exit_within_s": 300,
         }
         if plan is not None:
             value.update(

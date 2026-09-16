@@ -3048,6 +3048,37 @@
       "status_note": "2026-09-15 activation d6888966, cold gate 28 Q4 F4: registered by the magistrate from ruling 10 Q4, Opus pairing 12 and synthesis 13; recording a ruling, not issuing one; not started; not night-critical. Starts and lands only after INSTALL-WINDOWS-MULTI-01 merges, in its own small PR. The pending hard start dependency is omitted under the seat brief's explicit fallback because the schema requires status=blocked for that edge, while this registration requires status=queued; the post-merge ordering remains in this note and acceptance.",
       "stop_card": null
     },
+    "INSTALLER-FOLLOWUPS-REBASE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process/state_kernel.json /tasks/INSTALLER-BACKUP-WINDOW-01 (:3019, queued, rank 203) and /tasks/NIGHT-STREAM-PATHS-01 (:3957, queued, rank 176) at main d2cc8b5e: both still reference scripts/install_night_agent.sh and its retired mechanics (EXIT trap before mktemp, fake cp, shell line 125)",
+          "docs/process/state_kernel.json /tasks/INSTALL-WINDOWS-MULTI-01 (:2977) still queued at rank 0 at main d2cc8b5e although PR #341 merged at 2944a45d",
+          "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md (registration record)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/INSTALLER-FOLLOWUPS-REBASE-01/acceptance",
+          "label": "INSTALLER-FOLLOWUPS-REBASE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The acceptance and goal text of INSTALLER-BACKUP-WINDOW-01 and NIGHT-STREAM-PATHS-01 is rebased onto the merged engine joulewise/night_agent_install.py: prior-plist backups are Target.stage sidecars (the .prior files), directory creation is Prepared.custody_night, and every line number and shell anchor is replaced by the engine's function names so the rows can be executed against the code that exists; each rebased row keeps its original finding and must-die shape or records why the engine already discharges it (then the row closes with that evidence). INSTALL-WINDOWS-MULTI-01 moves to done with its PR #341 merge sha and the dependent rows' blocked states recompute. gen_state --check rc 0 and tests.test_gen_state green."
+      },
+      "authority": {
+        "label": "2026-09-16 interactive session b0ae8462 post-merge cross-unit review of the transactional installer (its record 25; seat report postmerge-astra); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Bookkeeping follow-through of the transactional installer merge (PR #341 at 2944a45d): two queued kernel rows, INSTALLER-BACKUP-WINDOW-01 and NIGHT-STREAM-PATHS-01, still prescribe edits to the retired zsh installer (an EXIT trap before mktemp, a fake cp, a shell line 125) that no longer exists in that form; their acceptance text must be rebased onto joulewise/night_agent_install.py, where backups are Target.stage sidecars and directory creation is Prepared.custody_night, and the merged INSTALL-WINDOWS-MULTI-01 row itself must move to done.",
+      "id": "INSTALLER-FOLLOWUPS-REBASE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 215,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from its post-merge review; registration only; not started. The INSTALL-WINDOWS-MULTI-01 status flip is that session's post-merge batch unless it hands it here.",
+      "stop_card": null
+    },
     "INSTRUMENT-PATH-PIN-01": {
       "acceptance": {
         "evidence": [
@@ -5909,6 +5940,38 @@
       "status_note": "2026-09-15 activation d6888966, cold gate 25 Q6: registered by the magistrate from ruling 10 as amended by Opus pairing 12 and synthesis 13; recording a ruling, not issuing one; not started. Separate Ed-visible docs-only item; §3 item 3 stays OUT of the INSTALL-WINDOWS-MULTI-01 diff. Ed approves or declines the proposed text; the registration file itself stays untouched; not night-critical.",
       "stop_card": null
     },
+    "RUNBOOK-SOURCE-MAP-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/phase_2/derivation_night_runbook.md:2555 (cites check_schedule in scripts/install_night_agent.sh) at main d2cc8b5e; grep check_schedule scripts/install_night_agent.sh is empty on main",
+          "joulewise/night_agent_install.py:556 (class Prepared) and :583 (def admit) at main d2cc8b5e: the admission that replaced check_schedule",
+          "tests/test_run_night.py:1020 (comment: so its 07:00 local dead-man is in the past) at main d2cc8b5e",
+          "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md (registration record)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RUNBOOK-SOURCE-MAP-01/acceptance",
+          "label": "RUNBOOK-SOURCE-MAP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every runbook and handback line that names a function or file of the retired shell installer points at the merged engine instead (check_schedule becomes Prepared.admit in joulewise/night_agent_install.py, with the section 7 fact table row updated), verified by a grep over docs/phase_2/derivation_night_runbook.md and docs/process/NIGHT_HANDBACK.md for the retired names that comes back empty; the obsolete fixed-07:00 dead-man comment in tests/test_run_night.py is rewritten to describe the current dead-man derivation or removed; no behaviour changes and no test is deleted."
+      },
+      "authority": {
+        "label": "2026-09-16 interactive session b0ae8462 post-merge cross-unit review of the transactional installer (its record 25; seat report postmerge-astra); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/09-installer-followups-and-runbook-map-lanes.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Source-map drift after the installer merge: docs/phase_2/derivation_night_runbook.md:2555 cites check_schedule in scripts/install_night_agent.sh, which no longer exists (the admission is now Prepared.admit at joulewise/night_agent_install.py:583), and tests/test_run_night.py:1020 keeps an obsolete fixed-07:00 dead-man comment. A runbook a reader must replicate from cannot point at code that is gone.",
+      "id": "RUNBOOK-SOURCE-MAP-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 216,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from its post-merge review; registration only; not started; docs and one comment, not night-critical.",
+      "stop_card": null
+    },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
       "acceptance": {
         "evidence": [
@@ -6840,6 +6903,37 @@
       "rank": 211,
       "status": "queued",
       "status_note": "2026-09-15 activation 08ca8197: registered at the interactive session b0ae8462's request from its record 16 flag F3; registration only; not started; not night-critical. First deliverable is the classification of the 8 literal-path files into filesystem-touching versus string-asserting, then the structural guard. Related: WORKTREE-PRUNE-01 (worktree hygiene) and the seat-side quick/touched tiers the interactive session is building.",
+      "stop_card": null
+    },
+    "TEST-PGREP-DIALECT-MULTILINE-01": {
+      "acceptance": {
+        "evidence": [
+          "tests/test_arm_readiness_evidence_t0.py:2690 (test_g4_real_ruled_census_pgrep_dialect) and :2741-2746 (real /usr/bin/pgrep -lf, then int(line.split(' ', 1)[0]) over every stdout line) at main 4c843126",
+          "docs/process_traces/2026-09-15-activation-08ca8197/07-test-pgrep-dialect-lane-registration.md (registration record; the failure text as reported by the interactive session b0ae8462, whose record 23 in docs/process_traces/2026-09-15-interactive-b0ae8462/ carries the evidence once it lands)",
+          "docs/process_traces/2026-09-15-interactive-b0ae8462/04-a173-design-astra.md (A173's own-module cure shape for census parsing, which this nit follows: PID set from pgrep -f, or tolerate non-PID lines)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-PGREP-DIALECT-MULTILINE-01/acceptance",
+          "label": "TEST-PGREP-DIALECT-MULTILINE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The test takes its PID set from PID-only output (pgrep -f without -l) or tolerates lines whose first token is not an integer (continuation lines of a multi-line argv), so a live process with a multi-line command line containing the pattern can no longer error the test; a regression spawns a decoy child whose argv carries a newline and the pattern and proves the test still reports the decoy's PID and does not raise; the G4 semantics the test kills (M10, a construct pgrep rejects or never matches) are unchanged and its must-die mutant still dies. Not night-critical; test-only."
+      },
+      "authority": {
+        "label": "2026-09-16 interactive session b0ae8462 (P3 nit from its running seats; record 23 in its trace dir); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/07-test-pgrep-dialect-lane-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Stop test_g4_real_ruled_census_pgrep_dialect (tests/test_arm_readiness_evidence_t0.py:2690) from erroring whenever a live process carries a multi-line argv that contains the pattern. The test runs the real pgrep -lf and parses every stdout line as <pid> <command>; pgrep -lf prints the full command line, so a process launched with a multi-line brief (tonight: Codex seats whose brief text mentions run_campaign) yields continuation lines that start with non-PID text and the parse raises invalid literal for int() with base 10: 'WRITE_SCOPE:'. Cure shape is A173's: take the PID set from pgrep -f (PID-only) or tolerate non-PID lines.",
+      "id": "TEST-PGREP-DIALECT-MULTILINE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 213,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request; registration only; not started; test-only nit, not night-critical. Related: TEST-CANONICAL-PATH-DEPENDENCY-01 (hermetic worktree runs) and ARM-CENSUS-IDLE-INTERACTIVE-01 (the census cure shape it follows).",
       "stop_card": null
     },
     "TEST-SPEED-01": {
@@ -7964,6 +8058,37 @@
       "rank": 73,
       "status": "queued",
       "status_note": "Installed by D-167 from the WORKLOAD-SCORED-01 delta-audit F4 disposition. It is required before any _v6 collection but does not block _v5.",
+      "stop_card": null
+    },
+    "WALL-METER-GAIN-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-15-interactive-b0ae8462/21-rq-literature-and-best-practices-fable.md (section 2 row 1: calibrated-analyzer practice Not done for JouleWise; row 5: Jay et al. CCGrid 2023 on the load-dependent software-meter versus wall gap) at main 1884922b",
+          "docs/process_traces/2026-09-15-activation-08ca8197/08-wall-meter-gain-lane-registration.md (registration record: Ed's purchase and condition as relayed by the interactive session b0ae8462)",
+          "docs/process/research_plan_2026-09-16.md (Phase 0 desk day the lane rides; the row is added by the lane itself)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WALL-METER-GAIN-01/acceptance",
+          "label": "WALL-METER-GAIN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "(a) A desk arm that logs the meter's delivered DC power as CSV over its USB HID interface to a logging host alongside powermetrics, over the pulse workload and the G2-a request set, with the battery held full and the battery current logged as a correction term; the arm decides and records whether the measured Mac may host the logger or a second device must (the answer is a measured statement about the logger's own load, not an assumption), and records the meter's DATASHEET accuracy, never a claimed one. (b) The gain factor between the software counter and the meter, with its uncertainty, becomes a stated calibration of the total-energy scale in Paper B's instrument section, in plain words: the meter cannot resolve phases, so it calibrates the scale and does not replace attribution. (c) Tests pin the log-alignment method (the same pulse fiducials the software side uses) and the correction-term arithmetic, each with a must-die mutant. (d) The lane rides week 1's desk day in docs/process/research_plan_2026-09-16.md Phase 0 and adds its own row there. No claim-bearing number moves until the gain is stated with its uncertainty; the D-078 attribution-limit framing is unchanged."
+      },
+      "authority": {
+        "label": "2026-09-16 ~01:05 PDT: Ed's purchase of a ChargerLAB POWER-Z KM003C, conditioned on meaningful science quality (relayed verbatim by the interactive session b0ae8462); registered by activation 08ca8197 (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/08-wall-meter-gain-lane-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Give JouleWise the one practice the literature review scores it WEAKER than SPEC, MLPerf and JouleSort on: a calibrated external meter check of the software counter's gain. Ed, 2026-09-16 ~01:05 PDT, is buying a ChargerLAB POWER-Z KM003C USB-C inline power meter, verbatim as relayed: \"if that buys us meaningful science quality\". It does: the review's section 2 row 1 scores the calibrated-analyzer practice Not done, and Jay et al. (CCGrid 2023) show the software-meter versus wall gap is load-dependent, so a stated gain factor with uncertainty is what turns the powermetrics energy scale into a calibrated one for the paper. The meter reads delivered USB-C DC power, so the battery must be held full and battery current logged as the correction term; it cannot resolve phases and so calibrates the total-energy scale only.",
+      "id": "WALL-METER-GAIN-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 214,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from Ed's purchase; registration only; not started; waits on the meter's arrival (hardware, Ed's hands) before the desk arm; the logger design, alignment tests and the Phase 0 row can be prepared before it arrives. Not night-critical; no window depends on it.",
       "stop_card": null
     },
     "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01": {
