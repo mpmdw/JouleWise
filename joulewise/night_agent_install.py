@@ -331,6 +331,8 @@ class Transaction:
         self.state = State.PARSED
         self.result = 1
         self.handlers = {}
+        self.raised_once = False
+        self.resolved = False
         self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
         self.prepared = None
         self.selected_span_close = None
@@ -348,8 +350,13 @@ class Transaction:
         self.state = state
 
     def _install_handlers(self):
+        # single-threaded process assumed: a helper thread would receive an unblocked
+        # signal and the Python handler would still run on the main thread.
         def raised(number, frame):
             signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
+            if self.raised_once:
+                return  # a second signal tripped before the block; the unwind owns the process
+            self.raised_once = True
             raise Signalled(128 + number)
         for number in SIGNALS:
             self.handlers[number] = signal.getsignal(number)
@@ -408,22 +415,22 @@ class Transaction:
                     self._warn("restore failed; retained prior sidecars: {}: {}".format(type(exc).__name__, exc))
 
     def _unwind(self):
-        for _ in range(2):
+        while True:
             try:
                 signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
                 break
             except Signalled:
-                # The handler already blocked SIGNALS. Retry without replacing
-                # the original failure or a completed transaction's result.
-                continue
-        self._teardown()
-        # Discard queued repetitions while blocked. They must not re-enter the
-        # transaction or replace its result after the unwind has completed.
-        for number in self.handlers:
-            signal.signal(number, signal.SIG_IGN)
-        signal.pthread_sigmask(signal.SIG_SETMASK, self.entry_mask)
-        for number, handler in self.handlers.items():
-            signal.signal(number, handler)
+                continue  # the one raise landed here; the handler has already blocked the signals
+        try:
+            self._teardown()
+        finally:
+            # Discard queued repetitions while blocked. Restore every saved
+            # disposition before opening the invocation's mask again.
+            for number in self.handlers:
+                signal.signal(number, signal.SIG_IGN)
+            for number, handler in self.handlers.items():
+                signal.signal(number, handler)
+            signal.pthread_sigmask(signal.SIG_SETMASK, self.entry_mask)
 
     def _commit(self):
         now = self.clock()
@@ -435,59 +442,73 @@ class Transaction:
     def run(self):
         self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
         try:
-            self.prepared = self.validate()
-            self.target.validate()
-            self._enter(State.VALIDATED)
-            if isinstance(self.target, LaunchdTarget):
-                for label in self.target.labels:
-                    try:
-                        self.adapter.require_absent(label)
-                    except NotAbsent as exc:
-                        detail = "label={}".format(label)
-                        if exc.liveness.kind is Kind.UNKNOWN:
-                            detail += " state=unknown rc={} stderr={}".format(exc.liveness.rc, exc.liveness.stderr)
-                        raise Refused(3, self.prepared.timing("night_agent_already_loaded", self.clock(), detail))
-            self.selected_span_close = self.prepared.admit(self.clock())
-            self._enter(State.ADMITTED)
-            self._install_handlers()
-            self._enter(State.STAGED)
-            self.target.stage()
-            self.prepared.custody_night.mkdir(parents=True, exist_ok=True)
-            for label, payload in self.prepared.render(self.target.labels):
-                result = self.adapter.write_plist(label, payload)
-                if result.kind is not Kind.SUCCEEDED:
-                    raise Refused(1, result.stderr)
-            self._enter(State.PUBLISHED)
-            if isinstance(self.target, LaunchdTarget):
-                for index, label in enumerate(self.target.labels):
-                    self._enter(State.NIGHT_LOADED if index == 0 else State.DEADMAN_LOADED)
-                    result = self.adapter.bootstrap(label)
-                    if result.kind is not Kind.SUCCEEDED:
-                        raise Refused(3, "failed to bootstrap {}".format(label))
-                observed = [self.adapter.print(label) for label in self.target.labels]
-                if any(value.kind is not Kind.LOADED for value in observed):
-                    raise Refused(3, "launch agent verification failed")
-            self._enter(State.VERIFIED)
-            self._commit()
             try:
-                self._say(self.prepared.pins)
-            except BrokenPipeError:
-                # COMMITTED must report success even when the reader closes.
-                # A failed flush leaves buffered bytes for Python's shutdown
-                # flush, which would otherwise replace exit 0 with exit 120.
-                with open(os.devnull, "wb") as sink:
-                    os.dup2(sink.fileno(), 1)
-        except Refused as exc:
-            self.result = exc.code
-            self._warn(str(exc))
+                self.prepared = self.validate()
+                self.target.validate()
+                self._enter(State.VALIDATED)
+                if isinstance(self.target, LaunchdTarget):
+                    for label in self.target.labels:
+                        try:
+                            self.adapter.require_absent(label)
+                        except NotAbsent as exc:
+                            detail = "label={}".format(label)
+                            if exc.liveness.kind is Kind.UNKNOWN:
+                                detail += " state=unknown rc={} stderr={}".format(exc.liveness.rc, exc.liveness.stderr)
+                            raise Refused(3, self.prepared.timing("night_agent_already_loaded", self.clock(), detail))
+                self.selected_span_close = self.prepared.admit(self.clock())
+                self._enter(State.ADMITTED)
+                self._install_handlers()
+                self._enter(State.STAGED)
+                self.target.stage()
+                self.prepared.custody_night.mkdir(parents=True, exist_ok=True)
+                for label, payload in self.prepared.render(self.target.labels):
+                    result = self.adapter.write_plist(label, payload)
+                    if result.kind is not Kind.SUCCEEDED:
+                        raise Refused(1, result.stderr)
+                self._enter(State.PUBLISHED)
+                if isinstance(self.target, LaunchdTarget):
+                    for index, label in enumerate(self.target.labels):
+                        self._enter(State.NIGHT_LOADED if index == 0 else State.DEADMAN_LOADED)
+                        result = self.adapter.bootstrap(label)
+                        if result.kind is not Kind.SUCCEEDED:
+                            raise Refused(3, "failed to bootstrap {}".format(label))
+                    observed = [self.adapter.print(label) for label in self.target.labels]
+                    if any(value.kind is not Kind.LOADED for value in observed):
+                        raise Refused(3, "launch agent verification failed")
+                self._enter(State.VERIFIED)
+                self._commit()
+                try:
+                    self._say(self.prepared.pins)
+                except BrokenPipeError:
+                    # COMMITTED must report success even when the reader closes.
+                    # A failed flush leaves buffered bytes for Python's shutdown
+                    # flush, which would otherwise replace exit 0 with exit 120.
+                    with open(os.devnull, "wb") as sink:
+                        os.dup2(sink.fileno(), 1)
+                self.resolved = True
+            except Refused as exc:
+                self.result = exc.code
+                self._warn(str(exc))
+                self.resolved = True
+            except Signalled as exc:
+                self.result = exc.code
+                self.resolved = True
+            except KeyboardInterrupt:
+                self.result = 130
+                self.resolved = True
+            except BaseException as exc:
+                self.result = 1
+                self._warn("{}: {}".format(type(exc).__name__, exc))
+                self.resolved = True
+            finally:
+                self._unwind()
         except Signalled as exc:
-            self.result = exc.code
-        except KeyboardInterrupt:
-            self.result = 130
-        except BaseException as exc:
-            self.result = 1
-            self._warn("{}: {}".format(type(exc).__name__, exc))
-        finally:
+            # The single handler raise landed outside the inner try: in an except clause above,
+            # or at _unwind's entry. Signals are blocked and the handler cannot raise again, so
+            # nothing below can be interrupted. _teardown is a no-op on a terminal state, so a
+            # second _unwind is safe.
+            if not self.resolved:
+                self.result = exc.code
             self._unwind()
         return self.result
 
@@ -521,9 +542,9 @@ def uninstall(adapter, stderr=None):
     finally:
         for number in machine.handlers:
             signal.signal(number, signal.SIG_IGN)
-        signal.pthread_sigmask(signal.SIG_SETMASK, machine.entry_mask)
         for number, handler in machine.handlers.items():
             signal.signal(number, handler)
+        signal.pthread_sigmask(signal.SIG_SETMASK, machine.entry_mask)
 
 
 @dataclass

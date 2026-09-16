@@ -1101,15 +1101,156 @@ class CapabilityTests(unittest.TestCase):
             signal.pthread_sigmask(signal.SIG_BLOCK, self.engine.SIGNALS)
             for number in dispositions:
                 signal.signal(number, signal.SIG_IGN)
-            signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
             for number, handler in dispositions.items():
                 signal.signal(number, handler)
+            signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
 
     def _assert_signal_state(self, mask, dispositions):
         import signal
         self.assertEqual(mask, signal.pthread_sigmask(signal.SIG_BLOCK, ()))
         self.assertEqual(dispositions,
                          {number: signal.getsignal(number) for number in self.engine.SIGNALS})
+
+    def _signal_machine(self, refusal=False):
+        import io
+        from types import SimpleNamespace
+        from unittest import mock
+        e = self.engine
+        prepared = SimpleNamespace(admit=lambda now: 60, schedule={"install_close_epoch_s": 60},
+            custody_night=self.root / "night", pins="pins",
+            render=lambda labels: ((label, b"published") for label in labels))
+        if refusal:
+            prepared.render = mock.Mock(side_effect=e.Refused(3, "render refused"))
+        return e.Transaction(self.adapter, lambda: prepared, clock=lambda: 10,
+                             stdout=io.StringIO(), stderr=io.StringIO())
+
+    def test_signal_inside_refused_warning_returns_signal_code(self):
+        import signal
+        from unittest import mock
+        e = self.engine
+        with self._signal_context() as (entry_mask, dispositions):
+            machine = self._signal_machine(refusal=True)
+            warn = machine._warn
+            deliveries = []
+
+            def interrupt_warning(message):
+                if not deliveries:
+                    deliveries.append(message)
+                    os.kill(os.getpid(), signal.SIGTERM)
+                warn(message)
+
+            with mock.patch.object(machine, "_warn", side_effect=interrupt_warning), \
+                 mock.patch.object(machine, "_restore", wraps=machine._restore) as restore:
+                result = machine.run()
+            self.assertEqual(143, result)
+            self.assertIs(e.State.ROLLED_BACK, machine.state)
+            self.assertEqual(["render refused"], deliveries)
+            self.assertEqual(1, restore.call_count, "the second unwind must be a terminal no-op")
+            self.assertNotIn("Traceback", machine.stderr.getvalue())
+            self._assert_signal_state(entry_mask, dispositions)
+
+    def test_two_pending_signals_at_unwind_entry_teardown_once(self):
+        import signal
+        from unittest import mock
+        e = self.engine
+        with self._signal_context() as (entry_mask, dispositions):
+            machine = self._signal_machine(refusal=True)
+            unwind = machine._unwind
+            pending = []
+            entries = []
+
+            def interrupt_entry():
+                entries.append(machine.state)
+                if len(entries) == 1:
+                    signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGHUP, signal.SIGTERM))
+                    os.kill(os.getpid(), signal.SIGHUP)
+                    os.kill(os.getpid(), signal.SIGTERM)
+                    pending.append(signal.sigpending())
+                    signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGHUP,))
+                elif len(entries) == 2:
+                    # Deliver the second queued signal after the outer catch
+                    # owns the first raise, independently of CPython's batching.
+                    signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGTERM,))
+                unwind()
+
+            with mock.patch.object(machine, "_unwind", side_effect=interrupt_entry), \
+                 mock.patch.object(machine, "_teardown", wraps=machine._teardown) as teardown:
+                result = machine.run()
+            self.assertEqual(3, result)
+            self.assertIs(e.State.ROLLED_BACK, machine.state)
+            self.assertEqual(1, len(pending))
+            self.assertTrue({signal.SIGHUP, signal.SIGTERM} <= pending[0])
+            self.assertEqual([e.State.STAGED, e.State.STAGED], entries)
+            self.assertEqual(1, teardown.call_count)
+            self._assert_signal_state(entry_mask, dispositions)
+
+    def _assert_signal_before_unwind_frame(self, refusal):
+        import signal
+        from unittest import mock
+        e = self.engine
+        with self._signal_context() as (entry_mask, dispositions):
+            machine = self._signal_machine(refusal=refusal)
+            unwind = machine._unwind
+            deliveries = []
+
+            def interrupt_entry():
+                if not deliveries:
+                    deliveries.append(machine.state)
+                    os.kill(os.getpid(), signal.SIGTERM)
+                unwind()
+
+            with mock.patch.object(machine, "_unwind", side_effect=interrupt_entry), \
+                 mock.patch.object(machine, "_teardown", wraps=machine._teardown) as teardown:
+                result = machine.run()
+            self.assertEqual(3 if refusal else 0, result)
+            self.assertEqual([e.State.STAGED if refusal else e.State.COMMITTED], deliveries)
+            self.assertIs(e.State.ROLLED_BACK if refusal else e.State.SUCCESS, machine.state)
+            self.assertEqual(1, teardown.call_count)
+            self._assert_signal_state(entry_mask, dispositions)
+
+    def test_signal_before_unwind_frame_preserves_refusal(self):
+        self._assert_signal_before_unwind_frame(refusal=True)
+
+    def test_signal_before_unwind_frame_preserves_commit(self):
+        self._assert_signal_before_unwind_frame(refusal=False)
+
+    def test_dispositions_restored_before_mask_opens(self):
+        import io
+        import signal
+        from unittest import mock
+        e = self.engine
+        for uninstalling in (False, True):
+            with self.subTest(uninstalling=uninstalling), \
+                 self._signal_context() as (entry_mask, dispositions):
+                machine = self._signal_machine(refusal=True)
+                sigmask = signal.pthread_sigmask
+                opened = []
+
+                def observe_open(how, mask):
+                    if how == signal.SIG_SETMASK and set(mask) == entry_mask:
+                        opened.append({number: signal.getsignal(number) for number in e.SIGNALS})
+                    return sigmask(how, mask)
+
+                with mock.patch.object(signal, "pthread_sigmask", side_effect=observe_open):
+                    result = (e.uninstall(self.adapter, stderr=io.StringIO())
+                              if uninstalling else machine.run())
+                self.assertEqual(0 if uninstalling else 3, result)
+                self.assertEqual([dispositions], opened,
+                                 "all saved dispositions must precede the mask opening")
+                self._assert_signal_state(entry_mask, dispositions)
+
+    def test_unwind_teardown_exception_still_restores_signal_state(self):
+        from unittest import mock
+        with self._signal_context() as (entry_mask, dispositions):
+            machine = self._signal_machine(refusal=True)
+            with mock.patch.object(machine, "_teardown", side_effect=RuntimeError("teardown witness")):
+                # Pin restoration independently of the unresolved ruling on
+                # how run() must translate an exception from its finally.
+                try:
+                    machine.run()
+                except RuntimeError as exc:
+                    self.assertEqual("teardown witness", str(exc))
+            self._assert_signal_state(entry_mask, dispositions)
 
     def _assert_unwind_entry_signal(self, refusal):
         import io
