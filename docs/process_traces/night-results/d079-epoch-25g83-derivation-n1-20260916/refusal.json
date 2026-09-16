@@ -1,0 +1,13 @@
+{
+  "plan_id": "d079-epoch-25g83-derivation-n1-20260916",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal": {
+    "detail": "chain process group is still alive or cannot be disproven",
+    "evidence": {
+      "pgid": 20946
+    },
+    "reason": "night_chain_alive"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}
