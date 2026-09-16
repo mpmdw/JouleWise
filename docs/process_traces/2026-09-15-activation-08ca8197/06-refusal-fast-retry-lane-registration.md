@@ -40,3 +40,22 @@ Ed's ruling (or the cold gate's with Ed's sight), to be installed as a dated
 decision-log addendum plus NIGHT_HANDBACK / runbook §1.4a prose. Parts (a)
 (span accounting) and (c) (tests) are mechanism. The D-161 evidence fence and
 every t0 gate stay untouched.
+
+## Amendment (2026-09-16 ~00:40 PDT) — part (b) ruled
+
+The interactive session relayed Ed's ruling of 00:35 PDT, quoted as verbatim:
+
+> "unless there's a scientific reason that's an unsound decision absolutely
+> reduce the hours to 20 min"
+
+Applied to the row: part (b) is RULED, not ruling-gated. A zero-capture t0
+refusal on machine state (`night_refused_not_quiet`,
+`night_refused_agent_present`, `night_refused_hid_idle`,
+`night_refused_boot_clock`; `refusal.json` present, no receipt, no
+`chain.started`) is a pre-authorized retry in the ARM-RETRY-CLASS-01 shape.
+Registration and class refusals and any refusal after a capture started stay
+on the cold-gate path. The one exception the ruling admits is a scientific
+reason that the retry is unsound; the seat must state it if it finds one.
+The ruling arrived by relay, not as a directive issue; the lane's
+decision-log addendum is where it is recorded for the doctrine. Still
+registration only; nothing changed in code.
