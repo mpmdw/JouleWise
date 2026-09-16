@@ -62,6 +62,23 @@ class SelectionTests(unittest.TestCase):
             self.assertFalse(selected.keys() & excluded.keys())
             self.assertEqual(selected.keys() | excluded.keys(), set(self.modules))
 
+    def test_a211_denied_even_when_cheap_touched_or_unknown(self):
+        denied = {
+            "tests.test_paper_round7_artifacts", "tests.test_admit_model_panel_entry",
+            "tests.test_rpt001_report_slice", "tests.test_floor_extraction",
+            "tests.test_run_campaign",
+        }
+        self.assertEqual(quick.CANONICAL_PATH_MODULES, denied)
+        for tier in ("quick", "touched"):
+            for weights in ({name: 0.1 for name in denied}, {}):
+                with self.subTest(tier=tier, weights=weights):
+                    selected, excluded = quick.select_modules(
+                        denied, weights, {}, {}, tier=tier, touched=denied,
+                    )
+                    self.assertEqual(selected, {})
+                    self.assertEqual(set(excluded), denied)
+                    self.assertTrue(all("A211" in reason for reason in excluded.values()))
+
 
 class TouchedTests(unittest.TestCase):
     def test_maps_names_prefixes_imports_literal_paths_and_direct_test_edits(self):
@@ -115,6 +132,28 @@ class TouchedTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
+    def test_a211_single_module_replay_cannot_bypass_guard(self):
+        for module in quick.CANONICAL_PATH_MODULES:
+            with (self.subTest(module=module),
+                  mock.patch.object(quick, "run_command") as run,
+                  contextlib.redirect_stderr(io.StringIO()) as output):
+                with self.assertRaises(SystemExit) as raised:
+                    quick.main(["--module", module])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn("A211", output.getvalue())
+                run.assert_not_called()
+
+    def test_stale_weight_reports_strict_threefold_boundary_for_pass_and_fail(self):
+        for code in (0, 1):
+            for seconds, weight, stale in ((3.0, 1.0, False), (3.001, 1.0, True),
+                                           (30.0, None, False)):
+                with self.subTest(code=code, seconds=seconds, weight=weight):
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        quick.report(quick.Result("tests.test_sample", code, seconds,
+                                                  "detail\n", "replay"), weight)
+                    self.assertEqual("STALE WEIGHT" in output.getvalue(), stale)
+
     def test_tier_aggregates_failure_and_runs_each_selected_module_once(self):
         calls = []
 

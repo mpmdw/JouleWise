@@ -29,6 +29,16 @@ else:
 
 ROOT = shard_tests.ROOT
 DOCS_MODULE = "tests.test_docs_freshness"
+# A211 / TEST-CANONICAL-PATH-DEPENDENCY-01: these modules reach the canonical
+# checkout. Keep them out of all seat runs, including touched and replays,
+# until that lane removes their hardcoded interpreter/corpus dependencies.
+CANONICAL_PATH_MODULES = frozenset({
+    "tests.test_paper_round7_artifacts",
+    "tests.test_admit_model_panel_entry",
+    "tests.test_rpt001_report_slice",
+    "tests.test_floor_extraction",
+    "tests.test_run_campaign",
+})
 
 
 def changed_paths(since: str, root: Path = ROOT) -> tuple[str, ...]:
@@ -79,6 +89,9 @@ def select_modules(modules, timings, exclusive, splits, *, max_seconds=5.0,
     """
     selected, excluded = {}, {}
     for module in sorted(modules):
+        if module in CANONICAL_PATH_MODULES:
+            excluded[module] = "A211 canonical-checkout dependency"
+            continue
         reasons = []
         if module not in timings:
             reasons.append("unknown weight")
@@ -146,9 +159,12 @@ def module_job(module: str):
     return module, command, rerun
 
 
-def report(result: Result) -> None:
+def report(result: Result, weight: float | None = None) -> None:
     print(f"{'PASS' if result.returncode == 0 else 'FAIL'} {result.name} "
           f"seconds={result.seconds:.3f}", flush=True)
+    if weight is not None and result.seconds > 3 * weight:
+        print(f"STALE WEIGHT {result.name} seconds={result.seconds:.3f} "
+              f"weight={weight:.3f} ratio={result.seconds / weight:.2f}", flush=True)
     if result.returncode:
         print(result.output, end="" if result.output.endswith("\n") else "\n")
         print(f"RERUN {result.rerun}", flush=True)
@@ -184,6 +200,8 @@ def main(argv=None) -> int:
         if args.module:
             if args.module not in modules:
                 parser.error(f"module not discovered: {args.module}")
+            if args.module in CANONICAL_PATH_MODULES:
+                parser.error(f"A211 canonical-checkout dependency: {args.module}")
             result = run_command(*module_job(args.module))
             print(result.output, end="" if result.output.endswith("\n") else "\n")
             report(result)
@@ -218,7 +236,7 @@ def main(argv=None) -> int:
         # after the ordinary pool, preserving their scheduling declaration.
         docs = run_command(*module_job(DOCS_MODULE))
         results.append(docs)
-        report(docs)
+        report(docs, timings.get(docs.name))
         pooled = set(selected) - {DOCS_MODULE} - set(exclusive)
         with ProcessPoolExecutor(max_workers=args.workers,
                                  mp_context=multiprocessing.get_context("spawn")) as pool:
@@ -234,11 +252,11 @@ def main(argv=None) -> int:
                     result = Result(module, 1, 0.0, f"Worker failed: {exc}\n",
                                     module_job(module)[2])
                 results.append(result)
-                report(result)
+                report(result, timings.get(module))
         for module in sorted(set(selected) & set(exclusive) - {DOCS_MODULE}):
             result = run_command(*module_job(module))
             results.append(result)
-            report(result)
+            report(result, timings.get(module))
         failures = sum(result.returncode != 0 for result in results)
         print(f"QUICK SUMMARY tier={args.tier} modules={len(selected)} "
               f"excluded={len(excluded)} failures={failures} "
