@@ -201,8 +201,11 @@ After notice acceptance, record its local time and epoch as the install open.
 Publish the reviewed plan to `<custody_root>/night_plan.json` through the
 runbook's atomic move, then run
 `scripts/install_night_agent.sh --plan <custody_root>/night_plan.json --python <absolute-interpreter-path>`.
-Both bootstraps (launchd job-load operations) must pass the immediate
-pre-bootstrap close check. The installer refuses
+After both bootstraps (launchd job-load operations) and verification, a single
+commit gate reads the clock and requires it to be strictly before both the
+plan cutoff and the initially selected install span's close. Passing this
+gate commits the install before reporting success; subsequent cleanup cannot
+undo it or replace its successful result. The installer refuses
 `install_span_closed` (exit 2), `install_outside_span` (2),
 `plan_t0_in_the_past` (2), `night_agent_already_loaded` (3), and
 `plan_outside_custody_root` (2); runbook §1.3 gives each predicate and recovery.

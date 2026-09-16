@@ -2,24 +2,32 @@
 set -euo pipefail
 
 usage() {
-  print "usage: $0 --plan PLAN.json [--python ABS_PATH] [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
+  print "usage: $0${1:+ (invalid $1)} --plan PLAN.json [--python ABS_PATH] [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
   exit 2
 }
 
+# Forward every supplied option in order after checking its value. Normalize
+# caller-relative paths before binding -m to this script's checkout.
+args=()
 plan=""
 python=""
 python_given=0
 uninstall=0
-render_only=""
-launchctl_bin="launchctl"
 while (( $# )); do
   case "$1" in
-    --plan) [[ $# -ge 2 ]] || usage; plan="$2"; shift 2 ;;
-    --python) [[ $# -ge 2 ]] || usage; python="$2"; python_given=1; shift 2 ;;
-    --uninstall) uninstall=1; shift ;;
-    --render-only) [[ $# -ge 2 ]] || usage; render_only="$2"; shift 2 ;;
-    --launchctl-bin) [[ $# -ge 2 ]] || usage; launchctl_bin="$2"; shift 2 ;;
-    *) usage ;;
+    --plan) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; plan="$2"; args+=("$1" "${2:A}"); shift 2 ;;
+    --python) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; python="$2"; python_given=1; args+=("$1" "$2"); shift 2 ;;
+    --uninstall) uninstall=1; args+=("$1"); shift ;;
+    --render-only) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; args+=("$1" "${2:A}"); shift 2 ;;
+    --launchctl-bin)
+      [[ $# -ge 2 && -n "$2" ]] || usage "$1"
+      if [[ "$2" == */* ]]; then
+        args+=("$1" "${2:A}")
+      else
+        args+=("$1" "$2")
+      fi
+      shift 2 ;;
+    *) usage "$1" ;;
   esac
 done
 [[ -n "$plan" ]] || usage
@@ -71,21 +79,10 @@ if sys.version_info[:2] < minimum:
     raise SystemExit(2)
 PYTHON_CHECK
 fi
-# Resolve caller-relative paths before binding -m to the script's checkout.
-if [[ "$launchctl_bin" == */* ]]; then
-  launchctl_bin="${launchctl_bin:A}"
-fi
-set -- --plan "${plan:A}" --launchctl-bin "$launchctl_bin"
-if [[ -n "$render_only" ]]; then
-  set -- "$@" --render-only "${render_only:A}"
-fi
-if (( uninstall )); then
-  set -- "$@" --uninstall
-  if (( python_given )); then
-    set -- "$@" --python "$python"
-  fi
-else
-  set -- "$@" --python "$python"
+# Only an inferred interpreter is added; supplied options are never rebuilt
+# from the final values of the parser's variables.
+if (( ! uninstall && ! python_given )); then
+  args+=(--python "$python")
 fi
 cd "$repo"
-PYTHONPATH="$repo" exec "$python" -B -m joulewise.night_agent_install "$@"
+PYTHONPATH="$repo" exec "$python" -B -m joulewise.night_agent_install "${args[@]}"

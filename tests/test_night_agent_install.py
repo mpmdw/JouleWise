@@ -9,6 +9,7 @@ by the uninstall entrypoint.
 D10 must-die amendment (lt-31 F1): delete the retained-prior refusal.
 """
 
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -1085,6 +1086,116 @@ class CapabilityTests(unittest.TestCase):
         self.target.directory.mkdir()
         self.adapter = engine.LaunchctlAdapter(self.target, str(self.fake.executable), timeout=0.75)
 
+    @contextlib.contextmanager
+    def _signal_context(self):
+        import signal
+        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
+        dispositions = {number: signal.getsignal(number) for number in self.engine.SIGNALS}
+        entry_mask = (original_mask - set(self.engine.SIGNALS)) | {signal.SIGUSR1}
+        signal.pthread_sigmask(signal.SIG_SETMASK, entry_mask)
+        try:
+            yield entry_mask, dispositions
+        finally:
+            # A failing mutant must not leak blocked signals, handlers or a
+            # pending SIGTERM into the unittest runner or its next test.
+            signal.pthread_sigmask(signal.SIG_BLOCK, self.engine.SIGNALS)
+            for number in dispositions:
+                signal.signal(number, signal.SIG_IGN)
+            signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+            for number, handler in dispositions.items():
+                signal.signal(number, handler)
+
+    def _assert_signal_state(self, mask, dispositions):
+        import signal
+        self.assertEqual(mask, signal.pthread_sigmask(signal.SIG_BLOCK, ()))
+        self.assertEqual(dispositions,
+                         {number: signal.getsignal(number) for number in self.engine.SIGNALS})
+
+    def _assert_unwind_entry_signal(self, refusal):
+        import io
+        import signal
+        from types import SimpleNamespace
+        from unittest import mock
+        e = self.engine
+        prepared = SimpleNamespace(admit=lambda now: 60, schedule={"install_close_epoch_s": 60},
+            custody_night=self.root / "night", pins="pins",
+            render=lambda labels: ((label, b"published") for label in labels))
+        if refusal:
+            prepared.render = mock.Mock(side_effect=e.Refused(2, "render refused"))
+        with self._signal_context() as (entry_mask, dispositions):
+            machine = e.Transaction(self.adapter, lambda: prepared, clock=lambda: 10,
+                                    stdout=io.StringIO(), stderr=io.StringIO())
+            unwind = machine._unwind
+            sigmask = signal.pthread_sigmask
+            at_entry = False
+            deliveries = []
+
+            def enter_unwind():
+                nonlocal at_entry
+                at_entry = True
+                unwind()
+
+            def interrupt_first_block(how, mask):
+                nonlocal at_entry
+                if at_entry and how == signal.SIG_BLOCK and set(mask) == set(e.SIGNALS):
+                    at_entry = False
+                    deliveries.append(machine.state)
+                    # Before the first block takes effect, invoke the actual
+                    # transaction handler; it blocks and raises Signalled.
+                    signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+                return sigmask(how, mask)
+
+            with mock.patch.object(machine, "_unwind", side_effect=enter_unwind), \
+                 mock.patch.object(signal, "pthread_sigmask", side_effect=interrupt_first_block):
+                result = machine.run()
+            self.assertEqual([e.State.STAGED if refusal else e.State.COMMITTED], deliveries)
+            self.assertEqual(2 if refusal else 0, result)
+            self._assert_signal_state(entry_mask, dispositions)
+
+    def test_unwind_entry_signal_preserves_refusal_and_signal_state(self):
+        self._assert_unwind_entry_signal(refusal=True)
+
+    def test_unwind_entry_signal_preserves_commit_and_signal_state(self):
+        self._assert_unwind_entry_signal(refusal=False)
+
+    def test_uninstall_handler_installation_seam_is_already_blocked(self):
+        import io
+        import signal
+        from unittest import mock
+        e = self.engine
+        for retained in (False, True):
+            with self.subTest(retained=retained), self._signal_context() as (entry_mask, dispositions):
+                if retained:
+                    self.fake.directive(LABELS[0], "bootout", loaded=True)
+                install_handlers = e.Transaction._install_handlers
+                deliveries = []
+
+                def signal_after_handlers(machine):
+                    install_handlers(machine)
+                    deliveries.append(signal.pthread_sigmask(signal.SIG_BLOCK, ()))
+                    # At the old handler-to-block seam this raises; with the
+                    # block first, it queues until uninstall's drain/restore.
+                    os.kill(os.getpid(), signal.SIGTERM)
+
+                with mock.patch.object(e.Transaction, "_install_handlers", signal_after_handlers):
+                    result = e.uninstall(self.adapter, stderr=io.StringIO())
+                self.assertEqual(4 if retained else 0, result)
+                self.assertEqual([entry_mask | set(e.SIGNALS)], deliveries)
+                self._assert_signal_state(entry_mask, dispositions)
+
+    def test_run_early_refusal_restores_invocation_mask_not_construction_mask(self):
+        import io
+        import signal
+        from unittest import mock
+        e = self.engine
+        with self._signal_context() as (entry_mask, dispositions):
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGUSR1,))
+            machine = e.Transaction(self.adapter,
+                mock.Mock(side_effect=e.Refused(3, "early refusal")), stderr=io.StringIO())
+            signal.pthread_sigmask(signal.SIG_SETMASK, entry_mask)
+            self.assertEqual(3, machine.run())
+            self._assert_signal_state(entry_mask, dispositions)
+
     def test_signal_handler_masks_before_unwind_and_restores_entry_state(self):
         import io
         import signal
@@ -1216,6 +1327,23 @@ class CapabilityTests(unittest.TestCase):
             with self.assertRaises(TypeError):
                 self.target.restore_prior(label, token)
             self.assertEqual(b"published bytes", self.target.path(label).read_bytes())
+
+    def test_render_cli_empty_value_refuses_before_target_construction(self):
+        import io
+        from unittest import mock
+        for mode in ([], ["--uninstall"]):
+            with self.subTest(mode=mode):
+                stderr = io.StringIO()
+                with mock.patch("sys.stderr", stderr), \
+                     mock.patch.object(self.engine.Target, "for_mode") as construct:
+                    with self.assertRaises(SystemExit) as raised:
+                        self.engine.main(["--plan", str(self.root / "unused.json"),
+                                          "--render-only", ""] + mode)
+                self.assertEqual(2, raised.exception.code)
+                self.assertRegex(stderr.getvalue(), r"\Ausage: .*\[--render-only DIR\]")
+                construct.assert_not_called()
+                self.assertEqual([], self.fake.calls())
+                self.assertEqual([], list(self.target.directory.iterdir()))
 
     def test_render_cli_constructs_null_adapter_before_plan_validation(self):
         plan = self.root / "invalid-plan.json"

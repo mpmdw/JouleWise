@@ -348,7 +348,6 @@ class Transaction:
         self.state = state
 
     def _install_handlers(self):
-        self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
         def raised(number, frame):
             signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
             raise Signalled(128 + number)
@@ -409,7 +408,14 @@ class Transaction:
                     self._warn("restore failed; retained prior sidecars: {}: {}".format(type(exc).__name__, exc))
 
     def _unwind(self):
-        signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
+        for _ in range(2):
+            try:
+                signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
+                break
+            except Signalled:
+                # The handler already blocked SIGNALS. Retry without replacing
+                # the original failure or a completed transaction's result.
+                continue
         self._teardown()
         # Discard queued repetitions while blocked. They must not re-enter the
         # transaction or replace its result after the unwind has completed.
@@ -427,6 +433,7 @@ class Transaction:
         self._enter(State.COMMITTED)
 
     def run(self):
+        self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
         try:
             self.prepared = self.validate()
             self.target.validate()
@@ -487,13 +494,17 @@ class Transaction:
 
 def uninstall(adapter, stderr=None):
     """System-interpreter recovery: no plan, driver, pins or venv imports."""
+    entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
     if type(adapter) is NullAdapter:
         raise TypeError("render-only and uninstall are mutually exclusive")
     sink = stderr or sys.stderr
     machine = Transaction(adapter, None, stderr=sink)
-    machine._install_handlers()
+    machine.entry_mask = entry_mask
+    # Nothing has mutated yet. Block before installing our raising handlers,
+    # so no handler-to-block sliver exists; handlers serve only drain/restore.
     signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
     try:
+        machine._install_handlers()
         proofs, unresolved = verified_bootout(adapter, adapter.target.labels)
         if unresolved:
             machine._warn("uninstall: still loaded after bootout: {}; retained plists: {}".format(
@@ -637,6 +648,11 @@ def validate_install(args, repo):
 
 
 def main(argv=None):
+    def render_directory(value):
+        if not value:
+            raise argparse.ArgumentTypeError("--render-only requires a non-empty value")
+        return Path(value)
+
     class UsageParser(argparse.ArgumentParser):
         def error(self, message):
             self.print_usage(sys.stderr)
@@ -648,7 +664,7 @@ def main(argv=None):
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--python")
     parser.add_argument("--uninstall", action="store_true")
-    parser.add_argument("--render-only", type=Path)
+    parser.add_argument("--render-only", type=render_directory)
     parser.add_argument("--launchctl-bin", default="launchctl")
     args = parser.parse_args(argv)
     try:

@@ -212,6 +212,69 @@ class InstallNightAgentTests(unittest.TestCase):
                         self.assertEqual([], self.fake.calls())
                         self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
 
+    def _assert_empty_option_refused(self, flag: str, *, uninstall: bool = False) -> None:
+        plan = self._write_plan()
+        argv = ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan),
+                "--python", sys.executable, "--launchctl-bin", str(self.launchctl)]
+        if uninstall:
+            argv.append("--uninstall")
+
+        def snapshot():
+            return {str(path.relative_to(self.root)):
+                    (path.stat().st_mode, path.stat().st_mtime_ns,
+                     path.read_bytes() if path.is_file() else None)
+                    for path in self.root.rglob("*")}
+
+        before = snapshot()
+        result = subprocess.run(argv + [flag, ""], env=self.environment,
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual("", result.stdout)
+        # Pin shell refusal: module defence must not hide a missing shell guard.
+        self.assertEqual(
+            f"usage: usage (invalid {flag}) --plan PLAN.json "
+            "[--python ABS_PATH] [--uninstall] [--render-only DIR] "
+            "[--launchctl-bin PATH]\n", result.stderr)
+        self.assertEqual([], self.fake.calls())
+        self.assertEqual(before, snapshot())
+
+    def test_empty_render_only_install_refuses_without_effects(self) -> None:
+        self._assert_empty_option_refused("--render-only")
+
+    def test_empty_render_only_uninstall_refuses_without_effects(self) -> None:
+        self._assert_empty_option_refused("--render-only", uninstall=True)
+
+    def test_other_empty_option_values_refuse_without_effects(self) -> None:
+        # Hour/minute remain unsupported; even empty values cannot enable them.
+        for flag in ("--plan", "--python", "--launchctl-bin", "--hour", "--minute"):
+            with self.subTest(flag=flag):
+                self._assert_empty_option_refused(flag)
+
+    def test_shell_preserves_supplied_options_and_order(self) -> None:
+        plan = self._write_plan()
+        python = self.bin_dir / "argv-python"
+        python.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, sys\n"
+            "if sys.argv[1:3] == ['-B', '-']:\n"
+            "    sys.argv = sys.argv[2:]\n"
+            "    exec(compile(sys.stdin.read(), '<version-check>', 'exec'))\n"
+            "else:\n"
+            "    print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd()}))\n")
+        python.chmod(0o755)
+        args = ["--render-only", "first render", "--plan", str(plan.relative_to(self.root)),
+                "--python", str(python), "--render-only", "second render",
+                "--launchctl-bin", str(self.launchctl.relative_to(self.root))]
+        result = subprocess.run(["/bin/zsh", str(SCRIPT_PATH)] + args,
+            cwd=self.root, env=self.environment, capture_output=True, text=True, timeout=15)
+        self.assertEqual(0, result.returncode, result.stderr)
+        expected = ["--render-only", str(self.root / "first render"), "--plan", str(plan),
+                    "--python", str(python), "--render-only", str(self.root / "second render"),
+                    "--launchctl-bin", str(self.launchctl)]
+        self.assertEqual({"argv": ["-B", "-m", "joulewise.night_agent_install"] + expected,
+                          "cwd": str(REPO_ROOT)}, json.loads(result.stdout))
+        self.assertEqual([], self.fake.calls())
+
     def test_installer_derives_calendar_fields_from_plan_without_hour_flags(self) -> None:
         # Production argv, real schedule subprocess, real plist rendering;
         # only launchctl and courier binaries are fixture executables.
@@ -513,7 +576,7 @@ class InstallNightAgentTests(unittest.TestCase):
         nonexecutable = self.bin_dir / "nonexecutable"
         nonexecutable.write_text("not executable\n")
         for value in ("python3", str(self.bin_dir), str(nonexecutable),
-                      str(self.root / "missing-python"), ""):
+                      str(self.root / "missing-python")):
             with self.subTest(python=value):
                 completed = self._run(self._write_plan(), python=value)
                 self.assertEqual(2, completed.returncode, completed.stderr)
