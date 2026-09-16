@@ -257,6 +257,20 @@ class ArmRetryTests(unittest.TestCase):
             self.attempts[0]["cause"] = refusal
             self.assertEqual(self.decide().reason, "cold_gate_history")
 
+    def test_policy_prose_pins_unreadable_thread_is_not_a_stop(self):
+        # Delta re-audit F1: the R1 correction must not be revertible in prose alone.
+        policy = arm_retry.render_policy()
+        self.assertIn("Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop", policy)
+        self.assertIn("neither clearance boolean requires reading it", policy)
+        self.assertIn("An unreadable notice thread is recorded as a limitation", arm_retry.retry_allowed.__doc__)
+        self.assertNotIn("unreadable veto channel is not clear", policy)
+
+    def test_runbook_pins_byte_for_byte_abort_copy(self):
+        # Delta re-audit F2: the R3 instruction must survive a docs-only reversion.
+        runbook = (ROOT / DOCS[1]).read_text(encoding="utf-8")
+        needle = "`latest_abort_epoch_s` is copied byte-for-byte from\n   `attempts[-1].abort_epoch_s`, never re-typed, rounded or truncated"
+        self.assertIn(needle, runbook)
+
     def test_headless_unreadable_thread_recorded_without_observed_no_allows(self):
         # Memory-only attempt-directory evidence: lack of thread access is a
         # recorded limitation, not a veto. Only authorized observations clear it.
