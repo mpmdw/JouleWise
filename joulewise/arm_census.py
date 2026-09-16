@@ -23,6 +23,7 @@ from joulewise.quiet_guard_process import (
 
 # Same discovery population as the night gate, but PID-only output prevents
 # multiline argv text from being mistaken for additional process hits.
+# Do not add -a: own ancestors are read separately, preserving that population.
 ARM_DISCOVERY_ARGV = (AGENT_CENSUS_ARGV[0], "-f", *AGENT_CENSUS_ARGV[2:])
 
 
@@ -128,6 +129,29 @@ def _interactive_root(row: DarwinProcessRecord) -> bool:
     return False
 
 
+def _own_root(inventory: KernelProcessTable, records: dict[int, DarwinProcessRecord],
+              caller_pid: int, hit_pids: set[int]) -> int | None:
+    """Select the outermost readable agent root or unreadable discovery hit."""
+    own = _ancestors(inventory, caller_pid)
+    rows = inventory.by_pid
+    root = None
+    pid = caller_pid
+    while pid in own:
+        own.remove(pid)
+        row = records.get(pid)
+        if row is not None and (_interactive_root(row) or (
+            os.path.basename(row.executable) == "claude" and any(
+                arg == "-p" or arg.startswith("--print") for arg in row.argv[1:]
+            )
+        )):
+            root = pid
+        elif row is None and pid in hit_pids:
+            # Unknown applies to this process, not its readable descendants.
+            root = pid
+        pid = rows[pid].ppid
+    return root
+
+
 def _codex_exec(args: tuple[str, ...]) -> bool:
     value_options = {"-m", "--model", "-c", "--config", "-C", "--cd", "-p", "--profile", "-s", "--sandbox", "-a", "--ask-for-approval", "--enable", "--disable", "--add-dir", "-i", "--image"}
     index = 0
@@ -185,8 +209,11 @@ def classify_arm_census(plan: NightPlan, observation: Observation, *, caller_pid
         _ancestors(observation.inventory, pid) for pid in observation.hit_pids
     )) if observation.hit_pids else set()
     roots = {pid for pid in relevant if pid in records and _interactive_root(records[pid])}
-    # Own headless roots also qualify for the stub-only idle-tree exemption.
-    roots.update(set(observation.hit_pids) & own)
+    # Exact ancestry finds roots even when discovery omits them; an unreadable
+    # own-chain discovery hit still anchors descendant workload scanning.
+    own_root = _own_root(observation.inventory, records, caller_pid, set(observation.hit_pids))
+    if own_root is not None:
+        roots.add(own_root)
     workloads: dict[int, str] = {}
     sessions = []
     exempt = set(own)
@@ -254,8 +281,10 @@ def observe_arm_census(*, caller_pid: int, reader: DarwinProcessReader | None = 
     for pid in sorted(pids | hits):
         read(pid)
     descendants: set[int] = set()
-    own = _ancestors(inventory, caller_pid)
-    roots = (hits & own) | {pid for pid, row in records.items() if _interactive_root(row)}
+    roots = {pid for pid, row in records.items() if _interactive_root(row)}
+    own_root = _own_root(inventory, records, caller_pid, hits)
+    if own_root is not None:
+        roots.add(own_root)
     for pid in roots:
         descendants.update(inventory.descendants(pid))
     for pid in sorted(descendants - pids - hits):

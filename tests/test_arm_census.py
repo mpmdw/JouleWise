@@ -191,46 +191,84 @@ class ArmCensusTests(unittest.TestCase):
         self.assertTrue(side.publication_blocked)
         self.assertEqual(((40, "unittest"),), side.workloads)
 
-    def test_own_idle_helpers_clear_but_sibling_seat_stays_foreign(self):
-        for sibling in (False, True):
-            with self.subTest(sibling=sibling):
-                rows = (
-                    row(20, 1, "/bin/claude", "-p", "magistrate"),
+    def test_own_root_selection_without_ancestor_discovery_hits(self):
+        for case, root, extra, hits, foreign, workloads in (
+            ("helper_only", row(20, 1, "/bin/claude", "-p", "magistrate"),
+             (), (50, 60), (), ()),
+            ("workload", row(20, 1, "/bin/claude", "-p", "magistrate"),
+             (row(71, 20, "/bin/python3", "-m", "unittest"),),
+             (50, 60), (50, 60), ((71, "unittest"),)),
+            ("sibling", row(20, 1, "/bin/claude", "-p", "magistrate"),
+             (row(52207, 1, "/bin/codex", "exec", "task"),),
+             (50, 60, 52207), (52207,), ()),
+            ("bare_shell", row(20, 1, "/bin/zsh"),
+             (), (50, 60), (50, 60), ()),
+        ):
+            with self.subTest(case=case):
+                fixture = observation(
+                    root,
                     row(30, 20, "/bin/zsh", "-c", "census"),
                     row(90, 30, "/bin/python3", "-m", "joulewise.arm_census"),
                     row(50, 20, "/bin/node", "/opt/bin/codex", "mcp-server"),
                     row(60, 50, "/fake/codex-code-mode-host"),
+                    *extra, hits=hits,
                 )
-                if sibling:
-                    rows += (row(52207, 1, "/bin/codex", "exec", "task"),)
-                hits = (20, 50, 60, 52207) if sibling else (20, 50, 60)
+                reader = FakeReader(fixture)
+                # Darwin pgrep excludes ancestors: PID 20 is never a hit.
                 with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
                     arm_census.ARM_DISCOVERY_ARGV, 0, "".join(f"{pid}\n" for pid in hits), "")):
-                    observed = arm_census.observe_arm_census(
-                        caller_pid=90, reader=FakeReader(observation(*rows, hits=hits)))
+                    observed = arm_census.observe_arm_census(caller_pid=90, reader=reader)
                 verdict = self.classify(observed)
-                self.assertEqual(sibling, verdict.publication_blocked)
-                self.assertEqual((52207,) if sibling else (), verdict.foreign_pids)
+                self.assertEqual(case != "helper_only", verdict.publication_blocked)
+                self.assertEqual(foreign, verdict.foreign_pids)
                 self.assertEqual((20, 30, 90), verdict.own_pids)
-                self.assertEqual((), verdict.workloads)
-                self.assertTrue(verdict.sessions[0].exempt)
+                self.assertEqual(workloads, verdict.workloads)
+                self.assertEqual(hits, observed.hit_pids)
+                self.assertEqual(sorted(r.pid for r in fixture.records if r.pid != 1),
+                                 sorted(reader.reads))
+                if case == "bare_shell":
+                    self.assertEqual((), verdict.sessions)
+                else:
+                    self.assertEqual((20,), tuple(s.root_pid for s in verdict.sessions))
+                    self.assertEqual(case != "workload", verdict.sessions[0].exempt)
+                if case == "helper_only":
+                    for receipt_class in ("DIAGNOSTIC_NO_PACK", "TRANSACTION_PACK"):
+                        with self.subTest(receipt_class=receipt_class), tempfile.TemporaryDirectory() as tmp:
+                            self.assertFalse(self.classify(observed, receipt_class).publication_blocked)
+                            path = Path(tmp) / "plan.json"
+                            path.write_text(json.dumps(night_plan_mapping(plan(receipt_class))))
+                            with mock.patch.object(arm_census, "observe_arm_census", return_value=observed), \
+                                 mock.patch.object(arm_census.os, "getpid", return_value=90), \
+                                 redirect_stdout(io.StringIO()):
+                                self.assertEqual(0, arm_census.main(["--plan", str(path)]))
 
-    def test_own_helpers_with_unittest_descendant_are_busy(self):
-        fixture = observation(
-            row(20, 1, "/bin/claude", "-p", "magistrate"),
-            row(30, 20, "/bin/zsh", "-c", "census"),
-            row(90, 30, "/bin/python3", "-m", "joulewise.arm_census"),
-            row(50, 20, "/bin/node", "/opt/bin/codex", "mcp-server"),
-            row(60, 50, "/fake/codex-code-mode-host"),
-            row(70, 50, "/bin/python3", "-m", "unittest"), hits=(20, 50, 60),
-        )
-        with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
-            arm_census.ARM_DISCOVERY_ARGV, 0, "20\n50\n60\n", "")):
-            observed = arm_census.observe_arm_census(caller_pid=90, reader=FakeReader(fixture))
-        verdict = self.classify(observed)
-        self.assertTrue(verdict.publication_blocked)
-        self.assertEqual(((70, "unittest"),), verdict.workloads)
-        self.assertFalse(verdict.sessions[0].exempt)
+    def test_outermost_exact_own_agent_root_is_selected(self):
+        for root in (
+            row(20, 1, "/bin/claude"),
+            row(20, 1, "/bin/claude", "--print=json", "magistrate"),
+            row(20, 1, "/bin/node", "/opt/t3-code/dist/cli.js"),
+        ):
+            with self.subTest(root=root):
+                fixture = observation(
+                    root,
+                    row(25, 20, "/bin/claude", "-p", "nested"),
+                    row(30, 25, "/bin/zsh", "-c", "census"),
+                    row(90, 30, "/bin/python3", "-m", "joulewise.arm_census"),
+                    row(50, 20, "/bin/node", "/opt/bin/codex", "mcp-server"),
+                    row(60, 50, "/fake/codex-code-mode-host"),
+                    row(71, 20, "/bin/unknown-helper"), hits=(50, 60),
+                )
+                reader = FakeReader(fixture)
+                with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
+                    arm_census.ARM_DISCOVERY_ARGV, 0, "50\n60\n", "")):
+                    observed = arm_census.observe_arm_census(caller_pid=90, reader=reader)
+                verdict = self.classify(observed)
+                self.assertFalse(verdict.publication_blocked)
+                self.assertEqual((), verdict.foreign_pids)
+                self.assertEqual((), verdict.workloads)
+                self.assertEqual((20,), tuple(s.root_pid for s in verdict.sessions))
+                self.assertEqual((25, 30, 50, 60, 71, 90), verdict.sessions[0].descendant_pids)
+                self.assertEqual([20, 25, 30, 50, 60, 71, 90], sorted(reader.reads))
 
     def test_unreadable_hit_outside_exempt_tree_is_idle(self):
         fixture = observation(row(20, 1, "/bin/codex", "exec", "task"))
@@ -351,6 +389,32 @@ class ArmCensusTests(unittest.TestCase):
                 self.assertEqual(busy, verdict.publication_blocked)
                 self.assertEqual((), verdict.foreign_pids)
                 self.assertEqual(((30, "telemetry"),) if busy else (), verdict.workloads)
+                self.assertIn("fixture unreadable", verdict.diagnostics[0])
+
+    def test_unreadable_outer_own_hit_scans_work_and_exempts_idle_helpers(self):
+        for busy in (False, True):
+            with self.subTest(busy=busy):
+                fixture = observation(
+                    row(20, 1, "/bin/claude", "-p", "outer"),
+                    row(25, 20, "/bin/claude", "-p", "inner"),
+                    row(90, 25, "/bin/python3", "-m", "joulewise.arm_census"),
+                    row(50, 20, "/bin/node", "/opt/bin/codex", "mcp-server"),
+                    row(60, 50, "/fake/codex-code-mode-host"),
+                    row(71, 20, "/bin/python3", "-m", "unittest") if busy else
+                    row(71, 20, "/bin/unknown-helper"), hits=(20, 50, 60),
+                )
+                reader = FakeReader(fixture, (20,))
+                with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
+                    arm_census.ARM_DISCOVERY_ARGV, 0, "20\n50\n60\n", "")):
+                    observed = arm_census.observe_arm_census(caller_pid=90, reader=reader)
+                verdict = self.classify(observed)
+                self.assertEqual(busy, verdict.publication_blocked)
+                self.assertEqual((50, 60) if busy else (), verdict.foreign_pids)
+                self.assertEqual(((71, "unittest"),) if busy else (), verdict.workloads)
+                self.assertEqual((20,), tuple(s.root_pid for s in verdict.sessions))
+                self.assertEqual(not busy, verdict.sessions[0].exempt)
+                self.assertEqual((25, 50, 60, 71, 90), verdict.sessions[0].descendant_pids)
+                self.assertEqual([20, 25, 50, 60, 71, 90], sorted(reader.reads))
                 self.assertIn("fixture unreadable", verdict.diagnostics[0])
 
     def test_invalid_plan_and_class_override_never_observe(self):
