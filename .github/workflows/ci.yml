@@ -11,6 +11,26 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  quick:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
+        run: |
+          if [ ! -x /bin/zsh ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q zsh
+          fi
+          test -x /bin/zsh
+      - name: Quick test tier
+        run: python3 scripts/quick_suite.py --tier quick --workers 4
+
   # Event-only interpreter selection; never skip tests based on changed paths.
   changes:
     runs-on: ubuntu-latest
@@ -63,7 +83,7 @@ jobs:
           python -m joulewise validate-bundle --strict "$bundle"
 
   test:
-    needs: changes
+    needs: [changes, quick]
     runs-on: ubuntu-latest
     env:
       # CI-TRIM-02: refreshed hosted weights balance six ordinary shards at
@@ -161,7 +181,7 @@ jobs:
           PY
 
   calibration-exits-exclusive:
-    needs: changes
+    needs: [changes, quick]
     # Exclusive by design: this module already runs sequentially internally;
     # colocating it with an ordinary shard only adds scheduler starvation.
     # The module watchdog ceiling is 10 minutes per child and this hosted job
@@ -196,7 +216,7 @@ jobs:
         run: python -m unittest -v tests.test_calibration_exits
 
   calibration-writer-crash-matrix-exclusive:
-    needs: changes
+    needs: [changes, quick]
     # Exclusive because fallback-weight shard placement is unsound for this
     # module: its hosted runtime is dominated by its own subprocess-heavy
     # cases — the same CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY
