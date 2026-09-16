@@ -1,0 +1,74 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "c5c7ecd3084b110f94684d48120f0e83534262533c4fe9d266a681ecafd52aec"
+    },
+    {
+      "path": "night/receipt.json",
+      "sha256": "f1fd01657c34abd361e28f54b3ac5c1c9981295e937db7bd1aef173e9feb3671"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "fa0502e1717ba551356cde1b16f17a43737b0c340270764d52208d3be31bd6e1"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "91511505f4ea342d5ea9fe1f9685c08b8d7c7b901fc9402776341ac441e9a230"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "2851ceeea5d43338d5072c6524a115800992b97cc175e5a2d97586309785f171"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "be6b9b84d52776c20a2bfb27b214878c6bbb50983a3730bae0038bb85ecb4c29"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "census_count": 1,
+  "census_hits": [
+    {
+      "argv": [
+        "/usr/bin/pgrep",
+        "-lf",
+        "codex|claude|t3"
+      ],
+      "exit_code": 0,
+      "monotonic_ns": 26985442016791,
+      "refusal": {
+        "detail": "pgrep exit 0; forbidden process output: 7066 claude\n7086 node /opt/homebrew/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n7094 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n9850 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1789551439865-hlf6ye.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 't=$(date -j -f '\"'\"'%Y-%m-%d %H:%M:%S'\"'\"' '\"'\"'2026-09-16 03:35:00'\"'\"' +%s); while [ \"$(date +%s)\" -lt \"$t\" ]; do sleep 30; done; echo \"03:35 reached: stub window ends 03:40, courier deadline 03:45; arm the 03:46 seat-launch wait\"; launchctl list | grep joulewise | tr '\"'\"'\\n'\"'\"' '\"'\"' '\"'\"'; echo' < /dev/null && pwd -P >| /tmp/claude-3fee-cwd",
+        "evidence": [
+          {
+            "argv": [
+              "/usr/bin/pgrep",
+              "-lf",
+              "codex|claude|t3"
+            ],
+            "exit_code": 0,
+            "monotonic_ns": 26985442016791,
+            "stderr": "",
+            "stdout": "7066 claude\n7086 node /opt/homebrew/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n7094 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n9850 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1789551439865-hlf6ye.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 't=$(date -j -f '\"'\"'%Y-%m-%d %H:%M:%S'\"'\"' '\"'\"'2026-09-16 03:35:00'\"'\"' +%s); while [ \"$(date +%s)\" -lt \"$t\" ]; do sleep 30; done; echo \"03:35 reached: stub window ends 03:40, courier deadline 03:45; arm the 03:46 seat-launch wait\"; launchctl list | grep joulewise | tr '\"'\"'\\n'\"'\"' '\"'\"' '\"'\"'; echo' < /dev/null && pwd -P >| /tmp/claude-3fee-cwd\n"
+          }
+        ],
+        "reason": "night_refused_agent_present"
+      },
+      "stderr": "",
+      "stdout": "7066 claude\n7086 node /opt/homebrew/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n7094 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n9850 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1789551439865-hlf6ye.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 't=$(date -j -f '\"'\"'%Y-%m-%d %H:%M:%S'\"'\"' '\"'\"'2026-09-16 03:35:00'\"'\"' +%s); while [ \"$(date +%s)\" -lt \"$t\" ]; do sleep 30; done; echo \"03:35 reached: stub window ends 03:40, courier deadline 03:45; arm the 03:46 seat-launch wait\"; launchctl list | grep joulewise | tr '\"'\"'\\n'\"'\"' '\"'\"' '\"'\"'; echo' < /dev/null && pwd -P >| /tmp/claude-3fee-cwd\n"
+    }
+  ],
+  "chain_exit_code": 0,
+  "chain_sha256": null,
+  "ended_epoch_s": 1789554303.1208582,
+  "ended_monotonic_ns": 26987699829666,
+  "plan_id": "rehearsal-20260916c",
+  "receipt_class": "REHEARSAL_STUB",
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1789554300.821443,
+  "started_monotonic_ns": 26985400405958,
+  "verdict": "REHEARSAL_ONLY"
+}
