@@ -1590,3 +1590,322 @@ scored-source extension, and second-device path needs its own later admission.
 3. **A10 + A11:** 16+12=28 windows, 7 reserve in a 35-window week; a difficulty-transfer paper only after the AP-5/source ruling; otherwise retain energy and external scores separately.
 4. **A08 + A13:** 12+10=22 windows, 6 reserve in a 28-window week; speculative burst and prefix-state interactions after observability support; A09 waits for executable MTP.
 5. **A15 or A16:** 16 or 18 windows plus at least 5 reserve; a second device buys coefficient transport or state-placement falsification, not both full studies or automatic generalization.
+
+## New questions 2026-09-16 (Fable exploration)
+
+**Basis: Paper C already exists** — the same premise as the Astra section
+above. `RQ-NEXT-*` are bank-local proposal identifiers, not registry rows.
+Sizes are 4-bit MLX unless stated. **NEEDS-WEB** marks a runtime-support fact
+the seat could not verify; it is a prerequisite, never an assumption. Window
+counts are the seat's, sized at ≈3.5 h of capture per window (≈80 members at
+≤8B, ≈40 at the 100B class); the research plan rescales them.
+
+**Paper-C facts consumed (PC-n):** PC-1 labelled attribution floor ≈1 J per
+phase, effective contrast bar ≈5 J, per-token resolution = bar/N. PC-2 timing
+widening dominates scatter (R≥2): longer windows beat more repetitions. PC-3
+coefficients `E = fixed + a·p + b·d` (p prompt tokens, d decode tokens) fitted
+per model/quant with held-out shapes; session composition and prefix crossover
+resolved. PC-4 decode is bandwidth-bound at near-flat power (≈23–28 W from
+1.5B to 122B-A10B), so decode energy differences are decode *time*. PC-5
+chunked KV-growth slope and context-nonlinearity onset known per model. PC-6
+token-shape sufficiency (category/content collapse to token counts at fixed
+shape) resolved. PC-7 sampling energy variance decomposed into length vs
+residual. PC-8 prefill resolvable only at ≥3 records (~0.34 s); shorter
+prefill prints `not resolvable`. PC-9 quantization split (watts vs time),
+keep-warm break-even, 128 GB failure frontier. Planning levels: 512-token
+decode ≈47 J (1.5B), ≈192 J (7B), ≈304 J (122B-A10B); bar 5 J ⇒ ≈10 mJ/token
+over 512 tokens, ≈2.4 mJ/token over 2048.
+
+- **RQ-NEXT-BYTES-LAW Bytes-touched-per-token decode law:** Across dense and
+  MoE at fixed quant, is decode energy/token one linear function of bytes read
+  per token (active weights + KV), with resident-but-inactive bytes costing
+  nothing? Ceiling L2/L3 via a predeclared one-covariate fit plus a held-out
+  model. **Extension** of `C5-1.1` (lifts its 4–6-point cap).
+  **Mechanism:** PC-4 ⇒ E/token = P·bytes/BW_eff; resident size enters only if
+  effective bandwidth drops (expert scatter, paging). **Design:** Qwen3
+  1.7B/4B/8B/14B/32B dense, Qwen3-30B-A3B, Qwen3.5-122B-A10B,
+  Qwen3-Next-80B-A3B; p=256, d=2048; 14B held out. 10% of 47 J ≈ bar at d=512;
+  at d=2048 resolution ≈1.3%. Windows: 3. **Difficulty:** none. **Risk:** quant
+  group-size drift across sizes; per-prompt expert-load imbalance (record
+  router statistics). Qwen3-Next-80B-A3B runtime support: NEEDS-WEB.
+
+- **RQ-NEXT-TOPK-KNOB Router top-k as an active-bytes dial:** Within one MoE
+  artifact, does overriding top-k (4/8/16 on Qwen3-30B-A3B) move decode
+  energy/token in proportion to active bytes with resident bytes fixed? Ceiling
+  L2, work-matched never output-matched. **NEW.** **Mechanism:** identical
+  weights and KV; only experts loaded per token vary — the cleanest
+  active-vs-resident isolation. **Design:** k∈{4,8,16}, p=256, d=1024, n=10;
+  predicted ≈+50 J per doubling ≫ 5 J. Windows: 1. **Difficulty:** none.
+  **Risk:** top-k override surface in MLX (NEEDS-WEB); shared-expert term
+  fixed; quality claims forbidden.
+
+- **RQ-NEXT-MIXER-3B Attention mixer at matched ~3B active:** At one problem
+  profile, do MLA (DeepSeek-V2-Lite 16B-A2.4B), GQA (Qwen3-30B-A3B),
+  Gated-DeltaNet hybrid (Qwen3-Next-80B-A3B) and KDA hybrid (Kimi-Linear-48B-A3B)
+  differ in decode slope vs position and prefill scaling with context? Ceiling
+  L2 named quadruplet, no class generalization. **Extension** of
+  `RQ-AXI-HYBRID-PAIR`; the D-041 KDA arm. **Mechanism:** GQA KV read grows
+  linearly with context; MLA compresses it; delta/linear state is constant —
+  the slope IS the mixer signature (PC-5). **Design:** p∈{512, 8K, 32K}, d=512,
+  byte-matched roster per tokenizer; slopes normalized to each model's p=512
+  level. 32K KV read ≈ weight bytes for GQA ⇒ tens of J over 512 tokens;
+  hybrids ≈0. Windows: 3. **Difficulty:** none. **Risk:** MLX support for
+  Kimi-Linear and DeepSeek-V2 (NEEDS-WEB; the Astra section found upstream
+  source files — source-level candidacy, not exercised support); totals differ
+  across models — pairs with BYTES-LAW.
+
+- **RQ-NEXT-MIXER-120B 128 GB-class mixer triplet:** Do GLM-4.5-Air (full
+  GQA, 106B-A12B), gpt-oss-120b (alternating sliding-window 128, 5.1B active,
+  MXFP4) and Qwen3.5-122B-A10B (hybrid — verify) differ in prefill
+  energy/prompt-token at 16K–128K and in decode slope? Ceiling L2.
+  **Extension** of `C5-1.2` + `RQ-AXI-HYBRID-PAIR`. **Mechanism:** a sliding
+  window caps KV read; prefill is quadratic for full attention, linear for
+  banded/linear layers. **Design:** p∈{2K,16K,64K,128K}, d=512, n=8; frontier
+  recorded (PC-9). 128K prefill ≈ minutes at ≈40 W ⇒ kJ ≫ bar. Windows: 4.
+  **Difficulty:** none. **Risk:** quant formats differ — within-model slopes
+  only; GLM-4.5-Air and gpt-oss-120b MLX support: NEEDS-WEB.
+
+- **RQ-NEXT-SPEC-SURFACE Speculative-decoding break-even surface from
+  coefficients:** Can speculation-on energy be predicted as target-verify
+  steps + drafter steps from the two models' PC-3 coefficients, and where is
+  break-even acceptance for 8B/32B/70B targets with 0.6B/1.7B drafters? Ceiling
+  L2/L3 (predicted vs measured, held-out pair). **Extension** of `C5-2.5c`.
+  **Mechanism:** PC-4 ⇒ a batched verify step costs ≈ one decode step in bytes;
+  break-even acceptance ≈ f(bytes_draft/bytes_target). **Design:** greedy
+  (output-identical, so `C-023-OUTPUT-IDENTITY` holds by construction), d=1024,
+  n=10; Llama-3.3-70B ≈40 GB, ≈10 tok/s ⇒ ≈1.5 kJ/512 tokens, 20% effects
+  ≈300 J. Windows: 3. **Difficulty:** none. **Risk:** observed-acceptance
+  accounting; the AXI-SC speculative path was `unsupported` in July — a
+  counter-complete MLX path is a prerequisite (NEEDS-WEB).
+
+- **RQ-NEXT-MTP Native multi-token prediction vs external draft:** At output
+  identity, joules per committed token for native MTP heads (Qwen3-Next /
+  Qwen3.5) vs a draft model vs baseline? Ceiling L2, separate family
+  `FAM-AXI-SPEC-NATIVE-MTP`. **Extension** of the `C5-2.5c` MTP arm.
+  Contingent on an MLX MTP surface (NEEDS-WEB; the Astra section reports the
+  MLX source strips MTP weights). Windows: 1 if supported. **Difficulty:** none.
+
+- **RQ-NEXT-KVQ-SURFACE KV quantization × context surface:** Does
+  kv_bits∈{16,8,4} save energy equal to (KV-byte saving × PC-5 slope) minus a
+  fixed dequantization term, on Qwen3-32B and Qwen3.5-122B at 2K/16K/64K?
+  Ceiling L2, no quality-neutrality without a divergence report. **Extension**
+  of `C5-2.11`. **Design:** 32B fp16 KV ≈262 KB/token ⇒ 17 GB per step at 64K
+  ≈ weight bytes; halving ⇒ ≈25% ≈100 J over 512 tokens; the net sign flips at
+  short context. Windows: 3. **Difficulty:** none. **Risk:** 64K prefill on
+  122B near the frontier; quantized-cache support per model class (NEEDS-WEB).
+
+- **RQ-NEXT-PHASE-CROSSOVER The prefill/decode crossover length p\*:** For
+  each model, at what prompt length does prefill energy equal 512-token decode
+  energy, and is p\*/d constant within a family (a device roofline signature)?
+  Ceiling L2/L3 (predict p\* for a held-out model). **NEW**; stands on PC-3,
+  PC-4, PC-8. **Mechanism:** prefill is compute-bound (FLOPs ∝ active·p),
+  decode bandwidth-bound; their per-token ratio is the machine's FLOP/byte
+  ratio, model-invariant at fixed quant. **Design:** 4 models ×
+  p∈{512,1K,2K,4K,8K}, n=10; 8B at 4K ≈200–250 J per phase. Windows: 2.
+  **Difficulty:** none. **Risk:** prefill_step_size confound (next row).
+
+- **RQ-NEXT-PREFILL-CHUNK Prefill chunk size as an energy knob:** Does prefill
+  energy/prompt-token fall with chunk size and saturate where GPU utilization
+  saturates? Ceiling L2. **NEW**; only a labelled prefill floor (PC-1, PC-8)
+  makes this prefill-only effect claimable. **Design:**
+  prefill_step_size∈{256,512,2048,8192}, p=8K, 8B and 32B, n=10; ≈100 J
+  prefill, 10% clears. Windows: <1. **Difficulty:** none.
+
+- **RQ-NEXT-BATCH-KNEE Static-batch decode knee:** Does decode energy/token
+  fall as 1/B until B×KV bytes ≈ weight bytes (predicted from PC-5), while
+  prefill energy/token stays flat? Ceiling L2. **Extension** of the `C5-2.2`
+  Mac leg (AXI-SB `supported`). **Design:** B∈{1,2,4,8,16}, 8B and 30B-A3B,
+  p=d=512; per-sequence 200 J → ≈40 J at B=8. Windows: 2. **Difficulty:** none.
+
+- **RQ-NEXT-ROUTING×BATCH MoE routing concentration under batching:** At B>1,
+  do tokens routed to shared experts amortize weight reads so that per-request
+  energy tracks router concentration, with a predicted null at B=1 (expert ≫
+  system-level cache, no reuse)? Ceiling L2. **Extension** of D-070 MOE×BATCH.
+  **Design:** Qwen3-30B-A3B, B∈{1,4,16}, rosters engineered for concentrated vs
+  dispersed routing, router statistics logged. Windows: 2. **Difficulty:**
+  none. **Risk:** MLX router hook (desk implementation prerequisite).
+
+- **RQ-NEXT-EPCA-LEVELS Energy per correct answer vs published difficulty:**
+  At fixed shape with natural EOS under a cap, does energy per correct answer
+  rise across MATH levels 1–5, and is the rise fully explained by emitted-token
+  count (PC-6/PC-7)? Ceiling L2, correctness quarantined, never "difficulty
+  causes energy". **Extension** of `C5-1.9`/`C5-I.2`. **Design:** Qwen3-8B,
+  32B, 30B-A3B; thinking off/on as arms; 32 items/level. Level-window energy ≈
+  hundreds of J ≫ bar; the binomial guard (±17% at 32 items) dominates.
+  Windows: 3. **Difficulty:** MATH per-item level, `{axis,value,scale,label,
+  source}` preserved from the dataset paper. **Risk:** contamination
+  (shape-only claims), cap hits under thinking; extending AP-5 to MATH needs a
+  prospective policy ruling (see `RQ-D-A10`).
+
+- **RQ-NEXT-EPCA-MECHANISM Energy per correct answer across mechanisms at one
+  profile:** On the same MATH strata, dense 32B vs MoE 30B-A3B vs hybrid
+  80B-A3B vs 122B-A10B at a matched accuracy band — which mechanism buys a
+  correct answer cheapest, and is the ordering level-stable? Ceiling L2 named
+  set. **Extension** of `C5-1.9`. Windows: 3 (shares EPCA-LEVELS rosters).
+  **Difficulty:** as EPCA-LEVELS. **Risk:** predeclare accuracy bands, never
+  post hoc.
+
+- **RQ-NEXT-COEFF-LAW Coefficient scaling law:** Do the PC-3 coefficients
+  (fixed, a, b) follow a law in (active bytes, KV bytes/token, resident bytes)
+  across the BYTES-LAW panel, predicting a held-out model's held-out shape
+  within the bar? Ceiling L3 through AP-1 holdout machinery only. **NEW**;
+  extends `Q4`/`C-023-COEFF-TRANSPORT`. Windows: 0 extra (rides BYTES-LAW +
+  PHASE-CROSSOVER). **Difficulty:** none.
+
+- **RQ-NEXT-RESIDENT-IDLE Does resident memory cost idle power:** Is the fixed
+  term a function of resident bytes (65–100 GB resident vs none), or is LPDDR5
+  self-refresh contents-blind (predicted null)? Ceiling L2. **Extension** of
+  `C5-1.7`. 30 s idle ⇒ 1 W = 30 J; resolution ≈0.03 W. Windows: <1.
+  **Difficulty:** none. **Risk:** macOS memory compression at high residency.
+
+- **RQ-NEXT-FRONTIER-235B The 128 GB frontier:** Does Qwen3-235B-A22B at
+  3-bit (~100 GB) run, and does its energy/token sit on the BYTES-LAW line or
+  above it (paging)? Ceiling L1/L2 frontier point. **Extension** of `C5-1.10`.
+  Windows: 1. **Difficulty:** none. **Risk:** 3-bit MLX conversion availability
+  (NEEDS-WEB).
+
+- **RQ-NEXT-ROOFLINE-DEVICE Second device as roofline falsifier:** On a
+  3080 Ti (912 GB/s, 12 GiB, board boundary), do BYTES-LAW and p\*/d rescale by
+  the device's byte/FLOP ratio? Ceiling L2 per boundary; L4 only with
+  calibration. **Extension** of `C5-2.7`/`Q6`. Fits: Qwen3 1.7B/4B/8B.
+  Windows: NV-gated, 2. **Difficulty:** none. Outside an Apple-only plan.
+
+**What one week (~30 seat-windows) buys, ranked:** (1) BYTES-LAW + COEFF-LAW +
+FRONTIER-235B (4): the scaling law that turns Paper C into a predictive model.
+(2) PHASE-CROSSOVER + PREFILL-CHUNK (3): the roofline signature p\*/d, the
+cheapest falsifiable prediction. (3) MIXER-3B + MIXER-120B (7): the north-star
+mechanism paper. (4) SPEC-SURFACE + BATCH-KNEE + ROUTING×BATCH (7):
+dynamic-execution axes predicted from static coefficients. (5) KVQ-SURFACE +
+EPCA-LEVELS/MECHANISM (9): the applied paper; TOPK-KNOB and RESIDENT-IDLE fill
+gaps. **Three boldest:** TOPK-KNOB (one artifact, one dial), PHASE-CROSSOVER
+(p\*/d as a machine constant predicted for a held-out model), ROUTING×BATCH
+(routing entropy as an energy knob, only under batching).
+
+## Cross-seat dedupe 2026-09-16
+
+Each row pairs an Astra `RQ-D-A*` with a Fable `RQ-NEXT-*` that isolates the
+same physical mechanism. "Stronger" means the design that identifies the
+mechanism with fewer confounds or a sharper predeclared prediction; the
+magistrate retires the weaker id later. Unpaired ids are listed after the
+table.
+
+| Astra | Fable | Shared mechanism | Stronger, and why |
+|---|---|---|---|
+| RQ-D-A01 | RQ-NEXT-RESIDENT-IDLE (+ the resident-bytes term of BYTES-LAW) | Resident-but-unread bytes vs bytes actually read: does residency cost joules before memory pressure? | **A01.** Same model with 0/24/48 GB of unread retained buffers is a within-artifact intervention; RESIDENT-IDLE only measures the idle term. Keep RESIDENT-IDLE's 30 s idle read as a rider inside A01's floor window. |
+| RQ-D-A03 | RQ-NEXT-ROUTING×BATCH | Expert-route overlap within a batch permits weight reuse; disjoint routes enlarge the working set. | **A03** for the identification (dense 32B control, predictor trained on two cells, held-out third cell and unseen partition). Adopt Fable's predeclared B=1 null as an extra arm — it is the sharper falsifier. |
+| RQ-D-A04 | RQ-NEXT-BYTES-LAW + RQ-NEXT-COEFF-LAW | Energy as a function of bytes moved (weights + KV) per token, transported to a held-out model. | **BYTES-LAW/COEFF-LAW** as the first law: one covariate, eight models, one held-out model — it directly lifts `C5-1.1`'s cap and cannot overfit. A04's duration predictor and out-of-family challenges (70B, A3B) become the second leg once the one-covariate law stands or fails. |
+| RQ-D-A05 | RQ-NEXT-MIXER-3B + RQ-NEXT-MIXER-120B | KV-read growth with context differs by mixer (GQA linear, MLA compressed, linear/delta constant, sliding-window capped). | **MIXER-3B.** Matching ≈3B active removes the size confound A05 carries (32B dense vs 16B-A2.4B vs 27B vs 48B-A3B). Take A05's held-out-context prediction step (freeze the crossover before the held-out run) into MIXER-3B. |
+| RQ-D-A06 | RQ-NEXT-PREFILL-CHUNK | Prefill chunk size trades matrix parallelism against state hand-offs and launches. | **PREFILL-CHUNK first** (dense 8B/32B, <1 window, saturation curve); A06's hybrid leg with output-identity validation and held-out 16K prediction rides afterwards, if the hybrids are supported. |
+| RQ-D-A07 | RQ-NEXT-KVQ-SURFACE | KV-byte saving vs a fixed dequantization cost. | **KVQ-SURFACE** as the first-order surface: it predicts the saving from the PC-5 slope. A07's weight×KV interaction is the second leg. |
+| RQ-D-A08 | RQ-NEXT-SPEC-SURFACE | A verify step costs ≈ one decode step in bytes; break-even acceptance follows from drafter/target bytes. | **SPEC-SURFACE first**: it predicts break-even from PC-3 coefficients with a held-out pair (L3). A08 (burst distribution at matched mean acceptance) is a second-order question that needs SPEC-SURFACE's surface to exist. Both need the counter-complete speculative path (NEEDS-WEB). |
+| RQ-D-A09 | RQ-NEXT-MTP | Native MTP heads reuse target state; an external drafter carries its own weights. | Equivalent; both blocked on an MLX MTP surface. Keep **A09** as the design record (target, head on/off, qualified draft candidate named). |
+| RQ-D-A10 | RQ-NEXT-EPCA-LEVELS | Energy per correct answer across published MATH levels at a fixed token envelope. | **EPCA-LEVELS** asks the mechanism question (is the rise fully explained by emitted tokens, PC-6/PC-7); A10's frozen licensed subset, deterministic quarantined scoring, and the AP-5 policy prerequisite are carried in as its protocol. |
+| RQ-D-A11 | RQ-NEXT-EPCA-MECHANISM | Residual energy across mechanisms on the same strata. | **A11** identifies an execution-policy effect only via A02's dispatch intervention; EPCA-MECHANISM is a cheaper named-set comparison sharing EPCA-LEVELS rosters. Run EPCA-MECHANISM first; A11 after A02 exists. |
+| RQ-D-A12 | RQ-NEXT-BATCH-KNEE | Batching amortizes weight reads until B×KV bytes ≈ weight bytes. | **BATCH-KNEE first**: a point prediction of the knee from PC-5 in 2 windows. A12 adds the context axis and the phase split with a held-out interior — the extension. |
+| RQ-D-A15 | RQ-NEXT-ROOFLINE-DEVICE | A second device rescales the byte/FLOP ratio and falsifies the mechanism. | **ROOFLINE-DEVICE** runs on owned hardware (3080 Ti) with a specific rescaling prediction; A15 prefers a second Mac. Both outside the Apple-only plan. |
+
+**Unpaired.** Astra only: A02 (function-preserving expert locality), A13
+(prefix × verification-state reuse), A14 (phase compensation hidden by a
+request total), A16 (state-transfer placement). Fable only: TOPK-KNOB (no
+Astra design turns the router's k), PHASE-CROSSOVER (p\*/d as a roofline
+constant), FRONTIER-235B (a frontier point; related to A01's pressure arm and
+`C5-1.10`, not the same question).
+
+## Literature and best practices 2026-09-16
+
+Source: the literature seat (`rq-literature-fable.md`, 2026-09-16; every entry
+verified by fetching the page or PDF). One correction it made to its brief:
+`docs/paper/draft-v1.md` §A.2 commands `powermetrics` at 100 ms (~10 Hz
+observed), not ~1 s.
+
+### Best practices, item by item (seat §2)
+
+| Practice (source) | JouleWise |
+|---|---|
+| Analyzer ≤1% uncertainty, calibrated yearly, fixed ranges (SPEC methodology https://www.spec.org/power/docs/SPEC-Power_and_Performance_Methodology.pdf; MLPerf checker https://github.com/mlcommons/power-dev/blob/master/compliance/check.py) | **Not done**: software counter, no gain calibration; Apple calls the values "estimated and may be inaccurate"; `draft-v1.md` §7 admits no wall check. **Weaker**; the field's first question. |
+| Clock sync (MLPerf: NTP, 800 ms tolerance) | **Stronger**: in-window pulse fiducials, rate-aware clock model, refusal on active NTP correction (`draft-v1.md` §2). Sub-100 ms bound vs 800 ms. |
+| Sampling cadence vs phase length (Dauner https://hotcarbon.org/assets/2026/paper-46.pdf; Yang https://arxiv.org/abs/2312.02741; Hähnel http://www.sigmetrics.org/greenmetrics/2012/papers/Hahnel.pdf) | **Partly**: resolvability rule <3 records → `not resolvable` (`draft-v1.md` §1); edge smear characterised by pulses (§A.3). **Not done**: `powermetrics` internal update period / stale reads uncharacterised — Dauner's NVML finding is the analogue. |
+| Repetitions ≥30 (Cruz https://luiscruz.github.io/2021/10/10/scientific-guide.html), 10–20 (Illusion https://arxiv.org/abs/2605.11999), CI stopping rule (Wilkins https://doi.org/10.1145/3632775.3662830) | **Differently**: n=10 ABBA blocks in the diagnostic contrast (`CLAIMS_STATUS.md` §2), pre-registered n with a one-way prior ratchet; repetition attacks the smaller term by design. Defensible; state why n is fixed rather than adaptive. |
+| Warm-up (Cruz 5 min; Illusion 3 iterations) | **Done for calibration** (3 warm-up pulses, `draft-v1.md` §A.3.4). Inference warm-up member: no stated rule found in the draft — make it explicit. |
+| Thermal control (SPEC ambient ≥20 °C, ±0.5 °C sensor, 4 samples/min; Watt Counts <65 °C cool-down https://arxiv.org/abs/2604.09048; Illusion logs die temperature) | **Differently**: cooldown gate ≤300 s to ≤1.10× reference power, "nominal thermal pressure", environment snapshots (`draft-v1.md` §3, §5). No ambient sensor, no die temperature. **Weaker on record, stronger on gating.** |
+| Idle: measure as its own interval, never subtract (SPEC); report gross + marginal | **Done**: gross headline, idle-subtracted labelled secondary, phase energy gross-only (`draft-v1.md` §4). |
+| Counterbalancing / drift (Georges; Mytkowicz) | **Stronger**: ABBA with midpoint evidence and a separate drift allowance (`draft-v1.md` §5). Nobody in the seat's related-work list does this. |
+| Uncertainty reporting | **Stronger**: cell resolution bound + separate directional interval + printed refusal (`draft-v1.md` §4). Only AgentStop, Watt Counts, Bench360 and Illusion report any CI. |
+| Tracker overhead (Khan https://dl.acm.org/doi/10.1145/3177754; Cao https://aclanthology.org/2020.sustainlp-1.19/; NAACL 2025 https://arxiv.org/abs/2502.05610) | **Not done**: `powermetrics` sampler overhead at 100 ms not reported. Cheap to add. |
+| Pre-registration (Zhuang et al. https://arxiv.org/abs/2605.28873) | **Stronger and unique in energy work**: frozen packs, hashes, freeze receipts (`docs/paper/protocol` §P.4). |
+| Artifacts (ACM v1.1 via https://sigir.org/general-information/acm-sigir-artifact-badging/; ICPE 2026 AE https://icpe2026.spec.org/tracks-and-submissions/artifact-evaluation-track/: Zenodo DOI, README with time estimates) | **Partly**: code open, evidence archive pending, FLOOR-BIND-01 limits third-party re-derivation (`draft-v1.md` §9). Target Available + Functional; Results Validated cannot be claimed at submission. |
+
+### Duplicates — cite and reposition (seat §3)
+
+- **The 1.7B-vs-8B decode contrast:** model-size scaling is published on GPUs
+  (ML.ENERGY https://arxiv.org/abs/2505.06371, Watt Counts
+  https://arxiv.org/abs/2604.09048) and on Apple silicon (Silicon Showdown
+  https://arxiv.org/abs/2605.00519, GreenBench https://arxiv.org/abs/2608.28667).
+  Keep it as the decision-rule demonstration only, with those citations.
+- **C5-1.1:** Fernandez et al. (https://aclanthology.org/2025.acl-long.1563/;
+  OLMoE up to 54% *more* energy than dense OLMo-1B) and ML.ENERGY v3
+  (https://arxiv.org/abs/2601.22076; Qwen3-30B-A3B 3.56× lower J/token than
+  Qwen3-32B) already conflict on kernels, so stack-conditioned pairwise is the
+  honest framing, as C-014 caps it.
+- **C5-1.12:** Arya & Simmhan (https://arxiv.org/abs/2506.09554; INT8 can cost
+  more than FP16) and ML.ENERGY FP8 show non-monotone quantization results;
+  cite, do not re-measure as a headline.
+- **C5-2.5:** Fernandez already shows the batch-size sign flip (speculative
+  decoding −29% at batch ≤16, +26% at batch 128).
+
+### Novel (seat §3)
+
+- **RQ-ATTRIBUTION-DOMINANCE:** no paper quantifies energy moved by phase-edge
+  placement; the closest (Hähnel) is CPU-path scale. Illusion and Ruf &
+  Detyniecki avoid the boundary by construction (separate operations;
+  generation length = 1).
+- **RQ-SHORT-PREFILL-RESOLVABILITY** as a printed negative with a record-count
+  rule is new for Apple silicon and dovetails with Dauner.
+- The pre-registered floor with refusal semantics is unique here.
+- **C5-1.3** (per-phase power asymmetry) is known on GPUs (Splitwise
+  https://arxiv.org/abs/2311.18677, Illusion) but unmeasured with a calibrated
+  boundary on a unified-memory SoC — future characterisation, not a claim.
+- **Reviewer questions we cannot yet answer:** (1) gain vs wall power under
+  this load (Cao/Jay show 17–20% load-dependent gaps; `Q6` is cut); (2)
+  `powermetrics` update granularity and whether 100 ms interval averages
+  alias; (3) why not isolate prefill with generation length = 1 (the 1-token
+  arm is a cheap falsifier we do not run); (4) sampler overhead; (5) one unit,
+  one stack, pulse-to-inference transfer untested (Future Work #1 is the right
+  test).
+- **The one change that most raises citation-worthiness:** an
+  independent-read-path cross-check — read the IOReport "Energy Model"
+  cumulative counters (Zeus's Apple interface
+  https://github.com/ml-energy/zeus-apple-silicon; 1 mJ, arbitrary instants, no
+  sudo) at the runtime's own phase edges in the same window, and compare each
+  phase's counter delta with the `powermetrics` interval integral against the
+  cell floor. Caveat to print: both paths are Apple's model, so it tests
+  read-path and time-base independence, not physics. Run it as a post-`_v5`
+  diagnostic-window arm; do not touch the frozen pack. Runner-up: a
+  generation-length-1 prefill-isolation arm (Ruf's design) as a boundary-free
+  falsifier. Both are ruled into the research plan's Phase 0 desk day.
+
+### Cite these (seat §4)
+
+1. Tschand et al., MLPerf Power, HPCA 2025, https://arxiv.org/abs/2410.12032 — external-analyzer rules, 60 s minimum, ranging; the benchmark-rules baseline we translate.
+2. SPEC Power and Performance Methodology 2025, https://www.spec.org/power/docs/SPEC-Power_and_Performance_Methodology.pdf — ≤1% uncertainty, ambient ≥20 °C, idle as its own interval.
+3. Chung et al., ML.ENERGY Benchmark, NeurIPS 2025, https://arxiv.org/abs/2505.06371 — steady-state per-token method, no repetitions.
+4. You et al., Zeus, NSDI 2023, https://www.usenix.org/conference/nsdi23/presentation/you — energy-window abstraction; Apple backend chose IOReport.
+5. Jay et al., CCGrid 2023, https://doi.org/10.1109/CCGrid57682.2023.00020 — software meters vs wall: load-dependent gap.
+6. Cao et al., SustaiNLP 2020, https://aclanthology.org/2020.sustainlp-1.19/ — software estimates 20% off, twice the spread.
+7. Khan et al., RAPL in Action, TOMPECS 2018, https://dl.acm.org/doi/10.1145/3177754 — counter-mechanics checklist.
+8. Hähnel et al., 2012, http://www.sigmetrics.org/greenmetrics/2012/papers/Hahnel.pdf — edge alignment to counter updates; nearest ancestor.
+9. Dauner et al., HotCarbon 2026, https://hotcarbon.org/assets/2026/paper-46.pdf — sampling frequency vs counter update.
+10. Yang et al., SC24-W, https://arxiv.org/abs/2312.02741 — nvidia-smi samples 25% of runtime.
+11. Ma et al., Illusion of Power Capping, 2026, https://arxiv.org/abs/2605.11999 — strongest phase methodology; counter cross-check.
+12. Ruf & Detyniecki, HotCarbon 2026, https://hotcarbon.org/assets/2026/paper-17.pdf — 1-token prefill isolation; boundary-free alternative.
+13. Niu et al., TokenPowerBench, AAAI 2026, https://arxiv.org/abs/2512.03024 — phase tagging without an error budget.
+14. Patel et al., Splitwise, ISCA 2024, https://arxiv.org/abs/2311.18677 — prefill/decode power asymmetry.
+15. Patel et al., POLCA, ASPLOS 2024, https://arxiv.org/abs/2308.12908 — boundary read visually from DCGM traces.
+16. Fernandez et al., ACL 2025, https://aclanthology.org/2025.acl-long.1563/ — MoE, speculative, batching sign flips; for C5-1.1/C5-2.5.
+17. Javat & Kazakov, Silicon Showdown, 2026, https://arxiv.org/abs/2605.00519 — `powermetrics` vs NVML boundary mismatch.
+18. Pham et al., AgentStop, CAIS 2026, https://arxiv.org/abs/2605.15206 — `powermetrics` 100 ms with CIs; nearest Apple methodology.
+19. Kannan et al., GreenBench, 2026, https://arxiv.org/abs/2608.28667 — Apple LLM energy at 2 s, no anchoring; cautionary comparator.
+20. Zhuang et al., Paired-MDE, 2026, https://arxiv.org/abs/2605.28873 — pre-registered detectable effect (accuracy, not energy).
+
+Not verified by the seat: `_v5` block counts per cell; an inference warm-up
+rule in the draft; the ACM badging page (403; SIGIR mirror used).
