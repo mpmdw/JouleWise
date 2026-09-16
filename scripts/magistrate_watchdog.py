@@ -17,6 +17,7 @@ import fcntl
 import hashlib
 import json
 import os
+import plistlib
 import re
 import signal
 import stat
@@ -27,6 +28,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Protocol, Sequence
+from xml.parsers.expat import ExpatError
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +46,7 @@ from joulewise.night_gate import (  # noqa: E402
 from scripts.run_night import (  # noqa: E402
     COURIER_DEADLINE_S,
     COURIER_LOCK_FRESH_S,
-    _next_deadman_epoch,
+    deadman_epoch,
     make_probes,
 )
 
@@ -254,6 +256,13 @@ class Storage:
 
     def read_text(self, path: Path) -> str:
         return path.read_text(encoding="utf-8")
+
+    def read_bytes(self, path: Path) -> bytes:
+        return path.read_bytes()
+
+    def list_directory(self, path: Path) -> Sequence[Path]:
+        # Unlike glob/exists, iterdir propagates unreadable-directory errors.
+        return list(path.iterdir())
 
     def glob_plans(self) -> Sequence[Path]:
         return sorted(self.root.parent.glob("*/night_plan.json"))
@@ -688,30 +697,56 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
                 raise PlanError(
                     "night_plan_malformed", "plan authored_epoch_s is in the future"
                 )
-        except PlanError as exc:
-            detail = f"{type(exc).__name__}: {exc.detail}"
+            deadman_epoch(plan)
+        except (PlanError, OverflowError, ValueError) as exc:
+            detail = f"{type(exc).__name__}: {exc}"
             diagnostics.append(
                 PlanDiagnostic("plan_malformed", "night_plan_malformed", path, detail)
             )
-            errors.append(f"night_plan_malformed {path}: {exc.detail}")
+            errors.append(f"night_plan_malformed {path}: {exc}")
             continue
         plans.append(plan)
     return PlanSnapshot(tuple(plans), tuple(errors), tuple(diagnostics))
 
 
-def local_fixed_fence(now: dt.datetime) -> str | None:
-    local = now.astimezone()
-    second = (
-        local.hour * 3600
-        + local.minute * 60
-        + local.second
-        + local.microsecond / 1_000_000
-    )
-    if 2 * 3600 + 45 * 60 <= second < 3 * 3600 + 30 * 60:
-        return "belt_02:45_03:30"
-    if 7 * 3600 <= second < 7 * 3600 + 60:
-        return "deadman_minute_07:00"
-    return None
+def installed_agent_fence(
+    now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None
+) -> str | None:
+    """Read installed agents independently of custody discovery; fail closed."""
+    directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
+    try:
+        entries = set(storage.list_directory(directory))
+    except FileNotFoundError:
+        # No LaunchAgents directory means no installed plist; a dangling
+        # directory symlink is unreadable and must still fail closed.
+        if storage.exists(directory):
+            raise ValueError(f"unreadable LaunchAgents directory: {directory}")
+        return None
+    reasons = []
+    for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
+        plist = directory / f"{label}.plist"
+        if plist not in entries:
+            continue
+        try:
+            document = plistlib.loads(storage.read_bytes(plist))
+            argv = document["ProgramArguments"]
+            if not isinstance(argv, list) or not all(isinstance(arg, str) for arg in argv):
+                raise ValueError("ProgramArguments must be a string array")
+            if argv.count("--plan") != 1:
+                raise ValueError("ProgramArguments must contain exactly one --plan")
+            plan_path = Path(argv[argv.index("--plan") + 1])
+            if not plan_path.is_absolute():
+                raise ValueError("installed --plan must be absolute")
+            plan = NightPlan.from_mapping(json.loads(storage.read_text(plan_path)))
+            if plan.authored_epoch_s > now.timestamp():
+                raise ValueError("installed plan authored_epoch_s is in the future")
+            deadman_epoch(plan)
+            if plan_span_active(plan, now.timestamp(), storage):
+                reasons.append(f"installed_plan:{plan.plan_id}")
+        except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
+                plistlib.InvalidFileException, ExpatError) as exc:
+            raise ValueError(f"unreadable installed agent {plist}: {exc}") from exc
+    return "; ".join(reasons) or None
 
 
 def plan_completion_epoch(plan: NightPlan) -> float:
@@ -733,7 +768,7 @@ def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> b
         return True
     if storage.exists(night / "courier.sent"):
         return False
-    return now_epoch_s <= _next_deadman_epoch(plan.t0_epoch_s) + COURIER_LOCK_FRESH_S
+    return now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S
 
 
 def plan_is_armed(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool:
@@ -746,7 +781,7 @@ def plan_is_armed(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool
         return True
     if storage.exists(night / "courier.sent"):
         return False
-    return now_epoch_s <= _next_deadman_epoch(plan.t0_epoch_s) + COURIER_LOCK_FRESH_S
+    return now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S
 
 
 def armed_plans(
@@ -779,12 +814,12 @@ def plan_conflicts(plans: Sequence[NightPlan]) -> list[str]:
 
     for index, left in enumerate(plans):
         left_start = left.t0_epoch_s - PLAN_LEAD_S
-        left_end = _next_deadman_epoch(left.t0_epoch_s) + COURIER_LOCK_FRESH_S
+        left_end = deadman_epoch(left) + COURIER_LOCK_FRESH_S
         for right in plans[index + 1 :]:
             if _canonical_measurement_root(left) == _canonical_measurement_root(right):
                 continue
             right_start = right.t0_epoch_s - PLAN_LEAD_S
-            right_end = _next_deadman_epoch(right.t0_epoch_s) + COURIER_LOCK_FRESH_S
+            right_end = deadman_epoch(right) + COURIER_LOCK_FRESH_S
             if max(left_start, right_start) <= min(left_end, right_end):
                 conflicts.add(
                     "overlapping spans use different measurement roots: "
@@ -1375,11 +1410,14 @@ def decide(
 
     snapshot = plan_snapshot or load_plans(storage, now_epoch_s=wall.timestamp())
     plans = list(snapshot.plans)
-    armed = armed_plans(plans, wall.timestamp(), storage)
+    try:
+        armed = armed_plans(plans, wall.timestamp(), storage)
+        conflicts = plan_conflicts(armed)
+    except (OverflowError, ValueError) as exc:
+        return Decision("HOLD_UNSAFE", f"night_plan_malformed: t0_epoch_s/window_max_s: {exc}")
     state["fenced_checkouts"] = fenced_checkout_rows(armed)
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
-    conflicts = plan_conflicts(armed)
     if conflicts:
         return Decision("HOLD_UNSAFE", "plan_conflict: " + "; ".join(conflicts))
 
@@ -1407,7 +1445,10 @@ def decide(
             storage.unlink(storage.root / "magistrate.lock")
             lock = None
 
-    fixed = local_fixed_fence(wall)
+    try:
+        installed = installed_agent_fence(wall, storage)
+    except (OSError, ValueError, OverflowError) as exc:
+        return Decision("HOLD_UNSAFE", f"installed_agent_fence: {exc}")
     active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage)]
     try:
         stop = deps.git_probe()
@@ -1437,8 +1478,8 @@ def decide(
         return Decision("STOPPED", stop.detail, adopt=owner is not None)
     if stop.state != "CLEAR":
         return Decision("NETWORK_UNCERTAIN", stop.detail, adopt=owner is not None)
-    if fixed is not None:
-        return Decision("FENCED", fixed)
+    if installed is not None:
+        return Decision("FENCED", installed)
     if owner is not None:
         return Decision("ACTIVE", f"owned pid {owner.pid} is live", adopt=True)
     if wall.timestamp() < float(state.get("next_eligible_epoch_s", 0.0)):

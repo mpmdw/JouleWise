@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 import hashlib
 import json
 from pathlib import Path
@@ -45,6 +44,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     MAX_DECLARED_SESSION_SLOTS,
 )
 from joulewise.night_gate import D166_REGISTRATION_PATH, NightPlan, PlanError  # noqa: E402
+from scripts.run_night import deadman_epoch  # noqa: E402
 
 RUNSHEET_PATH = (
     REPO_ROOT / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
@@ -60,10 +60,8 @@ TRACKED_CHAIN_PATH = REPO_ROOT / TRACKED_CHAIN_RELPATH
 # command line may contain one of these substrings.
 CENSUS_SUBSTRINGS = ("codex", "claude", "t3")
 
-# scripts/run_night.py:51,54-55 — the courier allowance and the dead-man minute.
+# Courier allowance is unchanged; the driver owns the derived dead-man.
 COURIER_DEADLINE_S = 300
-DEADMAN_HOUR = 7
-DEADMAN_MINUTE = 0
 
 # The pre-registered derivation night is twelve slots (cold-gate ruling 46 §R-c).
 PRE_REGISTERED_SLOT_COUNT = 12
@@ -226,18 +224,6 @@ def _validated_identity_epoch(path: Path) -> dict:
             "writer would refuse at d01 with the settle already spent"
         )
     return epoch
-
-
-def _next_deadman_epoch(t0_epoch_s: float) -> float:
-    """Mirror ``scripts/run_night.py:947-955``: the next local 07:00 after t0."""
-
-    t0 = datetime.fromtimestamp(t0_epoch_s)
-    deadman = t0.replace(
-        hour=DEADMAN_HOUR, minute=DEADMAN_MINUTE, second=0, microsecond=0
-    )
-    if deadman <= t0:
-        deadman += timedelta(days=1)
-    return deadman.timestamp()
 
 
 def slot_names(slot_count: int) -> list[str]:
@@ -525,13 +511,13 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
         )
 
     window_end_epoch_s = int(plan.t0_epoch_s + plan.window_max_s)
-    deadman = _next_deadman_epoch(plan.t0_epoch_s)
+    deadman = deadman_epoch(plan)
     completion = plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S
     if not completion < deadman:
         raise GenerationRefusal(
             "plan overruns the dead-man: t0 + window_max_s + "
-            f"{COURIER_DEADLINE_S} = {completion:.0f} is not before the next "
-            f"local 07:00 = {deadman:.0f}; move t0 earlier"
+            f"{COURIER_DEADLINE_S} = {completion:.0f} is not before the "
+            f"derived deadman_epoch_s = {deadman:.0f}"
         )
 
     out_path = Path(args.out).expanduser() if args.out else Path(plan.chain_path)
@@ -773,7 +759,7 @@ def render_region(chain_bytes: bytes) -> str:
         "— plus the driver's own work before it starts the chain at all; the\n"
         "window has to hold it on top of the programmed span.  The **courier\n"
         "allowance** is a separate 300 s the driver adds AFTER the window ends,\n"
-        "before the dead-man (the next local 07:00, the hour at which the night\n"
+        "before the derived dead-man (completion plus grace, when the night\n"
         "must be over whatever else is true).\n"
         "\n"
         "The generator refuses, before writing anything, when: the plan is not an\n"
@@ -782,8 +768,8 @@ def render_region(chain_bytes: bytes) -> str:
         f"{programmed_span_s(PRE_REGISTERED_SLOT_COUNT)} s for twelve slots) plus "
         f"the {PRE_SETTLE_ALLOWANCE_S} s pre-settle allowance;\n"
         f"`t0 + window_max_s + {COURIER_DEADLINE_S} s` (the courier allowance) is "
-        "not before the next\n"
-        "local 07:00; any emitted literal contains `codex`, `claude` or `t3`,\n"
+        "not before the\n"
+        "derived dead-man epoch; any emitted literal contains `codex`, `claude` or `t3`,\n"
         "which the night's own 30-second agent census would match and kill the\n"
         "night for; or the slot count is not the pre-registered twelve without an\n"
         "explicit `--slot-count-ruling` reference (which must be one line of\n"

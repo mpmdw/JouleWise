@@ -8,6 +8,7 @@ import io
 import inspect
 import json
 import os
+import plistlib
 import re
 import shlex
 import shutil
@@ -109,6 +110,9 @@ class WatchdogTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.temp = Path(self.temporary.name)
+        home_patch = mock.patch.object(wd.Path, "home", return_value=self.temp / "home")
+        home_patch.start()
+        self.addCleanup(home_patch.stop)
         self.local_tz = dt.datetime.now().astimezone().tzinfo
         assert self.local_tz is not None
         self.base = dt.datetime(2026, 9, 4, 1, 0, tzinfo=self.local_tz)
@@ -440,7 +444,7 @@ class FenceTests(WatchdogTestCase):
         self.assertFalse(wd.plan_span_active(plan, after_completion, self.harness.storage))
         (night / "courier.sent").unlink()
 
-        deadman_end = wd._next_deadman_epoch(plan.t0_epoch_s) + wd.COURIER_LOCK_FRESH_S
+        deadman_end = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S
         self.assertTrue(wd.plan_span_active(plan, deadman_end, self.harness.storage))
         self.assertFalse(wd.plan_span_active(plan, deadman_end + 0.001, self.harness.storage))
 
@@ -448,25 +452,113 @@ class FenceTests(WatchdogTestCase):
         plan = self.make_plan()
         night = Path(plan.custody_root) / "night"
         night.mkdir()
-        late = wd._next_deadman_epoch(plan.t0_epoch_s) + wd.COURIER_LOCK_FRESH_S + 1
+        late = wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S + 1
         (night / "chain.started").write_text("{}", encoding="utf-8")
         self.assertTrue(wd.plan_span_active(plan, late, self.harness.storage))
         (night / "chain.exited").write_text("{}", encoding="utf-8")
         self.assertFalse(wd.plan_span_active(plan, late, self.harness.storage))
 
-    def test_fixed_belt_is_half_open(self) -> None:
-        tz = self.local_tz
-        self.assertIsNone(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 2, 44, 59, 999999, tzinfo=tz)))
-        self.assertEqual(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 2, 45, tzinfo=tz)), "belt_02:45_03:30")
-        self.assertEqual(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 3, 29, 59, 999999, tzinfo=tz)), "belt_02:45_03:30")
-        self.assertIsNone(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 3, 30, tzinfo=tz)))
+    def test_watchdog_is_not_fenced_at_0300_without_a_plan(self) -> None:
+        self.harness.clock.wall = self.base.replace(hour=3)
+        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("LAUNCHING", decision.state)
 
-    def test_deadman_minute_is_half_open(self) -> None:
-        tz = self.local_tz
-        self.assertIsNone(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 6, 59, 59, 999999, tzinfo=tz)))
-        self.assertEqual(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 7, 0, tzinfo=tz)), "deadman_minute_07:00")
-        self.assertEqual(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 7, 0, 59, 999999, tzinfo=tz)), "deadman_minute_07:00")
-        self.assertIsNone(wd.local_fixed_fence(dt.datetime(2026, 9, 4, 7, 1, tzinfo=tz)))
+    def test_installed_plist_fences_a_plan_missing_from_discovery(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() + 600)
+        directory = wd.Path.home() / "Library/LaunchAgents"
+        directory.mkdir(parents=True)
+        for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
+            with self.subTest(label=label):
+                plist = directory / f"{label}.plist"
+                plist.write_bytes(plistlib.dumps({"ProgramArguments": ["python", "run_night.py", "run",
+                    "--plan", str(Path(plan.custody_root) / "night_plan.json")]}))
+                with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]):
+                    decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+                self.assertEqual("FENCED", decision.state)
+                self.assertEqual(f"installed_plan:{plan.plan_id}", decision.reason)
+                self.assertIsNone(wd.installed_agent_fence(
+                    dt.datetime.fromtimestamp(wd.deadman_epoch(plan) + wd.COURIER_LOCK_FRESH_S + 1),
+                    self.harness.storage))
+                plist.unlink()
+
+    def test_unreadable_launch_agents_dir_holds_unsafe(self) -> None:
+        with mock.patch.object(self.harness.storage, "list_directory", side_effect=PermissionError("denied")):
+            decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertIn("denied", decision.reason)
+
+    def test_unparseable_installed_plist_or_plan_holds_unsafe(self) -> None:
+        directory = wd.Path.home() / "Library/LaunchAgents"
+        directory.mkdir(parents=True)
+        plist = directory / "com.joulewise.night.plist"
+        for payload in (b"bad plist", b'<?xml version="1.0"?><plist><dict>',
+                        plistlib.dumps({"ProgramArguments": ["--plan"]}),
+                        plistlib.dumps({"ProgramArguments": ["--plan", str(self.temp / "missing.json")]})):
+            with self.subTest(payload=payload):
+                plist.write_bytes(payload)
+                decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+                self.assertEqual("HOLD_UNSAFE", decision.state)
+
+    def test_sequential_same_day_plans_do_not_conflict(self) -> None:
+        first = self.make_plan(name="morning", t0=self.base.replace(hour=9).timestamp(),
+                               measurement_root=str(self.temp / "measurement-a"), window_max_s=9000)
+        second = self.make_plan(name="afternoon", t0=self.base.replace(hour=14).timestamp(),
+                                measurement_root=str(self.temp / "measurement-b"), window_max_s=9000)
+        self.assertEqual([], wd.plan_conflicts([first, second]))
+        self.assertFalse(wd.plan_span_active(first, second.t0_epoch_s - wd.PLAN_LEAD_S, self.harness.storage))
+
+    def test_window_10_to_400_holds_unsafe_through_installed_and_discovered_plans(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() + 600)
+        path = Path(plan.custody_root) / "night_plan.json"
+        mapping = json.loads(path.read_text())
+        mapping["window_max_s"] = 10**400
+        path.write_text(json.dumps(mapping))
+        directory = wd.Path.home() / "Library/LaunchAgents"
+        directory.mkdir(parents=True)
+        for installed in (True, False):
+            with self.subTest(installed=installed):
+                plist = directory / "com.joulewise.night.plist"
+                if installed:
+                    plist.write_bytes(plistlib.dumps({"ProgramArguments": ["--plan", str(path)]}))
+                else:
+                    plist.unlink()
+                with mock.patch.object(self.harness.storage, "glob_plans", return_value=[] if installed else [path]):
+                    decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+                self.assertEqual("HOLD_UNSAFE", decision.state)
+                self.assertFalse(decision.adopt)
+                self.assertIn("window_max_s", decision.reason)
+                if installed:
+                    self.assertIn("installed_agent_fence:", decision.reason)
+
+    def test_authored_epoch_equality_is_accepted_in_discovery_and_installed_fence(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() + 600, authored_epoch_s=self.base.timestamp())
+        self.assertTrue(wd.plan_is_armed(plan, self.base.timestamp(), self.harness.storage))
+        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("FENCED", decision.state)
+        directory = wd.Path.home() / "Library/LaunchAgents"
+        directory.mkdir(parents=True)
+        (directory / "com.joulewise.night.plist").write_bytes(plistlib.dumps({"ProgramArguments": [
+            "--plan", str(Path(plan.custody_root) / "night_plan.json")]}))
+        with mock.patch.object(self.harness.storage, "glob_plans", return_value=[]):
+            decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("FENCED", decision.state)
+        self.assertEqual(f"installed_plan:{plan.plan_id}", decision.reason)
+
+    def test_armed_deadline_includes_exactly_deadman_plus_900(self) -> None:
+        plan = self.make_plan(t0=1800000000, window_max_s=9000, authored_epoch_s=1799990000)
+        self.assertTrue(wd.plan_is_armed(plan, 1800013800, self.harness.storage))
+        self.assertFalse(wd.plan_is_armed(plan, 1800013801, self.harness.storage))
+
+    def test_reverse_chronological_disjoint_and_touching_endpoints(self) -> None:
+        earlier = self.make_plan(name="z-earlier", t0=1800000000, window_max_s=9000,
+                                 measurement_root=str(self.temp / "earlier"))
+        later = self.make_plan(name="a-later", t0=1800015360, window_max_s=9000,
+                               measurement_root=str(self.temp / "later"))
+        self.assertEqual([], wd.plan_conflicts([later, earlier]))
+        touching = dataclasses.replace(later, t0_epoch_s=1800015300)
+        self.assertEqual(1, len(wd.plan_conflicts([touching, earlier])))
+        self.assertIn("overlapping spans", wd.plan_conflicts([touching, earlier])[0])
+
 
 
 class StopAndDecisionTests(WatchdogTestCase):

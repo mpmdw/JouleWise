@@ -8,6 +8,17 @@ script, gate and test this runbook operates is on `main` at
 establish from a primary source; they are open questions for the operator, not
 instructions.
 
+**Revision 8 — 2026-09-15, INSTALL-WINDOWS-MULTI-01 (D-180 clause 1,
+D-181 clause 1; adopted design record 06).** The live timing procedure below
+targets the adjudicated implementation: `scripts/run_night.py` owns install
+spans, the derived install close and the per-plan dead-man. The reviewed head
+H used for an arm must include that implementation; the earlier merged-head
+statement above describes the predecessor code. Sections §Terms, §0.4,
+§1.2–§1.5, §2.1, §5, §7 and §8 carry the corresponding in-place updates.
+
+**Historical revision notes follow, verbatim.** Their old clock limits and
+open cutoff question describe those revisions; §1.3 is the current procedure.
+
 **Changelog — revision 7 (2026-09-11), one line: the plan now names D-166,
 the registration file required by the night gate, while the scientific
 pre-registration is bound by the measurement head (the commit the plan pins) and the arm
@@ -184,8 +195,15 @@ default ruling and the continuation.
   additionally enforces in code that no corpus statistic is computed before
   the last registration session is terminal (§2.2, §4.1).
 - **Dead-man** — the second LaunchAgent (a macOS launchd job file), installed
-  alongside the night agent, which fires at a fixed local minute and stands the night down if the night's
-  completion time has passed without completion.
+  alongside the night agent. Its scheduled **epoch** here means seconds since
+  1970-01-01 00:00 UTC (distinct from the machine's identity epoch). It is
+  derived from **completion**: `t0 + window_max_s + 300 s`, where `t0` is the
+  plan's start, `window_max_s` its window length, and 300 s (5 × 60 s) the
+  allowance for the courier to email results. Add
+  3600 s (60 × 60 s), rounded up to a minute (§1.2). It fires daily at that
+  derived local hour and minute. Before completion it logs a stand-down;
+  after the courier delivery record `night/courier.sent` exists it skips;
+  otherwise it uses the driver's existing recovery checks (§1.3).
 - **Driver preflight** — the install-time check that loads the driver module
   and every project module it imports at module scope under the job's
   interpreter and PATH and parses the plan, without exercising functions'
@@ -205,19 +223,19 @@ default ruling and the continuation.
   three generated files and everything the night writes live in it. Its path
   convention is `/Users/edr/night-custody/<PLAN_ID>` (§0.2).
 - **Fence (watchdog sense)** — a period during which the relaunch watchdog
-  refuses to LAUNCH OR ADOPT a magistrate **agent** session on this machine.
-  Three things fence: a valid plan's span (opening at the closed boundary
-  `t0 − 25 min`), the fixed local belt `[02:45:00, 03:30:00)`, and the fixed
-  local dead-man minute `[07:00:00, 07:01:00)`; both fixed intervals are
-  half-open (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Safety model and state
-  machine" for the `FENCED` state, §"Fence and deadlines" for the intervals).
-  **What a fence forbids is an agent being started, never a night being run.**
-  The night's own two LaunchAgents are not magistrate sessions, and no fence
-  touches them. That is why §1.2's worked `t0` of 02:56 local sits INSIDE the
-  belt and is nonetheless correct: a capture night wants precisely the hour in
-  which no agent can be launched or adopted. The rehearsal night of 2026-09-09
-  fired at 02:56 local and ran to chain exit 0
-  (`docs/process/NIGHT_HANDBACK.md`, §"Executed — rehearsal-20260909").
+  prevents a new magistrate **agent** session from launching on this machine.
+  A valid plan's span fences, opening at the closed boundary `t0 − 25 min`
+  and continuing through completion. After completion, the courier record
+  and chain records determine when it closes; without delivery it extends
+  through the derived dead-man plus the courier-lock allowance (§1.3).
+  The watchdog discovers plans from sibling `*/night_plan.json` files or
+  from the installed night job files' `--plan` arguments through
+  `installed_agent_fence`. An unreadable installed job file or plan holds
+  `HOLD_UNSAFE`, the state that forbids relaunch when safety cannot be proved.
+  A discovered active span may adopt supervision of an already-owned session
+  to drain it; an installed-only fence returns `FENCED` with `adopt=False`
+  after stop checks clear. The night's two LaunchAgents can run during it. See
+  `docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines".
 - **Blindness fence** — a different object under a confusingly similar name:
   the code-enforced refusal of `prepare-candidate` while any session named in
   the registration is not terminal, which stops a corpus statistic being
@@ -284,8 +302,9 @@ absolute paths (record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/1
 set -euo pipefail
 : "${H:?}"
 export NIGHT_DATE=<YYYYMMDD>
+export WINDOW_ID=<unique attempt identifier, e.g. n1-a>
 export REMOTE_URL=https://github.com/mpmdw/JouleWise
-export MEASUREMENT_ROOT="/Users/edr/JouleWise-measurement-$NIGHT_DATE-derivation"
+export MEASUREMENT_ROOT="/Users/edr/JouleWise-measurement-$NIGHT_DATE-derivation-$WINDOW_ID"
 remote_main="$(git ls-remote --exit-code "$REMOTE_URL" refs/heads/main)"
 test "${remote_main%%$'\t'*}" = "$H"
 test ! -e "$MEASUREMENT_ROOT"
@@ -320,10 +339,13 @@ emitted wrapper sets the same value for the night itself, from
 executable (§1.1a step 1).
 
 `<NIGHT_DATE>` is the eight-digit `YYYYMMDD` of the calendar date `t0` falls
-on — the morning the captures happen, not the evening the agents are installed
-(§1.3 installs on the day BEFORE `t0`). Every dated name below is built from
-this one value so that the plan id, the night root and the clone cannot
-disagree about which night they belong to.
+on. Installation may be on that date or an earlier date, provided §1.3's
+listed span, exclusive plan cutoff and existing gates all permit it.
+`WINDOW_ID` distinguishes attempts/windows on that real date; choose a fresh
+identifier for each attempt, including a same-day successor. Use letters,
+digits and hyphens, and satisfy the census check below. Every name below uses
+the same date and window identifier so the plan, session, custody and clone
+stay together. The fresh-path checks remain mandatory for every attempt.
 
 The production ledger lives in this clone's own
 `runs/calibration_observation_ledger.jsonl`, restored byte-exact from the
@@ -341,9 +363,9 @@ value by the rule in the table that follows, then run the block.
 
 ```zsh
 set -euo pipefail
-: "${H:?}" "${NIGHT_DATE:?}" "${MEASUREMENT_ROOT:?}"
-export PLAN_ID="d079-epoch-25g83-derivation-n1-$NIGHT_DATE"
-export SESSION_ID="d079-epoch-25g83-derivation-n1-$NIGHT_DATE"
+: "${H:?}" "${NIGHT_DATE:?}" "${WINDOW_ID:?}" "${MEASUREMENT_ROOT:?}"
+export PLAN_ID="d079-epoch-25g83-derivation-$WINDOW_ID-$NIGHT_DATE"
+export SESSION_ID="$PLAN_ID"
 export EVIDENCE_ROOT_ID=<the registered evidence root id, no derivable default>
 export NIGHT_ROOT="/Users/edr/night-custody/$PLAN_ID"
 export STAGE="/Users/edr/night-plan-staging/$PLAN_ID"
@@ -370,9 +392,10 @@ test "$(stat -f %d "$NIGHT_ROOT")" = "$(stat -f %d "$STAGE")"
 
 | Variable | One line, and the rule for choosing it |
 |---|---|
-| `NIGHT_DATE` | `YYYYMMDD` of the date `t0` falls on. Chosen first; everything dated is built from it. |
-| `PLAN_ID` | The night plan's `plan_id` (§1.1). One per night, so nights 2 and 3 get `-n2-`/`-n3-`. It names the night root, so it is fixed BEFORE any directory exists. |
-| `SESSION_ID` | The ledger session this night opens, passed to the generator as `--session-id` and baked into the wrapper. One per night; the three together are the registration (§3). It also prefixes every slot attempt id (`<SESSION_ID>-d01`…), so it is an emitted literal and must survive the census check. |
+| `NIGHT_DATE` | `YYYYMMDD` of the real date `t0` falls on; never change the date to avoid a path collision. |
+| `WINDOW_ID` | One explicit, unique attempt/window identifier on that date, such as `n1-a` or `n1-b`; shared by all derived names. |
+| `PLAN_ID` | The night plan's `plan_id` (§1.1), derived from `WINDOW_ID` and `NIGHT_DATE`. It names the night root, so it is fixed BEFORE any directory exists. |
+| `SESSION_ID` | The ledger session this attempt opens, equal to `PLAN_ID`, passed as `--session-id` and baked into the wrapper. The FAIL-route registration still follows §3. It also prefixes every slot attempt id (`<SESSION_ID>-d01`…), so it must survive the census check. |
 | `EVIDENCE_ROOT_ID` | The identifier of the evidence root the night's bundles are filed under. **It has no derivable default**: take the literal from the record that registers it and record both in the arm materials (§1.1b step 3). |
 | `NIGHT_ROOT` | The night root (§Terms) — `/Users/edr/night-custody/<PLAN_ID>` by convention, and the value the plan's `custody_root` must carry. It is the directory the watchdog's discovery glob looks one level inside (§0.7). |
 | `STAGE` | The staging directory the plan is AUTHORED in, deliberately outside the watchdog's discovery path, so that authoring a plan does not arm a night (§0.7, §1.1b step 2). |
@@ -380,6 +403,17 @@ test "$(stat -f %d "$NIGHT_ROOT")" = "$(stat -f %d "$STAGE")"
 | `CALIBRATION_PLAN` | The **frozen calibration plan**: the committed capture plan a night's captures are taken under, a `calibration_plan.json` from a frozen campaign pack in the clone (`docs/phase_2/window_runbook.md`, §the ALPHA `window.env` example, calls the same file `FROZEN_PLAN` and notes it is not a custody reservation plan). Copy those committed bytes to `$CALIBRATION_PLAN` before §1.1b step 3; the path must be absolute, and the wrapper re-checks the file's `plan_id` and SHA-256 at launch (§1.1a step 3), so a wrong copy fails before the settle rather than at `d01`. |
 | `CALIBRATION_LEDGER` | The ledger the night opens its session against — **the clone's own**, never the canonical one. This is exactly the generator's `--ledger` default, written out so the harvest (§2.0) can rebuild it. |
 | `LEDGER_HEAD_PIN` | The committed head pin the ledger is authenticated against — again the clone's, and exactly the generator's `--head-pin` default. |
+
+Two worked inputs for the same real date, `NIGHT_DATE=20260916`, produce
+distinct names with the assignments above:
+
+| Invocation input | `MEASUREMENT_ROOT` | `PLAN_ID` = `SESSION_ID` | `NIGHT_ROOT` / `STAGE` |
+|---|---|---|---|
+| `WINDOW_ID=n1-a` | `/Users/edr/JouleWise-measurement-20260916-derivation-n1-a` | `d079-epoch-25g83-derivation-n1-a-20260916` | `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-a-20260916` / `/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-a-20260916` |
+| `WINDOW_ID=n1-b` | `/Users/edr/JouleWise-measurement-20260916-derivation-n1-b` | `d079-epoch-25g83-derivation-n1-b-20260916` | `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-b-20260916` / `/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-b-20260916` |
+
+These are naming examples; a successor still requires harvest and uninstall,
+all no-reuse checks, and the applicable registration constraints of §3.
 
 Two notes on the block itself. `stat -f %d` prints a filesystem device number;
 the night root and the staging directory must share one, because §1.4 publishes
@@ -491,7 +525,7 @@ The same `check` invocation loads the ledger snapshot with
 `require_committed_pin=True, verify_custody=True, mode="read_replay"`. Any
 refusal reason is printed on the `ledger: …` line. A `ledger:` line is a stop:
 the night's first machine action opens a session at head-equals-pin, and a
-ledger that will not authenticate at the desk will not authenticate at 03:00
+ledger that will not authenticate at the desk will not authenticate at `t0`
 either. Record the head pin's sequence and digest now — the pre-registration's
 `[SEQ]` and `[DIGEST]` fields are filled from the pin in force at the FIRST
 night's open, and are then frozen for every night of the campaign that
@@ -625,17 +659,21 @@ discoverable prior plan root, no active or indeterminate measurement ownership.
 Remove every `REHEARSAL_STUB` plan root before arming any real plan
 (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Install handoff").
 
-**"Discoverable" is one exact glob, and that is what makes staging safe.** The
-watchdog enumerates plans by globbing `*/night_plan.json` in the PARENT of its
-own state directory — `glob_plans` in `scripts/magistrate_watchdog.py`, whose
+**Sibling discovery uses one exact glob; installed plists provide a second fence.**
+The watchdog enumerates sibling plans by globbing `*/night_plan.json` in the
+PARENT of its own state directory — `glob_plans` in `scripts/magistrate_watchdog.py`, whose
 state root is `/Users/edr/night-custody/magistrate`, so the enumerated set is
 exactly `/Users/edr/night-custody/*/night_plan.json`: one level down, that
 filename, nothing else. A plan authored at `$STAGED_PLAN` under
-`/Users/edr/night-plan-staging/<PLAN_ID>/` is therefore invisible to it, which
-is precisely why §1.1b authors and verifies there. The night becomes
-discoverable at one instant and one only: §1.4's `os.replace` into
-`$NIGHT_ROOT/night_plan.json`, after the email. The night's own driver never
-discovers anything — launchd hands `scripts/run_night.py` the plan path as a
+`/Users/edr/night-plan-staging/<PLAN_ID>/` is therefore outside sibling
+discovery, which is why §1.1b authors and verifies there. §1.4's `os.replace`
+into `$NIGHT_ROOT/night_plan.json`, after the email, makes it discoverable.
+Independently, the watchdog reads the `--plan` paths in both installed night
+plists and fences their active spans, holding unsafe on unreadable or malformed
+inputs. The installer requires the resolved plan path to be
+`<custody_root>/night_plan.json`; staging is never an install destination.
+The night's own driver never discovers anything — launchd hands
+`scripts/run_night.py` the plan path as a
 `--plan` argument (its `--plan` is `required=True`), so the driver reads the
 file it was installed with and no other.
 
@@ -1141,39 +1179,44 @@ this floor from the new slot count rather than bypassing it.
 Those are the registration's three durations, and it states all three together
 precisely because confusing them is how a night opens a session it cannot
 finish: **programmed span 7680 s (128 min)**, **generator minimum 7980 s
-(133 min)**, **armed `window_max_s` 9000 s (150 min)**. A fourth number,
-210 min, belongs to none of them — it is the install span 03:00–06:30 of §1.3,
-an operator-facing block of the clock, and a 150 min window sits inside it with
-an hour to spare. The two measure different things and neither is derived from
-the other.
+(133 min)**, **armed `window_max_s` 9000 s (150 min)**. Install spans (§1.3)
+are intervals in which the operator may install the jobs; they do not bound
+or contain the acquisition window.
 
-**The dead-man check.** The rule is `t0 + window_max_s + 300 < the next 07:00`,
-where 300 s is the **courier allowance** and 07:00 is the dead-man minute. Two
-different 300 s budgets appear in this section; they are unrelated and happen
-to share a number. The pre-settle allowance above is spent INSIDE the window,
-before the settle. The courier allowance is spent AFTER the window ends: it is
-the time the driver reserves for the courier to send the night's result before
-the dead-man fires. Neither is a substitute for the other, and widening the
-window consumes dead-man slack while widening nothing else. Worked
-with real numbers, using the coordinates the prior night's arm runbook (record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`) pinned
-purely as an arithmetic example (`t0 = 2026-09-12 02:56:00 PDT`, epoch
-`1789206960`; that morning's 07:00 is epoch `1789221600`):
+**The dead-man check (updated 2026-09-15, INSTALL-WINDOWS-MULTI-01).**
+`scripts/run_night.py` defines `COURIER_DEADLINE_S = 300` (5 × 60 s),
+`DEADMAN_GRACE_S = 3600` (60 × 60 s), and `deadman_epoch(plan)`:
 
 ```
-t0                    = 1789206960   (02:56:00 PDT)
-t0 + 9000             = 1789215960   (05:26:00 PDT)   ← acquisition allocation ends
-t0 + 9000 + 300       = 1789216260   (05:31:00 PDT)   ← courier deadline
-next 07:00            = 1789221600   (07:00:00 PDT)
-1789216260 < 1789221600                               ✓ PASS, 89 minutes of slack
-
-strict maximum window_max_s for this t0
-  = 1789221600 - 1789206960 - 301 = 14339 s
-9000 ≤ 14339                                          ✓
+completion = t0 + window_max_s + COURIER_DEADLINE_S
+D = deadman_epoch(plan) = 60 × ceil((completion + DEADMAN_GRACE_S) / 60)
+required: completion < D
 ```
 
-(The `-301` is `-300` for the courier and `-1` because the comparison is
-strict. All four epoch↔local conversions above were verified with
-`TZ=America/Los_Angeles date -r <epoch>` when this runbook was drafted.)
+`ceil` means round upward to the next integer; if already integral, keep it.
+The **courier** is the process that emails the night's result. Its 300 s
+allowance is AFTER the window; the generator's separate 300 s pre-settle
+allowance is INSIDE it. The courier can make four 300 s attempts with waits
+of 60, 180 and 600 s: `4 × 300 + 60 + 180 + 600 = 2040 s`, below the
+3600 s dead-man grace. Neither allowance enlarges the acquisition window.
+
+Worked example, using the earlier plan's coordinates solely for arithmetic
+under this design (`t0 = 2026-09-12 02:56:00 PDT`, epoch `1789206960`):
+
+```
+t0                    = 1789206960   (2026-09-12 02:56:00 PDT)
+t0 + 9000             = 1789215960   (2026-09-12 05:26:00 PDT)  window end
+completion            = 1789216260   (2026-09-12 05:31:00 PDT)  courier deadline
+completion + 3600     = 1789219860   (2026-09-12 06:31:00 PDT)
+D = 60 × ceil(1789219860 / 60) = 1789219860
+1789216260 < 1789219860        PASS; 3600 s = 60 min of slack
+```
+
+The code checks `completion < deadman_epoch(plan)` directly; it does not
+compute a separate maximum window against a fixed D. Changing the window
+recomputes D. With sane constants completion is always at least 3600 s before
+D, so the registered `night_plan_overruns_deadman` refusal remains in code but
+is unreachable.
 
 The chain's own end boundary follows: `WINDOW_END_EPOCH_S = t0 + WINDOW_MAX_S`
 = `1789215960` in the example. Check that the last slot is admitted rather than
@@ -1242,25 +1285,209 @@ starts more than 22 minutes after `t0` loses `d12`, and
 that it did. The realized Δ of a finished night is readable at the harvest: the
 `chain_start` line's timestamp in `derivation-chain.log` minus `t0` (§2.1).
 
-If your chosen `<t0>` fails either check, move `<t0>` earlier. Never raise
-`window_max_s` past the strict maximum and never move the dead-man.
+Keep `window_max_s = 9000` and the strict completion/dead-man check above. A derived
+completion/dead-man check failure indicates inconsistent timing code or plan
+inputs: stop and resolve it before arming. Never hand-edit the dead-man time.
 
-### 1.3 Install span and the exit boundary
+### 1.3 Install span, install close and the exit boundary
 
-Install BOTH agents on the calendar day BEFORE `t0`, between **03:00 and 06:30
-local**. Never install in the 07:xx hour. The first 07:00 dead-man firing after
-installation should stand down, because the night's completion time has not yet
-arrived; that stand-down line in `night.log` is expected evidence, not a fault.
+**Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01, D-180 clause 1 and D-181
+clause 1.** Install BOTH agents on any day after the notice email is sent,
+before the plan's **install close** (the last allowed installation boundary),
+and inside a listed **install span** (a recurring local-time interval).
+Same-day successors are a machinery capability; for the three FAIL-route registration nights §3 item 3 still requires distinct calendar days.
+The admissible interval opens with the notice send and closes exclusively at:
 
-The activation's absolute exit boundary is `t0 − 25 minutes` (§0.6). Finish
-recording and exit before it. Do not remain resident until `t0`.
+```
+PLAN_LEAD_S = 1500 s = 25 × 60 s
+INSTALL_CLOSE_MARGIN_S = 3600 s = 60 × 60 s
+install_close_epoch(plan) = t0 - PLAN_LEAD_S - INSTALL_CLOSE_MARGIN_S
+                         = t0 - 25 min - 60 min = t0 - 85 min
+```
 
-`[UNVERIFIED: whether a 06:05 "Block B last start" cutoff should carry over to
-these nights. Record 12 (`docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`) §"Pins and preconditions" marks its own 06:05 rule
-PROPOSED for that runbook and notes runbook 67 contains no such rule. Treat it
-as the recommended operational cutoff, not a ratified gate: if the email-and-
-install block cannot begin by 06:05, do not arm — author the next night's
-notice instead.]`
+`INSTALL_SPANS` in `scripts/run_night.py` is the one list of per-day local
+`("HH:MM", "HH:MM")` spans. The shipped list is `(("00:00", "24:00"),)`:
+midnight to the next midnight, open included and close excluded. Ed may narrow
+that list. Entries must be ordered, disjoint, and close after open; `24:00`
+is allowed only as a close. `install_spans_for_day(day)` resolves every entry
+to epoch boundaries for that local date; `install_span_containing(now_epoch_s)`
+returns the containing pair or `None`. This respects local daylight-saving
+offsets; do not assume a local day always lasts 24 elapsed hours.
+
+Print the plan's schedule from the measurement clone before sending notice:
+
+```zsh
+"$PY" -B scripts/run_night.py schedule --plan "$STAGED_PLAN"
+```
+
+The JSON prints `t0_epoch_s`, `install_close_epoch_s`, `deadman_epoch_s`,
+both agents' calendar fields, and `install_spans_today`. To print every listed
+span for the chosen install day and the plan boundaries with local offsets,
+replace `<YYYY-MM-DD>` with that local date and run from the clone:
+
+```zsh
+"$PY" -B - "$STAGED_PLAN" "<YYYY-MM-DD>" <<'PY'
+import json, sys
+from datetime import date, datetime
+from pathlib import Path
+from joulewise.night_gate import NightPlan
+from scripts.run_night import (
+    COURIER_DEADLINE_S, deadman_epoch,
+    install_close_epoch, install_spans_for_day,
+)
+from scripts.magistrate_watchdog import PLAN_LEAD_S
+plan = NightPlan.from_mapping(json.loads(Path(sys.argv[1]).read_text()))
+def show(label, epoch):
+    print(label, datetime.fromtimestamp(epoch).astimezone().isoformat(), epoch)
+for i, (start, end) in enumerate(install_spans_for_day(date.fromisoformat(sys.argv[2])), 1):
+    show(f"install span {i} open", start)
+    show(f"install span {i} close (excluded)", end)
+show("install close (excluded)", install_close_epoch(plan))
+show("plan span / exit boundary", plan.t0_epoch_s - PLAN_LEAD_S)
+show("t0", plan.t0_epoch_s)
+show("completion / courier deadline", plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S)
+show("dead-man", deadman_epoch(plan))
+PY
+```
+
+Observed output from the two commands above, using a synthetic v2 plan at
+`/tmp/install-windows-docs-synthetic/night_plan.json` with
+`t0_epoch_s = 1789552560`, `window_max_s = 9000`, install date `2026-09-15`,
+and the host's PDT timezone. This is a desk arithmetic check, not an arm.
+The first command's `install_spans_today` always uses the execution date;
+the second block uses the explicitly supplied date.
+
+```text
+{"deadman_calendar": {"Hour": 6, "Minute": 31}, "deadman_epoch_s": 1789565460.0, "install_close_epoch_s": 1789547460.0, "install_spans_today": [[1789455600.0, 1789542000.0]], "night_calendar": {"Day": 16, "Hour": 2, "Minute": 56, "Month": 9}, "t0_epoch_s": 1789552560.0}
+```
+
+```text
+install span 1 open 2026-09-15T00:00:00-07:00 1789455600.0
+install span 1 close (excluded) 2026-09-16T00:00:00-07:00 1789542000.0
+install close (excluded) 2026-09-16T01:31:00-07:00 1789547460.0
+plan span / exit boundary 2026-09-16T02:31:00-07:00 1789551060.0
+t0 2026-09-16T02:56:00-07:00 1789552560.0
+completion / courier deadline 2026-09-16T05:31:00-07:00 1789561860.0
+dead-man 2026-09-16T06:31:00-07:00 1789565460.0
+```
+
+Print every listed span, not only the one intended for the arm. The notice and arm record
+must give each boundary as local date/time with UTC offset plus epoch seconds
+(seconds since 1970-01-01 00:00 UTC). Record the actual notice-send time as
+open; installation must satisfy both `notice_sent <= now < install_close`
+and membership in a listed span. Existing plan-age and census gates still apply.
+
+The installer checks these refusals before creating its output directories or
+rendering plists. Timing/location diagnostics print `<reason>: <summary>; <detail>`;
+the summary names `now_epoch_s`, `t0_epoch_s`, `install_close_epoch_s` and
+`deadman_epoch_s`, each with a local ISO-8601 time. `install_outside_span`
+also prints `install_spans_today`; `plan_outside_custody_root` prints `plan`
+and `expected`. A job's **label** is its name in launchd. The installer reads
+each label as **LOADED** (the query finds the job), **ABSENT** (the query
+establishes that the job is not loaded), or **UNKNOWN** (the query cannot
+establish either state). A query error alone does not establish absence.
+UNKNOWN counts as loaded for safety: the installer refuses admission or
+file removal. Admission refuses with
+`night_agent_already_loaded … state=unknown rc=<n> stderr=<diagnostics>`
+(exit 3), preserving the query's exit code (`rc`) and error output (`stderr`).
+During retention cleanup or uninstall, each UNKNOWN query instead adds
+`liveness_unknown: <label> rc=<n> stderr=<first line>` with the query's exit
+code and first error-output line.
+The loaded-job diagnostic names `label=com.joulewise.night`
+or `label=com.joulewise.night.deadman` and identifies an unknown state when applicable.
+Earlier interpreter, plan, pin, courier, preflight and existing-record checks
+can refuse first.
+
+| Refusal | Exit code | Condition / recovery |
+|---|---|---|
+| `install_span_closed` | 2 | `now >= install_close_epoch(plan)` or a later check reaches the initially selected span's close; do not install this plan late. Re-plan under the handback procedure. |
+| `install_outside_span` | 2 | `now` is outside every listed `INSTALL_SPANS` entry; use an allowed span before the plan's close. |
+| `plan_t0_in_the_past` | 2 | `t0 < now`; author a future plan. |
+| `night_agent_already_loaded` | 3 | `launchctl print` succeeds for `gui/<uid>/com.joulewise.night` or `gui/<uid>/com.joulewise.night.deadman`, or either query is UNKNOWN; finish the prior harvest and documented uninstall before another arm. Resolve an UNKNOWN query with a human before proceeding. `--render-only` skips this loaded-job check. |
+| `plan_outside_custody_root` | 2 | Resolved `--plan` is not the plan's `<custody_root>/night_plan.json`; publish through §1.4 before installing. |
+| `night_plan_malformed` | 2 from `schedule`; 3 from the installer's earlier plan validation | Missing/malformed `t0_epoch_s`, `window_max_s` or `authored_epoch_s` (or another invalid plan field); the detail identifies the validation failure. |
+| `plan_schedule_unrepresentable` | 2 | `schedule` cannot load the plan or represent derived arithmetic/calendar values, including `window_max_s=10**15` or `10**400`; detail preserves the underlying error. This is representability, with no maximum-window policy ceiling. |
+| `install_spans_unresolvable_on_day` | 2 | A day's resolved spans have nonpositive duration, are out of order, or overlap after DST resolution; detail names the day and offending span/pair. No span is repaired, reordered or dropped. |
+| `plan_t0_not_minute_aligned` | 2 | `t0_epoch_s` is not aligned to a whole minute; `schedule` and the installer refuse before rendering or bootstrapping. Author a minute-aligned plan. |
+| `plan_t0_ambiguous_local_time` | 2 | The local wall-clock minute at `t0` maps to two distinct epochs during a DST fold; both occurrences are refused by `schedule` and the installer before rendering or bootstrapping. Choose an unambiguous minute. |
+| `retained prior plist: <path>; re-run --uninstall` | 3 | A `.prior` sidecar holding the bytes an install replaced already exists. Nothing restores it automatically after the installer exits. Copy it by hand if you need the old plist back; `--uninstall` deletes both the plists and the sidecars. Complete the documented uninstall before trying another install. |
+| `unsupported plist destination: <path>` | 2 | A plist or its `.prior` path is not a regular file, for example a directory or symbolic link. Resolve that destination before retrying. |
+| `--render-only directory must differ from launch_dir` | 2 | The resolved render directory is the installation directory (`launch_dir`). Choose a separate directory for rendered files. |
+
+A plan's `t0` must fall on a whole minute that occurs exactly once in local time.
+
+After both bootstraps (launchd's job-load operations) and verification, the
+installer evaluates one **commit gate**, the check that authorizes success.
+It reads the clock after the last launchd mutation and requires that time to
+be strictly before both the plan cutoff and the initially selected span's
+close; a later span cannot replace the selected one. One final evaluation
+ensures earlier clock checks cannot authorize success after loading has
+crossed a boundary. A failed install may already have loaded a job, so deleting
+its job file (a **plist**) immediately would leave a loaded job without its
+file. Before replacing or deleting files during failure cleanup, the installer
+requires **proof of unloading**: queries must establish ABSENT for BOTH labels.
+UNKNOWN is insufficient. **`.prior` sidecars** hold the bytes an install
+replaced. Nothing restores them automatically after the installer exits: a
+later install refuses while one is present, and `--uninstall` deletes both
+the plists and the sidecars. Copy a sidecar by hand if you need the old plist
+back.
+SIGINT, SIGTERM and SIGHUP handlers are installed before argument parsing and
+only record the first signal. Ordinary-code polls honor it before the next
+mutation: response latency is bounded by one adapter call plus its timeout
+(5 seconds for launchctl), or by the validation subprocess's runtime. Before
+the handlers are installed, interpreter startup retains its usual signal
+behavior. The commit gate evaluates the clock predicate, then takes its final
+signal poll and assigns COMMITTED directly: a signal recorded during the clock
+read rolls back with its signal code; one recorded after that latch is discarded
+and exit 0 with the pins stands. A refusal already selected also keeps its code.
+D6 teardown is **uninterruptible by construction (no raising handler exists)**:
+it never polls, so signals during rollback are recorded and discarded. After
+completion these three signals remain ignored until CLI process death;
+in-process callers explicitly release the shield to restore their dispositions.
+A stalled stdout pipe after COMMITTED can require SIGKILL to free it; handback
+pipes must drain. SIGKILL/SIGQUIT skip teardown and can leave `.prior` sidecars
+that make the next install refuse with exit 3; follow the sidecar recovery above.
+
+These conditions give an install exactly one of five outcomes:
+
+| Outcome (meaning) | Exit code | What remains on disk | Operator's next action |
+|---|---|---|---|
+| **committed** — both agents are loaded and verified | 0 | The installed plists remain; cleanup of prior plists' `.prior` sidecars is best-effort. A cleanup failure prints `warning: prior sidecars not removed: <detail>` and still exits 0. | Complete the arm record and exit by the boundary below. |
+| **restored** — failure before or during loading leaves the pre-attempt files in place, or puts them back after both labels are established absent | Original failure code: 143 (SIGTERM), 130 (SIGINT), 129 (SIGHUP), 1, 2 or 3 | Any overwritten prior plist is restored byte-for-byte with its original modification time (`mtime`); newly created plists are removed. An admission refusal leaves existing files untouched. | Record the original failure and follow §1.4 recovery; do not report a successful arm. |
+| **retained** — cleanup cannot establish that both labels are unloaded | 4 | Nothing is changed by file cleanup: the plists and their `.prior` sidecars are kept as they stand. Nothing restores the sidecars automatically after exit. | Stop. Treat the machine as still holding a loaded label, including when its state is UNKNOWN. Copy a sidecar by hand if you need the old plist back; successful `--uninstall` deletes both the plists and the sidecars. A human must resolve it; no retirement, unpublishing or successor arm may follow until `--uninstall` exits 0. |
+| **failed teardown** — an unexpected teardown error leaves state RETAINED | 1 | Remaining plists and `.prior` sidecars are retained; teardown may have completed only some operations. The diagnostic is `teardown failed; retained: <type>: <message>`. | Stop and preserve the remaining files for human inspection. Do not assume both labels are unloaded or report a successful arm; no retirement, unpublishing or successor arm may follow until `--uninstall` exits 0. |
+| **failed restoration** — labels are established absent, but restoring or removing files fails | 1 | Prior sidecars remain; some plists may already have been restored or removed. The diagnostic is `restore failed; retained prior sidecars: <error type>: <detail>`. | Stop and preserve the remaining sidecars for human inspection. Copy a sidecar by hand if you need the old plist back; nothing restores it automatically after exit. Do not report a successful arm or completed restoration. |
+
+Retained cleanup prints
+`teardown: <night> loaded=…; <deadman> loaded=…; retained plists: …`.
+Exit 4 is a deliberate refusal to change files, not a crash or a partial install.
+For example, if the selected span closes between the two bootstraps, the
+installer finishes loading and verification, then the commit gate reports
+`install_span_closed`: if cleanup
+establishes both labels absent, it restores the prior files and exits 2; if a
+label remains loaded or UNKNOWN, it keeps the plists and sidecars and exits 4.
+If restoration itself fails after absence is established, it exits 1 with
+the prior sidecars left by that failed restoration.
+A bootstrap failure still reports `failed to bootstrap <label>` (for example,
+`failed to bootstrap com.joulewise.night.deadman`), and a loaded-job verification
+failure reports `launch agent verification failed`; their original exit code
+is 3 when restoration succeeds, overridden by 4 when unloading cannot be
+established, or by 1 when restoration fails.
+
+The night job uses the local Month/Day/Hour/Minute from `t0`. The dead-man
+uses only Hour/Minute from `deadman_epoch(plan)` (§1.2), so it fires daily at
+that local minute until uninstalled. A firing before completion logs a
+stand-down and writes no night record; after `night/courier.sent` it skips.
+If delivery is missing after completion, existing chain-alive and courier
+checks still govern recovery; the timer grants no authority to interrupt a
+live chain. With no delivery record the watchdog span stays closed to agents
+through `D + COURIER_LOCK_FRESH_S`, where the lock-fresh allowance is
+`300 + max(60, 180, 600) = 900 s = 15 min`; a started but unexited chain
+extends it without a clock limit.
+
+The activation's absolute exit boundary is `t0 − 25 minutes` (§0.6),
+60 minutes after install close. Finish recording and exit before it.
+Do not remain resident until `t0`.
 
 ### 1.4 Email, then arm
 
@@ -1268,13 +1495,16 @@ Order is fixed: **after H is committed and pushed, after any prior stub or plan
 root is retired, and BEFORE the plan is moved into its discoverable place.**
 There is no minimum notice interval beyond that ordering.
 
+Send one notice email per plan, never one notice for several arms.
 Send Ed the night notice with the activation's mail tool, under its standing
 email authority, containing: plan ID; class `DIAGNOSTIC_NO_PACK`; the full H
 twice; the handback commit (= H); measurement root, night custody root and runs
 root; `t0` local and UTC; `window_max_s` = 9000; the emitted wrapper's digest
 and its sidecar path (§1.1a), and the tracked chain's digest the wrapper pins;
 the two desk inputs' paths and digests from §0.8's paste lines; the courier
-deadline; the exit boundary; the planned install span; and the cancellation
+deadline and derived dead-man; the exit boundary and completion; the notice-send
+open and derived install close; every listed span for the install day, each
+boundary as local date/time with UTC offset plus epoch seconds (§1.3); and the cancellation
 instruction — **launch needs no action from Ed unless he replies NO**. Record
 the actual send acceptance, time, message and thread IDs, and which NO relay is
 available. A headless activation that cannot read the thread must say so; it
@@ -1289,7 +1519,8 @@ publication.
 These are the commands, adapted from the prior night's arm runbook, record 12,
 `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`,
 §"Block B" — the only executed template this project has for a real install.
-Two things are changed from it and both are named here: the plan assertions are
+Updated 2026-09-15 (INSTALL-WINDOWS-MULTI-01): calendar fields now come
+from the plan schedule; the earlier adaptations also remain: the plan assertions are
 this night's (`DIAGNOSTIC_NO_PACK`, `window_max_s = 9000`, no pack block, and a
 `registration_path` equal to `night_gate.D166_REGISTRATION_PATH`, the fixed
 D-166 registration path required by the night gate for this receipt class,
@@ -1327,8 +1558,6 @@ an armed night.
 set -euo pipefail
 : "${H:?}" "${PY:?}" "${MEASUREMENT_ROOT:?}" "${NIGHT_ROOT:?}" "${STAGE:?}" "${STAGED_PLAN:?}"
 : "${SESSION_ID:?}" "${EVIDENCE_ROOT_ID:?}" "${CALIBRATION_PLAN:?}"
-export NIGHT_HOUR=<t0's local hour, two digits or fewer, never the dead-man hour 7>
-export NIGHT_MINUTE=<t0's local minute>
 cd "$MEASUREMENT_ROOT"
 
 # 1. The pins still hold, and the notice really went out.
@@ -1353,6 +1582,7 @@ import hashlib, json, os, time
 from pathlib import Path
 from joulewise import night_gate
 from joulewise.night_gate import NightPlan
+from scripts.run_night import install_close_epoch
 plan = NightPlan.from_mapping(json.loads(Path(os.environ['STAGED_PLAN']).read_text()))
 assert plan.repo_head == plan.measurement_head == os.environ['H']
 assert plan.measurement_root == os.environ['MEASUREMENT_ROOT']
@@ -1367,7 +1597,7 @@ assert hashlib.sha256(
 ).hexdigest() == night_gate.D166_REGISTRATION_SHA256
 assert 0 <= time.time() - plan.authored_epoch_s <= 36 * 3600
 assert 0 <= plan.t0_epoch_s - plan.authored_epoch_s <= 36 * 3600
-assert time.time() < plan.t0_epoch_s - 1500          # still before the exit boundary
+assert time.time() < install_close_epoch(plan)     # t0 - 1500 - 3600 seconds
 assert Path(os.environ['STAGE']).stat().st_dev == Path(os.environ['NIGHT_ROOT']).stat().st_dev
 print('staged plan checks PASS')
 PY
@@ -1386,16 +1616,26 @@ PY
 
 # 6. Install both agents FROM the clone.
 scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
-  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE" --python "$PY"
+  --python "$PY"
 
 # 7. Inspect what was actually installed, and baseline the night directory.
 launchctl list | grep joulewise
 "$PY" -B - <<'PY'
-import json, os, subprocess
+import json, os, plistlib, subprocess
 from pathlib import Path
+from joulewise.night_gate import NightPlan
+from scripts.run_night import schedule
 labels = {line.split()[-1] for line in
           subprocess.check_output(['launchctl', 'list'], text=True).splitlines() if line.split()}
 assert {'com.joulewise.night', 'com.joulewise.night.deadman'} <= labels
+plan = NightPlan.from_mapping(json.loads(
+    (Path(os.environ['NIGHT_ROOT']) / 'night_plan.json').read_text()))
+expected = schedule(plan)
+for label, key in (('com.joulewise.night', 'night_calendar'),
+                   ('com.joulewise.night.deadman', 'deadman_calendar')):
+    plist = plistlib.loads((Path.home() / 'Library' / 'LaunchAgents' / f'{label}.plist').read_bytes())
+    assert plist['StartCalendarInterval'] == expected[key], (label, plist['StartCalendarInterval'])
+print('installed calendars match plan: night Month/Day/Hour/Minute; dead-man Hour/Minute only')
 night = Path(os.environ['NIGHT_ROOT']) / 'night'
 entries = sorted(night.iterdir()) if night.is_dir() else []
 print('post-install night/ baseline:', json.dumps(
@@ -1408,21 +1648,27 @@ cmp "$NIGHT_ROOT/night_plan.json" "$STAGE/arm-night_plan.json"
 ```
 
 Read both `plutil` dumps against four things and record the answers: each
-label's `StartCalendarInterval` (the night's `t0` hour and minute, and the
-dead-man's fixed minute), `WorkingDirectory` (the clone), the exact driver,
-plan and courier argv, and `RunAtLoad=false`. `install_night_agent.sh` refuses
-`--hour 7` outright, printing `refusing --hour <h>: it is the dead-man hour`,
-so the dead-man's own firing can never be the night's.
+label's `StartCalendarInterval` against `run_night.py schedule --plan`
+(the night: Month/Day/Hour/Minute from `t0`; the daily dead-man: Hour/Minute
+only from D), `WorkingDirectory` (the clone), the exact driver, plan and
+courier argv, and `RunAtLoad=false`. Keep both dumps and the schedule JSON
+in the arm record. The installer derives these fields; pass no `--hour` or
+`--minute` inputs. Its parser accepts only `--plan`, `--python`, `--uninstall`,
+`--render-only` and `--launchctl-bin`. An unknown flag, including `--help`,
+prints usage to stderr and exits 2 before any installation work.
 
-**If any step AFTER publication fails**, recover in this exact order and record
-every return code — the same `--uninstall` / preserve / compare / unpublish
-sequence record 12 §"Block B" uses:
+**If any step AFTER publication fails**, run `--uninstall` first and record
+its return code. Continue with preserve / compare / unpublish **only if
+uninstall exits 0**. Exit 4 means a label is still loaded or UNKNOWN and the
+plists were deliberately kept; stop for human resolution. Any other nonzero
+exit also stops recovery. The block below gates each command on the preceding
+command's success; record every return code:
 
 ```zsh
 scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
-  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE" --uninstall
-cp "$NIGHT_ROOT/night_plan.json" "$STAGE/failed-night_plan.json"
-cmp "$STAGE/failed-night_plan.json" "$STAGE/arm-night_plan.json"
+  --uninstall &&
+cp "$NIGHT_ROOT/night_plan.json" "$STAGE/failed-night_plan.json" &&
+cmp "$STAGE/failed-night_plan.json" "$STAGE/arm-night_plan.json" &&
 rm "$NIGHT_ROOT/night_plan.json"
 ```
 
@@ -1431,6 +1677,17 @@ proves the bytes that were briefly discoverable are the bytes that were
 reviewed, so the failed attempt is documentable rather than merely undone. If
 recovery itself fails, record the surviving labels and the discoverable plan
 and escalate; never claim nothing was armed.
+
+`--uninstall` verifies both labels after the two bootouts (requests to unload
+the jobs). If either remains loaded or UNKNOWN, it exits 4, changes no files,
+keeps both plists and any `.prior` sidecars, and prints
+`uninstall: still loaded after bootout: <loaded labels>; retained plists: <night plist> <deadman plist>`.
+Re-running `--uninstall` is safe and **idempotent**: repeating it does not
+undo a successful uninstall, and files remain protected while either label
+is loaded or UNKNOWN. Retry after human resolution; only exit 0 opens the
+remaining recovery steps. Those steps do not restore old plist bytes:
+successful `--uninstall` deletes both the plists and the sidecars. Copy a
+sidecar by hand first if you need the old plist back.
 
 ### 1.5 Record and exit
 
@@ -1450,8 +1707,8 @@ successor activation does not choose the list and this runbook cannot widen it:
 
 | Field | This night's value |
 |---|---|
-| `plan_id` | `$PLAN_ID` — e.g. `d079-epoch-25g83-derivation-n1-<YYYYMMDD>` (§0.2) |
-| `root` | `$MEASUREMENT_ROOT` — the fresh clone of §0.2, `/Users/edr/JouleWise-measurement-<NIGHT_DATE>-derivation` |
+| `plan_id` | `$PLAN_ID` — `d079-epoch-25g83-derivation-<WINDOW_ID>-<NIGHT_DATE>` (§0.2) |
+| `root` | `$MEASUREMENT_ROOT` — the fresh clone of §0.2, `/Users/edr/JouleWise-measurement-<NIGHT_DATE>-derivation-<WINDOW_ID>` |
 | `head` | `$H` — the 40-character reviewed head of §0.1 |
 
 The triple's purpose is a fence, not a handover: the prompt forbids Git
@@ -1463,6 +1720,11 @@ reconstructed from these three values plus the night root's own contents, and
 reconstruction is the successor's floor, not a licence to record less.
 
 #### What the arm record must carry, every night
+
+**Timing evidence update — 2026-09-15, INSTALL-WINDOWS-MULTI-01.** Retain the
+schedule JSON and both installed plist dumps with the actual notice-send open,
+install close, every listed install-day span, `t0 − 25 min`, `t0`, completion
+(the courier deadline) and D, all as local date/time plus epoch seconds.
 
 The arm record is the committed account of the plan and fixed inputs before
 capture; record these five items for the equivalence night and every night
@@ -1544,13 +1806,14 @@ coordinates from the arm record instead and treat the discrepancy as a finding.
 
 | Artifact | What it establishes |
 |---|---|
-| `<NIGHT_ROOT>/night.log` | The driver's own log: the prior morning's dead-man stand-down line, then this night's gate verdict line. |
+| `<NIGHT_ROOT>/night.log` | The driver's own log: a dead-man line dated before completion is expected evidence if that daily minute occurred after install; after `courier.sent` the dead-man skips. Read this plan's gate verdict line. |
 | `<NIGHT_ROOT>/night/result.json` | The verdict, the chain's exit code, and where the receipt or refusal is. Read this first; it directs the rest. |
 | `<NIGHT_ROOT>/night/receipt.json` or `refusal.json` | The C1–C5 condition rows, or the refusal reason and detail. C2 is `NOT_APPLICABLE`/`no_pack_by_design` for this class. |
 | `<WINDOW_CUSTODY_ROOT>/operator_logs/derivation-chain.log` | The chain's own lifecycle: `session_open kind=derivation slots=12`, `chain_start` (its timestamp minus `t0` is the night's realized Δ, §1.2), `settle_complete`, then twelve `slot_start` lines each answered by exactly one of `slot_end … disposition=valid`, `slot_end … disposition=non-valid` (a normal record, §2.4) or `slot_refused slot=dNN rc=<n>` (the night stopped here, session OPEN), and finally `derivation_night_complete slots=12` — or `slot_unused … reason=window_exhausted` followed by `session_abort`. |
 | `<NIGHT_ROOT>/night/chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log`, `chain.stderr.log` | Launchd lineage, actual chain termination, and the production census the driver takes at launch and every 30 s. |
 | `<NIGHT_ROOT>/night/courier.sent`, `courier.json`, `courier.heartbeat` | Send time and message ID; verify the email separately in Ed's inbox. |
 | launchd `.out`/`.err` for both labels | Present or absent, complete bytes, sizes, nanosecond mtimes — compare against the arm-time baseline. |
+| `night-results/<plan_id>` branch; `docs/process_traces/night-results/<plan_id>/` within it | The driver's best-effort published copies of night artifacts. Both destinations use the full plan ID, not the civil date; verify the push before relying on them. Local publication checkout: `<custody_root>/results-clone`. |
 | `check --session-ids <SESSION_ID>` (§2.2) | The night's session kind, state, terminality, declared and filled slot counts, exclusion counts by mechanism. |
 | The night's own ledger rows in `$CALIBRATION_LEDGER`, and each capture's `manifest.json` and `instrument_evidence.json` under `$RUNS_ROOT` | The twelve slot outcomes, and — for the captures that are `valid` and whose stored anchor record resolves — the **retained values** the equivalence rule compares (§2.5). Reading these AFTER this night has closed is what the check IS; §2.3 draws the line. |
 
@@ -2094,6 +2357,9 @@ turn that prepared the candidate.
 
 ## 5. Failure table
 
+**Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01:** installer refusals and
+exit codes are in §1.3; the derived-dead-man generator refusal is below.
+
 The five groups below are in the order the night can reach them: the desk
 writer refuses while writing the inputs (§0.8, its own table), the generator
 refuses at the desk, the wrapper refuses at launch, the chain exits during the
@@ -2110,7 +2376,7 @@ failures with no window cost:
 | `night plan is unreadable` / `night plan is not an exact v2 plan: …` | The plan file will not read, or its key set is not exactly the v2 key set. | Re-author the plan against the §1.1 table. The generator validates through the driver's own parser, so this is the same refusal the night would give. |
 | `a derivation night is DIAGNOSTIC_NO_PACK; this plan is <class>` | The plan's `receipt_class` is something else. | A `TRANSACTION_PACK` plan launches a pack launcher instead of the plan's chain, and a `REHEARSAL_STUB` never runs its chain at all, so the wrapper would never execute. Fix the class or stop. |
 | `window_max_s <n> < required 7680 + 300 = 7980 s …` | The window cannot hold the programmed span plus the pre-settle allowance (§1.2). | Lengthen the window or move `t0` earlier. Never shorten the settle, cadence, slot count or capture budget. |
-| `plan overruns the dead-man: t0 + window_max_s + 300 = <n> is not before the next local 07:00 = <n>; move t0 earlier` | The §1.2 dead-man arithmetic fails. | Move `t0` earlier. Never raise `window_max_s` past the strict maximum and never move the dead-man. |
+| `plan overruns the dead-man: t0 + window_max_s + 300 = <completion> is not before the derived deadman_epoch_s = <D>` | Completion is not before `deadman_epoch(plan)` (§1.2); unreachable with the adopted 3600 s grace. | Stop and check plan/code consistency. Keep the strict completion/dead-man check; never hand-edit D or raise the window to bypass a refusal. |
 | `--out <path> is not the plan's chain_path '<path>'` | An output path other than the plan's `chain_path` was requested. | Do not pass `--out`. The refusal exists so the plan and the artifact cannot disagree. |
 | `plan chain_sha256_path '<path>' is not '<chain_path>.sha256'` | The plan's sidecar path is not the wrapper's path plus `.sha256`. | Fix the plan; this is stricter than the driver, and it refuses rather than mis-writing. |
 | `slot count <n> is not the pre-registered 12; pass --allow-slot-count with --slot-count-ruling <ref> to override` | A slot count other than twelve without the two-flag override. | Use twelve. A departure needs a named written ruling and is announced on stderr and in the wrapper's own header. |
@@ -2129,7 +2395,7 @@ record is `<NIGHT_ROOT>/night/chain.stderr.log` — read it first:
 
 | `FAIL <reason>` | Meaning | Operator action |
 |---|---|---|
-| `measurement_root is required` / `must be an absolute path` / `contains control characters` / `measurement_head must be a full 40-character lowercase SHA-1` | The driver's four-variable environment was malformed. | Should be impossible from a valid plan; treat as a driver or plan defect and escalate before re-arming. |
+| `measurement_root is required` / `measurement_root must be an absolute path` / `measurement_root contains control characters` / `measurement_head must be a full 40-character lowercase SHA-1` | The driver's four-variable environment was malformed. | Should be impossible from a valid plan; treat as a driver or plan defect and escalate before re-arming. |
 | `night plan id does not match the wrapper` | `NIGHT_PLAN_ID` is not the plan this wrapper was frozen against. | The wrong wrapper was pinned, or a wrapper was reused across nights. Re-emit per night (§1.1b). |
 | `measurement_root does not match the wrapper` / `measurement_head does not match the wrapper` | The plan's clone path or head is not the one baked in at arm time. | The plan was edited after emission, or the wrong clone was named. Re-cut, re-author, re-emit. |
 | `checkout HEAD cannot be read` / `checkout HEAD does not equal measurement_head` | The clone is gone, is not a repository, or moved off H. | Stand down. Re-cut the clone at H (§0.2) and re-verify §0.8. |
@@ -2138,7 +2404,7 @@ record is `<NIGHT_ROOT>/night/chain.stderr.log` — read it first:
 | `frozen plan is not valid JSON` / `frozen plan has no plan_id` | The frozen calibration plan is corrupt. | Re-freeze at the desk; do not hand-edit. |
 | `frozen plan id does not equal the arm-time literal` / `frozen plan bytes do not equal the arm-time digest` | The plan file in the night root is not the one the wrapper was generated from — a swapped or re-written file. | Stop and account for the change. Then re-emit and re-`--verify`; never edit the wrapper. |
 | `identity epoch bytes do not equal the arm-time digest` / `t1 bindings bytes do not equal the arm-time digest` | One of the two files whose CONTENTS are copied into every slot record changed after emission — a `--force` re-run of the §0.8 writer is the ordinary cause. | Account for it, re-derive both (§0.8), re-emit, re-`--verify`. |
-| `tracked derivation chain bytes do not match the arm-time digest` | The capturing chain inside the clone is not the reviewed bytes — an uncommitted edit, or a clone at the wrong head. | Stand down the night. This is the tripwire §0.8's clean-tree check exists to keep from ever firing at 03:00. |
+| `tracked derivation chain bytes do not match the arm-time digest` | The capturing chain inside the clone is not the reviewed bytes — an uncommitted edit, or a clone at the wrong head. | Stand down the night. This is the tripwire §0.8's clean-tree check exists to keep from ever firing at `t0`. |
 | exit 1 with **no** `FAIL` line, on a `:?required` guard | The tracked chain ran without the wrapper's environment — i.e. the plan pinned the tracked chain directly instead of the emitted wrapper. | Re-author the plan per §1.1: `chain_path` is `<NIGHT_ROOT>/chain.zsh`. No window time was spent. |
 
 Chain exits (`scripts/night_chains/calibration_derivation_only.zsh`):
@@ -2181,7 +2447,8 @@ Issuer return codes (`scripts/issue_calibration_acceptance_generation.py`):
 Night-gate refusals to expect in `result.json`/`refusal.json` (names from
 `NIGHT_GATE_REASON_CODES` and `NIGHT_DRIVER_REASON_CODES` in
 `joulewise/night_gate.py`): `night_plan_malformed`,
-`night_plan_overruns_deadman` (the §1.2 arithmetic was wrong),
+`night_plan_overruns_deadman` (completion was not before the derived D;
+unreachable with the §1.2 constants),
 `night_refused_agent_present` (§0.6 was violated), `night_refused_boot_clock`,
 `night_refused_registration` (the `registration_path` did not hash to the D-166
 literal expected by C1, the night gate's registration check for
@@ -2248,7 +2515,10 @@ implementation.]`
 
 ## 7. Fact table — where each load-bearing fact came from
 
-Every source is in the merged tree at `main`, read read-only with
+**Timing-source update — 2026-09-15, INSTALL-WINDOWS-MULTI-01.** The timing
+rows cite the adopted design and the implementation that must be included in
+the reviewed arm head; verify these symbols after code/docs integration.
+Other sources are in the merged tree at `main`, read read-only with
 `git show HEAD:<path>` unless another location is named. Citations are by
 SYMBOL — a named constant, function, class, test name or document section — and
 by trace record number (§0.1), never by line number: the lane's own finding S-2
@@ -2270,37 +2540,38 @@ numbered record.
 | `SUCCESSOR_MINIMUM_CORPUS_SIZE = 19`, `RULED_ALTERNATIVE_CORPUS_SIZE` imported from the validator (one home), `SCREEN_CHALLENGE_MEMBER_LIMIT = 2` | same file, those constants |
 | `check --preregistration` (optional; parses the registered `powermetrics` digest, APPENDS one comparison line, adds an error rather than changing rc); `prepare-candidate --preregistration-sha256` required, `PREREGISTERED_NIGHT_COUNT = 3` and `PREREGISTERED_SLOTS_PER_NIGHT = 12` with `--nights-ruling` / `--slot-count-ruling` escapes; the `os_build` and sampler-digest void refusals; the level screen read from the authenticated predecessor's `ratified_operatives.preflight_level_screen_s`; the ruled maximum-plus-range diagnostic re-checked against the predecessor's `source_statistics` | same file: `preregistration_epoch_pins`, the authenticated-predecessor helper, and the `prepare-candidate` body and parser. These are the three arm-gate blockers record 109 recorded as unenforced, now enforced |
 | Three nights × 12 slots, retained n ≥ 19, the 16.95/25.4 projections, the 128 min schedule, blindness, the screen challenge, the D-125 envelope, the halt on `S >= C`, `0.04262208300415633`, `0.010818`, the predecessor ceiling `0.010164834757777545` | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` |
-| The three durations reconciled — programmed span 7680 s (128 min), generator minimum 7980 s (133 min), armed `window_max_s` 9000 s (150 min) — and the note that 210 min is the install span, not a window | same file, §"Why three nights of twelve slots" |
+| The three durations reconciled — programmed span 7680 s (128 min), generator minimum 7980 s (133 min), armed `window_max_s` 9000 s (150 min) | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, §"Why three nights of twelve slots"; its old install-span comparison is historical, superseded for installation by §1.3 |
 | Display state at `t0` is unconstrained by the night gate, recorded as a known condition and not a rule | same file, §"Known conditions (recorded, not rules)" |
-| Fences `[02:45,03:30)` / `[07:00,07:01)`, plan span from `t0 − 25 min`, the stand-down ladder −25/−16/−15, the 15-minute watchdog liveness, email-then-arm with Ed's NO overriding, the `measurement_root`/`measurement_head` install rule | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines" (the intervals and the boundary table) and §"Install handoff" |
+| Plan spans discovered from sibling plans or installed night plists, starting at `t0 − 25 min`; the stand-down ladder −25/−16/−15, 15-minute watchdog liveness, email-then-arm with Ed's NO overriding, and measurement-checkout install rule | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines" and §"Install handoff"; `installed_agent_fence` in `scripts/magistrate_watchdog.py` |
 | The handback's role, the courier's reading order, the campaign/chain process checks | `docs/process/NIGHT_HANDBACK.md`, its opening sections |
 | v2 plan required keys, `night_plan_overruns_deadman`, `registration_path`, the 36-hour authoring age | `joulewise/night_gate.py`: `_PLAN_KEYS`, `NightPlan.from_mapping`, `NIGHT_GATE_REASON_CODES`, `NIGHT_DRIVER_REASON_CODES`, `PLAN_MAX_AGE_S` |
 | Generation-time parsing of the two JSON inputs (six exact `IDENTITY_EPOCH_FIELDS`, scalar non-empty values, `power_policy == ac_high_power`; T1 bindings parsed as an object only), `MAX_DECLARED_SESSION_SLOTS = 99` as a desk-time ceiling, and the `CHAIN_ANCHORS` anchor-text discipline | `scripts/gen_derivation_night.py`: `_validated_identity_epoch`, `_validated_json_object`, `CHAIN_POWER_POLICY`, `CHAIN_ANCHORS`, and the slot-count and window checks in `build_spec`; `MAX_DECLARED_SESSION_SLOTS` from `joulewise/calibration_ledger.py` |
-| The wrapper mechanism, the thirteen + six exports, the three emitted files, the five-step arm order, the six required emit flags and their defaults, `--verify` rc 0 / rc 3, every generation-time refusal text, the 300 s pre-settle allowance, the 7680 s programmed span for twelve slots, the census substrings | `scripts/gen_derivation_night.py` (module docstring and the symbols `programmed_span_s`, `_census_clean`, `_validated_ruling`, `_next_deadman_epoch`, `build_spec`, `render_wrapper`, `emit`, `verify`, `build_parser`, `main`) and the `derivation-night-wrapper` generated region of `docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md` |
+| The wrapper mechanism, the thirteen + six exports, the three emitted files, the five-step arm order, the six required emit flags and their defaults, `--verify` rc 0 / rc 3, every generation-time refusal text, the 300 s pre-settle allowance, the 7680 s programmed span for twelve slots, the census substrings | `scripts/gen_derivation_night.py` (module docstring and the symbols `programmed_span_s`, `_census_clean`, `_validated_ruling`, `deadman_epoch` (imported from `scripts/run_night.py`), `build_spec`, `render_wrapper`, `emit`, `verify`, `build_parser`, `main`) and the `derivation-night-wrapper` generated region of `docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md` |
 | The desk-inputs writer: its flags and defaults, its paste-line output format, every refusal in §0.8's table, the canonical hyphenated filenames, and the rule that it must run under the project venv interpreter | `scripts/write_derivation_night_inputs.py` (module docstring, `_derive_planned_vectors`, `_refuse_incomplete_vector`, `_stale_identity_fields`, `_resolved_out_dir`, `_refuse_overwrite`, `write_night_inputs`, `_build_parser`, `main`), whose names `IDENTITY_EPOCH_NAME` and `T1_BINDINGS_NAME` come from `scripts/generate_g2a_probe_inputs.py`; seat record 135, including its live desk smoke and its MLX finding |
 | Why the G2-a producer cannot serve a derivation night (it authenticates the acceptance epoch that is stale), and that the desk-inputs writer is the answer | record 134 |
 | The live `check` output in §0.3 — two mismatched fields, `mlx_version 0.31.2` matching, rc 3, and the appended `match` line on the pre-registered sampler digest | record 134, run from a fresh clone at the desk |
 | Δ ≤ 1320 s for `d12` to be admitted at `window_max_s = 9000`; the three components of Δ | the chain's admission test read against the wrapper's pinned knobs; corroborated by the execution refuter's independent derivation (record 104 §7, "the night tolerates up to 1320 s of launch delay") and named as a runbook defect by the seam finding N-3 |
-| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute --python "$PY"` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
-| "Discoverable" = `/Users/edr/night-custody/*/night_plan.json`, one level, that filename — so the staging path arms nothing, and the driver discovers nothing because launchd hands it `--plan` | `glob_plans` in `scripts/magistrate_watchdog.py`; the `--plan` `required=True` argument of `scripts/run_night.py` |
+| The §1.4 installer uses `--plan --python "$PY"` for both labels, derives calendar fields from the plan, and removes jobs with `--uninstall`; publication and recovery retain the same `os.replace` / preserve / `cmp` sequence | `scripts/install_night_agent.sh`; `scripts/run_night.py` schedule command; record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, for the historical publication/recovery sequence |
+| Sibling discovery = `/Users/edr/night-custody/*/night_plan.json`, one level, that filename; installed plists independently fence their `--plan` references. The installer requires `<custody_root>/night_plan.json`; the driver reads only its required `--plan` path | `glob_plans` and `installed_agent_fence` in `scripts/magistrate_watchdog.py`; `check_schedule` in `scripts/install_night_agent.sh`; the `--plan` argument of `scripts/run_night.py` |
 | The plan is an INPUT to the generator, and the wrapper's bytes depend on the plan's CONTENT not its path | `scripts/gen_derivation_night.py`: `--plan`'s help text ("frozen v2 night plan JSON (emit mode)"), and `build_spec`, which renders every wrapper literal from the decoded plan fields |
 | The wrapper's `WINDOW_CUSTODY_ROOT` is `plan.custody_root`, its `RUNS_ROOT` defaults to `<custody_root>/runs`, its `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN` to the clone's ledger and head pin — the derivations §2.0 uses | `scripts/gen_derivation_night.py`: `WrapperSpec`, `build_spec`, and the `--runs-root` / `--ledger` / `--head-pin` defaults in `build_parser` |
 | The frozen checkout triple is exactly `(plan_id, root, head)`, rendered by the watchdog into the relaunch prompt, and fences those checkouts against movement | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`, the `@@FENCED_CHECKOUTS@@` line and the line after it; `docs/process/MAGISTRATE_WATCHDOG.md`, §"Complete write inventory" |
-| A fence forbids LAUNCHING OR ADOPTING a magistrate agent session, not running a night — so a `t0` inside the belt is correct | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Safety model and state machine" (the `FENCED` state) and §"Fence and deadlines"; corroborated by the rehearsal night that fired at 02:56 local and exited 0 (`docs/process/NIGHT_HANDBACK.md`, §"Executed — rehearsal-20260909") |
+| A fence prevents new magistrate launches during a plan span; a discovered active span permits supervision adoption to DRAIN an owned session (`STANDDOWN_<phase>`, `adopt=True`). An installed-only fence has `adopt=False`; the night agents run during the span | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Safety model and state machine" and §"Fence and deadlines" |
 | The frozen calibration plan is a committed pack-relative `calibration_plan.json`, not a custody reservation plan | `docs/phase_2/window_runbook.md`, the ALPHA `window.env` example and its `FROZEN_PLAN` gloss |
 | `[DD]` is the registration's authoring day | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, §"Fields filled at commit" |
 | The clone's environment must equal `env/mac-measurement-lock.txt` | record 12, §"Block A", its closing `pip freeze` diff |
-| Runbook shape, install span 03:00–06:30, never 07:xx, `t0+window_max_s+300 < 07:00`, the strict-maximum arithmetic, the Block A / Block B / record-and-exit structure | records 11 and 12 of this trace directory — `docs/process_traces/2026-09-10-activation-96bfeca7/11-night-handback-draft-g2a-20260912.md` and `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md` |
+| Install close `t0 − 1500 − 3600`, whole-day shipped `INSTALL_SPANS`, and dead-man `60 × ceil((t0 + window_max_s + 300 + 3600) / 60)` | D-180 clause 1 and D-181 clause 1; INSTALL-WINDOWS-MULTI-01 adopted design record 06; `scripts/run_night.py`: `install_close_epoch`, `INSTALL_CLOSE_MARGIN_S`, `INSTALL_SPANS`, `deadman_epoch`, `DEADMAN_GRACE_S` |
 | The supersession banner shape and the "read the newest activation records" instruction | record 13 |
-| Epoch↔local conversions and the four arithmetic results in §1.2 | computed with `TZ=America/Los_Angeles date -r <epoch>` and shell arithmetic when this runbook was drafted |
+| Epoch↔local conversions and strict maximum in §1.2 | §1.2 arithmetic, converted with `datetime.fromtimestamp(epoch, ZoneInfo("America/Los_Angeles"))`; the example applies the current design to earlier coordinates |
 | Driver hands the chain four variables and no argv (`_run_chain_once` in `scripts/run_night.py`, pinned by the argv assertion in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
 | Clean tree and desk-input provenance as arm-checklist items, and "one wrapper per night" | seat record 103 §7.1–§7.4 and its fix-round items B-1, B-2, S-1, S-4; refuter record 105 §5 |
 | Whole-suite replay green at the merged head, and the merge itself | records 130 and 133 |
 | The epoch-equivalence rule itself — the `m < 6` INCONCLUSIVE branch, the PASS and FAIL definitions, the continuation route and its addendum contents, the FAIL route's affirmation of V3, and the blindness clarification | The owner's directive issue 316 of 2026-09-10, transcribed as revision 2 of `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the dated Ed addendum under D-102 in `docs/decision_log.md` |
 | The reference-envelope constants `0.032898493715362`, `0.009724`, `0.010164834757777545` and n = 17, their raw counterparts `0.03289849371536248` and `0.00972358928879385`, and the fact that this generation's screen rule carries no floor | `joulewise/calibration_bracketing.py`: `_D102_N17_DERIVATION` (its `operatives`, `corpus_n` and `screen_rule`), bound to the acceptance id by `_D102_GENERATION_DERIVATIONS` and checked in `_valid_acceptance_bound`; the same lexemes in `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json` under `decimal_derivation.ratified_operatives`, `decimal_derivation.rounding` and `decimal_derivation.source_statistics` |
 
-Still unverified, and flagged in place: the 06:05 last-start cutoff's status
-(§1.3) and the complete night-gate refusal list with each refusal's remedy (§5).
+**Updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01:** §1.3 replaces the
+unverified last-start cutoff with the derived install close. Still unverified
+is the complete night-gate refusal list with each refusal's remedy (§5).
 **Closed since revision 1:** the driver's supply of the chain environment and of
 the per-slot binding argv (§1.1, §1.1a) — there is no such driver code by
 design, and the emitted wrapper supplies both. **Closed since revision 3:** the
@@ -2318,6 +2589,8 @@ tests live in `tests/test_gen_derivation_night.py`, the desk-inputs writer's in
 ---
 
 ## 8. First-use table
+
+**Timing rows updated 2026-09-15 — INSTALL-WINDOWS-MULTI-01.**
 
 Every term of art in this file, where it is built, and in one line what it
 means. A term is listed only if it does technical work.
@@ -2340,8 +2613,8 @@ means. A term is listed only if it does technical work.
 | ceiling (budget ceiling) | §Terms, §4.2 | The largest drift a generation will ever budget for; the bracket screen must be strictly below it. |
 | blind / blindness | §Terms, bounded §2.3 | Every rule that could be chosen after seeing values is fixed in writing BEFORE the data exists — "every rule fixed before data", not "no one may look". Nothing is read while a night runs; the equivalence night's retained values are read once its own session is terminal, and on the FAIL route no corpus statistic is computed before the last registration session is terminal. |
 | driver preflight | §Terms, §1.4 | The install-time check of the driver module, its module-scope project imports and the plan under the job's interpreter and PATH; it does not exercise lazy imports inside project functions or the chain's input checks. |
-| dead-man | §Terms | The second LaunchAgent that fires at a fixed local minute and stands the night down if completion has passed. |
-| fence (watchdog sense) | §Terms | A period in which the watchdog refuses to LAUNCH OR ADOPT a magistrate agent session: a plan span, the half-open belt `[02:45:00, 03:30:00)`, or the half-open dead-man minute `[07:00:00, 07:01:00)`. It forbids an agent starting, never a night running — which is why a `t0` of 02:56 is inside the belt and correct. |
+| dead-man | §Terms, §1.2–§1.3 | Daily job at the local hour/minute of completion plus 3600 s rounded up to a minute; pre-completion stand-down and post-`courier.sent` skip preserve existing recovery checks. |
+| fence (watchdog sense) | §Terms, §1.3 | A discovered or installed plan's span prevents new magistrate launches. A discovered active span permits supervision adoption to DRAIN an owned session; an installed-only fence has `adopt=False`. Completion, courier delivery and chain records govern its end. |
 | blindness fence | §Terms, enforced §2.3 item 3 | The code-enforced refusal of `prepare-candidate` while any session named in the registration is not terminal — the FAIL route's fence on computing a corpus statistic early. Not an interval; no clock clears it, and it does not govern the equivalence check, whose rule is fixed before capture instead. |
 | handback | §Terms | `docs/process/NIGHT_HANDBACK.md`, rewritten and committed with every armed night. |
 | email-then-arm | §Terms, §1.4 | Email Ed the notice, arm without waiting for a reply; Ed's NO overrides. |
@@ -2357,7 +2630,7 @@ means. A term is listed only if it does technical work.
 | night root | §Terms, exported §0.2 | `<NIGHT_ROOT>`, the custody directory the plan calls `custody_root`; the three emitted files and the night's two desk inputs live in it. |
 | tracked chain | §Terms | `scripts/night_chains/calibration_derivation_only.zsh`, the committed script that runs the twelve captures — identical in every clone at `H`, unlike the per-night wrapper. |
 | capture writer | §0.8 | `scripts/validate_powermetrics_fiducial.py`, run twelve times by the chain during the night. Distinguished from the desk-inputs writer everywhere in this file; a bare "writer" survives only inside a tool's own quoted message, where it means this one. |
-| `<NIGHT_DATE>` | §0.2 | The eight-digit `YYYYMMDD` of the date `t0` falls on; every dated name in the arm is built from it. |
+| `<NIGHT_DATE>` / `WINDOW_ID` | §0.2 | The real eight-digit `YYYYMMDD` date of `t0`, plus one unique attempt/window identifier; together they determine the clone, plan, session and custody names. |
 | staging path / `$STAGED_PLAN` | §0.2, §1.1b step 2 | `/Users/edr/night-plan-staging/<PLAN_ID>/night_plan.json`, where the plan is authored, generated from and `--verify`-ed. Outside the watchdog's discovery glob, so authoring a plan arms nothing. |
 | published (plan) | §1.4 | The one instant a night becomes discoverable: `os.replace` of the staged bytes into `<NIGHT_ROOT>/night_plan.json`, a target that must not pre-exist. Everything before it is undone by doing nothing. |
 | sidecar | §1.1a | A small companion file holding another file's SHA-256 in `shasum` output form — the digest, two spaces, a name. |
@@ -2371,6 +2644,8 @@ means. A term is listed only if it does technical work.
 | start-to-start cadence | §1.2 | Slot `d(k+1)` starts 600 s after `dk` STARTED; a long capture is never caught up by compressing a later slot. |
 | window_max_s / `WINDOW_END_EPOCH_S` | §1.2 | The plan's window length in seconds, and the exclusive window end the chain enforces. |
 | courier / courier deadline / courier allowance | §1.2, §2.1 | The process that emails the night's result; the 300 s the deadline arithmetic reserves for it AFTER the window ends. Distinct from the pre-settle allowance, which is spent inside the window; the two share a number by coincidence. |
+| install span / install close | §1.3 | Recurring local interval in `INSTALL_SPANS`; the separate per-plan exclusive cutoff `install_close_epoch(plan) = t0 − 85 min`. Installation also requires a sent notice. |
+| completion / D | §Terms, §1.2 | Completion is `t0 + window_max_s + 300`; D is `deadman_epoch(plan)`, completion plus 3600 s rounded up to a minute. |
 | Δ (delta) | §1.2 | The elapsed time from the plan's `t0` to the moment the chain's settle begins: driver gate work + chain preflight + session reservation. `d12` is admitted only while Δ ≤ 1320 s. |
 | plan span / exit boundary | §0.6, §1.3 | The interval from `t0 − 25 min` in which no agent may be resident; the activation's hard exit time. |
 | census | §0.6 | The enumerated process inventory proving no foreign or own agent is live. |
