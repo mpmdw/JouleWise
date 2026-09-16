@@ -1,0 +1,12 @@
+[
+  {
+    "id": "nv5-fake-vllm",
+    "command_regex": "(?:^|\\s)(?:\\S*/)?vllm\\s+serve\\s+/fake/model\\s+.*?--served-model-name\\s+nv5-fake-model(?:\\s|$)",
+    "source": "tests/test_node_worker_subprocess.py: _write_fake_vllm and _runtime_task; argv built by joulewise/adapters/node_worker.py:_vllm_serve_command"
+  },
+  {
+    "id": "nv5-fake-node-worker",
+    "command_regex": "(?:^|\\s)\\S*/node_worker\\.py\\s+--task\\s+\\S*/nv5-localhost-contract/tasks/[^\\s/]+\\.json(?:\\s|$)",
+    "source": "tests/test_node_worker_subprocess.py: LocalSubprocessTransport and nv5-localhost-contract run_id; argv built by joulewise/adapters/node_client.py:run_task"
+  }
+]

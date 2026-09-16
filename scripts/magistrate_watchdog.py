@@ -49,6 +49,7 @@ from scripts.run_night import (  # noqa: E402
     deadman_epoch,
     make_probes,
 )
+from scripts.fixture_orphan_census import launch_observation  # noqa: E402
 
 
 SCHEMA = "joulewise.magistrate_watchdog_state.v1"
@@ -211,6 +212,7 @@ class Dependencies:
     spawn: Callable[[Sequence[str], Path, Path, Path], Child]
     version_probe: Callable[[Path], str]
     sleep: Callable[[float], None]
+    fixture_census: Callable[[], Mapping[str, Any]] | None = None
 
 
 class RealProcessTable:
@@ -491,6 +493,7 @@ def real_dependencies() -> Dependencies:
         spawn=real_spawn,
         version_probe=version_probe,
         sleep=time.sleep,
+        fixture_census=launch_observation,
     )
 
 
@@ -2051,6 +2054,15 @@ def start_session(
     state["activation_spawn_epoch_s"] = activation_spawn_epoch_s
     state["resident_hold_drain"] = None
     state["attempt"] = int(state.get("attempt", 0)) + 1
+    if deps.fixture_census is not None:
+        # Observational only: no change to agent census or launch predicates.
+        storage.append_jsonl(storage.root / "events.jsonl", {
+            "schema": EVENT_SCHEMA,
+            "kind": "fixture_orphan_census",
+            "activation_id": activation_id,
+            "epoch_s": now.timestamp(),
+            "fixture_orphans": dict(deps.fixture_census()),
+        })
     requested_binary = binary_path or Path(
         os.environ.get(SESSION_BIN_ENV, str(DEFAULT_SESSION_BIN))
     )
