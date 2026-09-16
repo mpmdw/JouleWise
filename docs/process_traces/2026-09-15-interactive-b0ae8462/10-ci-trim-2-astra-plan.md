@@ -1039,3 +1039,9 @@ The rerun sat 56 minutes behind a pile of docs-only bookkeeping runs on main (ea
 00:10 PDT, see record ci-queue lesson), then ALL 13 jobs started within 60 s of each other (Pro's 40-job cap) and the
 run's execution wall was the longest job: test (3.13, 2) at 14.2 min; calibration-exits 10.7; shards 9.4–14.2.
 Conclusion: with the queue clear, a PR's CI ≈ 15 min. Next: measurement 3 on this head (quick gate + docs-only skip).
+
+## Measurement 3 (magistrate, run 35068879934 on 627b7f02: 6 shards on 3.13 + quick gate + docs-only skip, GitHub Pro)
+
+success, wall 20.1 min. Queue 0.1–2.5 min on every job; `quick` 2.1 min (153 modules, 4 workers) gates the fan-out;
+longest job test (3.13, 2) 13.9 min; calibration-exits 10.0. Conclusion: a code PR now costs ≈ 20 min wall and a red
+quick tier fails it in ≈ 3 min; a docs-only push runs four short jobs. From 32–40 min at the start of the evening.
