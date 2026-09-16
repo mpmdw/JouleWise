@@ -34,3 +34,25 @@ constant was changed. The 5-minute figure in the relay is recorded as the
 proposal the seat must justify or replace from the pad's history and the
 D-180/D-181 records; the 25-minute resident lead and every t0 gate are fenced
 as untouched in the acceptance text.
+
+## Amendment (2026-09-15 ~23:30 PDT)
+
+The interactive session relayed a second remark from Ed, quoted as verbatim:
+
+> "can't do less than 30 safely? let's do a speed pass with science quality
+> the only gate to speeding things up i want quick iterations fully ran by you
+> looped and running new ones"
+
+Scope change applied to the row: the 25-minute resident lead is no longer
+fenced. `PLAN_LEAD_S` / `REQUEST_LEAD_S` / `TERM_LEAD_S` / `KILL_LEAD_S`
+(`scripts/magistrate_watchdog.py:67-70` on main at `d3ea0236`, re-read by this
+activation: 25 / 25 / 16 / 15 minutes) are in scope with targets 5 / 5 / 3 / 2
+minutes, and `INSTALL_CLOSE_MARGIN_S` targets about 2 minutes, for an
+arm-to-t0 floor of about 10 minutes. The seat must justify every number by
+what it physically protects (load-average decay after the agents exit, the
+census needing the magistrate and its children gone, the watchdog's own tick
+cadence still observing each deadline; `SUPERVISOR_POLL_S = 10` at `:71`), pin
+the derived values, and leave every t0 gate untouched. The hard dependency on
+INSTALL-WINDOWS-MULTI-01 stays. The doubled parenthetical in the first
+status note was cleaned up in the same edit. Still registration only: no
+constant changed.
