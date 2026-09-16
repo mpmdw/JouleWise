@@ -383,7 +383,8 @@ class ArmCensusTests(unittest.TestCase):
                     row(90, 20, "/bin/python3", "-m", "joulewise.arm_census"),
                     row(30, 20, "/bin/powermetrics" if busy else "/bin/unknown"))
                 with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
-                    arm_census.ARM_DISCOVERY_ARGV, 0, "20\n", "")):
+                    arm_census.ARM_DISCOVERY_ARGV, 0, "", "")):
+                    # pgrep never lists the caller's own ancestors: no hits at all.
                     observed = arm_census.observe_arm_census(caller_pid=90, reader=FakeReader(fixture, (20,)))
                 verdict = self.classify(observed)
                 self.assertEqual(busy, verdict.publication_blocked)
@@ -401,11 +402,11 @@ class ArmCensusTests(unittest.TestCase):
                     row(50, 20, "/bin/node", "/opt/bin/codex", "mcp-server"),
                     row(60, 50, "/fake/codex-code-mode-host"),
                     row(71, 20, "/bin/python3", "-m", "unittest") if busy else
-                    row(71, 20, "/bin/unknown-helper"), hits=(20, 50, 60),
+                    row(71, 20, "/bin/unknown-helper"), hits=(50, 60),
                 )
                 reader = FakeReader(fixture, (20,))
                 with mock.patch.object(arm_census.subprocess, "run", return_value=subprocess.CompletedProcess(
-                    arm_census.ARM_DISCOVERY_ARGV, 0, "20\n50\n60\n", "")):
+                    arm_census.ARM_DISCOVERY_ARGV, 0, "50\n60\n", "")):
                     observed = arm_census.observe_arm_census(caller_pid=90, reader=reader)
                 verdict = self.classify(observed)
                 self.assertEqual(busy, verdict.publication_blocked)

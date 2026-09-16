@@ -131,7 +131,7 @@ def _interactive_root(row: DarwinProcessRecord) -> bool:
 
 def _own_root(inventory: KernelProcessTable, records: dict[int, DarwinProcessRecord],
               caller_pid: int, hit_pids: set[int]) -> int | None:
-    """Select the outermost readable agent root or unreadable discovery hit."""
+    """Select the outermost own-chain agent root, readable or unreadable."""
     own = _ancestors(inventory, caller_pid)
     rows = inventory.by_pid
     root = None
@@ -145,8 +145,10 @@ def _own_root(inventory: KernelProcessTable, records: dict[int, DarwinProcessRec
             )
         )):
             root = pid
-        elif row is None and pid in hit_pids:
+        elif row is None:
             # Unknown applies to this process, not its readable descendants.
+            # Darwin pgrep never lists the caller's own ancestors, so hit
+            # membership cannot be required of an unreadable own ancestor.
             root = pid
         pid = rows[pid].ppid
     return root

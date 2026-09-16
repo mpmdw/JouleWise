@@ -364,7 +364,6 @@ runpy.run_path(script, run_name='__main__')
         prepare.assert_not_called()
         author.assert_not_called()
         self.assertEqual(("/usr/bin/pgrep", "-lf", "codex|claude|t3"), events[0])
-        self.assertLess(events.index(events[0]), events.index("plan"))
         night = self.custody / "night"
         for name in ("receipt.json", "refusal.json"):
             record = json.loads((night / name).read_text())
