@@ -636,21 +636,46 @@ The coded census that the t0 gate and a pack night's arm both run
 (`pgrep -lf codex|claude|t3`) matches those helper processes; that is the
 ruled behaviour, and the pattern is not narrowed to exclude them.
 
-Before the arm census, stop all own seats, delegated tasks and background jobs
-using the activation's real task controls; record the task IDs and results and
-invent none. Then inspect and classify by ancestry:
+**Step 3b — arm-time census (D-180 clause 3).** Terms are defined in the
+first-use table (§8). Stop all own seats, delegated tasks and background jobs
+using the activation's real task controls; record their task IDs and results
+and invent none. After staging the plan, run the following from the reviewed
+measurement checkout, with `python3` resolving to that checkout's interpreter;
+repeat it immediately before publication in §1.4:
 
 ```zsh
-ps -axo pid,ppid,command | grep -E 'claude (daemon run|bg-spare|bg-pty-host)|--resume'
+python3 -m joulewise.arm_census --plan "$STAGED_PLAN"
 ```
 
-A no-match `grep` exit 1 is the expected outcome, not a failure to be
-suppressed. "Own" means this activation and its attached descendants: prior
-activations, interactive sessions, foreign seats, daemons, spares, resumed
-twins and PID-1 orphans are **not** own. Foreign or unclassifiable processes
-abort the arm; do not signal them. Never run the chain, the driver, a full
-preflight or a calibration capture from the live activation as a quietness
-test.
+Preserve the command's output in the arm transcript, including its plan digest,
+own PIDs, session descendants, workload categories and diagnostics. The parsed
+plan's `receipt_class` alone selects the rule; a plan name or caller flag cannot
+select it. For `REHEARSAL_STUB` only, an idle interactive Claude or Node/T3
+session is not foreign: only the listed workload families make its tree busy.
+Those families are unittest, pytest, `scripts/shard_tests.py`, powermetrics,
+nvidia-smi, `scripts/run_night.py`, `scripts/run_campaign.py`,
+`scripts/capture_t0_step.py`, `chain.zsh`, Python `-m joulewise*`, vLLM/MLX
+serving or module runners, `codex exec`, and Claude `-p`/`--print*` children.
+Inspect every descendant, including through shells and helpers; fixture paths
+do not exempt a listed workload. Unknown commands and unreadable observations
+read as idle, with observation diagnostics retained. The exact recognition
+rules are in `joulewise/arm_census.py`; Node/T3 coverage is PROVISIONAL and
+Electron roots are not claimed.
+
+The caller's own PPID chain is exempt for every class; side branches are not
+own. For a stub, exit 3 stops publication on a busy tree or remaining foreign
+agent; exit 0 permits the next step. For `DIAGNOSTIC_NO_PACK` and
+`TRANSACTION_PACK`, the command exits 0 with diagnostics and grants no idle
+exemption: the existing all-agents-closed arm precondition still applies,
+without a new coded publication gate. Invalid plans exit 2 and must be repaired.
+Do not signal foreign processes. Never run the chain, the driver, a full
+preflight or a calibration capture from the live activation as a quietness test.
+
+All sessions must still close before the plan span. At t0 the unfiltered night
+gate still records `night_refused_agent_present` for any agent hit, so no real
+measurement chain starts; the rehearsal driver retains its harmless-stub
+continuation and records census hits without killing the stub. An arm-time
+observation grants no plan-span exemption and predicts no future inactivity.
 
 ### 0.7 Nothing else is armed or discoverable
 
@@ -1376,6 +1401,8 @@ must give each boundary as local date/time with UTC offset plus epoch seconds
 (seconds since 1970-01-01 00:00 UTC). Record the actual notice-send time as
 open; installation must satisfy both `notice_sent <= now < install_close`
 and membership in a listed span. Existing plan-age and census gates still apply.
+The arm-time census in §0.6 changes neither install close nor the agent-free
+plan span; its idle-session exception applies only to rehearsal stubs.
 
 The installer checks these refusals before creating its output directories or
 rendering plists. Timing/location diagnostics print `<reason>: <summary>; <detail>`;
@@ -1602,8 +1629,15 @@ assert Path(os.environ['STAGE']).stat().st_dev == Path(os.environ['NIGHT_ROOT'])
 print('staged plan checks PASS')
 PY
 
-# 4. The final raw census, immediately before publication (§0.6).
-ps -axo pid,ppid,command | grep -E 'claude (daemon run|bg-spare|bg-pty-host)|--resume' || true
+# 4. The final arm-time census, immediately before publication (§0.6 step 3b).
+# Busy/foreign exit 3 is REHEARSAL_STUB-only; other valid classes are diagnostic.
+if python3 -m joulewise.arm_census --plan "$STAGED_PLAN"; then
+  :
+else
+  rc=$?
+  print -u2 "arm census exit $rc; preserve the transcript and stop publication"
+  exit "$rc"
+fi
 
 # 5. Publication: the one irreversible instant.
 "$PY" -B - <<'PY'
@@ -2552,6 +2586,7 @@ numbered record.
 | The live `check` output in §0.3 — two mismatched fields, `mlx_version 0.31.2` matching, rc 3, and the appended `match` line on the pre-registered sampler digest | record 134, run from a fresh clone at the desk |
 | Δ ≤ 1320 s for `d12` to be admitted at `window_max_s = 9000`; the three components of Δ | the chain's admission test read against the wrapper's pinned knobs; corroborated by the execution refuter's independent derivation (record 104 §7, "the night tolerates up to 1320 s of launch delay") and named as a runbook defect by the seam finding N-3 |
 | The §1.4 installer uses `--plan --python "$PY"` for both labels, derives calendar fields from the plan, and removes jobs with `--uninstall`; publication and recovery retain the same `os.replace` / preserve / `cmp` sequence | `scripts/install_night_agent.sh`; `scripts/run_night.py` schedule command; record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, for the historical publication/recovery sequence |
+| Step 3b and §1.4 arm-time census: workload-positive idle-session exception and publication blocking for `REHEARSAL_STUB` only; other classes receive diagnostics; plan-span census unchanged | `joulewise/arm_census.py` (`classify_arm_census`, `main`); D-180 clause 3; `joulewise/night_gate.py` (`agent_census`) |
 | Sibling discovery = `/Users/edr/night-custody/*/night_plan.json`, one level, that filename; installed plists independently fence their `--plan` references. The installer requires `<custody_root>/night_plan.json`; the driver reads only its required `--plan` path | `glob_plans` and `installed_agent_fence` in `scripts/magistrate_watchdog.py`; `check_schedule` in `scripts/install_night_agent.sh`; the `--plan` argument of `scripts/run_night.py` |
 | The plan is an INPUT to the generator, and the wrapper's bytes depend on the plan's CONTENT not its path | `scripts/gen_derivation_night.py`: `--plan`'s help text ("frozen v2 night plan JSON (emit mode)"), and `build_spec`, which renders every wrapper literal from the decoded plan fields |
 | The wrapper's `WINDOW_CUSTODY_ROOT` is `plan.custody_root`, its `RUNS_ROOT` defaults to `<custody_root>/runs`, its `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN` to the clone's ledger and head pin — the derivations §2.0 uses | `scripts/gen_derivation_night.py`: `WrapperSpec`, `build_spec`, and the `--runs-root` / `--ledger` / `--head-pin` defaults in `build_parser` |
@@ -2625,7 +2660,9 @@ means. A term is listed only if it does technical work.
 | desk-inputs writer | §0.8 | `scripts/write_derivation_night_inputs.py`: the tool that reads this machine through the capture writer's own helpers and writes `identity-epoch.json` and `t1-bindings.json` into the night root, refusing rather than writing a vector the night would reject. |
 | paste line | §0.8 | One of the two lines the desk-inputs writer prints in `NAME=<path> sha256=<64 hex>` form, shaped as a shell assignment so the path and digest reach the arm record and the generator's flags without retyping. |
 | clean tree | §0.8 | The measurement clone has no uncommitted change of any kind: `git status --porcelain` prints zero bytes. |
-| `DIAGNOSTIC_NO_PACK` | §1.1 | The receipt class for a night with no measurement pack; only C2 is not-applicable. |
+| `DIAGNOSTIC_NO_PACK` | §0.6, §1.1 | The receipt class for a real night with no measurement pack; only C2 is not-applicable. |
+| `REHEARSAL_STUB` | §0.6 | The receipt class running the driver's harmless built-in substitute chain, with no physics or evidence collection. |
+| `TRANSACTION_PACK` | §0.6 | The receipt class for a real night bound to a measurement pack. |
 | wrapper | §Terms, built §1.1a | The generated zsh file, one per night, that carries the night's whole environment as literal `export` lines, authenticates its pinned inputs, and then `exec`s the tracked chain. The plan's `chain_path` names it. |
 | night root | §Terms, exported §0.2 | `<NIGHT_ROOT>`, the custody directory the plan calls `custody_root`; the three emitted files and the night's two desk inputs live in it. |
 | tracked chain | §Terms | `scripts/night_chains/calibration_derivation_only.zsh`, the committed script that runs the twelve captures — identical in every clone at `H`, unlike the per-night wrapper. |
@@ -2648,7 +2685,14 @@ means. A term is listed only if it does technical work.
 | completion / D | §Terms, §1.2 | Completion is `t0 + window_max_s + 300`; D is `deadman_epoch(plan)`, completion plus 3600 s rounded up to a minute. |
 | Δ (delta) | §1.2 | The elapsed time from the plan's `t0` to the moment the chain's settle begins: driver gate work + chain preflight + session reservation. `d12` is admitted only while Δ ≤ 1320 s. |
 | plan span / exit boundary | §0.6, §1.3 | The interval from `t0 − 25 min` in which no agent may be resident; the activation's hard exit time. |
-| census | §0.6 | The enumerated process inventory proving no foreign or own agent is live. |
+| census | §0.6 | An inventory of running processes; the night gate uses the unfiltered `pgrep -lf codex\|claude\|t3` result. |
+| arm / arm-time census | §0.6 | Publishing a plan and installing its night/report jobs; the separate process check immediately before that publication. |
+| own / foreign | §0.6 | Own PIDs are the census caller and its ancestors reached through current PPID links; other processes are foreign unless the stub-only idle-session exception applies. No saved lock or guessed owner PID selects own. |
+| PID / PPID / process tree | §0.6 | A process's numeric identifier / its parent's identifier / all children and later descendants reached through those parent links. |
+| interactive session | §0.6 | A Claude executable named `claude` meeting the watchdog's interactive-role rules, or a Node process whose script operand ends in `/t3-code/dist/cli.js`. |
+| idle / busy (arm only) | §0.6 | No descendant matches the ruled workload table / at least one does; unknown helpers and unreadable observations count as idle. Neither low CPU usage nor a fixture filename decides this classification. |
+| exit code (arm census) | §0.6 | The command's integer result: 0 clear or diagnostic-only; 3 busy/foreign stub blocking publication; 2 invalid plan or invocation. |
+| plan digest | §0.6 | The SHA-256 identifying the exact plan bytes read by the command. |
 | frozen checkout triple | §1.5 | Exactly `(plan_id, root, head)` — the three fields the watchdog renders into the relaunch prompt's `@@FENCED_CHECKOUTS@@` list. It fences those checkouts against movement; §2.0 reconstructs every further harvest coordinate from it. |
 | terminal (session) | §2.2 | The session's last declared slot is final, or the session was aborted. |
 | dispatch (writer-status) | §2.4 | The chain branching on the capture's EXACT status number rather than on "non-zero": 0 valid and 1 non-valid both finalize the row and continue the night; 2 or more is a refusal or crash that stops it with the session open. |
