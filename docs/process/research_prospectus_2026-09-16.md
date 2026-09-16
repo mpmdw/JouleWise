@@ -1,14 +1,13 @@
 # JouleWise research prospectus — the landscape, the questions worth asking, and whether the tool deserves a public life (v2)
 
-**Date:** 2026-09-16. **Author:** Fable writer seat (v1) and Fable editor seat
+**Date:** 2026-09-16. **Author:** Fable drafting session (v1) and editing session
 (v2), read-only, at `main dc119f7d` (checkout
 `/Users/edr/code/JouleWise-wt-horizon`). **Reader:** Ed, who wants to learn the
-landscape before ranking work by CV value (what goes on his résumé) per
-hour of his own time. A *seat* is one delegated agent session that does a
-bounded piece of work; Fable (Claude) and Astra (GPT) are the two model
-families whose seats wrote the inputs, and the *magistrate* is the lead
-session that rules on process and science questions between Ed's own
-decisions.
+landscape before ranking work by CV value per
+hour of his own time. A delegated agent session working on one bounded task is a *seat*;
+Fable (Claude) and Astra (GPT) are the two model families that produced
+the inputs. The lead session (*magistrate*) rules on process and science
+questions between Ed's decisions.
 **Inputs, cited by path throughout:** the Apple-only plan
 (`docs/process/research_plan_2026-09-16.md`, "the plan"), two horizon drafts
 to reconcile (Fable: the session scratchpad’s Fable horizon draft (reconciled into `docs/process/research_plan_horizon_2026-09-16.md`), "the Fable
@@ -21,67 +20,63 @@ draft"), the literature record
 (`docs/research_question_coverage-2026-09-04.md`), `CLAIMS_STATUS.md`, the
 paper draft (`docs/paper/draft-v1.md`, "the paper" or "draft §n"), and the
 tool-viability report (the session scratchpad’s tool-viability report (its fetched facts are reproduced in Part IV), "the
-viability seat", whose external facts were fetched on 2026-09-16). Citations
-[1]–[31] are the numbered sources in record 21 §4 and the Fable draft
-§Sources; [32]–[57] are the viability seat's fetched pages. Nothing else was
+viability report", whose external facts were fetched on 2026-09-16). Citations
+[1]–[31] identify sources in the literature record (record 21 §4) and the Fable draft
+(§Sources); [32]–[57] are the pages fetched for the viability report. Nothing else was
 fetched.
 
-**How to read this.** Part 0 is the whole argument on one page; stop there if
-you only want the verdicts. Parts I–III build the landscape and rank the
+**How to read this.** Part 0 gives the argument and recommendations
+on one page. Parts I–III build the landscape and rank the
 questions; Part IV is the tool-release decision with the tool comparison;
 Part V is the day-by-day sequence and what Ed must do with his own hands.
-Every term of art is defined in plain words the first time it appears, and
-every mechanism comes with the problem that forces it and a worked example
-with real numbers; if a later section uses a word you do not recognise, the
-definition is earlier in the document, never later.
+Project terminology is defined at first use. Each mechanism is introduced
+through the problem it addresses and a quantitative worked example.
 
-**Two labels used throughout.** **NEEDS-WEB** marks a fact no seat verified
+**Two labels used throughout.** **NEEDS-WEB** marks a fact no agent verified
 against a primary page; it is a prerequisite to acting, never an assumption.
 **ASSUMED** marks a planning estimate (hours, dollars, byte sizes computed
 from parameter counts) that is not a measurement.
 
-**Identifiers used throughout, glossed once.** *D-nnn* is a numbered entry in
-the project's decision log (`docs/decision_log.md`), a ruling that binds later
-work. *A-nnn / E-nnn* is a registered work lane in `TASK_QUEUE.md` (the same
-lane appears under both prefixes). *RQ-…* and *Q-n* in backticks are row
-identifiers in the question bank; *C5-…* are claim identifiers in the coverage
-map; *AP-n* are the bank's numbered analysis-plan rules (for example AP-1, the
-rule that held-out shapes or models are named before any collection); *PC-n*
-are the bank's numbered planning facts assumed for Paper C (for example PC-4,
-decode power is near-flat). *Paper A* is the merged methods paper; *Paper B*
-is the phase-energy capstone paper (data-complete day 3 of the plan); *Paper
-C* is the mechanism paper on the bank's first tier of questions (day 10);
-*Paper D* is the post-C scaling and mechanism-law paper (core day 17, full
-day 23) — all from the plan §Terms and §Days to each paper. *Papers E and F*
-are proposed post-plan papers sketched in Part III (E: which device class
-should run which request; F: the instrument). *`_v5`* is the fifth frozen generation of the
-campaign plan for the pinned Qwen3 1.7B and 8B model pair — the one whose
-collection windows (defined in Part II) produce the first *claim-bearing*
-numbers, meaning numbers the paper
-may state as findings, as opposed to *diagnostic* numbers, which show the
-instrument working but may not be quoted as results.
+**Identifiers used throughout, glossed once.** Binding rulings are numbered
+in the decision log (`docs/decision_log.md`; *D-nnn*). A queued work item
+is a *lane* (`TASK_QUEUE.md`; *A-nnn / E-nnn*, two prefixes for the same item).
+Question-bank rows have backticked identifiers (*RQ-…*, *Q-n*); the coverage
+map identifies claims (*C5-…*). The bank also numbers analysis-plan rules
+(*AP-n*), including the requirement to name held-out shapes or models before
+collection (AP-1), and planning assumptions (*PC-n*), including near-flat
+decode power (PC-4) for the mechanism study (Paper C).
+The publication sequence is the merged methods paper (Paper A), the phase-energy
+capstone (Paper B, data-complete day 3 of the plan), the mechanism paper on
+the bank's first tier of questions (Paper C, day 10), then scaling and
+mechanism laws (Paper D, post-C, core day 17, full day 23; plan §Terms and
+§Days to each paper). Part III sketches two post-plan papers: device-class
+placement (E) and the instrument (F), referred to together as Papers E and F.
+The fifth frozen generation of the campaign plan fixes the Qwen3 1.7B and 8B
+model pair (`_v5`). Its collection windows, uninterrupted quiet-machine
+sessions detailed in Part II, produce the first *claim-bearing* numbers:
+findings the paper may state. *Diagnostic* numbers demonstrate instrument
+operation but may not be quoted as results.
 
 ---
 
 ## Part 0 — One page
 
-**What the tool is.** JouleWise measures how much energy a laptop spends
-answering a language-model request, and — the part nobody else does — says
-how much of that energy it can honestly assign to each of the request's two
-stages. A request has a *prefill* stage (the model reads the prompt) and a
-*decode* stage (it emits output tokens one at a time); the paper calls a
-stage a *phase*. Energy is power accumulated over time, so the energy charged
-to each phase depends on where the phase boundary falls on the power trace.
+**What the tool is.** JouleWise measures a laptop's energy consumption
+during a language-model request and, uniquely, quantifies how much it can
+attribute to each of the request's two stages. A request has a *prefill* stage (prompt processing) and a
+*decode* stage (sequential output-token generation); the paper calls a
+stage a *phase*. Phase energy is the integral of power over that phase, so it depends
+on where the phase boundary falls on the power trace.
 Apple's `powermetrics` reports the processor's average power every 100 ms;
 the model runtime records when each phase started and stopped on a different
 clock. JouleWise places both on one timeline by firing 59 one-second GPU
 pulses of known timing before and after every measurement session and
-fitting where the power trace *saw* them; the fit's residual is the timing
+fitting their observed positions in the power trace; the fit's residual is the timing
 uncertainty of every phase boundary in that session (draft §2). From that it
 computes, for every group of like-for-like runs (a *cell*: one model, one
-prompt shape, one phase, one machine state), a *resolution bound* — "the
+prompt shape, one phase, one machine state), a *resolution bound* ("the
 largest false difference this measurement system can manufacture when
-nothing has changed" — and it refuses to state a direction between two
+nothing has changed"). It refuses to state a direction between two
 conditions unless two gates pass (draft §4): the *magnitude gate* (the
 observed difference exceeds the bound) and the *direction gate* (the
 difference's own uncertainty interval lies entirely on one side of zero,
@@ -89,67 +84,65 @@ tightened by Holm's step-down correction when several contrasts are tested
 at once, so that the chance of a false direction anywhere in the family stays
 at the stated level). Everything is *pre-registered*: the plan, the models,
 the prompts and the decision rule are frozen and fingerprinted with SHA-256
-hashes before any data exists, and every refusal is a printed result with a
+hashes before any data exists, and every decision not to report a result (*refusal*) is printed with a
 reason (draft §5).
 
 **What it can and cannot resolve today.** The timing uncertainty is a few
-tens of milliseconds (one retained *capture* — one recorded calibration, the pulse train and the
-power trace that saw it — gave 30.07 ms, draft §2). Where the
-boundary sits on a steep power step — prefill runs the GPU hard, decode runs
-it lighter — the misplaced time times the power step is about a joule:
+tens of milliseconds (one retained *capture*, comprising a calibration pulse train and its
+recorded power trace, gave 30.07 ms, draft §2). At the
+steep power step from high-power prefill to lower-power decode,
+the timing error multiplied by the power step is about a joule:
 30 ms × 35 W ≈ 1 J. That is the **≈1 J attribution scale**, and no amount of
 repetition removes it, because it is applied to every run the same way.
 Run-to-run scatter, by contrast, is small: three diagnostic-era cells had
 point scatter floors of 0.29, 0.49 and 0.31 J against timing-widened floors
 of 3.15, 2.92 and 2.18 J (draft §3; the artifact's name for the resolution
 bound is the *detection floor*, and "floor" below always means that). The
-**≈5 J effective bar** is the labelled floor plus the *claim-side bound* — the
-extra margin a difference must show because the difference itself is
-measured with scatter and must clear the floor by its own uncertainty, not
-merely touch it (`CLAIMS_STATUS.md` §1, D-078 clause 11 — D-078 is the
-2026-07-19 soundness ruling that voided every pre-repair corpus and fixed this
-framing). Over a 512-token decode that is 5 J ÷ 512 ≈ 10 mJ per token; over
-2048 tokens ≈ 2.4 mJ. Anything smaller prints `not resolvable` — which means
-*this instrument cannot see it*, never *these are equal*. Nothing is
+**≈5 J effective bar** is the labelled floor plus the *claim-side bound*, the
+additional margin needed because the difference itself has scatter and its uncertainty
+interval to clear the floor. The 2026-07-19 soundness ruling (D-078) voided every pre-repair corpus and fixed this
+framing (`CLAIMS_STATUS.md` §1; D-078 clause 11). Over a 512-token decode that is 5 J ÷ 512 ≈ 10 mJ per token; over
+2048 tokens ≈ 2.4 mJ. Anything smaller prints `not resolvable`: the instrument cannot distinguish
+the conditions, which does not establish equality. Nothing is
 claim-bearing on disk today: every number in `CLAIMS_STATUS.md` is
-diagnostic, and the first claim-bearing cells come from the `_v5` windows on
-day 3 of the plan.
+diagnostic, and the first claim-bearing cells come from the frozen campaign's windows on
+day 3 of the plan (`_v5`).
 
 **The three highest-value questions on Mac + meter** (value defined in
-Part II): (1) the **bytes law** — is decode energy per token one linear
+Part II): (1) the **bytes law** tests whether decode energy per token follows one linear
 function of bytes read per token across model sizes and quantizations
-(weights stored in fewer bits), with a *held-out* model (one whose energy is
-predicted before it is measured)? It answers Ed's "why does each method cost
-more" directly. (2) **Same-query variance as a first-class result** — how much
-does the same request's energy vary on repeat, what drives the spread
-(thermal state, position in the window, sampling length), and how does it
-compare with the timing bound? Nobody publishes this for Apple silicon. (3)
+(weights stored in fewer bits), validated on a *held-out* model whose energy is
+predicted before measurement. It answers Ed's "why does each method cost
+more" directly. (2) **Same-query variance as a first-class result** measures the energy
+spread across repetitions of one request, its drivers
+(thermal state, position in the window, sampling length), and its size
+relative to the timing bound. Nobody publishes this for Apple silicon. (3)
 The **meter mapping** — one number with an uncertainty interval that ties
 `powermetrics`' units to a physical instrument on the laptop's power cable,
 the field's first question and 15 minutes of Ed.
 
 **Tool-release verdict, three sentences (Part IV has the rule in full).**
-Ship *Release 0* now, as Paper B's artifact: the existing Apple path packaged
+Ship *Release 0* now, as the phase-energy paper's artifact (Paper B): the existing Apple path packaged
 as a pip `joulewise` with `calibrate` and `measure` returning phase energies,
 the floor and the refusal, plus a Zenodo DOI (a permanent identifier minted
 by the Zenodo archive) and a citation file — two to
 three weeks of mostly agent work and half an hour of Ed, earning the ACM
 *Available* + *Functional* badges (code obtainable from a permanent
 identifier, and documented, complete and exercisable) that a metrology
-reviewer looks for. Start *Release 1* — the formal rewrite into a library
-other labs can use (portable backends, one-call API, replication-bar docs,
-7–16 seat-weeks depending on scope; a *backend* is the code that talks to
-one power counter) — only after Paper D's core is data-complete (day 17),
-only once the meter mapping has an interval, and only on a flip signal (an
+reviewer looks for. Start *Release 1*, the formal rewrite into a library
+for other labs, with portable backends, a one-call API and documentation sufficient for replication
+(7–16 seat-weeks of agent work depending on scope; a *backend* reads
+one power counter), only after the core scaling study is data-complete (Paper D, day 17),
+only once the meter mapping has an interval, and only when a trigger justifies starting (an
 NVIDIA pulse pilot yields a finite timing bound through the same code path,
-or IOReport — Apple's no-root energy-counter interface, the one Zeus reads —
-turns out to carry the same edge error, or an outside group asks); ship it only when a floor has actually been
+or IOReport, Apple's no-root energy-counter interface used by Zeus,
+carries the same edge error, or an outside group asks); ship it only when a floor has actually been
 re-derived on an NVIDIA card with at least one resolvable contrast and one
-printed refusal. Stop at Release 0 if the `_v5` attribution-dominance test (the paper's
-headline test of whether boundary attribution, not repeat scatter, dominates
-each phase's floor) returns a *null* — finds no dominance — in both phases
-*and* IOReport shows edge error well under the floor, or if six months after Release 0 there is zero external signal — until
-one of those fires, the rewrite is a bet, not an investment.
+printed refusal. Stop at Release 0 if the frozen campaign's test of whether boundary-attribution uncertainty
+dominates repeat scatter in each phase's floor (the attribution-dominance test,
+`_v5`) returns a *null*, finding no dominance, in both phases
+*and* IOReport shows edge error well under the floor, or if six months after Release 0 there is zero external signal — without
+one of those triggers, the rewrite remains speculative.
 
 ---
 
@@ -157,8 +150,8 @@ one of those fires, the rewrite is a bet, not an investment.
 
 ### Who measures LLM inference energy, and how (record 21 §1)
 
-The field splits into four groups, and each has a hole a metrologist sees
-first. Instrument names used in the table: `powermetrics` is Apple's
+The field splits into four groups, each with a distinct metrological
+gap. Instrument names used in the table: `powermetrics` is Apple's
 software power counter; NVML is NVIDIA's management library, the software
 counter for its GPUs; DCGM is NVIDIA's datacenter monitoring daemon over the
 same sensors; RAPL is Intel's on-chip energy counter; Zeus and CodeCarbon are
@@ -189,8 +182,8 @@ Four practices are absent from every row above and present in JouleWise
    only uncertainty reports are confidence intervals on repeats, which
    cannot see a systematic boundary error.
 3. **Pre-registration with frozen, hashed packs.** A *pack* is the set of
-   files that define a campaign — models, prompts, shapes, run counts,
-   decision rule — whose SHA-256 fingerprints are recorded before data
+   files that define a campaign (models, prompts, shapes, run counts,
+   decision rule), whose SHA-256 fingerprints are recorded before data
    exists, so nothing in it can change afterwards without detection. Unique
    in energy work (record 21 §2, last rows; the nearest analogue is Zhuang's
    paired minimum-detectable-effect design for accuracy benchmarks [20]).
@@ -205,12 +198,13 @@ And one practice is absent from JouleWise and present in the standards:
 MLPerf [1] require an analyzer with ≤1% uncertainty, calibrated yearly,
 *ranged* before the counted runs (a *ranging run* exercises the workload once
 so the meter's measurement range can be fixed before any counted run; a range
-change mid-run would change the meter's resolution). Every joule in Papers
-B–D is in Apple's units until the meter leg (Part II §5) runs.
+change mid-run would change the meter's resolution). Every joule in the phase-energy, mechanism and scaling papers
+(Papers B–D) is in Apple's units until the meter leg (Part II §5) runs.
 
 ### What a JouleSort-lineage reviewer asks first
 
-In this order, from record 21 §3 "reviewer questions we cannot yet answer":
+The literature review lists these unresolved reviewer questions in priority order
+(record 21 §3, "reviewer questions we cannot yet answer"):
 (1) how far is `powermetrics` from a physical meter under *this* load
 (gain)? (2) what is the counter's own update period — do your 100 ms
 averages *alias* a slower internal counter, that is, read the same stale
@@ -252,21 +246,21 @@ Four factors, each 1–3, multiplied; the product is what the ranking sorts on.
 - **Why-content**: 3 = the answer names a physical mechanism (bytes moved,
   time at flat power, a counter's update period); 2 = it decomposes an
   effect; 1 = it ranks.
-- **CV per Ed-hour**: 3 = zero Ed-hours (seats run it unattended) and it
+- **CV per Ed-hour**: 3 = zero Ed-hours (agents run it unattended) and it
   lands in a paper section; 2 = under an hour of Ed; 1 = Ed at a machine
   for hours or an unbuilt prerequisite.
 
 Windows are the plan's unit: a *window* is one uninterrupted quiet-machine
 collection session, ≈2.5 h wall, ≈2.25 h of capture, 4–5 per day; a
-*refusal* — the unattended chain declining to capture because an
-*admission gate* (a machine-state check a window must pass before capture:
-load, the *census* that nothing else is running, clock) failed — costs
+capture refusal caused by a failed
+*admission gate* (a pre-capture machine-state check of
+load, other running processes (*census*), and clock) costs
 ≈20 min (plan §Assumptions). A *rider* is an extra measurement taken inside
 a window already scheduled for something else, so it costs no window of its
 own. A *floor window*
-repeats one condition to measure its scatter and *mint* its floor — compute
-the cell's resolution bound and freeze it as a signed artifact that later
-contrasts consume; a *contrast window* compares two conditions. *Desk* work
+repeats one condition to measure its scatter, then computes and freezes
+the cell's resolution bound as a signed artifact for later
+contrasts (*minting* the floor); a *contrast window* compares two conditions. *Desk* work
 is analysis or writing that needs no window; a *desk arm* is a sub-experiment
 done at the desk (an *arm* is any sub-experiment inside a window or a lane).
 
@@ -284,9 +278,9 @@ context, so *KV growth* is how decode energy rises as that store grows. A
 *mixer* is the layer type that mixes information across tokens (standard
 attention or one of its variants), so a *mixer signature* is the energy
 fingerprint of that choice. *Prefill chunk* is the size of the pieces a long
-prompt is processed in. "Fable draft Leg 2": the Fable draft is organised
-in *Legs* — Leg 1 the meter, Leg 2 the Apple diagnostics and desk items,
-Leg 3 the NVIDIA and cloud work — and that naming is kept here. The
+prompt is processed in. The Fable draft groups the work
+into meter measurements (Leg 1), Apple diagnostics and analysis (Leg 2, cited as "Fable draft Leg 2"),
+and NVIDIA and cloud measurements (Leg 3). The
 *coefficient law*
 (`RQ-NEXT-COEFF-LAW`, bank line ≈1748) is the companion of the bytes law: a
 request's energy is modelled as E = fixed + a·p + b·d (p prompt tokens, d
@@ -314,27 +308,27 @@ held-out shape within the bar.
 rank 1's coefficients (the crossover prediction is derived from the fitted
 prefill and decode slopes), so it cannot be first. Ranks 10–12 are placed by
 product but listed after Ed's four axes are covered. The plan already runs
-7, 8, 9 and 11 in Paper C's window order (plan Phase 1, days 4–10) and 1, 5, 6, 12 in
-Paper D's (Phase 2, days 11–17, and Phase 2b, days 18–23); this ranking does not move them, it says which to protect if
+7, 8, 9 and 11 in the mechanism study's window order (Paper C; plan Phase 1, days 4–10) and 1, 5, 6, 12 in
+the scaling study's (Paper D; Phase 2, days 11–17, and Phase 2b, days 18–23); this ranking does not move them, it says which to protect if
 windows are lost.
 
 ### Ed's axes, one at a time
 
 #### Axis 1 — a benchmark of fixed difficulty, repeated (rank 5)
 
-*Plain words.* Take problems from the MATH benchmark (a dataset of
-competition problems) whose difficulty level (1–5) the dataset authors
-assigned, hold the prompt and output budget fixed, let the model stop
-naturally, and ask: does energy per *correct* answer rise with level, and is
-the rise entirely explained by how many tokens the model emitted?
+*Question.* Use MATH competition problems at author-assigned
+difficulty levels (1–5),
+fix the prompt and output budget, and allow natural stopping. Test
+whether energy per *correct* answer rises with level and whether
+output-token count explains the rise.
 
 *Why it matters.* "Harder questions cost more energy" is the sentence every
 practitioner wants; the honest version separates two mechanisms — the model
 *thinks longer* (more decode tokens at near-flat power, so more time) versus
 the model *does more work per token* (which, on a dense model at fixed shape,
 it cannot, because the computation graph is the same for every token). The
-bank's planning fact PC-4 (bank line ≈1608) is that decode power is nearly
-flat, ≈23–28 W from 1.5B to 122B-A10B (the A-suffix is a sparse model's active
+planning assumption is nearly flat decode power,
+≈23–28 W from 1.5B to 122B-A10B (PC-4; bank line ≈1608; the A-suffix is a sparse model's active
 parameter count: 122 B stored, 10 B read per token), so decode energy
 differences are decode *time*. If emitted tokens explain the whole rise, difficulty is a
 length effect; a residual after length is the interesting result.
@@ -343,16 +337,16 @@ length effect; a residual after length is the interesting result.
 level) with the binomial uncertainty of the denominator: at 32 items per
 level, a 50% accuracy has ±17% on the count of correct answers
 (`RQ-NEXT-EPCA-LEVELS`), which dominates the energy uncertainty because a
-level window's energy is hundreds of joules against a 5 J bar. Worked case
-from `RQ-D-A10`: 32 attempts, 16 correct, a 6 J aggregate difference is
+level window's energy is hundreds of joules against a 5 J bar. The energy-per-correct-answer analysis gives a worked case
+(`RQ-D-A10`): 32 attempts, 16 correct, a 6 J aggregate difference is
 6/16 = 0.375 J per correct answer; with 4 correct it is 1.5 J — the
 denominator, not the instrument, sets the resolution.
 
 *Windows, paper, prerequisites.* 5 windows (plan Phase 2b, windows 49–53),
-Paper D applied section. Prerequisite: a **policy ruling** extending AP-5 —
-the bank's rule that correctness is a quarantined annotation, never a
-capability claim (C-004, the July council ruling that quarantines
-correctness) — to the MATH source; without it only "energy beside external
+applied section of the scaling paper (Paper D). Prerequisite: a **policy ruling** extending the bank's rule that correctness
+is an annotation and cannot support capability claims to the MATH source
+(AP-5; C-004, the July council ruling restricting the use of
+correctness); without it only "energy beside external
 scores" is licensed (D-041, the decision that permits scored workloads only
 as annotation). Contamination (the model may have seen the problems in
 training) means the claim is shape-only: "on this frozen subset, at this token
@@ -360,11 +354,11 @@ envelope (prompt and output budget)", never "harder problems cost more".
 
 #### Axis 2 — same size, different quantizations, and *why* (ranks 1 and 4)
 
-*Plain words.* Quantization stores each weight in fewer bits (16-bit → 8 →
-4). For one model at one size, how much energy does each recipe save, and is
-the saving because the chip draws less power or because it finishes sooner?
-Then across sizes: is energy per decoded token simply proportional to the
-bytes the chip must read per token?
+*Question.* Quantization reduces weight precision (16-bit → 8 →
+4). At fixed model size, measure each recipe's energy saving and decompose
+it into lower power and shorter execution time. Across sizes, test whether
+energy per decoded token is proportional to the
+bytes read per token.
 
 *The mechanism, built from the numbers.* During decode every output token
 requires reading all the model's active weights once from memory, plus the
@@ -386,31 +380,31 @@ weights, the larger the cache's share. A *dequantization* cost (unpacking
 non-linear; Arya & Simmhan found INT8 can cost *more* than FP16 on some
 stacks (record 21 §1), which is exactly what a dequant term predicts.
 
-*What the answer looks like.* Rank 4 (`C5-1.12`, one 8-bit 8B cell in
-Paper C, plan window 11): a split — "of the X J saved per 512 tokens, Y J is
-lower mean power and Z J is shorter time". Rank 1 (`RQ-NEXT-BYTES-LAW`):
+*What the answer looks like.* Quantization decomposition (rank 4; `C5-1.12`, one 8-bit 8B cell in
+the mechanism paper, Paper C, plan window 11): a split — "of the X J saved per 512 tokens, Y J is
+lower mean power and Z J is shorter time". The bytes law (rank 1; `RQ-NEXT-BYTES-LAW`):
 one fitted line, E/token = P × bytes/BW_eff (P the flat decode power,
 BW_eff the effective memory bandwidth), across Qwen3 1.7B/4B/8B/14B/32B
 dense plus 30B-A3B and 122B-A10B sparse, with the 14B point held out and
 predicted before it is measured. Resolution: 10% of a 47 J 512-token decode
-≈ the 5 J bar, so at d = 2048 the law resolves ≈1.3% departures. The
+≈ the 5 J bar, so at d = 2048 (≈188 J) the law resolves ≈2.7% departures. The
 *negative* is as publishable: a resident-but-inactive-bytes term (the whole
 mixture-of-experts model, not just its active experts, costing energy) would
 show as sparse points above the line — the mechanism ML.ENERGY v3's 3.56× [3]
 versus Fernandez's +54% [16] disagree on.
 
-*Windows, paper, prerequisites.* Rank 4: 1 window, Paper C, the 8-bit
-artifact pinned. Rank 1: 5 windows with the new models' floors inside them
-(plan Phase 2 windows 1–5), Paper D; Qwen3-Next-80B-A3B runtime support
+*Windows, paper, prerequisites.* Quantization decomposition: 1 window for the mechanism paper (rank 4; Paper C), with the 8-bit
+artifact pinned. The bytes law: 5 windows (rank 1) with the new models' floors inside them
+(plan Phase 2 windows 1–5) for the scaling paper (Paper D); Qwen3-Next-80B-A3B runtime support
 NEEDS-WEB; quantization *group size* (how many weights share one scale
-factor) must be held constant across sizes (the risk both seats name).
+factor) must be held constant across sizes (the risk both analyses identify).
 
 #### Axis 3 — workload-profile variation as the investigated axis (ranks 6–9)
 
-*Plain words.* Hold the model fixed and vary what the request looks like —
-prompt length, output length, content category, whether the prompt is
-shared with the previous request — and ask which of those move energy, by
-how much, and whether the answer is the same for every model.
+*Question.* At fixed model, vary prompt length, output length,
+content category and prompt reuse across consecutive requests.
+Measure each factor's effect on energy and test whether
+the effects transfer across models.
 
 *The mechanism.* Prefill is compute-bound (every prompt token is processed
 in parallel; energy ∝ active parameters × prompt tokens at high power);
@@ -428,9 +422,8 @@ its absence is a result.
 with held-out shapes (512, 256) and (4096, 512) predicted within the floor
 (bank line 509). Rank 6: a single number p\*/d per model, predicted for the
 held-out model before it is measured (ladder rung L3). Rank 8: a null or a
-category effect above the floor, on the five conditions of AP-6 (the content
-sentinel's analysis plan: five synthetic content variants at one fixed
-shape). Rank 9: an ordering (code vs long-context vs reasoning) per model
+category effect above the floor, across five synthetic content variants at one fixed
+shape (the content-sentinel analysis plan, AP-6). Rank 9: an ordering (code vs long-context vs reasoning) per model
 and whether it flips.
 
 *Windows, paper.* Plan Phase 1 windows 3–10 (grid + validation), 20–24
@@ -442,10 +435,10 @@ must report stop reasons so a cheap wrong answer is visible as a short one.
 
 #### Axis 4 — same query, repeated: the spread as a first-class result (rank 2)
 
-*Plain words.* Run the identical request ten times under identical
-declared conditions. How far apart are the energies, what makes them
-differ, and how does that spread compare with the instrument's own timing
-uncertainty?
+*Question.* Repeat an identical request ten times under identical
+declared conditions. Measure the energy spread, identify its drivers,
+and compare it with the instrument's timing
+uncertainty.
 
 *What is already known, diagnostically.* Repeat scatter is small. The
 1.5B-vs-7B diagnostic contrast had σ = 0.241 J over n = 10 blocks (a
@@ -482,12 +475,12 @@ uncertainty is ≈1 J; sampling length explains X% of stochastic variance".
 No Apple study has printed any of those three numbers (record 21 §1).
 
 *Windows, paper.* 2 windows (Phase 1 windows 15–16) plus riders in every
-floor window; Paper C variance section, with the null and drift parts
-already Paper B obligations (coverage map "Non-registry paper obligations").
+floor window; the mechanism paper's variance section (Paper C), with the null and drift parts
+already required by the phase-energy paper (Paper B; coverage map "Non-registry paper obligations").
 
 ### The wall-meter question set (rank 3) and the disagreement about what it licenses
 
-*What the meter is.* The ChargerLAB POWER-Z KM003C is a pass-through on the
+*Instrument.* The ChargerLAB POWER-Z KM003C is a pass-through on the
 USB-C cable between the power adapter and the laptop; it logs voltage and
 current on that wire (Fable draft Leg 1; [31]). Retail pages say 1%
 accuracy, up to 1000 samples/s — **NEEDS-WEB**: the manufacturer's page and
@@ -508,9 +501,9 @@ drew.
 
 *The question set, in order:*
 
-1. **Logger host** — does logging over the meter's HID interface (a
-   driverless USB device class) from the measured Mac itself add load above
-   the idle floor? Measured, not assumed (lane A214 clause a).
+1. **Logger host** — measure whether logging through the meter's HID interface (a
+   driverless USB device class) on the measured Mac adds load above
+   the idle floor (lane A214 clause a).
 2. **Battery participation bound** — the signed battery energy
    ∫V·I dt over each block *and* the unsigned ∫|V·I| dt (charging and
    discharging can cancel in the signed total while substantial buffering
@@ -539,10 +532,10 @@ drew.
    fresh alignment and battery qualification (Astra's milestone M4); the largest
    held-out prediction error is a reported number.
 
-*The disagreement.* The registered lane A214 (`TASK_QUEUE.md` row E214) and
+*The disagreement.* The registered meter work (`TASK_QUEUE.md` row E214; lane A214) and
 the Fable draft call the slope a **gain** — "the calibration of the
-total-energy scale". Astra's draft numbers its requested rulings R-n, its
-findings F-n and its verifications V-n; its row R1 (`needs_ruling`) objects:
+total-energy scale". Astra's objection requires a ruling (R1, `needs_ruling`; R-n denotes requested rulings,
+F-n findings and V-n verifications):
 the slope bundles four things — counter error, loads outside the reported
 channels (backlight, SSD, memory), conversion and cable losses, and battery
 flow — and cannot identify counter gain separately from them; a slope of
@@ -562,13 +555,13 @@ correction factor applied to one of them).
 The physics is Astra's: the meter's boundary (DC into the whole laptop) is
 not the counter's boundary (CPU + GPU + ANE on the chip), so a slope between
 them is a mapping between boundaries, not a correction to one of them;
-multiplying phase energies by it would be a category error, and the A214
-acceptance text (b) as written invites that error. Fable's design — pulse
-anchoring, the ABBA ladder, the ranging run, the 50 mA refusal — is the
+multiplying phase energies by it would conflate the boundaries, and the meter work's
+acceptance text invites that error (A214, (b)). Fable's design, with pulse
+anchoring, the ABBA ladder, the ranging run and the 50 mA refusal, provides the
 better operational protocol and survives intact under Astra's wording;
 Astra's battery *energy* integrals and held-out day are strict improvements
-to it. **Ruling the magistrate must make before the desk arm starts:** (i)
-A214's claim wording — "gain calibration of the total-energy scale" →
+to it. **Ruling the magistrate must make before meter analysis starts:** (i)
+the meter work's claim wording (A214) — "gain calibration of the total-energy scale" →
 "workload-conditioned mapping from processor-counter energy to USB-C DC input
 energy, with interval and held-out error"; (ii) a new boundary identity (for
 example `usbc_dc_input`) distinct from `wall_meter` (AC) in the rail
@@ -593,8 +586,8 @@ Zeus's Apple read path [4], 1 mJ resolution, no administrator privileges) at
 which records are independent. (b) **Sampler overhead** — the same request
 set with the sampler at 100 ms, 1000 ms and off, ABBA; report tokens/s
 inflation and the sampler's own CPU time. Together with the meter mapping and
-the anchoring bound these are the four facts record 21 found no Apple study
-states, and they are Paper F's core (Part III, Papers E and F).
+the anchoring bound, these are the four facts absent from Apple studies
+in the literature review (record 21), and they form the core of the instrument paper (Paper F; Part III, Papers E and F).
 
 ---
 
@@ -602,7 +595,7 @@ states, and they are Paper F's core (Part III, Papers E and F).
 
 ### Heterogeneous placement across device classes (Ed's original interest)
 
-*Plain words.* The same request can be served by a Mac, a consumer NVIDIA
+*Question.* The same request can be served by a Mac, a consumer NVIDIA
 card, or a rented datacenter card. *Placement* is the choice of which device
 class should run which model size, phase mix and prompt length for the least
 energy. The **whole-request** version gives one device the entire request;
@@ -620,8 +613,8 @@ and 0.06 → the 0.13 J/token difference clears both, "decode 8B int8 on the
 floor → `not resolvable`. The boundary label is not decoration:
 `powermetrics` reports chip channels, NVML reports **board power** (the card
 and its own memory, nothing on the host [26]) — the two are not the same
-physical boundary, and Astra's R7 forbids turning them into an "Apple vs
-NVIDIA efficiency" ratio. What *is* legitimate: within-platform placement
+physical boundary, so the draft forbids using them to form an "Apple vs
+NVIDIA efficiency" ratio (Astra R7). What *is* legitimate: within-platform placement
 orderings, whether a mechanism's direction replicates inside each boundary,
 and whether the same functional law fits each platform with its own
 coefficients.
@@ -632,7 +625,7 @@ coefficients.
 points, excluded tensors), so a matched cross-vendor comparison needs one
 recipe on both ends. Astra proposes BF16 (16-bit floating point, the
 unquantized recipe) on both at 1.7B and 8B — which means **new Apple BF16
-cells with their own floors** (the `_v5` 4-bit floors do not license them)
+cells with their own floors** (the frozen campaign's 4-bit floors do not license them; `_v5`)
 and, because 8B BF16 is 16.4 GB, the 8B point fits neither the 12 GB 3080 Ti
 nor the 16 GB 5080 (Fable §3a table; Astra §2: 16.4 GB is 15.27 GiB, where a
 GiB is 2^30 bytes, so a nominal 16 GB card has no room for cache or runtime).
@@ -650,7 +643,7 @@ one of its 4-bit recipes) is 10.5 GB [28] — on the 12 GB card only at short pr
 
 *The second instrument class.* NVML exposes `nvmlDeviceGetPowerUsage`
 (milliwatts) and `nvmlDeviceGetTotalEnergyConsumption` (a cumulative
-millijoule counter, on Volta — NVIDIA's 2017 generation — and newer)
+millijoule counter, on Volta (NVIDIA's 2017 generation) and newer)
 [26],[27]. Two cautions Astra adds that Fable lacks: on Ampere (the 2020
 generation) cards other than GA100 (its datacenter chip), and on newer
 architectures, the generic power query returns a **one-second average**
@@ -703,10 +696,10 @@ note). Take **≈$115–150 for a 12-window cloud tier** as the planning number.
 (near-zero Ed-hours after one evening, exercises the port both others
 reuse), cloud secondary for what the card cannot hold. Astra: rented H100
 primary (memory headroom, native Linux which the existing
-`node_worker`/`vllm_runtime` adapters target — vLLM is a Linux GPU inference
-server — predictable access), 3080 Ti secondary for repeatable checks.
-**Resolution:** Fable's order is right *on Ed's stated objective* (CV per
-Ed-hour) — but only if the rig runs Linux and exposes the telemetry; Astra's
+`node_worker`/`vllm_runtime` adapters target (vLLM is a Linux GPU inference
+server), predictable access), 3080 Ti secondary for repeatable checks.
+**Resolution:** Fable's order meets *Ed's stated objective* (CV per
+Ed-hour) only if the rig runs Linux and exposes the telemetry; Astra's
 next-action ("read-only inventories of the owned rig and a candidate cloud
 instance") decides it. If the rig is Windows, or GA102's 1 s averaging plus a
 missing energy counter leave only request totals, Astra's order wins and the
@@ -729,9 +722,8 @@ before serialisation overhead; Fable's 2K-prompt case is ≈0.3 GB, ≈2.4 s at
 Metal, Apple's GPU API, and on CUDA) is the ASSUMED route. Budget: 5
 windows, ≈1 Ed-hour for adapter and cable, ≈$40 ASSUMED. Result: one figure
 with a stated attribution limit — link energy bounded below by the dongle's
-DC, unbounded above on the rig side. Astra's staging (fixed byte buffers → a
-real saved cache → decode from it with output verified) is the right order
-of proof.
+DC, unbounded above on the rig side. Astra's validation sequence is fixed byte buffers → a
+real saved cache → decode with output verification.
 
 ### Interconnect questions — the straight answer
 
@@ -792,8 +784,8 @@ fourth; it is the reason to run 2–3 at all beyond a leaderboard.
 
 Ed's physical total: Fable ≈5.5 h + optional; Astra 12–19 h. The gap is
 Astra's rig setup (4–8 h) and cloud provisioning (2–4 h) estimates versus
-Fable's 2–3 and 0.5; both are ASSUMED. Plan on Astra's numbers and be
-pleased if Fable's hold.
+Fable's 2–3 and 0.5; both are ASSUMED. Use Astra's numbers
+for planning.
 
 ### Papers E and F — two sketches each, one recommendation
 
@@ -808,13 +800,13 @@ phases resolve on which instrument; explicit negatives); **F** = "When bytes
 predict inference energy: held-out scaling and cache tests across Apple
 silicon and CUDA".
 
-Recommendation: Fable's F, retitled per the meter ruling ("mapping", not
+Recommendation: Fable's instrument paper (F), retitled per the meter ruling ("mapping", not
 "gain"), is the cheapest CV line in the program — ≈8 windows, most already
-inside H1–H2, a HotCarbon/e-Energy-workshop shape (two venues in Part IV's table),
-squarely in the advisor's lineage. For E, merge the two: Astra's cross-counter resolution question is
+inside the meter and placement weeks (H1–H2), a HotCarbon/e-Energy-workshop shape (two venues in Part IV's table),
+squarely in the advisor's lineage. For the placement paper (E), merge the two proposals: Astra's cross-counter resolution question is
 the *method* contribution a metrology reviewer accepts, and Fable's
 placement rule is the *application* that answers Ed's original interest;
-Astra's bytes-law F becomes E's second results section once the law stands
+Astra's bytes-law proposal (F) becomes the placement paper's second results section (E) once the law stands
 on the Mac (Paper D) — it does not need its own paper.
 
 ---
@@ -846,8 +838,8 @@ CLI with 13 subcommands (`run`, `validate-config`, `kv-size`, …) that is
 *governed* — every command runs under the custody rules; **not on PyPI, no
 `CITATION.cff` (the machine-readable citation file GitHub and Zenodo
 recognise), no Zenodo DOI, 0 GitHub stars, no software release** (the latest
-tag is a git tag for test data, not a release, from 2026-08-09) — viability
-seat Table 1b.
+tag is a git tag for test data, not a release, from 2026-08-09) (viability
+report Table 1b).
 
 ### What is unique, and what is Apple-shaped
 
@@ -865,8 +857,7 @@ seat Table 1b.
 Two tables because ten columns do not fit. Table 1a is what each tool
 measures and how; Table 1b is how rigorous and how packaged it is. Star
 counts, licences and release dates were read from the GitHub API on
-2026-09-16 by the viability seat. A *backend* is the piece of code that
-talks to one power source; *cadence* is how often readings arrive.
+2026-09-16 for the viability report. A *backend* reads one power source; *cadence* is how often readings arrive.
 
 **Table 1a. Backends, sampling, phases, uncertainty, anchoring.**
 
@@ -884,7 +875,7 @@ talks to one power source; *cadence* is how often readings arrive.
 | **TokenPowerBench** (AAAI 2026) [42] | "GPU-, node-, and system-level power without specialized power meters"; NVIDIA-class telemetry; abstract says it will be open-sourced, no repo link on the abstract page (NEEDS-WEB for the code) | Cadence not stated on the abstract; a secondary summary says 1 Hz default up to 10 Hz (NEEDS-WEB on the primary PDF) | **Yes** — "phase-aligned metrics pipeline that attributes energy to the prefill and decode stages of every request"; no error budget for the boundary (record 21) | None stated | Not stated |
 | **macmon** [43] | Apple silicon M1–M5; private API "the same data `powermetrics` exposes", **no sudo**; CPU/GPU/ANE watts, temperatures, frequencies | Polling; `--interval` in ms, default 1000 ms; TUI (terminal display), `pipe` JSON, `serve` Prometheus; Rust library | No | None | None |
 | **asitop** [44] | Apple silicon; `sudo powermetrics`; display only | Display refresh; no logging | No | None | None |
-| **JouleWise** (this repo) | Apple silicon via `powermetrics` (`sudo -n`, samplers `cpu_power,gpu_power,ane_power,thermal`); an `nvidia_smi` polling adapter exists (539 lines) but only the Apple path is calibrated and claim-bearing; MLX and vLLM runtime adapters | Interval-average records at a commanded **100 ms**; phase energy = integral of CPU+GPU+ANE interval power inside runtime-emitted phase boundaries (draft §2, §A.2) | **Yes, with a calibrated boundary**: 59 one-second GPU pulses before and after each window fit the sampler's edge placement; the operative timing bound is the larger of the pre- and post-window capture bounds plus a never-zero drift allowance (for the clock drifting between the two calibrations; ≥9.724 ms, draft §2); a prefill covered by fewer than 3 records is printed "not resolvable" (draft §1–§2) | **Yes**: per-cell resolution bound from repeat scatter, identical-condition ABBA blocks, all 2^n interval corners, a small-n guard (with few repeats the scatter estimate is itself uncertain, so the floor is widened by a Student-t factor), and a drift allowance; two gates (magnitude, direction with Holm) and printed refusals (draft §4) | **Yes**: five wall/monotonic clock pairs plus native second labels fit a rate-aware clock line; refuses on active NTP correction (draft §2) |
+| **JouleWise** (this repo) | Apple silicon via `powermetrics` (`sudo -n`, samplers `cpu_power,gpu_power,ane_power,thermal`); an `nvidia_smi` polling adapter exists (539 lines) but only the Apple path is calibrated and able to produce claim-bearing numbers; MLX and vLLM runtime adapters | Interval-average records at a commanded **100 ms**; phase energy = integral of CPU+GPU+ANE interval power inside runtime-emitted phase boundaries (draft §2, §A.2) | **Yes, with a calibrated boundary**: 59 one-second GPU pulses before and after each window fit the sampler's edge placement; the operative timing bound is the larger of the pre- and post-window capture bounds plus a never-zero drift allowance (for the clock drifting between the two calibrations; ≥9.724 ms, draft §2); a prefill covered by fewer than 3 records is printed "not resolvable" (draft §1–§2) | **Yes**: per-cell resolution bound from repeat scatter, identical-condition ABBA blocks, all 2^n interval corners, a small-n guard (with few repeats the scatter estimate is itself uncertain, so the floor is widened by a Student-t factor), and a drift allowance; two gates (magnitude, direction with Holm) and printed refusals (draft §4) | **Yes**: five wall/monotonic clock pairs plus native second labels fit a rate-aware clock line; refuses on active NTP correction (draft §2) |
 
 **Table 1b. Meter validation, statistics, custody, licence/stars/release, packaging.**
 
@@ -921,7 +912,7 @@ fewer than three 100 ms records, draft §1).
 
 - CodeCarbon at its default 15 s: a 0.3 s prefill overlaps zero or one
   sample. The tool cannot report prefill energy; it reports the request
-  average and calls it done.
+  average.
 - GreenBench's `powermetrics` at 2 s [19]: the same prefill sits inside one
   2 s interval together with the first ~1.5 s of decode. Mean power ×
   latency then charges decode power to prefill or the reverse; no error bar
@@ -935,7 +926,7 @@ fewer than three 100 ms records, draft §1).
   rule prints "not resolvable" below three. A 1 s prefill overlaps ten. The
   calibrated edge bound of ≈30 ms (draft §2 worked capture: 0.0300679 s) is
   then a known fraction of one record, and the energy it can move is power
-  step × 0.03 s — at a 40 W step, 1.2 J — which is the ≈1 J figure the
+  step × 0.03 s (at a 40 W step, 1.2 J), which is the ≈1 J figure the
   paper's abstract names.
 - NVML counters (Dauner [9]): update period ≈100 ms, the same order as
   `powermetrics`. A begin/end window in Zeus or pyJoules that straddles a
@@ -950,7 +941,7 @@ gave floors of 0.29–0.49 J, and the calibrated edges widened them to
 the boundary can manufacture. That single number is the reason a researcher
 would install this and not the others.
 
-**Star counts, for scale.** Total stars across the nine competing repos
+**Star counts, for scale.** Total stars across the eleven competing repos
 fetched: 4,635 (asitop, dormant since 2024) + 1,973 (Scaphandre) + 1,915
 (CodeCarbon) + 1,885 (macmon) + 374 (Zeus) + 341 (Optimum-Benchmark) + 274
 (pynvml) + 116 + 94 (pyRAPL, pyJoules) + 28 (power-dev) + 8
@@ -969,8 +960,8 @@ large and taken.
    session, how far the sampler's reported edges sit from commanded edges
    (59 pulses, bound ≈25–31 ms in the diagnostic era, draft §3) and carries
    that into the phase energy. The physics is general: any sampler with a
-   finite update period — `powermetrics` at 100 ms, NVML counters at
-   ~100 ms (Dauner [9]) — has this error, and a steep power step times a
+   finite update period (`powermetrics` at 100 ms, NVML counters at
+   ~100 ms, Dauner [9]) has this error, and a steep power step times a
    ~30 ms edge error is ≈1 J (draft §2). Nobody else quantifies it.
 2. *A resolution bound with refusal.* The two-gate rule and the printed
    refusal ("not resolvable", "direction unresolved") do not exist anywhere
@@ -1003,12 +994,12 @@ large and taken.
    shares that gap with everyone else in the software-counter row — until
    the meter mapping (Part II) lands.
 
-**Would researchers adopt the unique parts, or only admire them?** Honest
-split:
+**Adoption prospects.** The components differ in their likely
+uptake:
 
 - *Adopt*: the floor and the refusal, **if** they come out of a single
   function call with sensible defaults. Every 2025–2026 measurement section
-  in record 21 that lacks a CI would have one if the tool computed it for
+  identified in the literature review (record 21) as lacking a CI would have one if the tool computed it for
   them. The CodeCarbon issue tracker already asks for exactly this: issue
   #1350 (open, 2026-08-12) proposes a `codecarbon doctor` "to report
   measurement quality" [46].
@@ -1024,7 +1015,7 @@ split:
 
 ### Evidence of demand (viability seat §3)
 
-**What recent measurement sections get wrong (all from record 21, each
+**What recent measurement sections get wrong (all from the literature review, record 21, each
 verified there by fetch).**
 
 - Cadence unstated: Splitwise [14], Silicon Showdown [17] (`powermetrics`
@@ -1041,12 +1032,12 @@ verified there by fetch).**
 - No meter validation: Cao et al. [6] (~20% off a Watts Up meter), Jay et
   al. [5] (slope 1.17–1.18 vs wall); tracker overhead inflates inference
   time 15–50% (NAACL 2025).
-- Record 21's summary line: "No Apple-silicon study states time anchoring
+- The literature review summarises the Apple gap (record 21): "No Apple-silicon study states time anchoring
   between `powermetrics` and the workload, thermal control, or a resolution
   bound."
 
 **Live user pain on the Apple path, from the biggest tool's tracker (fetched
-via `gh` by the viability seat).** 48 CodeCarbon issues mention
+via `gh` for the viability report).** 48 CodeCarbon issues mention
 `powermetrics`. Open on 2026-08-12: #1306 "Empty powermetrics output yields
 NaN (not-a-number) power, poisoning all downstream totals on Apple Silicon"
 (https://github.com/mlco2/codecarbon/issues/1306); #1313
@@ -1055,16 +1046,16 @@ NaN (not-a-number) power, poisoning all downstream totals on Apple Silicon"
 Macs and report 0 W when no samples"
 (https://github.com/mlco2/codecarbon/issues/1345); #1397 (closed
 2026-08-19) timed out the subprocess. The most-used tool's Apple backend is,
-as of last month, still *failing open* — reporting a number when it should
-report nothing — the exact failure class JouleWise's admission gate refuses.
+as of last month, still *failing open*, reporting a number when it should
+report nothing. This is the exact failure class JouleWise's admission gate refuses.
 
 **The mainstream Apple path chose to sidestep the boundary, not solve it.**
 Zeus RFC #159 [33] picked IOReport counters read "at arbitrary times" and
 rejected `powermetrics`; the resulting library warns its values are
 model-based estimates and has 8 stars. Nobody has published whether
 IOReport's counter update period reintroduces the same edge error. That is
-an open question a JouleWise release could answer (record 21's recommended
-cross-check, and Part II rank 10's diagnostic window).
+an open question a JouleWise release could answer (the literature review's recommended
+cross-check, record 21, and Part II rank 10's diagnostic window).
 
 ### What a researcher elsewhere would need
 
@@ -1077,8 +1068,8 @@ cross-check, and Part II rank 10's diagnostic window).
 2. **A library API instead of a repo of scripts**: `measure(request,
    backend) → bundle`, `floor(cells) → bound`, `contrast(a, b, floor) →
    verdict | refusal`, with the pack/freeze objects as data classes.
-3. **Documentation at the replication bar** — the paper's Appendix A is
-   already written to it; the artifact guide (`docs/paper/artifact-guide.md`)
+3. **Documentation sufficient for replication** — the paper's Appendix A is
+   already written to that standard; the artifact guide (`docs/paper/artifact-guide.md`)
    covers governance, not use.
 4. **An artifact badge and a DOI** (Zenodo is the archive that mints the
    DOI; a `CITATION.cff` is the machine-readable citation file GitHub and
@@ -1099,7 +1090,7 @@ by one student), with the difference explained rather than averaged.
 and examples 1–2; test split 1; artifact submission 1 → **≈7–10
 seat-weeks**, Ed's share (review, the DOI, the submission) 6–10 Ed-hours.
 
-*The viability seat's estimate (twelve items, §4):*
+*The viability report's estimate (twelve items, §4):*
 
 | # | Item | What "done" means | Weeks | Drop or keep |
 |---|---|---|---|---|
@@ -1123,8 +1114,8 @@ seat-weeks**.
 *Reconciled range:* **7–16 seat-weeks for the formal rewrite** — 7–10 if the
 calibration stays Apple-only and the test tree is split rather than carved
 (prospectus), 12–16 if the pulse calibration is ported to CUDA, the mutation
-harness is carried over and an example window is packaged (viability seat);
-**2–3 seat-weeks for Release 0** (viability seat); **1–2 seat-days for the
+harness is carried over and an example window is packaged (viability report);
+**2–3 seat-weeks for Release 0** (viability report); **1–2 seat-days for the
 badge alone** (Fable draft Leg 2); **Ed 0.5 h** for the DOI in every case,
 6–10 h in total across a full rewrite. The risk is not the weeks; it is
 doing them before knowing whether the floor machinery is a general method or
@@ -1152,8 +1143,8 @@ the authors' artifacts. *Results Replicated*: without author artifacts.
 Zenodo mints a DOI per GitHub release once the repo is public, licensed and
 toggled on in Zenodo's GitHub settings [57]. JouleWise today would qualify
 for Available (public, MIT) and plausibly Functional for the *code*; Results
-Reproduced is blocked by the floor-binding limitation until FLOOR-BIND-01
-closes. A tool paper without cross-vendor evidence is a Mac tool paper;
+Reproduced is blocked by the floor-binding limitation until independent re-derivation of the floor-to-claim link
+is implemented (FLOOR-BIND-01). A tool paper without cross-vendor evidence is a Mac tool paper;
 ICPE's track will ask what the second backend showed.
 
 ### The decision rule — one rule, both seats' conditions
@@ -1162,27 +1153,27 @@ ICPE's track will ask what the second backend showed.
 only what already works: the Apple `powermetrics` backend at 100 ms,
 `calibrate` from the existing pulse train, `measure` returning gross + phase
 energy + cell floor + refusal, with a Zenodo DOI, `CITATION.cff` and one
-example window, published as Paper B's artifact at the ACM *Available* +
+example window, published as the phase-energy paper's artifact (Paper B) at the ACM *Available* +
 *Functional* level. Cost 2–3 seat-weeks of mostly agent work (1–2 seat-days
 if only the badge is taken), Ed 0.5 h. It needs no new science, it converts
 the existing code into an artifact reviewers can run, it is the badge a
 metrology reviewer looks for, and it starts JOSS's six-month clock. The
-seat work starts after day 3 so it never competes with Paper B's desk day.
+agent work starts after day 3 so it never competes with the phase-energy paper's analysis day (Paper B).
 
-**Release 1 — the formal rewrite — is gated twice.**
+**Release 1, the formal rewrite, has separate start and release criteria.**
 
 *Start* Release 1 only when **all** of the following hold:
 
-- (a) **Paper D's core is data-complete** (day 17). The prospectus's
-  condition was Paper C (day 10, so the Mac science is never delayed); the
-  viability seat's was Paper D, because a rewrite before then competes
+- (a) **The core scaling study is data-complete** (Paper D, day 17). The prospectus's
+  condition was completion of the mechanism study (Paper C, day 10, so the Mac science is never delayed); the
+  viability report required completion of the scaling study (Paper D), because a rewrite before then competes
   with the only windows that can produce claim-bearing numbers. The later
-  date subsumes the earlier one and is adopted; seat-side design work may
+  date subsumes the earlier one and is adopted; agent design work may
   begin at day 10.
 - (b) **The meter mapping has an interval** (Part II rank 3), so the tool
   can state its scale's traceability.
 - (c) **At least one flip signal toward "sooner" has fired:** (c1) the
-  IOReport cross-check (record 21's top recommendation; Part II rank 10)
+  IOReport cross-check (the literature review's top recommendation, record 21; Part II rank 10)
   shows IOReport counters carry the same ~100 ms edge error — then the
   pulse calibration is needed on the no-sudo path too and the tool has no
   substitute; (c2) an NVML pulse-train pilot on the 3080 Ti (or the cloud
@@ -1190,9 +1181,9 @@ seat work starts after day 3 so it never competes with Paper B's desk day.
   edge bound of ≥20 ms through the same pulse → anchor code path — then the
   method is demonstrably portable; (c3) any external group asks for the
   package after Release 0.
-- (d) **Neither stop signal has fired:** (d1) the `_v5` attribution-dominance
-  test returns a null in both phases (the floor is still useful, but the
-  calibration is then a 6-minute ritual that changes no decision and the
+- (d) **Neither stop signal has fired:** (d1) the frozen campaign's test
+  of attribution dominance (`_v5`) returns a null in both phases (the floor is still useful, but the
+  6-minute calibration changes no decision and the
   pitch shrinks to "floors and refusals") *and* (d2) IOReport at arbitrary
   instants shows edge error well under the floor (zeus-apple-silicon already
   sidesteps the boundary for free) — both together stop it; or (d3) six
@@ -1203,10 +1194,10 @@ seat work starts after day 3 so it never competes with Paper B's desk day.
 worked: a floor minted on an NVIDIA card by the same pulse → anchor →
 corner-enumeration → two-gate path, with its own sensor characterisation,
 producing at least one resolvable contrast and at least one printed refusal
-(H2–H3 in the week ladder). If that fails — NVML's averaging leaves every
-phase unresolved — the honest product is a **methods artifact** (the Mac
-tool, badged, with the recipe for porting) and a Paper F, not a general
-library. If it succeeds, the library is the Paper E artifact and the
+(H2–H3 in the week ladder). If NVML's averaging leaves every
+phase unresolved, the supported product is a **methods artifact** (the Mac
+tool, badged, with the recipe for porting) and an instrument paper (Paper F), not a general
+library. If it succeeds, the library is the placement paper's artifact (Paper E) and the
 rewrite pays for itself at submission. If the record is silent on (c) and
 (d), wait for the six-month JOSS clock and decide on external signal alone.
 
@@ -1219,7 +1210,7 @@ not, and should stay a campaign layer.
 
 ### Release 0, concretely (viability seat §5.1)
 
-The smallest release that is still useful is the one a reviewer of Paper B
+The smallest release that is still useful is the one a reviewer of the phase-energy paper (Paper B)
 can run in fifteen minutes on their own Apple laptop. Its public surface is
 four calls; everything else stays importable but undocumented.
 
@@ -1244,8 +1235,8 @@ Apple silicon with passwordless `sudo -n powermetrics`; that limitation is
 printed, not hidden.
 
 What it deliberately does not ship: packs, freeze receipts, the ABBA night
-scheduler, launchd agents, the watchdog, cold gates (reviews by a fresh
-session with no loop context). Those become
+scheduler, launchd agents, the watchdog, independent reviews (*cold gates*, conducted by a fresh
+session without the implementation history). Those become
 `joulewise.campaign` in Release 1 or stay in this repository as the paper's
 custody layer.
 
@@ -1268,31 +1259,31 @@ can ever skip it.
 
 One sequence, each step with its reason:
 
-1. **Days 1–3, Paper B as planned** (plan Phase 0), with the meter desk arm
-   on the day-2 desk day *after* the magistrate's A214 ruling (Part II
+1. **Days 1–3, the phase-energy paper as planned** (Paper B; plan Phase 0), with the meter analysis
+   on day-2 *after* the magistrate's meter-mapping ruling (A214; Part II
    rank 3). Reason: the grade; and the ruling costs nothing while the meter
    is in transit.
-2. **Day 2 desk: the two Leg 2 desk items** (warm-up rule, fixed-n
-   paragraph) into Paper B's protocol section. Reason: zero windows, two
+2. **Day 2 analysis: the warm-up rule and fixed-n
+   paragraph** (the two Leg 2 desk items) into the phase-energy paper's protocol section (Paper B). Reason: zero windows, two
    reviewer questions closed.
-3. **Days 4–10, Paper C as planned**, protecting in this order if windows
+3. **Days 4–10, the mechanism paper as planned** (Paper C), protecting in this order if windows
    are lost: the 30B-A3B/122B floors → shape grid + held-out → variance
    windows 15–16 → the 8-bit cell → KV growth → sentinel → categories.
-   Reason: the coefficients feed every Paper D law; the variance result is
-   Ed's axis and costs two windows. **In parallel, seat work, zero windows:
+   Reason: the coefficients feed every law in the scaling paper (Paper D); the variance result is
+   Ed's axis and costs two windows. **In parallel, agent work, zero windows:
    Release 0** (Part IV) — the pip package, example window, `CITATION.cff`;
-   the DOI is minted when Paper B is submitted. Reason: it is agent work
+   the DOI is minted when the phase-energy paper is submitted (Paper B). Reason: it is agent work
    that competes with nothing, and it starts the JOSS clock.
-4. **Days 11–17, Paper D core: bytes law first** (Phase 2 windows 1–5), then
+4. **Days 11–17, the core scaling study: bytes law first** (Paper D; Phase 2 windows 1–5), then
    crossover + chunk, then mixers if the NEEDS-WEB runtimes check out.
    Reason: rank 1 in Part II; it is the "why" behind every other axis.
-5. **Days 18–23, Paper D full set**, with EPCA (energy-per-correct-answer)
+5. **Days 18–23, the full scaling study** (Paper D), with EPCA (energy-per-correct-answer)
    levels last because it waits
-   on the AP-5 policy ruling — file that ruling request now so it is not the
+   on the correctness-annotation policy ruling (AP-5); request it now so it is not the
    blocker on day 18.
 6. **Days 24–30 (H1): meter ladder + the two Apple instrument windows +
    NVIDIA sensor characterisation** on the platform the inventory picks.
-   Reason: closes the field's first question and seeds Paper F; the NVIDIA
+   Reason: closes the field's first question and provides the instrument paper's initial data (Paper F); the NVIDIA
    characterisation (the pulse pilot, flip signal c2) and the IOReport
    cross-check (c1) are the go/no-go for Release 1.
 7. **Days 31–37 (H2): whole-request placement on the owned card at native
@@ -1302,14 +1293,14 @@ One sequence, each step with its reason:
    place 8B BF16 matching, 30B-A3B vs 32B and the scaling roster's upper
    rungs exist.
 9. **Days 45–51 (H4): KV-cache surface on the cloud card if the bytes law
-   stood; split rider only if already cabled.** Then writing: F to a
-   workshop, E to a venue; the Release 1 decision by the Part IV rule.
+   stood; split rider only if already cabled.** Then writing: the instrument paper (F) for a
+   workshop, the placement paper (E) for a venue; the Release 1 decision by the Part IV rule.
 
 ### What Ed must do physically, and when
 
 | when | action | hours |
 |---|---|---|
-| ≈17:00 PDT Wed 2026-09-17 (ASSUMED arrival) | plug the KM003C between adapter and Mac; confirm the adapter out-rates the laptop's peak (140 W ASSUMED vs <100 W ASSUMED); turn optimized battery charging off (setting NEEDS-WEB on this build); leave the logger decision to the desk arm's measurement | 0.25 |
+| ≈17:00 PDT 2026-09-17 (Ed's stated date; he said "Wed", which is 09-16; arrival ASSUMED) | plug the KM003C between adapter and Mac; confirm the adapter out-rates the laptop's peak (140 W ASSUMED vs <100 W ASSUMED); turn optimized battery charging off (setting NEEDS-WEB on this build); leave the logger decision to the desk arm's measurement | 0.25 |
 | at Paper B submission | Zenodo account; confirm the Release 0 DOI | 0.5 |
 | before H1 (any evening) | rig inventory: OS, driver, `nvidia-smi -q` telemetry fields, whether the energy counter reads on this GeForce, SSH from the Mac — read-only | 1–2, up to 4–8 if it becomes the setup evening |
 | H3 | cloud account and payment; pick a *dedicated single-GPU* instance (reject shared slices and MIG, NVIDIA's partitioning of one GPU into independently rented slices) | 0.5–4 |
@@ -1323,10 +1314,10 @@ One sequence, each step with its reason:
    calibration envelope, which decides whether the calibration is in force
    on this OS build): everything slides ≥1–2 days; nothing reorders.
 2. **The IOReport cross-check disagrees with `powermetrics` by more than
-   the cell floor**: Phase 1 stops; the instrument question becomes Paper
-   B's limitation and Paper F's headline — and the meter ladder moves up
+   the cell floor**: mechanism-study collection stops (Phase 1); the instrument question becomes the phase-energy paper's
+   limitation (Paper B) and the instrument paper's headline (Paper F) — and the meter ladder moves up
    to be the tie-breaker (a third read path).
-3. **The A214 ruling adopts "gain"**: the meter still runs, but the paper
+3. **The meter ruling adopts "gain"** (A214): the meter still runs, but the paper
    sentence must not multiply phase energies by the slope; if the ruling
    goes Astra's way (recommended), nothing else changes.
 4. **The rig inventory finds Windows, or GA102 gives only 1 s-averaged
@@ -1336,7 +1327,7 @@ One sequence, each step with its reason:
 5. **The bytes law fails on the Mac** (sparse points off the line beyond
    the bar): that is a result — the resident-bytes term exists — and the
    cross-vendor transport (Part III rank 4) becomes *more* interesting, not
-   less; the KV surface in H4 yields to a second bytes-law leg with router
+   less; the later KV-cache study (H4) yields to a second bytes-law leg with router
    statistics (the MoE router's per-token expert choices).
 6. **Ed's time shrinks**: drop in this order — 5080, split rider, cloud
    tier, rig. The meter, the desk items, Release 0 and every Apple window
@@ -1375,7 +1366,7 @@ One sequence, each step with its reason:
 
 ## Sources
 
-[1]–[20] are record 21 §4
+[1]–[20] are listed in the literature review (record 21 §4)
 (`docs/process_traces/2026-09-15-interactive-b0ae8462/21-rq-literature-and-best-practices-fable.md`);
 [21]–[31] are the Fable horizon draft's §Sources
 (the session scratchpad’s Fable horizon draft (reconciled into `docs/process/research_plan_horizon_2026-09-16.md`)). Astra's additional primary
@@ -1384,7 +1375,7 @@ NVIDIA WSL guide, vLLM installation, the ChargerLAB logging page, the RTX
 3080 Ti / 5080 product pages, Lambda pricing) are linked inline in
 the session scratchpad’s Astra horizon consult (same reconciliation) and are not renumbered here.
 
-[32]–[57] were fetched by the viability seat on 2026-09-16
+[32]–[57] were fetched for the viability report on 2026-09-16
 (the session scratchpad’s tool-viability report (its fetched facts are reproduced in Part IV) §Fetch log):
 
 - [32] Zeus measure page — https://ml.energy/zeus/measure/
@@ -1414,4 +1405,4 @@ the session scratchpad’s Astra horizon consult (same reconciliation) and are n
 - [56] ACM artifact badging text (SIGIR mirror; the ACM page returned 403) — https://sigir.org/general-information/acm-sigir-artifact-badging/
 - [57] GitHub docs, referencing and citing content (Zenodo DOI per release) — https://docs.github.com/en/repositories/archiving-a-github-repository/referencing-and-citing-content
 
-Failed fetches recorded by the viability seat: `mlco2.github.io/codecarbon/methodology.html` (301 → `docs.codecarbon.io/methodology.html` 404; the `/latest/explanation/methodology` path worked), the ACM badging page (403; SIGIR mirror used), `hotcarbon.org/2026/` (404; `/cfp` used), e-Energy 2026 root and CFP (403 both; Notes ≤4 pages is from a search snippet), ICPE 2027 deadlines (not on the site). Nothing in this prospectus was fetched fresh by the editor seat; every unverified fact is marked NEEDS-WEB or ASSUMED at its use.
+Failed fetches recorded in the viability report: `mlco2.github.io/codecarbon/methodology.html` (301 → `docs.codecarbon.io/methodology.html` 404; the `/latest/explanation/methodology` path worked), the ACM badging page (403; SIGIR mirror used), `hotcarbon.org/2026/` (404; `/cfp` used), e-Energy 2026 root and CFP (403 both; Notes ≤4 pages is from a search snippet), ICPE 2027 deadlines (not on the site). Nothing in this prospectus was fetched afresh during editing; every unverified fact is marked NEEDS-WEB or ASSUMED at its use.
