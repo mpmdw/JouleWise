@@ -1,0 +1,25 @@
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night"
+  "ProgramArguments" => [
+    0 => "/Users/edr/JouleWise-measurement-rehearsal-20260916c/.venv/bin/python"
+    1 => "/Users/edr/JouleWise-measurement-rehearsal-20260916c/scripts/run_night.py"
+    2 => "run"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/rehearsal-20260916c/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.273"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/rehearsal-20260916c/night/launchd.night.err"
+  "StandardOutPath" => "/Users/edr/night-custody/rehearsal-20260916c/night/launchd.night.out"
+  "StartCalendarInterval" => {
+    "Day" => 16
+    "Hour" => 3
+    "Minute" => 25
+    "Month" => 9
+  }
+  "WorkingDirectory" => "/Users/edr/JouleWise-measurement-rehearsal-20260916c"
+}

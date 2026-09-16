@@ -1,0 +1,16 @@
+{
+  "accepted": true,
+  "message_id": "1a0a99fa2717d749",
+  "thread_id": "1a0a99fa2717d749",
+  "sent_epoch_s": 1789552206.0,
+  "attempt": 1,
+  "plan_id": "rehearsal-20260916c",
+  "receipt_class": "REHEARSAL_STUB",
+  "measurement_head": "be221f6a886498f62154faac0b5da14cb66616a1",
+  "plan_sha256": "aa82ebd961f89cae053fcfb0644b7666b7fb6aec112de7585717a5025c9c1e40",
+  "prerequisites_clear": true,
+  "veto_clear": true,
+  "blocking_causes": [],
+  "latest_no_epoch_s": null,
+  "latest_abort_epoch_s": null
+}

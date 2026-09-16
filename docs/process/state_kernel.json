@@ -3860,6 +3860,40 @@
       "status_note": "Deferred 2026-08-03 from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake); the production hardening is a NEEDS_RULING tradeoff, non-blocking (no current concurrent-client scenario).",
       "stop_card": null
     },
+    "NOTICE-TRANSPORT-FALLBACK-01": {
+      "acceptance": {
+        "evidence": [
+          "GitHub issue mpmdw/JouleWise#349 (author mpmdw, label directive, filed 2026-09-16 ~02:34 PDT): the ruling text, quoted verbatim in the registration record",
+          "docs/process/NIGHT_HANDBACK.md at main be221f6a: the notice procedure names email as the only transport (arm_transport row; section Purpose of this night)",
+          "docs/phase_2/derivation_night_runbook.md section 1.4 at main be221f6a: notice-then-publish ordering with the Gmail send as the accepted-notice evidence",
+          "docs/process_traces/2026-09-15-activation-08ca8197/10-rehearsal-20260916-arm-record.md (arm attempt 1 aborted arm_transport: Gmail MCP session expired) and docs/process_traces/2026-09-16-activation-736e2aed/00-launch-record.md (activation spawned with no Gmail tools during the claude.ai connector outage): the two outages that cost the 03:00 candidate",
+          "docs/process_traces/2026-09-16-activation-83d93f5a/01-rehearsal-20260916c-arm-record.md (the re-plan armed by email; fallback not exercised)",
+          "docs/process_traces/2026-09-16-activation-83d93f5a/02-notice-transport-fallback-lane-registration.md (registration record)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NOTICE-TRANSPORT-FALLBACK-01/acceptance",
+          "label": "NOTICE-TRANSPORT-FALLBACK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "NIGHT_HANDBACK and runbook section 1.4 state, in plain words with issue #349 as the authority, that when the Gmail connector is unavailable to the magistrate (session expired, connector not found, or no send tool exposed) the arm notice may be posted as a new issue on mpmdw/JouleWise labelled directive-notice carrying exactly the content the email would carry (plan id, plan sha256, t0, install close, dead-man, clone H, span list); the no-objection window and the NO channel are unchanged (an owner comment or directive issue saying NO before install close stops the arm); the arm record and notice.json name the transport used; email stays primary when it works. The notice-evidence writer accepts an issue number and URL in place of a Gmail message id and thread id, and the arm block's notice precondition accepts either. A test proves the notice-evidence record with an issue transport carries the same plan pins as the email form and that a missing transport field fails closed. No change to any t0 gate, census, or retry cause."
+      },
+      "authority": {
+        "label": "Ed, directive issue #349 (owner mpmdw, 2026-09-16 ~02:40 PDT): arm notice may be posted as a GitHub issue when the Gmail connector is down; registered by activation 83d93f5a (registration, not a ruling of its own)",
+        "path": "docs/process_traces/2026-09-16-activation-83d93f5a/02-notice-transport-fallback-lane-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make the arm notice survive a Gmail outage. Two activations on 2026-09-16 (08ca8197, 736e2aed) could not send the notice for the staged 03:00 stub because the Gmail connector was expired or absent, and the candidate lapsed unarmed although the machine, the plan and the census were ready. Ed's directive #349 rules that a new GitHub issue labelled directive-notice with the same content is an acceptable notice transport when Gmail is down, because GitHub emails him on new issues, so the no-objection window and his NO channel are unchanged.",
+      "id": "NOTICE-TRANSPORT-FALLBACK-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 217,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 83d93f5a: registered from Ed's directive issue #349 (owner-authored, label directive); registration only; the fallback was NOT needed for rehearsal-20260916c (Gmail worked and carried the notice); docs + one evidence-writer change + test; not night-critical while Gmail works.",
+      "stop_card": null
+    },
     "NVIDIA-PORTABILITY-01": {
       "acceptance": {
         "evidence": [

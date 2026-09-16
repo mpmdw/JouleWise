@@ -1,0 +1,2 @@
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-rehearsal-20260916c/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+validated pins: repo_head=be221f6a886498f62154faac0b5da14cb66616a1 measurement_root=/Users/edr/JouleWise-measurement-rehearsal-20260916c measurement_head=be221f6a886498f62154faac0b5da14cb66616a1

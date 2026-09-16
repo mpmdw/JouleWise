@@ -1,0 +1,25 @@
+ATTEMPT_DIR=/Users/edr/night-plan-staging/rehearsal-20260916c/arm-attempts/000001
+aa82ebd961f89cae053fcfb0644b7666b7fb6aec112de7585717a5025c9c1e40  /Users/edr/night-plan-staging/rehearsal-20260916c/arm-attempts/000001/plan.json
+=== §1.3 schedule
+{"deadman_calendar": {"Hour": 4, "Minute": 45}, "deadman_epoch_s": 1789559100.0, "install_close_epoch_s": 1789553700.0, "install_spans_today": [[1789542000.0, 1789628400.0]], "night_calendar": {"Day": 16, "Hour": 3, "Minute": 25, "Month": 9}, "t0_epoch_s": 1789554300.0}
+install span 1 open 2026-09-16T00:00:00-07:00 1789542000.0
+install span 1 close (excluded) 2026-09-17T00:00:00-07:00 1789628400.0
+install close (excluded) 2026-09-16T03:15:00-07:00 1789553700.0
+plan span / exit boundary 2026-09-16T03:17:00-07:00 1789553820.0
+t0 2026-09-16T03:25:00-07:00 1789554300.0
+completion / courier deadline 2026-09-16T03:45:00-07:00 1789555500.0
+dead-man 2026-09-16T04:45:00-07:00 1789559100.0
+=== §1.4 --render-only validation of the STAGED plan (no launchctl)
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-rehearsal-20260916c/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+validated pins: repo_head=be221f6a886498f62154faac0b5da14cb66616a1 measurement_root=/Users/edr/JouleWise-measurement-rehearsal-20260916c measurement_head=be221f6a886498f62154faac0b5da14cb66616a1
+render-only rc=0
+total 16
+drwxr-xr-x@ 4 edr  staff   128 Sep 16 02:49 .
+drwxr-xr-x@ 5 edr  staff   160 Sep 16 02:49 ..
+-rw-r--r--@ 1 edr  staff  1404 Sep 16 02:49 com.joulewise.night.deadman.plist
+-rw-r--r--@ 1 edr  staff  1478 Sep 16 02:49 com.joulewise.night.plist
+=== §0.6 step 3b arm census (stub: idle interactive sessions not foreign; workloads block)
+{"diagnostics": ["pid=610 unknown: Darwin sysctl payload query failed"], "discovery_argv": ["/usr/bin/pgrep", "-f", "codex|claude|t3"], "foreign_pids": [], "own_pids": [8271, 8275, 8932, 9144, 9164], "plan_sha256": "aa82ebd961f89cae053fcfb0644b7666b7fb6aec112de7585717a5025c9c1e40", "receipt_class": "REHEARSAL_STUB", "sessions": [{"descendant_pids": [7086, 7094, 8400, 8930, 9081], "exempt": true, "root_pid": 7066, "workloads": []}, {"descendant_pids": [8289, 8294, 8932, 9144, 9164, 9165], "exempt": true, "root_pid": 8275, "workloads": []}], "workloads": []}
+arm census clear/idle-only
+arm census rc=0
+PREFLIGHT DONE 02:49:44 census_rc=0
