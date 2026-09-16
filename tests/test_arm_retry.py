@@ -167,7 +167,11 @@ class ArmRetryTests(unittest.TestCase):
         # Whole-day spans must not discard the last 15 minutes of eligibility.
         third_open = self.spans[2][0]
         self.assertEqual(self.attempts[0]["attempt_epoch_s"], self.spans[0][1] - 660)
-        self.change_candidate(t0_epoch_s=third_open + 6000)
+        # Derive the arm-to-t0 lead from the live driver so the cell holds under
+        # any PLAN_LEAD_S / INSTALL_CLOSE_MARGIN_S (LEAD-MARGIN-01 shortens them).
+        probe_t0 = third_open + 6000
+        lead = probe_t0 - run_night.install_close_epoch(SimpleNamespace(**dict(self.candidate, t0_epoch_s=probe_t0)))
+        self.change_candidate(t0_epoch_s=third_open + 900 + lead)
         self.assertEqual(self.plan["install_close_epoch_s"], third_open + 900)
         self.notice["sent_epoch_s"] = third_open + 300
         self.assertEqual(self.decide(third_open + 300), arm_retry.Decision(True, "allowed"))
