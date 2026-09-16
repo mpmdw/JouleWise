@@ -5,6 +5,8 @@ files track physical job state; its query outcomes determine whether absence
 is proven. UNKNOWN requires retention even without a marker. These tests
 characterize the instrument and pin the system-Python package imports required
 by the uninstall entrypoint.
+
+D10 must-die amendment (lt-31 F1): delete the retained-prior refusal.
 """
 
 import json
@@ -630,7 +632,8 @@ class TransactionTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         return TransactionFixture(temporary.name, priors)
 
-    def assert_tuple(self, fixture, result, rc, loaded, files, *, fence_directory=None):
+    def assert_tuple(self, fixture, result, rc, loaded, files, *, fence_directory=None,
+                     sidecars=None):
         """Every cell checks state, files, fence, teardown, diagnostics and recovery.
 
         Bootout checks cover all post-bootstrap rollback/retention cells and
@@ -723,7 +726,12 @@ class TransactionTests(unittest.TestCase):
                              or options.get("cleanup_baseexception"))
         extras = {path.name for path in fixture.directory.iterdir()
                   if path.name not in {label + ".plist" for label in LABELS}}
-        if recovery_retained and fixture.prior and not uninstall_mode:
+        if sidecars is not None:
+            self.assertEqual(set(sidecars), extras)
+            for name, expected in sidecars.items():
+                prior = fixture.directory / name
+                self.assertEqual(expected, (prior.read_bytes(), prior.stat().st_mtime_ns))
+        elif recovery_retained and fixture.prior and not uninstall_mode:
             self.assertEqual({label + ".plist.prior" for label in LABELS}, extras)
             for label in LABELS:
                 prior = fixture.directory / (label + ".plist.prior")
@@ -920,6 +928,25 @@ class TransactionTests(unittest.TestCase):
                                         prior = fixture.directory / (item + ".plist.prior")
                                         self.assertEqual(fixture.prior[item], (prior.read_bytes(), prior.stat().st_mtime_ns))
 
+    def test_retained_prior_refuses_without_writes(self):
+        fixture = self.fixture()
+        sidecar = fixture.directory / (LABELS[0] + ".plist.prior")
+        payload = b"retained prior plist bytes\n"
+        sidecar.write_bytes(payload)
+        os.utime(sidecar, ns=(fixture.prior_mtime, fixture.prior_mtime))
+        directory_mtime = fixture.directory.stat().st_mtime_ns
+
+        result = fixture.run()
+
+        self.assert_tuple(fixture, result, 3, (), "prior",
+                          sidecars={sidecar.name: (payload, fixture.prior_mtime)})
+        self.assertEqual("retained prior plist: {}; re-run --uninstall\n".format(sidecar),
+                         result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertEqual([], fixture.fake.calls())
+        self.assertEqual(directory_mtime, fixture.directory.stat().st_mtime_ns)
+        self.assertFalse((Path(fixture.plan.custody_root) / "night").exists())
+
     def test_occupancy_product(self):
         for label in LABELS:
             for fault in (None, 9, 64, 112, "113-with-wrong-label", "hang", "0-with-junk-stderr"):
@@ -1057,6 +1084,47 @@ class CapabilityTests(unittest.TestCase):
         self.target = engine.Target.for_mode(self.root / "LaunchAgents")
         self.target.directory.mkdir()
         self.adapter = engine.LaunchctlAdapter(self.target, str(self.fake.executable), timeout=0.75)
+
+    def test_signal_handler_masks_before_unwind_and_restores_entry_state(self):
+        import io
+        import signal
+        from types import SimpleNamespace
+        from unittest import mock
+        e = self.engine
+        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
+        dispositions = {number: signal.getsignal(number) for number in e.SIGNALS}
+        prepared = SimpleNamespace(admit=lambda now: now + 60,
+            custody_night=self.root / "night",
+            render=lambda labels: ((label, b"published") for label in labels))
+        observed_masks = []
+
+        def interrupted_bootstrap(label):
+            try:
+                # Direct invocation makes the pre-unwind observation deterministic.
+                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+            except e.Signalled:
+                observed_masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, ()))
+                raise
+
+        try:
+            construction_mask = original_mask - set(e.SIGNALS) - {signal.SIGUSR1}
+            signal.pthread_sigmask(signal.SIG_SETMASK, construction_mask)
+            machine = e.Transaction(self.adapter, lambda: prepared, stderr=io.StringIO())
+            # A distinct install-time mask also pins recapture after __init__.
+            entry_mask = construction_mask | {signal.SIGUSR1}
+            signal.pthread_sigmask(signal.SIG_SETMASK, entry_mask)
+            with mock.patch.object(self.adapter, "bootstrap", side_effect=interrupted_bootstrap):
+                result = machine.run()
+            self.assertEqual(128 + signal.SIGTERM, result)
+            self.assertEqual([entry_mask | set(e.SIGNALS)], observed_masks,
+                             "handler must block all transaction signals before unwinding")
+            self.assertEqual(entry_mask, signal.pthread_sigmask(signal.SIG_BLOCK, ()))
+            self.assertEqual(dispositions,
+                             {number: signal.getsignal(number) for number in e.SIGNALS})
+        finally:
+            for number, handler in dispositions.items():
+                signal.signal(number, handler)
+            signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
 
     def test_liveness_signature_product(self):
         e = self.engine

@@ -1410,7 +1410,7 @@ can refuse first.
 | `install_spans_unresolvable_on_day` | 2 | A day's resolved spans have nonpositive duration, are out of order, or overlap after DST resolution; detail names the day and offending span/pair. No span is repaired, reordered or dropped. |
 | `plan_t0_not_minute_aligned` | 2 | `t0_epoch_s` is not aligned to a whole minute; `schedule` and the installer refuse before rendering or bootstrapping. Author a minute-aligned plan. |
 | `plan_t0_ambiguous_local_time` | 2 | The local wall-clock minute at `t0` maps to two distinct epochs during a DST fold; both occurrences are refused by `schedule` and the installer before rendering or bootstrapping. Choose an unambiguous minute. |
-| `retained prior plist: <path>; re-run --uninstall` | 3 | A `.prior` sidecar (a file holding a previous plist for recovery) already exists. Complete the documented uninstall before trying another install. |
+| `retained prior plist: <path>; re-run --uninstall` | 3 | A `.prior` sidecar holding the bytes an install replaced already exists. Nothing restores it automatically after the installer exits. Copy it by hand if you need the old plist back; `--uninstall` deletes both the plists and the sidecars. Complete the documented uninstall before trying another install. |
 | `unsupported plist destination: <path>` | 2 | A plist or its `.prior` path is not a regular file, for example a directory or symbolic link. Resolve that destination before retrying. |
 | `--render-only directory must differ from launch_dir` | 2 | The resolved render directory is the installation directory (`launch_dir`). Choose a separate directory for rendered files. |
 
@@ -1426,16 +1426,19 @@ crossed a boundary. A failed install may already have loaded a job, so deleting
 its job file (a **plist**) immediately would leave a loaded job without its
 file. Before replacing or deleting files during failure cleanup, the installer
 requires **proof of unloading**: queries must establish ABSENT for BOTH labels.
-UNKNOWN is insufficient. Prior plists are saved alongside their replacements
-in **`.prior` sidecars**, files holding the previous bytes for recovery.
+UNKNOWN is insufficient. **`.prior` sidecars** hold the bytes an install
+replaced. Nothing restores them automatically after the installer exits: a
+later install refuses while one is present, and `--uninstall` deletes both
+the plists and the sidecars. Copy a sidecar by hand if you need the old plist
+back.
 These conditions give an install exactly one of four outcomes:
 
 | Outcome (meaning) | Exit code | What remains on disk | Operator's next action |
 |---|---|---|---|
 | **committed** — both agents are loaded and verified | 0 | The installed plists remain; prior plists' `.prior` sidecars are cleaned up. | Complete the arm record and exit by the boundary below. |
 | **restored** — failure before or during loading leaves the pre-attempt files in place, or puts them back after both labels are established absent | Original failure code: 143 (SIGTERM), 130 (SIGINT), 129 (SIGHUP), 1, 2 or 3 | Any overwritten prior plist is restored byte-for-byte with its original modification time (`mtime`); newly created plists are removed. An admission refusal leaves existing files untouched. | Record the original failure and follow §1.4 recovery; do not report a successful arm. |
-| **retained** — cleanup cannot establish that both labels are unloaded | 4 | Nothing is changed by file cleanup: the plists and their `.prior` sidecars are kept as they stand. | Stop. Treat the machine as still holding a loaded label, including when its state is UNKNOWN. A human must resolve it; no retirement, unpublishing or successor arm may follow until `--uninstall` exits 0. |
-| **failed restoration** — labels are established absent, but restoring or removing files fails | 1 | Recovery files remain; some plists may already have been restored or removed. The diagnostic is `restore failed; retained prior sidecars: <error type>: <detail>`. | Stop and preserve the remaining recovery files for human inspection. Do not report a successful arm or completed restoration. |
+| **retained** — cleanup cannot establish that both labels are unloaded | 4 | Nothing is changed by file cleanup: the plists and their `.prior` sidecars are kept as they stand. Nothing restores the sidecars automatically after exit. | Stop. Treat the machine as still holding a loaded label, including when its state is UNKNOWN. Copy a sidecar by hand if you need the old plist back; successful `--uninstall` deletes both the plists and the sidecars. A human must resolve it; no retirement, unpublishing or successor arm may follow until `--uninstall` exits 0. |
+| **failed restoration** — labels are established absent, but restoring or removing files fails | 1 | Prior sidecars remain; some plists may already have been restored or removed. The diagnostic is `restore failed; retained prior sidecars: <error type>: <detail>`. | Stop and preserve the remaining sidecars for human inspection. Copy a sidecar by hand if you need the old plist back; nothing restores it automatically after exit. Do not report a successful arm or completed restoration. |
 
 Retained cleanup prints
 `teardown: <night> loaded=…; <deadman> loaded=…; retained plists: …`.
@@ -1446,7 +1449,7 @@ installer finishes loading and verification, then the commit gate reports
 establishes both labels absent, it restores the prior files and exits 2; if a
 label remains loaded or UNKNOWN, it keeps the plists and sidecars and exits 4.
 If restoration itself fails after absence is established, it exits 1 with
-the recovery files left by that failed restoration.
+the prior sidecars left by that failed restoration.
 A bootstrap failure still reports `failed to bootstrap <label>` (for example,
 `failed to bootstrap com.joulewise.night.deadman`), and a loaded-job verification
 failure reports `launch agent verification failed`; their original exit code
@@ -1664,7 +1667,9 @@ keeps both plists and any `.prior` sidecars, and prints
 Re-running `--uninstall` is safe and **idempotent**: repeating it does not
 undo a successful uninstall, and files remain protected while either label
 is loaded or UNKNOWN. Retry after human resolution; only exit 0 opens the
-remaining recovery steps.
+remaining recovery steps. Those steps do not restore old plist bytes:
+successful `--uninstall` deletes both the plists and the sidecars. Copy a
+sidecar by hand first if you need the old plist back.
 
 ### 1.5 Record and exit
 

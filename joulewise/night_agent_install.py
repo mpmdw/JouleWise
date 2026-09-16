@@ -331,6 +331,7 @@ class Transaction:
         self.state = State.PARSED
         self.result = 1
         self.handlers = {}
+        self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
         self.prepared = None
         self.selected_span_close = None
 
@@ -347,7 +348,9 @@ class Transaction:
         self.state = state
 
     def _install_handlers(self):
+        self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
         def raised(number, frame):
+            signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
             raise Signalled(128 + number)
         for number in SIGNALS:
             self.handlers[number] = signal.getsignal(number)
@@ -406,13 +409,13 @@ class Transaction:
                     self._warn("restore failed; retained prior sidecars: {}: {}".format(type(exc).__name__, exc))
 
     def _unwind(self):
-        old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
+        signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
         self._teardown()
         # Discard queued repetitions while blocked. They must not re-enter the
         # transaction or replace its result after the unwind has completed.
         for number in self.handlers:
             signal.signal(number, signal.SIG_IGN)
-        signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+        signal.pthread_sigmask(signal.SIG_SETMASK, self.entry_mask)
         for number, handler in self.handlers.items():
             signal.signal(number, handler)
 
@@ -489,7 +492,7 @@ def uninstall(adapter, stderr=None):
     sink = stderr or sys.stderr
     machine = Transaction(adapter, None, stderr=sink)
     machine._install_handlers()
-    old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
+    signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
     try:
         proofs, unresolved = verified_bootout(adapter, adapter.target.labels)
         if unresolved:
@@ -507,7 +510,7 @@ def uninstall(adapter, stderr=None):
     finally:
         for number in machine.handlers:
             signal.signal(number, signal.SIG_IGN)
-        signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+        signal.pthread_sigmask(signal.SIG_SETMASK, machine.entry_mask)
         for number, handler in machine.handlers.items():
             signal.signal(number, handler)
 

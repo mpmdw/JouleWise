@@ -402,8 +402,12 @@ the old night's checkout or files from service) or successor arming. **Only
 exit 0 permits uninstall-dependent steps.** Exit 4 means **retained**: a
 launchd job name (label) is still loaded, or its query is **UNKNOWN**, meaning
 the installer cannot determine whether it is loaded. It changes no files and
-keeps the job files (plists) and any `.prior` sidecars holding their previous
-bytes. This is a deliberate stop, not a crash or a partial install. **Exit 4
+keeps the job files (plists) and any `.prior` sidecars. `.prior` sidecars hold
+the bytes an install replaced. Nothing restores them automatically after the
+installer exits: a later install refuses while one is present, and
+`--uninstall` deletes both the plists and the sidecars. Copy a sidecar by hand
+if you need the old plist back. This is a deliberate stop, not a crash or a
+partial install. **Exit 4
 STOPS retirement and successor arming until a human resolves the loaded or
 UNKNOWN label and `--uninstall` exits 0.** Re-running `--uninstall` is safe and
 **idempotent**: repeating it does not undo a successful uninstall, and a loaded
