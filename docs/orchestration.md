@@ -410,6 +410,17 @@ Pointer map only; mechanics stay in their owning files.
   `session-close`; the reduced discussion header, tolerant return envelope,
   receipt anchoring, and recovery primitives are defined only in
   `docs/contracts/bridge_protocol.md` (`bridge-protocol/v1.1`).
+- Delegated-seat verification: run
+  `python3 scripts/quick_suite.py --tier touched --since <BASE_HEAD>` before
+  handing back; paste its summary. The default `--tier quick` runs the state
+  and documentation fences plus measured modules below `--max-seconds` (default
+  five seconds), excluding exclusive and split modules. Touched adds tests
+  naming changed paths/modules, matching test-name prefixes, edited tests, and
+  every module with an unknown weight. Every exclusion is listed. Each module
+  uses the shard runner in a fresh process with a temporary directory outside
+  the checkout; `--workers` bounds parallelism, and touched exclusive modules
+  run alone. Failures include an exact single-module replay command. The lead
+  retains ownership of full-suite and live verification.
 - Skill-only mechanics on the operator's machine live under
   `~/.claude/skills`: `operation-loop` is the conductor,
   `codex-delegation` is the invocation/consumption contract,
