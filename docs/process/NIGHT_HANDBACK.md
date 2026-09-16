@@ -160,13 +160,13 @@ cleared by the 2026-09-15 19:55 PDT restart (`fseventsd` at 0.0 % CPU at
 `3c8bd220`) was never authored as a plan; this commit re-plans the id.
 
 Plan `d079-epoch-25g83-derivation-n1-20260916`, class `DIAGNOSTIC_NO_PACK`,
-is planned for 2026-09-16 at 05:40:00 PDT (`t0`, epoch 1789562400,
-12:40:00 UTC) with a 9000-second window (`window_max_s`; the acquisition
-allocation ends at 08:10:00 PDT, epoch 1789571400). The courier deadline is
-`t0 + 9000 + 300`, epoch 1789571700, 08:15:00 PDT; this is also the
+is planned for 2026-09-16 at 09:45:00 PDT (`t0`, epoch 1789577100,
+16:45:00 UTC) with a 9000-second window (`window_max_s`; the acquisition
+allocation ends at 12:15:00 PDT, epoch 1789586100). The courier deadline is
+`t0 + 9000 + 300`, epoch 1789586400, 12:20:00 PDT; this is also the
 **completion boundary**. The **dead-man**, the second launchd job that
 recovers missing delivery after completion, is
-`60 × ceil((1789571700 + 3600) / 60) = 1789575300`, 09:15:00 PDT on
+`60 × ceil((1789586400 + 3600) / 60) = 1789590000`, 13:20:00 PDT on
 2026-09-16, repeating daily at that local minute until uninstalled. This
 notice describes the planned night; the arm record establishes whether
 installation happened.
@@ -242,19 +242,22 @@ digests are baked into the wrapper.
 **Census.** This is a real night: the t0 census has no idle-interactive
 exemption (that exemption is stub-only, ARM-CENSUS-IDLE-INTERACTIVE-01), and
 the arm-time census classifies every `codex|claude|t3` match by ancestry and
-aborts on any foreign process. Ed's interactive session `joulewise-95` (pid
-7066) was alive when this commit was written; it estimated its own exit by
-05:00 PDT, and the notice is not sent, and nothing is published, while it
-lives. If it is still alive at 05:25 PDT the candidate is not armed and is
-re-planned under a new H with a later t0.
+aborts on any foreign process. The first candidate for this plan id (t0
+05:40:00 PDT, H `82ea3eef`) was never published: Ed's interactive session
+(pid 7066) stayed alive past its own 04:14 exit announcement because its
+terminal was never closed, and the candidate lapsed at its 05:30 install
+close (its staged plan and night root preserved unpublished under record 02's
+evidence). This commit re-plans the same id to the t0 above, chosen at the
+moment the census cleared plus the arm-to-t0 floor and a margin; nothing is
+published while any foreign agent process lives.
 
 **Timeline.** Both agents are installed on 2026-09-16 inside the shipped
 whole-day install span (00:00–24:00 local, epoch 1789542000 → 1789628400
 excluded), after the notice and before install close `t0 − 10 min` =
-05:30:00 PDT (epoch 1789561800). The watchdog's plan span opens, and its
-stand-down request lands, at `t0 − 8 min` = 05:32:00 PDT (1789561920); TERM
-is `t0 − 6 min` (1789562040, 05:34:00) and KILL is `t0 − 5 min` (1789562100,
-05:35:00). The consolidated notice with these pins is sent after commit H
+09:35:00 PDT (epoch 1789576500). The watchdog's plan span opens, and its
+stand-down request lands, at `t0 − 8 min` = 09:37:00 PDT (1789576620); TERM
+is `t0 − 6 min` (1789576740, 09:39:00) and KILL is `t0 − 5 min` (1789576800,
+09:40:00). The consolidated notice with these pins is sent after commit H
 and before the plan is moved into its discoverable place; Ed's NO on the
 notice thread stands the night down. The arming activation (headless
 magistrate `0bd12d79`) exits after recording the arm. Power source,
@@ -386,7 +389,7 @@ span, sequence 161) and the courier all behaved as specified.
 
 ## Executed — d079-epoch-25g83-derivation-n1-20260916 (05:40 candidate, 2026-09-16, NOT ARMED)
 
-The first candidate for this plan id (H `82ea3eef`, t0 05:40:00 PDT) was
+The first candidate for this plan id (H `82ea3eef`, t0 09:45:00 PDT) was
 staged, desk-checked and preflighted by activation `0bd12d79` at 04:15 but
 never noticed, published or installed: Ed's interactive Claude session (pid
 7066, with its codex MCP pair) stayed alive past its own 04:14 exit
@@ -410,8 +413,8 @@ t0 by the next handback commit once the census clears.
   `chain.stderr.log` (the wrapper's `FAIL <reason>` lines, if any),
   `courier.sent`, `courier.json`, `courier.heartbeat`.
 - Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night.log`
-  — `night driver started` and a `night gate verdict=` line for 05:40 PDT;
-  no dead-man line is expected before completion (09:15 is after it).
+  — `night driver started` and a `night gate verdict=` line for 09:45 PDT;
+  no dead-man line is expected before completion (13:20 is after it).
 - Chain log: `<custody root>/operator_logs/derivation-chain.log` —
   `session_open kind=derivation slots=12`, `chain_start` (its timestamp
   minus `t0` is the realized Δ), `settle_complete`, twelve `slot_start`
@@ -434,7 +437,7 @@ t0 by the next handback commit once the census clears.
 The relaunched magistrate (its prompt carries the frozen triple
 `d079-epoch-25g83-derivation-n1-20260916` /
 `/Users/edr/JouleWise-measurement-20260916-derivation` / this commit)
-harvests only after the completion boundary (08:15:00 PDT) has passed and
+harvests only after the completion boundary (12:20:00 PDT) has passed and
 `courier.sent` exists, per runbook §2: §2.0 rebuild the night's coordinates
 from the frozen triple; §2.1 read `result.json`, the receipt or refusal,
 `night.log`, the chain log and both launchd streams; preserve the custody

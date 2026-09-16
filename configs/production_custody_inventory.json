@@ -46,6 +46,6 @@
     "measurement_root": "/Users/edr/JouleWise-measurement-20260916-derivation",
     "custody_root": null,
     "ledger_path": "/Users/edr/JouleWise-measurement-20260916-derivation/runs/calibration_observation_ledger.jsonl",
-    "notes": "ACCEPTANCE-EPOCH-25G83-01 equivalence night d079-epoch-25g83-derivation-n1-20260916 (DIAGNOSTIC_NO_PACK, re-planned by activation 0bd12d79 for t0 2026-09-16 05:40 PDT; the 2026-09-14 candidate at 3c8bd220 was never authored as a plan), successor of the 20260915 plan refused at t0 on machine load; fresh GitHub clone detached at the handback commit H (the unused 3c8bd220 clone was moved out of this path first). Restore the canonical 76-record ledger byte-exact and authenticate its absolute iCloud custody locators with verify_custody=True; no separate deployment custody root is attested."
+    "notes": "ACCEPTANCE-EPOCH-25G83-01 equivalence night d079-epoch-25g83-derivation-n1-20260916 (DIAGNOSTIC_NO_PACK, re-planned by activation 0bd12d79 for t0 2026-09-16 09:45 PDT (the 05:40 candidate lapsed unpublished); the 2026-09-14 candidate at 3c8bd220 was never authored as a plan), successor of the 20260915 plan refused at t0 on machine load; fresh GitHub clone detached at the handback commit H (the unused 3c8bd220 clone was moved out of this path first). Restore the canonical 76-record ledger byte-exact and authenticate its absolute iCloud custody locators with verify_custody=True; no separate deployment custody root is attested."
   }
 ]
