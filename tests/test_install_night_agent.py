@@ -886,5 +886,19 @@ class InstallNightAgentTests(unittest.TestCase):
                           for label in ("com.joulewise.night", "com.joulewise.night.deadman")] * 2, calls)
 
 
+class InstallerSignalCliTests(unittest.TestCase):
+    def test_cli_signal_completion_under_both_interpreters(self):
+        # These cells invoke main against the file-backed fake launchctl, kill
+        # during pins printing / after run returns, and assert the actual CLI
+        # status is nonnegative and exactly 0/3 (or 143 before admission).
+        for interpreter in (sys.executable, "/usr/bin/python3"):
+            with self.subTest(interpreter=interpreter):
+                result = subprocess.run([sys.executable, "-B", "-m", "unittest",
+                    "tests.test_night_agent_install.RecordPollTests.test_cli_completion_and_parse_cells"],
+                    cwd=REPO_ROOT, env=dict(os.environ, JOULEWISE_SIGNAL_TEST_PYTHON=interpreter),
+                    capture_output=True, text=True, timeout=60)
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

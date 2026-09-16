@@ -69,6 +69,8 @@ import time
 from pathlib import Path
 
 root = Path(__file__).parent
+with (root / "child-masks.jsonl").open("a") as stream:
+    stream.write(json.dumps(sorted(signal.pthread_sigmask(signal.SIG_BLOCK, ()))) + "\n")
 args = sys.argv[1:]
 with (root / "calls.log").open("a", encoding="utf-8") as stream:
     stream.write(" ".join(args) + "\n")
@@ -485,7 +487,7 @@ class TransactionFixture:
         (self.root / "trace.json").write_text(json.dumps({"states": [], "commits": []}))
         options_path = self.root / "options.json"
         options_path.write_text(json.dumps(options))
-        command = [sys.executable, "-B", "-c",
+        command = [options.get("interpreter", sys.executable), "-B", "-c",
             "from tests.test_night_agent_install import run_transaction_cell; "
             "import sys; sys.exit(run_transaction_cell(sys.argv[1]))", str(self.root)]
         kwargs = dict(cwd=Path(__file__).resolve().parents[1], text=True,
@@ -532,7 +534,7 @@ def run_transaction_cell(root):
                                     directory if render else None, labels=labels)
     adapter = engine.NullAdapter(target) if render else engine.LaunchctlAdapter(
         target, str(root / "fake/launchctl-fake"), timeout=FAKE_TIMEOUT)
-    from tests.test_install_night_agent import REPO_ROOT
+    REPO_ROOT = Path(__file__).resolve().parents[1]
     cutoff = now + (60 if options.get("fault") == "past_install" else 120)
     selected = now + (120 if options.get("fault") == "past_install" else 60)
     prepared = engine.Prepared(plan, plan_path, REPO_ROOT, sys.executable,
@@ -559,7 +561,9 @@ def run_transaction_cell(root):
         try:
             if options.get("commit_refusal"):
                 raise engine.Refused(2, "commit predicate refusal witness")
-            return original_commit()
+            result = original_commit()
+            enter(engine.State.COMMITTED, transition=False)
+            return result
         finally:
             record["passed"] = machine.state is engine.State.COMMITTED
             save_trace()
@@ -576,8 +580,9 @@ def run_transaction_cell(root):
             return original_say(message, error=error)
         machine._say = failed_say
     original_enter = machine._enter
-    def enter(value):
-        original_enter(value)
+    def enter(value, transition=True):
+        if transition:
+            original_enter(value)
         trace["states"].append(value.name)
         save_trace()
         if value is engine.State.VERIFIED and fault == "BrokenPipeError_at_shutdown":
@@ -595,10 +600,6 @@ def run_transaction_cell(root):
         if value.name != state:
             return
         if fault in ("INT", "TERM", "HUP"):
-            # Background runners can pass SIG_IGN through exec, before the
-            # transaction installs its own handlers at STAGED.
-            if signal.getsignal(signal.SIGINT) is signal.SIG_IGN:
-                signal.signal(signal.SIGINT, signal.default_int_handler)
             os.kill(os.getpid(), getattr(signal, "SIG" + fault))
         elif fault in ("exactly_close", "past_selected", "past_install"):
             (root / "clock").write_text(str(min(cutoff, selected) + (fault != "exactly_close")))
@@ -663,6 +664,8 @@ def run_transaction_cell(root):
     if options.get("bootstrap_signal"):
         fake.directive(options["signal_label"], "bootstrap", loaded=True,
                        signal=options["bootstrap_signal"])
+    if options.get("signal_seam"):
+        return run_signal_cell(machine, prepared, fake, root, options, trace, save_trace)
     if options.get("uninstall"):
         return engine.uninstall(adapter)
     code = machine.run()
@@ -671,6 +674,160 @@ def run_transaction_cell(root):
         machine._unwind()
         assert calls == fake.calls(), "terminal teardown must not call launchctl again"
     (root / "result.json").write_text(json.dumps({"state": machine.state.name, "rc": code}))
+    return code
+
+
+def run_signal_cell(machine, prepared, fake, root, options, trace, save_trace):
+    """Synchronous OS delivery at named seams in the real engine, in a child."""
+    from unittest import mock
+    from joulewise import night_agent_install as e
+    seam, number = options["signal_seam"], options.get("signal_number", signal.SIGTERM)
+    adapter, target = machine.adapter, machine.target
+    entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
+    saved = {n: signal.getsignal(n) for n in e.SIGNALS}
+    events, hits, teardowns = [], [], []
+
+    def hit(name):
+        if seam == name and not hits:
+            hits.append(name)
+            os.kill(os.getpid(), number)
+            if options.get("two_signals"):
+                os.kill(os.getpid(), signal.SIGHUP)
+
+    def wrap(obj, name, before=None, after=None):
+        original = getattr(obj, name)
+        def call(*args, **kwargs):
+            if before:
+                before(*args, **kwargs)
+            result = original(*args, **kwargs)
+            if after:
+                after(*args, **kwargs)
+            return result
+        setattr(obj, name, call)
+
+    if seam == "pre_handlers":
+        # Explicit inherited defaults make this startup boundary reproducible
+        # even when the surrounding test launcher inherited SIG_IGN.
+        for n in e.SIGNALS:
+            signal.signal(n, signal.SIG_DFL)
+        wrap(machine.shield, "install", before=lambda: hit("pre_handlers"))
+    wrap(machine, "validate", before=lambda: hit("validate"))
+    wrap(machine, "_enter", before=lambda state: hit("enter_" + state.name),
+         after=lambda state: hit("after_" + state.name))
+    render = prepared.render
+    def rendering(labels):
+        for index, item in enumerate(render(labels), 1):
+            hit("write_before_" + str(index))
+            yield item
+    prepared.render = rendering
+    for verb in ("write_plist", "bootstrap", "print", "bootout"):
+        original = getattr(adapter, verb)
+        def call(label, *args, verb=verb, original=original):
+            index = str(LABELS.index(label) + 1)
+            prefix = "verify" if verb == "print" and not teardowns and machine.state in (
+                e.State.NIGHT_LOADED, e.State.DEADMAN_LOADED) else verb
+            hit(prefix + "_before_" + index)
+            events.append(prefix + "_" + index)
+            helper = None
+            if seam == "pep475" and verb == "bootstrap" and index == "1":
+                # The helper signals this parent during the fake's 1.2 s syscall.
+                fake.directive(label, verb, delay_s=1.2)
+                helper = subprocess.Popen([sys.executable, "-B", "-c",
+                    "import os,signal,time; time.sleep(0.3); os.kill(%d, %d)" %
+                    (os.getpid(), number)])
+            try:
+                result = original(label, *args)
+            finally:
+                if helper is not None:
+                    helper.wait(timeout=5)
+            if helper is not None:
+                hits.append(seam)
+                assert result.kind is e.Kind.SUCCEEDED, result
+                assert machine.shield.signalled == 128 + number
+                events.append("pep475_outcome_returned")
+            hit(prefix + "_after_" + index)
+            return result
+        setattr(adapter, verb, call)
+
+    # Commit clock read and the precise post-poll/pre-assignment latch seam.
+    wrap(machine, "clock", before=lambda: hit("clock") if machine.state is e.State.VERIFIED else None)
+    wrap(machine, "_poll", after=lambda: hit("post_latch") if machine.state is e.State.VERIFIED else None)
+    wrap(machine, "_say", before=lambda message, error=False: hit("pins") if not error else None,
+         after=lambda message, error=False: hit("post_pins") if not error else None)
+    wrap(machine, "_warn", before=lambda message: hit("warning"))
+    wrap(machine, "_unwind", before=lambda: hit("unwind"))
+    wrap(machine, "_teardown", before=lambda: (teardowns.append(machine.state.name), hit("teardown")))
+    wrap(target, "remove_plist", before=lambda label, proof: hit("remove_" + str(LABELS.index(label) + 1)))
+    wrap(machine.shield, "quiesce", before=lambda: hit("quiesce"), after=lambda: hit("post_quiesce"))
+    if (seam in ("warning", "unwind", "teardown", "bootout_before_1", "bootout_before_2")
+            and not options.get("warning_case")) or options.get("refusal"):
+        wrap(machine, "_commit", before=lambda: (_ for _ in ()).throw(e.Refused(3, "seam refusal")))
+    warning_case = options.get("warning_case")
+    if warning_case:
+        if warning_case != "stdout":
+            fake.directive(LABELS[1], "bootstrap", rc=1, loaded=True)
+        if warning_case == "retained":
+            fake.directive(LABELS[0], "bootout", loaded=True)
+        elif warning_case == "restore":
+            target.restore_prior = mock.Mock(side_effect=OSError("restore witness"))
+        elif warning_case == "teardown":
+            def failed_teardown():
+                teardowns.append(machine.state.name)
+                raise OSError("teardown witness")
+            machine._teardown = failed_teardown
+        elif warning_case == "stdout":
+            wrap(machine, "_say", before=lambda message, error=False:
+                 (_ for _ in ()).throw(OSError("stdout witness")) if not error else None)
+        # Inject only at the terminal warning, not the initial bootstrap refusal.
+        warn = machine._warn
+        def terminal_warning(message):
+            if "failed to bootstrap" in message:
+                return  # The tested warning is emitted by teardown.
+            return warn(message)
+        machine._warn = terminal_warning
+
+    real_signal = signal.signal
+    def quiesce_signal(n, handler):
+        if handler is signal.SIG_IGN:
+            hit("quiesce_signal_" + str(int(n)))
+        return real_signal(n, handler)
+
+    with mock.patch.object(signal, "signal", quiesce_signal):
+        if options.get("uninstall"):
+            code = e.uninstall(adapter, shield=machine.shield)
+        elif options.get("cli"):
+            # Exercise main's actual handler lifetime, parser and handoff, using
+            # only this fixture target and the supplied fake executable.
+            def transaction(adapter_arg, validate, **kwargs):
+                machine.shield = kwargs["shield"]
+                return machine
+            wrap(machine, "run", after=lambda: hit("run_return"))
+            parse = e.argparse.ArgumentParser.parse_args
+            def parsing(parser, argv):
+                hit("parse")
+                return parse(parser, argv)
+            with mock.patch.object(e, "Transaction", side_effect=transaction), \
+                 mock.patch.object(e.Target, "for_mode", return_value=target), \
+                 mock.patch.object(e.argparse.ArgumentParser, "parse_args", parsing):
+                code = e.main(["--plan", str(root / "custody/night_plan.json"),
+                               "--launchctl-bin", str(fake.executable)])
+            hit("main_return")
+        else:
+            code = machine.run()
+        hit("run_return")
+    report = {"state": machine.state.name, "rc": code, "hits": hits,
+              "events": events, "teardown_calls": len(teardowns),
+              "signalled": machine.shield.signalled,
+              "ignored": [signal.getsignal(n) is signal.SIG_IGN for n in e.SIGNALS],
+              "mask_unchanged": signal.pthread_sigmask(signal.SIG_BLOCK, ()) == entry_mask}
+    # Only in-process callers restore; CLI probes leave dispositions alone.
+    if not options.get("cli"):
+        machine.shield.release()
+        machine.shield.release()
+        report["restored"] = saved == {n: signal.getsignal(n) for n in e.SIGNALS}
+    (root / "signal-report.json").write_text(json.dumps(report))
+    (root / "result.json").write_text(json.dumps({"state": machine.state.name, "rc": code}))
+    save_trace()
     return code
 
 
@@ -857,8 +1014,7 @@ class TransactionTests(unittest.TestCase):
                             rc, loaded, files = 0, LABELS, "published"
                         elif fault in ("INT", "TERM", "HUP"):
                             number = getattr(signal, "SIG" + fault)
-                            rc = (-number if state in ("PARSED", "VALIDATED", "ADMITTED")
-                                  and fault != "INT" else 128 + number)
+                            rc = 128 + number
                             loaded, files = (), "prior"
                         elif fault.startswith("past_") or fault == "exactly_close":
                             rc, loaded, files = 2, (), "prior"
@@ -1104,7 +1260,7 @@ class TransactionTests(unittest.TestCase):
             self.assertIn("liveness_unknown: " + LABELS[1], result.stderr)
             self.assertFalse(any(call.startswith("bootout ") for call in fixture.fake.calls()))
 
-    def test_uninstall_masks_repeated_signals_through_absence_and_deletion(self):
+    def test_uninstall_records_repeated_signals_through_absence_and_deletion(self):
         fixture = self.fixture()
         self.assert_tuple(fixture, fixture.run(), 0, LABELS, "published")
         for label, number in zip(LABELS, ("TERM", "HUP")):
@@ -1177,8 +1333,158 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(2, sum(line.startswith("bootout ") for line in fixture.fake.calls()))
 
 
-class CapabilityTests(unittest.TestCase):
+class RecordPollTests(unittest.TestCase):
+    """Fable cells 1–13 and Opus's latch, PEP 475 and child-mask witnesses."""
+    fixture = TransactionTests.fixture
+    cell = TransactionTests.cell
+    assert_tuple = TransactionTests.assert_tuple
+
+    def signal_cell(self, seam, number=signal.SIGTERM, priors=True, **options):
+        fixture = self.fixture(priors)
+        interpreter = os.environ.get("JOULEWISE_SIGNAL_TEST_PYTHON", sys.executable)
+        options.setdefault("interpreter", interpreter)
+        fixture.fake.executable.write_text("#!" + interpreter + "\n" + FAKE_LAUNCHCTL_SOURCE)
+        if options.get("uninstall"):
+            installed = fixture.run(interpreter=interpreter)
+            self.assert_tuple(fixture, installed, 0, LABELS, "published")
+        result = fixture.run(signal_seam=seam, signal_number=number, **options)
+        self.assertGreaterEqual(result.returncode, 0, result.stderr)
+        report = json.loads((fixture.root / "signal-report.json").read_text())
+        self.assertEqual([seam], report["hits"], (result.stderr, report))
+        self.assertEqual([True] * 3, report["ignored"])
+        self.assertTrue(report["mask_unchanged"])
+        if not options.get("cli"):
+            self.assertTrue(report["restored"])
+        self.assertEqual(0 if options.get("uninstall") else 1, report["teardown_calls"])
+        masks = [json.loads(line) for line in
+                 (fixture.fake.root / "child-masks.jsonl").read_text().splitlines()] if fixture.fake.calls() else []
+        self.assertTrue(all(mask == [] for mask in masks), masks)
+        return fixture, result, report
+
+    def test_named_seam_signal_product(self):
+        early = ("validate", "enter_VALIDATED", "after_VALIDATED", "enter_ADMITTED",
+                 "after_ADMITTED", "enter_STAGED")
+        rollback = ("after_STAGED", "write_before_1", "write_plist_after_1",
+                    "write_before_2", "write_plist_after_2", "enter_PUBLISHED",
+                    "after_PUBLISHED", "enter_NIGHT_LOADED", "after_NIGHT_LOADED", "bootstrap_before_1",
+                    "bootstrap_after_1", "enter_DEADMAN_LOADED", "after_DEADMAN_LOADED", "bootstrap_before_2",
+                    "bootstrap_after_2", "verify_before_1", "verify_after_1",
+                    "verify_before_2", "verify_after_2", "enter_VERIFIED",
+                    "after_VERIFIED", "clock")
+        completed = ("post_latch", "pins", "post_pins", "quiesce", "post_quiesce",
+                     "run_return") + tuple("quiesce_signal_" + str(int(n)) for n in signal_signals())
+        refusal = ("warning", "unwind", "teardown", "bootout_before_1", "bootout_before_2")
+        for seam in early + rollback + completed + refusal:
+            for number in signal_signals():
+                with self.subTest(seam=seam, number=number):
+                    f, result, report = self.signal_cell(seam, number)
+                    rc = 0 if seam in completed else 3 if seam in refusal else 128 + number
+                    self.assert_tuple(f, result, rc, LABELS if rc == 0 else (),
+                                      "published" if rc == 0 else "prior")
+                    self.assertEqual("SUCCESS" if rc == 0 else "REFUSED" if seam in early
+                                     else "ROLLED_BACK", report["state"])
+                    if rc == 0:
+                        self.assertIn("validated pins:", result.stdout)
+                    forbidden = {"write_before_1": "write_plist_1", "write_before_2": "write_plist_2",
+                                 "enter_NIGHT_LOADED": "bootstrap_1",
+                                 "enter_DEADMAN_LOADED": "bootstrap_2",
+                                 "after_NIGHT_LOADED": "bootstrap_1",
+                                 "after_DEADMAN_LOADED": "bootstrap_2",
+                                 "bootstrap_after_1": "bootstrap_2",
+                                 "bootstrap_after_2": "verify_1", "verify_after_1": "verify_2"}
+                    if seam in forbidden:
+                        self.assertNotIn(forbidden[seam], report["events"])
+
+    def test_two_distinct_signals_first_wins(self):
+        f, result, report = self.signal_cell("write_before_2", two_signals=True)
+        self.assert_tuple(f, result, 143, (), "prior")
+        self.assertEqual(143, report["signalled"])
+
+    def test_pep475_call_returns_outcome_then_poll_rolls_back(self):
+        f, result, report = self.signal_cell("pep475")
+        self.assert_tuple(f, result, 143, (), "prior")
+        self.assertIn("pep475_outcome_returned", report["events"])
+        self.assertNotIn("InterruptedError", result.stderr)
+
+    def test_child_mask_after_signal_is_empty(self):
+        f, result, _ = self.signal_cell("bootstrap_after_1")
+        self.assert_tuple(f, result, 143, (), "prior")
+        self.assertTrue(any(call.startswith("bootout ") for call in f.fake.calls()))
+
+    def test_completed_warning_codes_stand(self):
+        for case, code in (("retained", 4), ("restore", 1), ("teardown", 1), ("stdout", 0)):
+            with self.subTest(case=case):
+                f, result, report = self.signal_cell("warning", warning_case=case)
+                self.assertEqual(code, result.returncode, result.stderr)
+                self.assertEqual("SUCCESS" if code == 0 else "RETAINED", report["state"])
+                self.assertEqual(143, report["signalled"])
+                self.assertEqual(tuple(LABELS) if case in ("teardown", "stdout") else
+                                 (LABELS[0],) if case == "retained" else (),
+                                 tuple(label for label in LABELS if f.fake.loaded(label)))
+                if case == "teardown":
+                    self.assertIn("teardown failed; retained: OSError: teardown witness", result.stderr)
+
+    def test_cli_completion_and_parse_cells(self):
+        for seam, refusal in (("run_return", False), ("run_return", True), ("pins", False),
+                              ("main_return", False), ("main_return", True), ("parse", False)):
+            with self.subTest(seam=seam, refusal=refusal):
+                f, result, _ = self.signal_cell(seam, cli=True, refusal=refusal)
+                code = 3 if refusal else 143 if seam == "parse" else 0
+                self.assert_tuple(f, result, code, LABELS if code == 0 else (),
+                                  "published" if code == 0 else "prior")
+
+    def test_uninstall_seam_signal_product(self):
+        for seam in ("bootout_before_1", "bootout_after_1", "bootout_before_2", "bootout_after_2",
+                     "print_before_1", "print_after_1", "print_before_2", "print_after_2",
+                     "remove_1", "remove_2", "quiesce", "post_quiesce"):
+            for number in signal_signals():
+                with self.subTest(seam=seam, number=number):
+                    f, result, _ = self.signal_cell(seam, number, priors=False, uninstall=True)
+                    self.assert_tuple(f, result, 0, (), "prior")
+
+    def test_module_contains_no_mask_call(self):
+        from joulewise import night_agent_install as e
+        result = subprocess.run(["grep", "-c", "pthread_sigmask", e.__file__],
+                                capture_output=True, text=True)
+        self.assertEqual((1, "0\n"), (result.returncode, result.stdout))
+
+    def test_pre_handler_boundary_has_no_effects(self):
+        interpreter = os.environ.get("JOULEWISE_SIGNAL_TEST_PYTHON", sys.executable)
+        for number in signal_signals():
+            with self.subTest(number=number):
+                f = self.fixture(True)
+                result = f.run(signal_seam="pre_handlers", signal_number=number,
+                               interpreter=interpreter)
+                self.assert_tuple(f, result, -number, (), "prior")
+                self.assertEqual([], f.fake.calls())
+
+
+def signal_signals():
+    return (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+class SignalTestCase(unittest.TestCase):
     def setUp(self):
+        from unittest import mock
+        from joulewise import night_agent_install as engine
+        self.shields = []
+        install = engine.Shield.install
+        def track(shield):
+            if shield not in self.shields:
+                self.shields.append(shield)
+            return install(shield)
+        patch = mock.patch.object(engine.Shield, "install", track)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def tearDown(self):
+        for shield in reversed(self.shields):
+            shield.release()
+
+
+class CapabilityTests(SignalTestCase):
+    def setUp(self):
+        super().setUp()
         from joulewise import night_agent_install as engine
         self.engine = engine
         temporary = tempfile.TemporaryDirectory(prefix="iw-txn-capability-", dir="/tmp")
@@ -1188,31 +1494,6 @@ class CapabilityTests(unittest.TestCase):
         self.target = engine.Target.for_mode(self.root / "LaunchAgents")
         self.target.directory.mkdir()
         self.adapter = engine.LaunchctlAdapter(self.target, str(self.fake.executable), timeout=FAKE_TIMEOUT)
-
-    @contextlib.contextmanager
-    def _signal_context(self):
-        import signal
-        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
-        dispositions = {number: signal.getsignal(number) for number in self.engine.SIGNALS}
-        entry_mask = (original_mask - set(self.engine.SIGNALS)) | {signal.SIGUSR1}
-        signal.pthread_sigmask(signal.SIG_SETMASK, entry_mask)
-        try:
-            yield entry_mask, dispositions
-        finally:
-            # A failing mutant must not leak blocked signals, handlers or a
-            # pending SIGTERM into the unittest runner or its next test.
-            signal.pthread_sigmask(signal.SIG_BLOCK, self.engine.SIGNALS)
-            for number in dispositions:
-                signal.signal(number, signal.SIG_IGN)
-            for number, handler in dispositions.items():
-                signal.signal(number, handler)
-            signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
-
-    def _assert_signal_state(self, mask, dispositions):
-        import signal
-        self.assertEqual(mask, signal.pthread_sigmask(signal.SIG_BLOCK, ()))
-        self.assertEqual(dispositions,
-                         {number: signal.getsignal(number) for number in self.engine.SIGNALS})
 
     def _signal_machine(self, refusal=False):
         import io
@@ -1227,279 +1508,39 @@ class CapabilityTests(unittest.TestCase):
         return e.Transaction(self.adapter, lambda: prepared, clock=lambda: 10,
                              stdout=io.StringIO(), stderr=io.StringIO())
 
-    def test_signal_inside_refused_warning_returns_signal_code(self):
-        import signal
-        from unittest import mock
+    def test_in_process_release_restores_exact_dispositions_and_mask(self):
         e = self.engine
-        with self._signal_context() as (entry_mask, dispositions):
-            machine = self._signal_machine(refusal=True)
-            warn = machine._warn
-            deliveries = []
-
-            def interrupt_warning(message):
-                if not deliveries:
-                    deliveries.append(message)
-                    os.kill(os.getpid(), signal.SIGTERM)
-                warn(message)
-
-            with mock.patch.object(machine, "_warn", side_effect=interrupt_warning), \
-                 mock.patch.object(machine, "_restore", wraps=machine._restore) as restore:
-                result = machine.run()
-            self.assertEqual(143, result)
-            self.assertIs(e.State.ROLLED_BACK, machine.state)
-            self.assertEqual(["render refused"], deliveries)
-            self.assertEqual(1, restore.call_count, "the second unwind must be a terminal no-op")
-            self.assertNotIn("Traceback", machine.stderr.getvalue())
-            self._assert_signal_state(entry_mask, dispositions)
-
-    def test_two_pending_signals_at_unwind_entry_teardown_once(self):
-        import signal
-        from unittest import mock
-        e = self.engine
-        with self._signal_context() as (entry_mask, dispositions):
-            machine = self._signal_machine(refusal=True)
-            unwind = machine._unwind
-            pending = []
-            entries = []
-
-            def interrupt_entry():
-                entries.append(machine.state)
-                if len(entries) == 1:
-                    signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGHUP, signal.SIGTERM))
-                    os.kill(os.getpid(), signal.SIGHUP)
-                    os.kill(os.getpid(), signal.SIGTERM)
-                    pending.append(signal.sigpending())
-                    signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGHUP,))
-                elif len(entries) == 2:
-                    # Deliver the second queued signal after the outer catch
-                    # owns the first raise, independently of CPython's batching.
-                    signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGTERM,))
-                unwind()
-
-            with mock.patch.object(machine, "_unwind", side_effect=interrupt_entry), \
-                 mock.patch.object(machine, "_teardown", wraps=machine._teardown) as teardown:
-                result = machine.run()
-            self.assertEqual(3, result)
-            self.assertIs(e.State.ROLLED_BACK, machine.state)
-            self.assertEqual(1, len(pending))
-            self.assertTrue({signal.SIGHUP, signal.SIGTERM} <= pending[0])
-            self.assertEqual([e.State.STAGED, e.State.STAGED], entries)
-            self.assertEqual(1, teardown.call_count)
-            self._assert_signal_state(entry_mask, dispositions)
-
-    def _assert_signal_before_unwind_frame(self, refusal):
-        import signal
-        from unittest import mock
-        e = self.engine
-        with self._signal_context() as (entry_mask, dispositions):
-            machine = self._signal_machine(refusal=refusal)
-            unwind = machine._unwind
-            deliveries = []
-
-            def interrupt_entry():
-                if not deliveries:
-                    deliveries.append(machine.state)
-                    os.kill(os.getpid(), signal.SIGTERM)
-                unwind()
-
-            with mock.patch.object(machine, "_unwind", side_effect=interrupt_entry), \
-                 mock.patch.object(machine, "_teardown", wraps=machine._teardown) as teardown:
-                result = machine.run()
-            self.assertEqual(3 if refusal else 0, result)
-            self.assertEqual([e.State.STAGED if refusal else e.State.COMMITTED], deliveries)
-            self.assertIs(e.State.ROLLED_BACK if refusal else e.State.SUCCESS, machine.state)
-            self.assertEqual(1, teardown.call_count)
-            self._assert_signal_state(entry_mask, dispositions)
-
-    def test_signal_before_unwind_frame_preserves_refusal(self):
-        self._assert_signal_before_unwind_frame(refusal=True)
-
-    def test_signal_before_unwind_frame_preserves_commit(self):
-        self._assert_signal_before_unwind_frame(refusal=False)
-
-    def test_dispositions_restored_before_mask_opens(self):
-        import io
-        import signal
-        from unittest import mock
-        e = self.engine
-        for uninstalling in (False, True):
-            with self.subTest(uninstalling=uninstalling), \
-                 self._signal_context() as (entry_mask, dispositions):
-                machine = self._signal_machine(refusal=True)
-                sigmask = signal.pthread_sigmask
-                opened = []
-
-                def observe_open(how, mask):
-                    if how == signal.SIG_SETMASK and set(mask) == entry_mask:
-                        opened.append({number: signal.getsignal(number) for number in e.SIGNALS})
-                    return sigmask(how, mask)
-
-                with mock.patch.object(signal, "pthread_sigmask", side_effect=observe_open):
-                    result = (e.uninstall(self.adapter, stderr=io.StringIO())
-                              if uninstalling else machine.run())
-                self.assertEqual(0 if uninstalling else 3, result)
-                self.assertEqual([dispositions], opened,
-                                 "all saved dispositions must precede the mask opening")
-                self._assert_signal_state(entry_mask, dispositions)
-
-    def test_unwind_teardown_exception_returns_one_and_retains_files(self):
-        import signal
-        from unittest import mock
-        e = self.engine
-        for label in LABELS:
-            self.target.path(label).write_bytes(b"prior")
-        self.fake.directive(LABELS[1], "bootstrap", rc=1)
-        with self._signal_context() as (entry_mask, dispositions):
-            machine = self._signal_machine()
-            bootout = self.adapter.bootout
-            teardown_masks = []
-
-            def failing_bootout(label):
-                teardown_masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, ()))
-                if label == LABELS[1]:
-                    raise RuntimeError("teardown witness")
-                return bootout(label)
-
-            with mock.patch.object(self.adapter, "bootout", side_effect=failing_bootout) as cleanup:
-                result = machine.run()
-            self.assertEqual(1, result)
-            self.assertIs(e.State.RETAINED, machine.state)
-            self.assertEqual([mock.call(label) for label in LABELS], cleanup.call_args_list)
-            self.assertEqual([entry_mask | set(e.SIGNALS)] * 2, teardown_masks)
-            self.assertFalse(self.fake.loaded(LABELS[0]), "the teardown partially completed")
-            for label in LABELS:
-                self.assertEqual(b"published", self.target.path(label).read_bytes())
-                self.assertEqual(b"prior", self.target.sidecar(label).read_bytes())
-            self.assertIn("teardown failed; retained: RuntimeError: teardown witness\n",
-                          machine.stderr.getvalue())
-            self.assertNotIn("Traceback", machine.stderr.getvalue())
-            self._assert_signal_state(entry_mask, dispositions)
-
-    def _assert_unwind_entry_signal(self, refusal):
-        import io
-        import signal
-        from types import SimpleNamespace
-        from unittest import mock
-        e = self.engine
-        prepared = SimpleNamespace(admit=lambda now: 60, schedule={"install_close_epoch_s": 60},
-            custody_night=self.root / "night", pins="pins",
-            render=lambda labels: ((label, b"published") for label in labels))
-        if refusal:
-            prepared.render = mock.Mock(side_effect=e.Refused(2, "render refused"))
-        with self._signal_context() as (entry_mask, dispositions):
-            machine = e.Transaction(self.adapter, lambda: prepared, clock=lambda: 10,
-                                    stdout=io.StringIO(), stderr=io.StringIO())
-            unwind = machine._unwind
-            sigmask = signal.pthread_sigmask
-            at_entry = False
-            deliveries = []
-
-            def enter_unwind():
-                nonlocal at_entry
-                at_entry = True
-                unwind()
-
-            def interrupt_first_block(how, mask):
-                nonlocal at_entry
-                if at_entry and how == signal.SIG_BLOCK and set(mask) == set(e.SIGNALS):
-                    at_entry = False
-                    deliveries.append(machine.state)
-                    # Before the first block takes effect, invoke the actual
-                    # transaction handler; it blocks and raises Signalled.
-                    signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
-                return sigmask(how, mask)
-
-            with mock.patch.object(machine, "_unwind", side_effect=enter_unwind), \
-                 mock.patch.object(signal, "pthread_sigmask", side_effect=interrupt_first_block):
-                result = machine.run()
-            self.assertEqual([e.State.STAGED if refusal else e.State.COMMITTED], deliveries)
-            self.assertEqual(2 if refusal else 0, result)
-            self._assert_signal_state(entry_mask, dispositions)
-
-    def test_unwind_entry_signal_preserves_refusal_and_signal_state(self):
-        self._assert_unwind_entry_signal(refusal=True)
-
-    def test_unwind_entry_signal_preserves_commit_and_signal_state(self):
-        self._assert_unwind_entry_signal(refusal=False)
-
-    def test_uninstall_handler_installation_seam_is_already_blocked(self):
-        import io
-        import signal
-        from unittest import mock
-        e = self.engine
-        for retained in (False, True):
-            with self.subTest(retained=retained), self._signal_context() as (entry_mask, dispositions):
-                if retained:
-                    self.fake.directive(LABELS[0], "bootout", loaded=True)
-                install_handlers = e.Transaction._install_handlers
-                deliveries = []
-
-                def signal_after_handlers(machine):
-                    install_handlers(machine)
-                    deliveries.append(signal.pthread_sigmask(signal.SIG_BLOCK, ()))
-                    # At the old handler-to-block seam this raises; with the
-                    # block first, it queues until uninstall's drain/restore.
-                    os.kill(os.getpid(), signal.SIGTERM)
-
-                with mock.patch.object(e.Transaction, "_install_handlers", signal_after_handlers):
-                    result = e.uninstall(self.adapter, stderr=io.StringIO())
-                self.assertEqual(4 if retained else 0, result)
-                self.assertEqual([entry_mask | set(e.SIGNALS)], deliveries)
-                self._assert_signal_state(entry_mask, dispositions)
-
-    def test_run_early_refusal_restores_invocation_mask_not_construction_mask(self):
-        import io
-        import signal
-        from unittest import mock
-        e = self.engine
-        with self._signal_context() as (entry_mask, dispositions):
-            signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGUSR1,))
-            machine = e.Transaction(self.adapter,
-                mock.Mock(side_effect=e.Refused(3, "early refusal")), stderr=io.StringIO())
-            signal.pthread_sigmask(signal.SIG_SETMASK, entry_mask)
-            self.assertEqual(3, machine.run())
-            self._assert_signal_state(entry_mask, dispositions)
-
-    def test_signal_handler_masks_before_unwind_and_restores_entry_state(self):
-        import io
-        import signal
-        from types import SimpleNamespace
-        from unittest import mock
-        e = self.engine
+        original = {n: signal.getsignal(n) for n in e.SIGNALS}
         original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
-        dispositions = {number: signal.getsignal(number) for number in e.SIGNALS}
-        prepared = SimpleNamespace(admit=lambda now: now + 60,
-            custody_night=self.root / "night",
-            render=lambda labels: ((label, b"published") for label in labels))
-        observed_masks = []
-
-        def interrupted_bootstrap(label):
-            try:
-                # Direct invocation makes the pre-unwind observation deterministic.
-                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
-            except e.Signalled:
-                observed_masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, ()))
-                raise
-
+        expected_mask = original_mask | {signal.SIGUSR1}
+        callbacks = {n: (lambda number, frame: None) for n in e.SIGNALS}
         try:
-            construction_mask = original_mask - set(e.SIGNALS) - {signal.SIGUSR1}
-            signal.pthread_sigmask(signal.SIG_SETMASK, construction_mask)
-            machine = e.Transaction(self.adapter, lambda: prepared, stderr=io.StringIO())
-            # A distinct install-time mask also pins recapture after __init__.
-            entry_mask = construction_mask | {signal.SIGUSR1}
-            signal.pthread_sigmask(signal.SIG_SETMASK, entry_mask)
-            with mock.patch.object(self.adapter, "bootstrap", side_effect=interrupted_bootstrap):
-                result = machine.run()
-            self.assertEqual(128 + signal.SIGTERM, result)
-            self.assertEqual([entry_mask | set(e.SIGNALS)], observed_masks,
-                             "handler must block all transaction signals before unwinding")
-            self.assertEqual(entry_mask, signal.pthread_sigmask(signal.SIG_BLOCK, ()))
-            self.assertEqual(dispositions,
-                             {number: signal.getsignal(number) for number in e.SIGNALS})
+            for n, callback in callbacks.items():
+                signal.signal(n, callback)
+            signal.pthread_sigmask(signal.SIG_SETMASK, expected_mask)
+            machine = self._signal_machine(refusal=True)
+            self.assertEqual(3, machine.run())
+            self.assertTrue(all(signal.getsignal(n) is signal.SIG_IGN for n in e.SIGNALS))
+            self.assertEqual(expected_mask, signal.pthread_sigmask(signal.SIG_BLOCK, ()))
+            machine.shield.release()
+            machine.shield.release()
+            self.assertEqual(callbacks, {n: signal.getsignal(n) for n in e.SIGNALS})
+            self.assertEqual(expected_mask, signal.pthread_sigmask(signal.SIG_BLOCK, ()))
         finally:
-            for number, handler in dispositions.items():
-                signal.signal(number, handler)
+            for n, handler in original.items():
+                signal.signal(n, handler)
             signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+
+    def test_only_poll_raises_signalled(self):
+        shield = self.engine.Shield()
+        shield.install()
+        os.kill(os.getpid(), signal.SIGTERM)
+        os.kill(os.getpid(), signal.SIGHUP)
+        self.assertEqual(143, shield.signalled)
+        with self.assertRaises(self.engine.Signalled) as raised:
+            shield.poll()
+        self.assertEqual(143, raised.exception.code)
+        shield.quiesce()
 
     def test_liveness_signature_product(self):
         e = self.engine

@@ -436,6 +436,11 @@ Author every new v2 plan with
 that writer's bytes and apply a named mutation. The writer emits both
 `schema: joulewise.night_plan.v2` and integer `schema_version: 2`; either field
 missing or inconsistent makes the plan malformed.
+The installer records the first SIGINT/SIGTERM/SIGHUP and polls before mutations
+and at the final commit latch after the clock check; rollback never polls, and
+signals after the latch or completion cannot replace the completed exit code
+(post-commit Ctrl-C keeps exit 0 and the pins).
+
 Installer note: on install the installer checks `repo_head` against the
 driver checkout HEAD and `measurement_head` against the HEAD of the plan's
 `measurement_root`, while `--uninstall` checks neither pin and no longer

@@ -1431,13 +1431,31 @@ replaced. Nothing restores them automatically after the installer exits: a
 later install refuses while one is present, and `--uninstall` deletes both
 the plists and the sidecars. Copy a sidecar by hand if you need the old plist
 back.
-These conditions give an install exactly one of four outcomes:
+SIGINT, SIGTERM and SIGHUP handlers are installed before argument parsing and
+only record the first signal. Ordinary-code polls honor it before the next
+mutation: response latency is bounded by one adapter call plus its timeout
+(5 seconds for launchctl), or by the validation subprocess's runtime. Before
+the handlers are installed, interpreter startup retains its usual signal
+behavior. The commit gate evaluates the clock predicate, then takes its final
+signal poll and assigns COMMITTED directly: a signal recorded during the clock
+read rolls back with its signal code; one recorded after that latch is discarded
+and exit 0 with the pins stands. A refusal already selected also keeps its code.
+D6 teardown is **uninterruptible by construction (no raising handler exists)**:
+it never polls, so signals during rollback are recorded and discarded. After
+completion these three signals remain ignored until CLI process death;
+in-process callers explicitly release the shield to restore their dispositions.
+A stalled stdout pipe after COMMITTED can require SIGKILL to free it; handback
+pipes must drain. SIGKILL/SIGQUIT skip teardown and can leave `.prior` sidecars
+that make the next install refuse with exit 3; follow the sidecar recovery above.
+
+These conditions give an install exactly one of five outcomes:
 
 | Outcome (meaning) | Exit code | What remains on disk | Operator's next action |
 |---|---|---|---|
 | **committed** — both agents are loaded and verified | 0 | The installed plists remain; cleanup of prior plists' `.prior` sidecars is best-effort. A cleanup failure prints `warning: prior sidecars not removed: <detail>` and still exits 0. | Complete the arm record and exit by the boundary below. |
 | **restored** — failure before or during loading leaves the pre-attempt files in place, or puts them back after both labels are established absent | Original failure code: 143 (SIGTERM), 130 (SIGINT), 129 (SIGHUP), 1, 2 or 3 | Any overwritten prior plist is restored byte-for-byte with its original modification time (`mtime`); newly created plists are removed. An admission refusal leaves existing files untouched. | Record the original failure and follow §1.4 recovery; do not report a successful arm. |
 | **retained** — cleanup cannot establish that both labels are unloaded | 4 | Nothing is changed by file cleanup: the plists and their `.prior` sidecars are kept as they stand. Nothing restores the sidecars automatically after exit. | Stop. Treat the machine as still holding a loaded label, including when its state is UNKNOWN. Copy a sidecar by hand if you need the old plist back; successful `--uninstall` deletes both the plists and the sidecars. A human must resolve it; no retirement, unpublishing or successor arm may follow until `--uninstall` exits 0. |
+| **failed teardown** — an unexpected teardown error leaves state RETAINED | 1 | Remaining plists and `.prior` sidecars are retained; teardown may have completed only some operations. The diagnostic is `teardown failed; retained: <type>: <message>`. | Stop and preserve the remaining files for human inspection. Do not assume both labels are unloaded or report a successful arm; no retirement, unpublishing or successor arm may follow until `--uninstall` exits 0. |
 | **failed restoration** — labels are established absent, but restoring or removing files fails | 1 | Prior sidecars remain; some plists may already have been restored or removed. The diagnostic is `restore failed; retained prior sidecars: <error type>: <detail>`. | Stop and preserve the remaining sidecars for human inspection. Copy a sidecar by hand if you need the old plist back; nothing restores it automatically after exit. Do not report a successful arm or completed restoration. |
 
 Retained cleanup prints

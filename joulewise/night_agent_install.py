@@ -6,6 +6,15 @@ Plist publication, removal and restoration have separate, narrow capabilities.
 The transaction's one finally dispatches on state, including after output fails.
 Unexpected teardown errors return 1 with state RETAINED and the warning
 "teardown failed; retained: <exception type>: <message>".
+
+INT/TERM/HUP handlers only record the first signal; ordinary-code polls honor
+it before the next mutation, at most one adapter call plus its timeout later
+(or the validation subprocess runtime). The final poll follows the commit
+clock predicate: a signal recorded during that read rolls back; one after the
+latch cannot replace success. Teardown never polls and discards signals;
+completion leaves these signals ignored until CLI process death. A stalled
+pins-output pipe can therefore require SIGKILL. SIGKILL/SIGQUIT skip teardown;
+remaining .prior sidecars make the next install refuse with exit 3.
 """
 
 import argparse
@@ -66,6 +75,40 @@ class Refused(Exception):
 class Signalled(BaseException):
     def __init__(self, code):
         self.code = code
+
+
+class Shield:
+    """Own three dispositions for one single-threaded invocation, never its mask."""
+    def __init__(self):
+        self.saved, self.signalled = {}, None
+
+    def install(self):
+        # main installs before parsing; run/uninstall also support direct callers.
+        if self.saved:
+            return
+
+        def record(number, frame):
+            if self.signalled is None:
+                self.signalled = 128 + number
+
+        for number in SIGNALS:
+            self.saved[number] = signal.getsignal(number)
+            signal.signal(number, record)
+
+    def poll(self):
+        if self.signalled is not None:
+            raise Signalled(self.signalled)
+
+    def quiesce(self):
+        """Discard deferred delivery and ignore later signals through CLI exit."""
+        for number in self.saved:
+            signal.signal(number, signal.SIG_IGN)
+
+    def release(self):
+        """Restore exact saved dispositions; in-process callers only."""
+        for number, handler in self.saved.items():
+            signal.signal(number, handler)
+        self.saved.clear()
 
 
 class NotAbsent(Exception):
@@ -322,7 +365,7 @@ class State(Enum):
 
 
 class Transaction:
-    def __init__(self, adapter, validate, clock=None, stdout=None, stderr=None):
+    def __init__(self, adapter, validate, clock=None, stdout=None, stderr=None, shield=None):
         self.adapter, self.target = adapter, adapter.target
         if isinstance(self.target, RenderTarget) and type(adapter) is not NullAdapter:
             raise TypeError("render-only requires NullAdapter")
@@ -332,10 +375,7 @@ class Transaction:
         self.stderr = stderr or sys.stderr
         self.state = State.PARSED
         self.result = 1
-        self.handlers = {}
-        self.raised_once = False
-        self.resolved = False
-        self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
+        self.shield = shield or Shield()
         self.prepared = None
         self.selected_span_close = None
 
@@ -348,21 +388,12 @@ class Transaction:
         except BaseException:
             pass
 
-    def _enter(self, state):
-        self.state = state
+    def _poll(self):
+        self.shield.poll()
 
-    def _install_handlers(self):
-        # single-threaded process assumed: a helper thread would receive an unblocked
-        # signal and the Python handler would still run on the main thread.
-        def raised(number, frame):
-            signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
-            if self.raised_once:
-                return  # a second signal tripped before the block; the unwind owns the process
-            self.raised_once = True
-            raise Signalled(128 + number)
-        for number in SIGNALS:
-            self.handlers[number] = signal.getsignal(number)
-            signal.signal(number, raised)
+    def _enter(self, state):
+        self._poll()
+        self.state = state
 
     def _unknowns(self, unresolved):
         for label, observed in unresolved.items():
@@ -417,120 +448,93 @@ class Transaction:
                     self._warn("restore failed; retained prior sidecars: {}: {}".format(type(exc).__name__, exc))
 
     def _unwind(self):
-        while True:
-            try:
-                signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
-                break
-            except Signalled:
-                continue  # the one raise landed here; the handler has already blocked the signals
         try:
             self._teardown()
         except BaseException as exc:
             self.state, self.result = State.RETAINED, 1
             self._warn("teardown failed; retained: {}: {}".format(type(exc).__name__, exc))
         finally:
-            # Discard queued repetitions while blocked. Restore every saved
-            # disposition before opening the invocation's mask again.
-            for number in self.handlers:
-                signal.signal(number, signal.SIG_IGN)
-            for number, handler in self.handlers.items():
-                signal.signal(number, handler)
-            signal.pthread_sigmask(signal.SIG_SETMASK, self.entry_mask)
+            self.shield.quiesce()
 
     def _commit(self):
         now = self.clock()
         if now >= min(self.selected_span_close, self.prepared.schedule["install_close_epoch_s"]):
             raise Refused(2, self.prepared.timing("install_span_closed", now,
                           "selected_span_close_epoch_s={}".format(self.selected_span_close)))
-        self._enter(State.COMMITTED)
+        self._poll()  # Commit latch: the final poll, after the clock predicate.
+        self.state = State.COMMITTED
 
     def run(self):
-        self.entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
+        self.shield.install()
         try:
-            try:
-                self.prepared = self.validate()
-                self.target.validate()
-                self._enter(State.VALIDATED)
-                if isinstance(self.target, LaunchdTarget):
-                    for label in self.target.labels:
-                        try:
-                            self.adapter.require_absent(label)
-                        except NotAbsent as exc:
-                            detail = "label={}".format(label)
-                            if exc.liveness.kind is Kind.UNKNOWN:
-                                detail += " state=unknown rc={} stderr={}".format(exc.liveness.rc, exc.liveness.stderr)
-                            raise Refused(3, self.prepared.timing("night_agent_already_loaded", self.clock(), detail))
-                self.selected_span_close = self.prepared.admit(self.clock())
-                self._enter(State.ADMITTED)
-                self._install_handlers()
-                self._enter(State.STAGED)
-                self.target.stage()
-                self.prepared.custody_night.mkdir(parents=True, exist_ok=True)
-                for label, payload in self.prepared.render(self.target.labels):
-                    result = self.adapter.write_plist(label, payload)
+            self.prepared = self.validate()
+            self.target.validate()
+            self._enter(State.VALIDATED)
+            if isinstance(self.target, LaunchdTarget):
+                for label in self.target.labels:
+                    try:
+                        self.adapter.require_absent(label)
+                    except NotAbsent as exc:
+                        detail = "label={}".format(label)
+                        if exc.liveness.kind is Kind.UNKNOWN:
+                            detail += " state=unknown rc={} stderr={}".format(exc.liveness.rc, exc.liveness.stderr)
+                        raise Refused(3, self.prepared.timing("night_agent_already_loaded", self.clock(), detail))
+            self.selected_span_close = self.prepared.admit(self.clock())
+            self._enter(State.ADMITTED)
+            self._enter(State.STAGED)
+            self.target.stage()
+            self.prepared.custody_night.mkdir(parents=True, exist_ok=True)
+            for label, payload in self.prepared.render(self.target.labels):
+                self._poll()
+                result = self.adapter.write_plist(label, payload)
+                if result.kind is not Kind.SUCCEEDED:
+                    raise Refused(1, result.stderr)
+            self._enter(State.PUBLISHED)
+            if isinstance(self.target, LaunchdTarget):
+                for index, label in enumerate(self.target.labels):
+                    self._enter(State.NIGHT_LOADED if index == 0 else State.DEADMAN_LOADED)
+                    self._poll()
+                    result = self.adapter.bootstrap(label)
                     if result.kind is not Kind.SUCCEEDED:
-                        raise Refused(1, result.stderr)
-                self._enter(State.PUBLISHED)
-                if isinstance(self.target, LaunchdTarget):
-                    for index, label in enumerate(self.target.labels):
-                        self._enter(State.NIGHT_LOADED if index == 0 else State.DEADMAN_LOADED)
-                        result = self.adapter.bootstrap(label)
-                        if result.kind is not Kind.SUCCEEDED:
-                            raise Refused(3, "failed to bootstrap {}".format(label))
-                    observed = [self.adapter.print(label) for label in self.target.labels]
-                    if any(value.kind is not Kind.LOADED for value in observed):
-                        raise Refused(3, "launch agent verification failed")
-                self._enter(State.VERIFIED)
-                self._commit()
-                try:
-                    self._say(self.prepared.pins)
-                except BrokenPipeError:
-                    # COMMITTED must report success even when the reader closes.
-                    # A failed flush leaves buffered bytes for Python's shutdown
-                    # flush, which would otherwise replace exit 0 with exit 120.
-                    with open(os.devnull, "wb") as sink:
-                        os.dup2(sink.fileno(), 1)
-                self.resolved = True
-            except Refused as exc:
-                self.result = exc.code
-                self._warn(str(exc))
-                self.resolved = True
-            except Signalled as exc:
-                self.result = exc.code
-                self.resolved = True
-            except KeyboardInterrupt:
-                self.result = 130
-                self.resolved = True
-            except BaseException as exc:
-                self.result = 1
-                self._warn("{}: {}".format(type(exc).__name__, exc))
-                self.resolved = True
-            finally:
-                self._unwind()
+                        raise Refused(3, "failed to bootstrap {}".format(label))
+                observed = []
+                for label in self.target.labels:
+                    self._poll()
+                    observed.append(self.adapter.print(label))
+                if any(value.kind is not Kind.LOADED for value in observed):
+                    raise Refused(3, "launch agent verification failed")
+            self._enter(State.VERIFIED)
+            self._commit()
+            try:
+                self._say(self.prepared.pins)
+            except BrokenPipeError:
+                # COMMITTED must report success even when the reader closes.
+                # A failed flush leaves buffered bytes for Python's shutdown
+                # flush, which would otherwise replace exit 0 with exit 120.
+                with open(os.devnull, "wb") as sink:
+                    os.dup2(sink.fileno(), 1)
+        except Refused as exc:
+            self.result = exc.code
+            self._warn(str(exc))
         except Signalled as exc:
-            # The single handler raise landed outside the inner try: in an except clause above,
-            # or at _unwind's entry. Signals are blocked and the handler cannot raise again, so
-            # nothing below can be interrupted. _teardown is a no-op on a terminal state, so a
-            # second _unwind is safe.
-            if not self.resolved:
-                self.result = exc.code
+            self.result = exc.code
+        except BaseException as exc:
+            self.result = 1
+            self._warn("{}: {}".format(type(exc).__name__, exc))
+        finally:
             self._unwind()
         return self.result
 
 
-def uninstall(adapter, stderr=None):
+def uninstall(adapter, stderr=None, shield=None):
     """System-interpreter recovery: no plan, driver, pins or venv imports."""
-    entry_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
+    shield = shield or Shield()
+    shield.install()
     if type(adapter) is NullAdapter:
         raise TypeError("render-only and uninstall are mutually exclusive")
     sink = stderr or sys.stderr
-    machine = Transaction(adapter, None, stderr=sink)
-    machine.entry_mask = entry_mask
-    # Nothing has mutated yet. Block before installing our raising handlers,
-    # so no handler-to-block sliver exists; handlers serve only drain/restore.
-    signal.pthread_sigmask(signal.SIG_BLOCK, SIGNALS)
+    machine = Transaction(adapter, None, stderr=sink, shield=shield)
     try:
-        machine._install_handlers()
         proofs, unresolved = verified_bootout(adapter, adapter.target.labels)
         if unresolved:
             machine._warn("uninstall: still loaded after bootout: {}; retained plists: {}".format(
@@ -545,11 +549,7 @@ def uninstall(adapter, stderr=None):
         machine._warn("uninstall failed: {}: {}".format(type(exc).__name__, exc))
         return 1
     finally:
-        for number in machine.handlers:
-            signal.signal(number, signal.SIG_IGN)
-        for number, handler in machine.handlers.items():
-            signal.signal(number, handler)
-        signal.pthread_sigmask(signal.SIG_SETMASK, machine.entry_mask)
+        shield.quiesce()
 
 
 @dataclass
@@ -674,6 +674,8 @@ def validate_install(args, repo):
 
 
 def main(argv=None):
+    shield = Shield()
+    shield.install()
     def render_directory(value):
         if not value:
             raise argparse.ArgumentTypeError("--render-only requires a non-empty value")
@@ -692,8 +694,8 @@ def main(argv=None):
     parser.add_argument("--uninstall", action="store_true")
     parser.add_argument("--render-only", type=render_directory)
     parser.add_argument("--launchctl-bin", default="launchctl")
-    args = parser.parse_args(argv)
     try:
+        args = parser.parse_args(argv)
         if args.uninstall and args.render_only is not None:
             raise Refused(2, "--render-only and --uninstall are mutually exclusive")
         if not args.plan.is_file():
@@ -710,11 +712,14 @@ def main(argv=None):
         if args.uninstall:
             if args.python:
                 print("--python ignored on uninstall", file=sys.stderr)
-            return uninstall(adapter)
-        return Transaction(adapter, lambda: validate_install(args, Path(__file__).resolve().parents[1])).run()
+            return uninstall(adapter, shield=shield)
+        return Transaction(adapter, lambda: validate_install(args, Path(__file__).resolve().parents[1]),
+                           shield=shield).run()
     except (Refused, OSError) as exc:
         print(str(exc), file=sys.stderr)
         return exc.code if isinstance(exc, Refused) else 1
+    finally:
+        shield.quiesce()
 
 
 if __name__ == "__main__":
