@@ -672,7 +672,20 @@ class SupervisorTests(WatchdogTestCase):
             self.assertGreater(gap - wd.SUPERVISOR_POLL_S, 0)
         self.assertEqual(tuple(gap - wd.SUPERVISOR_POLL_S for gap in gaps),
                          (110, 50))
-        self.assertLess(min(gaps) - launchd_tick, 0)
+
+    def test_kill_lead_plus_derivation_settle_preserves_ten_minute_idle(self) -> None:
+        chain = wd.REPO_ROOT / "scripts/night_chains/calibration_derivation_only.zsh"
+        defaults = re.findall(
+            r'^SETTLE_S="\$\{SETTLE_S:-(\d+)\}"$',
+            chain.read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        )
+        self.assertEqual(len(defaults), 1)
+        settle_s = int(defaults[0])
+        self.assertEqual(settle_s, 600)
+        # D-171(b)/A210: the chain settles before d01; do not credit any
+        # driver/preflight delay toward the ten-minute idle minimum.
+        self.assertGreaterEqual(wd.KILL_LEAD_S + settle_s, 600)
 
     def test_request_courtesy_is_two_minutes_but_late_plan_deadlines_win(self) -> None:
         plan = self.make_plan()

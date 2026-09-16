@@ -1321,11 +1321,30 @@ allow one minute before KILL at t0−2. The two-minute cooperative window is a
 courtesy, not a guarantee; absolute TERM/KILL boundaries win even after a late
 request. The arming activation still exits before the request boundary.
 
+D-171(b) ratified the old 25-minute lead for a physical reason: idle-triggered
+daemons (XProtect and kin) should run during **at least ten minutes of
+untouched idle before the first capture**. With this derivation chain, KILL
+at t0−2 plus `SETTLE_S = 600 s` before d01
+(`scripts/night_chains/calibration_derivation_only.zsh:76`; §1.2's programmed
+span and `t0 + Δ + 600` schedule) gives quiet-to-first-capture
+**≥ 120 + 10 + 600 s ≈ 12.2 min ≥ 10 min**, using ten seconds of driver/start
+delay in that timing budget. Even without crediting that delay,
+`KILL_LEAD_S + SETTLE_S >= 600`. This meets the idle duration rule under the
+new chain, but reduces the margin against a late-starting scan from roughly
+25 to 12 minutes; load is not rechecked per capture (thermal only).
+This reinterpretation is **PENDING Ed's ratification** in the dated
+2026-09-16 D-171(b) addendum (A210); the conservative alternative is 8/8/6/5.
+
 The census needs the magistrate, supervisor and every Codex child gone.
-One-minute load-average decay needs about **two to three minutes after
-teardown**: TERM aims to leave three minutes; KILL leaves at most two, reduced
-by polling, descendant signalling, census and supervisor-exit latency. This is
-an opportunity to settle, not a promise of passing t0. The resident polls every
+With five-second samples and `e^(−5/60)` decay, one-minute load-average excess
+falls to 13.5% after 120 s. Allowing ten seconds of poll slack and about five
+seconds for signalling/exit leaves 105 s, or 17.4% of excess: a KILL-only
+teardown at t0−2 clears the **2.0** gate only for excess load **≲ 6–8** at a
+base of 0.5–1.0 (about 8.6 at base 0.5; 5.7 at base 1.0).
+**TERM at t0−3 is the working teardown**: 165 effective seconds leaves
+6.4% of excess. KILL is the floor, not a promise of passing t0; polling,
+descendant signalling, census and supervisor-exit latency consume the budget.
+The resident polls every
 ten seconds: the 120/60-second phase gaps contain 12/6 polls and leave nominal
 observation slack of 110/50 seconds. The launchd template's 300-second
 `StartInterval` starts or recovers the resident and **cannot guarantee these

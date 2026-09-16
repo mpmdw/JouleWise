@@ -159,6 +159,11 @@ fail-closed backstop. See the
 [runbook derivation](../phase_2/derivation_night_runbook.md#13-install-span-install-close-and-the-exit-boundary)
 for the history, physical budget and latency limits.
 
+An **INTERACTIVE arm (unowned session) is never TERM/KILLed by the watchdog**,
+so the operator now has **5 minutes, not 25, to close every agent before t0**.
+The [watchdog adoption rehearsal example](MAGISTRATE_WATCHDOG.md#bench-rehearsal-no-real-night)
+uses **t0 = now + 10 minutes (not +8)**.
+
 For the plan coordinates above and a proposed install day of 2026-09-15,
 fill the notice-send row from the actual send acceptance. Times below are
 local PDT, UTC−07:00; **epoch seconds** count from 1970-01-01 00:00 UTC.

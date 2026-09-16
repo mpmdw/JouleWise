@@ -114,9 +114,14 @@ TERM at t0−3. KILL at t0−2 follows one minute later. The relaunch prompt ask
 for exit within two minutes of the request, as a courtesy rather than a
 guarantee; the absolute TERM/KILL deadlines still apply to late requests.
 The t0 census needs the magistrate, its supervisor and every Codex child gone.
-Load decay takes about two to three minutes after teardown: TERM aims to leave
-three minutes, while KILL leaves at most two, less poll/signalling/census/exit
-latency. The resident polls every ten seconds, so the 120/60-second gaps each
+With five-second samples and `e^(−5/60)` decay, 120 s leaves 13.5% of excess
+load; 105 effective seconds (ten seconds of poll slack plus about five seconds
+for signalling/exit) leaves 17.4%. A KILL-only teardown at t0−2 clears the
+2.0 gate only for excess load **≲ 6–8**, for base load 0.5–1.0 (about 8.6 at
+base 0.5; 5.7 at base 1.0). **TERM at t0−3 is the working teardown**:
+165 effective seconds leaves 6.4% of excess. KILL is the two-minute floor,
+less poll/signalling/census/exit latency.
+The resident polls every ten seconds, so the 120/60-second gaps each
 contain at least six polls (12/6), with nominal observation slack of 110/50
 seconds. launchd's unchanged 300-second recovery interval cannot guarantee
 these phases after supervisor failure. Scheduling or blocked I/O can also
@@ -124,6 +129,19 @@ delay enforcement. The unchanged t0 gates refuse a surviving tree or excess
 load: this is the fail-closed backstop, not a guaranteed settling interval.
 The two-minute installation pad precedes REQUEST, giving a seven-minute
 exclusive arm-to-t0 floor; it is not post-teardown settling time.
+
+D-171(b) ratified the old 25-minute lead so idle-triggered daemons (XProtect
+and kin) run during **at least ten minutes of untouched idle before the first
+capture**. The derivation chain's `SETTLE_S = 600 s` before d01
+(`scripts/night_chains/calibration_derivation_only.zsh:76`; derivation-night
+runbook §1.2's programmed span and `t0 + Δ + 600` schedule) combines with
+KILL at t0−2: quiet-to-first-capture **≥ 120 + 10 + 600 s ≈ 12.2 min ≥ 10 min**,
+using ten seconds of driver/start delay in that timing budget. Even without
+that delay, `KILL_LEAD_S + SETTLE_S >= 600`. The new chain therefore meets the
+idle duration rule, but the margin against a late-starting scan drops from
+roughly 25 to 12 minutes. Load is not rechecked per capture (thermal only).
+This reinterpretation is **PENDING Ed's ratification** in the dated
+2026-09-16 D-171(b) addendum (A210); the conservative alternative is 8/8/6/5.
 
 The process-tree walk is deliberately independent of process groups because an agent host can escape its parent's PGID. Only descendants of the validated lock PID are signaled. An unrelated census hit is evidence for a hold, never authority to signal.
 
@@ -488,7 +506,7 @@ python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
 
 Expected lock: `first_install_adoption=true`; its PID/start token names the Terminal-hosted interactive root, and the first `supervisor_adopted` event names the same activation without a second launch. Arm only a reviewed `REHEARSAL_STUB` so its first stand-down exercises that tree. The cooperative request should make the interactive session stop its children and exit; if ignored, the resident must TERM every validated descendant at `t0 - 3 minutes` and KILL survivors at `t0 - 2 minutes`. After the stand-down, rerun the observer commands above. Expected after: `CensusObservation(empty=True, ...)`, no Terminal-hosted twin, no `claude daemon`, no spares, `magistrate.lock` absent, and a final `FENCED` transition. Any survivor is `HOLD_CENSUS` and fails the rehearsal. Do not arm a real window until this before/after record passes review.
 
-After the lock and adoption event pass inspection, the exact rehearsal arm below sets `t0 = now + 8 minutes`: the request is due about three minutes later, TERM about five minutes later, and KILL about six minutes later. This leaves about one minute before the exclusive seven-minute install cutoff. Run it only with the observer recording and after the lead authorizes this destructive twin stand-down:
+After the lock and adoption event pass inspection, the exact rehearsal arm below sets `t0 = now + 10 minutes`: the request is due about five minutes later, TERM about seven minutes later, and KILL about eight minutes later. This leaves about three minutes before the exclusive seven-minute install cutoff. Run it only with the observer recording and after the lead authorizes this destructive twin stand-down:
 
 ```sh
 ADOPTION_PLAN_ROOT="$HOME/night-custody/watchdog-adoption-rehearsal" python3 - <<'PY'
@@ -506,7 +524,7 @@ now = time.time()
 plan = NightPlan(
     plan_id="first-tree-adoption-rehearsal",
     receipt_class="REHEARSAL_STUB",
-    t0_epoch_s=now + 8 * 60,
+    t0_epoch_s=now + 10 * 60,
     window_max_s=60,
     authored_epoch_s=now,
     repo_head="0" * 40,
