@@ -20,7 +20,7 @@ from scripts import run_night
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
-from tests.test_night_agent_install import FakeLaunchctl, LABELS
+from tests.test_night_agent_install import FakeLaunchctl, LABELS, run_fixture_process
 from tests.test_magistrate_watchdog import Harness
 from scripts import magistrate_watchdog as wd
 
@@ -143,13 +143,7 @@ class InstallNightAgentTests(unittest.TestCase):
         elif python is not None:
             argv.extend(["--python", python])
         self.fake.expect_plists(self.root / "home/Library/LaunchAgents", uninstall=uninstall)
-        return subprocess.run(
-            argv,
-            env=self.environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        return run_fixture_process(argv, env=self.environment, text=True)
 
     def _controlled_python(self, now: float, *, spans: tuple | None = None) -> Path:
         """A subprocess clock seam; no production environment override exists."""

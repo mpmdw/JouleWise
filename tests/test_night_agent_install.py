@@ -12,6 +12,8 @@ D10 must-die amendment (lt-31 F1): delete the retained-prior refusal.
 import contextlib
 import json
 import os
+import signal
+import time
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +22,42 @@ import unittest
 
 
 LABELS = ("com.joulewise.night", "com.joulewise.night.deadman")
+# A normal interpreter startup must not become an injected UNKNOWN under load.
+# Keep intentional hangs well beyond this deadline, including in product cells.
+FAKE_TIMEOUT = 5
+FAKE_HANG_SECONDS = 30
+
+
+@contextlib.contextmanager
+def fixture_process(command, **kwargs):
+    """Own the fixture's entire process group, including interrupted adapters."""
+    with subprocess.Popen(command, start_new_session=True, **kwargs) as child:
+        try:
+            yield child
+        finally:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            child.wait(timeout=10)
+            # Grandchildren are reaped by their parent or the OS after its exit.
+            # Do not let a late fake write race the next cell or root cleanup.
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    os.killpg(child.pid, 0)
+                except ProcessLookupError:
+                    break
+                if time.monotonic() >= deadline:
+                    raise AssertionError("fixture process group survived cleanup")
+                time.sleep(0.01)
+
+
+def run_fixture_process(command, *, timeout=60, **kwargs):
+    with fixture_process(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         **kwargs) as child:
+        stdout, stderr = child.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
 
 
 FAKE_LAUNCHCTL_SOURCE = r'''
@@ -64,6 +102,9 @@ counter.write_text(str(index + 1))
 if isinstance(directive, list):
     directive = directive[min(index, len(directive) - 1)] if directive else {}
 
+if directive.get("delay_s"):
+    time.sleep(directive["delay_s"])
+
 if action == "print":
     fault = directive.get("fault")
     # Record the fake's query outcome independently of the engine's classifier.
@@ -74,6 +115,13 @@ if action == "print":
     with (root / "queries.jsonl").open("a") as stream:
         stream.write(json.dumps({"label": label, "kind": kind}) + "\n")
     if fault == "hang":
+        # One process: no shell/sleep grandchild can outlive the adapter kill.
+        ready = root / "hang-ready.tmp"
+        ready.write_text(str(os.getpid()))
+        ready.replace(root / "hang-ready")
+        if "late_clock_file" in directive:
+            time.sleep(1)
+            Path(directive["late_clock_file"]).write_text(str(directive["late_clock"]))
         time.sleep(directive.get("hang_s", 30))
     elif fault in (9, 64, 112):
         print("injected query error " + str(fault), file=sys.stderr)
@@ -171,9 +219,8 @@ class FakeLaunchctl:
         domain = "gui/" + str(os.getuid() if uid is None else uid)
         args = ([domain, str(self.root / (label + ".plist"))]
                 if action == "bootstrap" else [domain + "/" + label])
-        return subprocess.run([str(self.executable), action] + args,
-                              capture_output=True, text=True, timeout=timeout,
-                              check=False)
+        return run_fixture_process([str(self.executable), action] + args,
+                                   text=True, timeout=timeout)
 
 
 class FakeLaunchctlTests(unittest.TestCase):
@@ -234,10 +281,10 @@ class FakeLaunchctlTests(unittest.TestCase):
             for loaded in (False, True):
                 with self.subTest(label=label, loaded=loaded):
                     self.fake.set_loaded(label, loaded)
-                    self.fake.directive(label, "print", fault="hang", hang_s=30)
+                    self.fake.directive(label, "print", fault="hang", hang_s=FAKE_HANG_SECONDS)
                     before = len(self.fake.calls())
                     with self.assertRaises(subprocess.TimeoutExpired):
-                        self.fake.invoke("print", label, timeout=1)
+                        self.fake.invoke("print", label, timeout=FAKE_TIMEOUT)
                     self.assertEqual(loaded, self.fake.loaded(label))
                     self.assertEqual(before + 1, len(self.fake.calls()))
 
@@ -444,9 +491,9 @@ class TransactionFixture:
         kwargs = dict(cwd=Path(__file__).resolve().parents[1], text=True,
                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", TMPDIR="/tmp"))
         if options.get("fault") != "BrokenPipeError_at_shutdown":
-            return subprocess.run(command, capture_output=True, timeout=15, **kwargs)
+            return run_fixture_process(command, **kwargs)
         import time
-        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs) as child:
+        with fixture_process(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs) as child:
             try:
                 deadline = time.monotonic() + 10
                 while not (self.root / "stdout-ready").exists():
@@ -484,7 +531,7 @@ def run_transaction_cell(root):
     target = engine.Target.for_mode(root / "real-LaunchAgents" if render else directory,
                                     directory if render else None, labels=labels)
     adapter = engine.NullAdapter(target) if render else engine.LaunchctlAdapter(
-        target, str(root / "fake/launchctl-fake"), timeout=0.75)
+        target, str(root / "fake/launchctl-fake"), timeout=FAKE_TIMEOUT)
     from tests.test_install_night_agent import REPO_ROOT
     cutoff = now + (60 if options.get("fault") == "past_install" else 120)
     selected = now + (120 if options.get("fault") == "past_install" else 60)
@@ -576,11 +623,11 @@ def run_transaction_cell(root):
                 raise engine.Refused(3, "rollback for restore fault")
         elif fault in ("FAILED", "UNKNOWN"):
             if state == "VALIDATED":
-                fake.directive(labels[0], "print", fault=9 if fault == "FAILED" else "hang", hang_s=3)
+                fake.directive(labels[0], "print", fault=9 if fault == "FAILED" else "hang", hang_s=FAKE_HANG_SECONDS)
             elif state in ("PUBLISHED", "NIGHT_LOADED", "DEADMAN_LOADED"):
                 label = labels[1] if state == "DEADMAN_LOADED" else labels[0]
                 fake.directive(label, "bootstrap", rc=5 if fault == "FAILED" else 0,
-                               loaded=True, hang_s=3 if fault == "UNKNOWN" else 0)
+                               loaded=True, hang_s=FAKE_HANG_SECONDS if fault == "UNKNOWN" else 0)
             elif state == "COMMITTED":
                 pass  # Output fault was armed before the state transition.
             else:
@@ -631,7 +678,17 @@ class TransactionTests(unittest.TestCase):
     def fixture(self, priors=False):
         temporary = tempfile.TemporaryDirectory(prefix="iw-txn-matrix-", dir="/tmp")
         self.addCleanup(temporary.cleanup)
-        return TransactionFixture(temporary.name, priors)
+        fixture = TransactionFixture(temporary.name, priors)
+        self.assertEqual(fixture.now, float(fixture.clock_file.read_text()))
+        return fixture
+
+    @contextlib.contextmanager
+    def cell(self, priors=False):
+        # SubTest does not run TestCase cleanups until the entire product ends.
+        with tempfile.TemporaryDirectory(prefix="iw-txn-cell-", dir="/tmp") as root:
+            fixture = TransactionFixture(root, priors)
+            self.assertEqual(fixture.now, float(fixture.clock_file.read_text()))
+            yield fixture
 
     def assert_tuple(self, fixture, result, rc, loaded, files, *, fence_directory=None,
                      sidecars=None):
@@ -868,6 +925,53 @@ class TransactionTests(unittest.TestCase):
                 self.assertEqual([], fixture.fake.calls())
                 self.assertEqual(before, snapshot())
 
+    def test_slow_admission_query_reaches_commit_refusal(self):
+        # The former 0.75s deadline refused at VALIDATED under scheduling load.
+        with self.cell() as fixture:
+            fixture.fake.sequence(LABELS[0], "print", [{"delay_s": 1}, {}, {}])
+            result = fixture.run(cross_two=True)
+            trace = json.loads((fixture.root / "trace.json").read_text())
+            self.assertIn("ADMITTED", trace["states"], result.stderr)
+            self.assertEqual("VERIFIED", trace["states"][-1], result.stderr)
+            self.assertEqual(1, len(trace["commits"]))
+            self.assertIn("install_span_closed", result.stderr)
+            self.assert_tuple(fixture, result, 2, (), "prior")
+
+    def test_hung_grandchild_cannot_write_clock_into_next_cell(self):
+        with self.cell() as first:
+            first.fake.directive(LABELS[0], "print", fault="hang",
+                                 late_clock_file=str(first.clock_file),
+                                 late_clock=first.now + 9999)
+            command = [str(first.fake.executable), "print",
+                       "gui/{}/{}".format(os.getuid(), LABELS[0])]
+            # Model an interrupted transaction with a still-running fake child.
+            wrapper = [sys.executable, "-B", "-c",
+                       "import subprocess,sys,time; subprocess.Popen(sys.argv[1:]); time.sleep(30)"]
+            with fixture_process(wrapper + command, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE) as parent:
+                deadline = time.monotonic() + 10
+                while not (first.fake.root / "hang-ready").exists():
+                    self.assertIsNone(parent.poll(), "fake wrapper exited before handshake")
+                    self.assertLess(time.monotonic(), deadline, "fake never started hanging")
+                    time.sleep(0.01)
+                ready = time.monotonic()
+                fake_pid = int((first.fake.root / "hang-ready").read_text())
+            self.assertIsNotNone(parent.returncode)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(fake_pid, 0)
+            stopped_clock = first.clock_file.read_text()
+            with self.cell() as second:
+                self.assertNotEqual(first.root, second.root)
+                self.assertNotEqual(first.clock_file, second.clock_file)
+                # Cross the fake's delayed-write deadline before admission.
+                time.sleep(max(0, ready + 1.1 - time.monotonic()))
+                self.assertEqual(stopped_clock, first.clock_file.read_text())
+                self.assertEqual(second.now, float(second.clock_file.read_text()))
+                result = second.run()
+                trace = json.loads((second.root / "trace.json").read_text())
+                self.assertIn("ADMITTED", trace["states"], result.stderr)
+                self.assert_tuple(second, result, 0, LABELS, "published")
+
     def test_retention_product(self):
         self.retention_product(marker_loaded=True,
                                faults=(None, 9, 64, 112, "113-with-wrong-label", "hang"))
@@ -886,8 +990,7 @@ class TransactionTests(unittest.TestCase):
                     for fault in faults:
                         for priors in (False, True):
                             with self.subTest(entry=entry, uninstall=uninstall_mode, labels=retained_labels,
-                                              fault=fault, priors=priors, marker_loaded=marker_loaded):
-                                fixture = self.fixture(priors)
+                                              fault=fault, priors=priors, marker_loaded=marker_loaded), self.cell(priors) as fixture:
                                 if uninstall_mode:
                                     # Begin from a complete successful publication.
                                     self.assert_tuple(fixture, fixture.run(), 0, LABELS, "published")
@@ -897,7 +1000,7 @@ class TransactionTests(unittest.TestCase):
                                         successful_queries = (0 if uninstall_mode else
                                                               2 if entry == "commit_refusal" else 1)
                                         fixture.fake.sequence(label, "print", [{}] * successful_queries +
-                                                              [{"fault": fault, "hang_s": 3}])
+                                                              [{"fault": fault, "hang_s": FAKE_HANG_SECONDS}])
                                 if not uninstall_mode and entry == "bootstrap_failure":
                                     fixture.fake.directive(LABELS[1], "bootstrap", rc=1, loaded=True)
                                 before = {item: (fixture.directory / (item + ".plist")).read_bytes()
@@ -905,7 +1008,7 @@ class TransactionTests(unittest.TestCase):
                                 result = fixture.run(uninstall=uninstall_mode, cross_two=entry == "commit_refusal")
                                 if entry == "commit_refusal":
                                     trace = json.loads((fixture.root / "trace.json").read_text())
-                                    self.assertEqual("VERIFIED", trace["states"][-1])
+                                    self.assertEqual("VERIFIED", trace["states"][-1], result.stderr)
                                     self.assertEqual(1, len(trace["commits"]))
                                     gate = trace["commits"][0]
                                     self.assertFalse(gate["passed"])
@@ -955,7 +1058,7 @@ class TransactionTests(unittest.TestCase):
                     fixture = self.fixture(True)
                     fixture.fake.set_loaded(label, True)
                     if fault:
-                        fixture.fake.directive(label, "print", fault=fault, hang_s=3)
+                        fixture.fake.directive(label, "print", fault=fault, hang_s=FAKE_HANG_SECONDS)
                     result = fixture.run()
                     self.assert_tuple(fixture, result, 3, (label,), "prior")
                     self.assertIn("night_agent_already_loaded", result.stderr)
@@ -1084,7 +1187,7 @@ class CapabilityTests(unittest.TestCase):
         self.fake = FakeLaunchctl(self.root / "fake")
         self.target = engine.Target.for_mode(self.root / "LaunchAgents")
         self.target.directory.mkdir()
-        self.adapter = engine.LaunchctlAdapter(self.target, str(self.fake.executable), timeout=0.75)
+        self.adapter = engine.LaunchctlAdapter(self.target, str(self.fake.executable), timeout=FAKE_TIMEOUT)
 
     @contextlib.contextmanager
     def _signal_context(self):
@@ -1405,7 +1508,7 @@ class CapabilityTests(unittest.TestCase):
                 for fault in (None, 9, 64, 112, "113-with-wrong-label", "0-with-junk-stderr", "hang"):
                     with self.subTest(label=label, loaded=loaded, fault=fault):
                         self.fake.set_loaded(label, loaded)
-                        self.fake.directive(label, "print", fault=fault, hang_s=3)
+                        self.fake.directive(label, "print", fault=fault, hang_s=FAKE_HANG_SECONDS)
                         value = self.adapter.print(label)
                         expected = (e.Kind.LOADED if fault == "0-with-junk-stderr" or (fault is None and loaded)
                                     else e.Kind.ABSENT if fault is None else e.Kind.UNKNOWN)
