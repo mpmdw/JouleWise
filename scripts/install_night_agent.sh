@@ -14,11 +14,11 @@ render_only=""
 launchctl_bin="launchctl"
 while (( $# )); do
   case "$1" in
-    --plan) plan="${2:-}"; shift 2 ;;
-    --python) python="${2:-}"; python_given=1; shift 2 ;;
+    --plan) [[ $# -ge 2 ]] || usage; plan="$2"; shift 2 ;;
+    --python) [[ $# -ge 2 ]] || usage; python="$2"; python_given=1; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
-    --render-only) render_only="${2:-}"; shift 2 ;;
-    --launchctl-bin) launchctl_bin="${2:-}"; shift 2 ;;
+    --render-only) [[ $# -ge 2 ]] || usage; render_only="$2"; shift 2 ;;
+    --launchctl-bin) [[ $# -ge 2 ]] || usage; launchctl_bin="$2"; shift 2 ;;
     *) usage ;;
   esac
 done

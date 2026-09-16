@@ -545,6 +545,10 @@ def run_transaction_cell(root):
         if value.name != state:
             return
         if fault in ("INT", "TERM", "HUP"):
+            # Background runners can pass SIG_IGN through exec, before the
+            # transaction installs its own handlers at STAGED.
+            if signal.getsignal(signal.SIGINT) is signal.SIG_IGN:
+                signal.signal(signal.SIGINT, signal.default_int_handler)
             os.kill(os.getpid(), getattr(signal, "SIG" + fault))
         elif fault in ("exactly_close", "past_selected", "past_install"):
             (root / "clock").write_text(str(min(cutoff, selected) + (fault != "exactly_close")))
@@ -812,6 +816,49 @@ class TransactionTests(unittest.TestCase):
                             self.assertFalse(any(call.startswith("bootout ") for call in calls))
         self.assertEqual(len(STATE_PRODUCT) * len(FAULT_PRODUCT), len(executed) + len(UNREACHABLE_CELLS))
 
+    def test_int_cells_with_inherited_sigign(self):
+        import signal
+        previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        try:
+            for state in STATE_PRODUCT[:STATE_PRODUCT.index("COMMITTED")]:
+                for priors in (False, True):
+                    with self.subTest(state=state, priors=priors):
+                        fixture = self.fixture(priors)
+                        result = fixture.run(state=state, fault="INT")
+                        self.assert_tuple(fixture, result, 130, (), "prior")
+                        self.assertIs(signal.SIG_IGN, signal.getsignal(signal.SIGINT))
+        finally:
+            signal.signal(signal.SIGINT, previous)
+
+    def test_shell_dangling_option_values_refuse_without_effects(self):
+        from tests.test_install_night_agent import SCRIPT_PATH
+        for flag in ("--plan", "--python", "--render-only", "--launchctl-bin"):
+            with self.subTest(flag=flag):
+                fixture = self.fixture(True)
+                home = fixture.root / "home"
+                home.mkdir()
+
+                def snapshot():
+                    return {str(path.relative_to(fixture.root)):
+                            (path.stat().st_mode, path.stat().st_mtime_ns,
+                             path.read_bytes() if path.is_file() else None)
+                            for path in fixture.root.rglob("*")}
+
+                before = snapshot()
+                result = subprocess.run(
+                    ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(fixture.plan_path),
+                     "--python", sys.executable, "--render-only", str(fixture.directory),
+                     "--launchctl-bin", str(fixture.fake.executable), flag],
+                    env=dict(os.environ, HOME=str(home), PYTHONDONTWRITEBYTECODE="1", TMPDIR="/tmp"),
+                    capture_output=True, text=True, timeout=15)
+                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertRegex(
+                    result.stderr, r"\Ausage: [^\n]+ --plan PLAN\.json \[--python ABS_PATH\] "
+                    r"\[--uninstall\] \[--render-only DIR\] \[--launchctl-bin PATH\]\n\Z")
+                self.assertEqual([], fixture.fake.calls())
+                self.assertEqual(before, snapshot())
+
     def test_retention_product(self):
         self.retention_product(marker_loaded=True,
                                faults=(None, 9, 64, 112, "113-with-wrong-label", "hang"))
@@ -823,42 +870,55 @@ class TransactionTests(unittest.TestCase):
                                faults=(9, 64, 112, "113-with-wrong-label", "hang"))
 
     def retention_product(self, *, marker_loaded, faults):
-        for uninstall_mode in (False, True):
-            for retained_labels in (LABELS[:1], LABELS[1:], LABELS):
-                for fault in faults:
-                    for priors in (False, True):
-                        with self.subTest(uninstall=uninstall_mode, labels=retained_labels,
-                                          fault=fault, priors=priors, marker_loaded=marker_loaded):
-                            fixture = self.fixture(priors)
-                            if uninstall_mode:
-                                # Begin from a complete successful publication.
-                                self.assert_tuple(fixture, fixture.run(), 0, LABELS, "published")
-                            for label in retained_labels:
-                                fixture.fake.directive(label, "bootout", rc=0, loaded=marker_loaded)
-                                if fault is not None:
-                                    fixture.fake.sequence(label, "print", ([{"fault": fault, "hang_s": 3}] if uninstall_mode
-                                        else [{}, {"fault": fault, "hang_s": 3}]))
-                            if not uninstall_mode:
-                                fixture.fake.directive(LABELS[1], "bootstrap", rc=1, loaded=True)
-                            before = {item: (fixture.directory / (item + ".plist")).read_bytes()
-                                      for item in LABELS} if uninstall_mode else None
-                            result = fixture.run(uninstall=uninstall_mode)
-                            self.assertEqual(
-                                [{"label": label, "kind": ("UNKNOWN" if fault is not None else "LOADED")
-                                  if label in retained_labels else "ABSENT"} for label in LABELS],
-                                fixture.fake.queries()[-2:])
-                            self.assert_tuple(fixture, result, 4,
-                                              retained_labels if marker_loaded else (), "published")
-                            if fault is not None:
+        for entry in ("bootstrap_failure", "commit_refusal"):
+            # Uninstall has no commit gate; keep its existing product once.
+            for uninstall_mode in ((False, True) if entry == "bootstrap_failure" else (False,)):
+                for retained_labels in (LABELS[:1], LABELS[1:], LABELS):
+                    for fault in faults:
+                        for priors in (False, True):
+                            with self.subTest(entry=entry, uninstall=uninstall_mode, labels=retained_labels,
+                                              fault=fault, priors=priors, marker_loaded=marker_loaded):
+                                fixture = self.fixture(priors)
+                                if uninstall_mode:
+                                    # Begin from a complete successful publication.
+                                    self.assert_tuple(fixture, fixture.run(), 0, LABELS, "published")
                                 for label in retained_labels:
-                                    self.assertIn("liveness_unknown: " + label, result.stderr)
-                            if before:
-                                for item in LABELS:
-                                    self.assertEqual(before[item], (fixture.directory / (item + ".plist")).read_bytes())
-                            if priors and not uninstall_mode:
-                                for item in LABELS:
-                                    prior = fixture.directory / (item + ".plist.prior")
-                                    self.assertEqual(fixture.prior[item], (prior.read_bytes(), prior.stat().st_mtime_ns))
+                                    fixture.fake.directive(label, "bootout", rc=0, loaded=marker_loaded)
+                                    if fault is not None:
+                                        successful_queries = (0 if uninstall_mode else
+                                                              2 if entry == "commit_refusal" else 1)
+                                        fixture.fake.sequence(label, "print", [{}] * successful_queries +
+                                                              [{"fault": fault, "hang_s": 3}])
+                                if not uninstall_mode and entry == "bootstrap_failure":
+                                    fixture.fake.directive(LABELS[1], "bootstrap", rc=1, loaded=True)
+                                before = {item: (fixture.directory / (item + ".plist")).read_bytes()
+                                          for item in LABELS} if uninstall_mode else None
+                                result = fixture.run(uninstall=uninstall_mode, cross_two=entry == "commit_refusal")
+                                if entry == "commit_refusal":
+                                    trace = json.loads((fixture.root / "trace.json").read_text())
+                                    self.assertEqual("VERIFIED", trace["states"][-1])
+                                    self.assertEqual(1, len(trace["commits"]))
+                                    gate = trace["commits"][0]
+                                    self.assertFalse(gate["passed"])
+                                    self.assertGreaterEqual(gate["now"], gate["selected"])
+                                    self.assertIn("install_span_closed", result.stderr)
+                                self.assertEqual(
+                                    [{"label": label, "kind": ("UNKNOWN" if fault is not None else "LOADED")
+                                      if label in retained_labels else "ABSENT"} for label in LABELS],
+                                    fixture.fake.queries()[-2:])
+                                self.assert_tuple(fixture, result, 4,
+                                                  retained_labels if marker_loaded else (), "published")
+                                unknown_labels = [line.split()[1] for line in result.stderr.splitlines()
+                                                  if line.startswith("liveness_unknown: ")]
+                                self.assertCountEqual(retained_labels if fault is not None else (),
+                                                      unknown_labels)
+                                if before:
+                                    for item in LABELS:
+                                        self.assertEqual(before[item], (fixture.directory / (item + ".plist")).read_bytes())
+                                if priors and not uninstall_mode:
+                                    for item in LABELS:
+                                        prior = fixture.directory / (item + ".plist.prior")
+                                        self.assertEqual(fixture.prior[item], (prior.read_bytes(), prior.stat().st_mtime_ns))
 
     def test_occupancy_product(self):
         for label in LABELS:
