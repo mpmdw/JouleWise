@@ -11,10 +11,93 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  quick:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
+        run: |
+          if [ ! -x /bin/zsh ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q zsh
+          fi
+          test -x /bin/zsh
+      - name: Quick test tier
+        run: python3 scripts/quick_suite.py --tier quick --workers 4
+
+  # Select interpreters and skip expensive jobs only for proven docs-only ranges.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      pythons: ${{ steps.interpreters.outputs.pythons || '["3.11","3.13"]' }}
+      code: ${{ steps.paths.outputs.code || 'true' }}
+    steps:
+      - name: Select Python interpreters
+        id: interpreters
+        shell: bash
+        run: |
+          # Fail open to all interpreters unless this is exactly a PR event.
+          pythons='["3.11","3.13"]'
+          case "${GITHUB_EVENT_NAME:-}" in
+            pull_request) pythons='["3.13"]' ;;
+          esac
+          printf 'pythons=%s\n' "$pythons" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        id: source
+        continue-on-error: true
+        with:
+          fetch-depth: 0
+      - name: Detect code changes
+        id: paths
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.source.outcome }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Only a successful, non-empty docs-only diff may suppress tests.
+          # Check every fallible detector command explicitly: errors run CI.
+          docs_only() {
+            local before after paths path
+            [[ "${CHECKOUT_OUTCOME:-}" == success ]] || return 1
+            case "${GITHUB_EVENT_NAME:-}" in
+              push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
+              pull_request) before=${PR_BASE_SHA:-}; after=${PR_HEAD_SHA:-} ;;
+              *) return 1 ;;
+            esac
+            [[ "$before" =~ ^[0-9a-f]{40}$ && "$before" != 0000000000000000000000000000000000000000 ]] || return 1
+            [[ "$after" =~ ^[0-9a-f]{40}$ && "$after" != 0000000000000000000000000000000000000000 ]] || return 1
+            git cat-file -e "$before^{commit}" || return 1
+            git cat-file -e "$after^{commit}" || return 1
+            paths=$(git diff --name-only --no-renames "$before..$after") || return 1
+            [[ -n "$paths" ]] || return 1
+            while IFS= read -r path; do
+              case "$path" in
+                docs/*) ;;
+                */*) return 1 ;;
+                *.md) ;;
+                *) return 1 ;;
+              esac
+            done <<< "$paths"
+          }
+          code=true
+          if docs_only; then
+            code=false
+          fi
+          printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
+
   # F2 state generation, F4 historical receipt semantics, and F5 CLI/strict
   # mock smokes ran identically inside every ordinary test-matrix shard; they
   # run once here instead, and F3 docs freshness is run explicitly here too.
-  # Every job below runs on every push to main and every pull request.
+  # Fences, build and installed-wheel also run for docs-only changes.
   fences:
     runs-on: ubuntu-latest
     steps:
@@ -46,12 +129,23 @@ jobs:
           python -m joulewise validate-bundle --strict "$bundle"
 
   test:
+    needs: [changes, quick]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    env:
+      # CI-TRIM-02: refreshed hosted weights balance six ordinary shards at
+      # ~14 min, below the ~19 min calibration-exit floor. Eight shards add
+      # queue pressure without lowering that floor (20 executing jobs were
+      # observed across concurrent main runs). Each selected interpreter
+      # runs the full suite across ordinary and exclusive jobs.
+      SHARD_COUNT: "6"
     strategy:
       matrix:
-        # 3.11 is the supported floor (pyproject); 3.14 matches local dev.
-        python-version: ["3.11", "3.14"]
-        shard: [1, 2, 3, 4]
+        # 3.11: supported floor; 3.13: production nights (the measurement venv).
+        # PRs use production 3.13 only; main pushes add the 3.11 floor. 3.14 is
+        # local dev and is exercised by every seat's local module runs, not CI.
+        python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -77,7 +171,7 @@ jobs:
         # are intentionally absent here (both carry exclusive_modules
         # declarations): their evidence makes fallback-weight shard
         # placement unsound; each runs once in its exclusive job below,
-        # while the remaining four shards retain deterministic LPT balance
+        # while the remaining six shards retain deterministic LPT balance
         # from the ordinary timing map.
         env:
           SHARD_INDEX: ${{ matrix.shard }}
@@ -104,11 +198,10 @@ jobs:
               timings[module] = seconds
           ordinary = tuple(module for module in discovered if module not in exclusive)
 
-          # UNIT-atomic, not module-atomic. A shard's floor used to be the
-          # single largest MODULE, and tests.test_reduce alone is 1544 s --
-          # larger than an even four-way share -- so NO shard count could
-          # get below it. Modules named in split_modules are spread across
-          # shards at test granularity instead. This edits no test file and
+          # UNIT-atomic, not module-atomic. The original test_reduce module
+          # dominated the four-way partition; retain its audited split and
+          # refresh the weights from hosted evidence. Modules in split_modules
+          # are spread across shards at test granularity. This edits no test file and
           # skips nothing: expand_units emits one unit per declared heavy
           # test plus ONE remainder unit holding every other test in that
           # module, and verify_split_declaration fails the build closed if
@@ -122,18 +215,21 @@ jobs:
           units, weights = shard_tests.expand_units(
               ordinary, timings, splits, unknown_weight=unknown
           )
+          count = int(os.environ["SHARD_COUNT"])
           partitions = shard_tests.partition_modules(
-              units, weights, 4, unknown_weight=unknown
+              units, weights, count, unknown_weight=unknown
           )
           totals = shard_tests.partition_totals(
               partitions, weights, unknown_weight=unknown
           )
           print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
           index = int(os.environ["SHARD_INDEX"])
-          raise SystemExit(shard_tests.run_units(partitions[index - 1], 4, index))
+          raise SystemExit(shard_tests.run_units(partitions[index - 1], count, index))
           PY
 
   calibration-exits-exclusive:
+    needs: [changes, quick]
+    if: needs.changes.outputs.code == 'true'
     # Exclusive by design: this module already runs sequentially internally;
     # colocating it with an ordinary shard only adds scheduler starvation.
     # The module watchdog ceiling is 10 minutes per child and this hosted job
@@ -142,7 +238,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        python-version: ["3.11", "3.14"]
+        python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -158,7 +254,7 @@ jobs:
           payload = json.loads(Path("scripts/test_timings.json").read_text())
           row = payload["exclusive_modules"]["tests.test_calibration_exits"]
           assert row["evidence_range_seconds"] == [648.0, 2036.0]
-          assert row["seconds"] == 2036.0
+          assert row["seconds"] == 1117.310
           assert payload["seconds_by_module"]["tests.test_calibration_exits"] == row["seconds"]
           assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
           PY
@@ -168,6 +264,8 @@ jobs:
         run: python -m unittest -v tests.test_calibration_exits
 
   calibration-writer-crash-matrix-exclusive:
+    needs: [changes, quick]
+    if: needs.changes.outputs.code == 'true'
     # Exclusive because fallback-weight shard placement is unsound for this
     # module: its hosted runtime is dominated by its own subprocess-heavy
     # cases — the same CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY
@@ -189,7 +287,7 @@ jobs:
     # 2. THE JOB IS NOW SPLIT IN TWO. Two of the 15 tests are 95.5% of the
     #    cost, so max-job time is floored at ~1385 s for EVERY split count
     #    >= 2 — K=3 and beyond buy literally zero wall clock and only burn
-    #    concurrent-job budget, which is capped at 20. K=2 it is: ~33 min
+    #    concurrent-job budget. K=2 it was: ~33 min
     #    becomes ~23 min. The split is runner-side only, edits no test file,
     #    and skips nothing (see split_modules in scripts/test_timings.json:
     #    one declared heavy test, plus a remainder unit computed at run time
@@ -197,16 +295,17 @@ jobs:
     #    audited AND the K=2 split was executed with both shards running
     #    concurrently on one machine — harsher than CI — with both passing.
     #
-    # The residual ~23 min is ONE indivisible test method. No sharding
-    # strategy goes below it; removing it is WO-CRASHMATRIX-RELIABILITY,
-    # which changes test semantics and is out of TEST-SPEED-01's fence.
+    # CI-TRIM-02 (2026-09-15) refreshes those historical weights: current
+    # heavy/remainder maxima are 679.554/331.860 s (20 tests total). The
+    # ~11.3 min heavy method is still indivisible by this runner; K>2 buys
+    # nothing. Preserve both units, exclusivity, and the existing ceiling.
     # See docs/process_traces/2026-08-23-speed/.
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.14"]
+        python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
         shard: [1, 2]
     steps:
       - uses: actions/checkout@v5
@@ -224,7 +323,7 @@ jobs:
           module = "tests.test_calibration_writer_crash_matrix"
           row = payload["exclusive_modules"][module]
           assert row["evidence_range_seconds"] == [145.911, 2005.0]
-          assert row["seconds"] == 1990.65
+          assert row["seconds"] == 1011.414
           assert payload["seconds_by_module"][module] == row["seconds"]
           assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
           # The split must account for the whole module: one declared heavy
