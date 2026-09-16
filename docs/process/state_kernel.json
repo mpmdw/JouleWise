@@ -6842,6 +6842,37 @@
       "status_note": "2026-09-15 activation 08ca8197: registered at the interactive session b0ae8462's request from its record 16 flag F3; registration only; not started; not night-critical. First deliverable is the classification of the 8 literal-path files into filesystem-touching versus string-asserting, then the structural guard. Related: WORKTREE-PRUNE-01 (worktree hygiene) and the seat-side quick/touched tiers the interactive session is building.",
       "stop_card": null
     },
+    "TEST-PGREP-DIALECT-MULTILINE-01": {
+      "acceptance": {
+        "evidence": [
+          "tests/test_arm_readiness_evidence_t0.py:2690 (test_g4_real_ruled_census_pgrep_dialect) and :2741-2746 (real /usr/bin/pgrep -lf, then int(line.split(' ', 1)[0]) over every stdout line) at main 4c843126",
+          "docs/process_traces/2026-09-15-activation-08ca8197/07-test-pgrep-dialect-lane-registration.md (registration record; the failure text as reported by the interactive session b0ae8462, whose record 23 in docs/process_traces/2026-09-15-interactive-b0ae8462/ carries the evidence once it lands)",
+          "docs/process_traces/2026-09-15-interactive-b0ae8462/04-a173-design-astra.md (A173's own-module cure shape for census parsing, which this nit follows: PID set from pgrep -f, or tolerate non-PID lines)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-PGREP-DIALECT-MULTILINE-01/acceptance",
+          "label": "TEST-PGREP-DIALECT-MULTILINE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The test takes its PID set from PID-only output (pgrep -f without -l) or tolerates lines whose first token is not an integer (continuation lines of a multi-line argv), so a live process with a multi-line command line containing the pattern can no longer error the test; a regression spawns a decoy child whose argv carries a newline and the pattern and proves the test still reports the decoy's PID and does not raise; the G4 semantics the test kills (M10, a construct pgrep rejects or never matches) are unchanged and its must-die mutant still dies. Not night-critical; test-only."
+      },
+      "authority": {
+        "label": "2026-09-16 interactive session b0ae8462 (P3 nit from its running seats; record 23 in its trace dir); registered by activation 08ca8197 at that session's request (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-15-activation-08ca8197/07-test-pgrep-dialect-lane-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Stop test_g4_real_ruled_census_pgrep_dialect (tests/test_arm_readiness_evidence_t0.py:2690) from erroring whenever a live process carries a multi-line argv that contains the pattern. The test runs the real pgrep -lf and parses every stdout line as <pid> <command>; pgrep -lf prints the full command line, so a process launched with a multi-line brief (tonight: Codex seats whose brief text mentions run_campaign) yields continuation lines that start with non-PID text and the parse raises invalid literal for int() with base 10: 'WRITE_SCOPE:'. Cure shape is A173's: take the PID set from pgrep -f (PID-only) or tolerate non-PID lines.",
+      "id": "TEST-PGREP-DIALECT-MULTILINE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 213,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request; registration only; not started; test-only nit, not night-critical. Related: TEST-CANONICAL-PATH-DEPENDENCY-01 (hermetic worktree runs) and ARM-CENSUS-IDLE-INTERACTIVE-01 (the census cure shape it follows).",
+      "stop_card": null
+    },
     "TEST-SPEED-01": {
       "acceptance": {
         "evidence": [
