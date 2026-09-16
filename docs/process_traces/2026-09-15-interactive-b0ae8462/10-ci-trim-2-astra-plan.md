@@ -1032,3 +1032,10 @@ pushes to main each triggered the full 21-job matrix and stalled the queue for
 hosted execution. Ed's 00:20 PDT ruling above authorizes the step-3 skip;
 expected result is approximately four short jobs per docs-only push instead
 of the prior 21/31-job configurations. Hosted confirmation remains lead-owned.
+
+## Measurement 2 (magistrate, rerun 35062628747 of 4685bab8 under GitHub Pro, 13 jobs: PRs on 3.13 only)
+
+The rerun sat 56 minutes behind a pile of docs-only bookkeeping runs on main (each a full 21-job matrix; cancelled at
+00:10 PDT, see record ci-queue lesson), then ALL 13 jobs started within 60 s of each other (Pro's 40-job cap) and the
+run's execution wall was the longest job: test (3.13, 2) at 14.2 min; calibration-exits 10.7; shards 9.4–14.2.
+Conclusion: with the queue clear, a PR's CI ≈ 15 min. Next: measurement 3 on this head (quick gate + docs-only skip).
