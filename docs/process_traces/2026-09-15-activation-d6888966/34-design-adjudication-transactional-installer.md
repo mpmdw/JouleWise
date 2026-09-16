@@ -142,3 +142,12 @@ workspace-write): `joulewise/night_agent_install.py`, `scripts/install_night_age
 T2 (Astra high, parallel): D9 docs. Then the gauntlet under the lieutenant: contract + execution refuters, fix rounds
 with delta re-audits (the stop condition of synthesis 28/13 §Q3 applies unchanged, with the class-1 predicate as
 D10 reads it), Opus counter-review, replay, ledger; magistrate rows 7/12; PR; merge; then A204 as its own PR.
+
+## Addendum 2026-09-15 20:45 PDT (magistrate b0ae8462, from lt-31 F2)
+
+D5's rationale above says the `.prior` sidecar "is resumable (33b's SIGKILL-mid-restore concern)". As implemented and
+as ruled in D7, it is not: `restore_prior` reads only the in-process `priors` map, `validate()` refuses while a sidecar
+exists, and `--uninstall` discards sidecars. After a SIGKILL the sidecar is operator-readable evidence (copy it by hand),
+never automatically restored. The shipped behaviour is right; only the word "resumable" in the D5 rationale overclaimed.
+The runbook §1.3/§1.4 and NIGHT_HANDBACK wording was corrected in fix round 5 (F2). D5's rejection of the TMPDIR journal
+stands on its other ground (one more directory whose absence is ambiguous).
