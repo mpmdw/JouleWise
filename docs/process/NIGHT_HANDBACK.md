@@ -149,14 +149,14 @@ All agents must still close before the plan span: the unchanged night gate recor
 
 ## Purpose of this night
 
-Plan `rehearsal-20260916`, class `REHEARSAL_STUB`, is planned for 2026-09-16
-at 03:00:00 PDT (`t0`, epoch 1789552800) with a 900-second window
-(`window_max_s`; the window ends at 03:15:00 PDT, epoch 1789553700). The
-courier deadline is `t0 + 900 + 300`, epoch 1789554000, 03:20:00 PDT; this is
+Plan `rehearsal-20260916c`, class `REHEARSAL_STUB`, is planned for 2026-09-16
+at 03:25:00 PDT (`t0`, epoch 1789554300) with a 900-second window
+(`window_max_s`; the window ends at 03:40:00 PDT, epoch 1789555200). The
+courier deadline is `t0 + 900 + 300`, epoch 1789555500, 03:45:00 PDT; this is
 also the **completion boundary**. The driver runs its built-in stub,
 `sleep 2; echo REHEARSAL`: no pack, no model, no measurement, no sudo. The
 **dead-man**, the second launchd job that recovers missing delivery after
-completion, is `60 × ceil((1789554000 + 3600) / 60) = 1789557600`, 04:20:00 PDT
+completion, is `60 × ceil((1789555500 + 3600) / 60) = 1789559100`, 04:45:00 PDT
 on 2026-09-16, repeating daily at that local minute until uninstalled. This
 notice describes the planned night; the arm record establishes whether
 installation happened.
@@ -181,7 +181,7 @@ of the machinery; a real night refuses on the same hit and starts no chain.
 
 `repo_head = measurement_head = H`, where H is **this commit**, the main
 commit that rewrites this handback for this night. The fresh clone at H is
-`/Users/edr/JouleWise-measurement-rehearsal-20260916b` (a `.venv` whose
+`/Users/edr/JouleWise-measurement-rehearsal-20260916c` (a `.venv` whose
 `bin/python` is Python 3.13 from `env/mac-measurement-lock.txt`, the
 interpreter both LaunchAgents name by absolute path; the canonical 76-record
 ledger restored byte-exact for the desk checks). Both night agents are
@@ -190,11 +190,11 @@ plan root after harvest and never reused for a real plan.
 
 The consolidated notice with these pins is sent after commit H and before the
 plan is moved into its discoverable place; Ed's NO on the notice thread stands
-the night down. The arming activation (headless magistrate `08ca8197`) exits
+the night down. The arming activation (headless magistrate `83d93f5a`) exits
 after recording the arm. The plan span opens, and the watchdog's stand-down
-request lands, at `t0 − 8 min` = 02:52:00 PDT (epoch 1789552320); TERM is
-`t0 − 6 min` (1789552440, 02:54:00) and KILL is `t0 − 5 min` (1789552500,
-02:55:00). Install close is `t0 − 10 min` = 02:50:00 PDT (1789552200). The
+request lands, at `t0 − 8 min` = 03:17:00 PDT (epoch 1789553820); TERM is
+`t0 − 6 min` (1789553940, 03:19:00) and KILL is `t0 − 5 min` (1789554000,
+03:20:00). Install close is `t0 − 10 min` = 03:15:00 PDT (1789553700). The
 install-span list is the shipped whole-day span (00:00–24:00 local).
 
 The predecessor plan `d079-epoch-25g83-derivation-n1-20260915` was refused at
@@ -203,6 +203,21 @@ retired to `~/night-archive` on 2026-09-15 at 23:25 PDT (activation
 `08ca8197`, record 04). The `20260916` successor prepared by record 50 was
 never authored as a plan; the equivalence science night is re-planned after
 this stub under §Next lane.
+
+The first candidate for this rehearsal, plan `rehearsal-20260916` at H
+`cf249594` (t0 03:00:00 PDT 2026-09-16), was staged and preflighted by
+activation `08ca8197` but NEVER published: arm attempt 1 aborted on
+`arm_transport` (the Gmail connector was expired in that process), activation
+`736e2aed` spawned without Gmail tools during the claude.ai connector outage,
+and the candidate lapsed unarmed at its install close (02:50). Its staged
+bytes and attempt evidence stay under `~/night-plan-staging/rehearsal-20260916`
+(no plan under night-custody; nothing was installed). This plan carries the
+`c` suffix so that it shares no path with that candidate. Ed's directive
+issue #349 (2026-09-16 02:40 PDT) rules that when the Gmail connector is
+unavailable the arm notice may be posted as a GitHub issue labelled
+`directive-notice` with the same content; the arm record names the transport
+used. Email remains primary and is the transport for this plan's notice when
+it sends.
 
 ## Executed — rehearsal-20260909 (history)
 
@@ -307,7 +322,7 @@ results are / §Next lane, rewritten by the commit that is its H).
 
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/rehearsal-20260916`; driver records
+- Custody root: `/Users/edr/night-custody/rehearsal-20260916c`; driver records
   in `night/` — `result.json` (expected verdict `REHEARSAL_ONLY` with
   `chain_exit_code` 0 on a clean census; if an agent session is alive at t0
   the gate records `night_refused_agent_present` and the stub still completes),
@@ -316,22 +331,22 @@ results are / §Next lane, rewritten by the commit that is its H).
   no wrapper), `chain.started`, `chain.exited`, `censuses.jsonl`,
   `chain.stdout.log` (`REHEARSAL`), `chain.stderr.log`, `courier.sent`,
   `courier.json`, `courier.heartbeat`.
-- Driver log: `/Users/edr/night-custody/rehearsal-20260916/night.log` — read
+- Driver log: `/Users/edr/night-custody/rehearsal-20260916c/night.log` — read
   `night driver started` and the `night gate verdict=` line; a dead-man line
   dated before completion is expected only if its daily minute occurred after
-  install (it does not: 04:20 is after completion).
+  install (it does not: 04:45 is after completion).
 - Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
   `launchd.night.err` must be EMPTY.
-- Results branch: `night-results/rehearsal-20260916` on `origin`, if the
+- Results branch: `night-results/rehearsal-20260916c` on `origin`, if the
   driver's push succeeded — verify, do not presume; trace directory
-  `docs/process_traces/night-results/rehearsal-20260916/`.
+  `docs/process_traces/night-results/rehearsal-20260916c/`.
 - No captures, no ledger rows, no chain log: a stub acquires nothing.
 
 ## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`rehearsal-20260916` / `/Users/edr/JouleWise-measurement-rehearsal-20260916b` /
-this commit) harvests only after the completion boundary (03:20:00 PDT) has
+`rehearsal-20260916c` / `/Users/edr/JouleWise-measurement-rehearsal-20260916c` /
+this commit) harvests only after the completion boundary (03:45:00 PDT) has
 passed and `courier.sent` exists: read `result.json`, the receipt or refusal,
 `night.log` and both launchd streams; preserve the custody root byte-exact
 outside watchdog discovery with an `lstat` inventory before anything is moved.
@@ -342,9 +357,9 @@ recorded `night_refused_agent_present` hit with the stub still completing),
 irregularity is a finding to cure before any further night.
 
 After the harvest, run `scripts/install_night_agent.sh --plan
-/Users/edr/night-custody/rehearsal-20260916/night_plan.json --uninstall` FROM
+/Users/edr/night-custody/rehearsal-20260916c/night_plan.json --uninstall` FROM
 the clone and record its exit code. Only exit 0 permits retiring the plan root
-(byte-exact archive to `~/night-archive/rehearsal-20260916-plan-root-retired-<epoch>`
+(byte-exact archive to `~/night-archive/rehearsal-20260916c-plan-root-retired-<epoch>`
 with `SHA256SUMS`, record-48 procedure) and removing the stub clone.
 
 Then the science: author the equivalence night per Ed's ruling in issue #316
