@@ -1,0 +1,15 @@
+./night.log: OK
+./night/censuses.jsonl: OK
+./night/chain.exited: OK
+./night/chain.started: OK
+./night/chain.stderr.log: OK
+./night/chain.stdout.log: OK
+./night/courier.attempts.jsonl: OK
+./night/courier.heartbeat: OK
+./night/courier.json: OK
+./night/courier.sent: OK
+./night/launchd.night.err: OK
+./night/launchd.night.out: OK
+./night/receipt.json: OK
+./night/result.json: OK
+./night_plan.json: OK

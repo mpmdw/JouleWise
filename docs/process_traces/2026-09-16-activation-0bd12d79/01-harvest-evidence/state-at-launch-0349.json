@@ -1,0 +1,50 @@
+{
+  "activation_id": "0bd12d79-673d-4b10-852c-f90d999a11fc",
+  "activation_spawn_epoch_s": 1789555771.145948,
+  "attempt": 39,
+  "backoff_boot_id": "kern.boottime:{ sec = 1789527324, usec = 351165 } Tue Sep 15 19:55:24 2026",
+  "backoff_index": 0,
+  "clock_drain": false,
+  "clock_sane_samples": 2459,
+  "fenced_checkouts": [
+    [
+      "__canonical_repo__",
+      "/Users/edr/code/JouleWise",
+      null
+    ]
+  ],
+  "generic_backoff_index": 0,
+  "last_clock": {
+    "epoch_s": 1789556691.473219,
+    "monotonic": 29376.035568916
+  },
+  "last_exit_class": "usage_exhausted",
+  "next_eligible_epoch_s": 1789554083.703531,
+  "next_eligible_monotonic": 26768.304595458,
+  "notice_pending": [],
+  "reason": "spawned activation 0bd12d79-673d-4b10-852c-f90d999a11fc",
+  "remote_stop": {
+    "detail": "stop branch absent; positive control present",
+    "observed_monotonic": 29367.003152583,
+    "state": "CLEAR"
+  },
+  "resident_hold_drain": null,
+  "resident_session": {
+    "activation_id": "0bd12d79-673d-4b10-852c-f90d999a11fc",
+    "activation_spawn_epoch_s": 1789555771.145948,
+    "binary_symlink": "/Users/edr/.local/bin/claude",
+    "binary_version": "2.1.273 (Claude Code)",
+    "launch_epoch_s": 1789555771.145948,
+    "pid": 12557,
+    "schema": "joulewise.magistrate_lock.v1",
+    "start_time": "Wed Sep 16 03:49:31 2026",
+    "status": "ACTIVE",
+    "supervisor_pid": 12553
+  },
+  "schema": "joulewise.magistrate_watchdog_state.v1",
+  "standdown_phase": null,
+  "state": "ACTIVE",
+  "transition_epoch_s": 1789555771.145948,
+  "transition_seq": 163,
+  "usage_backoff_index": 0
+}

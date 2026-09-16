@@ -320,6 +320,29 @@ results are / §Next lane, rewritten by the commit that is its H).
 
 **Dated addendum 2026-09-14 16:50 PDT (activation `24b9d3dd`) — ARMED THE SAME EVENING UNDER DIRECTIVE ISSUE #336.** Ed's directive issue #336 (owner, at the machine) ordered this very plan id armed tonight from the retained clone at H `27957b60`, with a one-night owner authorization for an evening install span (from the notice send until 23:30 PDT 09-14; every other gate unchanged), and kept the census clean himself. The session first retired its own never-published `n1-20260916` staging and night root (clone at `3c8bd220` retained), re-ran the desk block (staged plan authored 16:26:43, wrapper `356a0810…` VERIFIED — same digest as the morning), sent the notice at 16:30:20 (`1a0a241a8415794f`), and at 16:45:46 — census clean by ancestry, no NO — published the plan and installed both agents from the 20260915 clone (record 52). **`d079-epoch-25g83-derivation-n1-20260915` IS ARMED: t0 2026-09-15 02:56:00 PDT (1789466160), `window_max_s` 9000, courier deadline 05:31:00, dead-man 07:00; published plan sha256 `207245e1…`.** The §Purpose / §Where / §Next-lane text of THIS file on main describes the 20260916 successor written by `3c8bd220`; the clone at H `27957b60` carries the 20260915 text, which is the text in force for the armed night. The 20260916 plan id was never published; nothing else is armed.
 
+## Executed — rehearsal-20260916c (2026-09-16)
+
+Armed 02:50:45 PDT by activation `83d93f5a` (notice by email
+`1a0a99fa2717d749`; H `be221f6a`; both agents installed rc 0 from the clone).
+Fired 03:25:00.82 PDT. The t0 gate recorded `night_refused_agent_present`
+(Ed's interactive Claude session 7066, its codex MCP pair 7086/7094 and its
+zsh wait loop 9850, the outcome §Purpose named as expected while that session
+is open); the stub still ran: `chain.started` 03:25:00.85, `chain.exited`
+exit 0 at 03:25:03.12, stdout `REHEARSAL`, stderr empty; `result.json`
+verdict `REHEARSAL_ONLY`, `chain_exit_code` 0; `launchd.night.err` EMPTY;
+courier email `1a0a9c0fd1fc101e` 03:26:37, `courier.sent` written; results
+branch `night-results/rehearsal-20260916c` at `558d7b83`. Acceptance MET on
+all three clauses. Harvested 03:53 by activation `0bd12d79` (byte-exact copy
+with `SHA256SUMS`, 15/15 OK), both agents uninstalled from the clone 03:53:50
+rc 0, plan root retired to `~/night-archive` 03:54 (record-48 procedure,
+15/15 checksums re-verified), lapsed `rehearsal-20260916` staging archived,
+stub clones retained (delete refused by the harness):
+[record 01](../process_traces/2026-09-16-activation-0bd12d79/01-rehearsal-20260916c-harvest-record.md).
+This was the first night under the 2026-09-16 machinery (transactional
+installer, 8/8/6/5-minute leads, `t0 − 10 min` install close): the install
+transaction, the resident ladder (the watchdog's HOLD_CENSUS through the plan
+span, sequence 161) and the courier all behaved as specified.
+
 ## Where the results are
 
 - Custody root: `/Users/edr/night-custody/rehearsal-20260916c`; driver records

@@ -1,0 +1,28 @@
+The courier's duties for rehearsal-20260916c are complete. The stub night ran as the handback predicted and the delivery record is on disk.
+
+**What the records say**
+
+| Field | Value |
+|---|---|
+| result.json verdict | REHEARSAL_ONLY |
+| Chain exit code | 0 (stdout `REHEARSAL`, stderr empty) |
+| Gate refusal recorded | night_refused_agent_present |
+| Refusal detail | pgrep found Ed's interactive claude session (pid 7066), its codex mcp-server seat (7086, 7094) and its zsh wait loop (9850) |
+| Results branch | night-results/rehearsal-20260916c on origin, now at 558d7b83 |
+| launchd.night.err | empty |
+| Watchdog | state.json age 45.5 s at launch, last decision HOLD_CENSUS, alive |
+
+The handback was present and named this exact outcome as expected for a stub: the hit is recorded and the stub still completes. The result record and the receipt agree with it.
+
+**What I did**
+
+- Wrote the heartbeat first, with pid and epoch.
+- Emailed Ed with the verdict, exit code, refusal reason and detail, branch name and the three watchdog fields. Gmail confirms the message carries the SENT label.
+- Wrote courier.sent after acceptance.
+- Pushed a courier record to the results branch with the acceptance judgment clause by clause and the successor's next exact action.
+
+**What I deliberately left to the magistrate**
+
+The handback assigns the harvest, the uninstall from the clone and the plan-root retirement to the relaunched magistrate, and only after the 03:45 completion boundary with courier.sent present. The watchdog's span logic releases the span at that boundary, so it can relaunch the magistrate at its first tick after 03:45. Running the uninstall from here would act before that boundary and risk two agents retiring the same root, so no uninstall was attempted and no retained or UNKNOWN outcome exists. Both night plists remain installed until the magistrate's uninstall exits 0.
+
+Nothing new is armed. This courier process exits now so it stops appearing in the census.

@@ -1,0 +1,2 @@
+-	0	com.joulewise.magistrate
+com.joulewise.magistrate.plist
