@@ -56,7 +56,7 @@ class ArmRetryTests(unittest.TestCase):
         raw = json.dumps(self.candidate).encode()
         self.plan = dict(plan_bytes=raw, saved_plan_bytes=raw, reviewed_head="a" * 40,
                          install_close_epoch_s=run_night.install_close_epoch(SimpleNamespace(**self.candidate)),
-                         plan_max_age_s=night_gate.PLAN_MAX_AGE_S, install_spans=self.spans[:2])
+                         plan_max_age_s=night_gate.PLAN_MAX_AGE_S)
         digest = hashlib.sha256(raw).hexdigest()
         self.attempts = [dict(attempt=1, attempt_epoch_s=self.now - 60,
                               abort_epoch_s=self.now - 30, cause="arm_transport",
@@ -162,15 +162,38 @@ class ArmRetryTests(unittest.TestCase):
                               t0_epoch_s=self.now - 100 + night_gate.PLAN_MAX_AGE_S + 1)
         self.assertEqual(self.decide().reason, "plan_age")
 
-    def test_same_next_ceiling_uses_live_install_spans(self):
+    def test_whole_day_install_spans_are_informational(self):
         self.assertEqual(run_night.INSTALL_SPANS, (("00:00", "24:00"),))
+        for start, end in self.spans:
+            self.assertEqual(end - start, 24 * 3600)
+
+    def test_midnight_retry_two_days_later_before_install_close(self):
+        # Sep 15 23:49 attempt, Sep 17 00:05 retry, close at 00:15.
+        # Whole-day spans must not discard the last 15 minutes of eligibility.
         third_open = self.spans[2][0]
+        self.assertEqual(self.attempts[0]["attempt_epoch_s"], self.spans[0][1] - 660)
         self.change_candidate(t0_epoch_s=third_open + 6000)
-        self.assertTrue(self.decide().allowed)  # same span
-        self.assertTrue(self.decide(third_open - 1).allowed)  # next, close exclusive
-        self.assertEqual(self.decide(third_open).reason, "outside_same_or_next_span")
-        self.plan["install_spans"] = self.spans[1:3]  # cannot reset original span
-        self.assertEqual(self.decide(third_open).reason, "invalid_spans")
+        self.assertEqual(self.plan["install_close_epoch_s"], third_open + 900)
+        self.notice["sent_epoch_s"] = third_open + 300
+        self.assertEqual(self.decide(third_open + 300), arm_retry.Decision(True, "allowed"))
+
+    def test_truncated_abort_transcription_denied(self):
+        aborted = self.now - 30 + 0.6
+        self.attempts[-1]["abort_epoch_s"] = aborted
+        self.notice["latest_abort_epoch_s"] = aborted
+        self.assertTrue(self.decide().allowed)
+        self.notice["latest_abort_epoch_s"] = int(aborted)
+        self.assertEqual(self.decide(), arm_retry.Decision(False, "notice_abort_mismatch"))
+
+    def test_notice_well_formedness_precedes_reuse(self):
+        self.attempts[0]["message_id"] = ""  # prior attempt never sent mail
+        self.notice["message_id"] = ""
+        self.assertEqual(self.decide(), arm_retry.Decision(False, "notice_not_current"))
+        self.attempts[0]["message_id"] = "earlier-message"
+        self.notice.update(message_id="earlier-message", attempt=1)
+        self.assertEqual(self.decide(), arm_retry.Decision(False, "notice_not_current"))
+        self.notice["attempt"] = 2
+        self.assertEqual(self.decide(), arm_retry.Decision(False, "notice_reused"))
 
     def test_stale_notice_digest_head_abort_no_and_attempt(self):
         changes = (
@@ -233,6 +256,31 @@ class ArmRetryTests(unittest.TestCase):
         for refusal in COLD | INSTALLER | {"HOLD_CENSUS", "slot_refused", "unknown"}:
             self.attempts[0]["cause"] = refusal
             self.assertEqual(self.decide().reason, "cold_gate_history")
+
+    def test_headless_unreadable_thread_recorded_without_observed_no_allows(self):
+        # Memory-only attempt-directory evidence: lack of thread access is a
+        # recorded limitation, not a veto. Only authorized observations clear it.
+        attempt_directory = {
+            "notice-thread-limitation.txt": "Notice thread unreadable in this headless activation.",
+            "directive-issues.json": {"standing_no_epoch_s": None},
+            "stop-check.json": {"standdown_requested": False, "stop_present": False},
+            "relayed-no.json": {"standing_no_epoch_s": None},
+        }
+        self.assertIn("unreadable", attempt_directory["notice-thread-limitation.txt"])
+        stops = attempt_directory["stop-check.json"]
+        observed_no = [attempt_directory[name]["standing_no_epoch_s"]
+                       for name in ("directive-issues.json", "relayed-no.json")
+                       if attempt_directory[name]["standing_no_epoch_s"] is not None]
+        self.notice.update(veto_clear=not any(stops.values()) and not observed_no,
+                           prerequisites_clear=True,
+                           latest_no_epoch_s=max(observed_no) if observed_no else None)
+        self.assertEqual(self.decide(), arm_retry.Decision(True, "allowed"))
+        self.attempts = []
+        self.notice.update(attempt=1, latest_abort_epoch_s=None)
+        self.assertEqual(self.decide(), arm_retry.Decision(True, "allowed"))
+        # An observed NO still stops, even with the thread unreadable.
+        self.notice["latest_no_epoch_s"] = self.now - 3600
+        self.assertEqual(self.decide(), arm_retry.Decision(False, "owner_no"))
 
     def test_uncleared_and_unknown_evidence_never_authorizes(self):
         for key in ("accepted", "veto_clear", "prerequisites_clear"):
@@ -310,14 +358,13 @@ class ArmRetryTests(unittest.TestCase):
                 env = dict(ATTEMPT_DIR='attempt', STAGED_PLAN='staged', NIGHT_ROOT='night',
                            ARM_ATTEMPT='1' if alteration == 'initial' else '2', H='a' * 40)
                 namespace = dict(
-                    json=json, datetime=datetime, timedelta=timedelta, Path=MemoryPath,
+                    json=json, Path=MemoryPath,
                     os=SimpleNamespace(environ=env, replace=lambda *args: moves.append(args)),
                     time=SimpleNamespace(time=lambda: self.plan['install_close_epoch_s']
                                          if alteration == 'cutoff' else self.now),
                     NightPlan=SimpleNamespace(from_mapping=lambda row: SimpleNamespace(**row)),
                     PLAN_MAX_AGE_S=night_gate.PLAN_MAX_AGE_S,
                     install_close_epoch=run_night.install_close_epoch,
-                    install_spans_for_day=run_night.install_spans_for_day,
                     retry_allowed=arm_retry.retry_allowed,
                 )
                 if alteration in (None, "initial"):

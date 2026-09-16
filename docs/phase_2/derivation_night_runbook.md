@@ -1550,7 +1550,7 @@ only this activation's plan from discovery after documented successful cleanup.
 
 <!-- BEGIN ARM-RETRY-POLICY v1 -->
 
-D-180 clause 2; A172 rulings R1–R3 (2026-09-15). Exact arm-event IDs are labels for recorded observations, not receipt codes.
+D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact arm-event IDs are labels for recorded observations, not receipt codes.
 
 | Retry cause | Meaning and required clearance |
 |---|---|
@@ -1613,9 +1613,11 @@ D-180 clause 2; A172 rulings R1–R3 (2026-09-15). Exact arm-event IDs are label
 
 Unknown or mixed causes, any receipt refusal, and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
 
-R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling still applies, using the live `run_night.INSTALL_SPANS` resolved for local dates; it is not the operative budget. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
+R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
 
 Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.
+
+`prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.
 
 <!-- END ARM-RETRY-POLICY v1 -->
 
@@ -1648,8 +1650,11 @@ Every actual attempt sends a newly accepted notice and repeats the existing noti
    `$STAGED_PLAN` there as `plan.json` before sending, and save `notice-body.txt`.
    Include the exact SHA-256, full H, class, attempt number and earlier abort
    in the notice with all §1.4 fields. Send a new email; record actual accepted
-   time and message/thread IDs, never intended or presumed acceptance. An
-   unreadable veto channel is not clear; check earlier threads as well.
+   time and message/thread IDs, never intended or presumed acceptance. Check
+   authorized observable channels: directive issues, `standdown.request`/STOP
+   and any NO relayed into a readable channel, including earlier notices.
+   Record an unreadable notice thread as a limitation in the attempt directory;
+   it is not a stop. Preserve every observed NO; each stops publication.
 5. **Retain observations for the executable check.** In the new directory
    write `attempts.json`, the chronological array of this candidate's prior
    abort records (empty for an initial arm). Each record has `attempt`,
@@ -1664,10 +1669,13 @@ Every actual attempt sends a newly accepted notice and repeats the existing noti
    `receipt_class`, `measurement_head` (= reviewed H), and `plan_sha256`.
    Immediately before publication refresh its observation fields from the
    retained actual directive/stop, census, watchdog and desk-check results:
-   `prerequisites_clear` and `veto_clear` are literal booleans, `blocking_causes`
-   lists all concurrent refusals, `latest_no_epoch_s` is null only if no
-   standing NO exists, and `latest_abort_epoch_s` is the newest abort time
-   (null initially). Never fill clearance from the desired outcome. Preserve
+   `prerequisites_clear` and `veto_clear` are literal booleans covering those
+   authorized observable channels, not a requirement to read an inaccessible
+   notice thread. `blocking_causes` lists all concurrent refusals,
+   `latest_no_epoch_s` is null only if no observed standing NO exists, and
+   `latest_abort_epoch_s` is copied byte-for-byte from
+   `attempts[-1].abort_epoch_s`, never re-typed, rounded or truncated (null
+   initially). Never fill clearance from the desired outcome. Preserve
    the original send evidence and the fresh observation outputs separately.
 6. **Execute the final check below.** It rereads candidate bytes, the saved
    pre-notice snapshot and the current notice; derives bounds from the live
@@ -1789,28 +1797,21 @@ ps -axo pid,ppid,command | grep -E 'claude (daemon run|bg-spare|bg-pty-host)|--r
 # 5. Publication: the one irreversible instant.
 "$PY" -B - <<'PY'
 import json, os, time
-from datetime import datetime, timedelta
 from pathlib import Path
 from joulewise.arm_retry import retry_allowed
 from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S
-from scripts.run_night import install_close_epoch, install_spans_for_day
+from scripts.run_night import install_close_epoch
 attempt_dir = Path(os.environ['ATTEMPT_DIR'])
 raw = Path(os.environ['STAGED_PLAN']).read_bytes()
 plan = NightPlan.from_mapping(json.loads(raw))
 attempts = json.loads((attempt_dir / 'attempts.json').read_text())
 notice = json.loads((attempt_dir / 'notice.json').read_text())
 now = time.time()
-origin = attempts[0]['attempt_epoch_s'] if attempts else now
-day = datetime.fromtimestamp(origin).astimezone().date()
-spans = install_spans_for_day(day) + install_spans_for_day(day + timedelta(days=1))
-index = next((i for i, (start, end) in enumerate(spans) if start <= origin < end), None)
-if index is None or index + 1 >= len(spans):
-    raise SystemExit('original attempt has no resolved same/next install spans')
 if notice['attempt'] != int(os.environ['ARM_ATTEMPT']):
     raise SystemExit('notice belongs to a different attempt')
 context = dict(plan_bytes=raw, saved_plan_bytes=(attempt_dir / 'plan.json').read_bytes(),
                reviewed_head=os.environ['H'], install_close_epoch_s=install_close_epoch(plan),
-               plan_max_age_s=PLAN_MAX_AGE_S, install_spans=spans[index:index + 2])
+               plan_max_age_s=PLAN_MAX_AGE_S)
 decision = retry_allowed(now, context, attempts, notice)
 if not decision.allowed:
     raise SystemExit('arm refused: ' + decision.reason)

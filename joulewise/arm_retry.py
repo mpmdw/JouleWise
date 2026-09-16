@@ -99,9 +99,7 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
 
     plan: mapping with ``plan_bytes`` (reread candidate), ``saved_plan_bytes``
     (pre-notice snapshot), ``reviewed_head``, ``install_close_epoch_s`` from
-    run_night.install_close_epoch, ``plan_max_age_s`` from night_gate, and
-    ``install_spans``: the original attempt's containing span and its next
-    chronological span, resolved by run_night.install_spans_for_day.
+    run_night.install_close_epoch, and ``plan_max_age_s`` from night_gate.
 
     attempts: chronological prior abort mappings: attempt (1-based),
     attempt_epoch_s, abort_epoch_s, cause, receipt_class, plan_sha256,
@@ -112,10 +110,15 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
     notice: accepted, message_id, thread_id, sent_epoch_s, attempt, plan_id,
     receipt_class, measurement_head, plan_sha256; plus freshly observed
     prerequisites_clear and veto_clear (literal bools), latest_no_epoch_s
-    (None only if no standing NO), latest_abort_epoch_s (None for initial),
+    (None only if no observed standing NO), latest_abort_epoch_s (None for initial),
     and blocking_causes (all known concurrent refusal codes, empty to proceed).
-    Clearance covers census, watchdog, science, custody, no invocation and
-    stop/directive checks. Caller retains the underlying observations.
+    prerequisites_clear covers census, watchdog, science, custody, no invocation
+    and the authorized observable stop/directive channels. veto_clear covers
+    directive issues, standdown.request/STOP, and any NO relayed into a readable
+    channel. An unreadable notice thread is recorded as a limitation in the
+    attempt directory, not a stop. Every observed NO is preserved and stops.
+    Caller retains the underlying observations; neither boolean requires
+    reading an inaccessible notice thread.
 
     Empty history validates an initial arm without a retry delay. R2 successor
     activations use ordinary fresh-plan arming, not adoption of old bytes.
@@ -143,6 +146,11 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
             return Decision(False, "owner_no")
         if notice["veto_clear"] is not True or notice["prerequisites_clear"] is not True:
             return Decision(False, "prerequisites_not_clear")
+        if (type(notice["attempt"]) is not int or notice["attempt"] != len(attempts) + 1
+                or notice["accepted"] is not True
+                or any(not isinstance(notice[key], str) or not notice[key].strip()
+                       for key in ("message_id", "thread_id"))):
+            return Decision(False, "notice_not_current")
         previous_abort = None
         for ordinal, prior in enumerate(attempts, 1):
             started = _number(prior["attempt_epoch_s"])
@@ -171,22 +179,6 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
             return Decision(False, "plan_age")
         if now >= _number(plan["install_close_epoch_s"]):
             return Decision(False, "install_closed")
-        spans = plan["install_spans"]
-        if not isinstance(spans, (list, tuple)) or len(spans) != 2:
-            return Decision(False, "invalid_spans")
-        (start, end), (next_start, next_end) = spans
-        for boundary in (start, end, next_start, next_end):
-            _number(boundary)
-        origin = attempts[0]["attempt_epoch_s"] if attempts else now
-        if not start < end <= next_start < next_end or not start <= origin < end:
-            return Decision(False, "invalid_spans")
-        if not (start <= now < end or next_start <= now < next_end):
-            return Decision(False, "outside_same_or_next_span")
-        if (type(notice["attempt"]) is not int or notice["attempt"] != len(attempts) + 1
-                or notice["accepted"] is not True
-                or any(not isinstance(notice[key], str) or not notice[key].strip()
-                       for key in ("message_id", "thread_id"))):
-            return Decision(False, "notice_not_current")
         if (notice["plan_sha256"] != digest or notice["measurement_head"] != head
                 or any(notice[key] != candidate[key] for key in ("plan_id", "receipt_class"))):
             return Decision(False, "notice_binding_mismatch")
@@ -201,7 +193,7 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
 def render_policy() -> str:
     """Return the entire marked Markdown block, including its final newline."""
     lines = ["<!-- BEGIN ARM-RETRY-POLICY v1 -->", "",
-             "D-180 clause 2; A172 rulings R1–R3 (2026-09-15). "
+             "D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). "
              "Exact arm-event IDs are labels for recorded observations, not receipt codes.", "",
              "| Retry cause | Meaning and required clearance |", "|---|---|"]
     lines.extend("| `{}` | {} |".format(k, v) for k, v in RETRY_CAUSES.items())
@@ -213,7 +205,8 @@ def render_policy() -> str:
         lines.extend("| `{}` | {} |".format(k, v) for k, v in rows.items())
     lines.extend(["",
         "Unknown or mixed causes, any receipt refusal, and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.", "",
-        "R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least {} seconds between arm attempts. D-180's same-or-next-listed-span ceiling still applies, using the live `run_night.INSTALL_SPANS` resolved for local dates; it is not the operative budget. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.".format(RETRY_INTERVAL_S), "",
+        "R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least {} seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.".format(RETRY_INTERVAL_S), "",
         "Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.", "",
+        "`prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.", "",
         "<!-- END ARM-RETRY-POLICY v1 -->", ""])
     return "\n".join(lines)

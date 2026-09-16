@@ -66,7 +66,7 @@ only this activation's plan from discovery after documented successful cleanup.
 
 <!-- BEGIN ARM-RETRY-POLICY v1 -->
 
-D-180 clause 2; A172 rulings R1–R3 (2026-09-15). Exact arm-event IDs are labels for recorded observations, not receipt codes.
+D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact arm-event IDs are labels for recorded observations, not receipt codes.
 
 | Retry cause | Meaning and required clearance |
 |---|---|
@@ -129,9 +129,11 @@ D-180 clause 2; A172 rulings R1–R3 (2026-09-15). Exact arm-event IDs are label
 
 Unknown or mixed causes, any receipt refusal, and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
 
-R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling still applies, using the live `run_night.INSTALL_SPANS` resolved for local dates; it is not the operative budget. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
+R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
 
 Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.
+
+`prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.
 
 <!-- END ARM-RETRY-POLICY v1 -->
 
@@ -316,8 +318,7 @@ acceptance; put the actual accepted time in the notice evidence and arm record.
 > earlier abort `<record locator, or none>`. Exact plan SHA-256 `<digest>`,
 > reviewed head `<full H>`, same plan class `<receipt_class>`. Replaces notice
 > `<message ID, or none>` for this attempt only; any earlier NO still stands.
-> Retries end at `<install_close local + epoch>`, subject to plan age and the
-> same-or-next-listed-span ceiling.
+> Retries end at `<install_close local + epoch>`, subject to `PLAN_MAX_AGE_S`.
 >
 > Plan `<plan_id>`, class `<receipt_class>`, will run from `<measurement_root>`
 > at H `<full head>`; handback commit `<same full head>`. Custody `<custody_root>`;
