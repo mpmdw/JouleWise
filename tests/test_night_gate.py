@@ -1080,6 +1080,7 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual(
             night_gate.NIGHT_DRIVER_REASON_CODES,
             {
+                "night_calibration_refused",
                 "night_aborted_agent_present",
                 "night_chain_already_started",
                 "night_chain_alive",

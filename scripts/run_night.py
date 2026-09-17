@@ -233,6 +233,24 @@ def validate_refusal(value: Mapping[str, object]) -> list[str]:
     return defects
 
 
+def _write_refusal_bytes(path: Path, payload: bytes) -> Path:
+    """Allocate immutable refusal records; exclusive creation arbitrates races."""
+    index = 0
+    while True:
+        candidate = path if index == 0 else path.with_name(f"{path.stem}-{index:02d}{path.suffix}")
+        try:
+            _write_bytes_exclusive(candidate, payload)
+            return candidate
+        except FileExistsError:
+            index += 1
+
+
+def _refusal_paths(night_dir: Path) -> list[Path]:
+    return sorted({*night_dir.glob("refusal.json"), *night_dir.glob("refusal-[0-9]*.json"),
+                   *night_dir.glob("calibration-refusal.json"),
+                   *night_dir.glob("calibration-refusal.json.*.json")})
+
+
 def _write_driver_refusal(
     path: Path, plan: NightPlan, reason: str, detail: str, evidence: Any = None
 ) -> dict[str, Any]:
@@ -247,12 +265,12 @@ def _write_driver_refusal(
     defects = validate_refusal(document)
     if defects:
         raise ValueError(f"invalid driver refusal: {defects!r}")
-    _write_json(path, document)
+    _write_refusal_bytes(path, _json_bytes(document))
     return refusal
 
 
 def _write_gate_refusal(path: Path, receipt: Any) -> None:
-    _write_bytes_exclusive(path, receipt.to_json_bytes())
+    _write_refusal_bytes(path, receipt.to_json_bytes())
 
 
 def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
@@ -432,6 +450,43 @@ def _complete_chain_launch_failure(descriptor: int, error: OSError) -> str:
     return launch_error
 
 
+def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.update({
+        "NIGHT_PLAN_ID": plan.plan_id,
+        "JOULEWISE_NIGHT_PLAN_ID": plan.plan_id,
+        "NIGHT_DIR": str(night_dir),
+        "MEASUREMENT_ROOT": plan.measurement_root,
+        "MEASUREMENT_HEAD": plan.measurement_head,
+        # The exact v2 schema has no interpreter or custody-budget field.
+        "PY": f"{plan.measurement_root}/.venv/bin/python",
+        "CUSTODY_BUDGET_S": str(getattr(plan, "custody_budget_s", 120)),
+    })
+    # An inherited probe switch must never turn an admitted night into a probe.
+    environment.pop("NIGHT_VERIFY_ONLY", None)
+    return environment
+
+
+def _calibration_refusal(night_dir: Path, plan: NightPlan) -> dict[str, Any] | None:
+    path = night_dir / "calibration-refusal.json"
+    if not os.path.lexists(path):
+        return None
+    payload: Any = None
+    raw: str | None = None
+    try:
+        raw = path.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+        if (not isinstance(payload, dict)
+                or payload.get("schema") != "joulewise.calibration_refusal.v1"
+                or payload.get("plan_id") != plan.plan_id
+                or not isinstance(payload.get("code"), str) or not payload["code"]):
+            raise ValueError("schema, plan_id, or code mismatch")
+    except (OSError, ValueError, UnicodeError) as exc:
+        return _refusal_mapping(_CODES["calibration_refused"], "document_invalid",
+                                {"path": str(path), "payload": payload, "raw": raw, "error": str(exc)})
+    return _refusal_mapping(_CODES["calibration_refused"], payload["code"], payload)
+
+
 def _run_chain_once(
     chain_path: Path,
     plan: NightPlan,
@@ -448,12 +503,7 @@ def _run_chain_once(
     stdout_path = night_dir / "chain.stdout.log"
     stderr_path = night_dir / "chain.stderr.log"
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-        environment = os.environ.copy()
-        environment["NIGHT_PLAN_ID"] = plan.plan_id
-        environment["MEASUREMENT_ROOT"] = plan.measurement_root
-        environment["MEASUREMENT_HEAD"] = plan.measurement_head
-        # The exact v2 schema has no interpreter field; use the clone's venv.
-        environment["PY"] = f"{plan.measurement_root}/.venv/bin/python"
+        environment = _chain_environment(plan, night_dir)
         try:
             process = subprocess.Popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
@@ -534,7 +584,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
         night_dir / "receipt.json",
         night_dir / "go_receipt.json",
         night_dir / "go-census.json",
-        night_dir / "refusal.json",
+        *_refusal_paths(night_dir),
         night_dir / "result.json",
         night_dir / "chain.started",
         night_dir / "chain.exited",
@@ -898,6 +948,7 @@ def _write_result(
     chain_sha256: str | None,
     census_count: int,
     census_hits: list[dict[str, Any]] | None = None,
+    calibration_refusal: dict[str, Any] | None = None,
 ) -> None:
     _write_json(
         night_dir / "result.json",
@@ -915,6 +966,12 @@ def _write_result(
             "chain_sha256": chain_sha256,
             "census_count": census_count,
             "census_hits": [] if census_hits is None else census_hits,
+            "calibration_refusal": calibration_refusal,
+            "calibration_code": (calibration_refusal["detail"]
+                                 if calibration_refusal and calibration_refusal["detail"] != "document_invalid"
+                                 else None),
+            "refusal_documents": [str(path.relative_to(custody_root))
+                                  for path in _refusal_paths(night_dir)],
             "artifacts": _artifact_list(custody_root, night_dir),
         },
     )
@@ -1077,18 +1134,10 @@ def _existing_record(night_dir: Path) -> Path | None:
 
 
 def _write_rerun_refusal(night_dir: Path, plan: NightPlan, existing: Path) -> None:
-    epoch_s = int(time.time())
-    path = night_dir / f"rerun-{epoch_s}.refusal.json"
-    try:
-        _write_driver_refusal(
-            path,
-            plan,
-            _CODES["record_exists"],
-            "a write-once night record already exists",
-            {"existing": existing.name, "epoch_s": epoch_s},
-        )
-    except FileExistsError:
-        pass
+    _write_driver_refusal(
+        night_dir / "refusal.json", plan, _CODES["record_exists"],
+        "a write-once night record already exists", {"existing": existing.name},
+    )
 
 
 def _write_courier_outcome(night_dir: Path, outcome: Mapping[str, Any]) -> None:
@@ -1758,6 +1807,12 @@ def run_night(
         )
     )
 
+    calibration_refusal = _calibration_refusal(night_dir, plan)
+    if calibration_refusal is not None:
+        _write_driver_refusal(night_dir / "refusal.json", plan,
+                              calibration_refusal["reason"], calibration_refusal["detail"],
+                              calibration_refusal["evidence"])
+
     if abort is not None:
         abort_reason = str(abort["reason"])
         _write_driver_refusal(
@@ -1769,10 +1824,15 @@ def run_night(
         )
         refused = (
             abort_reason == _CODES["chain_launch_failed"] or not termination_proven
+            or calibration_refusal is not None
         )
         verdict = "REFUSED" if refused else "ABORTED"
         base_exit_code = EXIT_REFUSED if refused else EXIT_ABORTED
-        aborted_reason = abort_reason
+        aborted_reason = (calibration_refusal["reason"] if calibration_refusal else abort_reason)
+    elif calibration_refusal is not None:
+        verdict = "REFUSED"
+        base_exit_code = EXIT_REFUSED
+        aborted_reason = calibration_refusal["reason"]
     elif rehearsal_effective:
         verdict = "REHEARSAL_ONLY"
         base_exit_code = EXIT_REFUSED
@@ -1793,6 +1853,7 @@ def run_night(
         chain_sha256,
         census_count,
         census_hits,
+        calibration_refusal,
     )
     _append_log(custody_root, f"night result verdict={verdict}")
     if not termination_proven:
@@ -1905,7 +1966,7 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     probes = make_probes()
     probe, census_refusal = agent_census(probes)
     _append_census(night_dir / "censuses.jsonl", probe, census_refusal)
-    if census_refusal is not None and not (night_dir / "refusal.json").exists():
+    if census_refusal is not None:
         refusal = _refusal_from_object(census_refusal) or {}
         _write_driver_refusal(
             night_dir / "refusal.json",
@@ -1936,6 +1997,146 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     return EXIT_GO if outcome["sent"] else EXIT_COURIER_FAILED
 
 
+def _probe_group_absent(pgid: int) -> bool:
+    # pgrep also works where the sandbox denies killpg(..., 0) after exit.
+    try:
+        result = subprocess.run(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."],
+                                capture_output=True, text=True, timeout=1, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False  # Unknown census still requires attempted termination.
+    return result.returncode == 1 and not result.stdout.strip()
+
+
+def _stop_probe_group(process: subprocess.Popen[Any]) -> bool:
+    """Bound probe cleanup independently of the production termination policy."""
+    deadline = time.monotonic() + 5
+    try:
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            process.poll()
+            if _probe_group_absent(process.pid):
+                return process.poll() is not None
+            try:
+                os.killpg(process.pid, sig)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                return False
+            until = min(deadline, time.monotonic() + (1 if sig == signal.SIGTERM else 4))
+            while time.monotonic() < until:
+                process.poll()
+                if _probe_group_absent(process.pid):
+                    return process.poll() is not None
+                time.sleep(0.02)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return False
+
+
+def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> int:
+    """Exercise reservation access only; this receipt cannot authorize capture."""
+    import tempfile
+    from joulewise.night_agent_install import interpreter_identity, probe_bindings
+
+    if not math.isfinite(timeout_s) or timeout_s <= 0:
+        raise ValueError("timeout_s must be finite and positive")
+    plan_path, receipt_path = plan_path.resolve(), receipt_path.resolve()
+    started = time.time()
+    plan = _load_plan(plan_path)
+    bindings = probe_bindings(plan, plan_path, sys.executable)
+    record = dict(bindings, schema="joulewise.night_probe_receipt.v1",
+                  custody_budget_s=float(getattr(plan, "custody_budget_s", 120)),
+                  custody_elapsed_s=0.0, observations=0, outcome="refused",
+                  refusal_code=None, started_epoch_s=started, finished_epoch_s=None,
+                  launchd_label=os.environ.get("JOULEWISE_LAUNCHD_LABEL"))
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep probe refusals away from write-once production night records.
+    with tempfile.TemporaryDirectory(prefix="night-probe-", dir=receipt_path.parent) as directory:
+        night_dir = Path(directory)
+        environment = _chain_environment(plan, night_dir)
+        environment["NIGHT_VERIFY_ONLY"] = "1"
+        process = subprocess.Popen(["/bin/zsh", plan.chain_path], env=environment,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=True)
+        process_path = receipt_path.with_name(receipt_path.name + ".process.json")
+        process_record = {"driver_pid": os.getpid(), "chain_pgid": process.pid,
+                          "launchd_label": record["launchd_label"]}
+        # This transient identity record lets the installer clean up if launchd
+        # must boot out a driver before it can publish its final receipt.
+        temporary = process_path.with_name(process_path.name + f".{os.getpid()}.tmp")
+        stdout = b""
+        chain_started = time.monotonic()
+        try:
+            _write_json(temporary, process_record)
+            os.replace(temporary, process_path)
+            record.update(process_record)
+            stdout, _stderr = process.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            record["outcome"] = "timeout"
+            record["custody_elapsed_s"] = time.monotonic() - chain_started
+            record["refusal_code"] = "calibration_ledger_custody_timeout"
+        finally:
+            gone = _stop_probe_group(process)
+            process.stdout.close()
+            process.stderr.close()
+        if not gone:
+            record["outcome"] = "refused"
+            record["refusal_code"] = "probe_process_survived"
+        elif record["outcome"] != "timeout":
+            refusal = _calibration_refusal(night_dir, plan)
+            if refusal is not None:
+                record["refusal_code"] = refusal["detail"]
+                record["calibration_refusal"] = refusal
+                if refusal["detail"] != "document_invalid":
+                    record["custody_budget_s"] = refusal["evidence"].get("budget_s")
+                    record["custody_elapsed_s"] = refusal["evidence"].get("elapsed_s")
+            elif process.returncode == 0:
+                try:
+                    lines = []
+                    for line in stdout.decode("utf-8").splitlines():
+                        try:
+                            value = json.loads(line)
+                        except ValueError:
+                            continue
+                        if isinstance(value, dict) and value.get("verify_only") == "ok":
+                            lines.append(value)
+                    if len(lines) != 1:
+                        raise ValueError("expected one verify-only receipt line")
+                    value = lines[0]
+                    chain_python = interpreter_identity(value["python"])
+                    if chain_python["version"] != value["python_version"]:
+                        raise ValueError("chain_python version changed")
+                    for field, actual in (("chain_python", chain_python),
+                                          ("ledger_head_sha256", value["ledger_head_sha256"]),
+                                          ("code_digests", value["code_digests"])):
+                        if actual != bindings[field]:
+                            raise ValueError(field + " mismatch")
+                    for field in ("custody_budget_s", "custody_elapsed_s", "observations"):
+                        actual = value[field]
+                        if isinstance(actual, bool) or not isinstance(actual, (float, int)) or not math.isfinite(actual) or actual < 0:
+                            raise ValueError(field + " invalid")
+                        record[field] = actual
+                    if record["custody_budget_s"] != bindings["custody_budget_s"]:
+                        raise ValueError("custody_budget_s mismatch")
+                    if not isinstance(record["observations"], int):
+                        raise ValueError("observations must be an integer")
+                    # Recompute after the read: changed inputs cannot earn success.
+                    if bindings != probe_bindings(plan, plan_path, sys.executable):
+                        raise ValueError("probe bindings changed during verification")
+                    record["code_digests"] = value["code_digests"]
+                    record["outcome"] = "ok"
+                except (KeyError, ValueError, OSError, subprocess.SubprocessError) as exc:
+                    record["refusal_code"] = "probe_receipt_invalid"
+                    record["detail"] = str(exc)
+            else:
+                record["refusal_code"] = "probe_chain_failed"
+        record["finished_epoch_s"] = time.time()
+        # Atomic renewal: readers never mistake a partial receipt for success.
+        temporary = receipt_path.with_name(receipt_path.name + f".{os.getpid()}.tmp")
+        _write_json(temporary, record)
+        os.replace(temporary, receipt_path)
+    return 0 if record["outcome"] == "ok" else 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -1949,6 +2150,10 @@ def build_parser() -> argparse.ArgumentParser:
         command = subcommands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
         command.add_argument("--courier-bin", type=Path, metavar="ABSOLUTE_PATH")
+    access_probe = subcommands.add_parser("probe")
+    access_probe.add_argument("--plan", required=True, type=Path)
+    access_probe.add_argument("--receipt", required=True, type=Path)
+    access_probe.add_argument("--timeout-s", type=float, default=600)
     scheduling = subcommands.add_parser("schedule")
     scheduling.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
     preflight = subcommands.add_parser("preflight")
@@ -1962,6 +2167,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "probe":
+        try:
+            return probe_night(args.plan, args.receipt, args.timeout_s)
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+            print(f"night probe refused: {exc}", file=sys.stderr)
+            return 2
     if args.command == "schedule":
         try:
             derived = schedule(_load_plan(args.plan))

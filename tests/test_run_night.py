@@ -94,6 +94,117 @@ def _init_git_repo(root: Path) -> str:
     ).strip()
 
 
+def make_probe_fixture(root: Path, plan_path: Path, *, mode="ok") -> None:
+    """Fake seat A at its CLI boundary; never import its implementation."""
+    import shlex
+    plan = json.loads(plan_path.read_text())
+    measurement = Path(plan["measurement_root"])
+    scripts = measurement / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    chain = scripts / "night_chains/calibration_derivation_only.zsh"
+    chain.parent.mkdir(exist_ok=True)
+    shutil.copyfile(REPO_ROOT / "scripts/night_chains/calibration_derivation_only.zsh", chain)
+    python = measurement / ".venv/bin/python"
+    python.parent.mkdir(parents=True, exist_ok=True)
+    if not python.exists():
+        python.symlink_to(sys.executable)
+    module = measurement / "joulewise"
+    module.mkdir(exist_ok=True)
+    for name in ("calibration_ledger.py", "calibration_custody_worker.py"):
+        (module / name).write_text("# fake seat A code identity\n")
+    for name in ("recover_calibration_ledger.py", "validate_powermetrics_fiducial.py"):
+        (scripts / name).write_text("from pathlib import Path\nPath(__file__).with_suffix('.CALLED').touch()\nraise SystemExit(91)\n")
+    stub = scripts / "reserve_calibration_window_bracket.py"
+    stub.write_text('''import argparse, hashlib, json, os, sys, time, subprocess
+from pathlib import Path
+p = argparse.ArgumentParser()
+p.add_argument('--verify-only', action='store_true')
+p.add_argument('--custody-budget-s', type=float, required=True)
+p.add_argument('--custody-deadline-epoch-s', type=float, required=True)
+a, rest = p.parse_known_args()
+root = Path(__file__).parents[1]
+(root / 'reservation-argv.json').write_text(json.dumps(sys.argv[1:]))
+mode = (root / 'stub-mode').read_text()
+if mode == 'hang':
+    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+    (root / 'stub-pids.json').write_text(json.dumps([os.getpid(), child.pid]))
+    time.sleep(60)
+if mode in ('refused', 'mismatch', 'malformed'):
+    document = {'schema':'joulewise.calibration_refusal.v1',
+        'code':'calibration_ledger_custody_timeout', 'exit_code':2,
+        'phase':'reservation', 'plan_id':os.environ['JOULEWISE_NIGHT_PLAN_ID'],
+        'session_id':'stub-session', 'existing_session':False,
+        'ledger':{'path':str(root / 'ledger.jsonl'), 'head_sha256':'a'*64},
+        'budget_s':a.custody_budget_s, 'elapsed_s':0.1, 'last_observation':None,
+        'written_epoch_s':time.time(), 'pid':os.getpid(), 'detail':'governed read expired'}
+    if mode == 'mismatch': document['plan_id'] = 'wrong-plan'
+    path = Path(os.environ['JOULEWISE_CALIBRATION_REFUSAL_PATH'])
+    path.write_text('{' if mode == 'malformed' else json.dumps(document))
+    raise SystemExit(2)
+if mode == 'no-document': raise SystemExit(2)
+assert a.verify_only, 'capture would be attempted'
+code = ['scripts/reserve_calibration_window_bracket.py',
+        'joulewise/calibration_ledger.py', 'joulewise/calibration_custody_worker.py']
+print(json.dumps({'verify_only':'ok', 'ledger_head_sha256':'a'*64,
+    'observations':38, 'custody_elapsed_s':0.1, 'custody_budget_s':a.custody_budget_s,
+    'python':sys.executable, 'python_version':'.'.join(map(str,sys.version_info[:3])),
+    'code_digests':{name:'sha256:'+hashlib.sha256((root/name).read_bytes()).hexdigest() for name in code}}))
+''')
+    (measurement / "stub-mode").write_text(mode)
+    ledger = measurement / "ledger.jsonl"
+    ledger.write_text(json.dumps({"receipt_digest": "a" * 64}) + "\n")
+    pin = measurement / "head.json"
+    pin.write_text(json.dumps({"head_digest": "a" * 64}))
+    for name in ("frozen-plan.json", "identity.json", "t1.json"):
+        (measurement / name).write_text("{}\n")
+    exports = {"SESSION_ID": "stub-session", "WINDOW_ID": "window", "PLAN_ID": "frozen-plan",
+               "PLAN_SHA256": "b" * 64, "PLAN": str(measurement / "frozen-plan.json"),
+               "EVIDENCE_ROOT_ID": "stub-evidence", "RUNS_ROOT": str(measurement / "runs"),
+               "WINDOW_CUSTODY_ROOT": str(root / "window"), "CALIBRATION_LEDGER": str(ledger),
+               "LEDGER_HEAD_PIN": str(pin), "IDENTITY_EPOCH_JSON": str(measurement / "identity.json"),
+               "T1_BINDINGS_JSON": str(measurement / "t1.json"),
+               "WINDOW_END_EPOCH_S": str(int(plan["t0_epoch_s"] + plan["window_max_s"]))}
+    wrapper = plan_path.parent / "probe-chain.zsh"
+    wrapper.write_text("set -euo pipefail\n" + "\n".join(
+        "export " + name + "=" + shlex.quote(value) for name, value in exports.items()) +
+        "\nexec /bin/zsh " + shlex.quote(str(chain)) + " --slot-attempt-id stub\n")
+    sidecar = wrapper.with_suffix(".sha256")
+    sidecar.write_text(hashlib.sha256(wrapper.read_bytes()).hexdigest() + "\n")
+    plan.update(chain_path=str(wrapper), chain_sha256_path=str(sidecar))
+    plan_path.write_text(json.dumps(plan) + "\n")
+
+
+def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
+    # Fixture-owned oracle: do not depend on the new installer API. In
+    # particular, the missing-receipt regression must reach the old installer's
+    # real admission path when these tests are copied to the base revision.
+    plan = json.loads(plan_path.read_text())
+    root = Path(plan["measurement_root"])
+    digest = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+    def identity(executable):
+        code = ("import json,sys; print(json.dumps([sys.executable,"
+                "'.'.join(map(str,sys.version_info[:3]))]))")
+        path, version = json.loads(subprocess.check_output([str(executable), "-B", "-c", code], text=True))
+        return {"path": path, "version": version, "sha256": digest(path)}
+    code_paths = ("scripts/reserve_calibration_window_bracket.py", "joulewise/calibration_ledger.py",
+                  "joulewise/calibration_custody_worker.py")
+    stamp = time.time() if now is None else now
+    record = {"schema": "joulewise.night_probe_receipt.v1", "outcome": "ok", "refusal_code": None,
+              "plan_id": plan["plan_id"], "plan_sha256": digest(plan_path),
+              "measurement_head": plan["measurement_head"], "ledger_head_sha256": "a" * 64,
+              "code_digests": {name: "sha256:" + digest(root / name) for name in code_paths},
+              "driver_python": identity(python), "chain_python": identity(root / ".venv/bin/python"),
+              "chain_sha256": digest(plan["chain_path"]),
+              "chain_source_sha256": digest(root / "scripts/night_chains/calibration_derivation_only.zsh"),
+              "ledger_sha256": digest(root / "ledger.jsonl"), "ledger_pin_sha256": digest(root / "head.json"),
+              "custody_budget_s": 120.0, "custody_elapsed_s": 0.1, "observations": 38,
+              "started_epoch_s": stamp - 1, "finished_epoch_s": stamp,
+              "launchd_label": "com.joulewise.night-probe." + plan["plan_id"]}
+    path = plan_path.parent / "night_probe_receipt.json"
+    path.write_text(json.dumps(record))
+    return path
+
+
 class ProbeSource:
     def __init__(self, now_epoch_s: float) -> None:
         self.now_epoch_s = now_epoch_s
@@ -252,6 +363,92 @@ class NightDriverTests(unittest.TestCase):
                 registration_path=str(self.registration),
             ),
         )
+
+    def _run_calibration_stub(self, mode):
+        import shlex
+        make_probe_fixture(self.root, self.plan_path, mode=mode)
+        plan = self.driver._load_plan(self.plan_path)
+        # Exactly the same chain stimulus on the base: exit 2 plus a complete
+        # seat-A document. Environment plumbing is tested independently below.
+        chain = Path(plan.chain_path)
+        chain.write_text("export JOULEWISE_NIGHT_PLAN_ID=" + shlex.quote(plan.plan_id) +
+            "\nexport JOULEWISE_CALIBRATION_REFUSAL_PATH=" +
+            shlex.quote(str(self.custody / "night/calibration-refusal.json")) +
+            "\nexec " + shlex.quote(sys.executable) + " " +
+            shlex.quote(str(self.root / "scripts/reserve_calibration_window_bracket.py")) +
+            " --custody-budget-s 120 --custody-deadline-epoch-s 9999999999\n")
+        Path(plan.chain_sha256_path).write_text(hashlib.sha256(chain.read_bytes()).hexdigest() + "\n")
+        return self.driver.run_night(self.plan_path)
+
+    def test_calibration_refusal_transports_to_result_and_courier(self):
+        rc = self._run_calibration_stub("refused")
+        result = json.loads((self.custody / "night/result.json").read_text())
+        self.assertEqual("REFUSED", result["verdict"])
+        self.assertEqual("night_calibration_refused", result["aborted_reason"])
+        self.assertEqual(2, result["chain_exit_code"])
+        self.assertEqual("calibration_ledger_custody_timeout", result["calibration_code"])
+        payload = json.loads((self.custody / "night/calibration-refusal.json").read_text())
+        self.assertEqual(payload, result["calibration_refusal"]["evidence"])
+        self.assertIn("night/calibration-refusal.json", [a["path"] for a in result["artifacts"]])
+        self.assertEqual(self.driver.EXIT_REFUSED, rc)
+        self.driver.run_courier.assert_called_once()
+        self.assertEqual(2, self.driver._durable_record.call_count)
+        self.assertEqual(self.custody / "night", self.driver._durable_record.call_args.args[1])
+
+    def test_calibration_refusal_plan_mismatch_is_document_invalid(self):
+        self._run_calibration_stub("mismatch")
+        result = json.loads((self.custody / "night/result.json").read_text())
+        self.assertEqual("REFUSED", result["verdict"])
+        self.assertEqual("document_invalid", result["calibration_refusal"]["detail"])
+        self.assertEqual(2, result["chain_exit_code"])
+        self.driver.run_courier.assert_called_once()
+
+    def test_calibration_refusal_malformed_is_document_invalid(self):
+        self._run_calibration_stub("malformed")
+        result = json.loads((self.custody / "night/result.json").read_text())
+        self.assertEqual("REFUSED", result["verdict"])
+        self.assertEqual("document_invalid", result["calibration_refusal"]["detail"])
+
+    def test_calibration_exit_two_without_document_keeps_chain_failure(self):
+        rc = self._run_calibration_stub("no-document")
+        result = json.loads((self.custody / "night/result.json").read_text())
+        self.assertEqual("GO", result["verdict"])
+        self.assertEqual(2, result["chain_exit_code"])
+        self.assertEqual(self.driver.EXIT_CHAIN_FAILED, rc)
+
+    def test_deadman_then_calibration_refusal_preserves_both_paths(self):
+        original = self.driver._run_chain_once
+        def chain(*args, **kwargs):
+            plan, night = args[1], args[3]
+            self.driver._write_driver_refusal(night / "refusal.json", plan,
+                "night_chain_alive", "dead-man observed live chain", {"pgid": 123})
+            return original(*args, **kwargs)
+        with mock.patch.object(self.driver, "_run_chain_once", side_effect=chain):
+            self._run_calibration_stub("refused")
+        night = self.custody / "night"
+        first = json.loads((night / "refusal.json").read_text())
+        second = json.loads((night / "refusal-01.json").read_text())
+        self.assertEqual("night_chain_alive", first["refusal"]["reason"])
+        self.assertEqual("night_calibration_refused", second["refusal"]["reason"])
+        result = json.loads((night / "result.json").read_text())
+        for path in ("night/refusal.json", "night/refusal-01.json"):
+            self.assertIn(path, result["refusal_documents"])
+            self.assertIn(path, [item["path"] for item in result["artifacts"]])
+        self.driver.run_courier.assert_called_once()
+
+    def test_gate_and_driver_refusal_writers_retry_existing_sequence(self):
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "refusal.json").write_text("first")
+        (night / "refusal-01.json").write_text("second")
+        receipt = types.SimpleNamespace(to_json_bytes=lambda: b'gate refusal')
+        self.driver._write_gate_refusal(night / "refusal.json", receipt)
+        self.driver._write_driver_refusal(night / "refusal.json", self.driver._load_plan(self.plan_path),
+                                          "night_chain_alive", "still alive")
+        self.assertEqual("first", (night / "refusal.json").read_text())
+        self.assertEqual("second", (night / "refusal-01.json").read_text())
+        self.assertEqual(b"gate refusal", (night / "refusal-02.json").read_bytes())
+        self.assertEqual("night_chain_alive", json.loads((night / "refusal-03.json").read_text())["refusal"]["reason"])
 
     def test_preflight_emits_json_without_running_or_creating_custody(self) -> None:
         self.custody.rmdir()
@@ -467,7 +664,8 @@ runpy.run_path(script, run_name='__main__')
         )
 
     def test_plan_supplies_coordinates_when_parent_exports_are_absent(self) -> None:
-        keys = ("MEASUREMENT_ROOT", "MEASUREMENT_HEAD", "PY")
+        keys = ("MEASUREMENT_ROOT", "MEASUREMENT_HEAD", "PY", "NIGHT_DIR",
+                "JOULEWISE_NIGHT_PLAN_ID", "CUSTODY_BUDGET_S")
         parent = {key: value for key, value in os.environ.items() if key not in keys}
         with mock.patch.dict(os.environ, parent, clear=True):
             exit_code, calls = self._run_night()
@@ -476,7 +674,8 @@ runpy.run_path(script, run_name='__main__')
         environment = self.popen_kwargs[0]["env"]
         self.assertEqual(
             [environment.get(key) for key in keys],
-            [str(self.root), HEAD, str(self.root) + "/.venv/bin/python"],
+            [str(self.root), HEAD, str(self.root) + "/.venv/bin/python",
+             str(self.custody / "night"), "night-plan", "120"],
         )
 
     def test_chain_spawn_failure_records_refusal_and_finishes_reporting(self) -> None:
@@ -582,7 +781,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(claim["start_time"], "Tue Sep 8 01:02:03 2026")
         self.identity_mock.assert_called_once_with(claim["pid"])
         self.assertNotEqual(claim["pid"], os.getpid())
-        rerun = list(night.glob("rerun-*.refusal.json"))
+        rerun = list(night.glob("refusal*.json"))
         self.assertEqual(len(rerun), 1)
         refusal = json.loads(rerun[0].read_text())
         self.assertEqual(refusal["refusal"]["reason"], self.driver._CODES["record_exists"])
@@ -1155,7 +1354,7 @@ runpy.run_path(script, run_name='__main__')
         courier_calls = self.driver.run_courier.call_count
         probe_calls = self.probes_mock.call_count
         second_exit = self.driver.run_night(self.plan_path)
-        reruns = list(night.glob("rerun-*.refusal.json"))
+        reruns = list(night.glob("refusal*.json"))
         self.assertEqual(first_exit, 0)
         self.assertEqual(second_exit, self.driver.EXIT_REFUSED)
         self.assertEqual(first_calls, [["/bin/zsh", str(self.chain)]])
@@ -1801,6 +2000,8 @@ runpy.run_path(script, run_name='__main__')
         path = root / "custody/night_plan.json"
         path.parent.mkdir()
         path.write_text(json.dumps(plan), encoding="utf-8")
+        make_probe_fixture(root, path)
+        write_matching_probe_receipt(path, str(python))
         return path
 
     def _installer_environment(self, root: Path) -> tuple[dict[str, str], Path]:
@@ -2061,7 +2262,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(completed.returncode, 0, completed.stderr)
         calls = launch_log.read_text(encoding="utf-8").splitlines()
         self.assertEqual(
-            [line.split()[0] for line in calls[-4:]],
+            [line.split()[0] for line in calls if "night-probe." not in line][-4:],
             ["bootout", "bootout", "print", "print"],
         )
         self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
@@ -2113,7 +2314,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(completed.returncode, 0, completed.stderr)
         calls = launch_log.read_text(encoding="utf-8").splitlines()
         self.assertEqual(
-            [line.split()[0] for line in calls[-4:]],
+            [line.split()[0] for line in calls if "night-probe." not in line][-4:],
             ["bootout", "bootout", "print", "print"],
         )
         self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
@@ -2181,11 +2382,110 @@ runpy.run_path(script, run_name='__main__')
         self.assertTrue(any(line.startswith("bootstrap ") and "deadman.plist" in line for line in calls))
         self.assertTrue(any(line.startswith("bootout ") and line.endswith("com.joulewise.night") for line in calls))
         self.assertEqual(
-            [line.split()[0] for line in calls[-4:]],
+            [line.split()[0] for line in calls if "night-probe." not in line][-4:],
             ["bootout", "bootout", "print", "print"],
         )
 
 
+
+
+def probe_census_available():
+    try:
+        result = subprocess.run(["/usr/bin/pgrep", "-lf", "-g", "999999", "."],
+                                capture_output=True, timeout=5)
+        return result.returncode == 1
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+class NightProbeTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(dir="/tmp")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.plan_path = self.root / "night_plan.json"
+        plan = night_gate.NightPlan(plan_id="probe-fixture", receipt_class="DIAGNOSTIC_NO_PACK",
+            t0_epoch_s=(int(time.time()) // 60 + 60) * 60, window_max_s=9000,
+            authored_epoch_s=time.time(), repo_head=HEAD, measurement_root=str(self.root / "measurement"),
+            measurement_head=HEAD, chain_path=str(self.root / "chain"),
+            chain_sha256_path=str(self.root / "chain.sha256"), custody_root=str(self.root / "custody"),
+            registration_path="fixture-registration")
+        write_night_plan(self.plan_path, plan)
+        make_probe_fixture(self.root, self.plan_path)
+        self.plan = night_gate.NightPlan.from_mapping(json.loads(self.plan_path.read_text()))
+        self.receipt = self.root / "night_probe_receipt.json"
+
+    def run_probe(self, mode="ok", timeout=5):
+        (Path(self.plan.measurement_root) / "stub-mode").write_text(mode)
+        return subprocess.run([sys.executable, "-B", str(SCRIPT_PATH), "probe", "--plan",
+            str(self.plan_path), "--receipt", str(self.receipt), "--timeout-s", str(timeout)],
+            capture_output=True, text=True, timeout=15,
+            env={**os.environ, "JOULEWISE_LAUNCHD_LABEL": "com.joulewise.night-probe.probe-fixture"})
+
+    def test_verify_only_chain_runs_only_reservation(self):
+        night = self.root / "probe-output"
+        night.mkdir()
+        result = subprocess.run(["/bin/zsh", self.plan.chain_path], env={**os.environ,
+            "NIGHT_VERIFY_ONLY": "1", "NIGHT_DIR": str(night),
+            "JOULEWISE_NIGHT_PLAN_ID": self.plan.plan_id,
+            "PY": self.plan.measurement_root + "/.venv/bin/python", "CUSTODY_BUDGET_S": "0.75"},
+            text=True, capture_output=True, timeout=5)
+        self.assertEqual(0, result.returncode, result.stderr)
+        receipt = json.loads(result.stdout)
+        self.assertEqual("ok", receipt["verify_only"])
+        argv = json.loads((Path(self.plan.measurement_root) / "reservation-argv.json").read_text())
+        self.assertIn("--verify-only", argv)
+        self.assertNotIn("--execute", argv)
+        self.assertEqual("0.75", argv[argv.index("--custody-budget-s") + 1])
+        self.assertEqual(str(int(self.plan.t0_epoch_s + self.plan.window_max_s) - 10),
+                         argv[argv.index("--custody-deadline-epoch-s") + 1])
+        self.assertFalse(list(self.root.rglob("*.CALLED")))
+        self.assertFalse(list(self.root.rglob("chain.started")))
+        self.assertFalse((self.root / "window").exists())
+
+    @unittest.skipUnless(probe_census_available(), "process census unavailable in sandbox")
+    def test_probe_success_receipt_binds_every_field_without_capture(self):
+        completed = self.run_probe()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        receipt = json.loads(self.receipt.read_text())
+        fields = {"schema", "plan_id", "plan_sha256", "measurement_head", "ledger_head_sha256",
+                  "code_digests", "driver_python", "chain_python", "custody_budget_s", "custody_elapsed_s",
+                  "observations", "outcome", "refusal_code", "started_epoch_s", "finished_epoch_s", "launchd_label"}
+        self.assertTrue(fields <= receipt.keys())
+        self.assertEqual("joulewise.night_probe_receipt.v1", receipt["schema"])
+        self.assertEqual("ok", receipt["outcome"])
+        self.assertEqual(38, receipt["observations"])
+        self.assertEqual(120, receipt["custody_budget_s"])
+        self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), receipt["plan_sha256"])
+        for field in ("driver_python", "chain_python"):
+            identity = receipt[field]
+            self.assertEqual({"path", "version", "sha256"}, identity.keys())
+            self.assertEqual(hashlib.sha256(Path(identity["path"]).read_bytes()).hexdigest(), identity["sha256"])
+        self.assertFalse(list(self.root.rglob("chain.started")))
+        self.assertFalse(list(self.root.rglob("*.CALLED")))
+        self.assertFalse(Path(self.plan.custody_root).exists())
+
+    @unittest.skipUnless(probe_census_available(), "process census unavailable in sandbox")
+    def test_probe_refused_stub_preserves_calibration_code(self):
+        result = self.run_probe("refused")
+        self.assertEqual(2, result.returncode, result.stderr)
+        receipt = json.loads(self.receipt.read_text())
+        self.assertEqual("refused", receipt["outcome"])
+        self.assertEqual("calibration_ledger_custody_timeout", receipt["refusal_code"])
+        self.assertFalse(list(self.root.rglob("chain.started")))
+
+    @unittest.skipUnless(probe_census_available(), "process census unavailable in sandbox")
+    def test_probe_timeout_kills_reservation_and_descendant(self):
+        started = time.monotonic()
+        result = self.run_probe("hang", timeout=0.3)
+        self.assertLess(time.monotonic() - started, 8)
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual("timeout", json.loads(self.receipt.read_text())["outcome"])
+        pids = json.loads((Path(self.plan.measurement_root) / "stub-pids.json").read_text())
+        for pid in pids:
+            with self.assertRaises(ProcessLookupError):
+                os.kill(pid, 0)
+        self.assertFalse(list(self.root.rglob("chain.started")))
 
 
 class PackNightProducerTests(unittest.TestCase):

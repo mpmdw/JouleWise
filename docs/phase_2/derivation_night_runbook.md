@@ -206,8 +206,8 @@ default ruling and the continuation.
   derived from **completion**: `t0 + window_max_s + 300 s`, where `t0` is the
   plan's start, `window_max_s` its window length, and 300 s (5 × 60 s) the
   allowance for the courier to email results. Add
-  3600 s (60 × 60 s), rounded up to a minute (§1.2). It fires daily at that
-  derived local hour and minute. Before completion it logs a stand-down;
+  3600 s (60 × 60 s), rounded up to a minute (§1.2). Its first recovery time is that derived local hour and minute;
+  the installed calendar repeats at that time until uninstalled. Before completion it logs a stand-down;
   after the courier delivery record `night/courier.sent` exists it skips;
   otherwise it uses the driver's existing recovery checks (§1.3).
 - **Driver preflight** — the install-time check that loads the driver module
@@ -1572,7 +1572,7 @@ is 3 when restoration succeeds, overridden by 4 when unloading cannot be
 established, or by 1 when restoration fails.
 
 The night job uses the local Month/Day/Hour/Minute from `t0`. The dead-man
-uses only Hour/Minute from `deadman_epoch(plan)` (§1.2), so it fires daily at
+uses only Hour/Minute from `deadman_epoch(plan)` (§1.2), so its calendar repeats at
 that local minute until uninstalled. A firing before completion logs a
 stand-down and writes no night record; after `night/courier.sent` it skips.
 If delivery is missing after completion, existing chain-alive and courier
@@ -1806,12 +1806,58 @@ expected SHA-256 fingerprint of those bytes), and the
 chain re-check is this lane's wrapper `--verify` of §1.1b step 4 rather than
 that runbook's G2-a runsheet render.
 
+Before installation, exercise custody access through a temporary **LaunchAgent**
+(a macOS launchd job file), using the published plan and the pinned checkout:
+
+```zsh
+scripts/install_night_agent.sh --plan "$PLAN" --python "$PY" --launchd-probe
+# Only after exit 0, install through the ordinary arm sequence below.
+```
+
+A terminal inherits the owner's file-access consent; a launchd job does not
+inherit the terminal's consent. The probe therefore runs the production
+interpreter → chain → reservation path, using the real ledger and arguments.
+Its **verify-only** mode performs enforcing custody checks and stops before
+any session append, settle, or capture. It creates no `chain.started` record.
+A **receipt** is its non-authorizing record at
+`<plan_dir>/night_probe_receipt.json`. It binds the plan and wrapper bytes,
+measurement commit, ledger head (the digest of the latest record), ledger
+bytes, relevant code fingerprints, and both interpreters' paths, versions and
+binary SHA-256 fingerprints. Installation recomputes the bindings and accepts
+only an `ok` receipt less than six hours old. The temporary job has a 600 s
+limit (`--probe-timeout-s`), is booted out (unloaded), and must pass a process
+census (check for surviving processes) before the installer returns success.
+A missing/failed/stale/mismatched receipt refuses installation with exit 2.
+Rendering with `--render-only DIR` includes the probe job file; it starts no job.
+
+The driver first writes `night_probe_receipt.pending.json`; the installer
+publishes `night_probe_receipt.json` only after unloading and process cleanup
+are proven. An interrupted or failed cleanup leaves no installable receipt.
+Treat every Homebrew Python replacement as invalidating the successful launchd access probe; verify again.
+A replacement changes the executable fingerprint bound by the receipt; this
+is a conservative arm precondition, not a claim that every upgrade resets
+macOS consent. After answering a consent dialog, rerun successfully without
+further interaction before installation.
+
+Worked example, 2026-09-16: the 09:45 reservation read 190 governed files,
+3.33 GB under 38 iCloud custody locators, and waited 11 h 07 m until 20:52.
+No captures or verdict resulted. The root-cause record supports consent as
+the leading explanation, while cloud materialization (making remote file
+bytes locally available) remains an alternative. The reservation and each
+capture writer now share a whole-pass custody budget of 120 s, clipped ten
+seconds before the exclusive window end. Exhaustion produces the typed
+(machine-readable) `calibration_ledger_custody_timeout` refusal and preserves
+the night. The courier reads `calibration-refusal.json`, every numbered
+refusal listed by the result, and any later refusal siblings; it reports the
+code, budget, elapsed time, and whether a session already existed. No retry
+or ledger repair is authorized by this receipt or refusal.
+
 At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
 `python3` found through PATH selected macOS Python 3.9.6, which cannot import
 `datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
 (the executable running the driver). The installer flag `--python "$PY"`
 pins that path to the project interpreter defined in §0.2. Install and
-`--render-only DIR` (render the two job files into `DIR` without installing
+`--render-only DIR` (render the two night job files and access-probe file into `DIR` without installing
 anything) default to `<measurement_root>/.venv/bin/python` when
 `--python` is omitted. Even a stub checkout needs that venv or an absolute
 path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
@@ -2737,7 +2783,7 @@ Chain exits (`scripts/night_chains/calibration_derivation_only.zsh`):
 | exit 64 | A knob (`SLOT_COUNT`, `SETTLE_S`, `SLOT_CADENCE_S`, `SLOT_CAPTURE_BUDGET_S`, `WINDOW_END_EPOCH_S`) was not a non-negative integer string, or failed the positivity check — which covers `SLOT_CAPTURE_BUDGET_S` as well as `SLOT_COUNT`, `SLOT_CADENCE_S` and `SETTLE_S`. Refused before the settle, the reservation and any operator-log write. | The environment or plan is malformed. No window time was spent and no partial night exists. Fix at the desk; author a fresh plan for a later night. **Why the budget is in the positivity guard:** at `SLOT_CAPTURE_BUDGET_S=0` the window test `slot_start + budget > WINDOW_END_EPOCH_S` becomes vacuous, so a slot could start one second before the agent-free window ends and capture straight past it. |
 | exit 66 `derivation_chain_input_missing: <path>` | One of `PLAN`, `IDENTITY_EPOCH_JSON`, `T1_BINDINGS_JSON`, `CALIBRATION_LEDGER`, `LEDGER_HEAD_PIN` was absent. | The clone is incomplete or a path in the plan is wrong. Re-verify §0.2 and §0.4 before authoring the next night. |
 | exit 1 | **Ambiguous — read `chain.stderr.log` to disambiguate.** With a `FAIL <reason>` line it is a wrapper refusal (table above). Without one it is the tracked chain's own `:?required` guard, meaning the chain ran without the wrapper's environment. | Both are pre-window failures costing no window time. Resolve per the matching row above before re-arming. |
-| `readiness --phase pre-reserve` non-zero | The ledger was not ready; nothing was written and no window time was spent. It never authorizes ARM even when it passes. | Desk-repair the ledger; do not re-arm the same night on the same signature. |
+| Reservation enforcing preflight exits 2 | The ledger was not ready; nothing was written and no window time was spent. It never authorizes ARM even when it passes. | Desk-repair the ledger; do not re-arm the same night on the same signature. |
 | `slot_end slot=dNN disposition=non-valid`, night continues | **Not a failure.** The writer exited 1: the row is finalized with a disposition other than `valid`, and the next declared slot runs on the unchanged cadence (§2.4). | Record the count of such slots. Do nothing else, and read no value. Exclusion is decided at issuance, by named mechanism. |
 | `slot_refused slot=dNN rc=2` + chain exits 2, session left OPEN | The writer REFUSED this capture (`emit_refusal` exits 2). The row is **not** finalized, so the chain stops rather than continuing over an unrecorded slot — and deliberately does not abort the session. | Read the refusal in `chain.stderr.log`, then **desk recovery**: `recover_calibration_ledger.py … abort-session --session-id <id> --plan <plan> --reason <the named reason>` (§2.4). Never a retry inside the window. Until the session is closed the next night cannot open at head-equals-pin. |
 | `slot_refused slot=dNN rc=<n≥3>` + chain exits with that status, session left OPEN | The writer crashed rather than refusing. Same dispatch branch, same unfinalized row. | Same desk recovery, and account for the crash before any further night is armed: a crash is a defect, not an outcome. |

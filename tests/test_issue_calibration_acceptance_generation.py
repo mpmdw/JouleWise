@@ -388,10 +388,11 @@ elif name == "python3":
         if slot == os.environ.get("FAIL_SLOT"):
             sys.exit(int(os.environ.get("FAIL_SLOT_RC") or 7))
         clock.write_text(str(now + int(os.environ["FAKE_CAPTURE_S"])))
-    elif "recover_calibration_ledger.py" in args[0]:
-        if "readiness" in args and os.environ.get("FAIL_READINESS"):
-            sys.exit(3)
-    elif "reserve_calibration_window_bracket.py" not in args[0]:
+    elif "reserve_calibration_window_bracket.py" in args[0]:
+        # The shared enforcing preflight refuses before the reservation writes.
+        if os.environ.get("FAIL_READINESS"):
+            sys.exit(2)
+    elif "recover_calibration_ledger.py" not in args[0]:
         sys.exit(99)
 else:
     sys.exit(98)
@@ -431,6 +432,8 @@ else:
                 "FAIL_READINESS": "1" if fail_readiness else "",
                 "PY": str(root / "python3"), "SLEEP": str(root / "sleep"),
                 "DATE": str(root / "date"),
+                "NIGHT_DIR": str(root / "night"),
+                "JOULEWISE_NIGHT_PLAN_ID": "fixture-night",
                 "SESSION_ID": "fixture-session", "WINDOW_ID": "fixture-window",
                 "PLAN_ID": "fixture-plan", "PLAN_SHA256": "a" * 64,
                 "PLAN": str(root / "plan.json"),
@@ -465,24 +468,21 @@ else:
         result, calls, _log = self.run_chain()
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 14)
-        # G2-a order: pre-reserve readiness, then the reservation, then the ONE
-        # settle, then the captures.
-        self.assertIn("recover_calibration_ledger.py", calls[0]["args"][0])
-        self.assertEqual(calls[0]["args"][calls[0]["args"].index("--phase") + 1], "pre-reserve")
-        self.assertIn("readiness", calls[0]["args"])
-        self.assertIn("reserve_calibration_window_bracket.py", calls[1]["args"][0])
-        self.assertIn("--session-kind", python[1]["args"])
-        self.assertIn("derivation", python[1]["args"])
-        self.assertEqual(python[1]["args"][python[1]["args"].index("--slot-count") + 1], "12")
-        self.assertEqual([call["time"] for call in python[2:]], list(range(600, 7800, 600)))
+        self.assertEqual(len(python), 13)
+        # Enforcing readiness is inside reservation, before the ONE settle
+        # and all captures; the start-to-start schedule is unchanged.
+        self.assertIn("reserve_calibration_window_bracket.py", calls[0]["args"][0])
+        self.assertIn("--session-kind", python[0]["args"])
+        self.assertIn("derivation", python[0]["args"])
+        self.assertEqual(python[0]["args"][python[0]["args"].index("--slot-count") + 1], "12")
+        self.assertEqual([call["time"] for call in python[1:]], list(range(600, 7800, 600)))
         # The ONE settle: a single 600 s sleep, and the reservation is the last
         # machine action BEFORE it. Every later sleep only fills the cadence.
         sleeps = [call for call in calls if call["name"] == "sleep"]
         self.assertEqual(sleeps[0], {"name": "sleep", "args": ["600"], "time": 0})
-        self.assertLess(calls.index(python[1]), calls.index(sleeps[0]))
+        self.assertLess(calls.index(python[0]), calls.index(sleeps[0]))
         self.assertEqual([call["args"][0] for call in sleeps[1:]], ["120"] * 11)
-        for index, call in enumerate(python[2:], 1):
+        for index, call in enumerate(python[1:], 1):
             self.assertIn("--derivation-only", call["args"])
             self.assertIn("--allow-live", call["args"])
             self.assertIn(f"d{index:02d}", call["args"])
@@ -513,13 +513,12 @@ else:
                 self.assertEqual(calls, [])
                 self.assertEqual(log, [])
 
-    def test_unready_ledger_refuses_before_any_reservation(self) -> None:
+    def test_unready_ledger_refuses_before_any_reservation_write(self) -> None:
         result, calls, log = self.run_chain(fail_readiness=True)
-        self.assertEqual(result.returncode, 3, result.stderr)
-        # Exactly the readiness call: nothing was reserved, nothing settled.
+        self.assertEqual(result.returncode, 2, result.stderr)
+        # Only reservation's enforcing preflight ran: no settle or captures.
         self.assertEqual(len(calls), 1)
-        self.assertIn("recover_calibration_ledger.py", calls[0]["args"][0])
-        self.assertIn("readiness", calls[0]["args"])
+        self.assertIn("reserve_calibration_window_bracket.py", calls[0]["args"][0])
         self.assertEqual(log, [])
 
     def test_zero_settle_or_cadence_refuses_before_readiness_or_settle(self) -> None:
@@ -541,7 +540,7 @@ else:
         result, calls, log = self.run_chain(end=1800)
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 5)  # readiness, open, d01, d02, abort
+        self.assertEqual(len(python), 4)  # open, d01, d02, abort
         self.assertEqual(python[-1]["args"][-2:], ["--reason", "window_exhausted"])
         self.assertIn("abort-session", python[-1]["args"])
         self.assertNotIn("d03", str(python))
@@ -558,7 +557,7 @@ else:
         result, calls, log = self.run_chain(end=1500)
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 4)  # readiness, open, d01, abort
+        self.assertEqual(len(python), 3)  # open, d01, abort
         captures = [call for call in python if "validate_powermetrics_fiducial.py" in call["args"][0]]
         self.assertEqual([call["args"][call["args"].index("--slot") + 1] for call in captures], ["d01"])
         self.assertIn("slot_unused slot=d02 reason=window_exhausted", log)
@@ -578,14 +577,14 @@ else:
         self.assertEqual(
             [call["args"][call["args"].index("--slot") + 1] for call in captures], ["d01"]
         )
-        self.assertEqual(len(python), 4)  # readiness, open, d01, abort
+        self.assertEqual(len(python), 3)  # open, d01, abort
         self.assertIn("slot_unused slot=d02 reason=window_exhausted", log)
 
     def test_first_slot_that_cannot_finish_aborts_with_no_capture(self) -> None:
         result, calls, log = self.run_chain(end=1000)
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 3)  # readiness, open, abort
+        self.assertEqual(len(python), 2)  # open, abort
         self.assertNotIn("validate_powermetrics_fiducial.py", str(python))
         self.assertEqual(log[-2:], [
             "slot_unused slot=d01 reason=window_exhausted",
@@ -595,7 +594,7 @@ else:
     def test_slot_count_override_and_writer_error_stop(self) -> None:
         result, calls, _log = self.run_chain(slots="2")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len([c for c in calls if c["name"] == "python3"]), 4)
+        self.assertEqual(len([c for c in calls if c["name"] == "python3"]), 3)
         result, calls, log = self.run_chain(fail="d02")
         self.assertEqual(result.returncode, 7)
         self.assertNotIn("d03", str(calls))
@@ -767,19 +766,20 @@ else:
         # Forwarded verbatim means nothing follows them but --execute.
         self.assertEqual(arguments[start + len(bindings) :], ["--execute"])
 
-    def test_chain_readiness_call_puts_globals_before_the_subcommand_and_binds_the_night_ledger(self) -> None:
-        """recover_calibration_ledger.py declares --ledger/--head-pin on its top-level parser; placed
-        after `readiness` the real CLI exits 2 (delta re-audit 68 D-9). Dropping them silently retargets
-        the check at DEFAULT_LEDGER_PATH instead of the night's ledger (D-10). The stubbed harness cannot
-        see argparse, so the invocation shape is pinned in the source."""
-        source = CHAIN.read_text(encoding="utf-8")
-        self.assertIn(
-            '"$PY" "$REPO/scripts/recover_calibration_ledger.py" \\\n'
-            '    --ledger "$CALIBRATION_LEDGER" \\\n'
-            '    --head-pin "$LEDGER_HEAD_PIN" \\\n'
-            '    readiness \\\n'
-            '    --phase pre-reserve',
-            source,
+    def test_reservation_enforcing_readiness_binds_the_night_ledger(self) -> None:
+        """Readiness now runs inside reservation; keep its ledger and head pin
+        explicit so the check cannot silently target the CLI's default ledger.
+        The process-boundary stub does not exercise Seat A's implementation.
+        """
+        _result, calls, _log = self.run_chain(slots="1")
+        reservation = calls[0]["args"]
+        self.assertIn("reserve_calibration_window_bracket.py", reservation[0])
+        inputs = Path(reservation[reservation.index("--plan") + 1]).parent
+        self.assertEqual(
+            reservation[reservation.index("--ledger") + 1], str(inputs / "ledger.jsonl")
+        )
+        self.assertEqual(
+            reservation[reservation.index("--head-pin") + 1], str(inputs / "head.json")
         )
 
 

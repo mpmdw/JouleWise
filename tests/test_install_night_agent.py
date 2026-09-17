@@ -21,6 +21,7 @@ from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
 from tests.test_night_agent_install import FakeLaunchctl, LABELS, run_fixture_process
+from tests.test_run_night import make_probe_fixture, write_matching_probe_receipt
 from tests.test_magistrate_watchdog import Harness
 from scripts import magistrate_watchdog as wd
 
@@ -127,7 +128,9 @@ class InstallNightAgentTests(unittest.TestCase):
 
     def _run(self, plan: Path, *, uninstall: bool = False,
              python: str | None = sys.executable, script: Path = SCRIPT_PATH,
-             render_only: bool = True) -> subprocess.CompletedProcess[str]:
+             render_only: bool = True, seed_probe: bool = True) -> subprocess.CompletedProcess[str]:
+        if not render_only and not uninstall and seed_probe:
+            self._prepare_receipt(plan, python or str(self.measurement_root / ".venv/bin/python"))
         argv = [
             "/bin/zsh",
             str(script),
@@ -145,6 +148,17 @@ class InstallNightAgentTests(unittest.TestCase):
         self.fake.expect_plists(self.root / "home/Library/LaunchAgents", uninstall=uninstall)
         return run_fixture_process(argv, env=self.environment, text=True)
 
+    def _prepare_receipt(self, plan, python=sys.executable):
+        try:
+            parsed = NightPlan.from_mapping(json.loads(plan.read_text()))
+        except ValueError:
+            return
+        if parsed.measurement_root != str(self.measurement_root):
+            return
+        make_probe_fixture(self.root, plan)
+        now = float(self.clock_file.read_text()) if hasattr(self, "clock_file") else time.time()
+        write_matching_probe_receipt(plan, python, now=now)
+
     def _controlled_python(self, now: float, *, spans: tuple | None = None) -> Path:
         """A subprocess clock seam; no production environment override exists."""
         self.clock_file = self.root / "clock"
@@ -160,6 +174,8 @@ class InstallNightAgentTests(unittest.TestCase):
             "sys.argv = args\n"
             "if args[0] == '-':\n"
             "    exec(compile(sys.stdin.read(), '<installer-stdin>', 'exec'))\n"
+            "elif args[0] == '-c':\n"
+            "    exec(args[1])\n"
             "elif args[0] == '-m':\n"
             f"    sys.path.insert(0, {str(REPO_ROOT)!r})\n"
             "    from scripts import run_night\n"
@@ -185,6 +201,82 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertFalse((self.root / "custody/night").exists())
         if self.launch_log.exists():
             self.assertTrue(all(line.startswith("print ") for line in self.launch_log.read_text().splitlines()))
+
+    def test_install_requires_current_successful_bound_probe_receipt(self):
+        mutations = {
+            "missing": None,
+            "finished_epoch_s": lambda r: r.update(finished_epoch_s=time.time() - 21601),
+            "outcome": lambda r: r.update(outcome="refused"),
+            "driver_python": lambda r: r["driver_python"].update(sha256="0" * 64),
+            "chain_python": lambda r: r["chain_python"].update(sha256="0" * 64),
+            "code_digests": lambda r: r["code_digests"].update({"joulewise/calibration_custody_worker.py": "sha256:" + "0" * 64}),
+            "ledger_head_sha256": lambda r: r.update(ledger_head_sha256="0" * 64),
+            "plan_sha256": lambda r: r.update(plan_sha256="0" * 64),
+            "measurement_head": lambda r: r.update(measurement_head="0" * 40),
+            "launchd_label": lambda r: r.update(launchd_label=None),
+        }
+        for field, mutation in mutations.items():
+            with self.subTest(field=field):
+                plan = self._write_plan()
+                self._prepare_receipt(plan)
+                path = plan.parent / "night_probe_receipt.json"
+                if mutation is None:
+                    path.unlink()
+                else:
+                    value = json.loads(path.read_text()); mutation(value)
+                    path.write_text(json.dumps(value))
+                result = self._run(plan, render_only=False, seed_probe=False)
+                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertIn(field, result.stderr)
+                self.assertFalse(any("bootstrap" in call for call in self.fake.calls()))
+                self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        result = self._run(plan, render_only=False, seed_probe=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertTrue(all(self.fake.loaded(label) for label in LABELS))
+
+    def test_install_recomputes_code_ledger_and_interpreter_bindings(self):
+        for field in ("code_digests", "ledger_head_sha256", "chain_python"):
+            with self.subTest(field=field):
+                plan = self._write_plan()
+                self._prepare_receipt(plan)
+                if field == "code_digests":
+                    (self.measurement_root / "joulewise/calibration_custody_worker.py").write_text("# replaced code\n")
+                elif field == "ledger_head_sha256":
+                    (self.measurement_root / "head.json").write_text(json.dumps({"head_digest": "b" * 64}))
+                    (self.measurement_root / "ledger.jsonl").write_text(json.dumps({"receipt_digest": "b" * 64}) + "\n")
+                else:
+                    python = self.measurement_root / ".venv/bin/python"
+                    python.unlink()
+                    replacement = self.measurement_root / "replacement-python"
+                    shutil.copyfile(sys.executable, replacement)
+                    # A new executable path invalidates the effective identity.
+                    replacement.chmod(0o755)
+                    python.symlink_to(replacement)
+                result = self._run(plan, render_only=False, seed_probe=False)
+                self.assertEqual(2, result.returncode, result.stderr)
+                if field != "chain_python":
+                    self.assertIn(field, result.stderr)
+                self.assertFalse(any("bootstrap" in call for call in self.fake.calls()))
+                if field == "chain_python":
+                    python.unlink(); python.symlink_to(sys.executable)
+
+    def test_render_only_includes_probe_plist_with_pinned_topology(self):
+        plan = self._write_plan()
+        result = self._run(plan)
+        self.assertEqual(0, result.returncode, result.stderr)
+        value = json.loads(plan.read_text())
+        probe = plistlib.loads((self.rendered / ("com.joulewise.night-probe." + value["plan_id"] + ".plist")).read_bytes())
+        night = plistlib.loads((self.rendered / "com.joulewise.night.plist").read_bytes())
+        self.assertEqual([sys.executable, str(REPO_ROOT / "scripts/run_night.py"), "probe", "--plan", str(plan),
+                          "--receipt", str(plan.parent / "night_probe_receipt.pending.json"), "--timeout-s", "600"],
+                         probe["ProgramArguments"])
+        self.assertEqual(night["WorkingDirectory"], probe["WorkingDirectory"])
+        self.assertEqual(night["EnvironmentVariables"]["PATH"], probe["EnvironmentVariables"]["PATH"])
+        self.assertTrue(probe["RunAtLoad"])
+        self.assertNotIn("KeepAlive", probe)
+        self.assertEqual([], self.fake.calls())
 
     def test_help_and_unknown_flags_use_shell_usage_and_exit_two(self) -> None:
         usage = (" --plan PLAN.json [--python ABS_PATH] [--uninstall] "
@@ -392,7 +484,7 @@ class InstallNightAgentTests(unittest.TestCase):
                 before = plan_path.read_bytes()
                 completed = self._run(plan_path, render_only=True)
                 self.assertEqual(0, completed.returncode, completed.stderr)
-                self.assertEqual(2, len(list(self.rendered.glob("*.plist"))))
+                self.assertEqual(3, len(list(self.rendered.glob("*.plist"))))
                 for label in LABELS:
                     payload = plistlib.loads((self.rendered / (label + ".plist")).read_bytes())
                     argv = payload["ProgramArguments"]
@@ -518,7 +610,7 @@ class InstallNightAgentTests(unittest.TestCase):
         preflight = json.loads(completed.stdout.splitlines()[0])
         self.assertEqual("ok", preflight["preflight"])
         self.assertEqual(sys.executable, preflight["python"])
-        self.assertEqual(2, len(list(self.rendered.glob("*.plist"))))
+        self.assertEqual(3, len(list(self.rendered.glob("*.plist"))))
         for path in self.rendered.glob("*.plist"):
             argv = plistlib.loads(path.read_bytes())["ProgramArguments"]
             self.assertEqual(sys.executable, argv[0])
@@ -665,7 +757,7 @@ class InstallNightAgentTests(unittest.TestCase):
         completed = self._run(self._v2_plan(), python=str(python))
         self.assertEqual(0, completed.returncode, completed.stderr)
         plists = sorted(self.rendered.glob("*.plist"))
-        self.assertEqual(2, len(plists))
+        self.assertEqual(3, len(plists))
         for path in plists:
             argv = plistlib.loads(path.read_bytes())["ProgramArguments"]
             self.assertEqual(str(python), argv[0])
@@ -690,7 +782,7 @@ class InstallNightAgentTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertEqual(2, len(list(self.rendered.glob("*.plist"))))
+        self.assertEqual(3, len(list(self.rendered.glob("*.plist"))))
         for path in self.rendered.glob("*.plist"):
             self.assertEqual(
                 str(self.measurement_root / ".venv/bin/python"),
@@ -760,7 +852,7 @@ class InstallNightAgentTests(unittest.TestCase):
             cwd=self.root, env=self.environment, capture_output=True, text=True, check=False)
         self.assertEqual(0, completed.returncode, completed.stderr)
         paths = sorted((self.root / "relative rendered").glob("*.plist"))
-        self.assertEqual(2, len(paths))
+        self.assertEqual(3, len(paths))
         for path in paths:
             document = plistlib.loads(path.read_bytes())
             self.assertIn(str(plan), document["ProgramArguments"])
@@ -769,6 +861,7 @@ class InstallNightAgentTests(unittest.TestCase):
 
     def test_relative_launchctl_path_survives_script_cwd_binding(self) -> None:
         plan = self._write_plan()
+        self._prepare_receipt(plan)
         completed = subprocess.run(
             ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan.relative_to(self.root)),
              "--python", sys.executable, "--launchctl-bin", str(self.launchctl.relative_to(self.root))],
@@ -908,6 +1001,8 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual("--python ignored on uninstall\n", ignored_python.stderr)
         self.assertNotIn("preflight", ignored_python.stdout)
         calls = self.launch_log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(2, sum("night-probe." in call for call in calls))
+        calls = [call for call in calls if "night-probe." not in call]
         self.assertEqual(8, len(calls))
         self.assertEqual([f"{action} gui/{os.getuid()}/{label}"
                           for action in ("bootout", "print")

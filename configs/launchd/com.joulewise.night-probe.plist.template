@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>@@LABEL@@</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@@PYTHON@@</string>
+    <string>@@REPO@@/scripts/run_night.py</string>
+    <string>probe</string>
+    <string>--plan</string><string>@@PLAN@@</string>
+    <string>--receipt</string><string>@@RECEIPT@@</string>
+    <string>--timeout-s</string><string>@@TIMEOUT@@</string>
+  </array>
+  <key>WorkingDirectory</key><string>@@REPO@@</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>@@PATH@@</string>
+    <key>JOULEWISE_LAUNCHD_LABEL</key><string>@@LABEL@@</string>
+  </dict>
+  <key>StandardOutPath</key><string>@@PROBE_DIR@@/night-probe.out</string>
+  <key>StandardErrorPath</key><string>@@PROBE_DIR@@/night-probe.err</string>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>

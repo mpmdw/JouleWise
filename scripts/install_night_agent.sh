@@ -17,6 +17,9 @@ while (( $# )); do
   case "$1" in
     --plan) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; plan="$2"; args+=("$1" "${2:A}"); shift 2 ;;
     --python) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; python="$2"; python_given=1; args+=("$1" "$2"); shift 2 ;;
+    --launchd-probe) args+=("$1"); shift ;;
+    --probe-timeout-s|--probe-max-age-s|--hour|--minute)
+      [[ $# -ge 2 && -n "$2" ]] || usage "$1"; args+=("$1" "$2"); shift 2 ;;
     --uninstall) uninstall=1; args+=("$1"); shift ;;
     --render-only) [[ $# -ge 2 && -n "$2" ]] || usage "$1"; args+=("$1" "${2:A}"); shift 2 ;;
     --launchctl-bin)
