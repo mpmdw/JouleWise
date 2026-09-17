@@ -1183,11 +1183,14 @@ is:
 which is the cross-check that this arithmetic matches the registered design.
 
 Margin on top of the programmed span covers three things the 7680 s does not:
-the chain's pre-settle work (input preflight, the `--phase pre-reserve`
-readiness check, and the session reservation, all of which run BEFORE the
-settle so that an unusable declaration costs no window time), per-capture
-overrun beyond 600 s pushing later slots later, and the driver's own work
-before it starts the chain. Allocate **1320 s (22 min)**:
+the chain's pre-settle work (input preflight and the session reservation, both
+of which run BEFORE the settle so that an unusable declaration costs no window
+time — the reservation's `--pre-reserve-strict` enforcing readiness check is
+one bounded custody pass inside the reservation itself, and the chain runs no
+separate readiness command; `recover_calibration_ledger.py readiness --phase
+pre-reserve` remains a DESK command, `docs/phase_2/window_runbook.md:466`),
+per-capture overrun beyond 600 s pushing later slots later, and the driver's
+own work before it starts the chain. Allocate **1320 s (22 min)**:
 
 ```
 WINDOW_MAX_S = 7680 + 1320 = 9000 s   (2 h 30 min)
@@ -1322,9 +1325,17 @@ constants in `scripts/run_night.py`. The abort STARTS before the window end —
 it fires when the next slot's capture budget would cross it — so 1560 s is
 measured against at least that 3900 s. 1560 s < 3900 s, with roughly 39 min
 to spare: the dead-man does not fire and the courier still delivers the
-night's result. The alternative — an unbounded
-abort — is what hung the 2026-09-16 night, so a bounded 26 min worst case is
-the improvement, not a new risk. Shrink it further, if it ever matters, by
+night's result. If the abort's own custody pass exhausts its allowance, the
+abort command refuses with `calibration_ledger_custody_timeout`, writes the
+`joulewise.calibration_refusal.v1` document at
+`JOULEWISE_CALIBRATION_REFUSAL_PATH` (the chain exports it into the night
+directory) and exits 2; the driver reads that document and records verdict
+`REFUSED` with `aborted_reason` `night_calibration_refused`, so the delivered
+result says the night did not finish. A chain that exits 2 writing NO such
+document is still recorded as verdict `GO` with `chain_exit_code` 2 — for
+that case, read the chain exit code, not the verdict. The alternative — an
+unbounded abort — is what hung the 2026-09-16 night, so a bounded 26 min worst
+case is the improvement, not a new risk. Shrink it further, if it ever matters, by
 lowering `CUSTODY_BUDGET_S` or `SLOT_COUNT`; both are chain variables and
 both also move the cadence arithmetic above.
 
@@ -3040,7 +3051,7 @@ numbered record.
 | Install close `t0 − 480 − 120`, whole-day shipped `INSTALL_SPANS`, and dead-man `60 × ceil((t0 + window_max_s + 300 + 3600) / 60)` | D-180 clause 1 and D-181 clause 1; INSTALL-WINDOWS-MULTI-01 adopted design record 06; `scripts/run_night.py`: `install_close_epoch`, `INSTALL_CLOSE_MARGIN_S`, `INSTALL_SPANS`, `deadman_epoch`, `DEADMAN_GRACE_S` |
 | The supersession banner shape and the "read the newest activation records" instruction | record 13 |
 | Epoch↔local conversions and strict maximum in §1.2 | §1.2 arithmetic, converted with `datetime.fromtimestamp(epoch, ZoneInfo("America/Los_Angeles"))`; the example applies the current design to earlier coordinates |
-| Driver hands the chain four variables and no argv (`_run_chain_once` in `scripts/run_night.py`, pinned by the argv assertion in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
+| Driver hands the chain seven variables and no argv — `NIGHT_PLAN_ID`, `JOULEWISE_NIGHT_PLAN_ID`, `NIGHT_DIR`, `MEASUREMENT_ROOT`, `MEASUREMENT_HEAD`, `PY`, `CUSTODY_BUDGET_S` (`_chain_environment` in `scripts/run_night.py`, pinned by the environment and argv assertions in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
 | Clean tree and desk-input provenance as arm-checklist items, and "one wrapper per night" | seat record 103 §7.1–§7.4 and its fix-round items B-1, B-2, S-1, S-4; refuter record 105 §5 |
 | Whole-suite replay green at the merged head, and the merge itself | records 130 and 133 |
 | The epoch-equivalence rule itself — the `m < 6` INCONCLUSIVE branch, the PASS and FAIL definitions, the continuation route and its addendum contents, the FAIL route's affirmation of V3, and the blindness clarification | The owner's directive issue 316 of 2026-09-10, transcribed as revision 2 of `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the dated Ed addendum under D-102 in `docs/decision_log.md` |

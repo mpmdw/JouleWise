@@ -1051,7 +1051,9 @@ def main(argv=None):
             self.exit(2)
 
     parser = UsageParser(add_help=False, allow_abbrev=False,
-        usage="%(prog)s --plan PLAN.json [--python ABS_PATH] [--uninstall] "
+        usage="%(prog)s --plan PLAN.json [--python ABS_PATH] "
+              "[--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] "
+              "[--hour H] [--minute M] [--uninstall] "
               "[--render-only DIR] [--launchctl-bin PATH]")
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--python")
