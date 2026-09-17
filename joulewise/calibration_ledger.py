@@ -26,14 +26,17 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
+import selectors
 import stat
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -280,26 +283,30 @@ def content_id_from_artifact_hashes(artifact_sha256: Mapping[str, Any]) -> str |
     return canonical_sha256(identity)
 
 
-def artifact_hashes(custody_dir: Path) -> dict[str, str]:
+def artifact_hashes(custody_dir: Path, *, custody_deadline: CustodyDeadline | None = None) -> dict[str, str]:
     """Hash governed artifacts for issuance; refuse relocated custody roots."""
 
     _refuse_custody_override_mint()
+    if custody_deadline is not None:
+        custody_deadline.check()
+        if not _custody_probe_paths(Path(custody_dir), mode="issuing"):
+            return {}
+        result = _bounded_custody_request({
+            "operation": "hashes", "governed_artifacts": GOVERNED_ARTIFACTS,
+            "observations": [{"observation_id": None, "locator": str(custody_dir)}],
+        }, custody_deadline)
+        hashes = result.get("artifact_sha256")
+        if (not isinstance(hashes, dict) or set(hashes) - set(GOVERNED_ARTIFACTS)
+                or any(not _is_sha256(value) for value in hashes.values())):
+            raise CalibrationLedgerError(RefusalCode.LEDGER_CUSTODY_INVALID)
+        return hashes
     return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict, mode="issuing")
 
 
 def _artifact_hashes_unbounded(root: Path) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for relative in GOVERNED_ARTIFACTS:
-        path = root / relative
-        if path.is_file():
-            result[relative] = hashlib.sha256(
-                read_authentication_input(
-                    path,
-                    grammar="raw",
-                    label=f"calibration custody artifact {relative}",
-                )
-            ).hexdigest()
-    return result
+    from joulewise.calibration_custody_worker import artifact_hashes as hash_core
+
+    return hash_core(root, GOVERNED_ARTIFACTS, reader=read_authentication_input)
 
 
 def normalize_calibration_custody_path(path: Path | str) -> str:
@@ -1895,6 +1902,237 @@ def _target_state_transition_is_valid(
     return not ((after & fatal) - (before & fatal))
 
 
+DEFAULT_CUSTODY_BUDGET_S = 120.0
+CUSTODY_CLEANUP_TIMEOUT_S = 5.0
+
+
+class CustodyDeadline:
+    """One absolute monotonic allowance for a complete preparation operation."""
+
+    def __init__(self, budget_s: float = DEFAULT_CUSTODY_BUDGET_S,
+                 deadline_epoch_s: float | None = None):
+        if not math.isfinite(budget_s) or budget_s <= 0:
+            raise ValueError("custody budget must be finite and positive")
+        self.configured_budget_s = budget_s
+        self.deadline_epoch_s = deadline_epoch_s
+        self.started = time.monotonic()
+        self.window_deadline = None
+        remaining = budget_s
+        if deadline_epoch_s is not None:
+            if not math.isfinite(deadline_epoch_s):
+                raise ValueError("custody deadline must be finite")
+            self.window_deadline = self.started + deadline_epoch_s - time.time()
+            remaining = min(remaining, self.window_deadline - self.started)
+            if remaining <= 0:
+                raise CalibrationLedgerError(RefusalCode.WINDOW_EXHAUSTED)
+        self.budget_s = remaining
+        self.deadline = self.started + remaining
+        self.last_observation = None
+        self.ledger_head_sha256 = None
+        self.session_id = None
+        self.existing_session = False
+        self.observations = 0
+
+    def next_operation(self):
+        result = CustodyDeadline(self.configured_budget_s)
+        # Preserve the initial wall-to-monotonic conversion across operations.
+        result.window_deadline = self.window_deadline
+        result.deadline_epoch_s = self.deadline_epoch_s
+        if self.window_deadline is not None:
+            result.deadline = min(result.deadline, self.window_deadline)
+            result.budget_s = result.deadline - result.started
+            if result.budget_s <= 0:
+                raise CalibrationLedgerError(RefusalCode.WINDOW_EXHAUSTED)
+        result.ledger_head_sha256 = self.ledger_head_sha256
+        result.session_id = self.session_id
+        result.existing_session = self.existing_session
+        return result
+
+    @property
+    def elapsed_s(self):
+        return time.monotonic() - self.started
+
+    def context(self):
+        return {"budget_s": self.budget_s, "elapsed_s": self.elapsed_s,
+                "last_observation": self.last_observation,
+                "ledger_head_sha256": self.ledger_head_sha256,
+                "session_id": self.session_id,
+                "existing_session": self.existing_session}
+
+    def refuse(self):
+        raise CalibrationLedgerError(RefusalCode.LEDGER_CUSTODY_TIMEOUT,
+                                     context=self.context())
+
+    def remaining(self):
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            self.refuse()
+        return remaining
+
+    def check(self):
+        self.remaining()
+
+
+def _stop_custody_worker(process):
+    """Terminate, then kill and reap, using a separate bounded cleanup grace."""
+    end = time.monotonic() + CUSTODY_CLEANUP_TIMEOUT_S
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=min(0.5, max(0.001, end - time.monotonic())))
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=max(0.001, end - time.monotonic()))
+    for stream in (process.stdin, process.stdout):
+        if stream is not None:
+            stream.close()
+
+
+def _bounded_custody_request(request, deadline: CustodyDeadline):
+    """Supervise read-only verification; never hand the worker writer fds."""
+    deadline.check()
+    request_id = secrets.token_hex(16)
+    request = {**request, "request_id": request_id,
+               "remaining_budget_s": deadline.remaining()}
+    # Popen itself can block waiting for exec. Bound that wait too; a cancelled
+    # launch owns teardown of any child returned after the deadline.
+    ready = threading.Event()
+    launch_lock = threading.Lock()
+    launch = {"cancelled": False}
+
+    def spawn():
+        try:
+            process = subprocess.Popen(
+                [sys.executable, "-B", "-m", "joulewise.calibration_custody_worker"],
+                cwd=REPO_ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, close_fds=True, start_new_session=False,
+                bufsize=0,
+            )
+        except BaseException as exc:
+            with launch_lock:
+                launch["error"] = exc
+                ready.set()
+            return
+        with launch_lock:
+            cancelled = launch["cancelled"]
+            if not cancelled:
+                launch["process"] = process
+                ready.set()
+        if cancelled:
+            _stop_custody_worker(process)
+
+    threading.Thread(target=spawn, name="custody-worker-launch", daemon=True).start()
+    # Do not raise between starting the launcher and assigning teardown ownership.
+    ready.wait(max(0.0, deadline.deadline - time.monotonic()))
+    with launch_lock:
+        process = launch.get("process")
+        if process is None:
+            launch["cancelled"] = True
+    if process is None:
+        deadline.check()
+        raise CalibrationLedgerError(RefusalCode.LEDGER_CUSTODY_INVALID,
+                                     context={"reason": "custody_worker_start_failed"})
+    try:
+        deadline.check()
+        assert process.stdin is not None and process.stdout is not None
+        os.set_blocking(process.stdin.fileno(), False)
+        os.set_blocking(process.stdout.fileno(), False)
+        pending = memoryview(json.dumps(request).encode() + b"\n")
+        buffer = b""
+        result = None
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdin, selectors.EVENT_WRITE)
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while selector.get_map():
+                events = selector.select(deadline.remaining())
+                deadline.check()
+                for key, _mask in events:
+                    if key.fileobj is process.stdin:
+                        count = os.write(process.stdin.fileno(), pending[:65536])
+                        pending = pending[count:]
+                        if not pending:
+                            selector.unregister(process.stdin)
+                            process.stdin.close()
+                        continue
+                    chunk = os.read(process.stdout.fileno(), 65536)
+                    if not chunk:
+                        selector.unregister(process.stdout)
+                        continue
+                    buffer += chunk
+                    if len(buffer) > 4 * 1024 * 1024:
+                        raise ValueError("custody worker response too large")
+                    while b"\n" in buffer:
+                        line, buffer = buffer.split(b"\n", 1)
+                        message = json.loads(line)
+                        if not isinstance(message, dict):
+                            raise ValueError("custody worker response is not an object")
+                        if message.get("request_id") != request_id or result is not None:
+                            raise ValueError("custody worker response does not match request")
+                        if "progress" in message:
+                            progress = message["progress"]
+                            if not isinstance(progress, dict):
+                                raise ValueError("custody worker progress is not an object")
+                            deadline.last_observation = {
+                                field: progress.get(field)
+                                for field in ("observation_id", "locator", "artifact")
+                            }
+                            print(json.dumps({"event": "calibration_custody_progress",
+                                              **progress,
+                                              "elapsed_s": deadline.elapsed_s}),
+                                  file=sys.stderr, flush=True)
+                        elif message.get("timeout") is True:
+                            deadline.refuse()
+                        elif "result" in message:
+                            result = message["result"]
+                        else:
+                            raise ValueError("incomplete custody worker response")
+            exit_code = process.wait(timeout=deadline.remaining())
+        deadline.check()
+        if (exit_code != 0 or buffer or not isinstance(result, dict)
+                or type(result.get("observations")) is not int
+                or result.get("observations") != len(request["observations"])
+                or not isinstance(result.get("elapsed_s"), (float, int))
+                or not math.isfinite(result["elapsed_s"]) or result["elapsed_s"] < 0
+                or not isinstance(result.get("reasons"), list)
+                or any(reason != RefusalCode.LEDGER_CUSTODY_INVALID.value
+                       for reason in result["reasons"])):
+            raise ValueError("custody worker did not complete the exact request")
+        print(json.dumps({"event": "calibration_custody_complete",
+                          "elapsed_s": deadline.elapsed_s,
+                          "observations": result["observations"]}),
+              file=sys.stderr, flush=True)
+        deadline.check()
+        return result
+    except subprocess.TimeoutExpired:
+        deadline.refuse()
+    except (OSError, ValueError) as exc:
+        if isinstance(exc, CalibrationLedgerError):
+            raise
+        deadline.check()
+        raise CalibrationLedgerError(RefusalCode.LEDGER_CUSTODY_INVALID,
+                                     context={"reason": "custody_worker_protocol",
+                                              "detail": str(exc)}) from exc
+    finally:
+        _stop_custody_worker(process)
+
+
+def bounded_custody_reasons(observations, repo_root, deadline: CustodyDeadline):
+    frozen = []
+    for observation in observations:
+        root = Path(observation.custody_locator)
+        if not root.is_absolute():
+            root = Path(repo_root) / root
+        if (observation.artifact_sha256
+                and not _custody_probe_paths(root, mode="issuing")):
+            deadline.check()
+            return {RefusalCode.LEDGER_CUSTODY_INVALID.value}
+        frozen.append({"observation_id": observation.attempt_id,
+                       "locator": str(root), "disposition": observation.disposition,
+                       "artifact_sha256": dict(observation.artifact_sha256)})
+    result = _bounded_custody_request({"observations": frozen}, deadline)
+    return set(result["reasons"])
+
+
 def _custody_reasons(
     observations: Sequence[LedgerObservation], repo_root: Path, *,
     mode: Literal["read_replay", "issuing"] = "issuing",
@@ -2096,6 +2334,7 @@ def load_calibration_ledger_snapshot(
     repo_root: Path = REPO_ROOT,
     calibration_custody_store: Path | None = None,
     mode: Literal["read_replay", "issuing"] = "issuing",
+    custody_deadline: CustodyDeadline | None = None,
 ) -> CalibrationLedgerSnapshot:
     """Load, authenticate, and freeze exactly one ledger snapshot.
 
@@ -2186,12 +2425,23 @@ def load_calibration_ledger_snapshot(
         receipts
     )
     reasons.update(state_reasons)
+    if custody_deadline is not None:
+        custody_deadline.ledger_head_sha256 = physical_digest
+        custody_deadline.observations = len(_custody_observations(observations, bracket_sessions))
+        open_sessions = [session for session in bracket_sessions if session.state == "open"]
+        custody_deadline.existing_session = bool(open_sessions)
+        custody_deadline.session_id = open_sessions[0].session_id if open_sessions else None
+        custody_deadline.check()
     custody_store_manifest_sha256: str | None = None
     custody_observations = _custody_observations(observations, bracket_sessions)
     if calibration_custody_store is not None and not verify_custody:
         reasons.add("calibration_ledger_custody_invalid")
     elif verify_custody and calibration_custody_store is None:
-        reasons.update(_custody_reasons(custody_observations, repo_root, mode=mode))
+        reasons.update(
+            bounded_custody_reasons(custody_observations, repo_root, custody_deadline)
+            if custody_deadline is not None
+            else _custody_reasons(custody_observations, repo_root, mode=mode)
+        )
     elif verify_custody:
         store_reasons, custody_store_manifest_sha256 = _custody_store_reasons(
             custody_observations,
@@ -2201,6 +2451,8 @@ def load_calibration_ledger_snapshot(
             head_digest=physical_digest,
         )
         reasons.update(store_reasons)
+    if custody_deadline is not None:
+        custody_deadline.check()
     return CalibrationLedgerSnapshot(
         ledger_schema=LEDGER_SCHEMA,
         ledger_path=ledger_path,
@@ -2456,24 +2708,12 @@ def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
 
 
 def _assert_absolute_nonsymlink_directory_unbounded(directory: Path) -> Path:
-    path = Path(directory)
-    if not path.is_absolute():
-        raise CalibrationLedgerError("custody locator is not absolute")
-    current = Path(path.anchor)
+    from joulewise.calibration_custody_worker import assert_custody_directory
+
     try:
-        for component in path.parts[1:]:
-            current /= component
-            if stat.S_ISLNK(os.lstat(current).st_mode):
-                raise CalibrationLedgerError(
-                    f"custody locator resolves through a symlink: {path}"
-                )
-        if not stat.S_ISDIR(os.stat(path, follow_symlinks=False).st_mode):
-            raise CalibrationLedgerError(f"custody locator is not a directory: {path}")
-    except FileNotFoundError as exc:
-        raise CalibrationLedgerError(f"custody locator is missing: {path}") from exc
-    except OSError as exc:
-        raise CalibrationLedgerError(f"custody locator is unreadable: {path}") from exc
-    return path
+        return assert_custody_directory(directory)
+    except (OSError, ValueError) as exc:
+        raise CalibrationLedgerError(str(exc)) from exc
 
 
 def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
@@ -4358,6 +4598,7 @@ def append_bracket_session_receipt(
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
     _stage_boundary: Any | None = None,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> Mapping[str, Any]:
     """Atomically reserve exactly one immutable ordered-slot capability.
 
@@ -4436,6 +4677,8 @@ def append_bracket_session_receipt(
         )
     )
     operation_key = _operation_key_for_core(expected_core)
+    if custody_deadline is not None:
+        custody_deadline.check()
     return _locked_append(
         Path(ledger_path),
         build,
@@ -4454,6 +4697,7 @@ def claim_bracket_session_slot(
     attempt_id: str,
     claim_id: str | None = None,
     _stage_boundary: Any | None = None,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> Mapping[str, Any]:
     """Append one deterministic claim while liveness is owned by the lease."""
 
@@ -4529,6 +4773,8 @@ def claim_bracket_session_slot(
         "slot": slot,
         "attempt_id": attempt_id,
     }
+    if custody_deadline is not None:
+        custody_deadline.check()
     return _locked_append(
         Path(ledger_path),
         build,
@@ -4558,6 +4804,7 @@ def finalize_bracket_session_slot(
     capture_wall_time_s: str | None = None,
     exact_bound_lexeme_s: str | None = None,
     _stage_boundary: Any | None = None,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> Mapping[str, Any]:
     """Fill exactly one reserved session slot in mandatory pre/post order."""
 
@@ -4633,6 +4880,8 @@ def finalize_bracket_session_slot(
             },
         )
 
+    if custody_deadline is not None:
+        custody_deadline.check()
     return _locked_append(
         Path(ledger_path),
         build,
@@ -4922,24 +5171,12 @@ def _custody_backup_disabled(path: Path) -> bool:
 
 
 def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> set[str]:
-    for relative, expected in observation.artifact_sha256.items():
-        path = root / relative
-        try:
-            actual = hashlib.sha256(
-                read_authentication_input(
-                    path,
-                    grammar="raw",
-                    label=(
-                        f"calibration ledger custody {observation.attempt_id} "
-                        f"artifact {relative}"
-                    ),
-                )
-            ).hexdigest()
-        except OSError:
-            return {"calibration_ledger_custody_invalid"}
-        if actual != expected:
-            return {"calibration_ledger_custody_invalid"}
-    return set()
+    from joulewise.calibration_custody_worker import observation_custody_reasons
+
+    return observation_custody_reasons(
+        observation.attempt_id, observation.artifact_sha256, root,
+        reader=read_authentication_input,
+    )
 
 
 def probe_custody(
@@ -5016,8 +5253,19 @@ def _missing_custody(path: Path) -> Any:
 
 
 def _custody_state(
-    path: Path, *, mode: Literal["read_replay", "issuing"] = "issuing",
+    path: Path, *, custody_deadline: CustodyDeadline | None = None, mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> str:
+    if custody_deadline is not None:
+        custody_deadline.check()
+        if not _custody_probe_paths(path, mode="issuing"):
+            return "absent"
+        result = _bounded_custody_request({
+            "operation": "state", "governed_artifacts": GOVERNED_ARTIFACTS,
+            "observations": [{"observation_id": None, "locator": str(path)}],
+        }, custody_deadline)
+        if result.get("state") not in {"absent", "empty", "partial", "unreadable", "complete"}:
+            raise CalibrationLedgerError(RefusalCode.LEDGER_CUSTODY_INVALID)
+        return result["state"]
     return probe_custody(
         path, _custody_state_unbounded, lambda: "absent",
         not_directory=lambda: "unreadable", mode=mode,
@@ -5025,27 +5273,12 @@ def _custody_state(
 
 
 def _custody_state_unbounded(path: Path) -> str:
-    try:
-        if not path.exists():
-            return "absent"
-        if not path.is_dir():
-            return "unreadable"
-        present = {name for name in GOVERNED_ARTIFACTS if (path / name).is_file()}
-    except OSError:
-        return "unreadable"
-    if not present:
-        return "empty"
-    if present == set(GOVERNED_ARTIFACTS):
-        try:
-            raw_by_name = _governed_raw_nofollow_unbounded(path)
-            manifest = json.loads(raw_by_name["manifest.json"])
-            evidence = json.loads(raw_by_name["instrument_evidence.json"])
-        except (CalibrationLedgerError, UnicodeDecodeError, json.JSONDecodeError):
-            return "unreadable"
-        if not isinstance(manifest, Mapping) or not isinstance(evidence, Mapping):
-            return "unreadable"
-        return "complete"
-    return "partial"
+    from joulewise.calibration_custody_worker import custody_state
+
+    return custody_state(
+        path, GOVERNED_ARTIFACTS, _governed_raw_nofollow_unbounded,
+        read_errors=(CalibrationLedgerError,),
+    )
 
 
 def calibration_session_status(
@@ -5056,17 +5289,20 @@ def calibration_session_status(
     plan_path: Path | None = None,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> dict[str, Any]:
     """Derive session progress solely from durable ledger/plan/custody state."""
 
+    mode = "issuing" if custody_deadline is not None else "read_replay"
     inspection = inspect_calibration_ledger(ledger_path)
     snapshot = load_calibration_ledger_snapshot(
         ledger_path,
         head_pin_path,
         require_committed_pin=require_committed_pin,
         verify_custody=False,
-        mode="read_replay",
+        mode=mode,
         repo_root=repo_root,
+        custody_deadline=custody_deadline,
     )
     session = snapshot.bracket_session_by_id.get(session_id)
     if session is None:
@@ -5094,7 +5330,7 @@ def calibration_session_status(
         slots[slot] = {
             "attempt_id": session.slot_attempt_ids.get(slot),
             "custody_locator": str(locator) if locator is not None else None,
-            "custody_state": _custody_state(locator, mode="read_replay") if locator is not None else None,
+            "custody_state": _custody_state(locator, mode=mode, custody_deadline=custody_deadline) if locator is not None else None,
             "finalized": slot in session.finalized_slots,
         }
     next_slot = session.next_slot
@@ -5163,6 +5399,7 @@ def calibration_readiness(
     enforcing_under_lease: bool = False,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> CalibrationReadiness:
     """Evaluate the D-117 composite readiness predicate for one exact phase."""
 
@@ -5184,6 +5421,7 @@ def calibration_readiness(
         verify_custody=enforcing_under_lease,
         mode=mode,
         repo_root=repo_root,
+        custody_deadline=custody_deadline,
     )
     relation = _pin_relation(snapshot)
     common_blocked = inspection.state != "clean" or inspection.legacy_journal_path is not None
@@ -5232,7 +5470,7 @@ def calibration_readiness(
             if isinstance(reserved, Mapping):
                 custody_state = _custody_state(
                     Path(str(reserved["custody_locator"])),
-                    mode=mode,
+                    mode=mode, custody_deadline=custody_deadline,
                 )
             claims = [
                 receipt
@@ -5317,6 +5555,8 @@ def calibration_readiness(
         ):
             refusal = RefusalCode.TERMINAL_NOT_READY
 
+    if custody_deadline is not None:
+        custody_deadline.check()
     return CalibrationReadiness(
         phase=phase,
         status="ready" if refusal is None else "blocked",
@@ -5697,6 +5937,7 @@ def append_pending_receipt(
     head_pin_path: Path = DEFAULT_HEAD_PIN_PATH,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> Mapping[str, Any]:
     """Reserve an attempt before any capture directory or sampler exists.
 
@@ -5783,6 +6024,8 @@ def append_pending_receipt(
         )
     )
     operation_key = _operation_key_for_core(expected_core)
+    if custody_deadline is not None:
+        custody_deadline.check()
     return _locked_append(
         Path(ledger_path),
         build,
@@ -5802,6 +6045,7 @@ def finalize_attempt_receipt(
     t1_bindings: Mapping[str, Any] | None = None,
     capture_wall_time_s: str | None = None,
     exact_bound_lexeme_s: str | None = None,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> Mapping[str, Any]:
     """Append the sole final state for a previously reserved attempt."""
 
@@ -5879,6 +6123,8 @@ def finalize_attempt_receipt(
         )
     )
     operation_key = _operation_key_for_core(expected_core)
+    if custody_deadline is not None:
+        custody_deadline.check()
     return _locked_append(
         Path(ledger_path),
         build,
@@ -5908,6 +6154,8 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "CustodyDeadline",
+    "bounded_custody_reasons",
     "ABANDONMENT_EVENT",
     "CUSTODY_STORE_MANIFEST_NAME",
     "CUSTODY_STORE_MANIFEST_SCHEMA",

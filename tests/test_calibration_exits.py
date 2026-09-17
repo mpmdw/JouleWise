@@ -1146,6 +1146,7 @@ INTERNAL_UNIT_CODES = frozenset(
 
 
 WITNESS_CASES = (
+    WitnessCase(RefusalCode.LEDGER_CUSTODY_TIMEOUT, "_state_reservation_inputs", "reserve-execute-new"),
     WitnessCase(RefusalCode.LEDGER_MISSING, "_corrupt_missing", "audit"),
     WitnessCase(RefusalCode.LEDGER_MALFORMED, "_corrupt_malformed", "audit"),
     WitnessCase(RefusalCode.LEDGER_CHAIN_CONFLICT, "_corrupt_chain", "audit"),
@@ -5237,6 +5238,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 elif case.observer == "reserve-plan-mismatch":
                     sha_index = args.index("--plan-sha256") + 1
                     args[sha_index] = "f" * 64
+                if case.code is RefusalCode.LEDGER_CUSTODY_TIMEOUT:
+                    args += ["--custody-budget-s", "0.000000001"]
                 refused = self._run_script(self.reserve_script, *args)
             elif case.observer == "session-status":
                 refused = self._run(

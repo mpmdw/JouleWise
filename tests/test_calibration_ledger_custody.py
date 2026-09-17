@@ -170,7 +170,7 @@ class CustodyProbeTests(unittest.TestCase):
                         phase="pre-slot", session_id="session", enforcing_under_lease=enforcing)
                 self.assertEqual(load.call_args.kwargs.get("mode"), mode)
                 self.assertEqual(load.call_args.kwargs["verify_custody"], enforcing)
-                state.assert_called_once_with(Path("/mock/original"), mode=mode)
+                state.assert_called_once_with(Path("/mock/original"), mode=mode, custody_deadline=None)
 
     def test_head_pin_advancement_forwards_issuing_mode(self):
         class ReachedSnapshot(Exception):
@@ -692,3 +692,175 @@ class IssuingBoundaryTests(unittest.TestCase):
                 self.assertEqual(ledger._custody_state(original, mode=mode), "absent")
             self.assertEqual(stderr.getvalue(),
                 f"custody_backup_roots_disabled: {original}\n" if mode == "issuing" else "")
+
+
+class ReservationCustodyDeadlineTests(unittest.TestCase):
+    """Real CLI, committed historical ledger, successful stat then blocked read."""
+
+    def test_blocked_read_refuses_before_any_append(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
+        with CustodyFixture() as f:
+            before = f.bytes()
+            with BlockedArtifact(f.custodies[0] / "events.jsonl") as fifo:
+                try:
+                    completed, elapsed = f.reservation()
+                except AssertionError as exc:
+                    self.assertTrue(fifo.entered.is_set(), "counterfactual must enter the actual read")
+                    raise AssertionError(f"{exc}; FIFO_READ_ENTERED=1") from exc
+                self.assertTrue(fifo.entered.is_set(), "FIFO writer proves artifact open was entered")
+                self.assertEqual(completed.returncode, 2, completed.stderr)
+                self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+                self.assertLess(elapsed, 5.0, "3s budget plus 2s observed cleanup tolerance")
+                self.assertEqual(f.bytes(), before)
+                f.assert_lease_reacquirable()
+                f.assert_workers_gone(completed)
+                record = json.loads(f.refusal.read_text())
+                self.assertEqual(set(record), {"schema", "code", "exit_code", "phase", "plan_id", "session_id", "existing_session", "ledger", "budget_s", "elapsed_s", "last_observation", "written_epoch_s", "pid", "detail"})
+                self.assertEqual(record["schema"], "joulewise.calibration_refusal.v1")
+                self.assertEqual(record["code"], "calibration_ledger_custody_timeout")
+                self.assertEqual(record["phase"], "reservation")
+                self.assertEqual(record["plan_id"], "custody-hang-plan")
+                self.assertFalse(record["existing_session"])
+                self.assertIsNone(record["session_id"])
+                self.assertEqual(record["exit_code"], 2)
+                self.assertEqual(record["budget_s"], 3.0)
+                self.assertGreaterEqual(record["elapsed_s"], 3.0)
+                self.assertEqual(record["ledger"]["head_sha256"], json.loads(before[1])["head_digest"])
+                self.assertEqual(record["last_observation"]["artifact"], "events.jsonl")
+                self.assertEqual(record["last_observation"]["locator"], str(f.custodies[0]))
+            self.assertEqual(f.bytes(), before, "late FIFO release cannot append")
+            completed, _ = f.reservation()
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["status"], "reserved")
+
+    def test_one_budget_is_shared_by_several_observations(self):
+        from contextlib import ExitStack
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
+        with CustodyFixture() as f, ExitStack() as stack:
+            before = f.bytes()
+            fifos = [stack.enter_context(BlockedArtifact(root / "events.jsonl", delay=1.2)) for root in f.custodies]
+            completed, elapsed = f.reservation()
+            self.assertTrue(all(fifo.entered.is_set() for fifo in fifos), completed.stderr)
+            self.assertTrue(fifos[0].finished.is_set() and fifos[1].finished.is_set())
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+            self.assertLess(elapsed, 5)
+            self.assertEqual(f.bytes(), before)
+            f.assert_workers_gone(completed)
+
+    def test_slow_success_and_corrupt_byte_keep_full_hash_comparison(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
+        for corrupt in (False, True):
+            with self.subTest(corrupt=corrupt), CustodyFixture() as f:
+                before = f.bytes()
+                with BlockedArtifact(f.custodies[0] / "events.jsonl", delay=0.4) as fifo:
+                    if corrupt:
+                        # The FIFO thread takes these bytes only once a reader opens it.
+                        fifo.original += b"corrupted"
+                    completed, _ = f.reservation()
+                    self.assertTrue(fifo.entered.is_set())
+                    if corrupt:
+                        self.assertEqual(completed.returncode, 2, completed.stderr)
+                        self.assertIn('"code": "calibration_ledger_custody_invalid"', completed.stderr)
+                        self.assertEqual(f.bytes(), before)
+                    else:
+                        self.assertEqual(completed.returncode, 0, completed.stderr)
+                        self.assertNotEqual(f.bytes()[0], before[0])
+
+    def test_existing_session_timeout_preserves_recovery_evidence(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
+        with CustodyFixture() as f:
+            f.witness._open_session("session-new")
+            # A torn later write must remain byte-identical, including residue.
+            with f.ledger.open("ab") as handle:
+                handle.write(b'{"torn-recovery-evidence":')
+            before = f.bytes()
+            with BlockedArtifact(f.custodies[0] / "events.jsonl") as fifo:
+                completed, _ = f.reservation()
+                self.assertTrue(fifo.entered.is_set())
+                self.assertEqual(completed.returncode, 2, completed.stderr)
+                self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+                self.assertEqual(f.bytes(), before)
+                record = json.loads(f.refusal.read_text())
+                self.assertTrue(record["existing_session"])
+                self.assertEqual(record["session_id"], "session-new")
+                f.assert_lease_reacquirable()
+                f.assert_workers_gone(completed)
+
+    def test_verify_only_success_stall_and_mutual_exclusion(self):
+        import json
+        import sys
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
+        with CustodyFixture() as f:
+            before = f.bytes()
+            completed, _ = f.reservation(mode="--verify-only")
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(len(completed.stdout.splitlines()), 1)
+            receipt = json.loads(completed.stdout)
+            self.assertEqual(receipt["verify_only"], "ok")
+            self.assertEqual(receipt["observations"], 3)
+            self.assertEqual(receipt["ledger_head_sha256"], json.loads(before[1])["head_digest"])
+            self.assertEqual(receipt["python"], sys.executable)
+            self.assertEqual(set(receipt["code_digests"]), {"scripts/reserve_calibration_window_bracket.py", "joulewise/calibration_ledger.py", "joulewise/calibration_custody_worker.py"})
+            for name, digest in receipt["code_digests"].items():
+                self.assertEqual(digest, "sha256:" + hashlib.sha256((f.repo / name).read_bytes()).hexdigest())
+            self.assertEqual(f.bytes(), before)
+            completed, _ = f.reservation(mode="--verify-only", extra=("--execute",))
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("not allowed with argument", completed.stderr)
+            with BlockedArtifact(f.custodies[0] / "events.jsonl"):
+                completed, _ = f.reservation(mode="--verify-only")
+                self.assertEqual(completed.returncode, 2)
+                self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+            self.assertEqual(f.bytes(), before)
+
+    def test_existing_session_never_turns_invalid_custody_into_success(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as f:
+            f.witness._open_session("session-new")
+            artifact = f.custodies[0] / "events.jsonl"
+            artifact.write_bytes(b"corrupted")
+            before = f.bytes()
+            for mode in ("--verify-only", "--execute"):
+                completed, _ = f.reservation(mode=mode)
+                self.assertEqual(completed.returncode, 2, completed.stderr)
+                self.assertIn('"code": "calibration_ledger_custody_invalid"', completed.stderr)
+                self.assertNotIn('"verify_only": "ok"', completed.stdout)
+                self.assertEqual(f.bytes(), before)
+
+    def test_refusal_document_unset_and_collision_preserve_original(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as f:
+            env = dict(f.env)
+            env.pop("JOULEWISE_CALIBRATION_REFUSAL_PATH")
+            completed, _ = f.reservation(budget=0.000000001, env=env)
+            self.assertEqual(completed.returncode, 2)
+            self.assertFalse(f.refusal.exists())
+            f.refusal.write_bytes(b"original refusal\n")
+            completed, _ = f.reservation(budget=0.000000001)
+            self.assertEqual(completed.returncode, 2)
+            self.assertEqual(f.refusal.read_bytes(), b"original refusal\n")
+            siblings = list(f.repo.glob("calibration-refusal.json.*.json"))
+            self.assertEqual(len(siblings), 1)
+            payload = json.loads(siblings[0].read_text())
+            self.assertEqual(siblings[0].name, f"calibration-refusal.json.{payload['pid']}.json")
+            self.assertIn(str(siblings[0]), completed.stderr)
+
+    def test_metadata_stall_uses_same_timeout_code(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_read_barrier
+        with CustodyFixture() as f:
+            before = f.bytes()
+            marker = install_read_barrier(f, metadata=True)
+            completed, _ = f.reservation(budget=0.8)
+            self.assertTrue(marker.exists())
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+            self.assertEqual(f.bytes(), before)
+            f.assert_workers_gone(completed)
+
+
+if __name__ == "__main__":
+    unittest.main()

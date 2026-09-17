@@ -901,5 +901,88 @@ class CaptureClassificationTests(unittest.TestCase):
         self.assertIsNone(exceeds_under)
 
 
+
+
+class WriterCustodyDeadlineTests(unittest.TestCase):
+    def _stall(self, after_reads):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_read_barrier
+        with CustodyFixture() as fixture:
+            w = fixture.witness
+            state = w._state_real_writer("writer-custody-stall")
+            marker = install_read_barrier(fixture, after_reads=after_reads)
+            before = fixture.bytes()
+            command = [sys.executable, str(w.writer_script),
+                       *w._writer_capture_args(state)]
+            if "--custody-budget-s" in w.writer_script.read_text():
+                command += ["--custody-budget-s", "3"]
+            env = w._writer_env(state, mode="normal") | fixture.env
+            completed, elapsed = fixture.run(command, env=env)
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertLess(elapsed, 5)
+            self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+            self.assertEqual(fixture.bytes(), before)
+            self.assertFalse(Path(state["custody_locator"]).exists())
+            reads = [json.loads(line) for line in marker.read_text().splitlines()]
+            self.assertEqual(len(reads), after_reads + 1)
+            refusal = json.loads(fixture.refusal.read_text())
+            self.assertEqual(refusal["phase"], "writer_preflight" if after_reads == 0 else "under_lease")
+            self.assertTrue(refusal["existing_session"])
+            self.assertEqual(refusal["session_id"], state["session_id"])
+            fixture.assert_lease_reacquirable()
+            fixture.assert_workers_gone(completed)
+
+    def test_writer_preflight_stall_refuses_without_starting_slot(self):
+        self._stall(0)
+
+    def test_writer_under_lease_stall_preserves_open_session(self):
+        self._stall(1)
+
+    def test_final_artifact_timeout_preserves_existing_session(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_read_barrier
+        with CustodyFixture() as fixture:
+            w = fixture.witness
+            state = w._state_real_writer("writer-final-custody-stall")
+            custody = w._complete_custody(state["session_id"], "pre")
+            install_read_barrier(fixture)
+            fixture.env["JW_CUSTODY_BARRIER_TARGET"] = str(custody / "events.jsonl")
+            before = fixture.bytes()
+            # This calls the real finalization lifecycle under its real lease;
+            # no sampler or hardware is involved in the fixture.
+            code = (
+                "from pathlib import Path; "
+                "from scripts.validate_powermetrics_fiducial import _CaptureLedgerLifecycle; "
+                "from joulewise.calibration_ledger import CustodyDeadline,CalibrationLedgerError; "
+                f"l=_CaptureLedgerLifecycle(ledger_path=Path({str(fixture.ledger)!r}),"
+                f"head_pin_path=Path({str(fixture.pin)!r}),attempt_id={state['attempt_id']!r},"
+                f"custody_locator={str(custody)!r},identity_epoch={state['epoch']!r},"
+                f"t1_bindings={state['t1']!r},session_id={state['session_id']!r},slot='pre',"
+                "custody_deadline=CustodyDeadline(0.5)); "
+                "l.writer_lease.acquire();l.begun=True\n"
+                "try:\n l.finalize('valid')\nexcept CalibrationLedgerError as e:\n print(e.code.value)\n raise SystemExit(2)\n"
+            )
+            completed, _ = fixture.run([sys.executable, "-B", "-c", code])
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertEqual(completed.stdout.strip(), "calibration_ledger_custody_timeout")
+            self.assertEqual(fixture.bytes(), before)
+            fixture.assert_lease_reacquirable()
+            fixture.assert_workers_gone(completed)
+
+    def test_early_typed_writer_refusal_writes_document_and_preserves_collision(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as fixture:
+            fixture.refusal.write_bytes(b"prior\n")
+            completed, _ = fixture.run([
+                sys.executable, str(fixture.witness.writer_script),
+                "--ledger", str(fixture.ledger), "--head-pin", str(fixture.pin),
+            ])
+            self.assertEqual(completed.returncode, 2)
+            self.assertEqual(fixture.refusal.read_bytes(), b"prior\n")
+            documents = list(fixture.repo.glob("calibration-refusal.json.*.json"))
+            self.assertEqual(len(documents), 1)
+            refusal = json.loads(documents[0].read_text())
+            self.assertEqual(refusal["code"], RefusalCode.QUIET_MAC_AUTH_REQUIRED.value)
+            self.assertEqual(refusal["phase"], "writer_preflight")
+
+
 if __name__ == "__main__":
     unittest.main()
