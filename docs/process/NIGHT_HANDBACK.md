@@ -525,16 +525,20 @@ root-cause record. The whole custody pass now has a 120 s budget, clipped ten
 seconds before the window ends. One **custody pass** is one sweep over every
 governed file the ledger names that actually opens and hashes those files;
 the arm-time probe times exactly one, and the capture writer makes
-`WRITER_CUSTODY_PASSES` of them (2 today, in
+at most `WRITER_CUSTODY_PASSES` of them (3 today, in
 `joulewise/night_agent_install.py`) inside that one budget, so installation
 refuses unless `custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤
-custody_budget_s` — T ≤ 40 s at 2 passes and a 120 s budget — and unless the
+custody_budget_s` — T ≤ 26.67 s at 3 passes and a 120 s budget — and unless the
 probe verified at least one observation while the ledger holds finalized ones.
-The writer sweeps the corpus four times per slot but reads it twice: lane
-CUSTODY-PASS-MEMO-01 keeps the verified set on the shared allowance while the
-writer lease is held and the ledger's head digest is unchanged, so the two
-sweeps after the under-lease one read nothing. A recovery step that appends
-moves the head digest and costs one more read, which is what the 1.5 covers.
+The writer sweeps the corpus four times per slot but on a healthy slot reads it
+twice: lane CUSTODY-PASS-MEMO-01 keeps the verified set on the shared allowance
+while the writer lease is held and the ledger's head digest is unchanged, so the
+two sweeps after the under-lease one read nothing. Three is the worst case, and
+it is counted rather than absorbed by the 1.5 margin: a recovery step that
+appends moves the head digest and costs one more read, and a corrupt corpus
+costs three reads on its own, because a sweep that refuses is never memoized —
+and that slot has to reach its typed `calibration_ledger_custody_invalid`
+instead of timing out first.
 Each capture writer's success receipt reports its own `custody_passes`. The chain
 also exports `JOULEWISE_NIGHT_CUSTODY_BUDGET_S`, a per-operation allowance in
 seconds that every process it starts inherits — reservation, capture writer

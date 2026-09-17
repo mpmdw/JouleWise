@@ -1455,9 +1455,10 @@ class _CaptureLedgerLifecycle:
     def _release_writer_lease(self) -> None:
         """Release the lease and, with it, every memoized custody result.
 
-        The memo stands for bytes no other process could rewrite BECAUSE the
-        lease was held. Releasing the lease ends that guarantee, so the memo
-        must not survive the release.
+        Reuse is authorized by the lease, which keeps every other calibration
+        writer out of this ledger for as long as it is held. Releasing it ends
+        that authorization, so no memoized custody result may outlive the
+        release -- including one the allowance is holding at this moment.
         """
 
         self.custody_deadline.clear_custody_memo()
@@ -1535,9 +1536,9 @@ class _CaptureLedgerLifecycle:
             _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
             self.writer_lease.acquire()
             self.phase = "under_lease"
-            # The lease now freezes every governed byte against other
-            # writers, so from here to the release a later custody pass may
-            # reuse an earlier one's verified set. Arming AFTER acquisition
+            # The lease now keeps every other calibration writer out of
+            # this ledger, so from here to the release a later custody pass
+            # may reuse an earlier one's verified set. Arming AFTER acquisition
             # is the whole lease-boundary rule: the preflight pass above ran
             # while recovery could still mutate first, so it never feeds the
             # under-lease pass.
@@ -2679,10 +2680,11 @@ def main(argv: list[str] | None = None) -> int:
     # that allowance counted; it is legitimately 0 for a session's FIRST slot,
     # because none of its rows is finalized yet, and rises as slots finalize.
     # custody_passes is how many of those whole-corpus passes actually read
-    # the bytes: 2 on a healthy slot and 3 when recovery mutated the ledger
-    # under the lease. It is the night's own record of the count the gate
-    # assumes (WRITER_CUSTODY_PASSES), so a drift between code and gate is
-    # visible in a real receipt instead of only in a constant.
+    # the bytes: 2 on a healthy slot, 3 when recovery mutated the ledger under
+    # the lease or a pass refused. It is the night's own record of the
+    # quantity the gate bounds (WRITER_CUSTODY_PASSES, the worst case of
+    # three), so a drift between code and gate is visible in a real receipt
+    # instead of only in a constant.
     output = {
         "validation_id": validation_id,
         "status": evidence_payload["status"],

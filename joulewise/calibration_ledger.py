@@ -1950,17 +1950,25 @@ class CustodyDeadline:
         # for: one pass is one sweep that opens and hashes every governed
         # artifact of every custody-bearing observation. A pass answered from
         # the memo below reads no bytes and is not counted, so this is the
-        # quantity the install-time headroom gate multiplies the probe's
-        # single measured pass by (WRITER_CUSTODY_PASSES in
-        # joulewise/night_agent_install.py).
+        # quantity the install-time headroom gate is sized against: it
+        # multiplies the probe's single measured pass by
+        # WRITER_CUSTODY_PASSES (joulewise/night_agent_install.py), the
+        # WORST-case number of reads one slot can pay -- three. A healthy
+        # slot reports two.
         self.custody_passes = 0
         # Under-lease verified-set memo. ARMED means the caller holds the
-        # writer lease, so no other process can mutate the governed bytes
-        # while this allowance runs; only then may a later pass reuse an
-        # earlier one's result. It starts disarmed, which is what keeps a
-        # PRE-LEASE pass (the writer's preflight snapshot) from ever seeding
-        # it: recovery may still mutate the ledger after that pass, and the
-        # under-lease pass exists precisely to see that.
+        # writer lease: an advisory flock on the ledger's lock sidecar that
+        # every calibration writer takes before it appends, so while it is
+        # held no other calibration writer can append to this ledger. That
+        # is the whole guarantee -- the lease does not lock the governed
+        # artifact files themselves, and a process outside the calibration
+        # writers can still rewrite one of them. What that costs, and why it
+        # is accepted, is stated in docs/contracts/calibration_ledger_append.md
+        # under "The under-lease custody memo". Only while armed may a later
+        # pass reuse an earlier one's result, and it starts disarmed, which
+        # is what keeps a PRE-LEASE pass (the writer's preflight snapshot)
+        # from ever seeding it: recovery may still mutate the ledger after
+        # that pass, and the under-lease pass exists precisely to see that.
         self.custody_memo_armed = False
         # (physical ledger head digest, frozenset of verified entries), or
         # None. One entry is (attempt_id, absolute locator, the observation's
@@ -1975,8 +1983,9 @@ class CustodyDeadline:
         """Permit under-lease reuse of a verified custody set from here on.
 
         Call this ONLY after the writer lease is held, and pair it with
-        `clear_custody_memo` on release: the memo is sound exactly while no
-        other process can rewrite the governed bytes it stands for.
+        `clear_custody_memo` on release: reuse rests on that lease, which
+        keeps every other calibration writer out of this ledger for exactly
+        as long as it is held.
         """
 
         self.custody_memo_armed = True
@@ -2015,10 +2024,21 @@ class CustodyDeadline:
             return
         verified = frozenset(verified)
         if self.custody_memo is not None and self.custody_memo[0] == digest:
+            # Two passes at the same head digest each read real bytes and
+            # each found their own entries sound, so the memo holds their
+            # UNION. A later head digest replaces the memo outright: entries
+            # verified at an older ledger state are not carried forward.
             verified = self.custody_memo[1] | verified
         self.custody_memo = (digest, verified)
 
     def next_operation(self):
+        # This allowance is finished, so its memo ends with it. Clearing the
+        # SOURCE is what makes "cleared on release" true on the writer's
+        # ordinary exits: `finalize` and `abandon` replace their deadline
+        # with this successor and only then release the lease, so without
+        # this line the release would clear a fresh disarmed successor while
+        # the armed source object kept a verified set alive.
+        self.clear_custody_memo()
         result = CustodyDeadline(self.configured_budget_s,
                                  telemetry_stream=self.telemetry_stream)
         # Preserve the initial wall-to-monotonic conversion across operations.
@@ -2285,9 +2305,9 @@ def bounded_custody_reasons(observations, repo_root, deadline: CustodyDeadline):
     call -- nothing about them is cached. The only thing the memo below can
     save is the re-READING of the bytes on disk, and it may do that exactly
     when two conditions hold together: the writer lease is held (so no other
-    process can rewrite those bytes), and the physical ledger head digest is
-    the one the memoized pass ran against (so a recovery that appended to the
-    ledger between the two passes forces an honest re-read).
+    calibration writer can append to this ledger), and the physical ledger
+    head digest is the one the memoized pass ran against (so a recovery that
+    appended to the ledger between the two passes forces an honest re-read).
     """
 
     frozen = []

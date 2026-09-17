@@ -1104,7 +1104,7 @@ class UnderLeaseCustodyMemoTests(unittest.TestCase):
             self.assertEqual(3, deadline.custody_passes)
 
     def test_releasing_the_lease_ends_reuse(self):
-        """The memo stands for bytes the LEASE froze; it dies with the lease."""
+        """Reuse is authorized by the LEASE; it dies when the lease does."""
 
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
@@ -1190,7 +1190,13 @@ class UnderLeaseCustodyMemoTests(unittest.TestCase):
             self.assertEqual(2, deadline.custody_passes)
 
     def test_a_new_operation_starts_disarmed_and_uncounted(self):
-        """Abandonment and finalization take a FRESH allowance, not the memo."""
+        """Abandonment and finalization take a FRESH allowance, not the memo.
+
+        And the allowance they hand the work on FROM gives its memo up in the
+        same breath. The writer replaces its deadline with the successor and
+        only then releases the lease, so a source that kept its verified set
+        would keep it past the release that is supposed to end reuse.
+        """
 
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
@@ -1198,10 +1204,58 @@ class UnderLeaseCustodyMemoTests(unittest.TestCase):
             deadline = self._deadline()
             deadline.arm_custody_memo()
             self.assertEqual((), self._pass(fixture, deadline).refusal_reasons)
+            self.assertIsNotNone(deadline.custody_memo)
             following = deadline.next_operation()
             self.assertFalse(following.custody_memo_armed)
             self.assertIsNone(following.custody_memo)
             self.assertEqual(0, following.custody_passes)
+            self.assertFalse(deadline.custody_memo_armed)
+            self.assertIsNone(deadline.custody_memo)
+
+    def test_releasing_the_writer_lease_clears_the_allowance_it_holds(self):
+        """The release path clears the memo on the object actually holding it.
+
+        `finalize` and `abandon` swap in `next_operation()` inside their
+        `try` and release the lease in the `finally`, so the release runs on
+        the SUCCESSOR allowance. This test aims at the release itself, with a
+        stub lease and no filesystem: an allowance that holds a verified set
+        must lose it when the lease that authorized reuse goes away.
+        """
+
+        from scripts import validate_powermetrics_fiducial as writer
+
+        class _StubLease:
+            def __init__(self):
+                self.releases = 0
+
+            def release(self):
+                self.releases += 1
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            deadline = self._deadline()
+            lifecycle = writer._CaptureLedgerLifecycle(
+                ledger_path=root / "ledger.jsonl",
+                head_pin_path=root / "head.json",
+                attempt_id="attempt",
+                custody_locator=str(root / "runs/member"),
+                identity_epoch={},
+                t1_bindings={},
+                custody_deadline=deadline,
+            )
+            lease = _StubLease()
+            lifecycle.writer_lease = lease
+            deadline.ledger_head_sha256 = "a" * 64
+            deadline.arm_custody_memo()
+            entry = ("attempt", str(root / "runs/member"),
+                     (("m.json", "b" * 64),))
+            deadline.record_custody_memo({entry})
+            self.assertIsNotNone(deadline.custody_memo)
+            lifecycle._release_writer_lease()
+            self.assertEqual(1, lease.releases)
+            self.assertIs(deadline, lifecycle.custody_deadline)
+            self.assertIsNone(deadline.custody_memo)
+            self.assertFalse(deadline.custody_memo_armed)
 
     def test_reuse_needs_every_entry_the_pass_requires(self):
         """A superset of the memoized entries is read, never assumed sound."""

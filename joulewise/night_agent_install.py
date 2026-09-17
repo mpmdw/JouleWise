@@ -645,30 +645,44 @@ PROBE_CODE_PATHS = (
     "joulewise/calibration_ledger.py",
     "joulewise/calibration_custody_worker.py",
 )
-# How many whole-corpus custody passes the capture writer makes inside ONE
-# budget. A pass is one sweep that opens and hashes every governed artifact of
-# every custody-bearing observation. The writer makes TWO that read bytes: the
-# preflight snapshot before it holds the writer lease, and one pass under the
-# lease. Its other two under-lease sweeps -- the enforcing readiness gate and
-# the slot validation -- read nothing, because lane CUSTODY-PASS-MEMO-01
-# memoizes the verified set on the shared CustodyDeadline and reuses it while
-# the lease is held and the physical ledger head digest is unchanged (see
-# bounded_custody_reasons in joulewise/calibration_ledger.py). The memo is
-# armed only after the lease is acquired, so the preflight pass never feeds a
-# later one. When the pre-capture repair actually mutates the ledger the head
-# digest moves, the memo invalidates and the writer pays a third honest pass;
-# CUSTODY_HEADROOM_FACTOR below covers exactly that case (2 x 1.5 = three
-# passes' worth of allowance). The arm-time probe runs the reservation, which
-# makes exactly ONE pass, so the probe's measured custody_elapsed_s must be
-# multiplied by this count before it can be compared with the budget the night
-# will hand the writer. A capture writer's success receipt now reports its own
-# custody_passes, so a future change that adds a pass back is visible in a real
-# night's receipt and not only here.
-WRITER_CUSTODY_PASSES = 2
-# Margin on top of the multiplied passes. A night's corpus grows with every
-# finalized slot and the writer's passes are not identical in cost, so admission
-# requires half a pass of slack rather than an exact fit -- and at two passes
-# that slack is exactly the repaired-ledger third pass.
+# How many whole-corpus custody passes the capture writer can pay for inside
+# ONE budget. A pass is one sweep that opens and hashes every governed artifact
+# of every custody-bearing observation. The writer makes four sweeps per slot
+# -- the preflight snapshot before it holds the writer lease, one snapshot
+# under the lease, the enforcing readiness gate and the slot validation -- and
+# lane CUSTODY-PASS-MEMO-01 memoizes the verified set on the shared
+# CustodyDeadline so the last two read no bytes while the lease is held and the
+# physical ledger head digest is unchanged (see bounded_custody_reasons in
+# joulewise/calibration_ledger.py). The memo is armed only after the lease is
+# acquired, so the preflight pass never feeds a later one, and a HEALTHY slot
+# reads the corpus twice.
+#
+# This constant is not that healthy count. It is the honest WORST CASE, which
+# is THREE reads, reached two ways:
+#   * the pre-capture repair actually mutates the ledger, so the head digest
+#     moves between the under-lease pass and the readiness gate, the memo's key
+#     no longer matches, and the writer pays one more honest read; or
+#   * the corpus is CORRUPT. A refused pass is never memoized, so the preflight
+#     pass, the refused under-lease pass and the refusing re-read are three
+#     reads (tests/test_calibration_ledger_custody.py
+#     test_a_pre_lease_pass_never_feeds_an_under_lease_pass pins exactly this).
+# The corrupt case is why the count is 3 rather than 2 with the headroom factor
+# standing in for the third pass: a slot that is going to refuse must have room
+# to reach its typed calibration_ledger_custody_invalid rather than be cut off
+# by a calibration_ledger_custody_timeout, which names the wrong cause.
+#
+# The arm-time probe runs the reservation, which makes exactly ONE pass, so the
+# probe's measured custody_elapsed_s must be multiplied by this count before it
+# can be compared with the budget the night will hand the writer. A capture
+# writer's success receipt reports its own custody_passes (2 on a healthy
+# slot), so a future change that adds a sweep back is visible in a real night's
+# receipt and not only here.
+WRITER_CUSTODY_PASSES = 3
+# Margin on top of the multiplied passes, and nothing else: a night's corpus
+# grows with every finalized slot and the passes are not identical in cost, so
+# admission asks for half a pass of slack rather than an exact fit. It does not
+# stand in for a pass -- the worst case above is counted, not absorbed here. At
+# 3 x 1.5 against a 120 s budget the installer admits T <= 26.67 s.
 CUSTODY_HEADROOM_FACTOR = 1.5
 
 

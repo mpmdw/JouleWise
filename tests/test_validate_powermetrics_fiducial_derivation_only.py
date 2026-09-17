@@ -764,8 +764,8 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         self.assertEqual(
             2, passes,
             "a healthy slot must read the whole corpus exactly twice; "
-            "WRITER_CUSTODY_PASSES in joulewise/night_agent_install.py is "
-            "sized against this count",
+            "WRITER_CUSTODY_PASSES in joulewise/night_agent_install.py "
+            "bounds this count at the worst case of three",
         )
         stderr_events = [
             json.loads(line)
