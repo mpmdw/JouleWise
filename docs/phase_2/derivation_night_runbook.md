@@ -1183,11 +1183,14 @@ is:
 which is the cross-check that this arithmetic matches the registered design.
 
 Margin on top of the programmed span covers three things the 7680 s does not:
-the chain's pre-settle work (input preflight, the `--phase pre-reserve`
-readiness check, and the session reservation, all of which run BEFORE the
-settle so that an unusable declaration costs no window time), per-capture
-overrun beyond 600 s pushing later slots later, and the driver's own work
-before it starts the chain. Allocate **1320 s (22 min)**:
+the chain's pre-settle work (input preflight and the session reservation, both
+of which run BEFORE the settle so that an unusable declaration costs no window
+time — the reservation's `--pre-reserve-strict` enforcing readiness check is
+one bounded custody pass inside the reservation itself, and the chain runs no
+separate readiness command; `recover_calibration_ledger.py readiness --phase
+pre-reserve` remains a DESK command, `docs/phase_2/window_runbook.md:466`),
+per-capture overrun beyond 600 s pushing later slots later, and the driver's
+own work before it starts the chain. Allocate **1320 s (22 min)**:
 
 ```
 WINDOW_MAX_S = 7680 + 1320 = 9000 s   (2 h 30 min)
@@ -1243,14 +1246,37 @@ allowance object (`CustodyDeadline`) was constructed, and that construction
 happens before the ledger file is read and parsed. So `custody_elapsed_s`
 covers ledger read + ledger parse + the custody pass, not the pass alone: it
 is an over-report of T, never an under-report. Over-reporting is the safe
-direction here, because the number is used to decide whether FOUR passes fit
-inside one allowance — a gate that errs toward refusing a night, not toward
-arming one that cannot finish. Same field, same meaning, in the capture
-writer's own success receipt (below).
+direction here, because the number is used to decide whether the writer's
+passes fit inside one allowance — a gate that errs toward refusing a night,
+not toward arming one that cannot finish. Same field, same meaning, in the
+capture writer's own success receipt (below).
 
-The capture writer spends the SAME one allowance on FOUR passes per slot:
-its preflight snapshot, its under-lease snapshot, its enforcing readiness
-check and its slot validation. That count is the constant
+The capture writer sweeps the corpus four times per slot — its preflight
+snapshot, its under-lease snapshot, its enforcing readiness check and its
+slot validation — but on a healthy slot only TWO of those sweeps open and
+hash the files. The other two are answered from a **custody memo**: the set
+of (observation, governed file, expected hash) entries a sweep already
+checked, kept on the one shared allowance object and reused by a later
+sweep. The memo is armed only once the writer holds the ledger's **writer
+lease** — the advisory lock every calibration writer takes before it
+appends, so that while one writer holds it no other calibration writer can
+change the ledger — and it is thrown away when the lease is released; so the
+preflight sweep, which runs before the lease exists, never feeds a later
+one. The lease does not lock the governed files themselves, and that has a
+price: what the memo therefore stops seeing, and why the project accepts it,
+is stated in `docs/contracts/calibration_ledger_append.md` under "The
+under-lease custody memo". The memo is also keyed on the ledger's physical
+head digest — the hash of its last receipt — so the pre-capture recovery
+step that runs between the second and third sweeps invalidates it whenever
+it actually appends anything, and the writer then pays a third honest sweep.
+
+So: two reads on a healthy slot, three when recovery changed the ledger —
+and three again when the corpus is CORRUPT. The preflight sweep seeds
+nothing because it runs before the lease, and a sweep that REFUSES is never
+memoized either, so the refusing under-lease sweep and the refusing re-read
+after it both open the files: three reads again.
+
+Three — the worst case, not the healthy count — is the constant
 `WRITER_CUSTODY_PASSES` in `joulewise/night_agent_install.py`, and the
 installer refuses to arm unless
 
@@ -1258,37 +1284,42 @@ installer refuses to arm unless
 custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s
 ```
 
-The 1.5 is half a pass of margin (**headroom**): the corpus grows with every
-finalized slot, and the four passes are not identical in cost. With
-`WRITER_CUSTODY_PASSES = 4` and a 120 s budget, a probe is admissible only if
-T ≤ 20 s. Worked case: a probe reporting T = 90 s passes the six-hour
-freshness check and every digest binding, yet the writer's four passes would
-need 360 s of a 120 s allowance — a guaranteed
-`calibration_ledger_custody_timeout` on slot `d01`. Such a night now refuses
-at the desk, at install time, naming `custody_elapsed_s`. A probe that
-verified zero observations while the ledger already holds finalized ones is
-refused too, naming `observations`: a pass over nothing certifies nothing.
+The 1.5 is half a pass of margin (**headroom**) and nothing more: the corpus
+grows with every finalized slot, and the passes are not identical in cost. It
+is not a spare pass — the worst case is counted in `WRITER_CUSTODY_PASSES`
+itself, because a slot whose corpus is corrupt must have room to reach its
+typed `calibration_ledger_custody_invalid` rather than be cut off by a
+`calibration_ledger_custody_timeout`, which would name the wrong cause. With
+`WRITER_CUSTODY_PASSES = 3` and a 120 s budget, a probe is admissible only if
+T ≤ 26.67 s (120 ÷ 4.5). Worked case: a probe reporting T = 90 s passes the
+six-hour freshness check and every digest binding, yet the writer's three
+passes would need 270 s of a 120 s allowance — a guaranteed
+`calibration_ledger_custody_timeout` on slot `d01`. Such a night refuses at
+the desk, at install time, naming `custody_elapsed_s`. A probe that verified
+zero observations while the ledger already holds finalized ones is refused
+too, naming `observations`: a pass over nothing certifies nothing.
 
-Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up that memoizes the
-under-lease passes and lowers the constant to 2 (admitting T ≤ 40 s). Until
-it lands, 4 is the true count and the gate is sized to it. The lever is the
-gate, not a larger budget: enlarging `CUSTODY_BUDGET_S` spends window time
-the cadence arithmetic above has already allocated.
+The lever is the gate, not a larger budget: enlarging `CUSTODY_BUDGET_S`
+spends window time the cadence arithmetic above has already allocated.
 
 **Where a healthy night's T comes from.** The gate above is sized against T,
 so T has to be observable on nights that WORK, not only on nights that refuse.
 The capture writer's success receipt — the single JSON object it prints to
-standard output, captured in `chain.stdout.log` — carries `custody_elapsed_s`
-and `observations` for exactly that reason. `custody_elapsed_s` is that slot's
-PREPARATION allowance — the one its preflight snapshot, under-lease snapshot,
-readiness check and slot validation shared — read at the end of preparation
-and measured the same wide way as the probe's field (ledger read + parse +
-passes). `observations` is how many custody-bearing observations that
-preparation counted; it is 0 for a session's first slot, because none of its
-rows is finalized yet, and rises as slots finalize. Read them out of
-`chain.stdout.log` after a night and you have the real per-slot series to
-check `WRITER_CUSTODY_PASSES × 1.5 × T ≤ CUSTODY_BUDGET_S` against, instead of
-a single arm-time sample.
+standard output, captured in `chain.stdout.log` — carries `custody_elapsed_s`,
+`observations` and `custody_passes` for exactly that reason.
+`custody_elapsed_s` is that slot's PREPARATION allowance — the one its
+preflight snapshot, under-lease snapshot, readiness check and slot validation
+shared — read at the end of preparation and measured the same wide way as the
+probe's field (ledger read + parse + passes). `observations` is how many
+custody-bearing observations that preparation counted; it is 0 for a
+session's first slot, because none of its rows is finalized yet, and rises as
+slots finalize. `custody_passes` is how many of that slot's sweeps actually
+read the files rather than being answered from the memo: 2 on a healthy slot,
+3 when the recovery step appended or a sweep refused. Read all three out of `chain.stdout.log`
+after a night and you have the real per-slot series to check
+`WRITER_CUSTODY_PASSES × 1.5 × T ≤ CUSTODY_BUDGET_S` against, instead of a
+single arm-time sample — and `custody_passes` says whether the constant on
+the left is still the truth.
 
 **The inherited budget marker.** The chain exports
 `JOULEWISE_NIGHT_CUSTODY_BUDGET_S` with the same seconds as
@@ -1322,9 +1353,17 @@ constants in `scripts/run_night.py`. The abort STARTS before the window end —
 it fires when the next slot's capture budget would cross it — so 1560 s is
 measured against at least that 3900 s. 1560 s < 3900 s, with roughly 39 min
 to spare: the dead-man does not fire and the courier still delivers the
-night's result. The alternative — an unbounded
-abort — is what hung the 2026-09-16 night, so a bounded 26 min worst case is
-the improvement, not a new risk. Shrink it further, if it ever matters, by
+night's result. If the abort's own custody pass exhausts its allowance, the
+abort command refuses with `calibration_ledger_custody_timeout`, writes the
+`joulewise.calibration_refusal.v1` document at
+`JOULEWISE_CALIBRATION_REFUSAL_PATH` (the chain exports it into the night
+directory) and exits 2; the driver reads that document and records verdict
+`REFUSED` with `aborted_reason` `night_calibration_refused`, so the delivered
+result says the night did not finish. A chain that exits 2 writing NO such
+document is still recorded as verdict `GO` with `chain_exit_code` 2 — for
+that case, read the chain exit code, not the verdict. The alternative — an
+unbounded abort — is what hung the 2026-09-16 night, so a bounded 26 min worst
+case is the improvement, not a new risk. Shrink it further, if it ever matters, by
 lowering `CUSTODY_BUDGET_S` or `SLOT_COUNT`; both are chain variables and
 both also move the cadence arithmetic above.
 
@@ -1936,7 +1975,7 @@ than six hours old; the finish time may be at most 60 s ahead of the clock.
 It also refuses the install unless the receipt's single measured custody pass
 leaves the capture writer room for its own passes —
 `custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s`, which is
-T ≤ 20 s at today's constant of 4 (§1.2) — and unless `observations` is
+T ≤ 26.67 s at today's constant of 3 (§1.2) — and unless `observations` is
 greater than zero whenever the ledger already holds finalized observations. The temporary job has a 600 s
 limit (`--probe-timeout-s`) covering input binding reads and chain execution,
 with the reached phase recorded on timeout. Its supervised process group
@@ -3040,7 +3079,7 @@ numbered record.
 | Install close `t0 − 480 − 120`, whole-day shipped `INSTALL_SPANS`, and dead-man `60 × ceil((t0 + window_max_s + 300 + 3600) / 60)` | D-180 clause 1 and D-181 clause 1; INSTALL-WINDOWS-MULTI-01 adopted design record 06; `scripts/run_night.py`: `install_close_epoch`, `INSTALL_CLOSE_MARGIN_S`, `INSTALL_SPANS`, `deadman_epoch`, `DEADMAN_GRACE_S` |
 | The supersession banner shape and the "read the newest activation records" instruction | record 13 |
 | Epoch↔local conversions and strict maximum in §1.2 | §1.2 arithmetic, converted with `datetime.fromtimestamp(epoch, ZoneInfo("America/Los_Angeles"))`; the example applies the current design to earlier coordinates |
-| Driver hands the chain four variables and no argv (`_run_chain_once` in `scripts/run_night.py`, pinned by the argv assertion in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
+| Driver hands the chain seven variables and no argv — `NIGHT_PLAN_ID`, `JOULEWISE_NIGHT_PLAN_ID`, `NIGHT_DIR`, `MEASUREMENT_ROOT`, `MEASUREMENT_HEAD`, `PY`, `CUSTODY_BUDGET_S` (`_chain_environment` in `scripts/run_night.py`, pinned by the environment and argv assertions in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
 | Clean tree and desk-input provenance as arm-checklist items, and "one wrapper per night" | seat record 103 §7.1–§7.4 and its fix-round items B-1, B-2, S-1, S-4; refuter record 105 §5 |
 | Whole-suite replay green at the merged head, and the merge itself | records 130 and 133 |
 | The epoch-equivalence rule itself — the `m < 6` INCONCLUSIVE branch, the PASS and FAIL definitions, the continuation route and its addendum contents, the FAIL route's affirmation of V3, and the blindness clarification | The owner's directive issue 316 of 2026-09-10, transcribed as revision 2 of `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the dated Ed addendum under D-102 in `docs/decision_log.md` |

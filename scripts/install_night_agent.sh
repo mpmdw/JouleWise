@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  print "usage: $0${1:+ (invalid $1)} --plan PLAN.json [--python ABS_PATH] [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
+  print "usage: $0${1:+ (invalid $1)} --plan PLAN.json [--python ABS_PATH] [--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] [--hour H] [--minute M] [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
   exit 2
 }
 

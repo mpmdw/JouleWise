@@ -1087,6 +1087,8 @@ class TransactionTests(unittest.TestCase):
                 self.assertEqual("", result.stdout)
                 self.assertRegex(
                     result.stderr, r"\Ausage: [^\n]+ --plan PLAN\.json \[--python ABS_PATH\] "
+                    r"\[--launchd-probe\] \[--probe-timeout-s S\] \[--probe-max-age-s S\] "
+                    r"\[--hour H\] \[--minute M\] "
                     r"\[--uninstall\] \[--render-only DIR\] \[--launchctl-bin PATH\]\n\Z")
                 self.assertEqual([], fixture.fake.calls())
                 self.assertEqual(before, snapshot())

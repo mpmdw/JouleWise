@@ -18,6 +18,7 @@ from unittest import mock
 from zoneinfo import ZoneInfo
 
 from scripts import run_night
+from joulewise.night_agent_install import interpreter_identity
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
@@ -249,17 +250,36 @@ class InstallNightAgentTests(unittest.TestCase):
                     (self.measurement_root / "head.json").write_text(json.dumps({"head_digest": "b" * 64}))
                     (self.measurement_root / "ledger.jsonl").write_text(json.dumps({"receipt_digest": "b" * 64}) + "\n")
                 else:
+                    # The bound identity is CONTENT-bound: interpreter_identity
+                    # reports the running interpreter's path, version and the
+                    # SHA-256 of its bytes, so a byte-identical copy IS the same
+                    # interpreter and only the path could move. That path is
+                    # whatever CPython puts in sys.executable, and it differs by
+                    # platform when the interpreter is reached through a symlink
+                    # (macOS reports the link target it followed to find the
+                    # standard library, Linux the invoked path), which is why a
+                    # plain copy refused here and admitted the install on the
+                    # Linux runner of hosted CI run 35234610245. Append one byte
+                    # instead: the copy still runs, and its sha256 moves on every
+                    # platform. InterpreterIdentityTests below pins both halves.
                     python = self.measurement_root / ".venv/bin/python"
                     python.unlink()
                     replacement = self.measurement_root / "replacement-python"
                     shutil.copyfile(sys.executable, replacement)
-                    # A new executable path invalidates the effective identity.
+                    with replacement.open("ab") as handle:
+                        handle.write(b"\n#")
                     replacement.chmod(0o755)
                     python.symlink_to(replacement)
+                    # Prove the stimulus moved a bound field before asserting
+                    # the refusal, so this can never pass for another reason.
+                    recomputed = interpreter_identity(python)
+                    recorded = json.loads(
+                        (plan.parent / "night_probe_receipt.json").read_text())["chain_python"]
+                    self.assertNotEqual(recorded["sha256"], recomputed["sha256"])
+                    self.assertEqual(recorded["version"], recomputed["version"])
                 result = self._run(plan, render_only=False, seed_probe=False)
                 self.assertEqual(2, result.returncode, result.stderr)
-                if field != "chain_python":
-                    self.assertIn("input_digests" if field == "ledger_head_sha256" else field, result.stderr)
+                self.assertIn("input_digests" if field == "ledger_head_sha256" else field, result.stderr)
                 self.assertFalse(any("bootstrap" in call for call in self.fake.calls()))
                 if field == "chain_python":
                     python.unlink(); python.symlink_to(sys.executable)
@@ -361,7 +381,9 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual([], self.fake.calls())
 
     def test_help_and_unknown_flags_use_shell_usage_and_exit_two(self) -> None:
-        usage = (" --plan PLAN.json [--python ABS_PATH] [--uninstall] "
+        usage = (" --plan PLAN.json [--python ABS_PATH] "
+                 "[--launchd-probe] [--probe-timeout-s S] [--probe-max-age-s S] "
+                 "[--hour H] [--minute M] [--uninstall] "
                  "[--render-only DIR] [--launchctl-bin PATH]\n")
         # Exercise both real entrypoints; the shell already had this contract.
         for entrypoint in (["/bin/zsh", str(SCRIPT_PATH)],
@@ -401,7 +423,9 @@ class InstallNightAgentTests(unittest.TestCase):
         # Pin shell refusal: module defence must not hide a missing shell guard.
         self.assertEqual(
             f"usage: usage (invalid {flag}) --plan PLAN.json "
-            "[--python ABS_PATH] [--uninstall] [--render-only DIR] "
+            "[--python ABS_PATH] [--launchd-probe] [--probe-timeout-s S] "
+            "[--probe-max-age-s S] [--hour H] [--minute M] "
+            "[--uninstall] [--render-only DIR] "
             "[--launchctl-bin PATH]\n", result.stderr)
         self.assertEqual([], self.fake.calls())
         self.assertEqual(before, snapshot())
@@ -1089,6 +1113,55 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual([f"{action} gui/{os.getuid()}/{label}"
                           for action in ("bootout", "print")
                           for label in ("com.joulewise.night", "com.joulewise.night.deadman")] * 2, calls)
+
+
+class InterpreterIdentityTests(unittest.TestCase):
+    """Pin which fields bind an interpreter, and how portable each one is.
+
+    `validate_probe_receipt` compares the whole identity mapping field by
+    field, so this mapping's key set IS the set of compared fields. Two of
+    them are the same on every platform for the same interpreter bytes
+    (`version`, `sha256`); the third, `path`, is CPython's `sys.executable`,
+    which differs by platform whenever the interpreter is reached through a
+    symlink. So a test that means "a different interpreter is installed now"
+    has to move `sha256`; moving only `path` proves nothing on Linux.
+    """
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(dir="/tmp")
+        self.addCleanup(self.temporary.cleanup)
+        self.directory = Path(self.temporary.name)
+
+    def _linked_copy(self, name: str, *, extra: bytes = b"") -> Path:
+        """`<name>` is a symlink to a copy of this interpreter, plus `extra`."""
+        target = self.directory / (name + "-python")
+        shutil.copyfile(sys.executable, target)
+        if extra:
+            with target.open("ab") as handle:
+                handle.write(extra)
+        target.chmod(0o755)
+        link = self.directory / name
+        link.symlink_to(target)
+        return link
+
+    def test_identity_fields_and_what_a_copied_interpreter_moves(self) -> None:
+        original = interpreter_identity(sys.executable)
+        self.assertEqual(["path", "sha256", "version"], sorted(original))
+        self.assertTrue(Path(original["path"]).is_absolute())
+        self.assertEqual(".".join(map(str, sys.version_info[:3])), original["version"])
+        self.assertEqual(hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest(),
+                         original["sha256"])
+        # A byte-identical copy reached through a symlink: same interpreter by
+        # every content-bound field, on macOS and on Linux alike. Nothing here
+        # asserts `path`, because that is exactly the platform-dependent field.
+        identical = interpreter_identity(self._linked_copy("identical"))
+        self.assertEqual(original["version"], identical["version"])
+        self.assertEqual(original["sha256"], identical["sha256"])
+        # One appended byte: still a working interpreter of the same version,
+        # and a different identity by sha256 on every platform.
+        modified = interpreter_identity(self._linked_copy("modified", extra=b"\n#"))
+        self.assertEqual(original["version"], modified["version"])
+        self.assertNotEqual(original["sha256"], modified["sha256"])
 
 
 class InstallerSignalCliTests(unittest.TestCase):

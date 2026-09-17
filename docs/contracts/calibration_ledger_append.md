@@ -662,10 +662,133 @@ resolve to the same path and the bounded route is taken.
 `NIGHT_VERIFY_ONLY`, so a desk shell's value can never outrank the chain's own
 export in a night the driver starts.
 
+### The under-lease custody memo
+
+A **custody-bearing observation** is a finalized ledger record — a standalone
+attempt, or one finalized slot of a bracket session — that names a custody
+locator (the directory holding that capture's evidence) and the SHA-256 of
+each governed artifact under it. A **custody pass** is one sweep that opens
+every governed artifact of every custody-bearing observation the ledger names
+and hashes it, comparing the result with the hash the ledger recorded. Call
+the wall-clock cost of one sweep T.
+
+The forcing problem: the capture writer sweeps the corpus four times before a
+single capture starts — its preflight snapshot, its under-lease snapshot, its
+enforcing readiness gate and its slot validation — and all four spend ONE
+120 s `CustodyDeadline` allowance. The arm-time launchd probe runs the
+reservation, which sweeps once, and reports that single T. A corpus with
+T = 90 s therefore produced an arm receipt that passed every check and a
+`calibration_ledger_custody_timeout` on the night's first slot, because four
+sweeps needed 360 s of a 120 s allowance.
+
+The cure is a **custody memo**: a record, kept on the `CustodyDeadline`
+object the passes share, of the entries an earlier pass already verified. One
+**entry** is the triple (attempt id, absolute custody locator, the
+observation's artifact-name → expected-SHA-256 pairs) — exactly the inputs a
+pass re-derives from the ledger. The memo is a pair: the ledger's **physical
+head digest** (the `receipt_digest` of the last record physically present in
+the ledger file) at the moment the verifying pass ran, and the frozen set of
+entries that pass found sound.
+
+A memo may only be used while it is **armed**, which means the caller has
+told the allowance that it holds the `CalibrationWriterLease`. That lease is
+an advisory `flock` on the ledger's lock sidecar: every calibration writer
+takes it before it appends, so while one writer holds it no other calibration
+writer can append to that ledger. That is the whole of the guarantee — the
+lease does not lock the governed artifact files, and a process that is not a
+calibration writer can still rewrite one of them while it is held (what that
+costs is stated below). The capture writer arms the memo immediately AFTER
+acquiring the lease and clears it on every release.
+
+`bounded_custody_reasons` (`joulewise/calibration_ledger.py`) re-derives the
+required entries on every call and reuses the memo — returning no refusal
+reason without reading any bytes — when all three of these hold:
+
+1. the memo is armed;
+2. the memo's head digest equals the physical head digest of the snapshot now
+   asking;
+3. the entries this pass requires are a subset of the entries the memo holds.
+
+Otherwise the pass reads the bytes. Only a pass that found every entry sound
+records a memo; a pass that refused records nothing, so its refusal is
+re-derived from the bytes next time. Two recording rules complete the
+mechanism. A sound pass whose allowance already holds a memo at the SAME head
+digest adds its entries to that set — the union, because each of the two
+passes read real bytes for its own entries — while a sound pass at a
+different head digest replaces the memo outright, carrying nothing forward
+from the older ledger state. And a sound pass whose allowance carries no head
+digest at all records nothing: a memo keyed on nothing could never be
+invalidated by a later change, so it is never taken.
+
+Two consequences of arming only after the lease are contractual, not
+incidental:
+
+- The preflight pass, which runs before the lease exists, never seeds the
+  memo. Recovery, another writer, or a tamper may still change the bytes
+  between that pass and acquisition, and the under-lease pass exists
+  precisely to see that change.
+- A released lease invalidates the memo even if the same allowance object is
+  still alive. `CustodyDeadline.next_operation()` starts disarmed and
+  memo-less AND clears the allowance it succeeds, so neither the successor
+  nor the object it replaced can serve a reuse once the lease is gone — the
+  capture writer's abandonment and finalization paths take the successor
+  first and release the lease afterwards, so clearing only one of the two
+  would leave a verified set alive past the release.
+
+**What the memo stops seeing, and why that is accepted.** The lease bounds
+other calibration writers, not every process, so a governed artifact that is
+rewritten AFTER the under-lease pass read it — with the ledger's head digest
+unchanged — is invisible to the two sweeps that follow: the enforcing
+readiness gate and the slot validation answer from the memo and report a
+sound corpus, where the four-pass writer would have refused with
+`calibration_ledger_custody_invalid`. The 2026-09-17 review executed exactly
+that scenario: corrupt one governed file after the under-lease sweep, leave
+the head digest alone, and the memoized passes answer while an unmemoized
+pass over the same bytes refuses. Three facts make the trade acceptable. The
+exposed window is one recovery step plus those two sweeps — sub-second on a
+healthy ledger. Nothing in the night's threat model (decision D-161,
+operator-only adversary) rewrites governed files while a capture writer holds
+the lease. And the miss is fail-closed downstream: the NEXT slot's preflight
+pass runs before any lease and is never memoized, so corruption that arrived
+inside the window refuses there instead.
+
+The head-digest key is what handles recovery. `repair_calibration_ledger`
+runs between the writer's second and third sweeps. A repair that changes
+nothing leaves the physical head digest alone, the memo answers the third and
+fourth sweeps, and the slot costs **two** passes. A repair that appends —
+abandoning a torn uncommitted record, for instance — moves the head digest,
+the memo's key no longer matches, and the writer pays one honest re-read:
+**three** passes. No separate "was there a repair" signal is needed, and an
+append by any other process is covered by the same key.
+
+The count is therefore 2 for a healthy slot and 3 for a repaired one — and 3
+again for a CORRUPT corpus, where nothing is ever memoized: the preflight
+pass (sound, but taken before the lease, so it never seeds a memo), the
+refused under-lease pass, and the refusing re-read — a pass that refuses
+records nothing.
+
+`WRITER_CUSTODY_PASSES = 3` in `joulewise/night_agent_install.py` is that
+WORST case, not the count a healthy slot reports, and
+`CUSTODY_HEADROOM_FACTOR = 1.5` is growth margin on top of it (the corpus
+grows with every finalized slot and the passes are not identical in cost),
+not a stand-in for a third pass: the installer admits a probe only when
+`T × 3 × 1.5 ≤ custody_budget_s`, so at a 120 s budget T ≤ 26.67 s. The
+constant has to cover the corrupt case because a slot that is going to refuse
+must have room to REACH its typed `calibration_ledger_custody_invalid`; sized
+to the healthy 2, that same slot can spend the whole allowance first and
+refuse `calibration_ledger_custody_timeout`, which names the wrong cause. The
+worked case above (T = 90 s) still refuses at the desk: 90 × 3 × 1.5 = 405 s
+> 120 s.
+
+What the memo does NOT cache: the (locator, expected hash) pairs themselves,
+which are re-derived from the ledger snapshot on every pass, and any refusal.
+Only the fact that a named set of bytes was read and matched is reused.
+
 ### The capture writer's success receipt carries the custody timing
 
 On success the capture writer prints exactly one JSON object to standard
-output. That object now also carries `custody_elapsed_s` and `observations`.
+output. That object now also carries `custody_elapsed_s`, `observations` and
+`custody_passes`.
 
 `custody_elapsed_s` is the number of seconds the PREPARATION allowance's
 `CustodyDeadline` had been running at the END of preparation — the single
@@ -681,7 +804,12 @@ the conservative direction for the install-time headroom gate, which asks
 whether the passes fit inside the budget. `observations` is the number of
 custody-bearing observations that preparation counted; it is legitimately 0
 for the first slot of a session, because no row of it is finalized yet, and
-rises as slots finalize.
+rises as slots finalize. `custody_passes` is how many of that preparation's
+four sweeps actually read the governed bytes rather than being answered from
+the under-lease custody memo above: 2 on a healthy slot, 3 when the
+pre-capture repair appended. It is the night's own record of the quantity
+`WRITER_CUSTODY_PASSES` bounds, so a future change that adds a sweep back is
+visible in a real receipt and not only in a constant.
 
 They are in the receipt because nothing else records this on a healthy night.
 The writer builds its custody deadline with `telemetry_stream=None`, so no

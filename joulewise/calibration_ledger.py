@@ -1946,8 +1946,99 @@ class CustodyDeadline:
         self.session_id = None
         self.existing_session = False
         self.observations = 0
+        # How many WHOLE-CORPUS custody passes this allowance actually paid
+        # for: one pass is one sweep that opens and hashes every governed
+        # artifact of every custody-bearing observation. A pass answered from
+        # the memo below reads no bytes and is not counted, so this is the
+        # quantity the install-time headroom gate is sized against: it
+        # multiplies the probe's single measured pass by
+        # WRITER_CUSTODY_PASSES (joulewise/night_agent_install.py), the
+        # WORST-case number of reads one slot can pay -- three. A healthy
+        # slot reports two.
+        self.custody_passes = 0
+        # Under-lease verified-set memo. ARMED means the caller holds the
+        # writer lease: an advisory flock on the ledger's lock sidecar that
+        # every calibration writer takes before it appends, so while it is
+        # held no other calibration writer can append to this ledger. That
+        # is the whole guarantee -- the lease does not lock the governed
+        # artifact files themselves, and a process outside the calibration
+        # writers can still rewrite one of them. What that costs, and why it
+        # is accepted, is stated in docs/contracts/calibration_ledger_append.md
+        # under "The under-lease custody memo". Only while armed may a later
+        # pass reuse an earlier one's result, and it starts disarmed, which
+        # is what keeps a PRE-LEASE pass (the writer's preflight snapshot)
+        # from ever seeding it: recovery may still mutate the ledger after
+        # that pass, and the under-lease pass exists precisely to see that.
+        self.custody_memo_armed = False
+        # (physical ledger head digest, frozenset of verified entries), or
+        # None. One entry is (attempt_id, absolute locator, the observation's
+        # artifact name -> sha256 pairs): exactly the (locator, expected
+        # hash) pairs a pass re-derives from the ledger and then checks
+        # against the bytes on disk. Keying on the head digest is what makes
+        # the memo die when `repair_calibration_ledger` actually changes the
+        # ledger between two passes.
+        self.custody_memo = None
+
+    def arm_custody_memo(self):
+        """Permit under-lease reuse of a verified custody set from here on.
+
+        Call this ONLY after the writer lease is held, and pair it with
+        `clear_custody_memo` on release: reuse rests on that lease, which
+        keeps every other calibration writer out of this ledger for exactly
+        as long as it is held.
+        """
+
+        self.custody_memo_armed = True
+
+    def clear_custody_memo(self):
+        """Forget every memoized custody result and refuse further reuse."""
+
+        self.custody_memo_armed = False
+        self.custody_memo = None
+
+    def custody_memo_covers(self, required) -> bool:
+        """Whether an armed memo already verified every required entry.
+
+        Three conditions, all necessary: the memo is armed (the lease is
+        held), the physical ledger head digest it was taken at still equals
+        the digest of the snapshot now asking, and the entries this pass
+        needs are a subset of the entries that memo verified.
+        """
+
+        if not self.custody_memo_armed or self.custody_memo is None:
+            return False
+        digest, verified = self.custody_memo
+        if digest is None or digest != self.ledger_head_sha256:
+            return False
+        return required <= verified
+
+    def record_custody_memo(self, verified) -> None:
+        """Record a pass that read the bytes and found every entry sound."""
+
+        if not self.custody_memo_armed:
+            return
+        digest = self.ledger_head_sha256
+        if digest is None:
+            # A caller that set no head digest gets no memo rather than one
+            # keyed on nothing: an unkeyed memo could not be invalidated.
+            return
+        verified = frozenset(verified)
+        if self.custody_memo is not None and self.custody_memo[0] == digest:
+            # Two passes at the same head digest each read real bytes and
+            # each found their own entries sound, so the memo holds their
+            # UNION. A later head digest replaces the memo outright: entries
+            # verified at an older ledger state are not carried forward.
+            verified = self.custody_memo[1] | verified
+        self.custody_memo = (digest, verified)
 
     def next_operation(self):
+        # This allowance is finished, so its memo ends with it. Clearing the
+        # SOURCE is what makes "cleared on release" true on the writer's
+        # ordinary exits: `finalize` and `abandon` replace their deadline
+        # with this successor and only then release the lease, so without
+        # this line the release would clear a fresh disarmed successor while
+        # the armed source object kept a verified set alive.
+        self.clear_custody_memo()
         result = CustodyDeadline(self.configured_budget_s,
                                  telemetry_stream=self.telemetry_stream)
         # Preserve the initial wall-to-monotonic conversion across operations.
@@ -1961,6 +2052,10 @@ class CustodyDeadline:
         result.ledger_head_sha256 = self.ledger_head_sha256
         result.session_id = self.session_id
         result.existing_session = self.existing_session
+        # Deliberately NOT carried: the verified-set memo, its armed flag and
+        # the pass counter. A new operation is a new allowance, and it starts
+        # disarmed so that reuse must be re-authorized by a caller that knows
+        # it still holds the writer lease.
         return result
 
     @property
@@ -2203,7 +2298,20 @@ def _bounded_custody_request(request, deadline: CustodyDeadline):
 
 
 def bounded_custody_reasons(observations, repo_root, deadline: CustodyDeadline):
+    """Verify every governed artifact of every observation inside the budget.
+
+    Custody verification is a pure function of (locator, expected artifact
+    hash) pairs, and those pairs are re-derived from the ledger here on every
+    call -- nothing about them is cached. The only thing the memo below can
+    save is the re-READING of the bytes on disk, and it may do that exactly
+    when two conditions hold together: the writer lease is held (so no other
+    calibration writer can append to this ledger), and the physical ledger
+    head digest is the one the memoized pass ran against (so a recovery that
+    appended to the ledger between the two passes forces an honest re-read).
+    """
+
     frozen = []
+    required = set()
     for observation in observations:
         root = Path(observation.custody_locator)
         if not root.is_absolute():
@@ -2213,11 +2321,24 @@ def bounded_custody_reasons(observations, repo_root, deadline: CustodyDeadline):
             deadline.check()
             print(f"custody_backup_roots_disabled: {root}", file=sys.stderr)
             return {RefusalCode.LEDGER_CUSTODY_INVALID.value}
+        artifacts = dict(observation.artifact_sha256)
         frozen.append({"observation_id": observation.attempt_id,
                        "locator": str(root), "disposition": observation.disposition,
-                       "artifact_sha256": dict(observation.artifact_sha256)})
+                       "artifact_sha256": artifacts})
+        required.add((observation.attempt_id, str(root),
+                      tuple(sorted(artifacts.items()))))
+    required = frozenset(required)
+    if deadline.custody_memo_covers(required):
+        deadline.check()
+        return set()
     result = _bounded_custody_request({"observations": frozen}, deadline)
-    return set(result["reasons"])
+    deadline.custody_passes += 1
+    reasons = set(result["reasons"])
+    if not reasons:
+        # Only a pass that found every entry sound may be reused; a pass that
+        # refused is re-run, so the refusal is re-derived from the bytes.
+        deadline.record_custody_memo(required)
+    return reasons
 
 
 def _custody_reasons(

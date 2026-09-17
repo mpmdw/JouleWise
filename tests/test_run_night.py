@@ -461,6 +461,48 @@ class NightDriverTests(unittest.TestCase):
         self.assertEqual(2, result["chain_exit_code"])
         self.assertEqual(self.driver.EXIT_CHAIN_FAILED, rc)
 
+    def test_real_abort_command_refusal_reaches_the_driver_as_refused(self):
+        """The night's own abort step, refusing, must not be read as a GO night.
+
+        `abort_window_exhausted` in the chain runs the real
+        `scripts/recover_calibration_ledger.py … abort-session`, and that CLI
+        used to report its typed refusals on one stream only. The chain then
+        exited 2 with no document, which this driver records as verdict GO with
+        `chain_exit_code` 2 (the case above, still pinned for a chain that
+        writes nothing). Here the real command refuses for a real reason, so a
+        document must exist and the night must read REFUSED.
+        """
+        import shlex
+        ledger_root = self.root / "abort-ledger"
+        ledger_root.mkdir()
+        plan = self.driver._load_plan(self.plan_path)
+        chain = Path(plan.chain_path)
+        chain.write_text(
+            "export JOULEWISE_NIGHT_PLAN_ID=" + shlex.quote(plan.plan_id)
+            + '\nexport JOULEWISE_CALIBRATION_REFUSAL_PATH="$NIGHT_DIR/calibration-refusal.json"'
+            + "\nexport JOULEWISE_NIGHT_CUSTODY_BUDGET_S=3"
+            + "\nexec " + shlex.quote(sys.executable) + " -B "
+            + shlex.quote(str(REPO_ROOT / "scripts/recover_calibration_ledger.py"))
+            + " --ledger " + shlex.quote(str(ledger_root / "ledger.jsonl"))
+            + " --head-pin " + shlex.quote(str(ledger_root / "head.json"))
+            + " abort-session --session-id night-session --plan "
+            + shlex.quote(str(self.plan_path)) + " --reason window_exhausted\n")
+        Path(plan.chain_sha256_path).write_text(
+            hashlib.sha256(chain.read_bytes()).hexdigest() + "\n")
+        rc = self.driver.run_night(self.plan_path)
+        result = json.loads((self.custody / "night/result.json").read_text())
+        document = json.loads((self.custody / "night/calibration-refusal.json").read_text())
+        self.assertEqual("abort", document["phase"])
+        self.assertEqual(2, document["exit_code"])
+        self.assertEqual("night-plan", document["plan_id"])
+        self.assertEqual("REFUSED", result["verdict"])
+        self.assertEqual("night_calibration_refused", result["aborted_reason"])
+        self.assertEqual(2, result["chain_exit_code"])
+        self.assertEqual(document["code"], result["calibration_code"])
+        self.assertEqual(document, result["calibration_refusal"]["evidence"])
+        self.assertEqual(self.driver.EXIT_REFUSED, rc)
+        self.driver.run_courier.assert_called_once()
+
     def test_deadman_then_calibration_refusal_preserves_both_paths(self):
         original = self.driver._run_chain_once
         def chain(*args, **kwargs):
@@ -2748,12 +2790,28 @@ raise SystemExit(run_night.main(sys.argv[3:]))
 
     @unittest.skipUnless(probe_census_available(), "process census unavailable in sandbox")
     def test_probe_timeout_kills_reservation_and_descendant(self):
+        # The stub records its own and its child's process identifiers only
+        # after zsh, the chain and a Python interpreter have all started; on
+        # this Mac that takes ~0.7 s, and the original 0.3 s deadline killed
+        # the chain group before the file existed (hosted CI run 35234610245,
+        # and once on the Mac at record 49). The supervisor's timeout has to
+        # outlast that startup on a loaded runner, while the whole call stays
+        # far inside the 8 s wall assertion below: 3 s is ~4x the observed
+        # startup and ~3.4 s of wall, and the poll afterwards turns a slower
+        # runner into a named failure instead of a FileNotFoundError.
         started = time.monotonic()
-        result = self.run_probe("hang", timeout=0.3)
+        result = self.run_probe("hang", timeout=3.0)
         self.assertLess(time.monotonic() - started, 8)
         self.assertEqual(2, result.returncode, result.stderr)
         self.assertEqual("timeout", json.loads(self.receipt.read_text())["outcome"])
-        pids = json.loads((Path(self.plan.measurement_root) / "stub-pids.json").read_text())
+        stub_pids = Path(self.plan.measurement_root) / "stub-pids.json"
+        deadline = time.monotonic() + 2
+        while not stub_pids.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertTrue(stub_pids.exists(),
+            "the stalled reservation never reached its own startup inside the"
+            " probe deadline, so this run proved nothing about the kill")
+        pids = json.loads(stub_pids.read_text())
         for pid in pids:
             with self.assertRaises(ProcessLookupError):
                 os.kill(pid, 0)
@@ -2799,12 +2857,18 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         self.assertEqual(str(getattr(self.plan, "custody_budget_s", 120)),
                          environment["CUSTODY_BUDGET_S"])
 
-    def test_writer_custody_passes_constant_names_the_lane_that_lowers_it(self):
+    def test_writer_custody_passes_constant_matches_the_memoized_writer(self):
         from joulewise import night_agent_install as engine
-        # The number of whole-corpus custody passes the capture writer makes
-        # inside one budget. Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up
-        # that memoizes two of them away and lowers this to 2.
-        self.assertEqual(4, engine.WRITER_CUSTODY_PASSES)
+        # The worst-case number of whole-corpus custody passes the capture
+        # writer can pay for inside one budget, after lane
+        # CUSTODY-PASS-MEMO-01. A healthy slot reads twice (the pre-lease
+        # preflight pass, and ONE pass under the writer lease that the
+        # verified-set memo serves to the enforcing readiness gate and the
+        # slot validation), but the count must cover THREE: a repair that
+        # moves the head digest costs an honest re-read, and a corrupt corpus
+        # costs preflight + the refused under-lease pass + the refusing
+        # re-read. The headroom factor is growth margin, not a spare pass.
+        self.assertEqual(3, engine.WRITER_CUSTODY_PASSES)
         self.assertEqual(1.5, engine.CUSTODY_HEADROOM_FACTOR)
         self.assertIn("CUSTODY-PASS-MEMO-01", Path(engine.__file__).read_text())
 
@@ -2818,11 +2882,16 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         path = write_matching_probe_receipt(self.plan_path)
         record = json.loads(path.read_text())
         self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
-        # Four writer passes plus half a pass of margin: the arithmetic is
+        # Three writer passes -- the worst case, repaired ledger or corrupt
+        # corpus -- times half a pass of growth margin. The arithmetic is
         # spelled out rather than read from the constants, so this same test
-        # run against the base implementation reaches the actual admission.
-        limit = record["custody_budget_s"] / (4 * 1.5)
-        self.assertEqual(20.0, limit)
+        # run against the base implementation (which makes four passes and
+        # admits only 20 s) reaches the actual admission and fails.
+        self.assertEqual(120.0, record["custody_budget_s"])
+        limit = record["custody_budget_s"] / (3 * 1.5)
+        # 120 s / 4.5 = 26.67 s: the largest single measured pass that leaves
+        # the writer room for its worst case inside one allowance.
+        self.assertAlmostEqual(26.667, limit, places=3)
         for elapsed, admitted in ((limit, True), (limit * 1.001, False)):
             with self.subTest(custody_elapsed_s=elapsed):
                 record["custody_elapsed_s"] = elapsed

@@ -15,10 +15,12 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.calibration_exits import (  # noqa: E402
     RefusalCode,
+    emit_calibration_refusal,
     emit_refusal,
     explain_payload,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
+    DEFAULT_CUSTODY_BUDGET_S,
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
     LEDGER_SCHEMA,
@@ -34,6 +36,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     canonical_json_bytes,
     inspect_calibration_ledger,
     load_calibration_ledger_snapshot,
+    night_custody_budget_s,
     repair_calibration_ledger,
     resume_finalize_bracket_session,
     terminal_head_pin_for_session,
@@ -536,9 +539,33 @@ def main(argv: list[str] | None = None) -> int:
             print(canonical_json_bytes(output).decode("utf-8"))
             return 0
     except CalibrationLedgerError as exc:
-        return emit_refusal(
-            exc.code or RefusalCode.LEDGER_MALFORMED,
-            context=dict(exc.context) | {"detail": str(exc)},
+        code = exc.code or RefusalCode.LEDGER_MALFORMED
+        context = dict(exc.context) | {"detail": str(exc)}
+        if args.command != "abort-session":
+            return emit_refusal(code, context=context, stream=sys.stdout)
+        # `abort-session` is the one command of this CLI that the night chain
+        # runs (`abort_window_exhausted` in
+        # scripts/night_chains/calibration_derivation_only.zsh), and the chain
+        # exports JOULEWISE_CALIBRATION_REFUSAL_PATH. A refusal that reaches
+        # only this stream leaves the driver with nothing but a chain that
+        # exited 2, which it records as verdict GO with chain_exit_code 2 --
+        # the courier then reports a GO night that never finished. The
+        # document carries the typed code to the driver, which reports
+        # REFUSED / night_calibration_refused from it. Phase "abort" names
+        # the chain step; the contract enumerates no phase set.
+        try:
+            budget_s = night_custody_budget_s()
+        except CalibrationLedgerError:
+            # A malformed marker is itself a refusal elsewhere; here it must
+            # not displace the refusal being reported.
+            budget_s = None
+        return emit_calibration_refusal(
+            code,
+            phase="abort",
+            ledger_path=args.ledger,
+            custody_context=dict(exc.context),
+            budget_s=DEFAULT_CUSTODY_BUDGET_S if budget_s is None else budget_s,
+            context=context,
             stream=sys.stdout,
         )
     print(
