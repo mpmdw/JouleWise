@@ -2164,6 +2164,38 @@
       "status": "shelved",
       "stop_card": null
     },
+    "DRIVER-REFUSAL-COLLISION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md (executed root-cause record: timeline, census cadence, lease code, locator census, TCC database modification time 20:52:04, launchd reproduction)",
+          "docs/run_reports/2026-09-16-activation-e0c58148-equivalence-night-stall.md (headless activation e0c58148: timeline and the two defect lanes it named)",
+          "night root /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916: night.log, night/chain.started, night/chain.exited (exit −15), night/censuses.jsonl (1,332 rows), night/chain.stdout.log, night/chain.stderr.log, night/launchd.night.err, operator_logs/derivation-chain.log",
+          "scripts/run_night.py at main b5294f0e: _write_driver_refusal (line 250) → _write_json → _write_bytes_exclusive (line 144, os.O_CREAT together with os.O_EXCL)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/DRIVER-REFUSAL-COLLISION-01/acceptance",
+          "label": "DRIVER-REFUSAL-COLLISION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A second refusal writer never crashes the driver: the driver records its refusal in a distinct file (for example refusal.<epoch>.json) or a sequenced record, the courier still runs and emails, and the night-results branch carries both refusals. A regression proves the sequence dead-man refusal first, then a census abort, exits through the normal courier path with both records present. No change to gate or census semantics."
+      },
+      "authority": {
+        "label": "Registered 2026-09-16 by the interactive session 5239df1e (Fable, Ed present) from the executed root-cause record; magistrate registration, not a ruling; the cure shape goes to a pre-decision design consult",
+        "path": "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The night driver crashes when it must record a second refusal. scripts/run_night.py _write_driver_refusal creates night/refusal.json with O_CREAT together with O_EXCL; on 2026-09-16 the daily dead-man had already written refusal.json at 13:20 (night_chain_alive), so the driver's census-abort refusal at 20:52:19 raised FileExistsError (night/launchd.night.err), and no result.json, courier.sent, or courier email was produced: the night ended silently.",
+      "id": "DRIVER-REFUSAL-COLLISION-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 220,
+      "status": "queued",
+      "status_note": "2026-09-16 interactive 5239df1e: registered from the e0c58148 record and the executed traceback; bench-size cure; not design-bearing.",
+      "stop_card": null
+    },
     "ED-BRANCH-PROTECTION-E1-01": {
       "acceptance": {
         "evidence": [
@@ -3790,6 +3822,71 @@
       "rank": 88,
       "status": "active",
       "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open. 2026-09-10 07:00 PDT: pre-night dead-man observed standing down (record 30); item 5 ruled MET by cold gate 31 subject to the harvest predicate P1–P4 (checklist 13 §3a); items 4 and 6 await the 09-11 harvest. 2026-09-10 08:10: the 09-11 activation still harvests and closes items 5/6 and retires the stub; no real plan follows it until ACCEPTANCE-EPOCH-25G83-01. 2026-09-11: item 5 MET on rehearsal-20260911 (harvest record 01 of activation 58a3bcfc); item 6 NOT met: driver crashed on Python 3.9 before any gate. Cure NIGHT-INTERPRETER-PIN-01 merged as PR #321 (main 4c06b3b4); C1 seam docs merged as PR #322 (main 18ab2cc4). Cold-gate ruling 06 §4(c): stub rehearsal-20260912, t0 2026-09-12 00:30 PDT, from a checkout at H′ (NIGHT_HANDBACK rewrite, PR #323), armed by NIGHT_HANDBACK notice; fallback (a) = stub 2026-09-13 02:56 PDT. 2026-09-12 00:40 PDT (night courier, harvest under record 13 §Harvest pointer): rehearsal-20260912 FIRED at 00:30:04 PDT from the launchd-started driver under the pinned Python 3.13; result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260912 @ e657f30f, courier email 1a09487237fa6be2 (read back, SENT); receipt C1/C3/C4/C5 PASS with measured keys, C2 NOT_APPLICABLE no_pack_by_design, refusal null; launchd.night.err EMPTY. Ruling 06 C-7: every clause MET → acceptance item 6 MET (docs/process_traces/2026-09-12-courier-rehearsal-20260912/01-rehearsal-20260912-harvest-record.md). C-8: both agents uninstalled FROM the stub checkout at 00:35:23 (rc 0; launchctl free of com.joulewise.night*), stub worktree removed 00:37:36, plan root moved out of discovery at 00:37:38 to /Users/edr/night-archive/rehearsal-20260912-plan-root-retired-1789198658 (the courier's rm -r was refused by the harness permission classifier; the bytes are preserved and identical to the verified archive; `find ~/night-custody -maxdepth 2 -name night_plan.json` is EMPTY) (record 02). Items 1/2/3/5/6 MET; item 4 (stage-1 email before the first DIAGNOSTIC_NO_PACK arm) remains OPEN and is owed by the equivalence-night arm. Nothing is armed; next = equivalence-night install 03:00–06:30 PDT 09-12 for t0 02:56 09-13 (runbook 68 / runbook 99 rev 5). 2026-09-12: item 4 MET (stage-1 email 1a094a59a84b53be before the first DIAGNOSTIC_NO_PACK arm, activation b58fb582 record 02); all six acceptance items now have evidence; closure of the row is the next activation's bookkeeping after the equivalence night is harvested. Status blocked→active 2026-09-12 (no pending hard-start dependency remains; the row stays active until the equivalence night is harvested and its bookkeeping closes it).",
+      "stop_card": null
+    },
+    "NIGHT-RESERVE-HANG-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md (executed root-cause record: timeline, census cadence, lease code, locator census, TCC database modification time 20:52:04, launchd reproduction)",
+          "docs/run_reports/2026-09-16-activation-e0c58148-equivalence-night-stall.md (headless activation e0c58148: timeline and the two defect lanes it named)",
+          "night root /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916: night.log, night/chain.started, night/chain.exited (exit −15), night/censuses.jsonl (1,332 rows), night/chain.stdout.log, night/chain.stderr.log, night/launchd.night.err, operator_logs/derivation-chain.log",
+          "joulewise/calibration_ledger.py at main b5294f0e: probe_custody (line 4945, CUSTODY_PROBE_TIMEOUT_S = 2.0) bounds only exists/is_dir and runs the inspect callback unbounded on the caller; _custody_reasons (line 1898) hashes the governed artifacts of every observation; CalibrationWriterLease.acquire (line 3167) is a nonblocking flock",
+          "clone ledger /Users/edr/JouleWise-measurement-20260916-derivation/runs/calibration_observation_ledger.jsonl: 50 unique custody locators, 38 under ~/Library/Mobile Documents/com~apple~CloudDocs/"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-RESERVE-HANG-01/acceptance",
+          "label": "NIGHT-RESERVE-HANG-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "On the night path, custody verification of ledger observations is bounded by wall-clock: a read over any custody locator that does not complete inside a stated budget makes the reservation refuse with a named reason (for example calibration_ledger_custody_unreachable) before the window ends, never hang; and the night path does not depend on a human-answered consent, by one of two means chosen in a pre-decision design consult: historical-import custody outside the measurement root is not read on the night path (issuing mode for a derivation session verifies against the local custody store or the recorded hashes), or the arm dry run (bind-window) exercises the exact reservation read path from a launchd job under the plan's interpreter with the owner present, and its refusal blocks the arm. A regression proves that a custody read stalled past the budget refuses the reservation with the named reason and leaves the ledger without an open session. The derivation night runbook records the operating-system precondition in plain words: the plan interpreter must hold the Files-and-Folders (or Full Disk Access) grant for iCloud Drive, and a Homebrew Python upgrade resets that grant because the binary's code identity changes. No change to any measurement, instrument, gate, or claim constant."
+      },
+      "authority": {
+        "label": "Registered 2026-09-16 by the interactive session 5239df1e (Fable, Ed present) from the executed root-cause record; magistrate registration, not a ruling; the cure shape goes to a pre-decision design consult",
+        "path": "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The unattended night chain must never wait on a person or on the outside world. On 2026-09-16 the equivalence night's reservation step blocked for 11 h 07 m inside the calibration-ledger readiness pass, which reads and hashes every governed artifact of every historical custody row (190 files, 3.33 GB, in 38 locators under iCloud Drive) with no time bound, inside the writer lease, from a launchd-spawned Python that had never opened files under iCloud Drive; macOS raised a file-access consent, the open call blocked until the owner answered it (consent database modified 20:52:04), the readiness completed at 20:52:06, and the owner's interactive session then entered the census and the chain was terminated. No captures, no verdict.",
+      "id": "NIGHT-RESERVE-HANG-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 219,
+      "status": "queued",
+      "status_note": "2026-09-16 interactive 5239df1e: root cause ESTABLISHED at the bench (consent database modified 20:52:04, ledger written 20:52:06, owner's session in the census 20:52:13); Ed's verbal confirmation of the dialog requested; the e0c58148 record calls this lane NIGHT-RESERVATION-STALL-01, same defect; FIRST desk item for the successor magistrate; no re-plan of the equivalence night before this lane is cured.",
+      "stop_card": null
+    },
+    "NIGHT-STALL-WALLCLOCK-ABORT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md (executed root-cause record: timeline, census cadence, lease code, locator census, TCC database modification time 20:52:04, launchd reproduction)",
+          "docs/run_reports/2026-09-16-activation-e0c58148-equivalence-night-stall.md (headless activation e0c58148: timeline and the two defect lanes it named)",
+          "night root /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916: night.log, night/chain.started, night/chain.exited (exit −15), night/censuses.jsonl (1,332 rows), night/chain.stdout.log, night/chain.stderr.log, night/launchd.night.err, operator_logs/derivation-chain.log",
+          "night root chain.zsh: the WINDOW_END_EPOCH_S guard is placed after the reservation step (e0c58148 record, section Defects)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-STALL-WALLCLOCK-ABORT-01/acceptance",
+          "label": "NIGHT-STALL-WALLCLOCK-ABORT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The driver aborts the chain at t0 + window_max_s plus a stated grace with the refusal reason night_window_exceeded, runs the courier, and pushes the record, so a stalled night ends by itself before the dead-man fires. A regression proves that a chain sleeping past the window is terminated and the refusal named. The grace value and the interaction with the dead-man's daily firing are design-bearing and go to the cold gate or a consult before merge, per rule 11. No change to gate or census semantics."
+      },
+      "authority": {
+        "label": "Registered 2026-09-16 by the interactive session 5239df1e (Fable, Ed present) from the executed root-cause record; magistrate registration, not a ruling; the cure shape goes to a pre-decision design consult",
+        "path": "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Nothing terminates a stalled chain before an agent census hit. The chain's own WINDOW_END_EPOCH_S guard sits after the reservation step, so it never ran on 2026-09-16; the dead-man correctly refuses while the chain is alive; the driver has no wall-clock abort. A chain stalled inside any pre-capture step therefore holds the machine indefinitely and the night ends only when a person's session enters the census.",
+      "id": "NIGHT-STALL-WALLCLOCK-ABORT-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 221,
+      "status": "queued",
+      "status_note": "2026-09-16 interactive 5239df1e: registered from the e0c58148 record (structural item it flagged for the cold gate); design of the grace value is not settled here.",
       "stop_card": null
     },
     "NIGHT-STREAM-PATHS-01": {
