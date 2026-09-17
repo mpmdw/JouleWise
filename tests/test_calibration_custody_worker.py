@@ -165,14 +165,71 @@ class CustodyWorkerTests(unittest.TestCase):
         for response in cases:
             with self.subTest(response=response):
                 code = "import json,sys;q=json.load(sys.stdin);r={'reasons':[],'observations':0,'elapsed_s':0.0};" + response
+                launches = []
                 def spawn(_args, **kwargs):
-                    self.assertTrue(kwargs["close_fds"])
-                    self.assertFalse(kwargs["start_new_session"])
+                    launches.append(dict(kwargs))
                     return real_popen([sys.executable, "-B", "-c", code], **kwargs)
                 with mock.patch.object(ledger.subprocess, "Popen", side_effect=spawn), redirect_stderr(io.StringIO()):
                     with self.assertRaises(ledger.CalibrationLedgerError) as raised:
                         ledger._bounded_custody_request({"observations": []}, ledger.CustodyDeadline(2))
                 self.assertEqual(raised.exception.code, ledger.RefusalCode.LEDGER_CUSTODY_INVALID)
+                # Spawn catches exceptions: assertions there can masquerade as
+                # the protocol refusal this test expects. Assert on this thread.
+                self.assertEqual(len(launches), 1)
+                self.assertIs(launches[0]["close_fds"], True)
+                self.assertIs(launches[0]["start_new_session"], False)
+                self.assertEqual(launches[0].get("pass_fds", ()), ())
+
+    def test_valid_worker_cannot_inherit_parent_writable_descriptor(self):
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scratch = root / "parent-writable"
+            scratch.write_bytes(b"parent-only bytes")
+            evidence = root / "evidence"
+            evidence.write_bytes(b"authenticated bytes")
+            with scratch.open("r+b") as handle:
+                descriptor = fcntl.fcntl(handle.fileno(), fcntl.F_DUPFD, 64)
+            try:
+                # Python defaults descriptors to non-inheritable. Explicitly
+                # defeat that default so only close_fds protects this file.
+                os.set_inheritable(descriptor, True)
+                real_popen = subprocess.Popen
+                launches = []
+                # This bootstrap always attempts the write before invoking the
+                # real worker main. A complete valid response proves it ran;
+                # unchanged scratch bytes prove the writable fd was closed.
+                # A high fd avoids accidental reuse by the child's stdio pipes.
+                probe = (
+                    "import errno,os\n"
+                    f"try: os.write({descriptor}, b'CHILD INHERITED WRITER FD')\n"
+                    "except OSError as exc:\n"
+                    " if exc.errno != errno.EBADF: raise\n"
+                    "from joulewise.calibration_custody_worker import main\n"
+                    "raise SystemExit(main())\n"
+                )
+                def spawn(args, **kwargs):
+                    launches.append((list(args), dict(kwargs)))
+                    return real_popen([sys.executable, "-B", "-c", probe], **kwargs)
+
+                with mock.patch.object(ledger.subprocess, "Popen", side_effect=spawn), redirect_stderr(io.StringIO()):
+                    result = ledger._bounded_custody_request({"observations": [{
+                        "observation_id": "descriptor-probe", "locator": str(root),
+                        "disposition": "valid", "artifact_sha256": {
+                            "evidence": hashlib.sha256(evidence.read_bytes()).hexdigest()},
+                    }]}, ledger.CustodyDeadline(3))
+                self.assertEqual(result["reasons"], [])
+                self.assertEqual(result["observations"], 1)
+                self.assertEqual(scratch.read_bytes(), b"parent-only bytes",
+                                 "real worker inherited the parent's writable descriptor")
+                self.assertEqual(len(launches), 1)
+                args, kwargs = launches[0]
+                self.assertEqual(args[-2:], ["-m", "joulewise.calibration_custody_worker"])
+                self.assertIs(kwargs["close_fds"], True)
+                self.assertEqual(kwargs.get("pass_fds", ()), ())
+            finally:
+                os.close(descriptor)
 
     def test_complete_result_with_stalled_exit_is_still_timeout_and_killed(self):
         real_popen = subprocess.Popen

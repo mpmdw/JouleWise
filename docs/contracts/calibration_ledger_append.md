@@ -300,6 +300,21 @@ and closure. Those enforcing under-lease predicates are the only
 authenticated snapshot, not only the proposed session. A parser-clean result
 with a non-null `legacy_journal_path` is blocked by the machine gate.
 
+Night reservation uses `--execute --pre-reserve-strict`: any blocked readiness
+refuses immediately, before session retry, recovery, an append intent (a durable
+record of a planned append), or reservation. `--verify-only` implies this strict
+gate and stops before append. Both share one bounded custody pass under the
+writer lease. Without the strict flag, execution retains the existing session
+retry behavior for resumable callers.
+
+Strict success first emits one stdout JSON line with `pre_reserve_readiness`
+set to `ready`, `frozen_plan` containing the plan path, identifier, SHA-256 hash,
+and proposed session identifier, and `custody_elapsed_s`. The existing reservation
+success output or verify-only receipt follows. If no optional plan path was
+supplied, its diagnostic path is null; supplied plan bytes must match the declared
+identifier and hash. This is the enforcing gate's diagnostic, not a second
+advisory custody scan.
+
 ## Generated cross-layer refusal projection
 
 <!-- BEGIN GENERATED: calibration-refusal-registry -->

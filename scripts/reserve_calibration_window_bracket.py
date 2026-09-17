@@ -113,6 +113,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--t1-bindings-json", type=Path, required=True)
     parser.add_argument("--custody-budget-s", type=float, default=120.0)
     parser.add_argument("--custody-deadline-epoch-s", type=float)
+    parser.add_argument(
+        "--pre-reserve-strict", action="store_true",
+        help="refuse blocked readiness before any session retry; implied by --verify-only",
+    )
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument("--verify-only", action="store_true",
                            help="run enforcing preflight and stop before append")
@@ -195,6 +199,7 @@ def _declared_slot_sources(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    pre_reserve_strict = args.pre_reserve_strict or args.verify_only
     from scripts.validate_powermetrics_fiducial import (  # noqa: PLC0415
         _configure_writer_crash_authorization,
     )
@@ -285,11 +290,13 @@ def main(argv: list[str] | None = None) -> int:
                 if readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_TIMEOUT:
                     custody_deadline.refuse()
                 if readiness.status != "ready":
-                    # A verification receipt must never turn blocked readiness
-                    # into success via the existing-session retry path.
-                    if args.verify_only or readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_INVALID:
+                    # The night gate and verification cannot turn blocked
+                    # readiness into success via the resumable-session route.
+                    if pre_reserve_strict or readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_INVALID:
                         raise CalibrationLedgerError(
-                            readiness.refusal_code or RefusalCode.PRE_RESERVE_NOT_READY)
+                            readiness.refusal_code or RefusalCode.PRE_RESERVE_NOT_READY,
+                            context={"readiness": readiness.as_dict()},
+                        )
                     try:
                         calibration_session_status(
                             args.ledger,
@@ -321,6 +328,17 @@ def main(argv: list[str] | None = None) -> int:
                         flush=True,
                     )
                 custody_deadline.check()
+                if pre_reserve_strict:
+                    print(json.dumps({
+                        "pre_reserve_readiness": "ready",
+                        "frozen_plan": {
+                            "path": str(args.plan) if args.plan is not None else None,
+                            "plan_id": args.plan_id,
+                            "sha256": args.plan_sha256,
+                            "proposed_session_id": args.session_id,
+                        },
+                        "custody_elapsed_s": custody_deadline.elapsed_s,
+                    }, sort_keys=True), flush=True)
                 if args.verify_only:
                     output = {
                         "verify_only": "ok",

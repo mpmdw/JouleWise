@@ -697,6 +697,34 @@ class IssuingBoundaryTests(unittest.TestCase):
 class ReservationCustodyDeadlineTests(unittest.TestCase):
     """Real CLI, committed historical ledger, successful stat then blocked read."""
 
+    def test_successful_custody_then_expiry_at_reservation_append_boundary(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_reservation_append_expiry
+
+        with CustodyFixture() as f:
+            marker = install_reservation_append_expiry(f)
+            before = f.bytes()
+            completed, _ = f.reservation(budget=2)
+            boundary = json.loads(marker.read_text())
+            self.assertEqual(boundary["observations"], 3)
+            self.assertLess(boundary["elapsed_before_pause"], boundary["budget_s"])
+            self.assertGreater(boundary["elapsed_after_pause"], boundary["budget_s"])
+            completed_passes = [json.loads(line) for line in completed.stderr.splitlines()
+                                if line.startswith('{"event": "calibration_custody_complete"')]
+            self.assertEqual(len(completed_passes), 1)
+            self.assertEqual(completed_passes[0]["observations"], 3)
+            appended = [json.loads(line)["event"] for line in
+                        f.bytes()[0][len(before[0]):].splitlines()]
+            self.assertEqual(completed.returncode, 2,
+                             f"late expiry returned {completed.returncode}; appended_events={appended}")
+            self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+            self.assertEqual(f.bytes(), before)
+            self.assertEqual(appended, [])
+            self.assertEqual(json.loads(f.refusal.read_text())["code"],
+                             "calibration_ledger_custody_timeout")
+            f.assert_lease_reacquirable()
+            f.assert_workers_gone(completed)
+
     def test_blocked_read_refuses_before_any_append(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
@@ -797,8 +825,9 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
             before = f.bytes()
             completed, _ = f.reservation(mode="--verify-only")
             self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertEqual(len(completed.stdout.splitlines()), 1)
-            receipt = json.loads(completed.stdout)
+            self.assertEqual(len(completed.stdout.splitlines()), 2)
+            readiness, receipt = map(json.loads, completed.stdout.splitlines())
+            self.assertEqual(readiness["pre_reserve_readiness"], "ready")
             self.assertEqual(receipt["verify_only"], "ok")
             self.assertEqual(receipt["observations"], 3)
             self.assertEqual(receipt["ledger_head_sha256"], json.loads(before[1])["head_digest"])
@@ -860,6 +889,130 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
             self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
             self.assertEqual(f.bytes(), before)
             f.assert_workers_gone(completed)
+
+
+class StrictReservationReadinessTests(unittest.TestCase):
+    def _strict_execute(self, fixture):
+        # A base-copy counterfactual must reach the old retry, not stop at an
+        # argparse unknown-flag error. Current code always receives the flag.
+        flags = (("--pre-reserve-strict",)
+                 if "--pre-reserve-strict" in fixture.witness.reserve_script.read_text()
+                 else ())
+        return fixture.reservation(extra=flags)
+
+    def _open(self, fixture):
+        completed, _ = fixture.reservation()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def _interrupt_claim(self, fixture):
+        def interrupt(boundary):
+            if boundary == "intent-fsynced":
+                raise OSError("fixture interrupted claim")
+
+        with self.assertRaisesRegex(OSError, "fixture interrupted claim"):
+            ledger.claim_bracket_session_slot(
+                fixture.ledger, session_id=fixture.state["session_id"],
+                slot="pre", attempt_id=fixture.state["attempt_id"],
+                _stage_boundary=interrupt,
+            )
+
+    def _assert_refusal(self, fixture, completed, before, code):
+        import json
+        changed = fixture.bytes() != before
+        self.assertEqual(completed.returncode, 2,
+                         f"strict refusal missing: exit={completed.returncode}, ledger_changed={changed}")
+        self.assertIn(f'"code": "{code}"', completed.stderr)
+        self.assertEqual(completed.stdout, "")
+        self.assertEqual(fixture.bytes(), before)
+        documents = [json.loads(path.read_text()) for path in
+                     fixture.refusal.parent.glob(fixture.refusal.name + "*")]
+        matching = [document for document in documents if document["code"] == code]
+        self.assertEqual(len(matching), 1)
+        refusal = matching[0]
+        self.assertEqual(refusal["phase"], "reservation")
+        self.assertEqual(refusal["exit_code"], 2)
+        self.assertEqual(refusal["session_id"], fixture.state["session_id"])
+        self.assertTrue(refusal["existing_session"])
+        passes = [json.loads(line) for line in completed.stderr.splitlines()
+                  if line.startswith('{"event": "calibration_custody_complete"')]
+        self.assertEqual(len(passes), 1, "strict readiness must not retry custody")
+        fixture.assert_lease_reacquirable()
+        fixture.assert_workers_gone(completed)
+
+    def _read_success(self, fixture, completed):
+        import json
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        lines = completed.stdout.splitlines()
+        self.assertIn('"pre_reserve_readiness": "ready"', lines[0],
+                      "strict success omitted its readiness diagnostic")
+        readiness = json.loads(lines[0])
+        self.assertEqual(set(readiness), {"pre_reserve_readiness", "frozen_plan", "custody_elapsed_s"})
+        self.assertEqual(readiness["frozen_plan"], {
+            "path": str(fixture.state["plan"]), "plan_id": "plan-new",
+            "sha256": fixture.state["plan_sha"],
+            "proposed_session_id": fixture.state["session_id"],
+        })
+        self.assertGreaterEqual(readiness["custody_elapsed_s"], 0)
+        self.assertLess(readiness["custody_elapsed_s"], 3)
+        return json.loads("\n".join(lines[1:]))
+
+    def test_interrupted_claim_strict_refuses_but_legacy_retry_recovers(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as f:
+            self._open(f)
+            self._interrupt_claim(f)
+            before = f.bytes()
+            self.assertEqual(json.loads(before[0].splitlines()[-1])["event"], "append-intent")
+            completed, _ = self._strict_execute(f)
+            self._assert_refusal(f, completed, before, "calibration_ledger_recovery_required")
+            # Deliberately retain the G2-a retry behavior outside the night gate.
+            completed, _ = f.reservation()
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["status"], "reserved")
+            self.assertNotEqual(f.bytes()[0], before[0])
+            self.assertEqual(f.bytes()[1], before[1])
+            self.assertEqual(ledger.inspect_calibration_ledger(f.ledger).state, "clean")
+
+    def test_open_session_strict_refuses_without_append(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as f:
+            self._open(f)
+            before = f.bytes()
+            completed, _ = self._strict_execute(f)
+            self._assert_refusal(f, completed, before, "calibration_pre_reserve_not_ready")
+
+    def test_healthy_strict_reservation_emits_frozen_plan_and_reserves(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as f:
+            before = f.bytes()
+            completed, _ = self._strict_execute(f)
+            receipt = self._read_success(f, completed)
+            self.assertEqual(receipt["status"], "reserved")
+            appended = [json.loads(line)["event"] for line in
+                        f.bytes()[0][len(before[0]):].splitlines()]
+            self.assertEqual(appended, ["append-intent", ledger.BRACKET_SESSION_OPEN_EVENT])
+            self.assertEqual(f.bytes()[1], before[1])
+            self.assertEqual(completed.stderr.count('"event": "calibration_custody_complete"'), 1)
+
+    def test_verify_only_implies_strict_gate_for_healthy_open_and_interrupted(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as f:
+            before = f.bytes()
+            completed, _ = f.reservation(mode="--verify-only")
+            receipt = self._read_success(f, completed)
+            self.assertEqual(receipt["verify_only"], "ok")
+            self.assertEqual(len(completed.stdout.splitlines()), 2)
+            self.assertEqual(f.bytes(), before)
+            self._open(f)
+            before = f.bytes()
+            completed, _ = f.reservation(mode="--verify-only")
+            self._assert_refusal(f, completed, before, "calibration_pre_reserve_not_ready")
+            self._interrupt_claim(f)
+            before = f.bytes()
+            completed, _ = f.reservation(mode="--verify-only")
+            self._assert_refusal(f, completed, before, "calibration_ledger_recovery_required")
 
 
 if __name__ == "__main__":

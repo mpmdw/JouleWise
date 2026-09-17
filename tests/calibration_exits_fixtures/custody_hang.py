@@ -149,6 +149,44 @@ class BlockedArtifact:
         self.path.write_bytes(self.original)
 
 
+def install_reservation_append_expiry(fixture):
+    """Expire only after the CLI checks readiness, inside receipt preparation."""
+    marker = fixture.repo / "reservation-append-expiry.json"
+    custom = fixture.repo / "sitecustomize.py"
+    custom.write_text('''import json, os, sys, time
+from pathlib import Path
+# Worker subprocesses retain their normal read-only import surface.
+if sys.argv[0].endswith("reserve_calibration_window_bracket.py"):
+    from joulewise import calibration_ledger as ledger
+    _append = ledger.append_bracket_session_receipt
+    _target_core = ledger._target_core
+    _deadline = None
+    _paused = False
+    def append(*args, **kwargs):
+        global _deadline
+        _deadline = kwargs["custody_deadline"]
+        return _append(*args, **kwargs)
+    def target_core(receipt):
+        global _paused
+        result = _target_core(receipt)
+        if not _paused and _deadline is not None and receipt["event"] == ledger.BRACKET_SESSION_OPEN_EVENT:
+            _paused = True
+            _deadline.check()
+            record = {"elapsed_before_pause": _deadline.elapsed_s,
+                      "budget_s": _deadline.budget_s,
+                      "observations": _deadline.observations}
+            time.sleep(_deadline.remaining() + 0.03)
+            record["elapsed_after_pause"] = _deadline.elapsed_s
+            Path(os.environ["JW_APPEND_EXPIRY_MARKER"]).write_text(json.dumps(record))
+        return result
+    ledger.append_bracket_session_receipt = append
+    ledger._target_core = target_core
+''')
+    fixture.env.update({"PYTHONPATH": str(fixture.repo),
+                        "JW_APPEND_EXPIRY_MARKER": str(marker)})
+    return marker
+
+
 def install_read_barrier(fixture, *, after_reads=0, delay=60.0, metadata=False):
     """Instrument only the filesystem read seam in a disposable CLI checkout."""
     target = fixture.custodies[0] / "events.jsonl"
