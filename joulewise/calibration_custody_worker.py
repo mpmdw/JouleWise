@@ -86,6 +86,11 @@ def custody_state(path, artifacts, read_governed, *, read_errors=(OSError, Value
             raw = read_governed(path)
             manifest = json.loads(raw["manifest.json"])
             evidence = json.loads(raw["instrument_evidence.json"])
+        except TimeoutError:
+            # The deadline expiry raised inside read_governed is a timeout, not
+            # unreadable custody: re-raise so it is never reported as state.
+            # (TimeoutError is a subclass of OSError, which read_errors carries.)
+            raise
         except (*read_errors, UnicodeDecodeError, json.JSONDecodeError):
             return "unreadable"
         if not isinstance(manifest, Mapping) or not isinstance(evidence, Mapping):
