@@ -307,7 +307,7 @@ gate and stops before append. Both share one bounded custody pass under the
 writer lease. Without the strict flag, execution retains the existing session
 retry behavior for resumable callers.
 
-Strict success first emits one stdout JSON line with `pre_reserve_readiness`
+Strict success first emits one JSON line on standard output (stdout) with `pre_reserve_readiness`
 set to `ready`, `frozen_plan` containing the plan path, identifier, SHA-256 hash,
 and proposed session identifier, and `custody_elapsed_s`. The existing reservation
 success output or verify-only receipt follows. If no optional plan path was
