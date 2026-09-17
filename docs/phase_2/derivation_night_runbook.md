@@ -1233,9 +1233,20 @@ allowance for ONE preparation operation's custody work: checking that every
 governed file the ledger names is present and hashes to the recorded value.
 Call one sweep over all of those files a **custody pass**, and call its
 wall-clock cost T. The reservation makes exactly ONE pass, and the arm-time
-launchd access probe (§1.4) reports that pass, and only that pass, as the
-receipt field `custody_elapsed_s`. So the probe measures T; it does not
-measure the night's whole custody bill.
+launchd access probe (§1.4) reports that one pass as the receipt field
+`custody_elapsed_s`. So the probe measures T; it does not measure the night's
+whole custody bill.
+
+`custody_elapsed_s` is measured slightly WIDE of the pass itself, and
+deliberately so. The clock it reports is the seconds since the operation's
+allowance object (`CustodyDeadline`) was constructed, and that construction
+happens before the ledger file is read and parsed. So `custody_elapsed_s`
+covers ledger read + ledger parse + the custody pass, not the pass alone: it
+is an over-report of T, never an under-report. Over-reporting is the safe
+direction here, because the number is used to decide whether FOUR passes fit
+inside one allowance — a gate that errs toward refusing a night, not toward
+arming one that cannot finish. Same field, same meaning, in the capture
+writer's own success receipt (below).
 
 The capture writer spends the SAME one allowance on FOUR passes per slot:
 its preflight snapshot, its under-lease snapshot, its enforcing readiness
@@ -1264,6 +1275,21 @@ it lands, 4 is the true count and the gate is sized to it. The lever is the
 gate, not a larger budget: enlarging `CUSTODY_BUDGET_S` spends window time
 the cadence arithmetic above has already allocated.
 
+**Where a healthy night's T comes from.** The gate above is sized against T,
+so T has to be observable on nights that WORK, not only on nights that refuse.
+The capture writer's success receipt — the single JSON object it prints to
+standard output, captured in `chain.stdout.log` — carries `custody_elapsed_s`
+and `observations` for exactly that reason. `custody_elapsed_s` is that slot's
+PREPARATION allowance — the one its preflight snapshot, under-lease snapshot,
+readiness check and slot validation shared — read at the end of preparation
+and measured the same wide way as the probe's field (ledger read + parse +
+passes). `observations` is how many custody-bearing observations that
+preparation counted; it is 0 for a session's first slot, because none of its
+rows is finalized yet, and rises as slots finalize. Read them out of
+`chain.stdout.log` after a night and you have the real per-slot series to
+check `WRITER_CUSTODY_PASSES × 1.5 × T ≤ CUSTODY_BUDGET_S` against, instead of
+a single arm-time sample.
+
 **The inherited budget marker.** The chain exports
 `JOULEWISE_NIGHT_CUSTODY_BUDGET_S` with the same seconds as
 `CUSTODY_BUDGET_S`, and every process it starts inherits it: the reservation,
@@ -1274,6 +1300,33 @@ value, and a read that cannot be bounded refuses
 fresh allowance for each operation that starts under it — and not a clock
 time, because the session abort runs when the window is already spent and
 would otherwise refuse the one operation that closes the session.
+
+*What a fresh allowance per operation costs in the worst case.* The end-of-
+window abort (`abort_window_exhausted` in the chain, which runs
+`recover_calibration_ledger.py … abort-session`) reports the state of EVERY
+declared slot, and it checks one slot's custody per call, each call starting
+its own fresh allowance. So the abort's worst case — every slot's custody
+stalled until its allowance expires — is one budget per declared slot:
+
+```
+SLOT_COUNT × CUSTODY_BUDGET_S = 12 × 120 s = 1440 s = 24 min
+```
+
+`SLOT_COUNT` (12) and `CUSTODY_BUDGET_S` (120 s) are both set in the chain
+`scripts/night_chains/calibration_derivation_only.zsh`. The abort's own
+closing custody pass can add one more allowance, so the ceiling is 13 × 120 s
+= 1560 s = 26 min. Compare that with the span the dead-man formula below
+allows between the end of the acquisition window and the dead-man instant D:
+`COURIER_DEADLINE_S` (300 s) + `DEADMAN_GRACE_S` (3600 s) = 3900 s, both
+constants in `scripts/run_night.py`. The abort STARTS before the window end —
+it fires when the next slot's capture budget would cross it — so 1560 s is
+measured against at least that 3900 s. 1560 s < 3900 s, with roughly 39 min
+to spare: the dead-man does not fire and the courier still delivers the
+night's result. The alternative — an unbounded
+abort — is what hung the 2026-09-16 night, so a bounded 26 min worst case is
+the improvement, not a new risk. Shrink it further, if it ever matters, by
+lowering `CUSTODY_BUDGET_S` or `SLOT_COUNT`; both are chain variables and
+both also move the cadence arithmetic above.
 
 **The dead-man check (updated 2026-09-15, INSTALL-WINDOWS-MULTI-01).**
 `scripts/run_night.py` defines `COURIER_DEADLINE_S = 300` (5 × 60 s),

@@ -1091,6 +1091,33 @@ class NightCustodyBudgetTests(unittest.TestCase):
                 # The one metadata probe reads no governed bytes and is admitted.
                 self.assertEqual(ledger._assert_absolute_nonsymlink_directory(root), root)
 
+    def test_marker_refusal_names_the_variable_the_desk_must_unset(self):
+        """The refusal tells a desk operator WHICH variable to clear.
+
+        The registry renders `calibration_ledger_custody_invalid` as
+        "receipt-bound evidence bytes are absent or hash-invalid", and the
+        wrapper adds "primary evidence is unreadable".  Neither is true of an
+        inherited marker: the bytes are intact and the process simply carries
+        the night's budget.  Without the `unset` key the operator has to read
+        the source to learn that `JOULEWISE_NIGHT_CUSTODY_BUDGET_S` is the
+        cause, so the key is part of the refusal, not a convenience.
+
+        The variable is spelled literally rather than read from the module
+        constant, so this test reaches the guard on the base revision too.
+        """
+
+        with self.custody() as root:
+            with mock.patch.dict(os.environ, {"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "3"}):
+                with self.assertRaises(ledger.CalibrationLedgerError) as raised:
+                    ledger._governed_raw_nofollow(root)
+            context = raised.exception.context
+            self.assertEqual(context["reason"],
+                             "custody_read_unbounded_under_night_budget")
+            self.assertEqual(context["unset"], "JOULEWISE_NIGHT_CUSTODY_BUDGET_S")
+            # The name in the refusal is the name the reader of the module
+            # constant would get; a rename must move both together.
+            self.assertEqual(context["unset"], ledger.NIGHT_CUSTODY_BUDGET_ENV)
+
     def test_entry_functions_take_the_bounded_route_under_the_marker(self):
         with self.custody() as root:
             with mock.patch.dict(os.environ, {"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "20"}):

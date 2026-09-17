@@ -2572,6 +2572,75 @@ class NightProbeTests(unittest.TestCase):
                 self.assertEqual(code, record["refusal_code"])
                 self.assertEqual(6, len(record["input_digests"]))
 
+    def test_worker_receipt_is_admitted_by_the_real_install_validator(self):
+        """End to end: real `_probe_worker` -> its receipt -> real admission.
+
+        Neither side of this handoff was covered.  `_probe_worker` publishes
+        the INSTALLER-side code_digests -- five paths, because the installer
+        also pins the driver and the capture writer -- while the reservation
+        echoes only the three programs it knows about.  Publishing the
+        reservation's three-entry echo instead survived both modules in
+        isolation, yet `validate_probe_receipt` compares `probe_bindings`
+        field by field, so every real install would have refused with
+        "probe receipt code_digests mismatch".  The mutation is only visible
+        when one test runs the worker and then feeds its receipt to the
+        validator, which is what this does.
+        """
+        from joulewise import night_agent_install as engine
+        driver = _load_driver()
+        label = "com.joulewise.night-probe." + self.plan.plan_id
+        (Path(self.plan.measurement_root) / "stub-mode").write_text("ok")
+        with (mock.patch.object(driver, "_probe_group_absent", return_value=True),
+              mock.patch.dict(os.environ, {"JOULEWISE_LAUNCHD_LABEL": label})):
+            rc = driver.probe_night(self.plan_path, self.receipt, 15)
+        self.assertEqual(0, rc)
+        receipt = json.loads(self.receipt.read_text())
+        self.assertEqual("ok", receipt["outcome"])
+        # The receipt carries the installer's whole binding, not the
+        # reservation's partial echo: the driver and the writer are pinned too.
+        self.assertEqual(set(receipt["code_digests"]), set(engine.PROBE_CODE_PATHS))
+        self.assertEqual(5, len(engine.PROBE_CODE_PATHS))
+        prepared = types.SimpleNamespace(plan=self.plan, plan_path=self.plan_path,
+                                         python=sys.executable)
+        admitted = engine.validate_probe_receipt(prepared, receipt_path=self.receipt)
+        self.assertEqual("ok", admitted["outcome"])
+        self.assertEqual(receipt["code_digests"], admitted["code_digests"])
+
+    def test_reservation_echo_below_its_own_floor_is_refused(self):
+        """A silently shrunk echo attests to less code than the reservation ran.
+
+        The installer binds a superset of the echo, so the reconciliation can
+        only check the entries that are THERE.  Without a floor, an echo that
+        dropped to two entries -- or to one -- reconciles exactly as happily
+        as the full three, and the receipt would then be published as if the
+        missing program had been hashed.  REQUIRED_RESERVATION_ECHO is that
+        floor, and the refusal names the path that went missing.
+        """
+        driver = _load_driver()
+        # Spelled literally, not read from the constant, so this test reaches
+        # the reconciliation on the base revision instead of stopping at a
+        # missing name.
+        dropped = "joulewise/calibration_custody_worker.py"
+        stub = Path(self.plan.measurement_root) / "scripts/reserve_calibration_window_bracket.py"
+        source = stub.read_text()
+        # Shrink the fixture reservation's echo to two entries, leaving the
+        # two it still names byte-identical to the installer's binding.
+        shrunk = source.replace(", '" + dropped + "']", "]")
+        self.assertNotEqual(source, shrunk)
+        stub.write_text(shrunk)
+        (Path(self.plan.measurement_root) / "stub-mode").write_text("ok")
+        with mock.patch.object(driver, "_probe_group_absent", return_value=True):
+            rc = driver.probe_night(self.plan_path, self.receipt, 15)
+        self.assertEqual(2, rc)
+        record = json.loads(self.receipt.read_text())
+        self.assertEqual("refused", record["outcome"])
+        self.assertEqual("probe_receipt_invalid", record["refusal_code"])
+        self.assertIn(dropped, record["detail"])
+        self.assertIn("missing required reservation entries", record["detail"])
+        # The floor is the reservation's own three programs, defined once.
+        self.assertIn(dropped, driver.REQUIRED_RESERVATION_ECHO)
+        self.assertEqual(3, len(driver.REQUIRED_RESERVATION_ECHO))
+
     def test_probe_deadline_covers_blocked_binding_read(self):
         import signal
         ledger = Path(self.plan.measurement_root) / "ledger.jsonl"

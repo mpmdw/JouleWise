@@ -74,6 +74,20 @@ DEADMAN_GRACE_S = 3600
 # that belongs after agent teardown. The installer still rechecks its cutoff.
 INSTALL_CLOSE_MARGIN_S = 2 * 60
 INSTALL_SPANS: tuple[tuple[str, str], ...] = (("00:00", "24:00"),)
+# The three programs the reservation itself hashes and echoes in its
+# verify-only receipt (scripts/reserve_calibration_window_bracket.py, the
+# --verify-only branch). The installer binds a SUPERSET of these -- it also
+# pins the driver and the capture writer -- so the echo is checked as a
+# subset of that binding. A FLOOR is still needed: without one, an echo that
+# silently shrank to two entries, or to one, would reconcile just as happily
+# as the full three, and the reservation would be attesting to less code than
+# it ran under. Every name here must appear in the echo; extra names are the
+# installer's business, not the reservation's.
+REQUIRED_RESERVATION_ECHO = frozenset((
+    "scripts/reserve_calibration_window_bracket.py",
+    "joulewise/calibration_ledger.py",
+    "joulewise/calibration_custody_worker.py",
+))
 COURIER_ALLOWED_TOOLS = (
     "Read,Glob,Grep,Bash,Edit,Write,mcp__claude_ai_Gmail__send_message"
 )
@@ -2219,6 +2233,11 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
                     echoed = value["code_digests"]
                     if not isinstance(echoed, dict) or not echoed:
                         raise ValueError("code_digests missing or invalid")
+                    missing = sorted(REQUIRED_RESERVATION_ECHO - set(echoed))
+                    if missing:
+                        raise ValueError(
+                            "code_digests missing required reservation entries: "
+                            + ", ".join(missing))
                     if any(bindings["code_digests"].get(name) != digest
                            for name, digest in echoed.items()):
                         raise ValueError("code_digests mismatch")

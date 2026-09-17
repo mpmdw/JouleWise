@@ -1424,6 +1424,12 @@ class _CaptureLedgerLifecycle:
         self.require_committed_pin = require_committed_pin
         self.preflight_snapshot = preflight_snapshot
         self.custody_deadline = custody_deadline or CustodyDeadline()
+        # What the PREPARATION allowance cost, read at the end of begin()
+        # (the last moment before the capture starts). Both stay None until
+        # then, so a lifecycle that refused during preparation reports
+        # neither.
+        self.custody_preparation_elapsed_s: float | None = None
+        self.custody_preparation_observations: int | None = None
         self.phase = "writer_preflight"
         self.claim_id = (
             stable_bracket_claim_id(
@@ -1617,6 +1623,13 @@ class _CaptureLedgerLifecycle:
                 head_pin_path=self.head_pin_path,
                 require_committed_pin=self.require_committed_pin,
             )
+        # Preparation is over; the capture itself starts next. Read the
+        # allowance's clock HERE, not at finalization: this same deadline
+        # object is not replaced until finalize, so its elapsed_s keeps
+        # running through the capture, and a reading taken later would report
+        # the capture's duration rather than the custody work's.
+        self.custody_preparation_elapsed_s = self.custody_deadline.elapsed_s
+        self.custody_preparation_observations = self.custody_deadline.observations
 
     def abandon(self, reason: str) -> Mapping[str, Any] | None:
         """Best-effort governed closure for an interrupted writer."""
@@ -2618,6 +2631,27 @@ def main(argv: list[str] | None = None) -> int:
             stream=sys.stderr,
         )
     atexit.unregister(finalize_abandoned)
+    # Healthy-night custody timing. Everything else that records how long a
+    # custody pass took is on a refusal path: the writer runs its deadline
+    # with telemetry_stream=None (its standard error carries exactly one JSON
+    # refusal line and nothing else), so the bounded passes print nothing, and
+    # CustodyDeadline.context() only reaches a reader when the deadline
+    # expires. A night that SUCCEEDS therefore left no timing behind -- and
+    # the install-time headroom gate (custody_elapsed_s x
+    # WRITER_CUSTODY_PASSES x CUSTODY_HEADROOM_FACTOR <= budget, in
+    # joulewise/night_agent_install.py) is sized against exactly that
+    # quantity. These two fields put it in the receipt.
+    #
+    # custody_elapsed_s is seconds since the PREPARATION allowance's
+    # CustodyDeadline was constructed: the one allowance the preflight
+    # snapshot, the under-lease snapshot, the enforcing readiness check and
+    # the slot validation all shared. Its clock starts at construction, before
+    # the ledger is read and parsed, so it covers read + parse + the custody
+    # passes rather than the passes alone -- an over-report, which is the
+    # conservative direction for a gate that asks whether those passes fit
+    # inside the budget. observations is how many custody-bearing observations
+    # that allowance counted; it is legitimately 0 for a session's FIRST slot,
+    # because none of its rows is finalized yet, and rises as slots finalize.
     output = {
         "validation_id": validation_id,
         "status": evidence_payload["status"],
@@ -2625,6 +2659,8 @@ def main(argv: list[str] | None = None) -> int:
         "output": str(out_dir),
         "ledger_head_pin_candidate": head_pin_candidate,
         "claim_evaluation_blocked_until_pin_commit": True,
+        "custody_elapsed_s": ledger_lifecycle.custody_preparation_elapsed_s,
+        "observations": ledger_lifecycle.custody_preparation_observations,
     }
     if bracket_mode:
         output["bracket_session"] = {
