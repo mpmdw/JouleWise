@@ -1168,6 +1168,37 @@
       "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding). 2026-09-10: production clone provisionally cut at 078a13a4 (record 05: clean tree, lock diff empty, ledger authenticated with custody replay at sequence 76, tokenizer pins match); fresh cut at H on 09-11 per checklist 13 §6. 2026-09-10: provisional clone re-cut at d84da72e (clean, lock diff empty, ledger authenticated with custody replay); the final cut waits for the transaction head.",
       "stop_card": null
     },
+    "COLDGATE-CONVENE-DOCTRINE-FREE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-activation-9853dd2b/69-coldgate-packet-prereg-chain-digest/12-opus-pairing-refuter-on-ruling-10.md (B1)",
+          "docs/process_traces/2026-09-16-activation-9853dd2b/69-coldgate-packet-prereg-chain-digest/10-coldgate-fable-ruling.md (section 0 disclosure)",
+          "docs/process/coldgate_charter.md (the ONE-context clause)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COLDGATE-CONVENE-DOCTRINE-FREE-01/acceptance",
+          "label": "COLDGATE-CONVENE-DOCTRINE-FREE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The council (not the magistrate) decides the convening shape: a judge tree without the tracked CLAUDE.md (e.g. an export of the checkout with that file removed, digests pinned) and a HOME override carrying no memory index or user doctrine; the convene script records what the judge could load; a regression or checklist item in the convening pattern fails the convening when a doctrine file is present in the judge's tree. Until decided, every convening records the auto-loaded files in the ruling's disclosure (already the practice) and pairs an Opus refuter (already the practice). Process observation for the council; no rule text is amended by this registration."
+      },
+      "authority": {
+        "label": "2026-09-17 activation 9853dd2b, flagged by the Opus pairing refuter of cold gate 69; registration by the magistrate for the council, not a ruling",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The cold-gate charter (docs/process/coldgate_charter.md) says the charter is the ONE process context a cold adjudication instance receives and that the project's operating doctrine is deliberately withheld; the convening pattern in use runs the judge with `claude -p` from a linked JouleWise worktree, so the tracked project CLAUDE.md, the user-level ~/.claude/CLAUDE.md and the memory index MEMORY.md auto-load before the judge reads the packet (rulings 61 and 69 both disclose this honestly). The judge is asked to disclose auto-loads rather than prevented from receiving them, so 'cold' is nominal. Both rulings stood because the paired Opus refuter re-derived every load-bearing probe independently.",
+      "id": "COLDGATE-CONVENE-DOCTRINE-FREE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 228,
+      "status": "queued",
+      "status_note": "2026-09-17 activation 9853dd2b: registered for the council; not started; no night depends on it.",
+      "stop_card": null
+    },
     "COLDGATE-HANDOFF-01": {
       "acceptance": {
         "evidence": [
