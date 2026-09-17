@@ -8069,6 +8069,37 @@
       "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from Ed's purchase; registration only; not started; waits on the meter's arrival (hardware, Ed's hands) before the desk arm; the logger design, alignment tests and the Phase 0 row can be prepared before it arrives. Not night-critical; no window depends on it.",
       "stop_card": null
     },
+    "WATCHDOG-BOOTID-CLOCK-STEP-01": {
+      "acceptance": {
+        "evidence": [
+          "/Users/edr/night-custody/magistrate/events.jsonl: backoff_reset_after_reboot at epoch 1789624651.734894, immediately before transition sequence 174 at epoch 1789624651.759294 (FENCED → CLOCK_UNCERTAIN, wall and monotonic deltas disagree); cited in place, custody file not copied",
+          "scripts/magistrate_watchdog.py:500-519 (current_boot_id builds the full kern.boottime string, with a monotonic-origin-minute fallback), :1371 (apply_backoff stores it), :1383-1414 (reset_backoff_after_reboot; exact-string comparison :1398-1400, deadline reset :1402-1404, event :1405-1412), :1719-1721 (clean-exit cooldown stores it)",
+          "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md (section \"Why the watchdog launched\")"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-BOOTID-CLOCK-STEP-01/acceptance",
+          "label": "WATCHDOG-BOOTID-CLOCK-STEP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The boot identity used for reboot detection tolerates wall-clock steps: compare kern.boottime at second resolution (or derive boot identity from a monotonic-clock origin) and record the comparison rule in a comment. A regression feeds a stored id and an observed id that differ only in the usec field and asserts no backoff_reset_after_reboot event and no backoff reset; a second regression with a different sec still resets. Existing reboot and clock tests remain unchanged. Lands under the twelve-row gate; not night-critical; no change to the CLOCK_UNCERTAIN predicate or to any night-gate census or clock rule."
+      },
+      "authority": {
+        "label": "2026-09-16 activation 9853dd2b launch record 00; registered by the magistrate (registration, not a ruling)",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The watchdog in scripts/magistrate_watchdog.py uses a boot id (its reboot detector, a string built from sysctl kern.boottime) to associate a saved backoff wait with a machine boot. When a saved backoff deadline exists, reset_backoff_after_reboot compares the stored string with the current one and, on any difference, emits backoff_reset_after_reboot and clears the backoff deadlines. On 2026-09-16 at 22:57:31 PDT (events.jsonl epoch 1789624651.734894, immediately before transition sequence 174 FENCED → CLOCK_UNCERTAIN), the stored value was kern.boottime:{ sec = 1789527324, usec = 351165 } and the observed value kern.boottime:{ sec = 1789527324, usec = 277634 }, both followed by the same human-readable date: the same boot second, with a 73,531 µs difference in the microsecond field. The machine had not rebooted: kern.boottime sec was unchanged, and the interactive session and the previous activation's 20:59 stand-down were on this boot. As recorded in launch record 00, macOS adjusts kern.boottime when the wall clock is stepped; the machine had just been moved and its clock re-synchronised, also triggering CLOCK_UNCERTAIN at that instant. The exact-string comparison therefore mistook a clock step for a reboot. The spurious backoff reset was benign here, but boot-keyed logic sharing this string can misclassify a clock step as a reboot or vice versa: current_boot_id (:500-519), apply_backoff (:1371), reset_backoff_after_reboot (:1398-1412), and the clean-exit cooldown (:1719-1721) in scripts/magistrate_watchdog.py.",
+      "id": "WATCHDOG-BOOTID-CLOCK-STEP-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 222,
+      "status": "queued",
+      "status_note": "2026-09-16 activation 9853dd2b: magistrate registration from launch record 00, not a ruling; not started; not night-critical; lands under the twelve-row gate. Code observation: reset_backoff_after_reboot clears the saved deadlines (:1402-1403), not the ladder indices. Night-gate observation only: joulewise/night_gate.py has no boottime or boot_id reference; BOOT_SESSION_ARGV (:55) and C4 (:1255-1279) use kern.bootsessionuuid, not the watchdog string, for night_refused_boot_clock. Its other boot-keyed sites are _pack_no_retry (:785-804), ARM receipt boot/expiry (:933-937), and C4 ARM boot/expiry (:1286-1291). No night-gate acceptance change is registered here.",
+      "stop_card": null
+    },
     "WATCHDOG-CLI-TEST-TMP-DISCOVERY-01": {
       "acceptance": {
         "evidence": [
