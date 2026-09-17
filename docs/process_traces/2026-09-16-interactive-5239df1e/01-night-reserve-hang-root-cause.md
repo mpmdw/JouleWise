@@ -114,3 +114,35 @@ No code changed. No design chosen: the cure shape (bounded reads versus keeping 
 custody off the night path) is design-bearing and goes to a pre-decision consult before
 implementation. Ed's verbal confirmation of the dialog is requested in the session's closing
 message.
+
+## Addendum 2026-09-17 ~00:20 PDT: proven from the unified log
+
+The cause is no longer an inference. Every unified-log query earlier in this session and in
+the e0c58148 record ran zsh's `log` builtin, not `/usr/bin/log`, and so returned nothing;
+re-run with the full path, the log holds the whole request (all lines from
+`/usr/bin/log show --predicate 'process == "tccd"'`, times PDT):
+
+```
+09:45:03.122 AUTHREQ_CTX: msgID=165.162, function=TCCAccessRequest, service=kTCCServiceSystemPolicyAllFiles, preflight=yes
+09:45:03.122 AUTHREQ_ATTRIBUTION: msgID=165.162, attribution={responsible={TCCDProcess: identifier=python3-5555..., pid=20936 ...
+09:45:03.127 AUTHREQ_RESULT: msgID=165.162, authValue=0, authReason=5      (Full Disk Access: not granted)
+09:45:03.135 REQUEST: sender_pid=165, function=TCCAccessRequestIndirect, msgID=165.165
+09:45:03.142 Prompting for access to indirect object iCloud Drive by python3.13
+20:52:04.644 REPLY: (501) function=TCCAccessRequestIndirect, msgID=165.165
+20:52:04.644 Publishing <TCCDEvent: type=Create, service=kTCCServiceFileProviderDomain, identifier_type=Path,
+             identifier=/opt/homebrew/Cellar/python@3.13/3.13.1/Frameworks/Python.framework/Versions/13/bin/python3.13>
+```
+
+One consent request, msgID 165.165, opened at 09:45:03.142 as a prompt ("access to iCloud
+Drive by python3.13", the plan interpreter, responsible process pid 20936 = the night driver)
+and answered at 20:52:04.644 with a stored grant (TCC event type Create for the
+FileProviderDomain service, keyed by the interpreter's path). `loginwindow` shows keyboard
+activity at the machine from 20:52:02 (brightness/volume OSD lines). The ledger rows landed at
+20:52:06; Ed's `claude` entered the census at 20:52:13. The iCloud daemon log (`brctl log`)
+shows no download of the governed files at any point on 09-16 and all 190 are local and not
+dataless, so the download alternative is excluded. The grant now exists for that exact
+interpreter path; the launchd re-run tonight with the same interpreter read all five governed
+artifacts of a locator in 0.19 s with no prompt.
+
+Lesson recorded for future forensics: in this zsh, `log` is a builtin; always call
+`/usr/bin/log show`.

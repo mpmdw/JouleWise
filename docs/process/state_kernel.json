@@ -3950,7 +3950,7 @@
       "priority": "p1_phase_gate",
       "rank": 219,
       "status": "queued",
-      "status_note": "2026-09-16 interactive 5239df1e: root cause ESTABLISHED at the bench (consent database modified 20:52:04, ledger written 20:52:06, owner's session in the census 20:52:13; TCC attribution is an inference pending Ed's confirmation, the unbounded-read defect is established regardless); design consult run and ADOPTED (record 02); the e0c58148 record calls this lane NIGHT-RESERVATION-STALL-01; FIRST item for the successor magistrate: implementation seat in a linked worktree under WRITE_SCOPE from record 02's files-and-functions list, distinct-lens refuters, delta re-audit; no re-plan of the equivalence night before this lane is cured.",
+      "status_note": "2026-09-16 interactive 5239df1e: root cause PROVEN from the unified log (record 01 addendum): tccd prompted 'access to iCloud Drive by python3.13' at 09:45:03.142 (msgID 165.165) and replied at 20:52:04.644 with a Create grant for kTCCServiceFileProviderDomain keyed by the interpreter path; ledger written 20:52:06; owner's session in the census 20:52:13; the download alternative is excluded (no downloads in the iCloud daemon log, all 190 files local); design consult run and ADOPTED (record 02); the e0c58148 record calls this lane NIGHT-RESERVATION-STALL-01; FIRST item for the successor magistrate: implementation seat in a linked worktree under WRITE_SCOPE from record 02's files-and-functions list, distinct-lens refuters, delta re-audit; no re-plan of the equivalence night before this lane is cured.",
       "stop_card": null
     },
     "NIGHT-STALL-WALLCLOCK-ABORT-01": {
