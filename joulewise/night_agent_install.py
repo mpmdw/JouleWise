@@ -645,6 +645,20 @@ PROBE_CODE_PATHS = (
     "joulewise/calibration_ledger.py",
     "joulewise/calibration_custody_worker.py",
 )
+# How many whole-corpus custody passes the capture writer makes inside ONE
+# budget: preflight snapshot, under-lease snapshot, enforcing readiness, and
+# slot validation (four today). The arm-time probe runs the reservation, which
+# makes exactly ONE pass, so the probe's measured custody_elapsed_s must be
+# multiplied by this count before it can be compared with the budget the night
+# will hand the writer. Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up that
+# memoizes the under-lease passes and lowers this constant to 2; until it
+# lands, 4 is the true count and lowering it here would admit a night that
+# cannot finish its first slot.
+WRITER_CUSTODY_PASSES = 4
+# Margin on top of the multiplied passes. A night's corpus grows with every
+# finalized slot and the writer's passes are not identical in cost, so admission
+# requires half a pass of slack rather than an exact fit.
+CUSTODY_HEADROOM_FACTOR = 1.5
 
 
 def _digest(path):
@@ -674,24 +688,50 @@ def reservation_input_digests(plan, plan_path):
             for path in reservation_input_paths(plan, plan_path)}
 
 
-def probe_bindings(plan, plan_path, python):
-    """Bind the actual reservation inputs and the effective interpreters."""
+def chain_literal_paths(chain, names=("CALIBRATION_LEDGER", "LEDGER_HEAD_PIN")):
+    """Read the pinned wrapper's own literal exports; never a parallel list."""
     import shlex
-    chain = Path(plan.chain_path)
-    digest = _digest(chain)
-    sidecar = Path(plan.chain_sha256_path).read_text().split()
-    if (not sidecar or sidecar[0] != digest or len(sidecar) > 2
-            or (len(sidecar) == 2 and sidecar[1] != chain.name)):
-        raise ValueError("chain_sha256 mismatch")
+    text = Path(chain).read_text()
     paths = {}
-    for name in ("CALIBRATION_LEDGER", "LEDGER_HEAD_PIN"):
-        matches = re.findall(r"^export " + name + r"=(.*)$", chain.read_text(), re.MULTILINE)
+    for name in names:
+        matches = re.findall(r"^export " + name + r"=(.*)$", text, re.MULTILINE)
         if len(matches) != 1:
             raise ValueError(name + " must be one literal export in the pinned chain")
         words = shlex.split(matches[0])
         if len(words) != 1 or not Path(words[0]).is_absolute() or any(c in words[0] for c in "$`\n\r"):
             raise ValueError(name + " is not an absolute literal path")
         paths[name] = Path(words[0])
+    return paths
+
+
+def finalized_observation_rows(ledger_path):
+    """Count ledger rows that finalize an attempt (an observation the night verifies)."""
+    from joulewise.calibration_ledger import HISTORICAL_IMPORT_FINALIZATION_EVENT
+    final_events = {"finalization", HISTORICAL_IMPORT_FINALIZATION_EVENT}
+    rows = 0
+    for line in Path(ledger_path).read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError:
+            # A torn tail is the recovery tool's business, not this gate's.
+            continue
+        if isinstance(record, dict) and record.get("event") in final_events:
+            rows += 1
+    return rows
+
+
+def probe_bindings(plan, plan_path, python):
+    """Bind the actual reservation inputs and the effective interpreters."""
+    chain = Path(plan.chain_path)
+    digest = _digest(chain)
+    sidecar = Path(plan.chain_sha256_path).read_text().split()
+    if (not sidecar or sidecar[0] != digest or len(sidecar) > 2
+            or (len(sidecar) == 2 and sidecar[1] != chain.name)):
+        raise ValueError("chain_sha256 mismatch")
+    paths = chain_literal_paths(chain)
     pin = json.loads(paths["LEDGER_HEAD_PIN"].read_text())
     head = pin["head_digest"]
     rows = paths["CALIBRATION_LEDGER"].read_text().splitlines()
@@ -759,6 +799,18 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
         raise Refused(2, "probe receipt custody_elapsed_s invalid")
     if isinstance(observations, bool) or not isinstance(observations, int) or observations < 0:
         raise Refused(2, "probe receipt observations invalid")
+    budget = receipt.get("custody_budget_s")
+    if (isinstance(budget, bool) or not isinstance(budget, (int, float))
+            or not math.isfinite(budget) or budget <= 0):
+        raise Refused(2, "probe receipt custody_budget_s invalid")
+    # The probe timed ONE custody pass; the writer makes WRITER_CUSTODY_PASSES
+    # of them inside the same budget. Refuse the install here, at the desk,
+    # rather than time the night out on its first slot.
+    if elapsed * WRITER_CUSTODY_PASSES * CUSTODY_HEADROOM_FACTOR > budget:
+        raise Refused(2, "probe receipt custody_elapsed_s {:g} s x WRITER_CUSTODY_PASSES"
+            " {} x {:g} exceeds custody_budget_s {:g} s: the capture writer cannot"
+            " finish its passes inside the night's budget".format(
+                elapsed, WRITER_CUSTODY_PASSES, CUSTODY_HEADROOM_FACTOR, budget))
     if receipt.get("refusal_code") is not None:
         raise Refused(2, "probe receipt refusal_code contradicts success")
     if receipt.get("launchd_label") != probe_label(prepared.plan.plan_id):
@@ -780,8 +832,16 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
             raise Refused(2, "probe receipt input_digests[{}] mismatch".format(name))
     try:
         expected = probe_bindings(prepared.plan, prepared.plan_path, prepared.python)
+        finalized = finalized_observation_rows(
+            chain_literal_paths(prepared.plan.chain_path)["CALIBRATION_LEDGER"])
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
         raise Refused(2, "probe receipt current bindings invalid: {}".format(exc))
+    # A pass over nothing certifies nothing: a probe that verified zero
+    # observations while the ledger already holds finalized ones measured a
+    # corpus the night will not read.
+    if observations == 0 and finalized:
+        raise Refused(2, "probe receipt observations is 0 while the ledger holds {}"
+                         " finalized observation rows".format(finalized))
     for name in sorted(set(inputs) | set(expected["input_digests"])):
         if inputs.get(name) != expected["input_digests"].get(name):
             raise Refused(2, "probe receipt input_digests[{}] mismatch".format(name))

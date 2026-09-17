@@ -287,6 +287,8 @@ def artifact_hashes(custody_dir: Path, *, custody_deadline: CustodyDeadline | No
     """Hash governed artifacts for issuance; refuse relocated custody roots."""
 
     _refuse_custody_override_mint()
+    if custody_deadline is None:
+        custody_deadline = _ambient_custody_deadline()
     if custody_deadline is not None:
         custody_deadline.check()
         if not _custody_probe_paths(Path(custody_dir), mode="issuing"):
@@ -1986,6 +1988,69 @@ class CustodyDeadline:
         self.remaining()
 
 
+NIGHT_CUSTODY_BUDGET_ENV = "JOULEWISE_NIGHT_CUSTODY_BUDGET_S"
+
+
+def night_custody_budget_s() -> float | None:
+    """Return the night's inherited custody allowance in seconds, or None.
+
+    `JOULEWISE_NIGHT_CUSTODY_BUDGET_S` carries a BUDGET -- a fresh allowance
+    for each operation that starts under it -- and never an absolute night
+    deadline. The end-of-window session abort runs with as little as zero
+    seconds of window left, so an ambient absolute deadline would refuse
+    exactly the operation that closes the session. The night chain exports
+    the marker once; every process it starts inherits it, so a call site
+    that was handed no deadline object is bounded anyway.
+
+    A present but unusable value refuses instead of silently disabling the
+    bound: a typo in the chain must not buy an unbounded night.
+    """
+
+    raw = os.environ.get(NIGHT_CUSTODY_BUDGET_ENV)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        budget_s = float(raw)
+    except ValueError:
+        budget_s = float("nan")
+    if not math.isfinite(budget_s) or budget_s <= 0:
+        raise CalibrationLedgerError(
+            RefusalCode.LEDGER_CUSTODY_INVALID,
+            context={"reason": "night_custody_budget_invalid", "value": raw},
+        )
+    return budget_s
+
+
+def _ambient_custody_deadline(
+    mode: Literal["read_replay", "issuing"] = "issuing",
+) -> CustodyDeadline | None:
+    """Build the inherited budget for an entry that threaded no deadline.
+
+    Bounded-pass diagnostics stay silent (`telemetry_stream=None`): this
+    bound can appear under any caller, including the capture writer, whose
+    standard-error contract is exactly one JSON refusal line.
+
+    Replay refuses instead of re-mapping. The bounded worker route always
+    reads the ISSUING locator, so auto-bounding a replay call would silently
+    change WHICH BYTES are read whenever a replacement root is configured.
+    """
+
+    budget_s = night_custody_budget_s()
+    if budget_s is None:
+        return None
+    if mode == "read_replay" and any(
+        os.environ.get("JOULEWISE_BACKUP_ROOTS", "").split(os.pathsep)
+    ):
+        raise CalibrationLedgerError(
+            RefusalCode.LEDGER_CUSTODY_INVALID,
+            context={"reason": "custody_bounded_replay_unsupported",
+                     "detail": "JOULEWISE_BACKUP_ROOTS names a replacement "
+                               "custody root while " + NIGHT_CUSTODY_BUDGET_ENV
+                               + " is set"},
+        )
+    return CustodyDeadline(budget_s, telemetry_stream=None)
+
+
 def _stop_custody_worker(process):
     """Terminate, then kill and reap, using a separate bounded cleanup grace."""
     end = time.monotonic() + CUSTODY_CLEANUP_TIMEOUT_S
@@ -2447,6 +2512,11 @@ def load_calibration_ledger_snapshot(
         receipts
     )
     reasons.update(state_reasons)
+    if (custody_deadline is None and verify_custody
+            and calibration_custody_store is None):
+        # Only the branch below reads governed bytes; an ambient budget for a
+        # pass that never runs would start a timer against nothing.
+        custody_deadline = _ambient_custody_deadline(mode)
     if custody_deadline is not None:
         custody_deadline.ledger_head_sha256 = physical_digest
         custody_deadline.observations = len(_custody_observations(observations, bracket_sessions))
@@ -2723,9 +2793,12 @@ def _historical_directories(roots: Sequence[Path]) -> tuple[Path, ...]:
 
 
 def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
+    # The ONLY metadata_only gateway call: assert_custody_directory makes
+    # stat-class calls on the directory itself and reads no governed bytes,
+    # so the two-second path probe already bounds it.
     return probe_custody(
         directory, _assert_absolute_nonsymlink_directory_unbounded,
-        lambda: _missing_custody(directory), mode="issuing",
+        lambda: _missing_custody(directory), mode="issuing", metadata_only=True,
     )
 
 
@@ -5208,6 +5281,7 @@ def probe_custody(
     *,
     not_directory: Callable[[], _CustodyResult] | None = None,
     mode: Literal["read_replay", "issuing"] = "issuing",
+    metadata_only: bool = False,
 ) -> _CustodyResult:
     """Bound only a pure path probe; inspect synchronously on the caller.
 
@@ -5224,11 +5298,31 @@ def probe_custody(
 
     Accepted race: a mount can stall between a successful probe and the
     unchanged, unbounded authenticated read (the roughly two-second post-probe
-    window). This narrows the hang window; it does not bound reads. No timed-out
-    worker can retain an authentication lock. Existing non-directory outcomes
-    remain the caller's responsibility.
+    window). The probe narrows the hang window; it does not bound reads. No
+    timed-out worker can retain an authentication lock. Existing non-directory
+    outcomes remain the caller's responsibility.
+
+    THE SOLE GATEWAY. Every unbounded governed read in this module reaches
+    the filesystem through this function, so one guard here covers call sites
+    that do not exist yet. Under the night's inherited budget marker
+    (`night_custody_budget_s`, exported by the night chain), an unbounded read
+    is refused as `calibration_ledger_custody_invalid`, with the qualified name
+    of the calling function in the refusal context. `metadata_only=True` marks
+    the one probe that reads no governed bytes at all -- the
+    absolute/non-symlink directory assertion, which makes only `stat`-class
+    calls the two-second probe already bounds; every other caller must reach
+    the bounded worker route through a `CustodyDeadline`, which the entry
+    functions build from the marker when the caller threaded none.
     """
 
+    if not metadata_only and night_custody_budget_s() is not None:
+        frame = sys._getframe(1)
+        raise CalibrationLedgerError(
+            RefusalCode.LEDGER_CUSTODY_INVALID,
+            context={"reason": "custody_read_unbounded_under_night_budget",
+                     "caller": frame.f_code.co_qualname,
+                     "locator": str(path)},
+        )
     paths = _custody_probe_paths(path, mode=mode)
     if not paths:
         if mode == "issuing":
@@ -5277,6 +5371,8 @@ def _missing_custody(path: Path) -> Any:
 def _custody_state(
     path: Path, *, custody_deadline: CustodyDeadline | None = None, mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> str:
+    if custody_deadline is None:
+        custody_deadline = _ambient_custody_deadline(mode)
     if custody_deadline is not None:
         custody_deadline.check()
         if not _custody_probe_paths(path, mode="issuing"):
@@ -6179,6 +6275,7 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 __all__ = [
     "CustodyDeadline",
     "bounded_custody_reasons",
+    "night_custody_budget_s",
     "ABANDONMENT_EVENT",
     "CUSTODY_STORE_MANIFEST_NAME",
     "CUSTODY_STORE_MANIFEST_SCHEMA",

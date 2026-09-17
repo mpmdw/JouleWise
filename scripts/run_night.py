@@ -462,7 +462,11 @@ def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
         "PY": f"{plan.measurement_root}/.venv/bin/python",
         "CUSTODY_BUDGET_S": str(getattr(plan, "custody_budget_s", 120)),
     })
-    # An inherited probe switch must never turn an admitted night into a probe.
+    # An inherited probe switch must never turn an admitted night into a probe,
+    # and an inherited custody budget must never displace the chain's own
+    # export (the chain sets JOULEWISE_NIGHT_CUSTODY_BUDGET_S from
+    # CUSTODY_BUDGET_S above; a desk shell value would silently outrank it).
+    environment.pop("JOULEWISE_NIGHT_CUSTODY_BUDGET_S", None)
     environment.pop("NIGHT_VERIFY_ONLY", None)
     environment.pop("NIGHT_RESERVATION_ARGV_ONLY", None)
     return environment

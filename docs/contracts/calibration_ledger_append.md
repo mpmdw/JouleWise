@@ -605,3 +605,49 @@ separator-only values such as `":"` and `"::"`, it
 emits exactly one stderr line per probe:
 `custody_backup_roots_disabled: <path>`. Replay remains silent for this shortcut;
 unrelated local paths and timeout/exception diagnostics are unchanged.
+
+## 2026-09-17 addendum: the night's inherited custody budget
+
+`JOULEWISE_NIGHT_CUSTODY_BUDGET_S` carries a **budget**: a fresh allowance in
+seconds for each custody operation that starts while it is set, never an
+absolute night deadline. The night chain exports it once, from the same
+`CUSTODY_BUDGET_S` it passes to the reservation and the capture writer, and
+every process the chain starts inherits it — including
+`recover_calibration_ledger.py abort-session`, which runs when the window is
+already spent. An absolute deadline would refuse exactly that operation,
+because a window with zero seconds left raises `calibration_window_exhausted`.
+An absent, empty, non-numeric, non-finite or non-positive value refuses
+`calibration_ledger_custody_invalid` with reason `night_custody_budget_invalid`
+rather than silently leaving reads unbounded; absence alone (the variable
+unset or empty) restores the previous behaviour exactly.
+
+Under the marker, the three custody entry points that already have a bounded
+worker route take it when their caller threaded no `CustodyDeadline`:
+`artifact_hashes`, `_custody_state`, and the snapshot's custody-verification
+branch. The deadline these build writes no `calibration_custody_progress` or
+`calibration_custody_complete` lines (its telemetry stream is `None`), because
+the bound can appear under any caller, including the capture writer, whose
+standard error is exactly one JSON refusal line.
+
+`probe_custody` is the **sole gateway**: every unbounded governed read in the
+module reaches the filesystem through it. Under the marker it refuses
+`calibration_ledger_custody_invalid` with context
+`{"reason": "custody_read_unbounded_under_night_budget", "caller": <qualified
+name of the calling function>, "locator": <path>}` unless the call passes the
+keyword-only `metadata_only=True`. Exactly one call site passes it —
+`_assert_absolute_nonsymlink_directory`, whose probe makes only `stat`-class
+calls and reads no governed bytes — and a unit test walks the module's syntax
+tree to keep that the only one. A call site that invents a new read shape with
+no bounded route therefore gets an immediate typed refusal naming itself,
+rather than an unbounded read.
+
+Auto-bounding never re-maps a replay locator. The bounded worker route reads
+the issuing locator, so when the ambient branch is asked for
+`mode="read_replay"` while `JOULEWISE_BACKUP_ROOTS` names a replacement root,
+it refuses with reason `custody_bounded_replay_unsupported` instead of reading
+different bytes. With no replacement root configured, replay and issuing
+resolve to the same path and the bounded route is taken.
+
+`scripts/run_night.py` `_chain_environment` pops the variable next to
+`NIGHT_VERIFY_ONLY`, so a desk shell's value can never outrank the chain's own
+export in a night the driver starts.

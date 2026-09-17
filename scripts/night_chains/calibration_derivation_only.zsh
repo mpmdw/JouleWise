@@ -72,6 +72,12 @@ REPO="${PWD}"
 : "${JOULEWISE_NIGHT_PLAN_ID:?required}"
 export JOULEWISE_NIGHT_PLAN_ID
 export JOULEWISE_CALIBRATION_REFUSAL_PATH="$NIGHT_DIR/calibration-refusal.json"
+# Inherited custody BUDGET (seconds of fresh allowance per operation), not a
+# night deadline: every process this chain starts -- the reservation, each
+# capture writer, and the session abort below, which runs when the window is
+# already spent -- bounds any governed read it was not handed a deadline for,
+# and refuses one it cannot bound. A deadline threaded by a caller still wins.
+export JOULEWISE_NIGHT_CUSTODY_BUDGET_S="${CUSTODY_BUDGET_S:-120}"
 
 PY="${PY:-$REPO/.venv/bin/python}"
 SLEEP="${SLEEP:-/bin/sleep}"

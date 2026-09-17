@@ -1015,5 +1015,290 @@ class StrictReservationReadinessTests(unittest.TestCase):
             self._assert_refusal(f, completed, before, "calibration_ledger_recovery_required")
 
 
+class NightCustodyBudgetTests(unittest.TestCase):
+    """The inherited budget marker: bounded entries and a fail-closed gateway."""
+
+    @contextmanager
+    def custody(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve() / "runs/member"
+            for name in ledger.GOVERNED_ARTIFACTS:
+                artifact = root / name
+                artifact.parent.mkdir(parents=True, exist_ok=True)
+                artifact.write_bytes(b"{}")
+            yield root
+
+    @staticmethod
+    def observation(path):
+        return SimpleNamespace(
+            custody_locator=str(path), artifact_sha256={"manifest.json": "0" * 64},
+            attempt_id="probe", disposition="valid",
+        )
+
+    def test_marker_parsing_refuses_unusable_values(self):
+        self.assertIsNone(ledger.night_custody_budget_s())
+        for raw in ("", "   "):
+            with (self.subTest(value=raw),
+                  mock.patch.dict(os.environ, {ledger.NIGHT_CUSTODY_BUDGET_ENV: raw})):
+                self.assertIsNone(ledger.night_custody_budget_s())
+        for raw in ("0", "-1", "nan", "inf", "later"):
+            with (self.subTest(value=raw),
+                  mock.patch.dict(os.environ, {ledger.NIGHT_CUSTODY_BUDGET_ENV: raw})):
+                with self.assertRaises(ledger.CalibrationLedgerError) as raised:
+                    ledger.night_custody_budget_s()
+                self.assertEqual(raised.exception.context["reason"],
+                                 "night_custody_budget_invalid")
+        with mock.patch.dict(os.environ, {ledger.NIGHT_CUSTODY_BUDGET_ENV: "7.5"}):
+            self.assertEqual(ledger.night_custody_budget_s(), 7.5)
+            # A BUDGET, not a deadline: each operation starts a fresh allowance.
+            deadline = ledger._ambient_custody_deadline()
+            self.assertEqual(deadline.configured_budget_s, 7.5)
+            self.assertIsNone(deadline.deadline_epoch_s)
+            self.assertIsNone(deadline.telemetry_stream)
+
+    def test_unbounded_gateway_reads_refuse_and_name_their_caller(self):
+        # The variable is spelled literally here and in the two tests below,
+        # not read from the module constant, so the same tests run against the
+        # base implementation reach the unbounded read rather than a missing
+        # name.
+        with self.custody() as root:
+            observation = self.observation(root)
+            calls = {
+                "_read_contained_nofollow":
+                    lambda: ledger._read_contained_nofollow(root, "manifest.json"),
+                "_governed_raw_nofollow": lambda: ledger._governed_raw_nofollow(root),
+                "_custody_reasons":
+                    lambda: ledger._custody_reasons([observation], Path("/")),
+            }
+            # Without the marker every one of them reads the real bytes.
+            self.assertEqual(calls["_read_contained_nofollow"](), b"{}")
+            self.assertEqual(set(calls["_governed_raw_nofollow"]()),
+                             set(ledger.GOVERNED_ARTIFACTS))
+            self.assertEqual(calls["_custody_reasons"](),
+                             {"calibration_ledger_custody_invalid"})
+            with mock.patch.dict(os.environ, {"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "3"}):
+                for caller, call in calls.items():
+                    with self.subTest(caller=caller):
+                        with self.assertRaises(ledger.CalibrationLedgerError) as raised:
+                            call()
+                        self.assertEqual(raised.exception.code,
+                                         ledger.RefusalCode.LEDGER_CUSTODY_INVALID)
+                        context = raised.exception.context
+                        self.assertEqual(context["reason"],
+                                         "custody_read_unbounded_under_night_budget")
+                        self.assertEqual(context["caller"], caller)
+                        self.assertEqual(context["locator"], str(root))
+                # The one metadata probe reads no governed bytes and is admitted.
+                self.assertEqual(ledger._assert_absolute_nonsymlink_directory(root), root)
+
+    def test_entry_functions_take_the_bounded_route_under_the_marker(self):
+        with self.custody() as root:
+            with mock.patch.dict(os.environ, {"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "20"}):
+                requests = []
+                original = ledger._bounded_custody_request
+
+                def record(request, deadline):
+                    requests.append((request["operation"], deadline.configured_budget_s))
+                    return original(request, deadline)
+
+                with mock.patch.object(ledger, "_bounded_custody_request", record):
+                    self.assertEqual(ledger._custody_state(root), "complete")
+                    self.assertEqual(set(ledger.artifact_hashes(root)),
+                                     set(ledger.GOVERNED_ARTIFACTS))
+                self.assertEqual(requests, [("state", 20.0), ("hashes", 20.0)])
+
+    def test_replay_refuses_rather_than_reading_the_original_locator(self):
+        # The bounded worker route always reads the ISSUING locator, so a
+        # replay call must refuse instead of silently changing which bytes
+        # are read. With no replacement root configured the two resolve
+        # identically and the bounded route is taken.
+        with self.custody() as root:
+            marker = {"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "5"}
+            with mock.patch.dict(os.environ, marker | {"JOULEWISE_BACKUP_ROOTS": "/mock/replacement"}):
+                with self.assertRaises(ledger.CalibrationLedgerError) as raised:
+                    ledger._custody_state(root, mode="read_replay")
+                self.assertEqual(raised.exception.context["reason"],
+                                 "custody_bounded_replay_unsupported")
+            # An absent or empty override maps nothing, so replay and issuing
+            # name the same bytes and the bounded route is safe.
+            for override in ({}, {"JOULEWISE_BACKUP_ROOTS": ""}):
+                with (self.subTest(override=override),
+                      mock.patch.dict(os.environ, marker | override)):
+                    self.assertEqual(ledger._custody_state(root, mode="read_replay"),
+                                     "complete")
+
+
+class ProbeCustodyGatewayCensusTests(unittest.TestCase):
+    """One guard, not reviewer diligence: every call site is accounted for."""
+
+    CALL_SITES = {
+        "artifact_hashes": False,
+        "_custody_reasons": False,
+        "_assert_absolute_nonsymlink_directory": True,
+        "_read_contained_nofollow": False,
+        "_governed_raw_nofollow": False,
+        "_custody_state": False,
+    }
+
+    def test_every_probe_custody_call_site_is_metadata_only_or_guarded(self):
+        import ast
+
+        tree = ast.parse(Path(ledger.__file__).read_text())
+        enclosing = {}
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for child in ast.walk(node):
+                    enclosing.setdefault(child, node.name)
+        observed = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", getattr(node.func, "attr", None))
+            if name != "probe_custody":
+                continue
+            flags = [keyword.value for keyword in node.keywords
+                     if keyword.arg == "metadata_only"]
+            for flag in flags:
+                self.assertIsInstance(flag, ast.Constant)
+                self.assertIs(flag.value, True)
+            observed[enclosing.get(node, "<module>")] = bool(flags)
+        self.assertEqual(observed, self.CALL_SITES)
+
+    def test_the_guard_runs_before_any_probe_and_is_keyword_only(self):
+        import ast
+
+        tree = ast.parse(Path(ledger.__file__).read_text())
+        function = next(node for node in ast.walk(tree)
+                        if isinstance(node, ast.FunctionDef)
+                        and node.name == "probe_custody")
+        guard = function.body[1]
+        self.assertIsInstance(guard, ast.If)
+        dumped = ast.dump(guard.test)
+        self.assertIn("night_custody_budget_s", dumped)
+        self.assertIn("metadata_only", dumped)
+        self.assertIsInstance(guard.body[-1], ast.Raise)
+        parameter = inspect.signature(ledger.probe_custody).parameters["metadata_only"]
+        self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(parameter.default, False)
+
+
+class NightBudgetAbortPathTests(unittest.TestCase):
+    """The end-of-window session abort, bounded by inheritance alone."""
+
+    def _finalized_slot(self, fixture, session_id="session-abort"):
+        from joulewise.calibration_ledger import (
+            claim_bracket_session_slot, finalize_bracket_session_slot)
+
+        plan = fixture.witness._open_session(session_id)
+        root = fixture.witness._complete_custody(session_id, "pre")
+        claim_bracket_session_slot(fixture.ledger, session_id=session_id,
+                                   slot="pre", attempt_id=f"{session_id}-pre")
+        finalize_bracket_session_slot(
+            fixture.ledger, session_id=session_id, slot="pre", disposition="abandoned",
+            custody_locator=str(root), artifact_sha256={},
+            identity_epoch=fixture.witness.epoch, t1_bindings=fixture.witness.t1)
+        return plan, root
+
+    def _install_governed_read_barrier(self, fixture, target, *, delay=60.0):
+        """Stall the real filesystem read of one present governed artifact.
+
+        The 2026-09-16 hang was a blocked open() on a regular file that was
+        there (a macOS file-access consent on an iCloud-backed custody root),
+        so the barrier sits at the module's only no-follow read seam. That
+        seam uses os.open with a directory descriptor, not Path.read_bytes,
+        and a FIFO cannot stand in for it: custody_state counts only regular
+        files, so a FIFO answers "partial" without reading anything.
+        """
+        marker = fixture.repo / "governed-read-barrier.jsonl"
+        (fixture.repo / "sitecustomize.py").write_text(
+            '''import json, os, time
+from pathlib import Path
+_target = os.environ.get("JW_GOVERNED_BARRIER_TARGET")
+if _target:
+    from joulewise import authentication_io as _io
+    _original = _io._read_nofollow_bytes
+    def _barrier(directory, relative):
+        if str(Path(directory) / relative) == _target:
+            with open(os.environ["JW_GOVERNED_BARRIER_MARKER"], "a") as handle:
+                handle.write(json.dumps({"pid": os.getpid(), "path": _target}) + "\\n")
+            time.sleep(float(os.environ["JW_GOVERNED_BARRIER_DELAY"]))
+        return _original(directory, relative)
+    _io._read_nofollow_bytes = _barrier
+''')
+        fixture.env.update({"PYTHONPATH": str(fixture.repo),
+                            "JW_GOVERNED_BARRIER_TARGET": str(target),
+                            "JW_GOVERNED_BARRIER_MARKER": str(marker),
+                            "JW_GOVERNED_BARRIER_DELAY": str(delay)})
+        return marker
+
+    def _abort(self, fixture, plan, *, session_id="session-abort", budget=3.0):
+        import sys
+
+        env = dict(fixture.env)
+        # Exactly what the chain exports; nothing is threaded through the CLI.
+        # Spelled literally, not through the module constant: the same test
+        # run against the base implementation must reach the actual hang, not
+        # an AttributeError for a name that head introduced.
+        env["JOULEWISE_NIGHT_CUSTODY_BUDGET_S"] = str(budget)
+        return fixture.run([sys.executable, str(fixture.witness.script),
+                            "--ledger", str(fixture.ledger),
+                            "--head-pin", str(fixture.pin), "abort-session",
+                            "--session-id", session_id, "--plan", str(plan),
+                            "--reason", "window_exhausted"],
+                           budget=budget, env=env)
+
+    def test_marker_leaves_a_healthy_reservation_unchanged(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as f:
+            env = dict(f.env)
+            env["JOULEWISE_NIGHT_CUSTODY_BUDGET_S"] = "30"
+            before = f.bytes()
+            # The reservation threads its own deadline; the marker must not
+            # displace it, refuse it, or add a line to either stream.
+            completed, _ = f.reservation(mode="--verify-only", env=env)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            receipt = json.loads(completed.stdout.splitlines()[-1])
+            self.assertEqual(receipt["verify_only"], "ok")
+            self.assertEqual(receipt["observations"], 3)
+            self.assertEqual(receipt["custody_budget_s"], 3.0)
+            self.assertEqual(f.bytes(), before)
+            completed, _ = f.reservation(env=env)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["status"], "reserved")
+
+    def test_blocked_finalized_slot_refuses_inside_the_inherited_budget(self):
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as f:
+            plan, root = self._finalized_slot(f)
+            # The stall sits in the read of a finalized slot's manifest.json.
+            marker = self._install_governed_read_barrier(f, root / "manifest.json")
+            before = f.bytes()
+            try:
+                completed, elapsed = self._abort(f, plan)
+            except AssertionError as exc:
+                entered = marker.exists() and marker.read_text().strip()
+                raise AssertionError(f"{exc}; BARRIER_READ_ENTERED={bool(entered)}") from exc
+            reads = [json.loads(line) for line in marker.read_text().splitlines()]
+            self.assertTrue(reads, "the barrier proves the governed read was entered")
+            self.assertNotEqual(completed.returncode, 0, completed.stdout)
+            self.assertIn('"code": "calibration_ledger_custody_timeout"',
+                          completed.stdout)
+            self.assertLess(elapsed, 5.0,
+                            "3 s budget plus 2 s observed cleanup tolerance")
+            self.assertEqual(f.bytes(), before, "ledger and head pin unchanged")
+            f.assert_lease_reacquirable()
+            f.assert_workers_gone(completed)
+            # The session is still open, so the desk can still abort it.
+            f.env.pop("JW_GOVERNED_BARRIER_TARGET")
+            completed, _ = self._abort(f, plan)
+            self.assertEqual(completed.returncode, 0, completed.stdout)
+            self.assertEqual(json.loads(completed.stdout)["terminal_result"],
+                             "session_aborted")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -522,7 +522,19 @@ locators held the 09:45 reservation for 11 h 07 m, until 20:52; there were no
 captures or verdict. Consent is the leading explanation; materialization
 (a cloud file becoming locally available) remains an alternative in the
 root-cause record. The whole custody pass now has a 120 s budget, clipped ten
-seconds before the window ends. A typed refusal means a machine-readable
+seconds before the window ends. One **custody pass** is one sweep over every
+governed file the ledger names; the arm-time probe times exactly one, and the
+capture writer makes `WRITER_CUSTODY_PASSES` of them (4 today, in
+`joulewise/night_agent_install.py`) inside that one budget, so installation
+refuses unless `custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤
+custody_budget_s` — T ≤ 20 s at 4 passes and a 120 s budget — and unless the
+probe verified at least one observation while the ledger holds finalized ones.
+Lane CUSTODY-PASS-MEMO-01 lowers that constant to 2 when it lands. The chain
+also exports `JOULEWISE_NIGHT_CUSTODY_BUDGET_S`, a per-operation allowance in
+seconds that every process it starts inherits — reservation, capture writer
+and the end-of-window session abort alike — so a governed read that was handed
+no budget of its own is still bounded, and one that cannot be bounded refuses
+`calibration_ledger_custody_invalid` instead of blocking. A typed refusal means a machine-readable
 cause: `calibration_ledger_custody_timeout` stops and preserves the night.
 Read `calibration-refusal.json`, its `<pid>.json` siblings, and every path in
 `result.json.refusal_documents`; also discover later `refusal-NN.json` files.

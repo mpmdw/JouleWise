@@ -2690,6 +2690,93 @@ raise SystemExit(run_night.main(sys.argv[3:]))
                 os.kill(pid, 0)
         self.assertFalse(list(self.root.rglob("chain.started")))
 
+    def test_chain_exports_the_custody_budget_to_reservation_writer_and_abort(self):
+        # The bound travels by INHERITANCE: one export in the chain reaches
+        # every process it starts, including the session abort that runs when
+        # the window is already spent. The recorder stands in for the
+        # interpreter, so each call is captured with the environment it got.
+        night = self.root / "marker-output"
+        night.mkdir()
+        record = self.root / "chain-calls.jsonl"
+        recorder = Path(self.plan.measurement_root) / "recorder.zsh"
+        recorder.write_text("#!/bin/zsh\nprintf '{\"script\": \"%s\", \"budget\": \"%s\"}\\n'"
+            " \"${1:t}\" \"${JOULEWISE_NIGHT_CUSTODY_BUDGET_S-unset}\" >> \"$JW_CHAIN_RECORD\"\nexit 0\n")
+        recorder.chmod(0o755)
+        environment = {**os.environ, "NIGHT_DIR": str(night),
+            "JOULEWISE_NIGHT_PLAN_ID": self.plan.plan_id, "PY": str(recorder),
+            "JW_CHAIN_RECORD": str(record), "CUSTODY_BUDGET_S": "45",
+            "SETTLE_S": "1", "SLOT_COUNT": "1", "SLOT_CADENCE_S": "1"}
+        environment.pop("JOULEWISE_NIGHT_CUSTODY_BUDGET_S", None)
+        for capture_budget in ("1", "99999999"):
+            # The second run cannot finish a slot inside the window, which is
+            # the branch that calls recover_calibration_ledger.py abort-session.
+            result = subprocess.run(["/bin/zsh", self.plan.chain_path],
+                env={**environment, "SLOT_CAPTURE_BUDGET_S": capture_budget},
+                text=True, capture_output=True, timeout=30)
+            self.assertEqual(0, result.returncode, result.stderr)
+        calls = [json.loads(line) for line in record.read_text().splitlines()]
+        self.assertEqual([call["script"] for call in calls],
+            ["reserve_calibration_window_bracket.py", "validate_powermetrics_fiducial.py",
+             "reserve_calibration_window_bracket.py", "recover_calibration_ledger.py"])
+        self.assertEqual({call["budget"] for call in calls}, {"45"})
+
+    def test_driver_environment_drops_an_inherited_custody_budget(self):
+        driver = _load_driver()
+        with mock.patch.dict(os.environ, {"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "9999",
+                                          "NIGHT_VERIFY_ONLY": "1"}):
+            environment = driver._chain_environment(self.plan, self.root / "night")
+        self.assertNotIn("JOULEWISE_NIGHT_CUSTODY_BUDGET_S", environment)
+        self.assertNotIn("NIGHT_VERIFY_ONLY", environment)
+        self.assertEqual(str(getattr(self.plan, "custody_budget_s", 120)),
+                         environment["CUSTODY_BUDGET_S"])
+
+    def test_writer_custody_passes_constant_names_the_lane_that_lowers_it(self):
+        from joulewise import night_agent_install as engine
+        # The number of whole-corpus custody passes the capture writer makes
+        # inside one budget. Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up
+        # that memoizes two of them away and lowers this to 2.
+        self.assertEqual(4, engine.WRITER_CUSTODY_PASSES)
+        self.assertEqual(1.5, engine.CUSTODY_HEADROOM_FACTOR)
+        self.assertIn("CUSTODY-PASS-MEMO-01", Path(engine.__file__).read_text())
+
+    def test_probe_receipt_gates_writer_passes_and_zero_observations(self):
+        from joulewise import night_agent_install as engine
+        prepared = types.SimpleNamespace(plan=self.plan, plan_path=self.plan_path,
+                                         python=sys.executable)
+        ledger = Path(self.plan.measurement_root) / "ledger.jsonl"
+        ledger.write_text(json.dumps({"receipt_digest": "a" * 64, "event": "finalization",
+                                      "attempt_id": "session-d01"}) + "\n")
+        path = write_matching_probe_receipt(self.plan_path)
+        record = json.loads(path.read_text())
+        self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+        # Four writer passes plus half a pass of margin: the arithmetic is
+        # spelled out rather than read from the constants, so this same test
+        # run against the base implementation reaches the actual admission.
+        limit = record["custody_budget_s"] / (4 * 1.5)
+        self.assertEqual(20.0, limit)
+        for elapsed, admitted in ((limit, True), (limit * 1.001, False)):
+            with self.subTest(custody_elapsed_s=elapsed):
+                record["custody_elapsed_s"] = elapsed
+                path.write_text(json.dumps(record))
+                if admitted:
+                    self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+                    continue
+                with self.assertRaisesRegex(engine.Refused, "custody_elapsed_s") as raised:
+                    engine.validate_probe_receipt(prepared)
+                self.assertEqual(2, raised.exception.code)
+        record.update(custody_elapsed_s=0.1, observations=0)
+        path.write_text(json.dumps(record))
+        with self.assertRaisesRegex(engine.Refused, "observations") as raised:
+            engine.validate_probe_receipt(prepared)
+        self.assertEqual(2, raised.exception.code)
+        # A ledger that holds no finalized observation yet admits a zero count.
+        ledger.write_text(json.dumps({"receipt_digest": "a" * 64}) + "\n")
+        path = write_matching_probe_receipt(self.plan_path)
+        record = json.loads(path.read_text())
+        record["observations"] = 0
+        path.write_text(json.dumps(record))
+        self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+
 
 class PackNightProducerTests(unittest.TestCase):
     """Real driver/file custody with mocked ARM author and live probes only."""

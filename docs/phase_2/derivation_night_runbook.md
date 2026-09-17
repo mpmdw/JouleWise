@@ -1227,6 +1227,54 @@ finish: **programmed span 7680 s (128 min)**, **generator minimum 7980 s
 are intervals in which the operator may install the jobs; they do not bound
 or contain the acquisition window.
 
+**The custody budget, and why one measured pass is not the whole bill.**
+`CUSTODY_BUDGET_S` (120 s unless the chain's caller overrides it) is the
+allowance for ONE preparation operation's custody work: checking that every
+governed file the ledger names is present and hashes to the recorded value.
+Call one sweep over all of those files a **custody pass**, and call its
+wall-clock cost T. The reservation makes exactly ONE pass, and the arm-time
+launchd access probe (§1.4) reports that pass, and only that pass, as the
+receipt field `custody_elapsed_s`. So the probe measures T; it does not
+measure the night's whole custody bill.
+
+The capture writer spends the SAME one allowance on FOUR passes per slot:
+its preflight snapshot, its under-lease snapshot, its enforcing readiness
+check and its slot validation. That count is the constant
+`WRITER_CUSTODY_PASSES` in `joulewise/night_agent_install.py`, and the
+installer refuses to arm unless
+
+```
+custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s
+```
+
+The 1.5 is half a pass of margin (**headroom**): the corpus grows with every
+finalized slot, and the four passes are not identical in cost. With
+`WRITER_CUSTODY_PASSES = 4` and a 120 s budget, a probe is admissible only if
+T ≤ 20 s. Worked case: a probe reporting T = 90 s passes the six-hour
+freshness check and every digest binding, yet the writer's four passes would
+need 360 s of a 120 s allowance — a guaranteed
+`calibration_ledger_custody_timeout` on slot `d01`. Such a night now refuses
+at the desk, at install time, naming `custody_elapsed_s`. A probe that
+verified zero observations while the ledger already holds finalized ones is
+refused too, naming `observations`: a pass over nothing certifies nothing.
+
+Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up that memoizes the
+under-lease passes and lowers the constant to 2 (admitting T ≤ 40 s). Until
+it lands, 4 is the true count and the gate is sized to it. The lever is the
+gate, not a larger budget: enlarging `CUSTODY_BUDGET_S` spends window time
+the cadence arithmetic above has already allocated.
+
+**The inherited budget marker.** The chain exports
+`JOULEWISE_NIGHT_CUSTODY_BUDGET_S` with the same seconds as
+`CUSTODY_BUDGET_S`, and every process it starts inherits it: the reservation,
+each capture writer, and the end-of-window session abort. A governed-file
+read that was handed no budget object of its own is bounded by that inherited
+value, and a read that cannot be bounded refuses
+`calibration_ledger_custody_invalid` rather than blocking. It is a BUDGET — a
+fresh allowance for each operation that starts under it — and not a clock
+time, because the session abort runs when the window is already spent and
+would otherwise refuse the one operation that closes the session.
+
 **The dead-man check (updated 2026-09-15, INSTALL-WINDOWS-MULTI-01).**
 `scripts/run_night.py` defines `COURIER_DEADLINE_S = 300` (5 × 60 s),
 `DEADMAN_GRACE_S = 3600` (60 × 60 s), and `deadman_epoch(plan)`:
@@ -1831,7 +1879,12 @@ fingerprints. The input list comes from the chain's actual expanded reservation
 arguments through the driver's production environment builder; render-only
 prints these input fingerprints. Installation recomputes the bindings and accepts
 only an `ok` receipt whose finish time and file modification time are less
-than six hours old; the finish time may be at most 60 s ahead of the clock. The temporary job has a 600 s
+than six hours old; the finish time may be at most 60 s ahead of the clock.
+It also refuses the install unless the receipt's single measured custody pass
+leaves the capture writer room for its own passes —
+`custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s`, which is
+T ≤ 20 s at today's constant of 4 (§1.2) — and unless `observations` is
+greater than zero whenever the ledger already holds finalized observations. The temporary job has a 600 s
 limit (`--probe-timeout-s`) covering input binding reads and chain execution,
 with the reached phase recorded on timeout. Its supervised process group
 (the worker and its child processes) is terminated and checked for survivors;
