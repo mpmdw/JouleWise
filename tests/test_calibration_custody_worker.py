@@ -17,6 +17,64 @@ from joulewise import calibration_ledger as ledger
 from joulewise import calibration_custody_worker as worker
 
 
+class BoundedBackupDiagnosticTests(unittest.TestCase):
+    def setUp(self):
+        self.root = ledger.BACKUP_ROOTS[0] / "runs/disabled-diagnostic"
+
+    def _probe(self, operation):
+        original_stat, original_open = Path.stat, Path.open
+
+        def no_backup_io(original):
+            def guarded(path, *args, **kwargs):
+                self.assertFalse(path.is_relative_to(ledger.BACKUP_ROOTS[0]),
+                                 f"disabled custody filesystem access: {path}")
+                return original(path, *args, **kwargs)
+            return guarded
+
+        stderr = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}),
+            mock.patch.object(ledger, "_bounded_custody_request",
+                              side_effect=AssertionError("filesystem worker started")) as request,
+            mock.patch.object(Path, "stat", no_backup_io(original_stat)),
+            mock.patch.object(Path, "open", no_backup_io(original_open)),
+            redirect_stderr(stderr),
+        ):
+            result = operation(ledger.CustodyDeadline(2))
+        request.assert_not_called()
+        self.assertEqual(stderr.getvalue(), f"custody_backup_roots_disabled: {self.root}\n")
+        return result
+
+    def test_bounded_state_emits_disabled_diagnostic_once_without_io(self):
+        self.assertEqual(self._probe(lambda deadline: ledger._custody_state(
+            self.root, custody_deadline=deadline)), "absent")
+
+    def test_bounded_hashes_emit_disabled_diagnostic_once_without_io(self):
+        self.assertEqual(self._probe(lambda deadline: ledger.artifact_hashes(
+            self.root, custody_deadline=deadline)), {})
+
+    def test_bounded_snapshot_emits_disabled_diagnostic_once_without_io(self):
+        from tests import test_calibration_ledger as ledger_tests
+
+        fixture = ledger_tests.CalibrationLedgerTests(methodName="runTest")
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        fixture._reserve("disabled-diagnostic", self.root)
+        receipt = ledger.finalize_attempt_receipt(
+            fixture.ledger, attempt_id="disabled-diagnostic", disposition="valid",
+            custody_locator=str(self.root),
+            artifact_sha256={name: "a" * 64 for name in ledger.GOVERNED_ARTIFACTS},
+            identity_epoch=fixture.epoch, t1_bindings=fixture.t1,
+            capture_wall_time_s="99.0", exact_bound_lexeme_s="0.025",
+        )
+        fixture._write_pin(ledger.head_pin_for_receipt(receipt))
+        snapshot = self._probe(lambda deadline: ledger.load_calibration_ledger_snapshot(
+            fixture.ledger, fixture.pin, require_committed_pin=False,
+            verify_custody=True, mode="issuing", custody_deadline=deadline))
+        self.assertEqual(len(snapshot.observations), 1)
+        self.assertEqual(snapshot.refusal_reasons, (ledger.RefusalCode.LEDGER_CUSTODY_INVALID.value,))
+
+
 class CustodyWorkerTests(unittest.TestCase):
     def test_worker_cannot_append_even_when_request_names_writable_ledger(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -157,21 +215,36 @@ class CustodyWorkerTests(unittest.TestCase):
         import threading
         real_popen = subprocess.Popen
         children = []
+        entered = threading.Event()
+        release = threading.Event()
         finished = threading.Event()
         def spawn(_args, **kwargs):
-            time.sleep(0.25)
+            entered.set()
+            # A finite backstop keeps a broken parent from hanging the suite.
+            # The successful path releases this barrier only after refusal.
+            release.wait(5)
             child = real_popen([sys.executable, "-B", "-c", "import time;time.sleep(30)"], **kwargs)
             children.append(child)
             finished.set()
             return child
         started = time.monotonic()
-        with mock.patch.object(ledger.subprocess, "Popen", side_effect=spawn):
-            with self.assertRaises(ledger.CalibrationLedgerError) as raised:
-                ledger._bounded_custody_request({"observations": []}, ledger.CustodyDeadline(0.05))
-        self.assertEqual(raised.exception.code, ledger.RefusalCode.LEDGER_CUSTODY_TIMEOUT)
-        self.assertLess(time.monotonic() - started, 0.2)
-        self.assertTrue(finished.wait(2))
-        children[0].wait(timeout=2)
+        try:
+            with mock.patch.object(ledger.subprocess, "Popen", side_effect=spawn):
+                with self.assertRaises(ledger.CalibrationLedgerError) as raised:
+                    ledger._bounded_custody_request({"observations": []}, ledger.CustodyDeadline(0.05))
+            self.assertEqual(raised.exception.code, ledger.RefusalCode.LEDGER_CUSTODY_TIMEOUT)
+            self.assertLess(time.monotonic() - started, 2)
+            self.assertTrue(entered.wait(2))
+            self.assertFalse(finished.is_set(), "parent waited for the blocked launch")
+        finally:
+            release.set()
+            self.assertTrue(finished.wait(2))
+            try:
+                children[0].wait(timeout=2)
+            finally:
+                if children[0].poll() is None:
+                    children[0].kill()
+                    children[0].wait(timeout=2)
         self.assertIsNotNone(children[0].returncode)
 
 

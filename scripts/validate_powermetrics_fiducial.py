@@ -1632,14 +1632,17 @@ class _CaptureLedgerLifecycle:
                 )
             else:
                 self.custody_deadline = self.custody_deadline.next_operation()
+                artifacts = ledger_artifact_hashes(
+                    Path(self.custody_locator), custody_deadline=self.custody_deadline,
+                )
+                self.custody_deadline.check()
                 receipt = finalize_attempt_receipt(
                     self.ledger_path,
+                    custody_deadline=self.custody_deadline,
                     attempt_id=self.attempt_id,
                     disposition="abandoned",
                     custody_locator=self.custody_locator,
-                    artifact_sha256=ledger_artifact_hashes(
-                        Path(self.custody_locator), custody_deadline=self.custody_deadline,
-                    ),
+                    artifact_sha256=artifacts,
                     identity_epoch=self.identity_epoch,
                     t1_bindings=self.t1_bindings,
                     capture_wall_time_s=self.capture_wall_time_s,

@@ -904,6 +904,94 @@ class CaptureClassificationTests(unittest.TestCase):
 
 
 class WriterCustodyDeadlineTests(unittest.TestCase):
+    def _ordinary_abandon(self, pause_at=None):
+        from unittest import mock
+        from joulewise import calibration_ledger as ledger
+        from tests import test_calibration_ledger as ledger_tests
+
+        fixture = ledger_tests.CalibrationLedgerTests(methodName="runTest")
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        custody = fixture._custody("ordinary-abandon")
+        (custody / "power_trace.csv").write_text("timestamp_s,power_w\n99.0,1.0\n")
+        lifecycle = validation_script._CaptureLedgerLifecycle(
+            ledger_path=fixture.ledger, head_pin_path=fixture.pin,
+            attempt_id="ordinary-abandon", custody_locator=str(custody),
+            identity_epoch=fixture.epoch, t1_bindings=fixture.t1,
+            require_committed_pin=False, custody_deadline=ledger.CustodyDeadline(2),
+        )
+        self.addCleanup(lifecycle.writer_lease.release)
+        lifecycle.begin()
+        before = fixture.ledger.read_bytes(), fixture.pin.read_bytes()
+        before_rows = [json.loads(line) for line in before[0].splitlines()]
+        self.assertEqual(before_rows[-1]["event"], "reservation")
+        self.assertEqual(before_rows[-1]["disposition"], "pending")
+        real_hashes = validation_script.ledger_artifact_hashes
+        real_finalize = validation_script.finalize_attempt_receipt
+        hashes_seen = []
+
+        def expire_after_hashing():
+            lifecycle.custody_deadline.check()
+            self.assertTrue(hashes_seen)
+            time.sleep(lifecycle.custody_deadline.remaining() + 0.02)
+
+        def hash_then_pause(*args, **kwargs):
+            hashes = real_hashes(*args, **kwargs)
+            self.assertEqual(set(hashes), set(ledger.GOVERNED_ARTIFACTS))
+            hashes_seen.append(hashes)
+            if pause_at == "hash_return":
+                expire_after_hashing()
+            return hashes
+
+        def finalize_after_pause(*args, **kwargs):
+            if pause_at == "finalizer_entry":
+                expire_after_hashing()
+            return real_finalize(*args, **kwargs)
+
+        refusal = None
+        with (
+            mock.patch.object(validation_script, "ledger_artifact_hashes",
+                              side_effect=hash_then_pause),
+            mock.patch.object(validation_script, "finalize_attempt_receipt",
+                              side_effect=finalize_after_pause),
+        ):
+            try:
+                receipt = lifecycle.abandon("fixture interruption")
+            except ledger.CalibrationLedgerError as exc:
+                refusal = exc.code
+        after = fixture.ledger.read_bytes(), fixture.pin.read_bytes()
+        after_rows = [json.loads(line) for line in after[0].splitlines()]
+        appended_events = [row["event"] for row in after_rows[len(before_rows):]]
+        self.assertEqual(len(hashes_seen), 1)
+        if pause_at:
+            self.assertEqual(
+                refusal, RefusalCode.LEDGER_CUSTODY_TIMEOUT,
+                f"expired abandonment appended {appended_events}; ledger_changed={after != before}",
+            )
+            self.assertEqual(after, before)
+            # The pending attempt already has its reservation intent; no new
+            # append-intent or finalization may follow the expired custody pass.
+            self.assertEqual(appended_events, [])
+            self.assertFalse(lifecycle.closed)
+        else:
+            self.assertIsNone(refusal)
+            self.assertEqual(receipt["disposition"], "abandoned")
+            self.assertEqual(dict(receipt["artifact_sha256"]), hashes_seen[0])
+            self.assertEqual(appended_events, ["append-intent", "finalization"])
+            self.assertEqual(after[1], before[1])
+            self.assertTrue(lifecycle.closed)
+        with ledger.CalibrationWriterLease(fixture.ledger):
+            pass
+
+    def test_ordinary_abandon_refuses_expiry_after_hashing_without_append(self):
+        self._ordinary_abandon("hash_return")
+
+    def test_ordinary_abandon_forwards_deadline_to_finalizer_append_guard(self):
+        self._ordinary_abandon("finalizer_entry")
+
+    def test_ordinary_abandon_within_budget_appends_abandoned_receipt(self):
+        self._ordinary_abandon()
+
     def _stall(self, after_reads):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_read_barrier
         with CustodyFixture() as fixture:

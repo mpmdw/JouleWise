@@ -290,6 +290,7 @@ def artifact_hashes(custody_dir: Path, *, custody_deadline: CustodyDeadline | No
     if custody_deadline is not None:
         custody_deadline.check()
         if not _custody_probe_paths(Path(custody_dir), mode="issuing"):
+            print(f"custody_backup_roots_disabled: {custody_dir}", file=sys.stderr)
             return {}
         result = _bounded_custody_request({
             "operation": "hashes", "governed_artifacts": GOVERNED_ARTIFACTS,
@@ -2125,6 +2126,7 @@ def bounded_custody_reasons(observations, repo_root, deadline: CustodyDeadline):
         if (observation.artifact_sha256
                 and not _custody_probe_paths(root, mode="issuing")):
             deadline.check()
+            print(f"custody_backup_roots_disabled: {root}", file=sys.stderr)
             return {RefusalCode.LEDGER_CUSTODY_INVALID.value}
         frozen.append({"observation_id": observation.attempt_id,
                        "locator": str(root), "disposition": observation.disposition,
@@ -5258,6 +5260,7 @@ def _custody_state(
     if custody_deadline is not None:
         custody_deadline.check()
         if not _custody_probe_paths(path, mode="issuing"):
+            print(f"custody_backup_roots_disabled: {path}", file=sys.stderr)
             return "absent"
         result = _bounded_custody_request({
             "operation": "state", "governed_artifacts": GOVERNED_ARTIFACTS,

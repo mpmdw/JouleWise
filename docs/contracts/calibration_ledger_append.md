@@ -59,7 +59,8 @@ frozen observation pass. Startup, directory probes, IPC (communication between
 processes), reads, hashing, and normal process exit share that allowance. The
 parent rejects incomplete or mismatched responses and checks expiry again
 before append. On expiry it terminates, kills if necessary, and reaps the
-worker, allowing at most five additional seconds for cleanup. The permanent
+worker (collects the finished child process's exit status so it does not linger),
+allowing at most five additional seconds for cleanup. The permanent
 writer-lock file remains; normal unwinding releases the operating-system lock.
 
 `calibration_ledger_custody_timeout` means evidence availability could not be
@@ -71,8 +72,9 @@ expired when preparation starts retains `calibration_window_exhausted`.
 interpreter/code-bound JSON receipt without appending. Refusals optionally
 write an exclusive-create `joulewise.calibration_refusal.v1` document at
 `JOULEWISE_CALIBRATION_REFUSAL_PATH`; an existing document is preserved and the
-new document uses the `.PID.json` sibling. The append transaction always runs
-synchronously in the lease-holding parent, never inside the bounded worker.
+new document uses the `.PID.json` sibling, where PID means process identifier.
+The append transaction always runs synchronously in the lease-holding parent,
+never inside the bounded worker.
 The capture writer shares one allowance across preflight and under-lease
 preparation; final artifact verification starts its own bounded operation.
 
