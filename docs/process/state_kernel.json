@@ -7102,7 +7102,7 @@
       "priority": "p3_hardening_candidates",
       "rank": 229,
       "status": "queued",
-      "status_note": "2026-09-17 activation 9853dd2b: registered from the hosted-CI failure on c613e71e at the arm; not an arm blocker (Ed ruling 2026-09-16: hosted CI is post-merge confirmation, fix forward). Bench-sized; lands under the twelve-row gate.",
+      "status_note": "2026-09-17 activation 9853dd2b: FIX MERGED as PR #356 (main 3fc54a6a; Opus refuter CONFIRM record 79; full replay record 80, 6352 tests 0 failures). The lane stays open for the refuter's two residual test-strength points only: (1) the widened fixture no longer discriminates partial-grace mutants (a grace/2 driver survives; sibling exact-arithmetic assertions cover it); (2) the test never asserts that the chain actually outlived the window end, so a later window_max_s edit could make it pass vacuously — add an explicit chain-end-vs-window-end assertion. Hosted CI failed the same shard a third time on the docs-only main 3d8e5807 before the fix; the successor confirms hosted CI green on 3fc54a6a or later.",
       "stop_card": null
     },
     "THREAT-MODEL-PRUNE-01": {
