@@ -1478,19 +1478,72 @@ class ProbeCustodyGatewayCensusTests(unittest.TestCase):
 class NightBudgetAbortPathTests(unittest.TestCase):
     """The end-of-window session abort, bounded by inheritance alone."""
 
-    def _finalized_slot(self, fixture, session_id="session-abort"):
+    def _finalized_slot(self, fixture, session_id="session-abort",
+                        slots=("pre", "post"), next_custody=False):
+        """Open a session, finalize its first slot, and name both custodies.
+
+        Returns (plan, finalized custody root, next slot's custody root). The
+        finalized slot's custody is complete on disk; the NEXT slot's custody
+        is created only when ``next_custody`` asks for it, because that is the
+        one slot whose state the abort actually reads.
+        """
         from joulewise.calibration_ledger import (
             claim_bracket_session_slot, finalize_bracket_session_slot)
 
-        plan = fixture.witness._open_session(session_id)
-        root = fixture.witness._complete_custody(session_id, "pre")
+        # A bracket-kind session may declare only ("pre", "post"); a
+        # twelve-slot night is a derivation-kind session, exactly as the
+        # production chain reserves it.
+        plan = fixture.witness._open_session(
+            session_id, slots=tuple(slots),
+            session_kind=None if tuple(slots) == ("pre", "post") else "derivation")
+        root = fixture.witness._complete_custody(session_id, slots[0])
         claim_bracket_session_slot(fixture.ledger, session_id=session_id,
-                                   slot="pre", attempt_id=f"{session_id}-pre")
+                                   slot=slots[0], attempt_id=f"{session_id}-{slots[0]}")
         finalize_bracket_session_slot(
-            fixture.ledger, session_id=session_id, slot="pre", disposition="abandoned",
+            fixture.ledger, session_id=session_id, slot=slots[0], disposition="abandoned",
             custody_locator=str(root), artifact_sha256={},
             identity_epoch=fixture.witness.epoch, t1_bindings=fixture.witness.t1)
-        return plan, root
+        next_root = (fixture.witness._complete_custody(session_id, slots[1])
+                     if next_custody else
+                     fixture.repo / "runs" / session_id / "instrument_validation"
+                     / f"{session_id}-{slots[1]}")
+        return plan, root, next_root
+
+    def _install_custody_metadata_delay(self, fixture, prefix, *, delay=0.2):
+        """Make every custody classification slow, but admitted and readable.
+
+        A legitimately-admitted iCloud-backed custody root is SLOW, not
+        blocked: each existence and file test pays a round trip. The barrier
+        adds that cost to every metadata probe under one directory prefix and
+        logs each one with the process that paid it, so a test can count both
+        the delay and the number of custody workers that were started.
+        """
+        marker = fixture.repo / "custody-metadata-delay.jsonl"
+        (fixture.repo / "sitecustomize.py").write_text(
+            '''import json, os, time
+from pathlib import Path
+_prefix = os.environ.get("JW_CUSTODY_SLOW_PREFIX")
+if _prefix:
+    _delay = float(os.environ["JW_CUSTODY_SLOW_DELAY"])
+    _marker = os.environ["JW_CUSTODY_SLOW_MARKER"]
+    def _slow(name):
+        original = getattr(Path, name)
+        def probe(self, *args, **kwargs):
+            if str(self).startswith(_prefix):
+                with open(_marker, "a") as handle:
+                    handle.write(json.dumps(
+                        {"pid": os.getpid(), "call": name, "path": str(self)}) + "\\n")
+                time.sleep(_delay)
+            return original(self, *args, **kwargs)
+        setattr(Path, name, probe)
+    for _name in ("exists", "is_dir", "is_file"):
+        _slow(_name)
+''')
+        fixture.env.update({"PYTHONPATH": str(fixture.repo),
+                            "JW_CUSTODY_SLOW_PREFIX": str(prefix),
+                            "JW_CUSTODY_SLOW_MARKER": str(marker),
+                            "JW_CUSTODY_SLOW_DELAY": str(delay)})
+        return marker
 
     def _install_governed_read_barrier(self, fixture, target, *, delay=60.0):
         """Stall the real filesystem read of one present governed artifact.
@@ -1524,7 +1577,8 @@ if _target:
                             "JW_GOVERNED_BARRIER_DELAY": str(delay)})
         return marker
 
-    def _abort(self, fixture, plan, *, session_id="session-abort", budget=3.0):
+    def _abort(self, fixture, plan, *, session_id="session-abort", budget=3.0,
+               flag=True):
         import sys
 
         env = dict(fixture.env)
@@ -1533,12 +1587,17 @@ if _target:
         # run against the base implementation must reach the actual hang, not
         # an AttributeError for a name that head introduced.
         env["JOULEWISE_NIGHT_CUSTODY_BUDGET_S"] = str(budget)
-        return fixture.run([sys.executable, str(fixture.witness.script),
-                            "--ledger", str(fixture.ledger),
-                            "--head-pin", str(fixture.pin), "abort-session",
-                            "--session-id", session_id, "--plan", str(plan),
-                            "--reason", "window_exhausted"],
-                           budget=budget, env=env)
+        command = [sys.executable, str(fixture.witness.script),
+                   "--ledger", str(fixture.ledger),
+                   "--head-pin", str(fixture.pin), "abort-session",
+                   "--session-id", session_id, "--plan", str(plan),
+                   "--reason", "window_exhausted"]
+        # The chain passes the budget as a flag as well. Omit it where the CLI
+        # has none, so the same test run against the base implementation
+        # reaches the actual behaviour instead of an unknown-flag exit.
+        if flag and "--custody-budget-s" in fixture.witness.script.read_text():
+            command += ["--custody-budget-s", str(budget)]
+        return fixture.run(command, budget=budget, env=env)
 
     def test_marker_leaves_a_healthy_reservation_unchanged(self):
         import json
@@ -1561,14 +1620,15 @@ if _target:
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(json.loads(completed.stdout)["status"], "reserved")
 
-    def test_blocked_finalized_slot_refuses_inside_the_inherited_budget(self):
+    def test_blocked_next_slot_refuses_inside_one_shared_budget(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
         with CustodyFixture() as f:
-            plan, root = self._finalized_slot(f)
-            # The stall sits in the read of a finalized slot's manifest.json.
-            marker = self._install_governed_read_barrier(f, root / "manifest.json")
+            plan, _root, next_root = self._finalized_slot(f, next_custody=True)
+            # The stall sits in the read of the NEXT slot's manifest.json --
+            # the one custody value the abort consumes.
+            marker = self._install_governed_read_barrier(f, next_root / "manifest.json")
             before = f.bytes()
             try:
                 completed, elapsed = self._abort(f, plan)
@@ -1585,12 +1645,91 @@ if _target:
             self.assertEqual(f.bytes(), before, "ledger and head pin unchanged")
             f.assert_lease_reacquirable()
             f.assert_workers_gone(completed)
-            # The session is still open, so the desk can still abort it.
+            # The session survived the timeout and is still actionable: with
+            # the stall removed, the same command reads the same slot, finds
+            # its custody complete, and routes the desk to resume-finalize --
+            # a typed refusal derived from the still-open session, not the
+            # silence of a session left in an unknown state.
             f.env.pop("JW_GOVERNED_BARRIER_TARGET")
             completed, _ = self._abort(f, plan)
-            self.assertEqual(completed.returncode, 0, completed.stdout)
-            self.assertEqual(json.loads(completed.stdout)["terminal_result"],
-                             "session_aborted")
+            self.assertEqual(2, completed.returncode, completed.stdout)
+            self.assertEqual("calibration_custody_complete_use_resume",
+                             json.loads(completed.stdout)["code"])
+
+    def test_a_blocked_slot_other_than_the_next_one_is_never_read(self):
+        """The abort reads the next slot only, so a stall elsewhere costs nothing.
+
+        Amendment A to cold-gate ruling 61: the status pass pre-declares a
+        custody locator for EVERY declared slot, so the abort used to start,
+        wait for, and then discard one custody read per slot -- eleven of
+        twelve on the production night. One blocked discarded read cost the
+        abort a whole allowance, and twelve of them cost twelve. The abort now
+        asks for the state of `next_slot` and nothing else, so a slot it does
+        not consume can be blocked for a minute without delaying the close.
+        """
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as f:
+            # "pre" is finalized with complete custody on disk; the next slot
+            # is "post". Block "pre" for 60 s: at the base head the abort
+            # reads it and hangs until its allowance expires.
+            plan, finalized, _next_root = self._finalized_slot(f)
+            marker = self._install_governed_read_barrier(
+                f, finalized / "manifest.json", delay=60.0)
+            completed, elapsed = self._abort(f, plan)
+            self.assertEqual(0, completed.returncode, completed.stdout)
+            self.assertEqual("session_aborted",
+                             json.loads(completed.stdout)["terminal_result"])
+            self.assertFalse(marker.exists(),
+                             "a slot the abort does not consume was read anyway")
+            self.assertLess(elapsed, 5.0, "3 s budget plus 2 s cleanup tolerance")
+            f.assert_lease_reacquirable()
+            f.assert_workers_gone(completed)
+
+    def test_a_slow_but_admitted_root_completes_within_one_allowance(self):
+        """Twelve slow classifications do not fit one budget; one does.
+
+        The install-time headroom gate admits a night when ONE measured
+        custody pass fits the budget with 3x margin -- at 120 s and three
+        writer passes, a pass of up to 26.67 s. It never certified twelve
+        passes, so an abort that reads twelve slots under one shared allowance
+        can time out on a root that was legitimately admitted, leaving the
+        session open under a live writer lease: the exact harm this lane
+        exists to prevent. Every declared slot here has a custody directory
+        whose every metadata probe is slow but answers correctly.
+        """
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        slots = tuple(f"d{index:02d}" for index in range(1, 13))
+        with CustodyFixture() as f:
+            plan, _finalized, next_root = self._finalized_slot(f, slots=slots)
+            # The next slot is present but incomplete -- a night aborted
+            # between two captures -- so the abort closes the session instead
+            # of routing to resume-finalize. Every other declared slot holds
+            # complete custody, so at the base head each one costs a worker
+            # and a full classification.
+            (next_root / "raw").mkdir(parents=True)
+            (next_root / "events.jsonl").write_bytes(b'{"event_type":"partial"}\n')
+            (next_root / "manifest.json").write_bytes(b"{}\n")
+            for slot in slots[2:]:
+                f.witness._complete_custody("session-abort", slot)
+            prefix = f.repo / "runs" / "session-abort" / "instrument_validation"
+            marker = self._install_custody_metadata_delay(f, prefix, delay=0.15)
+            completed, elapsed = self._abort(f, plan)
+            probes = [json.loads(line) for line in marker.read_text().splitlines()]
+            # One custody worker, for one slot: every probe was paid by the
+            # same process, and every path it touched belongs to the next slot.
+            self.assertEqual(1, len({probe["pid"] for probe in probes}), probes)
+            self.assertTrue(all(f"session-abort-{slots[1]}" in probe["path"]
+                                for probe in probes), probes)
+            self.assertLess(elapsed, 5.0, "3 s budget plus 2 s cleanup tolerance")
+            self.assertEqual(0, completed.returncode, completed.stdout)
+            self.assertEqual("session_aborted",
+                             json.loads(completed.stdout)["terminal_result"])
+            f.assert_lease_reacquirable()
+            f.assert_workers_gone(completed)
 
     def test_blocked_abort_publishes_the_typed_refusal_document(self):
         """A timed-out abort must reach the courier as a DOCUMENT, not a line.
@@ -1606,8 +1745,8 @@ if _target:
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
         with CustodyFixture() as f:
-            plan, root = self._finalized_slot(f)
-            marker = self._install_governed_read_barrier(f, root / "manifest.json")
+            plan, _root, next_root = self._finalized_slot(f, next_custody=True)
+            marker = self._install_governed_read_barrier(f, next_root / "manifest.json")
             self.assertFalse(f.refusal.exists())
             before = f.bytes()
             completed, elapsed = self._abort(f, plan)

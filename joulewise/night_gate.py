@@ -91,6 +91,7 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
         "night_courier_unavailable",      # the stamped courier binary is missing or not executable
         "night_plan_overruns_deadman",   # t0 + window_max_s + courier deadline is not before the dead-man hour
         "night_record_exists",            # a write-once record proves this night was already invoked
+        "night_window_exceeded",  # driver wall-clock deadline: chain terminated after the exclusive window end plus shutdown grace
     }
 )
 if NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES:

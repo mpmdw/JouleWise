@@ -1168,6 +1168,37 @@
       "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding). 2026-09-10: production clone provisionally cut at 078a13a4 (record 05: clean tree, lock diff empty, ledger authenticated with custody replay at sequence 76, tokenizer pins match); fresh cut at H on 09-11 per checklist 13 §6. 2026-09-10: provisional clone re-cut at d84da72e (clean, lock diff empty, ledger authenticated with custody replay); the final cut waits for the transaction head.",
       "stop_card": null
     },
+    "COLDGATE-CONVENE-DOCTRINE-FREE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-activation-9853dd2b/69-coldgate-packet-prereg-chain-digest/12-opus-pairing-refuter-on-ruling-10.md (B1)",
+          "docs/process_traces/2026-09-16-activation-9853dd2b/69-coldgate-packet-prereg-chain-digest/10-coldgate-fable-ruling.md (section 0 disclosure)",
+          "docs/process/coldgate_charter.md (the ONE-context clause)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COLDGATE-CONVENE-DOCTRINE-FREE-01/acceptance",
+          "label": "COLDGATE-CONVENE-DOCTRINE-FREE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The council (not the magistrate) decides the convening shape: a judge tree without the tracked CLAUDE.md (e.g. an export of the checkout with that file removed, digests pinned) and a HOME override carrying no memory index or user doctrine; the convene script records what the judge could load; a regression or checklist item in the convening pattern fails the convening when a doctrine file is present in the judge's tree. Until decided, every convening records the auto-loaded files in the ruling's disclosure (already the practice) and pairs an Opus refuter (already the practice). Process observation for the council; no rule text is amended by this registration."
+      },
+      "authority": {
+        "label": "2026-09-17 activation 9853dd2b, flagged by the Opus pairing refuter of cold gate 69; registration by the magistrate for the council, not a ruling",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The cold-gate charter (docs/process/coldgate_charter.md) says the charter is the ONE process context a cold adjudication instance receives and that the project's operating doctrine is deliberately withheld; the convening pattern in use runs the judge with `claude -p` from a linked JouleWise worktree, so the tracked project CLAUDE.md, the user-level ~/.claude/CLAUDE.md and the memory index MEMORY.md auto-load before the judge reads the packet (rulings 61 and 69 both disclose this honestly). The judge is asked to disclose auto-loads rather than prevented from receiving them, so 'cold' is nominal. Both rulings stood because the paired Opus refuter re-derived every load-bearing probe independently.",
+      "id": "COLDGATE-CONVENE-DOCTRINE-FREE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 228,
+      "status": "queued",
+      "status_note": "2026-09-17 activation 9853dd2b: registered for the council; not started; no night depends on it.",
+      "stop_card": null
+    },
     "COLDGATE-HANDOFF-01": {
       "acceptance": {
         "evidence": [
@@ -1387,38 +1418,6 @@
       "rank": 187,
       "status": "queued",
       "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
-      "stop_card": null
-    },
-    "CUSTODY-PASS-MEMO-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-16-activation-9853dd2b/44-structural-bound-consult-report.md section 3 (writer budget model with numbers: P = 4 today on one budget, memoization keyed on the head digest collapses it to P = 2, or 3 when repair mutated; T <= 60 s at P = 2; headroom gate WRITER_CUSTODY_PASSES and the runbook wording)",
-          "docs/process_traces/2026-09-16-activation-9853dd2b/36-opus-counter-review-report.md finding F2 (four whole-corpus passes share the CustodyDeadline built at validate_powermetrics_fiducial.py:1863 while the reservation makes one; worked case T = 90 s passes the arm and times out on slot d01)",
-          "scripts/validate_powermetrics_fiducial.py:1862 (budget created), :2008 (preflight snapshot), :1517 (under-lease snapshot), :1526 (repair between passes), :1561 (enforcing readiness), :1573 (slot validation), :1634 and :1673 (the only resets)",
-          "joulewise/night_agent_install.py (WRITER_CUSTODY_PASSES beside PROBE_CODE_PATHS, and the headroom check in validate_probe_receipt)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CUSTODY-PASS-MEMO-01/acceptance",
-          "label": "CUSTODY-PASS-MEMO-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Memoize the verified set on the CustodyDeadline object, keyed on the physical ledger head digest together with the frozenset of (attempt_id, locator, artifact sha256) triples the pass requires, and reuse it only when the head digest is unchanged and the required set is a subset of the memoized one. Reuse is confined to a single writer lease (the exclusive claim the writer holds while it owns the ledger): the memo is never carried across a lease acquisition, because the under-lease authentication at validate_powermetrics_fiducial.py:1516-1517 exists precisely so that recovery cannot have mutated the corpus first, and repair_calibration_ledger at :1526 runs between passes 2 and 3, so a repair that mutates the head invalidates the memo and forces one honest re-read. Result: passes 2, 3 and 4 collapse into one when repair is a no-op (two passes per slot), three passes when repair mutated the head. Set WRITER_CUSTODY_PASSES from 4 to the honest worst case (ruled 3: a repaired ledger or a corrupt corpus costs three passes; healthy slots read twice) in joulewise/night_agent_install.py and change the runbook multiplier text with it (docs/phase_2/derivation_night_runbook.md section 1.2), so prose and gate cannot drift. Regressions: one proving a second pass under an unchanged head performs no filesystem re-read and returns the memoized verdict, and one proving a head-digest change between passes forces a fresh read. Gated BEFORE the next night arm; no change to what any pass verifies, only to how often identical work is repeated."
-      },
-      "authority": {
-        "label": "2026-09-17 activation 9853dd2b, NIGHT-RESERVE-HANG-01 review findings; registration by the magistrate, not a ruling",
-        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "An unattended measurement night re-reads every governed artifact file named by the calibration ledger and re-checks each file's SHA-256 digest against the digest the ledger records; one sweep over the whole corpus is called a custody verification pass, and its wall-clock cost is written T below. Before the night is installed, an arm-time probe (a rehearsal run started by macOS's launchd service manager that performs the same work the night will perform and mints a receipt) measures exactly ONE pass and reports it as custody_elapsed_s (scripts/reserve_calibration_window_bracket.py:340, :346); the reservation step also makes one. The capture writer (scripts/validate_powermetrics_fiducial.py, the program that records one timed measurement slot) instead makes FOUR whole-corpus passes per slot -- preflight snapshot :2008, under-lease snapshot :1517, enforcing readiness :1561, and slot validation :1573 -- and all four spend from ONE shared CustodyDeadline budget (a wall-clock allowance object) created at :1862 and reset only on abandon :1634 and finalize :1673. Probe, reservation and writer all receive the same allowance B, default 120 s from CUSTODY_BUDGET_S in scripts/night_chains/calibration_derivation_only.zsh:178 and :241. The writer therefore needs 4T <= B, i.e. T <= 30 s, while the probe certifies only T <= 120 s: a receipt showing T = 90 s is a passing arm at the desk and a guaranteed calibration_ledger_custody_timeout refusal on the night's first slot (record 36 finding F2, record 44 section 3). The install-time headroom gate in joulewise/night_agent_install.py compensates for the redundancy rather than removing it: it carries WRITER_CUSTODY_PASSES = 4 and refuses an install unless custody_elapsed_s x WRITER_CUSTODY_PASSES x 1.5 <= custody_budget_s, so with B = 120 s the probe must show T <= 20 s. This lane removes the redundant passes so the writer costs two passes, not four, and the gate can be relaxed to match measured behaviour instead of guarding an inflated multiplier.",
-      "id": "CUSTODY-PASS-MEMO-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 223,
-      "status": "queued",
-      "status_note": "2026-09-17 activation 9853dd2b: IMPLEMENTED on branch feat/2026-09-17-custody-pass-memo (records 50/53/55/56/57): under-lease custody memo keyed on the physical ledger head digest; a healthy slot reads the corpus twice (receipt field custody_passes = 2); WRITER_CUSTODY_PASSES is ruled 3 (the honest worst case: a repaired ledger or a corrupt corpus costs three passes, so a refusing slot reaches its typed calibration_ledger_custody_invalid rather than a timeout), CUSTODY_HEADROOM_FACTOR stays 1.5, so the arm-time probe must show custody_elapsed_s <= 120/(3 x 1.5) = 26.67 s. Refuter (Opus, both lenses, seven mutants) MERGEABLE-WITH-FIXES; fix round 1 closed all findings. Lands with the post-#350 fix-forward in one PR; retire this row (removal) once merged.",
       "stop_card": null
     },
     "CUSTODY-REAPING-ATTRIBUTION-01": {
@@ -2225,39 +2224,6 @@
       "priority": "p4_polish",
       "rank": 35,
       "status": "shelved",
-      "stop_card": null
-    },
-    "DRIVER-REFUSAL-COLLISION-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md (executed root-cause record: timeline, census cadence, lease code, locator census, TCC database modification time 20:52:04, launchd reproduction)",
-          "docs/run_reports/2026-09-16-activation-e0c58148-equivalence-night-stall.md (headless activation e0c58148: timeline and the two defect lanes it named)",
-          "night root /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916: night.log, night/chain.started, night/chain.exited (exit −15), night/censuses.jsonl (1,332 rows), night/chain.stdout.log, night/chain.stderr.log, night/launchd.night.err, operator_logs/derivation-chain.log",
-          "scripts/run_night.py at main b5294f0e: _write_driver_refusal (line 250) → _write_json → _write_bytes_exclusive (line 144, os.O_CREAT together with os.O_EXCL)",
-          "docs/process_traces/2026-09-16-interactive-5239df1e/02-reserve-hang-design-consult.md (consult section 5: naming and inventory requirements)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/DRIVER-REFUSAL-COLLISION-01/acceptance",
-          "label": "DRIVER-REFUSAL-COLLISION-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A second refusal writer never crashes the driver: each refusal is an immutable distinct document with a collision-resistant name or an exclusive-create sequence allocation (never a second JSON object appended to refusal.json, never a second-resolution epoch name assumed unique); both causes are preserved, the result and artifact inventory reference their actual paths (the inventory currently hardcodes only refusal.json, scripts/run_night.py line 531), and the courier reads them. A regression proves the sequence dead-man refusal first, then a census abort, exits through the normal courier path with both records present. No change to gate or census semantics."
-      },
-      "authority": {
-        "label": "Registered 2026-09-16 by the interactive session 5239df1e (Fable, Ed present) from the executed root-cause record; magistrate registration, not a ruling; the cure shape goes to a pre-decision design consult",
-        "path": "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "The night driver crashes when it must record a second refusal. scripts/run_night.py _write_driver_refusal creates night/refusal.json with O_CREAT together with O_EXCL; on 2026-09-16 the daily dead-man had already written refusal.json at 13:20 (night_chain_alive), so the driver's census-abort refusal at 20:52:19 raised FileExistsError (night/launchd.night.err), and no result.json, courier.sent, or courier email was produced: the night ended silently.",
-      "id": "DRIVER-REFUSAL-COLLISION-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 220,
-      "status": "queued",
-      "status_note": "2026-09-16 interactive 5239df1e: registered from the e0c58148 record and the executed traceback; bench-size cure; not design-bearing.",
       "stop_card": null
     },
     "ED-BRANCH-PROTECTION-E1-01": {
@@ -5469,6 +5435,37 @@
       "rank": 170,
       "status": "queued",
       "status_note": "2026-09-09: QUEUED by cold gate 44 (Q3), record-only. The comparability argument stands on its own: Low Power Mode changes frequency caps and scheduling, so a night measured under powermode 1 is a different machine state from a calibration taken under powermode 0, and the state is currently unrecorded in plan and receipt (observed AC Power powermode 1 on 2026-09-09). The paired refuter 45 dissents from GATING on powermode (it was shown not to be the cause of the local test failures); the judge's constraint therefore stands as a RECOMMENDATION to Ed, not a gate: prefer powermode 0 for real or pack-bound nights until the calibration corpus's powermode is recorded; REHEARSAL_STUB nights are unaffected. Ed is asked whether Low Power Mode was on during the 2026-09-08 replay 58d9225b (rc 0). Refuse-vs-flag is deferred to a cold-gate design decision.",
+      "stop_card": null
+    },
+    "PREREG-CHAIN-DIGEST-ADDENDUM-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-activation-9853dd2b/64-wallclock-abort-seat-opus-report.md (section For the lead, item 1)",
+          "configs/calibration/preregistration_d079_epoch_25g83_rev1.md line 144 (sealed digest b8bf5b0a…)",
+          "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md (regenerated region: current digest, constants unchanged)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PREREG-CHAIN-DIGEST-ADDENDUM-01/acceptance",
+          "label": "PREREG-CHAIN-DIGEST-ADDENDUM-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A dated addendum to the pre-registration re-pins the chain-digest field to the current tracked chain digest, states that the two changes are operational (bounded reads, strict pre-reserve, bounded abort, driver deadline) and touch no timing, capture, slot or settle constant (the runsheet's regenerated region proves the constants byte-identical), and is ruled by the cold gate or Ed before the next arm (rule 11: a sealed pre-registration is not the magistrate's to amend). A regression pins that the pre-registration's digest equals the tracked chain's digest so the two can never drift silently again. Gated BEFORE the next arm."
+      },
+      "authority": {
+        "label": "2026-09-17 activation 9853dd2b, flagged by the NIGHT-STALL-WALLCLOCK-ABORT-01 seat; registration by the magistrate, not a ruling",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The sealed D-079 identity-epoch 25G83 pre-registration (revision 1, configs/calibration/preregistration_d079_epoch_25g83_rev1.md line 144) pins the night chain's SHA-256 as b8bf5b0a85bb…; the tracked chain (scripts/night_chains/calibration_derivation_only.zsh) has since changed twice on 2026-09-17 for operational reasons only — bounded custody reads with the strict pre-reserve flag (PR #350) and the bounded end-of-window abort with the driver deadline (NIGHT-STALL-WALLCLOCK-ABORT-01) — to b5beea464d39…, with no change to any timing, capture, slot or settle constant. The night gate refuses an arm whose chain digest differs from the plan's pin (night_chain_digest_mismatch), and docs/process/NIGHT_HANDBACK.md said the digest was unchanged since sealing until 2026-09-17.",
+      "id": "PREREG-CHAIN-DIGEST-ADDENDUM-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 227,
+      "status": "queued",
+      "status_note": "2026-09-17 activation 9853dd2b: registered; not started; the addendum itself is a cold-gate or Ed decision; the next arm cannot pass the gate's digest check against the sealed value.",
       "stop_card": null
     },
     "PROBE-DRIVER-COPY-BINDING-01": {

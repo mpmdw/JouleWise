@@ -1,0 +1,11 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+# Delta re-audit — NIGHT-STALL-WALLCLOCK-ABORT-01 fix round 1 (a4d530cd..6bcf5f0a), read-only, both lenses
+
+You are in a detached worktree at `6bcf5f0a`. WRITE_SCOPE is EMPTY: no edits, commits, stash or checkout; experiments in `cp -R <this worktree>/. /tmp/reaudit-a221fix/` with read-only git. Never touch `/Users/edr/code/JouleWise`, other worktrees, `~/night-custody`, `~/Library/LaunchAgents`, measurement roots, real `launchctl`, network. Tests: `TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest <module>`.
+
+Object of study: ONLY `git diff a4d530cd..6bcf5f0a` (4 files, +79/−4: a unit test for the group-census rc discipline, a regression that every census retry re-signals the current phase, a comment change in scripts/run_night.py, runbook and handback prose). It answers refuter findings F1, F2, F5, F6, F7 of record 66 (read-only: `nl -ba /Users/edr/code/JouleWise-wt-bk2-9853dd2b/docs/process_traces/2026-09-16-activation-9853dd2b/66-wallclock-abort-refuter-report.md`); the seat's report is record 68 in that directory (read LAST).
+
+Execute: (1) re-apply mutant M4 (`_group_census`: `== 1` → `!= 0`) and mutant M3 (delete the `_signal_group` re-issue in `_prove_group_absent`) in the copy and confirm each now FAILS a test; paste the assertions; (2) confirm no production behaviour changed (`git diff a4d530cd..6bcf5f0a -- scripts/run_night.py` must be comment-only; prove by `python3 -c "import ast,sys; ..."` comparing the AST dump of both versions or by a whitespace/comment-insensitive diff); (3) read the new runbook sentences (single-read budget wording; the 300 s rationale and its residual — writer overrun > 180 s leaves an OPEN session, the lease is a kernel flock released on exit) and the handback gloss against the code: is every number and claim true at this head (`WINDOW_SHUTDOWN_GRACE_S`, the 70 s bound, the `next_start + 480 ≤ END` guard, the flock release)? first-use test on new terms; (4) `tests.test_run_night tests.test_docs_freshness` tails. Severity as usual. Emit the report as your FINAL MESSAGE: the review envelope under 8000 bytes; verdict MERGEABLE / MERGEABLE-WITH-FIXES / NOT-MERGEABLE.

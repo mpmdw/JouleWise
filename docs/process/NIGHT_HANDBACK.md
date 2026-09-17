@@ -102,6 +102,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
 | `night_record_exists` | A write-once night record proves invocation already occurred. |
 | `night_calibration_refused` | The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause. |
+| `night_window_exceeded` | The chain ran past the exclusive window end and was terminated by the driver; reservation or capture intent may have been written and the session may need desk recovery; never an auto-retry cause. |
 
 **Installer §1.3 refusals — cold-gate path.**
 
@@ -190,9 +191,16 @@ plan-pinned wrapper `<night root>/chain.zsh`, emitted by
 `scripts/gen_derivation_night.py`, which carries the night's environment as
 literals, verifies the tracked chain's bytes and `exec`s
 `scripts/night_chains/calibration_derivation_only.zsh` (SHA-256
-`b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf`, the value
-the pre-registration's chain-digest field already carries; unchanged since
-its sealing).
+`b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb` at this
+head). The pre-registration revision 1 (`configs/calibration/preregistration_d079_epoch_25g83_rev1.md`)
+still carries the digest of the chain as sealed, `b8bf5b0a85bb…`; the chain
+has since changed twice for operational reasons only (2026-09-17: bounded
+custody reads and the strict pre-reserve flag; the bounded end-of-window
+abort and the driver deadline), with no change to any timing, capture, slot
+or settle constant. The pre-registration's chain-digest field must be
+re-pinned by a dated addendum before the next arm (lane
+PREREG-CHAIN-DIGEST-ADDENDUM-01); an arm against the sealed digest refuses
+`night_chain_digest_mismatch`.
 
 **What happens with the result, fixed before the night** (runbook
 `docs/phase_2/derivation_night_runbook.md` §2.5). Let m be the number of
@@ -544,7 +552,25 @@ also exports `JOULEWISE_NIGHT_CUSTODY_BUDGET_S`, a per-operation allowance in
 seconds that every process it starts inherits — reservation, capture writer
 and the end-of-window session abort alike — so a governed read that was handed
 no budget of its own is still bounded, and one that cannot be bounded refuses
-`calibration_ledger_custody_invalid` instead of blocking. A typed refusal means a machine-readable
+`calibration_ledger_custody_invalid` instead of blocking. The abort is also
+passed that allowance as a flag, and it reads ONE slot's custody state (the
+next slot, the only such value it consumes), so its whole bill is one 120 s
+allowance rather than one per declared slot.
+
+**What happens after the window ends** (NIGHT-STALL-WALLCLOCK-ABORT-01). Every
+instant below is measured from the exclusive window end, `t0 + window_max_s`;
+the constants are in `scripts/run_night.py`.
+
+| From the window end | What happens |
+|---|---|
+| acquisition already fenced | The chain refuses to START a slot whose capture budget would cross the end, and its reservation and every writer carry a custody deadline of `window end − 10 s`. Nothing new is acquired after this point. |
+| the closing abort | The chain's end-of-window `abort-session` runs with the window already spent: one 120 s custody allowance plus seconds of lease and repair work. It acquires nothing. |
+| `+ 300 s` (`WINDOW_SHUTDOWN_GRACE_S`) | The driver's wall-clock deadline. The instant is computed once from the driver's clock when the chain starts and then tracked on a monotonic clock, so a clock change cannot move it. A census-loop check and an independent watchdog thread both enforce it, because the loop itself can block on a census probe or on a write to the custody volume. |
+| `≤ 70 s` more (`TERMINATION_BOUND_S`) | Terminating the chain's whole process group and PROVING it gone: SIGTERM, up to 30 s to reap the chain, up to 5 s of re-signalled `pgrep -g` census, then the SIGKILL escalation with the same two bounds. The census re-sends the phase's signal before each look because a member forked by a survivor after the first signal inherits the group unsignalled. Proven means reaped AND the census came back empty. |
+| `≤ 300 s` more (`COURIER_DEADLINE_S`) | The courier delivers the result, verdict `ABORTED`, reason `night_window_exceeded`. If termination was NOT proven the night reports `night_chain_alive` instead and the courier is suppressed. |
+| `+ 3900 s` | The dead-man (`COURIER_DEADLINE_S + DEADMAN_GRACE_S`). The 670 s above leave it at least 3230 s of margin, so it fires only when the driver itself is gone. |
+
+A typed refusal means a machine-readable
 cause: `calibration_ledger_custody_timeout` stops and preserves the night.
 Read `calibration-refusal.json`, its `<pid>.json` siblings, and every path in
 `result.json.refusal_documents`; also discover later `refusal-NN.json` files.

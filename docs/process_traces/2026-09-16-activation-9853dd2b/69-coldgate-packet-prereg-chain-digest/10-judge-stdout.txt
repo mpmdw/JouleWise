@@ -1,0 +1,2 @@
+Ruling 69 written (13.5 KB, no tracked file touched): Q1 AFFIRM (iii) as-merged with placeholder `<CHAIN_SHA256_AT_ARM_HEAD>`, revision 3 text supplied verbatim, Q3 = contract change, Q4 = both tests; exhibit C's empty a4d530cd block cured by my own probe, and the new deadline-refusal path named as a MATERIAL omission.
+rc=0

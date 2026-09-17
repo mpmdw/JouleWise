@@ -541,7 +541,13 @@ else:
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
         self.assertEqual(len(python), 4)  # open, d01, d02, abort
-        self.assertEqual(python[-1]["args"][-2:], ["--reason", "window_exhausted"])
+        # The abort carries the same per-operation custody allowance as the
+        # reservation and the capture writer, and NO absolute deadline: it
+        # runs when the window is already spent, so a deadline would refuse
+        # the one operation that closes the session.
+        self.assertEqual(python[-1]["args"][-4:],
+                         ["--reason", "window_exhausted", "--custody-budget-s", "120"])
+        self.assertNotIn("--custody-deadline-epoch-s", python[-1]["args"])
         self.assertIn("abort-session", python[-1]["args"])
         self.assertNotIn("d03", str(python))
         self.assertEqual(log[-3:], [

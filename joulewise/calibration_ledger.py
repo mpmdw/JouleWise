@@ -5539,10 +5539,39 @@ def calibration_session_status(
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
     custody_deadline: CustodyDeadline | None = None,
+    custody_mode: Literal["read_replay", "issuing"] | None = None,
+    custody_state_scope: Literal["declared_slots", "next_slot"] = "declared_slots",
 ) -> dict[str, Any]:
-    """Derive session progress solely from durable ledger/plan/custody state."""
+    """Derive session progress solely from durable ledger/plan/custody state.
 
-    mode = "issuing" if custody_deadline is not None else "read_replay"
+    ``custody_state_scope`` chooses WHICH declared slots have their custody
+    state read. ``declared_slots`` (the default) reads every slot the open
+    receipt declared, which is what an operator reading a status report wants.
+    ``next_slot`` reads only the one slot whose custody state the caller
+    actually consumes; every other declared slot reports ``not_inspected``
+    and no custody worker is started for it. The end-of-window session abort
+    (``abort_calibration_session``) uses ``next_slot``: it consumes exactly
+    that one value, so with twelve declared slots the other eleven reads were
+    started, waited for, and then discarded. A single blocked read among those
+    eleven cost the abort a whole allowance, and the install-time headroom
+    gate (``joulewise/night_agent_install.py``) certifies ONE measured custody
+    pass against the budget, never twelve.
+
+    ``custody_mode`` states the custody resolution mode outright. Threading a
+    ``custody_deadline`` alone selects ``issuing``, because a caller that
+    bounds a read is normally the one issuing it; the abort threads a budget
+    only to bound itself and must keep reading the replay locator, so it says
+    ``read_replay`` explicitly and the bytes it reads do not change.
+    """
+
+    if custody_mode is not None:
+        mode = custody_mode
+    elif custody_deadline is not None:
+        mode = "issuing"
+    else:
+        mode = "read_replay"
+    if custody_state_scope not in {"declared_slots", "next_slot"}:
+        raise ValueError(f"invalid custody state scope: {custody_state_scope}")
     inspection = inspect_calibration_ledger(ledger_path)
     snapshot = load_calibration_ledger_snapshot(
         ledger_path,
@@ -5563,6 +5592,7 @@ def calibration_session_status(
             expected_plan_id=session.plan_id,
         )
     open_receipt = _session_open_receipt(snapshot, session_id)
+    next_slot = session.next_slot
     slots: dict[str, Any] = {}
     for slot in session.declared_slots:
         reserved = (
@@ -5576,13 +5606,25 @@ def calibration_session_status(
             if isinstance(reserved, Mapping)
             else None
         )
+        # A slot outside the requested scope is never opened, never hashed,
+        # and never given a custody worker: "not_inspected" says the state is
+        # unknown BY REQUEST, which is not the same claim as the None a slot
+        # with no reserved locator carries.
+        inspect_custody = (
+            custody_state_scope == "declared_slots" or slot == next_slot
+        )
+        if locator is None:
+            custody_state = None
+        elif not inspect_custody:
+            custody_state = "not_inspected"
+        else:
+            custody_state = _custody_state(locator, mode=mode, custody_deadline=custody_deadline)
         slots[slot] = {
             "attempt_id": session.slot_attempt_ids.get(slot),
             "custody_locator": str(locator) if locator is not None else None,
-            "custody_state": _custody_state(locator, mode=mode, custody_deadline=custody_deadline) if locator is not None else None,
+            "custody_state": custody_state,
             "finalized": slot in session.finalized_slots,
         }
-    next_slot = session.next_slot
     live_writer = writer_lease_is_live(ledger_path)
     actionable: RefusalCode | None = None
     unexpected = set(snapshot.refusal_reasons) - {
@@ -6114,16 +6156,50 @@ def abort_calibration_session(
     plan_path: Path,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
+    custody_budget_s: float | None = None,
 ) -> Mapping[str, Any]:
-    """Abort an open session under the writer lease without deleting custody."""
+    """Abort an open session under the writer lease without deleting custody.
+
+    ``custody_budget_s`` bounds this abort's ONE custody read -- the state of
+    the session's next slot, the only custody value this function consumes --
+    with a single fresh allowance in seconds. The night chain passes the same
+    seconds it passes the reservation and the capture writer, so the abort
+    that closes a spent window is bounded by the figure the install-time
+    headroom gate certified: one pass, not one per declared slot. Passing no
+    budget leaves the inherited-marker behaviour untouched: each read builds
+    its own ambient allowance, or is unbounded when no marker is set.
+    """
 
     _refuse_custody_override_mint()
 
+    # A budget that cannot bound anything (nan, inf, zero, negative) refuses
+    # with the same typed cause the inherited marker uses, and refuses BEFORE
+    # the writer lease is taken: the chain runs this command with the window
+    # already spent, and an untyped crash would reach the driver as nothing
+    # but a chain that exited nonzero.
+    if custody_budget_s is not None and (
+            not math.isfinite(custody_budget_s) or custody_budget_s <= 0):
+        raise CalibrationLedgerError(
+            RefusalCode.LEDGER_CUSTODY_INVALID,
+            context={"reason": "night_custody_budget_invalid",
+                     "value": custody_budget_s},
+        )
     with CalibrationWriterLease(ledger_path):
         repair_calibration_ledger(
             ledger_path,
             engine_identity="recover_calibration_ledger.abort-session",
             attestation_reason="fresh-process governed session abort",
+        )
+        # The allowance starts HERE, after the lease and the ledger repair, so
+        # the seconds the installer certified are spent on the one custody
+        # read this abort needs and not on lease acquisition.
+        # telemetry_stream=None: the abort's stdout is a single JSON record
+        # and its stderr carries the chain's refusal line; a bounded-pass
+        # diagnostic in either stream would be read as output.
+        custody_deadline = (
+            CustodyDeadline(custody_budget_s, telemetry_stream=None)
+            if custody_budget_s is not None
+            else None
         )
         status = calibration_session_status(
             ledger_path,
@@ -6132,6 +6208,11 @@ def abort_calibration_session(
             plan_path=plan_path,
             require_committed_pin=require_committed_pin,
             repo_root=repo_root,
+            custody_deadline=custody_deadline,
+            # The threaded budget must not move the abort from replay to
+            # issuing resolution: it bounds the read, it does not re-aim it.
+            custody_mode="read_replay",
+            custody_state_scope="next_slot",
         )
         if status["session_state"] != "open":
             terminal_result = (
