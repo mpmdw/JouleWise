@@ -2857,12 +2857,18 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         self.assertEqual(str(getattr(self.plan, "custody_budget_s", 120)),
                          environment["CUSTODY_BUDGET_S"])
 
-    def test_writer_custody_passes_constant_names_the_lane_that_lowers_it(self):
+    def test_writer_custody_passes_constant_matches_the_memoized_writer(self):
         from joulewise import night_agent_install as engine
-        # The number of whole-corpus custody passes the capture writer makes
-        # inside one budget. Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up
-        # that memoizes two of them away and lowers this to 2.
-        self.assertEqual(4, engine.WRITER_CUSTODY_PASSES)
+        # The worst-case number of whole-corpus custody passes the capture
+        # writer can pay for inside one budget, after lane
+        # CUSTODY-PASS-MEMO-01. A healthy slot reads twice (the pre-lease
+        # preflight pass, and ONE pass under the writer lease that the
+        # verified-set memo serves to the enforcing readiness gate and the
+        # slot validation), but the count must cover THREE: a repair that
+        # moves the head digest costs an honest re-read, and a corrupt corpus
+        # costs preflight + the refused under-lease pass + the refusing
+        # re-read. The headroom factor is growth margin, not a spare pass.
+        self.assertEqual(3, engine.WRITER_CUSTODY_PASSES)
         self.assertEqual(1.5, engine.CUSTODY_HEADROOM_FACTOR)
         self.assertIn("CUSTODY-PASS-MEMO-01", Path(engine.__file__).read_text())
 
@@ -2876,11 +2882,16 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         path = write_matching_probe_receipt(self.plan_path)
         record = json.loads(path.read_text())
         self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
-        # Four writer passes plus half a pass of margin: the arithmetic is
+        # Three writer passes -- the worst case, repaired ledger or corrupt
+        # corpus -- times half a pass of growth margin. The arithmetic is
         # spelled out rather than read from the constants, so this same test
-        # run against the base implementation reaches the actual admission.
-        limit = record["custody_budget_s"] / (4 * 1.5)
-        self.assertEqual(20.0, limit)
+        # run against the base implementation (which makes four passes and
+        # admits only 20 s) reaches the actual admission and fails.
+        self.assertEqual(120.0, record["custody_budget_s"])
+        limit = record["custody_budget_s"] / (3 * 1.5)
+        # 120 s / 4.5 = 26.67 s: the largest single measured pass that leaves
+        # the writer room for its worst case inside one allowance.
+        self.assertAlmostEqual(26.667, limit, places=3)
         for elapsed, admitted in ((limit, True), (limit * 1.001, False)):
             with self.subTest(custody_elapsed_s=elapsed):
                 record["custody_elapsed_s"] = elapsed

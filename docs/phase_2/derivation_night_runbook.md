@@ -1246,14 +1246,37 @@ allowance object (`CustodyDeadline`) was constructed, and that construction
 happens before the ledger file is read and parsed. So `custody_elapsed_s`
 covers ledger read + ledger parse + the custody pass, not the pass alone: it
 is an over-report of T, never an under-report. Over-reporting is the safe
-direction here, because the number is used to decide whether FOUR passes fit
-inside one allowance — a gate that errs toward refusing a night, not toward
-arming one that cannot finish. Same field, same meaning, in the capture
-writer's own success receipt (below).
+direction here, because the number is used to decide whether the writer's
+passes fit inside one allowance — a gate that errs toward refusing a night,
+not toward arming one that cannot finish. Same field, same meaning, in the
+capture writer's own success receipt (below).
 
-The capture writer spends the SAME one allowance on FOUR passes per slot:
-its preflight snapshot, its under-lease snapshot, its enforcing readiness
-check and its slot validation. That count is the constant
+The capture writer sweeps the corpus four times per slot — its preflight
+snapshot, its under-lease snapshot, its enforcing readiness check and its
+slot validation — but on a healthy slot only TWO of those sweeps open and
+hash the files. The other two are answered from a **custody memo**: the set
+of (observation, governed file, expected hash) entries a sweep already
+checked, kept on the one shared allowance object and reused by a later
+sweep. The memo is armed only once the writer holds the ledger's **writer
+lease** — the advisory lock every calibration writer takes before it
+appends, so that while one writer holds it no other calibration writer can
+change the ledger — and it is thrown away when the lease is released; so the
+preflight sweep, which runs before the lease exists, never feeds a later
+one. The lease does not lock the governed files themselves, and that has a
+price: what the memo therefore stops seeing, and why the project accepts it,
+is stated in `docs/contracts/calibration_ledger_append.md` under "The
+under-lease custody memo". The memo is also keyed on the ledger's physical
+head digest — the hash of its last receipt — so the pre-capture recovery
+step that runs between the second and third sweeps invalidates it whenever
+it actually appends anything, and the writer then pays a third honest sweep.
+
+So: two reads on a healthy slot, three when recovery changed the ledger —
+and three again when the corpus is CORRUPT. The preflight sweep seeds
+nothing because it runs before the lease, and a sweep that REFUSES is never
+memoized either, so the refusing under-lease sweep and the refusing re-read
+after it both open the files: three reads again.
+
+Three — the worst case, not the healthy count — is the constant
 `WRITER_CUSTODY_PASSES` in `joulewise/night_agent_install.py`, and the
 installer refuses to arm unless
 
@@ -1261,37 +1284,42 @@ installer refuses to arm unless
 custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s
 ```
 
-The 1.5 is half a pass of margin (**headroom**): the corpus grows with every
-finalized slot, and the four passes are not identical in cost. With
-`WRITER_CUSTODY_PASSES = 4` and a 120 s budget, a probe is admissible only if
-T ≤ 20 s. Worked case: a probe reporting T = 90 s passes the six-hour
-freshness check and every digest binding, yet the writer's four passes would
-need 360 s of a 120 s allowance — a guaranteed
-`calibration_ledger_custody_timeout` on slot `d01`. Such a night now refuses
-at the desk, at install time, naming `custody_elapsed_s`. A probe that
-verified zero observations while the ledger already holds finalized ones is
-refused too, naming `observations`: a pass over nothing certifies nothing.
+The 1.5 is half a pass of margin (**headroom**) and nothing more: the corpus
+grows with every finalized slot, and the passes are not identical in cost. It
+is not a spare pass — the worst case is counted in `WRITER_CUSTODY_PASSES`
+itself, because a slot whose corpus is corrupt must have room to reach its
+typed `calibration_ledger_custody_invalid` rather than be cut off by a
+`calibration_ledger_custody_timeout`, which would name the wrong cause. With
+`WRITER_CUSTODY_PASSES = 3` and a 120 s budget, a probe is admissible only if
+T ≤ 26.67 s (120 ÷ 4.5). Worked case: a probe reporting T = 90 s passes the
+six-hour freshness check and every digest binding, yet the writer's three
+passes would need 270 s of a 120 s allowance — a guaranteed
+`calibration_ledger_custody_timeout` on slot `d01`. Such a night refuses at
+the desk, at install time, naming `custody_elapsed_s`. A probe that verified
+zero observations while the ledger already holds finalized ones is refused
+too, naming `observations`: a pass over nothing certifies nothing.
 
-Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up that memoizes the
-under-lease passes and lowers the constant to 2 (admitting T ≤ 40 s). Until
-it lands, 4 is the true count and the gate is sized to it. The lever is the
-gate, not a larger budget: enlarging `CUSTODY_BUDGET_S` spends window time
-the cadence arithmetic above has already allocated.
+The lever is the gate, not a larger budget: enlarging `CUSTODY_BUDGET_S`
+spends window time the cadence arithmetic above has already allocated.
 
 **Where a healthy night's T comes from.** The gate above is sized against T,
 so T has to be observable on nights that WORK, not only on nights that refuse.
 The capture writer's success receipt — the single JSON object it prints to
-standard output, captured in `chain.stdout.log` — carries `custody_elapsed_s`
-and `observations` for exactly that reason. `custody_elapsed_s` is that slot's
-PREPARATION allowance — the one its preflight snapshot, under-lease snapshot,
-readiness check and slot validation shared — read at the end of preparation
-and measured the same wide way as the probe's field (ledger read + parse +
-passes). `observations` is how many custody-bearing observations that
-preparation counted; it is 0 for a session's first slot, because none of its
-rows is finalized yet, and rises as slots finalize. Read them out of
-`chain.stdout.log` after a night and you have the real per-slot series to
-check `WRITER_CUSTODY_PASSES × 1.5 × T ≤ CUSTODY_BUDGET_S` against, instead of
-a single arm-time sample.
+standard output, captured in `chain.stdout.log` — carries `custody_elapsed_s`,
+`observations` and `custody_passes` for exactly that reason.
+`custody_elapsed_s` is that slot's PREPARATION allowance — the one its
+preflight snapshot, under-lease snapshot, readiness check and slot validation
+shared — read at the end of preparation and measured the same wide way as the
+probe's field (ledger read + parse + passes). `observations` is how many
+custody-bearing observations that preparation counted; it is 0 for a
+session's first slot, because none of its rows is finalized yet, and rises as
+slots finalize. `custody_passes` is how many of that slot's sweeps actually
+read the files rather than being answered from the memo: 2 on a healthy slot,
+3 when the recovery step appended or a sweep refused. Read all three out of `chain.stdout.log`
+after a night and you have the real per-slot series to check
+`WRITER_CUSTODY_PASSES × 1.5 × T ≤ CUSTODY_BUDGET_S` against, instead of a
+single arm-time sample — and `custody_passes` says whether the constant on
+the left is still the truth.
 
 **The inherited budget marker.** The chain exports
 `JOULEWISE_NIGHT_CUSTODY_BUDGET_S` with the same seconds as
@@ -1947,7 +1975,7 @@ than six hours old; the finish time may be at most 60 s ahead of the clock.
 It also refuses the install unless the receipt's single measured custody pass
 leaves the capture writer room for its own passes —
 `custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s`, which is
-T ≤ 20 s at today's constant of 4 (§1.2) — and unless `observations` is
+T ≤ 26.67 s at today's constant of 3 (§1.2) — and unless `observations` is
 greater than zero whenever the ledger already holds finalized observations. The temporary job has a 600 s
 limit (`--probe-timeout-s`) covering input binding reads and chain execution,
 with the reached phase recorded on timeout. Its supervised process group
