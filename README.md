@@ -1,5 +1,6 @@
 # JouleWise
 
+
 Terms used on this page: a *measurement window* is one uninterrupted,
 calibrated collection session; a *pack* is the frozen campaign plan and its
 authenticated supporting files; a *detection floor* is the largest false
@@ -9,7 +10,7 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-**Now (2026-09-16 late evening):** the machine has been moved and is back on mains power in its quiet spot; the background scheduler (the "magistrate watchdog") is loaded again and has already relaunched the unattended magistrate (an owner's open terminal only blocks it while a night is armed). The reason today's equivalence night produced no data is now established: its reservation step read three gigabytes of historical calibration files stored in iCloud Drive from a background process that had never opened files there before, macOS put up a permission dialog, and the process waited eleven hours for someone to answer it. Three repair lanes are registered (give those reads a time budget so a stall becomes a recorded refusal, let a second refusal record be written without crashing the night driver, and end any chain that outlives its window); the next equivalence night is planned only after the first lane is cured.
+**Now (2026-09-17):** the unattended-night hang of 2026-09-16 is cured and merged (PR #350). Every custody-evidence read on the night path is now time-bounded and refuses with a named reason instead of waiting on a person; that refusal reaches the morning email; and a night can only be armed after a probe run from a launchd job proves the same reads complete in budget. **Next:** halve the capture writer's custody passes (CUSTODY-PASS-MEMO-01), settle the wall-clock abort grace (NIGHT-STALL-WALLCLOCK-ABORT-01) through the cold gate, then re-plan the equivalence night with the launchd probe as its dry run. Nothing is armed.
 
 **Previously (2026-09-16 early morning):** the scheduled-window installer and its follow-ups are merged, and the first rehearsal night ran end to end unattended (03:25 PDT: the chain fired, the courier emailed, the plan was harvested and retired by the relaunched headless magistrate). The next window is a real equivalence night, planned by the magistrate for a quiet machine. Two new reader-facing documents landed under `docs/process/`: the research prospectus (landscape, ranked questions, tool-release verdict) and the automation history (what it took to make windows run without a human), both rewritten for a technical reader with no project background.
 

@@ -1418,7 +1418,7 @@
       "priority": "p1_phase_gate",
       "rank": 223,
       "status": "queued",
-      "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started. Sequencing per record 44 section 5: the structural bound and the two install admission gates land in the reserve-hang PR with WRITER_CUSTODY_PASSES = 4, and this lane is the gated follow-up that lowers the constant to 2, because the memo changes what enforcing-under-lease verifies and deserves its own review round. Must land before the next night arm; if it slips, the arm stays admissible only while the probe shows T <= 20 s.",
+      "status_note": "2026-09-17 activation 9853dd2b: IMPLEMENTED on branch feat/2026-09-17-custody-pass-memo (records 50/53/55/56/57): under-lease custody memo keyed on the physical ledger head digest; a healthy slot reads the corpus twice (receipt field custody_passes = 2); WRITER_CUSTODY_PASSES is ruled 3 (the honest worst case: a repaired ledger or a corrupt corpus costs three passes, so a refusing slot reaches its typed calibration_ledger_custody_invalid rather than a timeout), CUSTODY_HEADROOM_FACTOR stays 1.5, so the arm-time probe must show custody_elapsed_s <= 120/(3 x 1.5) = 26.67 s. Refuter (Opus, both lenses, seven mutants) MERGEABLE-WITH-FIXES; fix round 1 closed all findings. Lands with the post-#350 fix-forward in one PR; retire this row (removal) once merged.",
       "stop_card": null
     },
     "CUSTODY-REAPING-ATTRIBUTION-01": {
