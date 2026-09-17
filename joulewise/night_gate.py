@@ -84,6 +84,7 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
     {
         "night_aborted_agent_present",   # census hit while the chain ran; chain group terminated
         "night_chain_already_started",   # O_EXCL claim on chain.started failed: never start the chain twice (D-078)
+        "night_calibration_refused",     # typed reservation/writer refusal, including invalid transport documents
         "night_chain_alive",             # dead-man refused: the chain has not exited, so no agent may start
         "night_chain_launch_failed",     # chain Popen failed after the once-only start claim
         "night_courier_running",          # dead-man found a fresh courier lock owned by a live process

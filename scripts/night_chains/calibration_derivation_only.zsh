@@ -68,6 +68,10 @@ REPO="${PWD}"
 : "${IDENTITY_EPOCH_JSON:?required}"
 : "${T1_BINDINGS_JSON:?required}"
 : "${WINDOW_END_EPOCH_S:?required}"
+: "${NIGHT_DIR:?required}"
+: "${JOULEWISE_NIGHT_PLAN_ID:?required}"
+export JOULEWISE_NIGHT_PLAN_ID
+export JOULEWISE_CALIBRATION_REFUSAL_PATH="$NIGHT_DIR/calibration-refusal.json"
 
 PY="${PY:-$REPO/.venv/bin/python}"
 SLEEP="${SLEEP:-/bin/sleep}"
@@ -98,7 +102,6 @@ if (( SLOT_COUNT < 1 || SLOT_CADENCE_S < 1 || SETTLE_S < 1 \
 fi
 
 OPERATOR_LOG_ROOT="$WINDOW_CUSTODY_ROOT/operator_logs"
-/bin/mkdir -p "$OPERATOR_LOG_ROOT" "$RUNS_ROOT/instrument_validation"
 CHAIN_LOG="$OPERATOR_LOG_ROOT/derivation-chain.log"
 
 timestamp() {
@@ -138,28 +141,42 @@ preflight_inputs() {
     done
 }
 
-# Order follows the pinned G2-a chain (SHAKEDOWN-G2-RUNSHEET.md:509-536):
-# input preflight, pre-reserve readiness, and the session reservation FIRST,
-# then chain_start, then the ONE settle, then the captures. Reserving after the
-# settle would make the reservation the last machine action before slot d01 and
+# Preserve the pinned G2-a timing order (SHAKEDOWN-G2-RUNSHEET.md:509-536):
+# input preflight and reservation's enforcing readiness precede any write,
+# then session reservation, chain_start, the ONE settle, and captures. Unlike
+# the runsheet, readiness is not a separate early-warning command here.
+# Reserving after the settle would make the reservation the last machine
+# action before slot d01 and make
 # the pre-registration's "one 600 s settle after the last operator action"
 # literally false.
 preflight_inputs
 
-# G2-a parity (runsheet L509-512): the early-warning readiness check runs before
-# the reservation, so an unready ledger refuses while nothing has been written
-# and no window time has been spent. It never authorizes ARM.
-"$PY" "$REPO/scripts/recover_calibration_ledger.py" \
-    --ledger "$CALIBRATION_LEDGER" \
-    --head-pin "$LEDGER_HEAD_PIN" \
-    readiness \
-    --phase pre-reserve \
-    --session-id "$SESSION_ID" \
-    --plan "$PLAN"
+# Reservation owns one bounded custody pass. --pre-reserve-strict preserves
+# the early refusal before retry, recovery or append, including interrupted
+# claims. It emits the pre_reserve_readiness report with frozen-plan bindings.
+# A separate readiness command would duplicate custody reads ahead of this
+# deadline. Verify-only implies strictness and uses the same arguments.
+reservation_mode=(--execute)
+if [[ "${NIGHT_VERIFY_ONLY:-0}" == 1 ]]; then
+    reservation_mode=(--verify-only)
+fi
 
-"$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" \
+reservation_call() {
+    # The driver discovers input files from this exact expanded argv, using
+    # its production environment builder. Inspection never invokes reservation.
+    if [[ "${NIGHT_RESERVATION_ARGV_ONLY:-0}" == 1 ]]; then
+        printf '%s\0' "$@"
+        return 0
+    fi
+    "$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" "$@"
+}
+
+reservation_call \
+    --pre-reserve-strict \
     --ledger "$CALIBRATION_LEDGER" \
     --head-pin "$LEDGER_HEAD_PIN" \
+    --custody-budget-s "${CUSTODY_BUDGET_S:-120}" \
+    --custody-deadline-epoch-s "$(( WINDOW_END_EPOCH_S - 10 ))" \
     --session-kind derivation \
     --slot-count "$SLOT_COUNT" \
     --session-id "$SESSION_ID" \
@@ -172,7 +189,12 @@ preflight_inputs
     --identity-epoch-json "$IDENTITY_EPOCH_JSON" \
     --t1-bindings-json "$T1_BINDINGS_JSON" \
     "$@" \
-    --execute
+    "${reservation_mode[@]}"
+# set -e already preserves a refused reservation's exit status and stdout.
+if [[ "${NIGHT_VERIFY_ONLY:-0}" == 1 || "${NIGHT_RESERVATION_ARGV_ONLY:-0}" == 1 ]]; then
+    exit 0
+fi
+/bin/mkdir -p "$OPERATOR_LOG_ROOT" "$RUNS_ROOT/instrument_validation"
 log_event "session_open kind=derivation slots=$SLOT_COUNT"
 log_event "chain_start session=$SESSION_ID window=$WINDOW_ID slots=$SLOT_COUNT \
 settle_s=$SETTLE_S slot_cadence_s=$SLOT_CADENCE_S slot_capture_budget_s=$SLOT_CAPTURE_BUDGET_S"
@@ -216,6 +238,8 @@ for (( index = 1; index <= SLOT_COUNT; index++ )); do
     if "$PY" "$REPO/scripts/validate_powermetrics_fiducial.py" \
         --allow-live \
         --derivation-only \
+        --custody-budget-s "${CUSTODY_BUDGET_S:-120}" \
+        --custody-deadline-epoch-s "$(( WINDOW_END_EPOCH_S - 10 ))" \
         --ledger "$CALIBRATION_LEDGER" \
         --head-pin "$LEDGER_HEAD_PIN" \
         --session-id "$SESSION_ID" \

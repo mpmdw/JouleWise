@@ -566,6 +566,7 @@ class Prepared:
     courier_path: str
     schedule: dict
     spans_for_day: object
+    probe_timeout_s: float = 600
 
     @property
     def custody_night(self):
@@ -609,6 +610,9 @@ class Prepared:
         plan_path = (self.plan_path if require_published else
                      (Path(self.plan.custody_root) / "night_plan.json").resolve())
         for index, label in enumerate(labels):
+            if label.startswith("com.joulewise.night-probe."):
+                yield render_probe(self, self.probe_timeout_s)
+                continue
             mode = "run" if index == 0 else "dead-man"
             calendar = self.schedule["night_calendar" if index == 0 else "deadman_calendar"]
             text = self.template
@@ -623,6 +627,257 @@ class Prepared:
             values.update({"@@{}@@".format(key.upper()): str(value) for key, value in calendar.items()})
             yield label, re.sub(r"com\.joulewise\.night|@@[A-Z_]+@@",
                 lambda match: escape(values.get(match.group(0), match.group(0))), text).encode("utf-8")
+
+
+PROBE_RECEIPT_MAX_AGE_S = 6 * 60 * 60
+PROBE_CODE_PATHS = (
+    "scripts/reserve_calibration_window_bracket.py",
+    "joulewise/calibration_ledger.py",
+    "joulewise/calibration_custody_worker.py",
+)
+
+
+def _digest(path):
+    import hashlib
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def interpreter_identity(python):
+    """Identify the interpreter actually executed, including a venv's binary."""
+    code = ("import hashlib,json,sys; from pathlib import Path; "
+            "print(json.dumps({'path':sys.executable,"
+            "'version':'.'.join(map(str,sys.version_info[:3])),"
+            "'sha256':hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()}))")
+    result = subprocess.run([str(python), "-B", "-c", code], capture_output=True,
+                            text=True, timeout=10, check=True)
+    value = json.loads(result.stdout)
+    if (set(value) != {"path", "version", "sha256"}
+            or not Path(value["path"]).is_absolute()
+            or not re.fullmatch(r"[0-9a-f]{64}", value["sha256"])):
+        raise ValueError("interpreter identity invalid")
+    return value
+
+
+def reservation_input_digests(plan, plan_path):
+    from scripts.run_night import reservation_input_paths
+    return {str(path): "sha256:" + _digest(path)
+            for path in reservation_input_paths(plan, plan_path)}
+
+
+def probe_bindings(plan, plan_path, python):
+    """Bind the actual reservation inputs and the effective interpreters."""
+    import shlex
+    chain = Path(plan.chain_path)
+    digest = _digest(chain)
+    sidecar = Path(plan.chain_sha256_path).read_text().split()
+    if (not sidecar or sidecar[0] != digest or len(sidecar) > 2
+            or (len(sidecar) == 2 and sidecar[1] != chain.name)):
+        raise ValueError("chain_sha256 mismatch")
+    paths = {}
+    for name in ("CALIBRATION_LEDGER", "LEDGER_HEAD_PIN"):
+        matches = re.findall(r"^export " + name + r"=(.*)$", chain.read_text(), re.MULTILINE)
+        if len(matches) != 1:
+            raise ValueError(name + " must be one literal export in the pinned chain")
+        words = shlex.split(matches[0])
+        if len(words) != 1 or not Path(words[0]).is_absolute() or any(c in words[0] for c in "$`\n\r"):
+            raise ValueError(name + " is not an absolute literal path")
+        paths[name] = Path(words[0])
+    pin = json.loads(paths["LEDGER_HEAD_PIN"].read_text())
+    head = pin["head_digest"]
+    rows = paths["CALIBRATION_LEDGER"].read_text().splitlines()
+    physical = json.loads(rows[-1])["receipt_digest"] if rows else "0" * 64
+    if not re.fullmatch(r"[0-9a-f]{64}", head) or physical != head:
+        raise ValueError("ledger_head_sha256 mismatch")
+    root = Path(plan.measurement_root)
+    source = root / "scripts/night_chains/calibration_derivation_only.zsh"
+    if "NIGHT_VERIFY_ONLY" not in source.read_text() or "calibration_derivation_only.zsh" not in chain.read_text():
+        raise ValueError("chain does not support reservation verify-only mode")
+    if "NIGHT_RESERVATION_ARGV_ONLY" not in source.read_text():
+        raise ValueError("input_digests: chain lacks reservation argument inspection")
+    inputs = reservation_input_digests(plan, plan_path)
+    return {"plan_id": plan.plan_id, "plan_sha256": _digest(plan_path),
+            "input_digests": inputs,
+            "measurement_head": plan.measurement_head, "ledger_head_sha256": head,
+            "custody_budget_s": float(getattr(plan, "custody_budget_s", 120)),
+            "code_digests": {name: "sha256:" + _digest(root / name) for name in PROBE_CODE_PATHS},
+            "driver_python": interpreter_identity(python),
+            "chain_python": interpreter_identity(root / ".venv/bin/python"),
+            "chain_sha256": digest, "chain_source_sha256": _digest(source),
+            # Bind ledger bytes as well as the head; never trust a copied tail.
+            "ledger_sha256": _digest(paths["CALIBRATION_LEDGER"]),
+            "ledger_pin_sha256": _digest(paths["LEDGER_HEAD_PIN"])}
+
+
+def probe_label(plan_id):
+    label = "com.joulewise.night-probe." + plan_id
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", label):
+        raise Refused(2, "probe plan_id is not a valid launchd label")
+    return label
+
+
+def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_path=None):
+    import math
+    path = receipt_path or prepared.plan_path.parent / "night_probe_receipt.json"
+    try:
+        receipt = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise Refused(2, "probe receipt missing or invalid: {}: {}".format(path, exc))
+    if not isinstance(receipt, dict) or receipt.get("schema") != "joulewise.night_probe_receipt.v1":
+        raise Refused(2, "probe receipt schema mismatch")
+    if receipt.get("outcome") != "ok":
+        raise Refused(2, "probe receipt outcome is not ok: {}".format(receipt.get("outcome")))
+    now = time.time()
+    if now - path.stat().st_mtime >= max_age_s:
+        raise Refused(2, "probe receipt mtime stale (maximum age {} s)".format(max_age_s))
+    finished = receipt.get("finished_epoch_s")
+    if (isinstance(finished, bool) or not isinstance(finished, (int, float))
+            or not math.isfinite(finished) or not -60 <= now - finished < max_age_s):
+        raise Refused(2, "probe receipt finished_epoch_s stale or invalid (maximum age {} s)".format(max_age_s))
+    started = receipt.get("started_epoch_s")
+    elapsed = receipt.get("custody_elapsed_s")
+    observations = receipt.get("observations")
+    if (isinstance(started, bool) or not isinstance(started, (int, float))
+            or not math.isfinite(started) or not 0 <= started <= finished):
+        raise Refused(2, "probe receipt started_epoch_s invalid")
+    if (isinstance(elapsed, bool) or not isinstance(elapsed, (int, float))
+            or not math.isfinite(elapsed) or elapsed < 0):
+        raise Refused(2, "probe receipt custody_elapsed_s invalid")
+    if isinstance(observations, bool) or not isinstance(observations, int) or observations < 0:
+        raise Refused(2, "probe receipt observations invalid")
+    if receipt.get("refusal_code") is not None:
+        raise Refused(2, "probe receipt refusal_code contradicts success")
+    if receipt.get("launchd_label") != probe_label(prepared.plan.plan_id):
+        raise Refused(2, "probe receipt launchd_label mismatch")
+    inputs = receipt.get("input_digests")
+    if not isinstance(inputs, dict) or not inputs:
+        raise Refused(2, "probe receipt input_digests missing or invalid")
+    # Check recorded inputs before running the pinned wrapper's own input
+    # authentication, so a changed or missing file is named precisely.
+    for name, digest in inputs.items():
+        if (not isinstance(name, str) or not Path(name).is_absolute()
+                or not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)):
+            raise Refused(2, "probe receipt input_digests invalid: {}".format(name))
+        try:
+            actual = "sha256:" + _digest(Path(name))
+        except OSError as exc:
+            raise Refused(2, "probe receipt input_digests[{}] unavailable: {}".format(name, exc))
+        if actual != digest:
+            raise Refused(2, "probe receipt input_digests[{}] mismatch".format(name))
+    try:
+        expected = probe_bindings(prepared.plan, prepared.plan_path, prepared.python)
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        raise Refused(2, "probe receipt current bindings invalid: {}".format(exc))
+    for name in sorted(set(inputs) | set(expected["input_digests"])):
+        if inputs.get(name) != expected["input_digests"].get(name):
+            raise Refused(2, "probe receipt input_digests[{}] mismatch".format(name))
+    for field, value in expected.items():
+        if receipt.get(field) != value:
+            raise Refused(2, "probe receipt {} mismatch".format(field))
+    return receipt
+
+
+def render_probe(prepared, timeout_s=600):
+    import plistlib
+    template = prepared.repo / "configs/launchd/com.joulewise.night-probe.plist.template"
+    values = {"@@LABEL@@": probe_label(prepared.plan.plan_id), "@@PYTHON@@": prepared.python,
+              "@@REPO@@": str(prepared.repo), "@@PLAN@@": str(prepared.plan_path),
+              "@@RECEIPT@@": str(prepared.plan_path.parent / "night_probe_receipt.pending.json"),
+              "@@TIMEOUT@@": format(timeout_s, "g"), "@@PATH@@": prepared.courier_path,
+              "@@PROBE_DIR@@": str(prepared.plan_path.parent)}
+    text = re.sub(r"@@[A-Z_]+@@", lambda match: escape(values[match.group(0)]), template.read_text())
+    value = plistlib.loads(text.encode())
+    if "KeepAlive" in value:
+        raise Refused(2, "probe template must not contain KeepAlive")
+    return value["Label"], text.encode()
+
+
+def probe_process_census(label, plan_path, process_record=None):
+    """Prove label/argv and the independent chain group have no survivors."""
+    pattern = re.escape(label) + "|run_night[.]py probe .*" + re.escape(str(plan_path))
+    commands = [["/usr/bin/pgrep", "-lf", pattern]]
+    if process_record is not None:
+        pgid = process_record.get("chain_pgid")
+        if not isinstance(pgid, int) or pgid <= 1:
+            raise Refused(2, "probe process census invalid chain_pgid")
+        commands.append(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."])
+    for command in commands:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+        if result.returncode != 1 or result.stdout.strip():
+            raise Refused(2, "probe process census survivor or unknown: {} {}".format(result.stdout, result.stderr))
+
+
+def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_RECEIPT_MAX_AGE_S):
+    """Run a temporary job in the installation GUI domain, then prove cleanup."""
+    label, payload = render_probe(prepared, timeout_s)
+    published_path = prepared.plan_path.parent / "night_probe_receipt.json"
+    receipt_path = prepared.plan_path.parent / "night_probe_receipt.pending.json"
+    process_path = receipt_path.with_name(receipt_path.name + ".process.json")
+    with tempfile.TemporaryDirectory(prefix="night-probe-job-", dir=prepared.plan_path.parent) as directory:
+        target = Target.for_mode(directory, labels=(label,))
+        adapter = LaunchctlAdapter(target, executable)
+        try:
+            adapter.require_absent(label)
+        except NotAbsent as exc:
+            raise Refused(2, "probe label is not absent: {}".format(exc))
+        probe_process_census(label, prepared.plan_path)
+        # Remove only non-authorizing prior probe outputs after proving no owner.
+        published_path.unlink(missing_ok=True)
+        receipt_path.unlink(missing_ok=True)
+        process_path.unlink(missing_ok=True)
+        result = adapter.write_plist(label, payload)
+        if result.kind is not Kind.SUCCEEDED:
+            raise Refused(2, "probe plist publication failed: " + result.stderr)
+        try:
+            shield.poll()
+            result = adapter.bootstrap(label)
+            if result.kind is not Kind.SUCCEEDED:
+                raise Refused(2, "probe bootstrap failed: " + result.stderr)
+            deadline = time.monotonic() + timeout_s + 10  # bounded driver cleanup/publication
+            while not receipt_path.is_file():
+                shield.poll()
+                if time.monotonic() >= deadline:
+                    raise Refused(2, "probe receipt timeout")
+                time.sleep(0.05)
+        finally:
+            _proofs, unresolved = verified_bootout(adapter, (label,))
+            if unresolved:
+                raise Refused(2, "probe bootout absence unproven: " + label)
+            process_record = json.loads(process_path.read_text()) if process_path.is_file() else None
+            if receipt_path.is_file() and process_record is None:
+                raise Refused(2, "probe process identity missing")
+            # A killed driver may leave its separately-created chain group.
+            if process_record is not None:
+                if process_record.get("launchd_label") != label:
+                    raise Refused(2, "probe process label mismatch")
+                pgid = process_record.get("chain_pgid")
+                if not isinstance(pgid, int) or pgid <= 1:
+                    raise Refused(2, "probe process chain_pgid invalid")
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                except PermissionError as exc:
+                    # An absent group may also deny signals in a sandbox.
+                    probe_process_census(label, prepared.plan_path, process_record)
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    probe_process_census(label, prepared.plan_path, process_record)
+                    break
+                except Refused:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.05)
+        receipt = validate_probe_receipt(prepared, max_age_s, receipt_path)
+        if (receipt.get("chain_pgid") != process_record["chain_pgid"]
+                or receipt.get("driver_pid") != process_record["driver_pid"]):
+            raise Refused(2, "probe receipt process identity mismatch")
+        # A driver success is only pending until bootout AND census succeed.
+        # Interruption (including SIGKILL) before this point leaves no installable
+        # success receipt. The publication is atomic in the same directory.
+        os.replace(receipt_path, published_path)
+        print("launchd probe ok; bootout and process census clear: " + label)
+        return receipt
 
 
 def validate_install(args, repo):
@@ -670,13 +925,26 @@ def validate_install(args, repo):
     except (ValueError, OverflowError, OSError) as exc:
         raise Refused(2, "{}: {}".format(getattr(exc, "reason", "plan_schedule_unrepresentable"), exc))
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
-                        courier_path, schedule, run_night.install_spans_for_day)
+                        courier_path, schedule, run_night.install_spans_for_day,
+                        getattr(args, "probe_timeout_s", 600))
     records = [name for name in ("receipt.json", "result.json", "refusal.json", "chain.started",
                "chain.exited", "courier.json", "courier.sent") if os.path.lexists(prepared.custody_night / name)]
     if records:
         raise Refused(3, "refusing install: existing night records: " + " ".join(records))
     # All read-only refusals precede admission and mkdir.
     prepared.admit(time.time(), require_published=args.render_only is None)
+    for field in ("hour", "minute"):
+        supplied = getattr(args, field, None)
+        if supplied is not None and supplied != schedule["night_calendar"][field.capitalize()]:
+            raise Refused(2, "--{} must match the plan calendar".format(field))
+    if args.render_only is not None:
+        source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
+        if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
+            print(json.dumps({"input_digests": reservation_input_digests(plan, args.plan)}, sort_keys=True))
+        else:
+            print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
+    if args.render_only is None and not getattr(args, "launchd_probe", False):
+        validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
     return prepared
 
 
@@ -698,11 +966,21 @@ def main(argv=None):
               "[--render-only DIR] [--launchctl-bin PATH]")
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--python")
+    parser.add_argument("--launchd-probe", action="store_true")
+    parser.add_argument("--probe-timeout-s", type=float, default=600)
+    parser.add_argument("--probe-max-age-s", type=float, default=PROBE_RECEIPT_MAX_AGE_S)
+    parser.add_argument("--hour", type=int)
+    parser.add_argument("--minute", type=int)
     parser.add_argument("--uninstall", action="store_true")
     parser.add_argument("--render-only", type=render_directory)
     parser.add_argument("--launchctl-bin", default="launchctl")
     try:
         args = parser.parse_args(argv)
+        import math
+        if any(not math.isfinite(v) or v <= 0 for v in (args.probe_timeout_s, args.probe_max_age_s)):
+            raise Refused(2, "probe timeout and receipt age must be finite and positive")
+        if args.launchd_probe and (args.uninstall or args.render_only is not None):
+            raise Refused(2, "--launchd-probe is a separate step from install/render/uninstall")
         if args.uninstall and args.render_only is not None:
             raise Refused(2, "--render-only and --uninstall are mutually exclusive")
         if not args.plan.is_file():
@@ -719,10 +997,38 @@ def main(argv=None):
         if args.uninstall:
             if args.python:
                 print("--python ignored on uninstall", file=sys.stderr)
-            return uninstall(adapter, shield=shield)
-        return Transaction(adapter, lambda: validate_install(args, Path(__file__).resolve().parents[1]),
-                           shield=shield).run()
-    except (Refused, OSError) as exc:
+            # Uninstall remains usable with malformed/retired plans and Python 3.9.
+            result = uninstall(adapter, shield=shield)
+            if result == 0:
+                try:
+                    plan_id = json.loads(args.plan.read_text()).get("plan_id")
+                    if isinstance(plan_id, str):
+                        label = probe_label(plan_id)
+                        probe_target = Target.for_mode(args.plan.parent, labels=(label,))
+                        probe_adapter = LaunchctlAdapter(probe_target, adapter.executable)
+                        observed = probe_adapter.print(label)
+                        if observed.kind is not Kind.ABSENT:
+                            _, unresolved = verified_bootout(probe_adapter, (label,))
+                            if unresolved:
+                                raise Refused(2, "leftover probe label absence unproven")
+                            probe_process_census(label, args.plan)
+                except (ValueError, AttributeError):
+                    pass
+            return result
+        repo = Path(__file__).resolve().parents[1]
+        if args.launchd_probe:
+            prepared = validate_install(args, repo)
+            launchd_probe(prepared, adapter.executable, shield, args.probe_timeout_s, args.probe_max_age_s)
+            return 0
+        def validate():
+            prepared = validate_install(args, repo)
+            if isinstance(target, RenderTarget):
+                target.labels += (probe_label(prepared.plan.plan_id),)
+            return prepared
+        return Transaction(adapter, validate, shield=shield).run()
+    except Signalled as exc:
+        return exc.code
+    except (Refused, OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
         print(str(exc), file=sys.stderr)
         return exc.code if isinstance(exc, Refused) else 1
     finally:
