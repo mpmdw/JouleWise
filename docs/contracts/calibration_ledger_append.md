@@ -78,6 +78,21 @@ never inside the bounded worker.
 The capture writer shares one allowance across preflight and under-lease
 preparation; final artifact verification starts its own bounded operation.
 
+Every refusing command writes **exactly one** JSON line to standard error: the
+refusal payload itself. When a refusal document collides with an existing file,
+or cannot be written at all, that fact is carried as `refusal_document`,
+`refusal_document_existing`, and `refusal_document_error` fields inside that
+single line, never as a second line, so a caller may parse standard error whole.
+
+While a bounded pass runs, the command may also write `calibration_custody_progress`
+lines (one per directory probe or governed-artifact read, each naming the observation,
+locator, artifact, worker process identifier, and elapsed seconds) and one
+`calibration_custody_complete` line to standard error. Reservation does so; the
+**capture writer does not**, because its standard error is reserved for the single
+refusal line above. The writer's equivalent evidence is the refusal document's
+`last_observation`, which names the observation, locator, and artifact the bounded pass
+was reading when the allowance expired.
+
 ## Canonical encoding and lineage
 
 Every admitted physical record is canonical UTF-8 JSON followed by `LF`.

@@ -1513,15 +1513,16 @@ class _CaptureLedgerLifecycle:
             self.phase = "under_lease"
             _writer_stage(WriterStage.AFTER_WRITER_LEASE)
             # Authenticate historical custody before recovery can mutate even
-            # an existing session's append intent or partial evidence.
-            under_lease_snapshot = load_calibration_ledger_snapshot(
+            # an existing session's append intent or partial evidence. Only
+            # the custody verification is wanted here; the slot binding keeps
+            # its pinned two checks (before the lease, and after recovery in
+            # _begin_once), so the snapshot itself is deliberately unused.
+            load_calibration_ledger_snapshot(
                 self.ledger_path, self.head_pin_path,
                 require_committed_pin=self.require_committed_pin,
                 verify_custody=True, mode="issuing",
                 custody_deadline=self.custody_deadline,
             )
-            if self.is_bracket_session:
-                self._validate_slot(ledger_snapshot=under_lease_snapshot)
             self.custody_deadline.check()
             repair_calibration_ledger(
                 self.ledger_path,
@@ -1849,17 +1850,28 @@ def main(argv: list[str] | None = None) -> int:
     ledger_lifecycle = None
 
     def emit_refusal(code, *, context=None, terminal_result=None, stream):
+        # Report whatever phase and allowance the live lifecycle exposes, and
+        # fall back to the preflight ones. Refusing must never depend on a
+        # lifecycle object being fully constructed: a refusal raised while the
+        # lifecycle is being built would otherwise become an AttributeError.
+        deadline = getattr(ledger_lifecycle, "custody_deadline", None) or custody_deadline
         return emit_calibration_refusal(
-            code, phase=ledger_lifecycle.phase if ledger_lifecycle else "writer_preflight",
+            code,
+            phase=getattr(ledger_lifecycle, "phase", None) or "writer_preflight",
             ledger_path=args.ledger,
-            custody_context=(ledger_lifecycle.custody_deadline.context() if ledger_lifecycle
-                             else custody_deadline.context() if custody_deadline else None),
+            custody_context=deadline.context() if deadline is not None else None,
             budget_s=args.custody_budget_s, context=context,
             terminal_result=terminal_result, stream=stream,
         )
 
     try:
-        custody_deadline = CustodyDeadline(args.custody_budget_s, args.custody_deadline_epoch_s)
+        # This command's standard error carries exactly one JSON line -- the
+        # refusal -- and its standard output stays empty until the receipt, so
+        # the bounded custody pass writes no progress diagnostics here.
+        custody_deadline = CustodyDeadline(
+            args.custody_budget_s, args.custody_deadline_epoch_s,
+            telemetry_stream=None,
+        )
     except (CalibrationLedgerError, ValueError) as exc:
         return emit_refusal(
             exc.code if isinstance(exc, CalibrationLedgerError) else RefusalCode.WRITER_BRACKET_ARGUMENTS,

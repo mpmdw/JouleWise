@@ -1905,15 +1905,26 @@ def _target_state_transition_is_valid(
 
 DEFAULT_CUSTODY_BUDGET_S = 120.0
 CUSTODY_CLEANUP_TIMEOUT_S = 5.0
+# Sentinel for "write bounded-custody diagnostics to whatever sys.stderr is
+# bound to when the line is written", as opposed to a stream object captured
+# at construction time or None, which means write nothing.
+CUSTODY_TELEMETRY_STDERR = "stderr"
 
 
 class CustodyDeadline:
     """One absolute monotonic allowance for a complete preparation operation."""
 
     def __init__(self, budget_s: float = DEFAULT_CUSTODY_BUDGET_S,
-                 deadline_epoch_s: float | None = None):
+                 deadline_epoch_s: float | None = None,
+                 telemetry_stream=CUSTODY_TELEMETRY_STDERR):
         if not math.isfinite(budget_s) or budget_s <= 0:
             raise ValueError("custody budget must be finite and positive")
+        # Bounded-pass progress and completion diagnostics go to standard
+        # error by default (resolved when a line is written, so in-process
+        # capture works). A caller whose own standard-error contract is
+        # exactly one JSON refusal line -- the capture writer CLI -- passes
+        # None here, and the pass stays silent.
+        self.telemetry_stream = telemetry_stream
         self.configured_budget_s = budget_s
         self.deadline_epoch_s = deadline_epoch_s
         self.started = time.monotonic()
@@ -1935,7 +1946,8 @@ class CustodyDeadline:
         self.observations = 0
 
     def next_operation(self):
-        result = CustodyDeadline(self.configured_budget_s)
+        result = CustodyDeadline(self.configured_budget_s,
+                                 telemetry_stream=self.telemetry_stream)
         # Preserve the initial wall-to-monotonic conversion across operations.
         result.window_deadline = self.window_deadline
         result.deadline_epoch_s = self.deadline_epoch_s
@@ -1987,6 +1999,16 @@ def _stop_custody_worker(process):
     for stream in (process.stdin, process.stdout):
         if stream is not None:
             stream.close()
+
+
+def _custody_telemetry(deadline: CustodyDeadline, payload) -> None:
+    """Write one bounded-pass diagnostic line, unless the caller asked for none."""
+    stream = getattr(deadline, "telemetry_stream", CUSTODY_TELEMETRY_STDERR)
+    if stream is None:
+        return
+    print(json.dumps(payload),
+          file=sys.stderr if stream is CUSTODY_TELEMETRY_STDERR else stream,
+          flush=True)
 
 
 def _bounded_custody_request(request, deadline: CustodyDeadline):
@@ -2077,10 +2099,9 @@ def _bounded_custody_request(request, deadline: CustodyDeadline):
                                 field: progress.get(field)
                                 for field in ("observation_id", "locator", "artifact")
                             }
-                            print(json.dumps({"event": "calibration_custody_progress",
-                                              **progress,
-                                              "elapsed_s": deadline.elapsed_s}),
-                                  file=sys.stderr, flush=True)
+                            _custody_telemetry(deadline, {
+                                "event": "calibration_custody_progress",
+                                **progress, "elapsed_s": deadline.elapsed_s})
                         elif message.get("timeout") is True:
                             deadline.refuse()
                         elif "result" in message:
@@ -2098,10 +2119,9 @@ def _bounded_custody_request(request, deadline: CustodyDeadline):
                 or any(reason != RefusalCode.LEDGER_CUSTODY_INVALID.value
                        for reason in result["reasons"])):
             raise ValueError("custody worker did not complete the exact request")
-        print(json.dumps({"event": "calibration_custody_complete",
-                          "elapsed_s": deadline.elapsed_s,
-                          "observations": result["observations"]}),
-              file=sys.stderr, flush=True)
+        _custody_telemetry(deadline, {"event": "calibration_custody_complete",
+                                      "elapsed_s": deadline.elapsed_s,
+                                      "observations": result["observations"]})
         deadline.check()
         return result
     except subprocess.TimeoutExpired:
