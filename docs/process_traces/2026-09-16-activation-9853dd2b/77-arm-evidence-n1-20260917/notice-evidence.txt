@@ -1,0 +1,8 @@
+notice sent via Gmail MCP send_message at 2026-09-17T13:38:09-0700 (epoch 1789677489; Gmail internalDate 1789677468000)
+message_id 1a0b116fb583b4fc thread_id 1a0b116fb583b4fc
+to claude.ai.copper531@passmail.net
+subject NIGHT NOTICE — d079-epoch-25g83-derivation-n1-20260917 (DIAGNOSTIC_NO_PACK) — attempt 1
+plan_sha256 e875cc7bcd1e70f86934c3a1022e9c5fecca3e1633829de1c779257e9de7a426 H 92c178f863ccc9a9742f080108433a5afd148b2e
+thread read at 2026-09-17T13:40:49-0700 (get_thread MINIMAL): 1 message (the notice), no reply, no NO
+open owner directives at read: #353 (Codex quota restored; run windows unattended ASAP) — not a NO; it orders this arm
+standdown.request absent; STOP absent
