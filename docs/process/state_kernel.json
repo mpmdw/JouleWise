@@ -1389,38 +1389,6 @@
       "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
       "stop_card": null
     },
-    "CUSTODY-PASS-MEMO-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-16-activation-9853dd2b/44-structural-bound-consult-report.md section 3 (writer budget model with numbers: P = 4 today on one budget, memoization keyed on the head digest collapses it to P = 2, or 3 when repair mutated; T <= 60 s at P = 2; headroom gate WRITER_CUSTODY_PASSES and the runbook wording)",
-          "docs/process_traces/2026-09-16-activation-9853dd2b/36-opus-counter-review-report.md finding F2 (four whole-corpus passes share the CustodyDeadline built at validate_powermetrics_fiducial.py:1863 while the reservation makes one; worked case T = 90 s passes the arm and times out on slot d01)",
-          "scripts/validate_powermetrics_fiducial.py:1862 (budget created), :2008 (preflight snapshot), :1517 (under-lease snapshot), :1526 (repair between passes), :1561 (enforcing readiness), :1573 (slot validation), :1634 and :1673 (the only resets)",
-          "joulewise/night_agent_install.py (WRITER_CUSTODY_PASSES beside PROBE_CODE_PATHS, and the headroom check in validate_probe_receipt)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CUSTODY-PASS-MEMO-01/acceptance",
-          "label": "CUSTODY-PASS-MEMO-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Memoize the verified set on the CustodyDeadline object, keyed on the physical ledger head digest together with the frozenset of (attempt_id, locator, artifact sha256) triples the pass requires, and reuse it only when the head digest is unchanged and the required set is a subset of the memoized one. Reuse is confined to a single writer lease (the exclusive claim the writer holds while it owns the ledger): the memo is never carried across a lease acquisition, because the under-lease authentication at validate_powermetrics_fiducial.py:1516-1517 exists precisely so that recovery cannot have mutated the corpus first, and repair_calibration_ledger at :1526 runs between passes 2 and 3, so a repair that mutates the head invalidates the memo and forces one honest re-read. Result: passes 2, 3 and 4 collapse into one when repair is a no-op (two passes per slot), three passes when repair mutated the head. Set WRITER_CUSTODY_PASSES from 4 to the honest worst case (ruled 3: a repaired ledger or a corrupt corpus costs three passes; healthy slots read twice) in joulewise/night_agent_install.py and change the runbook multiplier text with it (docs/phase_2/derivation_night_runbook.md section 1.2), so prose and gate cannot drift. Regressions: one proving a second pass under an unchanged head performs no filesystem re-read and returns the memoized verdict, and one proving a head-digest change between passes forces a fresh read. Gated BEFORE the next night arm; no change to what any pass verifies, only to how often identical work is repeated."
-      },
-      "authority": {
-        "label": "2026-09-17 activation 9853dd2b, NIGHT-RESERVE-HANG-01 review findings; registration by the magistrate, not a ruling",
-        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "An unattended measurement night re-reads every governed artifact file named by the calibration ledger and re-checks each file's SHA-256 digest against the digest the ledger records; one sweep over the whole corpus is called a custody verification pass, and its wall-clock cost is written T below. Before the night is installed, an arm-time probe (a rehearsal run started by macOS's launchd service manager that performs the same work the night will perform and mints a receipt) measures exactly ONE pass and reports it as custody_elapsed_s (scripts/reserve_calibration_window_bracket.py:340, :346); the reservation step also makes one. The capture writer (scripts/validate_powermetrics_fiducial.py, the program that records one timed measurement slot) instead makes FOUR whole-corpus passes per slot -- preflight snapshot :2008, under-lease snapshot :1517, enforcing readiness :1561, and slot validation :1573 -- and all four spend from ONE shared CustodyDeadline budget (a wall-clock allowance object) created at :1862 and reset only on abandon :1634 and finalize :1673. Probe, reservation and writer all receive the same allowance B, default 120 s from CUSTODY_BUDGET_S in scripts/night_chains/calibration_derivation_only.zsh:178 and :241. The writer therefore needs 4T <= B, i.e. T <= 30 s, while the probe certifies only T <= 120 s: a receipt showing T = 90 s is a passing arm at the desk and a guaranteed calibration_ledger_custody_timeout refusal on the night's first slot (record 36 finding F2, record 44 section 3). The install-time headroom gate in joulewise/night_agent_install.py compensates for the redundancy rather than removing it: it carries WRITER_CUSTODY_PASSES = 4 and refuses an install unless custody_elapsed_s x WRITER_CUSTODY_PASSES x 1.5 <= custody_budget_s, so with B = 120 s the probe must show T <= 20 s. This lane removes the redundant passes so the writer costs two passes, not four, and the gate can be relaxed to match measured behaviour instead of guarding an inflated multiplier.",
-      "id": "CUSTODY-PASS-MEMO-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 223,
-      "status": "queued",
-      "status_note": "2026-09-17 activation 9853dd2b: IMPLEMENTED on branch feat/2026-09-17-custody-pass-memo (records 50/53/55/56/57): under-lease custody memo keyed on the physical ledger head digest; a healthy slot reads the corpus twice (receipt field custody_passes = 2); WRITER_CUSTODY_PASSES is ruled 3 (the honest worst case: a repaired ledger or a corrupt corpus costs three passes, so a refusing slot reaches its typed calibration_ledger_custody_invalid rather than a timeout), CUSTODY_HEADROOM_FACTOR stays 1.5, so the arm-time probe must show custody_elapsed_s <= 120/(3 x 1.5) = 26.67 s. Refuter (Opus, both lenses, seven mutants) MERGEABLE-WITH-FIXES; fix round 1 closed all findings. Lands with the post-#350 fix-forward in one PR; retire this row (removal) once merged.",
-      "stop_card": null
-    },
     "CUSTODY-REAPING-ATTRIBUTION-01": {
       "acceptance": {
         "evidence": [
@@ -2225,39 +2193,6 @@
       "priority": "p4_polish",
       "rank": 35,
       "status": "shelved",
-      "stop_card": null
-    },
-    "DRIVER-REFUSAL-COLLISION-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md (executed root-cause record: timeline, census cadence, lease code, locator census, TCC database modification time 20:52:04, launchd reproduction)",
-          "docs/run_reports/2026-09-16-activation-e0c58148-equivalence-night-stall.md (headless activation e0c58148: timeline and the two defect lanes it named)",
-          "night root /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916: night.log, night/chain.started, night/chain.exited (exit −15), night/censuses.jsonl (1,332 rows), night/chain.stdout.log, night/chain.stderr.log, night/launchd.night.err, operator_logs/derivation-chain.log",
-          "scripts/run_night.py at main b5294f0e: _write_driver_refusal (line 250) → _write_json → _write_bytes_exclusive (line 144, os.O_CREAT together with os.O_EXCL)",
-          "docs/process_traces/2026-09-16-interactive-5239df1e/02-reserve-hang-design-consult.md (consult section 5: naming and inventory requirements)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/DRIVER-REFUSAL-COLLISION-01/acceptance",
-          "label": "DRIVER-REFUSAL-COLLISION-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A second refusal writer never crashes the driver: each refusal is an immutable distinct document with a collision-resistant name or an exclusive-create sequence allocation (never a second JSON object appended to refusal.json, never a second-resolution epoch name assumed unique); both causes are preserved, the result and artifact inventory reference their actual paths (the inventory currently hardcodes only refusal.json, scripts/run_night.py line 531), and the courier reads them. A regression proves the sequence dead-man refusal first, then a census abort, exits through the normal courier path with both records present. No change to gate or census semantics."
-      },
-      "authority": {
-        "label": "Registered 2026-09-16 by the interactive session 5239df1e (Fable, Ed present) from the executed root-cause record; magistrate registration, not a ruling; the cure shape goes to a pre-decision design consult",
-        "path": "docs/process_traces/2026-09-16-interactive-5239df1e/01-night-reserve-hang-root-cause.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "The night driver crashes when it must record a second refusal. scripts/run_night.py _write_driver_refusal creates night/refusal.json with O_CREAT together with O_EXCL; on 2026-09-16 the daily dead-man had already written refusal.json at 13:20 (night_chain_alive), so the driver's census-abort refusal at 20:52:19 raised FileExistsError (night/launchd.night.err), and no result.json, courier.sent, or courier email was produced: the night ended silently.",
-      "id": "DRIVER-REFUSAL-COLLISION-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 220,
-      "status": "queued",
-      "status_note": "2026-09-16 interactive 5239df1e: registered from the e0c58148 record and the executed traceback; bench-size cure; not design-bearing.",
       "stop_card": null
     },
     "ED-BRANCH-PROTECTION-E1-01": {
