@@ -629,11 +629,21 @@ branch. The deadline these build writes no `calibration_custody_progress` or
 the bound can appear under any caller, including the capture writer, whose
 standard error is exactly one JSON refusal line.
 
+The `unset` key names the variable a desk operator has to clear, and it is
+there because the refusal code says something else. `calibration_ledger_custody_invalid`
+renders in the refusal registry as "receipt-bound evidence bytes are absent or
+hash-invalid", and the ledger wraps it as "primary evidence is unreadable".
+Under an inherited marker neither is true: the bytes are intact and the
+process is simply carrying the night's budget. Recovery is
+`unset JOULEWISE_NIGHT_CUSTODY_BUDGET_S`, so the refusal states that name
+instead of leaving the reader to find it in the source.
+
 `probe_custody` is the **sole gateway**: every unbounded governed read in the
 module reaches the filesystem through it. Under the marker it refuses
 `calibration_ledger_custody_invalid` with context
 `{"reason": "custody_read_unbounded_under_night_budget", "caller": <qualified
-name of the calling function>, "locator": <path>}` unless the call passes the
+name of the calling function>, "locator": <path>, "unset":
+"JOULEWISE_NIGHT_CUSTODY_BUDGET_S"}` unless the call passes the
 keyword-only `metadata_only=True`. Exactly one call site passes it —
 `_assert_absolute_nonsymlink_directory`, whose probe makes only `stat`-class
 calls and reads no governed bytes — and a unit test walks the module's syntax
@@ -651,3 +661,36 @@ resolve to the same path and the bounded route is taken.
 `scripts/run_night.py` `_chain_environment` pops the variable next to
 `NIGHT_VERIFY_ONLY`, so a desk shell's value can never outrank the chain's own
 export in a night the driver starts.
+
+### The capture writer's success receipt carries the custody timing
+
+On success the capture writer prints exactly one JSON object to standard
+output. That object now also carries `custody_elapsed_s` and `observations`.
+
+`custody_elapsed_s` is the number of seconds the PREPARATION allowance's
+`CustodyDeadline` had been running at the END of preparation — the single
+allowance shared by the preflight snapshot, the under-lease snapshot, the
+enforcing readiness check and the slot validation, read at the point the
+capture is about to start. It is read there, not at finalization, because the
+same deadline object keeps running through the capture and is replaced only
+in `finalize`; a later reading would report the capture's duration instead of
+the custody work's. That clock starts when the deadline is constructed, so it
+covers the ledger read and parse as well as the custody passes over the
+governed corpus; it therefore reports MORE than those passes alone. That is
+the conservative direction for the install-time headroom gate, which asks
+whether the passes fit inside the budget. `observations` is the number of
+custody-bearing observations that preparation counted; it is legitimately 0
+for the first slot of a session, because no row of it is finalized yet, and
+rises as slots finalize.
+
+They are in the receipt because nothing else records this on a healthy night.
+The writer builds its custody deadline with `telemetry_stream=None`, so no
+`calibration_custody_progress` or `calibration_custody_complete` line is
+written; and `CustodyDeadline.context()` reaches a reader only when the
+allowance expires. Before these fields, a night that SUCCEEDED left no record
+of how long its custody passes took — the exact quantity
+`WRITER_CUSTODY_PASSES` and the headroom factor are sized against.
+
+The fields are additive and the surrounding contracts are unchanged: standard
+output is still one JSON object, and standard error still carries exactly one
+JSON line on a refusal and no bounded-pass telemetry ever.

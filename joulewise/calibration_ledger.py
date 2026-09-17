@@ -5321,7 +5321,16 @@ def probe_custody(
             RefusalCode.LEDGER_CUSTODY_INVALID,
             context={"reason": "custody_read_unbounded_under_night_budget",
                      "caller": frame.f_code.co_qualname,
-                     "locator": str(path)},
+                     "locator": str(path),
+                     # Name the variable a desk operator has to clear. The
+                     # registry renders this code as "evidence bytes are
+                     # absent or hash-invalid", which is the WRONG story for
+                     # an inherited marker: the bytes are fine, the process
+                     # simply carries the night's budget. Desk recovery is
+                     # `unset JOULEWISE_NIGHT_CUSTODY_BUDGET_S`, so the
+                     # refusal states the name instead of making the reader
+                     # find it.
+                     "unset": NIGHT_CUSTODY_BUDGET_ENV},
         )
     paths = _custody_probe_paths(path, mode=mode)
     if not paths:
