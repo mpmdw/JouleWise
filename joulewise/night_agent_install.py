@@ -730,6 +730,11 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
     if now - path.stat().st_mtime >= max_age_s:
         raise Refused(2, "probe receipt mtime stale (maximum age {} s)".format(max_age_s))
     finished = receipt.get("finished_epoch_s")
+    # Allow a small forward step from clock resynchronisation between the
+    # probe's wall-clock stamp and this read. In the 2026-09-16 machine move,
+    # kern.boottime shifted by tens of milliseconds; NTP corrections are bounded
+    # well under a minute. Larger future skew indicates a forged or mis-stamped
+    # receipt, so retain the 60 s limit.
     if (isinstance(finished, bool) or not isinstance(finished, (int, float))
             or not math.isfinite(finished) or not -60 <= now - finished < max_age_s):
         raise Refused(2, "probe receipt finished_epoch_s stale or invalid (maximum age {} s)".format(max_age_s))

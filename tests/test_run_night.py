@@ -2536,14 +2536,54 @@ class NightProbeTests(unittest.TestCase):
         ledger = Path(self.plan.measurement_root) / "ledger.jsonl"
         ledger.unlink()
         os.mkfifo(ledger)
-        budget = 0.75
-        started = time.monotonic()
-        process = subprocess.Popen([sys.executable, "-B", str(SCRIPT_PATH), "probe", "--plan",
-            str(self.plan_path), "--receipt", str(self.receipt), "--timeout-s", str(budget)],
+        # CLI imports precede probe_night's clock and can take several seconds
+        # under load. Record its entry separately; worker imports and binding
+        # reads remain inside the production deadline (15 s for this test).
+        budget = 15.0
+        entry_path = self.root / "probe-entry.monotonic"
+        bootstrap = """import sys, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from scripts import run_night
+entry = Path(sys.argv[2])
+probe = run_night.probe_night
+def timed_probe(*args, **kwargs):
+    temporary = entry.with_suffix('.tmp')
+    temporary.write_text(str(time.monotonic()))
+    temporary.replace(entry)
+    return probe(*args, **kwargs)
+run_night.probe_night = timed_probe
+raise SystemExit(run_night.main(sys.argv[3:]))
+"""
+        startup_deadline = time.monotonic() + 30
+        process = subprocess.Popen([sys.executable, "-B", "-c", bootstrap,
+            str(REPO_ROOT), str(entry_path), "probe", "--plan", str(self.plan_path),
+            "--receipt", str(self.receipt), "--timeout-s", str(budget)],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         try:
+            while not entry_path.exists():
+                self.assertIsNone(process.poll(), "probe CLI exited before entry")
+                self.assertLess(time.monotonic(), startup_deadline, "probe CLI startup stalled")
+                time.sleep(0.01)
+            started = float(entry_path.read_text())
+            bindings_entered = False
+            while time.monotonic() < started + budget and process.poll() is None:
+                for progress in self.receipt.parent.glob("night-probe-supervisor-*/progress.json"):
+                    try:
+                        bindings_entered = json.loads(progress.read_text())["phase"] == "bindings"
+                    except FileNotFoundError:  # Supervisor cleanup may remove the record.
+                        continue
+                    if bindings_entered:
+                        break
+                if bindings_entered:
+                    break
+                time.sleep(0.01)
+            self.assertTrue(bindings_entered, "probe never entered the blocked binding read")
+            self.assertLess(time.monotonic() - started, budget)
+            # No writer opens the FIFO: after observing bindings, only the
+            # production deadline can release this blocked worker.
             try:
-                _, stderr = process.communicate(timeout=budget + 2)
+                _, stderr = process.communicate(timeout=max(0, started + budget + 2 - time.monotonic()))
             except subprocess.TimeoutExpired:
                 self.fail("probe exceeded whole deadline during binding read")
             self.assertLess(time.monotonic() - started, budget + 2)
@@ -2556,6 +2596,12 @@ class NightProbeTests(unittest.TestCase):
             self.assertFalse((Path(self.plan.measurement_root) / "reservation-argv.json").exists())
         finally:
             if process.poll() is None:
+                identity = self.receipt.with_name(self.receipt.name + ".process.json")
+                if identity.exists():
+                    try:
+                        os.killpg(json.loads(identity.read_text())["chain_pgid"], signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 os.killpg(process.pid, signal.SIGKILL)
             process.communicate(timeout=2)
 
