@@ -658,8 +658,14 @@ def interpreter_identity(python):
     return value
 
 
+def reservation_input_digests(plan, plan_path):
+    from scripts.run_night import reservation_input_paths
+    return {str(path): "sha256:" + _digest(path)
+            for path in reservation_input_paths(plan, plan_path)}
+
+
 def probe_bindings(plan, plan_path, python):
-    """Read the generated wrapper's literal ledger paths without executing it."""
+    """Bind the actual reservation inputs and the effective interpreters."""
     import shlex
     chain = Path(plan.chain_path)
     digest = _digest(chain)
@@ -686,7 +692,11 @@ def probe_bindings(plan, plan_path, python):
     source = root / "scripts/night_chains/calibration_derivation_only.zsh"
     if "NIGHT_VERIFY_ONLY" not in source.read_text() or "calibration_derivation_only.zsh" not in chain.read_text():
         raise ValueError("chain does not support reservation verify-only mode")
+    if "NIGHT_RESERVATION_ARGV_ONLY" not in source.read_text():
+        raise ValueError("input_digests: chain lacks reservation argument inspection")
+    inputs = reservation_input_digests(plan, plan_path)
     return {"plan_id": plan.plan_id, "plan_sha256": _digest(plan_path),
+            "input_digests": inputs,
             "measurement_head": plan.measurement_head, "ledger_head_sha256": head,
             "custody_budget_s": float(getattr(plan, "custody_budget_s", 120)),
             "code_digests": {name: "sha256:" + _digest(root / name) for name in PROBE_CODE_PATHS},
@@ -716,9 +726,12 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
         raise Refused(2, "probe receipt schema mismatch")
     if receipt.get("outcome") != "ok":
         raise Refused(2, "probe receipt outcome is not ok: {}".format(receipt.get("outcome")))
+    now = time.time()
+    if now - path.stat().st_mtime >= max_age_s:
+        raise Refused(2, "probe receipt mtime stale (maximum age {} s)".format(max_age_s))
     finished = receipt.get("finished_epoch_s")
     if (isinstance(finished, bool) or not isinstance(finished, (int, float))
-            or not math.isfinite(finished) or not 0 <= time.time() - finished < max_age_s):
+            or not math.isfinite(finished) or not -60 <= now - finished < max_age_s):
         raise Refused(2, "probe receipt finished_epoch_s stale or invalid (maximum age {} s)".format(max_age_s))
     started = receipt.get("started_epoch_s")
     elapsed = receipt.get("custody_elapsed_s")
@@ -735,10 +748,28 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
         raise Refused(2, "probe receipt refusal_code contradicts success")
     if receipt.get("launchd_label") != probe_label(prepared.plan.plan_id):
         raise Refused(2, "probe receipt launchd_label mismatch")
+    inputs = receipt.get("input_digests")
+    if not isinstance(inputs, dict) or not inputs:
+        raise Refused(2, "probe receipt input_digests missing or invalid")
+    # Check recorded inputs before running the pinned wrapper's own input
+    # authentication, so a changed or missing file is named precisely.
+    for name, digest in inputs.items():
+        if (not isinstance(name, str) or not Path(name).is_absolute()
+                or not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)):
+            raise Refused(2, "probe receipt input_digests invalid: {}".format(name))
+        try:
+            actual = "sha256:" + _digest(Path(name))
+        except OSError as exc:
+            raise Refused(2, "probe receipt input_digests[{}] unavailable: {}".format(name, exc))
+        if actual != digest:
+            raise Refused(2, "probe receipt input_digests[{}] mismatch".format(name))
     try:
         expected = probe_bindings(prepared.plan, prepared.plan_path, prepared.python)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
         raise Refused(2, "probe receipt current bindings invalid: {}".format(exc))
+    for name in sorted(set(inputs) | set(expected["input_digests"])):
+        if inputs.get(name) != expected["input_digests"].get(name):
+            raise Refused(2, "probe receipt input_digests[{}] mismatch".format(name))
     for field, value in expected.items():
         if receipt.get(field) != value:
             raise Refused(2, "probe receipt {} mismatch".format(field))
@@ -906,6 +937,12 @@ def validate_install(args, repo):
         supplied = getattr(args, field, None)
         if supplied is not None and supplied != schedule["night_calendar"][field.capitalize()]:
             raise Refused(2, "--{} must match the plan calendar".format(field))
+    if args.render_only is not None:
+        source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
+        if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
+            print(json.dumps({"input_digests": reservation_input_digests(plan, args.plan)}, sort_keys=True))
+        else:
+            print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
     if args.render_only is None and not getattr(args, "launchd_probe", False):
         validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
     return prepared

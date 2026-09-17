@@ -1202,7 +1202,7 @@ refuses to emit a wrapper at all unless the window can hold the programmed
 span plus a **pre-settle allowance** of 300 s. The pre-settle allowance is the
 first of the three margin items above, isolated and made mandatory: the time
 spent INSIDE the window but BEFORE the settle begins — the chain's input
-preflight, its `--phase pre-reserve` readiness check and the session
+preflight, strict bounded readiness inside reservation and the session
 reservation, plus the driver's own gate work before it starts the chain at all.
 The refusal is arithmetic, and its message states both numbers:
 
@@ -1277,9 +1277,10 @@ this order, and none is instantaneous:
    against its sidecar, and only then launches the wrapper.
 2. **The chain preflight.** The wrapper's own checks (one `git rev-parse`, the
    three input digests, one `shasum` of the tracked chain — all sub-second on
-   this hardware), then the chain's input preflight and its `--phase
-   pre-reserve` readiness check.
-3. **The session reservation.** The ledger call that opens the
+   this hardware), then the chain's input-presence checks.
+3. **The session reservation.** Its `--pre-reserve-strict` enforcing check
+   refuses before retry, recovery or append and uses one bounded custody pass.
+   This consumes window time up to the custody budget. The ledger call then opens the
    `derivation`-kind session and declares all twelve slots. The chain logs
    `chain_start` only after this returns; the settle begins immediately after.
 
@@ -1822,10 +1823,18 @@ any session append, settle, or capture. It creates no `chain.started` record.
 A **receipt** is its non-authorizing record at
 `<plan_dir>/night_probe_receipt.json`. It binds the plan and wrapper bytes,
 measurement commit, ledger head (the digest of the latest record), ledger
-bytes, relevant code fingerprints, and both interpreters' paths, versions and
-binary SHA-256 fingerprints. Installation recomputes the bindings and accepts
-only an `ok` receipt less than six hours old. The temporary job has a 600 s
-limit (`--probe-timeout-s`), is booted out (unloaded), and must pass a process
+bytes, every reservation input file via `input_digests` (including the night
+plan, calibration plan, identity epoch and T1 bindings), relevant code
+fingerprints, and both interpreters' paths, versions and binary SHA-256
+fingerprints. The input list comes from the chain's actual expanded reservation
+arguments through the driver's production environment builder; render-only
+prints these input fingerprints. Installation recomputes the bindings and accepts
+only an `ok` receipt whose finish time and file modification time are less
+than six hours old; the finish time may be at most 60 s ahead of the clock. The temporary job has a 600 s
+limit (`--probe-timeout-s`) covering input binding reads and chain execution,
+with the reached phase recorded on timeout. Its supervised process group
+(the worker and its child processes) is terminated and checked for survivors;
+then it is booted out (unloaded), and must pass a process
 census (check for surviving processes) before the installer returns success.
 A missing/failed/stale/mismatched receipt refuses installation with exit 2.
 Rendering with `--render-only DIR` includes the probe job file; it starts no job.
@@ -2764,7 +2773,7 @@ record is `<NIGHT_ROOT>/night/chain.stderr.log` — read it first:
 
 | `FAIL <reason>` | Meaning | Operator action |
 |---|---|---|
-| `measurement_root is required` / `measurement_root must be an absolute path` / `measurement_root contains control characters` / `measurement_head must be a full 40-character lowercase SHA-1` | The driver's four-variable environment was malformed. | Should be impossible from a valid plan; treat as a driver or plan defect and escalate before re-arming. |
+| `measurement_root is required` / `measurement_root must be an absolute path` / `measurement_root contains control characters` / `measurement_head must be a full 40-character lowercase SHA-1` | The driver-supplied environment was malformed. | Should be impossible from a valid plan; treat as a driver or plan defect and escalate before re-arming. |
 | `night plan id does not match the wrapper` | `NIGHT_PLAN_ID` is not the plan this wrapper was frozen against. | The wrong wrapper was pinned, or a wrapper was reused across nights. Re-emit per night (§1.1b). |
 | `measurement_root does not match the wrapper` / `measurement_head does not match the wrapper` | The plan's clone path or head is not the one baked in at arm time. | The plan was edited after emission, or the wrong clone was named. Re-cut, re-author, re-emit. |
 | `checkout HEAD cannot be read` / `checkout HEAD does not equal measurement_head` | The clone is gone, is not a repository, or moved off H. | Stand down. Re-cut the clone at H (§0.2) and re-verify §0.8. |
@@ -2783,7 +2792,8 @@ Chain exits (`scripts/night_chains/calibration_derivation_only.zsh`):
 | exit 64 | A knob (`SLOT_COUNT`, `SETTLE_S`, `SLOT_CADENCE_S`, `SLOT_CAPTURE_BUDGET_S`, `WINDOW_END_EPOCH_S`) was not a non-negative integer string, or failed the positivity check — which covers `SLOT_CAPTURE_BUDGET_S` as well as `SLOT_COUNT`, `SLOT_CADENCE_S` and `SETTLE_S`. Refused before the settle, the reservation and any operator-log write. | The environment or plan is malformed. No window time was spent and no partial night exists. Fix at the desk; author a fresh plan for a later night. **Why the budget is in the positivity guard:** at `SLOT_CAPTURE_BUDGET_S=0` the window test `slot_start + budget > WINDOW_END_EPOCH_S` becomes vacuous, so a slot could start one second before the agent-free window ends and capture straight past it. |
 | exit 66 `derivation_chain_input_missing: <path>` | One of `PLAN`, `IDENTITY_EPOCH_JSON`, `T1_BINDINGS_JSON`, `CALIBRATION_LEDGER`, `LEDGER_HEAD_PIN` was absent. | The clone is incomplete or a path in the plan is wrong. Re-verify §0.2 and §0.4 before authoring the next night. |
 | exit 1 | **Ambiguous — read `chain.stderr.log` to disambiguate.** With a `FAIL <reason>` line it is a wrapper refusal (table above). Without one it is the tracked chain's own `:?required` guard, meaning the chain ran without the wrapper's environment. | Both are pre-window failures costing no window time. Resolve per the matching row above before re-arming. |
-| Reservation enforcing preflight exits 2 | The ledger was not ready; nothing was written and no window time was spent. It never authorizes ARM even when it passes. | Desk-repair the ledger; do not re-arm the same night on the same signature. |
+| Reservation enforcing preflight exits 2 | **Enforcing** means the decision is made while the reservation holds the writer lease (exclusive permission to change ledger state). `--pre-reserve-strict` refuses before retry, recovery or append, including interrupted claims. The check consumes up to the custody budget of window time. Only enforcing under-lease predicates can produce `ready_to_arm`; success also emits a `pre_reserve_readiness` diagnostic line. | `calibration_ledger_custody_timeout` stops with `night_stopped_preserved`, leaving ledger/session state unchanged; report the budget and elapsed time. `calibration_ledger_recovery_required` requires desk recovery. Other readiness refusals preserve their named cause. Do not retry or repair inside the window. |
+| Verify-only probe receipt | **Verify-only** performs access checks and stops before append, settle or capture. Its `outcome: ok` is non-authorizing arm-admission evidence; it is never a `ready_to_arm` result. | Install requires matching input and interpreter fingerprints and fresh receipt timestamps. A refused probe does not authorize capture, recovery or retry. |
 | `slot_end slot=dNN disposition=non-valid`, night continues | **Not a failure.** The writer exited 1: the row is finalized with a disposition other than `valid`, and the next declared slot runs on the unchanged cadence (§2.4). | Record the count of such slots. Do nothing else, and read no value. Exclusion is decided at issuance, by named mechanism. |
 | `slot_refused slot=dNN rc=2` + chain exits 2, session left OPEN | The writer REFUSED this capture (`emit_refusal` exits 2). The row is **not** finalized, so the chain stops rather than continuing over an unrecorded slot — and deliberately does not abort the session. | Read the refusal in `chain.stderr.log`, then **desk recovery**: `recover_calibration_ledger.py … abort-session --session-id <id> --plan <plan> --reason <the named reason>` (§2.4). Never a retry inside the window. Until the session is closed the next night cannot open at head-equals-pin. |
 | `slot_refused slot=dNN rc=<n≥3>` + chain exits with that status, session left OPEN | The writer crashed rather than refusing. Same dispatch branch, same unfinalized row. | Same desk recovery, and account for the crash before any further night is armed: a crash is a defect, not an outcome. |
@@ -3002,7 +3012,7 @@ means. A term is listed only if it does technical work.
 | `zsh -n` | §1.1b step 5 | A syntax check: zsh parses the file and runs none of it. |
 | census substring | §1.1b, §5 | The three strings the night's own 30 s process census matches; the generator refuses to bake any of them into an emitted literal. |
 | programmed span | §1.2 | Chain start to the end of the last slot's capture budget: settle + (slots − 1) × cadence + one budget = 7680 s for twelve slots. |
-| pre-settle allowance | §1.2 | 300 s INSIDE the window and BEFORE the settle — the chain's input preflight, its pre-reserve readiness check and the session reservation, plus the driver's pre-launch work. The generator refuses a window below programmed span + this. |
+| pre-settle allowance | §1.2 | 300 s INSIDE the window and BEFORE the settle — the chain's input preflight, strict bounded readiness inside reservation and the session reservation, plus the driver's pre-launch work. The generator refuses a window below programmed span + this. |
 | start-to-start cadence | §1.2 | Slot `d(k+1)` starts 600 s after `dk` STARTED; a long capture is never caught up by compressing a later slot. |
 | window_max_s / `WINDOW_END_EPOCH_S` | §1.2 | The plan's window length in seconds, and the exclusive window end the chain enforces. |
 | courier / courier deadline / courier allowance | §1.2, §2.1 | The process that emails the night's result; the 300 s the deadline arithmetic reserves for it AFTER the window ends. Distinct from the pre-settle allowance, which is spent inside the window; the two share a number by coincidence. |

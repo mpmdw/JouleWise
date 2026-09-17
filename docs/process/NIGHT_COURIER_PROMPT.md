@@ -16,8 +16,11 @@ postdate the immutable result. Read `calibration-refusal.json` and any
 `calibration-refusal.json.<pid>.json` siblings when present. For calibration
 refusals, report the exact calibration code, budget in seconds, elapsed time,
 and `existing_session` (whether a session already existed). `document_invalid`
-means the driver could not authenticate the document's schema or plan binding;
-report that failure and preserve the evidence.
+means the driver could not authenticate the document's schema, plan binding,
+or self-exit status; report that failure and preserve the evidence.
+A driver-initiated abort keeps
+its own verdict and reason; report any calibration refusal as additional
+evidence, without replacing the driver's abort cause.
 
 Email Ed at claude.ai.copper531@passmail.net. Use plain words. State the
 verdict, the chain exit code, any refusal reason and detail, and the results

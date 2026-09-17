@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import hashlib
 import os
 import plistlib
 import shutil
@@ -205,6 +206,7 @@ class InstallNightAgentTests(unittest.TestCase):
     def test_install_requires_current_successful_bound_probe_receipt(self):
         mutations = {
             "missing": None,
+            "input_digests": lambda r: r.pop("input_digests"),
             "finished_epoch_s": lambda r: r.update(finished_epoch_s=time.time() - 21601),
             "outcome": lambda r: r.update(outcome="refused"),
             "driver_python": lambda r: r["driver_python"].update(sha256="0" * 64),
@@ -257,10 +259,67 @@ class InstallNightAgentTests(unittest.TestCase):
                 result = self._run(plan, render_only=False, seed_probe=False)
                 self.assertEqual(2, result.returncode, result.stderr)
                 if field != "chain_python":
-                    self.assertIn(field, result.stderr)
+                    self.assertIn("input_digests" if field == "ledger_head_sha256" else field, result.stderr)
                 self.assertFalse(any("bootstrap" in call for call in self.fake.calls()))
                 if field == "chain_python":
                     python.unlink(); python.symlink_to(sys.executable)
+
+    def test_install_rejects_each_changed_or_missing_reservation_input(self):
+        import hashlib
+        from tests.test_night_agent_install import LABELS
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        receipt = json.loads((plan.parent / "night_probe_receipt.json").read_text())
+        # Fixture-owned expectation: night plan plus all five file arguments.
+        expected = {plan, *(self.measurement_root / name for name in
+            ("ledger.jsonl", "head.json", "frozen-plan.json", "identity.json", "t1.json"))}
+        receipt["input_digests"] = {str(p): "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
+                                   for p in expected}
+        (plan.parent / "night_probe_receipt.json").write_text(json.dumps(receipt))
+        for path in sorted(expected):
+            for missing in (False, True):
+                with self.subTest(input=str(path), missing=missing):
+                    raw = path.read_bytes()
+                    calls_start = len(self.fake.calls())
+                    try:
+                        path.unlink() if missing else path.write_bytes(raw + b" ")
+                        result = self._run(plan, render_only=False, seed_probe=False)
+                        self.assertEqual(2, result.returncode, result.stderr)
+                        self.assertIn(str(path), result.stderr)
+                        self.assertFalse(any("bootstrap" in call for call in self.fake.calls()[calls_start:]))
+                    finally:
+                        path.write_bytes(raw)
+                        for label in LABELS:
+                            self.fake.set_loaded(label, False)
+        result = self._run(plan, render_only=False, seed_probe=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_missing_input_digests_refuses_install(self):
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        path = plan.parent / "night_probe_receipt.json"
+        record = json.loads(path.read_text())
+        record.pop("input_digests", None)
+        path.write_text(json.dumps(record))
+        result = self._run(plan, render_only=False, seed_probe=False)
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertIn("input_digests", result.stderr)
+        self.assertFalse(any("bootstrap" in call for call in self.fake.calls()))
+
+    def test_input_discovery_includes_additional_file_argument_and_render_output(self):
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        parsed = json.loads(plan.read_text())
+        extra = self.measurement_root / "extra-reservation-input.json"
+        extra.write_text("{}")
+        wrapper = Path(parsed["chain_path"])
+        wrapper.write_text(wrapper.read_text().rstrip() + " --extra-input=" + extra.name + "\n")
+        Path(parsed["chain_sha256_path"]).write_text(hashlib.sha256(wrapper.read_bytes()).hexdigest() + "\n")
+        result = self._run(plan)
+        self.assertEqual(0, result.returncode, result.stderr)
+        records = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
+        inputs = next(record["input_digests"] for record in records if "input_digests" in record)
+        self.assertEqual("sha256:" + hashlib.sha256(extra.read_bytes()).hexdigest(), inputs[str(extra)])
 
     def test_render_only_includes_probe_plist_with_pinned_topology(self):
         plan = self._write_plan()

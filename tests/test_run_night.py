@@ -9,6 +9,7 @@ import json
 import os
 import plistlib
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,7 @@ def make_probe_fixture(root: Path, plan_path: Path, *, mode="ok") -> None:
 from pathlib import Path
 p = argparse.ArgumentParser()
 p.add_argument('--verify-only', action='store_true')
+p.add_argument('--pre-reserve-strict', action='store_true')
 p.add_argument('--custody-budget-s', type=float, required=True)
 p.add_argument('--custody-deadline-epoch-s', type=float, required=True)
 a, rest = p.parse_known_args()
@@ -143,6 +145,8 @@ if mode in ('refused', 'mismatch', 'malformed'):
     raise SystemExit(2)
 if mode == 'no-document': raise SystemExit(2)
 assert a.verify_only, 'capture would be attempted'
+if a.pre_reserve_strict:
+    print(json.dumps({'pre_reserve_readiness':'ready','frozen_plan':{},'custody_elapsed_s':0.1}))
 code = ['scripts/reserve_calibration_window_bracket.py',
         'joulewise/calibration_ledger.py', 'joulewise/calibration_custody_worker.py']
 print(json.dumps({'verify_only':'ok', 'ledger_head_sha256':'a'*64,
@@ -193,6 +197,9 @@ def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
               "plan_id": plan["plan_id"], "plan_sha256": digest(plan_path),
               "measurement_head": plan["measurement_head"], "ledger_head_sha256": "a" * 64,
               "code_digests": {name: "sha256:" + digest(root / name) for name in code_paths},
+              "input_digests": {str(p.absolute()): "sha256:" + digest(p) for p in
+                  (plan_path.resolve(), root / "ledger.jsonl", root / "head.json", root / "frozen-plan.json",
+                   root / "identity.json", root / "t1.json")},
               "driver_python": identity(python), "chain_python": identity(root / ".venv/bin/python"),
               "chain_sha256": digest(plan["chain_path"]),
               "chain_source_sha256": digest(root / "scripts/night_chains/calibration_derivation_only.zsh"),
@@ -202,6 +209,7 @@ def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
               "launchd_label": "com.joulewise.night-probe." + plan["plan_id"]}
     path = plan_path.parent / "night_probe_receipt.json"
     path.write_text(json.dumps(record))
+    os.utime(path, (stamp, stamp))
     return path
 
 
@@ -394,6 +402,39 @@ class NightDriverTests(unittest.TestCase):
         self.driver.run_courier.assert_called_once()
         self.assertEqual(2, self.driver._durable_record.call_count)
         self.assertEqual(self.custody / "night", self.driver._durable_record.call_args.args[1])
+
+    def test_driver_census_abort_keeps_precedence_over_calibration_document(self):
+        payload = {"schema": "joulewise.calibration_refusal.v1", "plan_id": "night-plan",
+                   "code": "calibration_ledger_custody_timeout", "exit_code": 2}
+        def abort(*args, **kwargs):
+            night = args[3]
+            (night / "calibration-refusal.json").write_text(json.dumps(payload))
+            return -15, {"reason": "night_aborted_agent_present", "detail": "census hit",
+                         "evidence": {"pid": 123}}, 1, [], True
+        with mock.patch.object(self.driver, "_run_chain_once", side_effect=abort):
+            rc = self.driver.run_night(self.plan_path)
+        result = json.loads((self.custody / "night/result.json").read_text())
+        self.assertEqual(4, rc)
+        self.assertEqual("ABORTED", result["verdict"])
+        self.assertEqual("night_aborted_agent_present", result["aborted_reason"])
+        self.assertEqual(-15, result["chain_exit_code"])
+        self.assertEqual(payload, result["evidence"]["calibration_refusal"]["evidence"])
+        self.assertIn("night/calibration-refusal.json", result["refusal_documents"])
+        self.assertEqual("night_aborted_agent_present",
+            json.loads((self.custody / "night/refusal.json").read_text())["refusal"]["reason"])
+        self.driver.run_courier.assert_called_once()
+
+    def test_calibration_document_exit_code_must_match_self_exit(self):
+        def chain(*args, **kwargs):
+            (args[3] / "calibration-refusal.json").write_text(json.dumps({
+                "schema": "joulewise.calibration_refusal.v1", "plan_id": "night-plan",
+                "code": "calibration_ledger_custody_timeout", "exit_code": 2}))
+            return 7, None, 0, [], True
+        with mock.patch.object(self.driver, "_run_chain_once", side_effect=chain):
+            self.driver.run_night(self.plan_path)
+        result = json.loads((self.custody / "night/result.json").read_text())
+        self.assertEqual("document_invalid", result["calibration_refusal"]["detail"])
+        self.assertEqual(7, result["chain_exit_code"])
 
     def test_calibration_refusal_plan_mismatch_is_document_invalid(self):
         self._run_calibration_stub("mismatch")
@@ -2376,7 +2417,7 @@ runpy.run_path(script, run_name='__main__')
             text=True,
             check=False,
         )
-        self.assertEqual(failed.returncode, 3)
+        self.assertEqual(failed.returncode, 3, failed.stderr)
         calls = launch_log.read_text().splitlines()
         self.assertTrue(any(line.startswith("bootstrap ") and "com.joulewise.night.plist" in line for line in calls))
         self.assertTrue(any(line.startswith("bootstrap ") and "deadman.plist" in line for line in calls))
@@ -2431,7 +2472,7 @@ class NightProbeTests(unittest.TestCase):
             "PY": self.plan.measurement_root + "/.venv/bin/python", "CUSTODY_BUDGET_S": "0.75"},
             text=True, capture_output=True, timeout=5)
         self.assertEqual(0, result.returncode, result.stderr)
-        receipt = json.loads(result.stdout)
+        receipt = json.loads(result.stdout.splitlines()[-1])
         self.assertEqual("ok", receipt["verify_only"])
         argv = json.loads((Path(self.plan.measurement_root) / "reservation-argv.json").read_text())
         self.assertIn("--verify-only", argv)
@@ -2443,13 +2484,88 @@ class NightProbeTests(unittest.TestCase):
         self.assertFalse(list(self.root.rglob("chain.started")))
         self.assertFalse((self.root / "window").exists())
 
+    def test_execute_chain_carries_pre_reserve_strict_flag(self):
+        night = self.root / "execute-output"
+        night.mkdir()
+        (Path(self.plan.measurement_root) / "stub-mode").write_text("refused")
+        result = subprocess.run(["/bin/zsh", self.plan.chain_path], env={**os.environ,
+            "NIGHT_DIR": str(night), "JOULEWISE_NIGHT_PLAN_ID": self.plan.plan_id,
+            "PY": self.plan.measurement_root + "/.venv/bin/python"},
+            text=True, capture_output=True, timeout=5)
+        self.assertEqual(2, result.returncode, result.stderr)
+        argv = json.loads((Path(self.plan.measurement_root) / "reservation-argv.json").read_text())
+        self.assertIn("--execute", argv)
+        self.assertIn("--pre-reserve-strict", argv)
+        self.assertFalse(list(self.root.rglob("*.CALLED")))
+
+    def test_receipt_checks_mtime_and_finished_clock_bounds(self):
+        from joulewise import night_agent_install as engine
+        prepared = types.SimpleNamespace(plan=self.plan, plan_path=self.plan_path, python=sys.executable)
+        for field, age, finished_offset in (("mtime", 21601, 0),
+                ("finished_epoch_s", 0, -21601), ("finished_epoch_s", 0, 61)):
+            with self.subTest(field=field, offset=finished_offset):
+                path = write_matching_probe_receipt(self.plan_path)
+                record = json.loads(path.read_text())
+                record["finished_epoch_s"] = time.time() + finished_offset
+                path.write_text(json.dumps(record))
+                os.utime(path, (time.time() - age, time.time() - age))
+                with self.assertRaisesRegex(engine.Refused, field) as raised:
+                    engine.validate_probe_receipt(prepared)
+                self.assertEqual(2, raised.exception.code)
+        path = write_matching_probe_receipt(self.plan_path, now=time.time() + 30)
+        self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+
+    def test_supervised_probe_success_and_refusal_with_fixture_census(self):
+        driver = _load_driver()
+        # Real subprocess topology and receipt IO; only the unavailable census
+        # seam is faked. The separate FIFO regression proves its worker is gone.
+        for mode, outcome, code in (("ok", "ok", None),
+                ("refused", "refused", "calibration_ledger_custody_timeout")):
+            with self.subTest(mode=mode):
+                (Path(self.plan.measurement_root) / "stub-mode").write_text(mode)
+                with mock.patch.object(driver, "_probe_group_absent", return_value=True):
+                    rc = driver.probe_night(self.plan_path, self.receipt, 5)
+                self.assertEqual(0 if outcome == "ok" else 2, rc)
+                record = json.loads(self.receipt.read_text())
+                self.assertEqual(outcome, record["outcome"])
+                self.assertEqual(code, record["refusal_code"])
+                self.assertEqual(6, len(record["input_digests"]))
+
+    def test_probe_deadline_covers_blocked_binding_read(self):
+        import signal
+        ledger = Path(self.plan.measurement_root) / "ledger.jsonl"
+        ledger.unlink()
+        os.mkfifo(ledger)
+        budget = 0.75
+        started = time.monotonic()
+        process = subprocess.Popen([sys.executable, "-B", str(SCRIPT_PATH), "probe", "--plan",
+            str(self.plan_path), "--receipt", str(self.receipt), "--timeout-s", str(budget)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+        try:
+            try:
+                _, stderr = process.communicate(timeout=budget + 2)
+            except subprocess.TimeoutExpired:
+                self.fail("probe exceeded whole deadline during binding read")
+            self.assertLess(time.monotonic() - started, budget + 2)
+            self.assertEqual(2, process.returncode, stderr)
+            record = json.loads(self.receipt.read_text())
+            self.assertEqual("timeout", record["outcome"])
+            self.assertEqual("bindings", record["phase"])
+            with self.assertRaises(ProcessLookupError):
+                os.kill(record["chain_pgid"], 0)
+            self.assertFalse((Path(self.plan.measurement_root) / "reservation-argv.json").exists())
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+            process.communicate(timeout=2)
+
     @unittest.skipUnless(probe_census_available(), "process census unavailable in sandbox")
     def test_probe_success_receipt_binds_every_field_without_capture(self):
         completed = self.run_probe()
         self.assertEqual(0, completed.returncode, completed.stderr)
         receipt = json.loads(self.receipt.read_text())
         fields = {"schema", "plan_id", "plan_sha256", "measurement_head", "ledger_head_sha256",
-                  "code_digests", "driver_python", "chain_python", "custody_budget_s", "custody_elapsed_s",
+                  "code_digests", "input_digests", "driver_python", "chain_python", "custody_budget_s", "custody_elapsed_s",
                   "observations", "outcome", "refusal_code", "started_epoch_s", "finished_epoch_s", "launchd_label"}
         self.assertTrue(fields <= receipt.keys())
         self.assertEqual("joulewise.night_probe_receipt.v1", receipt["schema"])

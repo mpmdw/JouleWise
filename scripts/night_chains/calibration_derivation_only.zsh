@@ -151,15 +151,28 @@ preflight_inputs() {
 # literally false.
 preflight_inputs
 
-# Reservation owns the shared enforcing preflight and its whole-pass deadline.
-# A separate readiness command here would leave an unbounded custody read ahead
-# of that deadline. Verify-only uses precisely the same reservation arguments.
+# Reservation owns one bounded custody pass. --pre-reserve-strict preserves
+# the early refusal before retry, recovery or append, including interrupted
+# claims. It emits the pre_reserve_readiness report with frozen-plan bindings.
+# A separate readiness command would duplicate custody reads ahead of this
+# deadline. Verify-only implies strictness and uses the same arguments.
 reservation_mode=(--execute)
 if [[ "${NIGHT_VERIFY_ONLY:-0}" == 1 ]]; then
     reservation_mode=(--verify-only)
 fi
 
-"$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" \
+reservation_call() {
+    # The driver discovers input files from this exact expanded argv, using
+    # its production environment builder. Inspection never invokes reservation.
+    if [[ "${NIGHT_RESERVATION_ARGV_ONLY:-0}" == 1 ]]; then
+        printf '%s\0' "$@"
+        return 0
+    fi
+    "$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" "$@"
+}
+
+reservation_call \
+    --pre-reserve-strict \
     --ledger "$CALIBRATION_LEDGER" \
     --head-pin "$LEDGER_HEAD_PIN" \
     --custody-budget-s "${CUSTODY_BUDGET_S:-120}" \
@@ -178,7 +191,7 @@ fi
     "$@" \
     "${reservation_mode[@]}"
 # set -e already preserves a refused reservation's exit status and stdout.
-if [[ "${NIGHT_VERIFY_ONLY:-0}" == 1 ]]; then
+if [[ "${NIGHT_VERIFY_ONLY:-0}" == 1 || "${NIGHT_RESERVATION_ARGV_ONLY:-0}" == 1 ]]; then
     exit 0
 fi
 /bin/mkdir -p "$OPERATOR_LOG_ROOT" "$RUNS_ROOT/instrument_validation"

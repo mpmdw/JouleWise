@@ -14,8 +14,10 @@ environment as literal ``export`` lines, re-derives and cross-checks
 the frozen calibration plan, verifies the tracked chain's bytes, and ``exec``s
 the tracked chain with the per-slot bindings as argv.
 
-Readiness runs inside the bounded reservation preflight, before any session
-write; there is no separate pre-reserve readiness command. For the driver's
+The chain passes ``--pre-reserve-strict`` so bounded readiness refuses before
+any retry, recovery or session write, including an interrupted claim. It emits
+``pre_reserve_readiness`` with frozen-plan bindings on success. There is no
+separate pre-reserve readiness command or second custody pass. For the driver's
 access probe, ``NIGHT_VERIFY_ONLY=1`` runs only reservation with ``--verify-only``
 and stops before session append, settle, or capture.
 
@@ -324,7 +326,8 @@ def render_wrapper(spec: WrapperSpec) -> str:
         "# This wrapper supplies thirteen more variables frozen with the plan, verifies the",
         "# tracked chain's bytes, and execs it with the per-slot bindings as argv:",
         f"# {2 * spec.slot_count} flag/value pairs, {4 * spec.slot_count} argv words.",
-        "# Readiness is inside the bounded reservation preflight, before any session write.",
+        "# --pre-reserve-strict refuses before retry, recovery or write in one bounded pass.",
+        "# Successful preflight emits pre_reserve_readiness with frozen-plan bindings.",
         "# NIGHT_VERIFY_ONLY=1 runs only reservation with --verify-only; no settle or capture.",
         "set -euo pipefail",
         "",
@@ -697,8 +700,10 @@ def render_region(chain_bytes: bytes) -> str:
         "needs thirteen more variables and 24 per-slot binding flag/value pairs\n"
         "(48 argv words).  The wrapper supplies both, then `exec`s the chain.\n"
         "\n"
-        "Readiness runs inside the bounded reservation preflight, before any\n"
-        "session write; there is no separate pre-reserve readiness command.\n"
+        "The chain passes `--pre-reserve-strict`: bounded readiness refuses before\n"
+        "any retry, recovery or session write, including an interrupted claim.\n"
+        "Success emits `pre_reserve_readiness` with frozen-plan bindings. There\n"
+        "is no separate readiness command or second custody pass.\n"
         "For the driver's access probe, `NIGHT_VERIFY_ONLY=1` runs only the\n"
         "reservation with `--verify-only`, then exits without appending a session,\n"
         "settling, or capturing data. The probe does not authorize a night.\n"

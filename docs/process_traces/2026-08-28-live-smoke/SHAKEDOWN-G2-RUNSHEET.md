@@ -1625,8 +1625,10 @@ tracked chain `scripts/night_chains/calibration_derivation_only.zsh`
 needs thirteen more variables and 24 per-slot binding flag/value pairs
 (48 argv words).  The wrapper supplies both, then `exec`s the chain.
 
-Readiness runs inside the bounded reservation preflight, before any
-session write; there is no separate pre-reserve readiness command.
+The chain passes `--pre-reserve-strict`: bounded readiness refuses before
+any retry, recovery or session write, including an interrupted claim.
+Success emits `pre_reserve_readiness` with frozen-plan bindings. There
+is no separate readiness command or second custody pass.
 For the driver's access probe, `NIGHT_VERIFY_ONLY=1` runs only the
 reservation with `--verify-only`, then exits without appending a session,
 settling, or capturing data. The probe does not authorize a night.
@@ -1730,7 +1732,7 @@ explicit `--slot-count-ruling` reference (which must be one line of
 ordinary reference characters, since it is written into the wrapper).
 
 The emitted bytes, rendered here from placeholder coordinates and the
-live digest of the tracked chain (`5383741e870515a5cbe4624756eb717cc967b864311d478b4d22d5ab1ccf2f7a`):
+live digest of the tracked chain (`a7578b5ca4b98af5619a8150e51afa4736691ad2f20470acca5e905675636a2f`):
 
 ```zsh
 #!/bin/zsh
@@ -1742,7 +1744,8 @@ live digest of the tracked chain (`5383741e870515a5cbe4624756eb717cc967b864311d4
 # This wrapper supplies thirteen more variables frozen with the plan, verifies the
 # tracked chain's bytes, and execs it with the per-slot bindings as argv:
 # 24 flag/value pairs, 48 argv words.
-# Readiness is inside the bounded reservation preflight, before any session write.
+# --pre-reserve-strict refuses before retry, recovery or write in one bounded pass.
+# Successful preflight emits pre_reserve_readiness with frozen-plan bindings.
 # NIGHT_VERIFY_ONLY=1 runs only reservation with --verify-only; no settle or capture.
 set -euo pipefail
 
@@ -1818,7 +1821,7 @@ observed_plan_id="$(/usr/bin/jq -er '.plan_id' "$PLAN" 2>/dev/null)" || route_re
 # the capturing chain's bytes move: the coverage is transitive and needs
 # no second file.  (The night root also carries an advisory
 # <wrapper>.chain-source.sha256 for hand checks; nothing trusts it.)
-[ "$(sha256_of "$REPO/scripts/night_chains/calibration_derivation_only.zsh")" = '5383741e870515a5cbe4624756eb717cc967b864311d478b4d22d5ab1ccf2f7a' ] || route_refuse 'tracked derivation chain bytes do not match the arm-time digest'
+[ "$(sha256_of "$REPO/scripts/night_chains/calibration_derivation_only.zsh")" = 'a7578b5ca4b98af5619a8150e51afa4736691ad2f20470acca5e905675636a2f' ] || route_refuse 'tracked derivation chain bytes do not match the arm-time digest'
 
 # exec, never source: the chain derives REPO from its own $0 with
 #   cd "${0:A:h:h:h}"
