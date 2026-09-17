@@ -37,6 +37,7 @@ class CustodyFixture:
         assert snapshot.valid and len(snapshot.observations) == 3
         assert all(item.is_historical_import for item in snapshot.observations)
         self.state = w._state_reservation_inputs()
+        self.process_group = None
         self.refusal = self.repo / "calibration-refusal.json"
         self.env = exits._fresh_cli_env() | {
             "JOULEWISE_CALIBRATION_REFUSAL_PATH": str(self.refusal),
@@ -66,6 +67,11 @@ class CustodyFixture:
         process = subprocess.Popen(command, cwd=self.repo, env=env or self.env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, start_new_session=True)
+        # start_new_session makes this process the leader of a brand-new
+        # process group whose identifier equals its own process identifier.
+        # Every custody worker it spawns inherits that group, so the group is
+        # the exact set of processes this run is responsible for reaping.
+        self.process_group = process.pid
         try:
             stdout, stderr = process.communicate(timeout=budget + 2.0)
         except subprocess.TimeoutExpired:
@@ -92,15 +98,27 @@ class CustodyFixture:
         assert completed.stdout.strip() == "reacquired"
 
     def assert_workers_gone(self, completed):
+        # Any worker named by a progress diagnostic must be gone. Commands
+        # whose standard error carries exactly one JSON refusal line (the
+        # capture writer) emit no such diagnostics, so the process group is
+        # the authority: after the leader has exited and been reaped, a
+        # surviving group member can only be a leaked custody worker.
         pids = {row["pid"] for line in completed.stderr.splitlines()
                 if line.startswith("{") and (row := json.loads(line)).get("event") == "calibration_custody_progress"}
-        assert pids, completed.stderr
         for pid in pids:
             try:
                 os.kill(pid, 0)
             except ProcessLookupError:
                 continue
             raise AssertionError(f"custody worker {pid} survived its caller")
+        assert self.process_group is not None, "no run to check for leaked workers"
+        try:
+            os.killpg(self.process_group, 0)
+        except ProcessLookupError:
+            return
+        raise AssertionError(
+            f"a custody worker survived its caller in process group {self.process_group}"
+        )
 
 
 class BlockedArtifact:

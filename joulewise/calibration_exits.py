@@ -658,22 +658,28 @@ def emit_calibration_refusal(
             "written_epoch_s": time.time(), "pid": os.getpid(), "detail": detail,
         }
         path = destination
+        # A refusal is exactly ONE JSON line on the stream, so a sibling-path
+        # notice or a write failure travels as a field inside that line rather
+        # than as a second line a caller parsing the whole stream would choke on.
+        notice: dict[str, str] = {}
         try:
             encoded = json.dumps(payload, sort_keys=True, allow_nan=False) + "\n"
             try:
                 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             except FileExistsError:
                 path = f"{destination}.{os.getpid()}.json"
-                print(f"calibration refusal document exists; writing {path}",
-                      file=stream, flush=True)
+                notice = {"refusal_document_existing": destination,
+                          "refusal_document": path}
                 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 handle.write(encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
         except (OSError, ValueError) as exc:
-            print(f"calibration refusal document could not be written: {path}: {exc}",
-                  file=stream, flush=True)
+            notice = notice | {"refusal_document": path,
+                               "refusal_document_error": str(exc)}
+        if notice:
+            context = dict(context or {}) | notice
     return emit_refusal(code, context=context, terminal_result=terminal_result,
                         stream=stream)
 
