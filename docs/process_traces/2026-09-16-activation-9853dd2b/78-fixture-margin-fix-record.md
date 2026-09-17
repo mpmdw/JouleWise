@@ -28,16 +28,16 @@ at about 3 s, so the test's duration does not change, and a driver that
 terminated the chain at the window end with no allowance would still fail
 the test (the chain runs 2 s past the window end).
 
-`git diff origin/main --stat` → `tests/test_run_night.py | 9 +++++++--`.
+`git diff origin/main --stat` at the fix commit `bf303ca3`: `tests/test_run_night.py | 9 +++++++--` plus this record and its evidence directory (the refuter, record 79, verified the test hunk byte-identical to what it probed).
 
 ## Executed evidence (this worktree, `/Users/edr/code/JouleWise-wt-flake`)
 
-- `78-fixture-margin-evidence/eight-runs-and-class.log`: the single test
+- `78-fixture-margin-evidence/eight-runs-and-class.txt`: the single test
   8 × `OK`; `WindowDeadlineTests` class `Ran 6 tests in 17.507s` `OK`.
-- `78-fixture-margin-evidence/quick-tier-tail.log`:
+- `78-fixture-margin-evidence/quick-tier-tail.txt`:
   `QUICK SUMMARY tier=quick modules=153 excluded=84 failures=0 seconds=86.236 result=PASS`
   (full log gzipped beside it).
-- Refuter (Opus, contract + execution lenses, read-only): record 79.
+- Refuter (Opus, contract + execution lenses, read-only): record 79 — CONFIRM; grace-0 mutant killed with the CI signature; 10/10 + class 6/6; under a 2× busy-loop load the old 3.0 s value reproduced the CI failure and the new 8.0 s value passed 4/4; two custody nits applied here (evidence files renamed off the gitignored `.log` suffix; this stat line).
 
 ## Magistrate terminal review (row 12)
 
