@@ -1846,6 +1846,26 @@ class LaunchdAccessProbeTests(unittest.TestCase):
         self.assertFalse(self.fake.loaded(self.label))
         self.assertFalse(self.fixture.receipt.exists())
 
+    def test_cleanup_refusal_reports_the_failure_it_interrupted(self):
+        """The finally block fails closed WITHOUT discarding the diagnostic."""
+        import itertools
+        from unittest import mock
+        # Bootstrap publishes no receipt (the wait loop times out) and bootout
+        # leaves the service loaded (the absence proof fails in the finally).
+        self.fake.directive(self.label, "bootstrap")
+        self.fake.directive(self.label, "bootout", loaded=True)
+        clock = itertools.count(0.0, 5.0)  # only launchd_probe reads this clock
+        with mock.patch.object(self.engine.time, "monotonic", side_effect=lambda: next(clock)):
+            with self.assertRaises(self.engine.Refused) as caught:
+                self.engine.launchd_probe(self.prepared, str(self.fake.executable),
+                                          self.engine.Shield(), timeout_s=0.5)
+        self.assertEqual(2, caught.exception.code)
+        self.assertIn("probe bootout absence unproven", str(caught.exception))
+        self.assertIn("probe receipt timeout", str(caught.exception))
+        self.assertIsInstance(caught.exception.__cause__, self.engine.Refused)
+        self.assertIn("probe receipt timeout", str(caught.exception.__cause__))
+        self.assertFalse(self.fixture.receipt.exists())
+
     def test_survivor_or_unknown_census_refuses(self):
         from unittest import mock
         for rc, stdout in ((0, "4321 probe-worker\n"), (3, "")):

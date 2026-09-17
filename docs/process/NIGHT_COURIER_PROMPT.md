@@ -12,7 +12,13 @@ if present, it names this night's purpose, result paths, and next lane. Then rea
 the result record directs. Read every path in `refusal_documents` (relative to
 `{custody_root}`), including numbered `refusal-NN.json` records. Also discover
 all `refusal*.json` files in the night directory: a later dead-man refusal can
-postdate the immutable result. Read `calibration-refusal.json` and any
+postdate the immutable result. One name is an exception: `rerun.refusal.json`
+(and any numbered `rerun.refusal-NN.json`) is informational only. It records
+that a second driver invocation fired, found a night record already in place,
+and did nothing; it is never this night's verdict, never appears in
+`refusal_documents`, and is never written once `result.json` exists. Mention it
+as a duplicate launch if you find one, and take the verdict from `result.json`.
+Read `calibration-refusal.json` and any
 `calibration-refusal.json.<pid>.json` siblings when present. For calibration
 refusals, report the exact calibration code, budget in seconds, elapsed time,
 and `existing_session` (whether a session already existed). `document_invalid`
