@@ -615,6 +615,11 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
         night_dir / "go_receipt.json",
         night_dir / "go-census.json",
         *_refusal_paths(night_dir),
+        # Informational only: a rerun refusal records a second driver fire that
+        # did nothing. It is carried as evidence so the durable publish keeps
+        # it, and deliberately left out of _refusal_paths so it never enters
+        # result.json's refusal_documents or the courier's refusal discovery.
+        *sorted(night_dir.glob("rerun.refusal*.json")),
         night_dir / "result.json",
         night_dir / "chain.started",
         night_dir / "chain.exited",
@@ -1165,8 +1170,23 @@ def _existing_record(night_dir: Path) -> Path | None:
 
 
 def _write_rerun_refusal(night_dir: Path, plan: NightPlan, existing: Path) -> None:
+    """Record a spurious second fire without contradicting the first night.
+
+    A rerun refusal says only "this invocation did nothing"; it is never the
+    night's verdict. Two rules keep it from being read as one. It never takes
+    the authoritative `refusal.json` name, so the result record's
+    `refusal_documents` and the courier's `refusal*.json` discovery cannot pick
+    it up; and once `result.json` exists the night has already published a
+    verdict, so no document is written at all. The remaining case - a second
+    fire while the first night is still running, with only `chain.started` or
+    `receipt.json` present - writes `rerun.refusal.json` through the same
+    exclusive-create allocator, which numbers concurrent writers
+    `rerun.refusal-01.json` and so on.
+    """
+    if (night_dir / "result.json").exists():
+        return
     _write_driver_refusal(
-        night_dir / "refusal.json", plan, _CODES["record_exists"],
+        night_dir / "rerun.refusal.json", plan, _CODES["record_exists"],
         "a write-once night record already exists", {"existing": existing.name},
     )
 
@@ -2182,10 +2202,22 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
                     if chain_python["version"] != value["python_version"]:
                         raise ValueError("chain_python version changed")
                     for field, actual in (("chain_python", chain_python),
-                                          ("ledger_head_sha256", value["ledger_head_sha256"]),
-                                          ("code_digests", value["code_digests"])):
+                                          ("ledger_head_sha256", value["ledger_head_sha256"])):
                         if actual != bindings[field]:
                             raise ValueError(field + " mismatch")
+                    # The reservation echoes digests only for the programs it
+                    # knows about; the installer binds a superset (it also pins
+                    # the driver and the writer). Reconciliation: every echoed
+                    # entry must name a bound path and equal the installer-side
+                    # digest, and the receipt then carries the installer-side
+                    # set, which validate_probe_receipt recomputes field by
+                    # field against PROBE_CODE_PATHS at install time.
+                    echoed = value["code_digests"]
+                    if not isinstance(echoed, dict) or not echoed:
+                        raise ValueError("code_digests missing or invalid")
+                    if any(bindings["code_digests"].get(name) != digest
+                           for name, digest in echoed.items()):
+                        raise ValueError("code_digests mismatch")
                     for field in ("custody_budget_s", "custody_elapsed_s", "observations"):
                         actual = value[field]
                         if isinstance(actual, bool) or not isinstance(actual, (float, int)) or not math.isfinite(actual) or actual < 0:
@@ -2199,7 +2231,9 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
                     phase("revalidation", record)
                     if bindings != probe_bindings(plan, plan_path, sys.executable):
                         raise ValueError("probe bindings changed during verification")
-                    record["code_digests"] = value["code_digests"]
+                    # Publish the installer-side (superset) binding, never the
+                    # reservation's partial echo.
+                    record["code_digests"] = bindings["code_digests"]
                     record["outcome"] = "ok"
                 except (KeyError, ValueError, OSError, subprocess.SubprocessError) as exc:
                     record["refusal_code"] = "probe_receipt_invalid"

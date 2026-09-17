@@ -264,6 +264,29 @@ class InstallNightAgentTests(unittest.TestCase):
                 if field == "chain_python":
                     python.unlink(); python.symlink_to(sys.executable)
 
+    def test_install_binds_the_driver_and_the_writer_programs(self):
+        """An uncommitted edit to either custody-reading program voids the receipt.
+
+        A committed edit moves the measurement checkout's HEAD and is caught by
+        the plan's measurement_head pin; an uncommitted one moves nothing else,
+        so these two programs must be bound by name in PROBE_CODE_PATHS.
+        """
+        for name in ("scripts/validate_powermetrics_fiducial.py", "scripts/run_night.py"):
+            with self.subTest(path=name):
+                plan = self._write_plan()
+                self._prepare_receipt(plan)
+                head_before = _git_head(self.measurement_root)
+                target = self.measurement_root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with target.open("a", encoding="utf-8") as handle:
+                    handle.write("#")  # one uncommitted byte
+                result = self._run(plan, render_only=False, seed_probe=False)
+                self.assertEqual(head_before, _git_head(self.measurement_root))
+                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertIn("code_digests", result.stderr)
+                self.assertFalse(any("bootstrap" in call for call in self.fake.calls()))
+                self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
+
     def test_install_rejects_each_changed_or_missing_reservation_input(self):
         import hashlib
         from tests.test_night_agent_install import LABELS

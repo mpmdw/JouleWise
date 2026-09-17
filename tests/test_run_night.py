@@ -115,6 +115,9 @@ def make_probe_fixture(root: Path, plan_path: Path, *, mode="ok") -> None:
         (module / name).write_text("# fake seat A code identity\n")
     for name in ("recover_calibration_ledger.py", "validate_powermetrics_fiducial.py"):
         (scripts / name).write_text("from pathlib import Path\nPath(__file__).with_suffix('.CALLED').touch()\nraise SystemExit(91)\n")
+    # The installer binds the driver and the writer as well as the reservation;
+    # the real measurement checkout always carries this file.
+    (scripts / "run_night.py").write_text("# fake measurement-checkout driver\n")
     stub = scripts / "reserve_calibration_window_bracket.py"
     stub.write_text('''import argparse, hashlib, json, os, sys, time, subprocess
 from pathlib import Path
@@ -190,8 +193,9 @@ def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
                 "'.'.join(map(str,sys.version_info[:3]))]))")
         path, version = json.loads(subprocess.check_output([str(executable), "-B", "-c", code], text=True))
         return {"path": path, "version": version, "sha256": digest(path)}
-    code_paths = ("scripts/reserve_calibration_window_bracket.py", "joulewise/calibration_ledger.py",
-                  "joulewise/calibration_custody_worker.py")
+    code_paths = ("scripts/reserve_calibration_window_bracket.py",
+                  "scripts/validate_powermetrics_fiducial.py", "scripts/run_night.py",
+                  "joulewise/calibration_ledger.py", "joulewise/calibration_custody_worker.py")
     stamp = time.time() if now is None else now
     record = {"schema": "joulewise.night_probe_receipt.v1", "outcome": "ok", "refusal_code": None,
               "plan_id": plan["plan_id"], "plan_sha256": digest(plan_path),
@@ -822,10 +826,10 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(claim["start_time"], "Tue Sep 8 01:02:03 2026")
         self.identity_mock.assert_called_once_with(claim["pid"])
         self.assertNotEqual(claim["pid"], os.getpid())
-        rerun = list(night.glob("refusal*.json"))
-        self.assertEqual(len(rerun), 1)
-        refusal = json.loads(rerun[0].read_text())
-        self.assertEqual(refusal["refusal"]["reason"], self.driver._CODES["record_exists"])
+        # The first night already published result.json, so the second fire
+        # records nothing at all: no authoritative refusal, no rerun sibling.
+        self.assertEqual([], list(night.glob("refusal*.json")))
+        self.assertEqual([], list(night.glob("rerun.refusal*.json")))
 
     def test_census_refusal_terminates_group_and_records_abort(self) -> None:
         self.source.census_responses = [
@@ -1395,7 +1399,6 @@ runpy.run_path(script, run_name='__main__')
         courier_calls = self.driver.run_courier.call_count
         probe_calls = self.probes_mock.call_count
         second_exit = self.driver.run_night(self.plan_path)
-        reruns = list(night.glob("refusal*.json"))
         self.assertEqual(first_exit, 0)
         self.assertEqual(second_exit, self.driver.EXIT_REFUSED)
         self.assertEqual(first_calls, [["/bin/zsh", str(self.chain)]])
@@ -1403,9 +1406,47 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual((night / "receipt.json").read_bytes(), receipt_before)
         self.assertEqual(self.driver.run_courier.call_count, courier_calls)
         self.assertEqual(self.probes_mock.call_count, probe_calls + 1)  # first-act census precedes plan reads
-        self.assertEqual(len(reruns), 1)
-        rerun = json.loads(reruns[0].read_text())
-        self.assertEqual(rerun["refusal"]["reason"], self.driver._CODES["record_exists"])
+        self.assertEqual([], list(night.glob("refusal*.json")))
+
+    def test_second_fire_beside_a_go_night_writes_no_refusal_document(self) -> None:
+        """A spurious rerun must never report a finished night as refused."""
+        first_exit, _ = self._run_night()
+        night = self.custody / "night"
+        result_before = (night / "result.json").read_bytes()
+        published = json.loads(result_before)
+        self.assertEqual(first_exit, 0)
+        self.assertEqual("GO", published["verdict"])
+        self.assertEqual([], published["refusal_documents"])
+        self.assertEqual(self.driver.EXIT_REFUSED, self.driver.run_night(self.plan_path))
+        # No authoritative refusal.json (the courier's `refusal*.json`
+        # discovery and result.json's refusal_documents both key on that
+        # name), and no rerun sibling either once a verdict exists.
+        self.assertEqual([], list(night.glob("refusal*.json")))
+        self.assertEqual([], list(night.glob("rerun.refusal*.json")))
+        self.assertEqual(result_before, (night / "result.json").read_bytes())
+        self.assertEqual([], self.driver._refusal_paths(night))
+        self.assertEqual([], [entry for entry in published["artifacts"]
+                              if "refusal" in entry["path"]])
+        self.assertEqual([], [entry for entry in self.driver._artifact_list(self.custody, night)
+                              if "refusal" in entry["path"]])
+
+    def test_second_fire_during_a_running_night_uses_the_rerun_stem(self) -> None:
+        """While the first night runs there is no verdict yet; keep the record."""
+        night = self.custody / "night"
+        night.mkdir(parents=True)
+        (night / "chain.started").write_text(json.dumps({"pid": 4242, "pgid": 4242}))
+        self.assertEqual(self.driver.EXIT_REFUSED, self.driver.run_night(self.plan_path))
+        self.assertFalse((night / "refusal.json").exists())
+        document = json.loads((night / "rerun.refusal.json").read_text())
+        self.assertEqual(document["refusal"]["reason"], self.driver._CODES["record_exists"])
+        self.assertEqual(document["refusal"]["evidence"], {"existing": "chain.started"})
+        self.assertEqual([], self.driver._refusal_paths(night))
+        # A concurrent second fire numbers through the same allocator.
+        self.assertEqual(self.driver.EXIT_REFUSED, self.driver.run_night(self.plan_path))
+        self.assertTrue((night / "rerun.refusal-01.json").is_file())
+        self.assertFalse((night / "refusal.json").exists())
+        self.assertIn("night/rerun.refusal.json",
+                      [entry["path"] for entry in self.driver._artifact_list(self.custody, night)])
 
     def test_driver_refusal_schema_is_exact_and_not_a_gate_receipt(self) -> None:
         plan = self.driver._load_plan(self.plan_path)

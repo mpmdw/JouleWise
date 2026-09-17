@@ -630,8 +630,18 @@ class Prepared:
 
 
 PROBE_RECEIPT_MAX_AGE_S = 6 * 60 * 60
+# Every program of the measurement checkout whose bytes decide what the night
+# reads under custody. The probe receipt is invalidated by a change to any of
+# them, committed or not: a committed change also moves the measurement HEAD
+# (night_gate pins plan.measurement_head), but an uncommitted edit in the clone
+# moves nothing else. The reservation echoes digests only for the files it
+# knows; probe_bindings binds this whole set and validate_probe_receipt
+# recomputes it field by field at install time (see scripts/run_night.py
+# _probe_worker for the echo-is-a-subset reconciliation).
 PROBE_CODE_PATHS = (
     "scripts/reserve_calibration_window_bracket.py",
+    "scripts/validate_powermetrics_fiducial.py",
+    "scripts/run_night.py",
     "joulewise/calibration_ledger.py",
     "joulewise/calibration_custody_worker.py",
 )
@@ -832,6 +842,7 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
         result = adapter.write_plist(label, payload)
         if result.kind is not Kind.SUCCEEDED:
             raise Refused(2, "probe plist publication failed: " + result.stderr)
+        in_flight = None
         try:
             shield.poll()
             result = adapter.bootstrap(label)
@@ -843,36 +854,49 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
                 if time.monotonic() >= deadline:
                     raise Refused(2, "probe receipt timeout")
                 time.sleep(0.05)
+        except BaseException as exc:
+            in_flight = exc
+            raise
         finally:
-            _proofs, unresolved = verified_bootout(adapter, (label,))
-            if unresolved:
-                raise Refused(2, "probe bootout absence unproven: " + label)
-            process_record = json.loads(process_path.read_text()) if process_path.is_file() else None
-            if receipt_path.is_file() and process_record is None:
-                raise Refused(2, "probe process identity missing")
-            # A killed driver may leave its separately-created chain group.
-            if process_record is not None:
-                if process_record.get("launchd_label") != label:
-                    raise Refused(2, "probe process label mismatch")
-                pgid = process_record.get("chain_pgid")
-                if not isinstance(pgid, int) or pgid <= 1:
-                    raise Refused(2, "probe process chain_pgid invalid")
-                try:
-                    os.killpg(pgid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                except PermissionError as exc:
-                    # An absent group may also deny signals in a sandbox.
-                    probe_process_census(label, prepared.plan_path, process_record)
-            deadline = time.monotonic() + 5
-            while True:
-                try:
-                    probe_process_census(label, prepared.plan_path, process_record)
-                    break
-                except Refused:
-                    if time.monotonic() >= deadline:
-                        raise
-                    time.sleep(0.05)
+            try:
+                _proofs, unresolved = verified_bootout(adapter, (label,))
+                if unresolved:
+                    raise Refused(2, "probe bootout absence unproven: " + label)
+                process_record = json.loads(process_path.read_text()) if process_path.is_file() else None
+                if receipt_path.is_file() and process_record is None:
+                    raise Refused(2, "probe process identity missing")
+                # A killed driver may leave its separately-created chain group.
+                if process_record is not None:
+                    if process_record.get("launchd_label") != label:
+                        raise Refused(2, "probe process label mismatch")
+                    pgid = process_record.get("chain_pgid")
+                    if not isinstance(pgid, int) or pgid <= 1:
+                        raise Refused(2, "probe process chain_pgid invalid")
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    except PermissionError as exc:
+                        # An absent group may also deny signals in a sandbox.
+                        probe_process_census(label, prepared.plan_path, process_record)
+                deadline = time.monotonic() + 5
+                while True:
+                    try:
+                        probe_process_census(label, prepared.plan_path, process_record)
+                        break
+                    except Refused:
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.05)
+            except Refused as cleanup:
+                # Fail closed on the cleanup proof, but never lose the exception
+                # it interrupted: an unproven bootout raised over a receipt
+                # timeout must report both, and the traceback keeps the
+                # interrupted failure as this refusal's cause.
+                if in_flight is None:
+                    raise
+                raise Refused(cleanup.code, "{} (raised while handling {}: {})".format(
+                    cleanup, type(in_flight).__name__, in_flight)) from in_flight
         receipt = validate_probe_receipt(prepared, max_age_s, receipt_path)
         if (receipt.get("chain_pgid") != process_record["chain_pgid"]
                 or receipt.get("driver_pid") != process_record["driver_pid"]):
