@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """Emit the plan-pinned wrapper that launches one derivation night.
 
-The night driver hands a chain exactly four variables and no argv
-(``scripts/run_night.py:414-444``: ``NIGHT_PLAN_ID``, ``MEASUREMENT_ROOT``,
-``MEASUREMENT_HEAD``, ``PY``), and it verifies the plan-pinned chain's bytes
-against a ``shasum``-form sidecar before launching it
-(``scripts/run_night.py:1576-1610``).  The tracked derivation chain
+The night driver's ``_chain_environment`` supplies ``NIGHT_PLAN_ID``,
+``MEASUREMENT_ROOT``, ``MEASUREMENT_HEAD``, ``PY``, ``NIGHT_DIR``,
+``JOULEWISE_NIGHT_PLAN_ID`` and ``CUSTODY_BUDGET_S``, with no argv. It verifies
+the plan-pinned chain's bytes against a ``shasum``-form sidecar before launch.
+The tracked derivation chain
 ``scripts/night_chains/calibration_derivation_only.zsh`` needs thirteen more
 variables and 24 per-slot binding flag/value pairs (48 argv words), so a night
 is armed by
-pinning a *wrapper* emitted here: the wrapper carries the night's whole
-environment as literal ``export`` lines, re-derives and cross-checks the frozen
-calibration plan, verifies the tracked chain's bytes, and ``exec``s the tracked
-chain with the per-slot bindings as argv.
+pinning a *wrapper* emitted here: it carries the night's additional
+environment as literal ``export`` lines, re-derives and cross-checks
+the frozen calibration plan, verifies the tracked chain's bytes, and ``exec``s
+the tracked chain with the per-slot bindings as argv.
+
+Readiness runs inside the bounded reservation preflight, before any session
+write; there is no separate pre-reserve readiness command. For the driver's
+access probe, ``NIGHT_VERIFY_ONLY=1`` runs only reservation with ``--verify-only``
+and stops before session append, settle, or capture.
 
 ``exec`` rather than ``source`` is load-bearing: the tracked chain derives its
 repository root from its own path (the anchor line ``cd "${0:A:h:h:h}"``), so it
@@ -80,8 +85,8 @@ DEFAULT_SETTLE_S = 600
 DEFAULT_SLOT_CADENCE_S = 600
 DEFAULT_SLOT_CAPTURE_BUDGET_S = 480
 
-# The chain does its input preflight, the pre-reserve readiness check and the
-# session reservation BEFORE the settle, and the driver does its own gate work
+# The chain does its input checks and bounded reservation preflight (including
+# enforcing readiness) BEFORE reservation and settle. The driver does gate work
 # before it starts the chain at all.  This is the allowance the window must hold
 # on top of the programmed span; it is deliberately far smaller than runbook
 # 99 §1.2's total 1320 s margin, which also covers per-capture overrun.
@@ -314,11 +319,13 @@ def render_wrapper(spec: WrapperSpec) -> str:
         f"# Derivation-night wrapper for night plan {spec.plan_id}.",
         *departure,
         "#",
-        "# The driver supplies NIGHT_PLAN_ID, MEASUREMENT_ROOT, MEASUREMENT_HEAD and",
-        "# PY and no argv (scripts/run_night.py:430-444).  This wrapper supplies the",
-        "# thirteen chain variables as literals frozen with the plan, verifies the",
+        "# The driver supplies NIGHT_PLAN_ID, MEASUREMENT_ROOT, MEASUREMENT_HEAD,",
+        "# PY, NIGHT_DIR, JOULEWISE_NIGHT_PLAN_ID and CUSTODY_BUDGET_S, with no argv.",
+        "# This wrapper supplies thirteen more variables frozen with the plan, verifies the",
         "# tracked chain's bytes, and execs it with the per-slot bindings as argv:",
         f"# {2 * spec.slot_count} flag/value pairs, {4 * spec.slot_count} argv words.",
+        "# Readiness is inside the bounded reservation preflight, before any session write.",
+        "# NIGHT_VERIFY_ONLY=1 runs only reservation with --verify-only; no settle or capture.",
         "set -euo pipefail",
         "",
         "route_refuse() { printf 'FAIL %s\\n' \"$1\" >&2; exit 1; }",
@@ -682,13 +689,19 @@ def render_region(chain_bytes: bytes) -> str:
         "\n"
         "One `DIAGNOSTIC_NO_PACK` derivation night is armed by pinning a\n"
         "**wrapper** — a generated zsh file, one per night, carrying that night's\n"
-        "whole environment as literal `export` lines — rather than the tracked\n"
-        "chain itself.  The reason: the night driver hands the file it launches\n"
-        "exactly four variables (`NIGHT_PLAN_ID`, `MEASUREMENT_ROOT`,\n"
-        "`MEASUREMENT_HEAD`, `PY`) and no command-line arguments, while the\n"
+        "additional environment as literal `export` lines — rather than the tracked\n"
+        "chain itself. The driver supplies `NIGHT_PLAN_ID`, `MEASUREMENT_ROOT`,\n"
+        "`MEASUREMENT_HEAD`, `PY`, `NIGHT_DIR`, `JOULEWISE_NIGHT_PLAN_ID` and\n"
+        "`CUSTODY_BUDGET_S`, with no command-line arguments, while the\n"
         f"tracked chain `{TRACKED_CHAIN_RELPATH}`\n"
         "needs thirteen more variables and 24 per-slot binding flag/value pairs\n"
         "(48 argv words).  The wrapper supplies both, then `exec`s the chain.\n"
+        "\n"
+        "Readiness runs inside the bounded reservation preflight, before any\n"
+        "session write; there is no separate pre-reserve readiness command.\n"
+        "For the driver's access probe, `NIGHT_VERIFY_ONLY=1` runs only the\n"
+        "reservation with `--verify-only`, then exits without appending a session,\n"
+        "settling, or capturing data. The probe does not authorize a night.\n"
         "\n"
         "### The three emitted files\n"
         "\n"
@@ -755,7 +768,7 @@ def render_region(chain_bytes: bytes) -> str:
         "Two different budgets of 300 s appear below; they are unrelated and\n"
         "happen to share a number.  The **pre-settle allowance** is the time the\n"
         "chain spends before its settle even begins — checking its inputs,\n"
-        "running the pre-reserve readiness check and opening the ledger session\n"
+        "running bounded readiness inside reservation and opening the ledger session\n"
         "— plus the driver's own work before it starts the chain at all; the\n"
         "window has to hold it on top of the programmed span.  The **courier\n"
         "allowance** is a separate 300 s the driver adds AFTER the window ends,\n"
