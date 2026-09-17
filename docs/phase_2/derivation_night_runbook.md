@@ -1332,40 +1332,59 @@ fresh allowance for each operation that starts under it — and not a clock
 time, because the session abort runs when the window is already spent and
 would otherwise refuse the one operation that closes the session.
 
-*What a fresh allowance per operation costs in the worst case.* The end-of-
-window abort (`abort_window_exhausted` in the chain, which runs
-`recover_calibration_ledger.py … abort-session`) reports the state of EVERY
-declared slot, and it checks one slot's custody per call, each call starting
-its own fresh allowance. So the abort's worst case — every slot's custody
-stalled until its allowance expires — is one budget per declared slot:
+*What the end-of-window abort costs in the worst case.* The abort
+(`abort_window_exhausted` in the chain, which runs
+`recover_calibration_ledger.py … abort-session --custody-budget-s`) needs ONE
+custody value: the state of the session's **next slot**, the slot the window
+ran out on. That is the value that decides whether the session can be closed
+or whether complete capture custody must be finalized instead. So the abort
+asks for that slot's state and no other, under one allowance:
 
 ```
-SLOT_COUNT × CUSTODY_BUDGET_S = 12 × 120 s = 1440 s = 24 min
+1 × CUSTODY_BUDGET_S = 120 s   (plus seconds of lease and repair work)
 ```
 
-`SLOT_COUNT` (12) and `CUSTODY_BUDGET_S` (120 s) are both set in the chain
-`scripts/night_chains/calibration_derivation_only.zsh`. The abort's own
-closing custody pass can add one more allowance, so the ceiling is 13 × 120 s
-= 1560 s = 26 min. Compare that with the span the dead-man formula below
-allows between the end of the acquisition window and the dead-man instant D:
-`COURIER_DEADLINE_S` (300 s) + `DEADMAN_GRACE_S` (3600 s) = 3900 s, both
-constants in `scripts/run_night.py`. The abort STARTS before the window end —
-it fires when the next slot's capture budget would cross it — so 1560 s is
-measured against at least that 3900 s. 1560 s < 3900 s, with roughly 39 min
-to spare: the dead-man does not fire and the courier still delivers the
-night's result. If the abort's own custody pass exhausts its allowance, the
-abort command refuses with `calibration_ledger_custody_timeout`, writes the
+`CUSTODY_BUDGET_S` (120 s) is set in the chain
+`scripts/night_chains/calibration_derivation_only.zsh`, and the chain passes
+it to the abort as a flag exactly as it passes it to the reservation and to
+each capture writer. There is deliberately no `--custody-deadline-epoch-s`
+here: the abort runs when the window is already spent, and an absolute
+deadline would refuse the one operation that closes the session.
+
+One pass is also the only figure the install-time headroom gate certifies.
+That gate admits a night when `custody_elapsed_s × WRITER_CUSTODY_PASSES ×
+1.5 ≤ custody_budget_s` — one measured pass of up to 26.67 s at three passes
+and a 120 s budget. It never certified twelve passes, so an abort that read
+all twelve declared slots under one shared allowance could time out on a
+custody root the installer had legitimately admitted, and a timed-out abort
+leaves the ledger session OPEN under a live writer lease, which is the state
+desk recovery finds hardest to resolve (`LIVE_WRITER_CONTENTION`). Reading
+only the slot whose state is consumed removes that failure entirely: the
+pre-declared locators for the other slots are not opened, hashed, or given a
+custody worker, and their entries report `not_inspected` rather than a state
+nobody measured.
+
+If that one pass exhausts its allowance, the abort command refuses with
+`calibration_ledger_custody_timeout`, writes the
 `joulewise.calibration_refusal.v1` document at
 `JOULEWISE_CALIBRATION_REFUSAL_PATH` (the chain exports it into the night
 directory) and exits 2; the driver reads that document and records verdict
 `REFUSED` with `aborted_reason` `night_calibration_refused`, so the delivered
 result says the night did not finish. A chain that exits 2 writing NO such
 document is still recorded as verdict `GO` with `chain_exit_code` 2 — for
-that case, read the chain exit code, not the verdict. The alternative — an
-unbounded abort — is what hung the 2026-09-16 night, so a bounded 26 min worst
-case is the improvement, not a new risk. Shrink it further, if it ever matters, by
-lowering `CUSTODY_BUDGET_S` or `SLOT_COUNT`; both are chain variables and
-both also move the cadence arithmetic above.
+that case, read the chain exit code, not the verdict.
+
+*And the driver no longer waits for any of it indefinitely.* 120 s of abort is
+covered by the driver's own shutdown allowance, `WINDOW_SHUTDOWN_GRACE_S` =
+300 s in `scripts/run_night.py`: **end-of-window abort is bounded by one
+shared custody budget of 120 s; the driver terminates the chain 300 s after
+the exclusive window end.** Proving the chain's whole process group gone takes
+at most 70 s after that (`TERMINATION_BOUND_S`: 30 s to reap the chain, 5 s of
+group census, 30 s after the SIGKILL escalation, 5 s of census), and the
+courier then has its own 300 s — 670 s in total against the 3900 s the
+dead-man formula below leaves after the window end
+(`COURIER_DEADLINE_S` 300 s + `DEADMAN_GRACE_S` 3600 s). The unbounded
+alternative is what held the 2026-09-16 night for 11 h 07 m.
 
 **The dead-man check (updated 2026-09-15, INSTALL-WINDOWS-MULTI-01).**
 `scripts/run_night.py` defines `COURIER_DEADLINE_S = 300` (5 × 60 s),
@@ -1810,6 +1829,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
 | `night_record_exists` | A write-once night record proves invocation already occurred. |
 | `night_calibration_refused` | The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause. |
+| `night_window_exceeded` | The chain ran past the exclusive window end and was terminated by the driver; reservation or capture intent may have been written and the session may need desk recovery; never an auto-retry cause. |
 
 **Installer §1.3 refusals — cold-gate path.**
 
@@ -1845,6 +1865,41 @@ Every actual attempt sends a newly accepted notice and repeats the existing noti
 `prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.
 
 <!-- END ARM-RETRY-POLICY v1 -->
+
+**Two window codes, two different instants.** They sit next to each other in
+the table above and mean opposite things.
+
+- `night_window_expired` is a GATE refusal, decided BEFORE anything runs: at
+  the moment the driver evaluated its conditions, the clock was already
+  outside `[t0, t0 + window_max_s]`, so no chain was started and no ledger
+  session was opened. Nothing was acquired and nothing needs recovery.
+- `night_window_exceeded` is a DRIVER termination, decided AFTER the chain
+  ran: the chain was still alive `WINDOW_SHUTDOWN_GRACE_S` (300 s) past the
+  window end, so the driver terminated its whole process group. The
+  reservation exists, capture intent may have been written, and the ledger
+  session may still be open — this one can need desk recovery, which is why
+  A172 keeps it on the cold-gate path with no auto-retry.
+
+**Reading the two records a wall-clock termination leaves.** Both sit in the
+night directory beside `result.json` and both are listed in the result's
+artifact inventory.
+
+- `chain.deadline` is always written when the deadline fires:
+  `{"pgid", "deadline_epoch_s", "fired_epoch_s", "proven"}`. `pgid` is the
+  chain's process-group identifier, `deadline_epoch_s` is the instant the
+  driver computed once from its wall clock (`t0 + window_max_s + 300`),
+  `fired_epoch_s` is when the termination sequence finished, and `proven` is
+  the group proof: `true` means the chain was reaped AND a `pgrep -g` census
+  of its group came back empty.
+- `chain.unkilled` appears only when `proven` is false:
+  `{"pgid", "epoch_s", "group_census"}`, where `group_census` is the lines the
+  last census listed — the processes that were still in the group, or a
+  `census_failed:` / `census_exit_N:` line if the census itself could not
+  answer. In that state the night reports `night_chain_alive` with
+  `evidence.trigger` = `night_window_exceeded`, the courier is suppressed, and
+  the dead-man re-derives the same state at `t0 + window_max_s + 3900 s`.
+  Treat surviving processes as a desk matter: identify them from
+  `group_census` before arming anything else.
 
 1. **Record and classify before retrying.** Preserve the command/tool, full
    result, stage reached, candidate digest and original attempt identity.
@@ -2462,8 +2517,11 @@ and a refused night blocks its successor until the desk clears it.
 
 If the chain could not reach every slot it logs `slot_unused slot=dNN
 reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
---reason window_exhausted`, and exits 0. An aborted session IS terminal, and
-its finalized observations remain in the prior set.
+--reason window_exhausted --custody-budget-s "$CUSTODY_BUDGET_S"`, and exits
+0. That flag bounds the one custody read the abort makes — the next slot's
+state — at 120 s (§1.2 "What the end-of-window abort costs in the worst
+case"). An aborted session IS terminal, and its finalized observations remain
+in the prior set.
 `session-refusal` is the recovery tool's subcommand that reads an aborted
 session and prints its abort as a **refusal code** — the machine-readable name
 the tool prints in place of a prose reason, the kind §5's "Refusal code"

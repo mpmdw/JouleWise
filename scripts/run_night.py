@@ -12,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import uuid
 import math
@@ -62,6 +63,20 @@ PROBE_TIMEOUT_S = 30
 CENSUS_INTERVAL_S = 30
 # R-7: min(600, max(3 * (5303 ms / 1000), 300)) from cold_start.json.
 COURIER_DEADLINE_S = 300
+# Separate shutdown allowance for the chain's bounded end-of-window abort (one
+# shared 120 s custody budget plus lease overhead); not derived from the
+# courier deadline.
+WINDOW_SHUTDOWN_GRACE_S = 300
+# One process-group SIGTERM or SIGKILL reaches the members that exist when it
+# is sent, and wait() only ever proves the DIRECT child ended. Proving the
+# GROUP gone therefore needs a census, and a census needs a bound: each phase
+# re-signals the group and re-censuses it every GROUP_CENSUS_INTERVAL_S for at
+# most GROUP_CENSUS_WINDOW_S. Worst case for the whole sequence:
+# 30 s wait + 5 s census + 30 s wait + 5 s census.
+GROUP_CENSUS_WINDOW_S = 5
+GROUP_CENSUS_INTERVAL_S = 0.2
+GROUP_WAIT_S = 30
+TERMINATION_BOUND_S = 2 * (GROUP_WAIT_S + GROUP_CENSUS_WINDOW_S)
 COURIER_BACKOFF_S = (60, 180, 600)
 COURIER_LOCK_FRESH_S = COURIER_DEADLINE_S + max(COURIER_BACKOFF_S)
 DEADMAN_GRACE_S = 3600
@@ -266,8 +281,17 @@ def _refusal_paths(night_dir: Path) -> list[Path]:
 
 
 def _write_driver_refusal(
-    path: Path, plan: NightPlan, reason: str, detail: str, evidence: Any = None
+    path: Path, plan: NightPlan, reason: str, detail: str, evidence: Any = None,
+    *, allocated: list[Path] | None = None,
 ) -> dict[str, Any]:
+    """Write one immutable refusal record and return its refusal mapping.
+
+    `allocated`, when given, receives the name the exclusive-create allocator
+    actually used: a caller that must tell a later writer "this cause is
+    already on disk" needs the file's identity, and the mapping alone does not
+    carry it.
+    """
+
     refusal = _refusal_mapping(reason, detail, evidence)
     document = {
         "schema": REFUSAL_SCHEMA,
@@ -279,7 +303,9 @@ def _write_driver_refusal(
     defects = validate_refusal(document)
     if defects:
         raise ValueError(f"invalid driver refusal: {defects!r}")
-    _write_refusal_bytes(path, _json_bytes(document))
+    written = _write_refusal_bytes(path, _json_bytes(document))
+    if allocated is not None:
+        allocated.append(written)
     return refusal
 
 
@@ -387,30 +413,97 @@ def _record_chain_exit(
     _write_json(night_dir / "chain.exited", record)
 
 
+def _signal_group(pgid: int, number: int) -> None:
+    try:
+        os.killpg(pgid, number)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _prove_group_absent(pgid: int, number: int) -> tuple[bool, list[str]]:
+    """Re-signal and re-census one group until it is proven empty, or give up.
+
+    Every retry re-issues the signal before looking again. `killpg` reaches
+    only the members that exist at the instant it is called, so a member
+    forked by a survivor immediately after the first signal would otherwise
+    keep the group alive unsignalled; re-signalling is idempotent and costs
+    nothing. The loop is bounded by GROUP_CENSUS_WINDOW_S.
+    """
+
+    deadline = time.monotonic() + GROUP_CENSUS_WINDOW_S
+    absent, census = False, []
+    while True:
+        _signal_group(pgid, number)
+        # The census timeout is clipped to what is left of this phase, so the
+        # sequence keeps its stated 70 s bound; a census that runs out of
+        # window reports "not absent", never "empty".
+        absent, census = _group_census(
+            pgid, min(1.0, max(0.01, deadline - time.monotonic()))
+        )
+        if absent or time.monotonic() >= deadline:
+            return absent, census
+        time.sleep(min(GROUP_CENSUS_INTERVAL_S, max(0.01, deadline - time.monotonic())))
+
+
 def _terminate_process_group(
     process: subprocess.Popen[Any],
     night_dir: Path | None = None,
     *,
     pgid: int | None = None,
+    prove_group_absent: bool = True,
+    evidence: dict[str, Any] | None = None,
 ) -> bool:
-    """Return True only when wait() proves that the child session exited."""
+    """Return True only when the whole process GROUP is proven gone.
+
+    `wait()` on the direct child proves only that the direct child ended. An
+    executed probe (cold-gate ruling 61) killpg'd a group, saw `wait()` return
+    -15 in 0.009 s, and then listed a live group member that had ignored
+    SIGTERM: the old "wait() returned, so the group is gone" reading was
+    false, and it authorized both the courier and the night's verdict.
+    Termination is now PROVEN only when the direct child is reaped AND a
+    group census returns empty:
+
+        killpg(SIGTERM) -> wait(30) -> re-signalled census for 5 s
+        -> killpg(SIGKILL) -> wait(30) -> re-signalled census for 5 s
+
+    `prove_group_absent=False` keeps the pre-census behaviour for a caller
+    that runs under its own separate deadline; see the courier retry path.
+    `evidence`, when given, receives the last census for the caller's record.
+    """
 
     process_group = process.pid if pgid is None else pgid
+    exit_code: int | None = None
+    reaped = False
+    census: list[str] = []
+
+    def observe(number: int) -> bool:
+        nonlocal absent, census
+        if not prove_group_absent:
+            absent, census = True, []
+        else:
+            absent, census = _prove_group_absent(process_group, number)
+        return reaped and absent
+
+    _signal_group(process_group, signal.SIGTERM)
     try:
-        os.killpg(process_group, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError):
-        pass
-    try:
-        exit_code = process.wait(timeout=30)
+        exit_code = process.wait(timeout=GROUP_WAIT_S)
+        reaped = True
     except subprocess.TimeoutExpired:
+        pass
+    absent = False
+    if not observe(signal.SIGTERM):
+        _signal_group(process_group, signal.SIGKILL)
         try:
-            os.killpg(process_group, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
-        try:
-            exit_code = process.wait(timeout=30)
+            exit_code = process.wait(timeout=GROUP_WAIT_S)
+            reaped = True
         except subprocess.TimeoutExpired:
-            return False
+            pass
+        observe(signal.SIGKILL)
+    if evidence is not None:
+        evidence["group_census"] = census
+        evidence["reaped"] = reaped
+    if not (reaped and absent):
+        return False
     if night_dir is not None:
         _record_chain_exit(night_dir, exit_code)
     return True
@@ -535,6 +628,168 @@ def _calibration_refusal(night_dir: Path, plan: NightPlan, chain_exit_code: int 
     return _refusal_mapping(_CODES["calibration_refused"], payload["code"], payload)
 
 
+def _window_exceeded_detail(grace_s: float) -> str:
+    """The one sentence the courier reports for a wall-clock termination."""
+
+    return ("chain terminated at the wall-clock deadline (window end + "
+            f"{int(grace_s)} s); process-group termination proven")
+
+
+class _WindowDeadline:
+    """The chain's wall-clock stop, enforced from the loop OR from a thread.
+
+    The driver's exclusive window ends at `t0 + window_max_s`. Past that
+    instant nothing the chain still does is admitted: the chain fences its own
+    acquisition ten seconds before the end, and the only step that legitimately
+    runs later is the bounded end-of-window session abort. So the chain gets
+    one shutdown allowance -- WINDOW_SHUTDOWN_GRACE_S, sized for that abort's
+    one custody budget plus lease overhead -- and is then terminated.
+
+    The deadline instant is computed ONCE from the driver's wall clock when the
+    chain starts, and afterwards tracked on `time.monotonic()`, which no clock
+    adjustment can move.
+
+    Two enforcers, one firing. The census loop checks `expired()` at each point
+    it could otherwise sleep past the deadline, and a daemon thread watches the
+    same instant independently. The thread exists because the loop can block
+    without bound in two places: the census probe (the stdlib kills a timed-out
+    child and then `wait()`s for it with no timeout) and `_append_census`,
+    which writes under the custody root -- the exact volume whose blocked open
+    held the 2026-09-16 night for 11 h 07 m. `signal.alarm` cannot stand in for
+    the thread: its handler runs only on the main thread, and only when that
+    thread returns from its syscall. A lock serializes the two enforcers, so
+    the termination sequence, `chain.deadline`, and the refusal document happen
+    exactly once, whichever gets there first. The thread never runs the
+    courier: delivery stays on the main path, behind the termination proof.
+    """
+
+    def __init__(
+        self,
+        process: subprocess.Popen[Any],
+        *,
+        pgid: int,
+        night_dir: Path,
+        plan: NightPlan,
+        deadline_epoch_s: float,
+        deadline_monotonic: float,
+    ) -> None:
+        self.process = process
+        self.pgid = pgid
+        self.night_dir = night_dir
+        self.plan = plan
+        self.deadline_epoch_s = deadline_epoch_s
+        self.deadline_monotonic = deadline_monotonic
+        self.outcome: dict[str, Any] | None = None
+        self._lock = threading.Lock()
+        self._cancelled = False
+        self._woken = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def remaining(self) -> float:
+        return self.deadline_monotonic - time.monotonic()
+
+    def expired(self) -> bool:
+        return self.remaining() <= 0
+
+    def start(self) -> None:
+        self._thread = threading.Thread(
+            target=self._watch, name="night-window-deadline", daemon=True
+        )
+        self._thread.start()
+
+    def _watch(self) -> None:
+        while not self._woken.wait(max(0.0, min(1.0, self.remaining()))):
+            if self.expired():
+                self.fire()
+                return
+
+    def cancel(self) -> dict[str, Any] | None:
+        """Stop the watchdog; return the outcome if the deadline already fired.
+
+        Taking the lock is what makes the hand-off safe: if the thread is
+        inside `fire()`, this blocks until that firing is complete and then
+        reports it, so the caller never records a chain exit the thread has
+        already recorded.
+        """
+
+        with self._lock:
+            if self.outcome is None:
+                self._cancelled = True
+        self._woken.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=1.0)
+        return self.outcome
+
+    def fire(self) -> dict[str, Any] | None:
+        """Terminate the group and record the deadline; idempotent."""
+
+        with self._lock:
+            if self.outcome is not None or self._cancelled:
+                return self.outcome
+            evidence: dict[str, Any] = {}
+            proven = _terminate_process_group(
+                self.process, self.night_dir, pgid=self.pgid, evidence=evidence
+            )
+            fired_epoch_s = time.time()
+            census = list(evidence.get("group_census", []))
+            if proven:
+                refusal = _refusal_mapping(
+                    _CODES["window_exceeded"],
+                    _window_exceeded_detail(WINDOW_SHUTDOWN_GRACE_S),
+                    {
+                        "deadline_epoch_s": self.deadline_epoch_s,
+                        "fired_epoch_s": fired_epoch_s,
+                        "pgid": self.pgid,
+                        "group_census": census,
+                    },
+                )
+            else:
+                # One machine state, one name: "the chain has not been proved
+                # ended" is already `night_chain_alive`, and the dead-man will
+                # re-derive the same state. The trigger says WHY it was
+                # attempted here.
+                refusal = _refusal_mapping(
+                    _CODES["chain_alive"],
+                    "process-group termination could not be proven at the "
+                    "wall-clock deadline",
+                    {
+                        "trigger": _CODES["window_exceeded"],
+                        "deadline_epoch_s": self.deadline_epoch_s,
+                        "fired_epoch_s": fired_epoch_s,
+                        "pgid": self.pgid,
+                        "group_census": census,
+                    },
+                )
+            # The document is written HERE, by whichever enforcer fired, and
+            # not left to the main loop: a loop blocked forever in
+            # `_append_census` never resumes, and the night's only report would
+            # then be the dead-man's generic `night_chain_alive` at +3900 s.
+            # Refusal records are immutable and exclusively created, so this
+            # write cannot collide with another cause.
+            allocated: list[Path] = []
+            _write_driver_refusal(
+                self.night_dir / "refusal.json", self.plan,
+                refusal["reason"], refusal["detail"], refusal["evidence"],
+                allocated=allocated,
+            )
+            if not proven:
+                _write_json(
+                    self.night_dir / "chain.unkilled",
+                    {"pgid": self.pgid, "epoch_s": fired_epoch_s,
+                     "group_census": census},
+                )
+            _write_json(
+                self.night_dir / "chain.deadline",
+                {"pgid": self.pgid, "deadline_epoch_s": self.deadline_epoch_s,
+                 "fired_epoch_s": fired_epoch_s, "proven": proven},
+            )
+            self.outcome = {
+                "proven": proven,
+                "refusal": {**refusal, "document": allocated[0].name},
+            }
+            return self.outcome
+
+
 def _run_chain_once(
     chain_path: Path,
     plan: NightPlan,
@@ -578,24 +833,77 @@ def _run_chain_once(
         pgid = _complete_chain_start(claim_descriptor, process, night_dir)
         census_count = 0
         census_hits: list[dict[str, Any]] = []
+        # Read the driver's wall clock ONCE, here, and convert the deadline to
+        # a monotonic instant: a clock step during the window must not move
+        # the moment the chain is stopped. Neither `deadman_epoch` nor the plan
+        # schema learns about this instant -- a plan field would be a contract
+        # change, and the v2 schema is exact (see the _chain_environment note).
+        deadline_epoch_s = plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S
+        deadline = _WindowDeadline(
+            process,
+            pgid=pgid,
+            night_dir=night_dir,
+            plan=plan,
+            deadline_epoch_s=deadline_epoch_s,
+            deadline_monotonic=(
+                time.monotonic() + (deadline_epoch_s - float(probes.now_epoch_s()))
+            ),
+        )
+        deadline.start()
+
+        def exceeded(outcome: dict[str, Any]) -> tuple[
+            int | None, dict[str, Any], int, list[dict[str, Any]], bool
+        ]:
+            return (
+                process.poll(),
+                outcome["refusal"],
+                census_count,
+                census_hits,
+                bool(outcome["proven"]),
+            )
+
         next_census = time.monotonic()
         while process.poll() is None:
             now = time.monotonic()
+            # Three checks, because the two calls between them can each block
+            # without bound: the census probe and the census append. The
+            # watchdog thread covers a block that never returns at all; these
+            # keep the ordinary path from spending a whole probe timeout or
+            # census interval past the deadline.
+            if deadline.expired():
+                fired = deadline.fire()
+                if fired is not None:
+                    return exceeded(fired)
             if now >= next_census:
                 probe, refusal = agent_census(probes)
+                if deadline.expired():
+                    fired = deadline.fire()
+                    if fired is not None:
+                        return exceeded(fired)
                 record = _census_record(probe, refusal)
                 _append_census(census_path, probe, refusal)
                 census_count += 1
+                if deadline.expired():
+                    fired = deadline.fire()
+                    if fired is not None:
+                        return exceeded(fired)
                 if refusal is not None:
                     census_hits.append(record)
                     if abort_on_census:
+                        # The wall-clock stop wins if it already fired: the
+                        # group is gone and the exit is recorded.
+                        fired = deadline.cancel()
+                        if fired is not None:
+                            return exceeded(fired)
+                        evidence: dict[str, Any] = {}
                         proven = _terminate_process_group(
-                            process, night_dir, pgid=pgid
+                            process, night_dir, pgid=pgid, evidence=evidence
                         )
                         if not proven:
                             _write_json(
                                 night_dir / "chain.unkilled",
-                                {"pgid": pgid, "epoch_s": time.time()},
+                                {"pgid": pgid, "epoch_s": time.time(),
+                                 "group_census": list(evidence.get("group_census", []))},
                             )
                             return (
                                 process.poll(),
@@ -620,7 +928,15 @@ def _run_chain_once(
                             True,
                         )
                 next_census = now + CENSUS_INTERVAL_S
-            time.sleep(min(1.0, max(0.01, next_census - time.monotonic())))
+            # Never sleep past either instant.
+            time.sleep(min(1.0, max(0.01, min(
+                next_census - time.monotonic(), deadline.remaining()))))
+        # The chain ended on its own -- unless the watchdog is what ended it.
+        # `cancel()` is the hand-off: it blocks while a firing is in progress
+        # and then reports it, so the exit is recorded exactly once.
+        fired = deadline.cancel()
+        if fired is not None:
+            return exceeded(fired)
         exit_code = process.wait()
         _record_chain_exit(night_dir, exit_code)
         return exit_code, None, census_count, census_hits, True
@@ -642,6 +958,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
         night_dir / "chain.started",
         night_dir / "chain.exited",
         night_dir / "chain.unkilled",
+        night_dir / "chain.deadline",
         night_dir / "censuses.jsonl",
         night_dir / "chain.stdout.log",
         night_dir / "chain.stderr.log",
@@ -945,7 +1262,17 @@ def run_courier(
                 )
                 heartbeat_seen = heartbeat_seen or saw_heartbeat
                 if not was_sent:
-                    _terminate_process_group(process)
+                    # Keyword-gated OFF here, deliberately (cold-gate ruling
+                    # 61 Q3 as amended). This loop is bounded by its own
+                    # schedule -- it checks `deadman_epoch_s` before each
+                    # attempt and before each backoff -- and that schedule
+                    # does not account for up to 10 s of group census per
+                    # failed attempt. The group proof exists to decide a
+                    # night's verdict and whether the courier may run at all;
+                    # neither is decided here, and this call site discards the
+                    # return value. A courier group that outlives its kill is
+                    # the dead-man's business, as it is today.
+                    _terminate_process_group(process, prove_group_absent=False)
                     last_error = "courier did not create courier.sent"
             attempt_record = {
                 "attempt": attempt + 1,
@@ -1885,13 +2212,18 @@ def run_night(
 
     if abort is not None:
         abort_reason = str(abort["reason"])
-        _write_driver_refusal(
-            night_dir / "refusal.json",
-            plan,
-            abort_reason,
-            str(abort["detail"]),
-            abort["evidence"],
-        )
+        # The wall-clock stop writes its own document when it fires, because a
+        # main loop blocked on the custody volume may never reach this line.
+        # When it did fire, `document` names the record already on disk and
+        # this path must not allocate a second copy of the same cause.
+        if "document" not in abort:
+            _write_driver_refusal(
+                night_dir / "refusal.json",
+                plan,
+                abort_reason,
+                str(abort["detail"]),
+                abort["evidence"],
+            )
         refused = (
             abort_reason == _CODES["chain_launch_failed"] or not termination_proven
         )
@@ -2066,14 +2398,33 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     return EXIT_GO if outcome["sent"] else EXIT_COURIER_FAILED
 
 
-def _probe_group_absent(pgid: int, timeout_s: float = 1) -> bool:
+def _group_census(pgid: int, timeout_s: float = 1) -> tuple[bool, list[str]]:
+    """Census one process group: (absent, the lines the census listed).
+
+    ABSENT means one thing only: `pgrep` exited 1 (its "no process matched"
+    status) with empty output. Exit 0 lists live members. Exit 2 means the
+    argument was malformed and nothing was searched; an OSError or a timeout
+    means the census did not run. None of those three establishes absence, so
+    each of them returns False and carries its own evidence line: a census
+    that could not answer is never read as an empty group.
+    """
+
     # pgrep also works where the sandbox denies killpg(..., 0) after exit.
     try:
         result = subprocess.run(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."],
                                 capture_output=True, text=True, timeout=timeout_s, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return False  # Unknown census still requires attempted termination.
-    return result.returncode == 1 and not result.stdout.strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        return False, [f"census_failed: {type(error).__name__}: {error}"]
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode == 1 and not lines:
+        return True, []
+    if result.returncode not in {0, 1}:
+        lines = [f"census_exit_{result.returncode}: {result.stderr.strip()}", *lines]
+    return False, lines
+
+
+def _probe_group_absent(pgid: int, timeout_s: float = 1) -> bool:
+    return _group_census(pgid, timeout_s)[0]
 
 
 def _stop_probe_group(process: subprocess.Popen[Any]) -> bool:

@@ -124,13 +124,20 @@ settle() {
 
 abort_window_exhausted() {
     log_event "session_abort reason=window_exhausted"
+    # --custody-budget-s like every sibling call, and deliberately NOT a
+    # --custody-deadline-epoch-s: this runs when the window is already spent,
+    # so an absolute deadline would refuse the one operation that closes the
+    # session. The abort reads ONE slot's custody state (the next slot, the
+    # only such value it consumes), so this is the whole allowance it can
+    # spend -- not one allowance per declared slot.
     "$PY" "$REPO/scripts/recover_calibration_ledger.py" \
         --ledger "$CALIBRATION_LEDGER" \
         --head-pin "$LEDGER_HEAD_PIN" \
         abort-session \
         --session-id "$SESSION_ID" \
         --plan "$PLAN" \
-        --reason window_exhausted
+        --reason window_exhausted \
+        --custody-budget-s "${CUSTODY_BUDGET_S:-120}"
 }
 
 preflight_inputs() {

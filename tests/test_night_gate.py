@@ -1089,6 +1089,7 @@ class NightGateTests(unittest.TestCase):
                 "night_courier_unavailable",
                 "night_plan_overruns_deadman",
                 "night_record_exists",
+                "night_window_exceeded",
             },
         )
         self.assertFalse(night_gate.NIGHT_DRIVER_REASON_CODES & night_gate.NIGHT_GATE_REASON_CODES)

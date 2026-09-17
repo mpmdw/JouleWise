@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import io
 import importlib.util
 import json
+import math
 import os
 import plistlib
 import shutil
@@ -13,18 +15,20 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import types
 import unittest
 from datetime import date, datetime
 from contextlib import redirect_stdout
+import dataclasses
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 from zoneinfo import ZoneInfo
 
 from joulewise.measurement_liveness import Identity
-from joulewise import night_gate
+from joulewise import calibration_ledger, night_gate
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
 
@@ -879,11 +883,17 @@ runpy.run_path(script, run_name='__main__')
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="agent\n"),
         ]
         calls, spawn = self._popen_recorder(running_once=True)
+        # The group census runs a real /usr/bin/pgrep; with Popen mocked for
+        # the chain it cannot also spawn that, so absence is stated here. The
+        # census itself is proven against real process groups in
+        # test_deadline_terminates_a_group_with_a_grandchild and its siblings.
         with mock.patch.object(self.driver.subprocess, "Popen", spawn), mock.patch.object(
             self.driver.os, "killpg"
-        ) as kill_group, mock.patch.object(self.driver.time, "sleep"):
+        ) as kill_group, mock.patch.object(self.driver.time, "sleep"), mock.patch.object(
+            self.driver, "_group_census", return_value=(True, [])
+        ):
             self.assertEqual(self.driver.run_night(self.plan_path), 4)
-        kill_group.assert_called_once_with(4242, self.driver.signal.SIGTERM)
+        kill_group.assert_any_call(4242, self.driver.signal.SIGTERM)
         night = self.custody / "night"
         refusal = json.loads((night / "refusal.json").read_text())
         exited = json.loads((night / "chain.exited").read_text())
@@ -901,9 +911,10 @@ runpy.run_path(script, run_name='__main__')
         calls, spawn = self._popen_recorder(running_once=True)
         with mock.patch.object(self.driver.subprocess, "Popen", spawn), \
              mock.patch.object(self.driver.os, "killpg") as kill_group, \
-             mock.patch.object(self.driver.time, "sleep"):
+             mock.patch.object(self.driver.time, "sleep"), \
+             mock.patch.object(self.driver, "_group_census", return_value=(True, [])):
             self.assertEqual(4, self.driver.run_night(self.plan_path))
-        kill_group.assert_called_once_with(4242, self.driver.signal.SIGTERM)
+        kill_group.assert_any_call(4242, self.driver.signal.SIGTERM)
         self.assertEqual([["/bin/zsh", str(self.chain)]], calls)
         night = self.custody / "night"
         receipt = json.loads((night / "receipt.json").read_text())
@@ -1513,13 +1524,18 @@ runpy.run_path(script, run_name='__main__')
             _probe(night_gate.AGENT_CENSUS_ARGV, stdout="agent\n"),
         ]
         process = UnkillableProcess(["/bin/zsh", str(self.chain)])
-        with mock.patch.object(self.driver.subprocess, "Popen", return_value=process), mock.patch.object(
-            self.driver.os, "killpg"
-        ) as kill_group:
+        census = ["4343 /bin/zsh chain.zsh"]
+        with mock.patch.object(self.driver.subprocess, "Popen", return_value=process), \
+             mock.patch.object(self.driver, "GROUP_CENSUS_WINDOW_S", 0.05), \
+             mock.patch.object(self.driver, "_group_census", return_value=(False, census)), \
+             mock.patch.object(self.driver.os, "killpg") as kill_group:
             exit_code = self.driver.run_night(self.plan_path)
         night = self.custody / "night"
         refusal = json.loads((night / "refusal.json").read_text())
         unkilled = json.loads((night / "chain.unkilled").read_text())
+        # The census that refused to empty is preserved as the evidence a desk
+        # reader needs: which processes were still in the group.
+        self.assertEqual(census, unkilled["group_census"])
         self.assertEqual(exit_code, self.driver.EXIT_COURIER_FAILED)
         self.assertEqual(refusal["refusal"]["reason"], self.driver._CODES["chain_alive"])
         self.assertEqual(unkilled["pgid"], process.pid)
@@ -3491,6 +3507,355 @@ class PackNightProducerTests(unittest.TestCase):
         self.author.author_arm_readiness_evidence_t0.assert_not_called()
         self.assertEqual(raw, path.read_bytes())
         self.assertIn({"path": "night/go_receipt.json", "sha256": self.readiness.sha256_bytes(raw)}, self.driver._artifact_list(self.custody, path.parent))
+
+
+class WindowDeadlineTests(unittest.TestCase):
+    """The driver's wall-clock stop: NIGHT-STALL-WALLCLOCK-ABORT-01.
+
+    The night's exclusive window ends at `t0 + window_max_s`. Before this
+    lane, nothing in the driver ended a chain that ran past it: the census
+    loop only ever aborted for an agent, and the dead-man merely refused, an
+    hour later, to start anything new. The 2026-09-16 night held a quiet
+    machine for 11 h 07 m for exactly that reason. The driver now terminates
+    the chain WINDOW_SHUTDOWN_GRACE_S after the window end -- one shutdown
+    allowance, sized for the chain's bounded end-of-window abort -- and
+    reports `night_window_exceeded`.
+
+    Every test here runs a REAL chain in a REAL process group and proves the
+    outcome from the night's own records. The gate's clock is the fixture's
+    (`ProbeSource.now_epoch_s`), which is also the clock the driver reads once
+    to place the deadline, so the plan's window and the patched grace are the
+    only knobs; wall-clock scaling is what keeps these tests in seconds.
+    """
+
+    def setUp(self) -> None:
+        if not probe_census_available():
+            self.skipTest("/usr/bin/pgrep group census is unavailable")
+        self.driver = _load_driver()
+        self.temporary = tempfile.TemporaryDirectory(dir="/tmp")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.custody = self.root / "custody"
+        self.custody.mkdir()
+        self.chain = self.root / "chain.zsh"
+        self.sidecar = self.root / "chain.zsh.sha256"
+        self.registration = self.root / "registration.json"
+        self.registration.write_text('{"registered":true}\n', encoding="utf-8")
+        self.plan_path = self.root / "plan.json"
+        self.courier = self.root / "claude"
+        self.courier.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
+        self.courier.chmod(0o755)
+        self.t0_epoch_s = datetime(2026, 9, 2, 1, 0).timestamp()
+        self.source = ProbeSource(self.t0_epoch_s + 1)
+        for patch in (
+            mock.patch.object(self.driver, "observe_identity",
+                              return_value=Identity("LIVE", "Tue Sep 8 01:02:03 2026")),
+            mock.patch.object(night_gate, "D166_REGISTRATION_SHA256",
+                              hashlib.sha256(self.registration.read_bytes()).hexdigest()),
+            mock.patch.object(self.driver, "make_probes",
+                              return_value=self.source.probes()),
+            mock.patch.object(self.driver, "_resolve_courier_bin",
+                              return_value=(self.courier, None, None)),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.driver._durable_record = mock.Mock()
+        self.driver.run_courier = mock.Mock(return_value={
+            "attempted": 1, "sent": True, "heartbeat_seen": True, "last_error": None,
+        })
+
+    def _write_chain(self, body: str) -> None:
+        self.chain.write_text(body, encoding="utf-8")
+        self.sidecar.write_text(
+            hashlib.sha256(self.chain.read_bytes()).hexdigest() + "  chain.zsh\n",
+            encoding="utf-8")
+
+    def _write_plan(self, *, window_max_s: int) -> None:
+        write_night_plan(
+            self.plan_path,
+            night_gate.NightPlan(
+                plan_id="night-plan", receipt_class="DIAGNOSTIC_NO_PACK",
+                t0_epoch_s=self.t0_epoch_s, window_max_s=window_max_s,
+                authored_epoch_s=self.t0_epoch_s - 1, repo_head=HEAD,
+                measurement_root=str(self.root), measurement_head=HEAD,
+                chain_path=str(self.chain), chain_sha256_path=str(self.sidecar),
+                custody_root=str(self.custody), registration_path=str(self.registration),
+            ),
+        )
+
+    def _arm(self, body: str, *, window_max_s: int = 2, grace_s: float = 1.0) -> None:
+        """Scale the window and the shutdown allowance, never the plan schema."""
+        self._write_chain(body)
+        self._write_plan(window_max_s=window_max_s)
+        # create=True on purpose: run against the base head, which has no
+        # shutdown allowance at all, these tests must reach the real
+        # behaviour -- a chain that runs to its own end past the window --
+        # and not stop at an AttributeError for a name head introduced.
+        patch = mock.patch.object(
+            self.driver, "WINDOW_SHUTDOWN_GRACE_S", grace_s, create=True)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def _signal_spy(self):
+        """Record every signal sent to a group, and really send it."""
+        sent = []
+        real = os.killpg
+
+        def spy(pgid, number):
+            sent.append((pgid, number))
+            return real(pgid, number)
+
+        return sent, mock.patch.object(self.driver.os, "killpg", spy)
+
+    @staticmethod
+    def _alive(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def _await(self, path: Path, timeout_s: float = 30.0) -> None:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            if path.exists():
+                return
+            time.sleep(0.05)
+        raise AssertionError(f"{path} never appeared within {timeout_s} s")
+
+    def _records(self) -> tuple[dict, dict, dict]:
+        night = self.custody / "night"
+        return (
+            json.loads((night / "result.json").read_text()),
+            json.loads((night / "refusal.json").read_text()),
+            json.loads((night / "chain.deadline").read_text()),
+        )
+
+    # ---- (1) the group, not just the direct child --------------------------
+
+    def test_deadline_kills_the_chain_and_its_grandchild_then_couriers(self) -> None:
+        """A grandchild in the chain's group is terminated with it.
+
+        `start_new_session=False` is what keeps the chain's own children --
+        including every custody worker -- inside the group `killpg` reaches;
+        the assertion below is the invariant, not an assumption.
+        """
+        grandchild = self.root / "grandchild.pid"
+        # Bounded sleeps: past the deadline, but self-terminating, so the
+        # base-head counterfactual fails on the verdict in half a minute
+        # instead of holding a process group for ten.
+        self._arm(f"/bin/sleep 25 &\necho $! > {grandchild}\n/bin/sleep 20\n")
+        exit_code = self.driver.run_night(self.plan_path)
+        pid = int(grandchild.read_text().strip())
+        # The verdict first: a driver with no wall-clock stop lets the chain
+        # run to its own end and reports GO, which is the defect.
+        self.assertEqual(self.driver.EXIT_ABORTED, exit_code)
+        result, refusal, deadline = self._records()
+        self.assertEqual("ABORTED", result["verdict"])
+        self.assertEqual("night_window_exceeded", result["aborted_reason"])
+        self.assertEqual("night_window_exceeded", refusal["refusal"]["reason"])
+        # The scaled fixture's own allowance, substituted into the sentence
+        # the courier reports; the production wording is pinned in
+        # test_an_abort_that_spends_its_whole_budget_is_not_interrupted.
+        self.assertEqual(
+            "chain terminated at the wall-clock deadline (window end + 1 s); "
+            "process-group termination proven",
+            refusal["refusal"]["detail"])
+        self.assertTrue(deadline["proven"])
+        self.assertEqual(self.t0_epoch_s + 2 + 1, deadline["deadline_epoch_s"])
+        self.assertFalse(self._alive(pid), "a group member outlived the deadline")
+        self.driver.run_courier.assert_called_once()
+        self.assertIn(
+            {"path": "night/chain.deadline",
+             "sha256": self.driver._sha256_path(self.custody / "night/chain.deadline")},
+            self.driver._artifact_list(self.custody, self.custody / "night"))
+        source = inspect.getsource(calibration_ledger._bounded_custody_request)
+        self.assertIn("start_new_session=False", source)
+
+    # ---- (2) escalation to SIGKILL -----------------------------------------
+
+    def test_a_grandchild_that_ignores_sigterm_is_killed_and_still_proven(self) -> None:
+        grandchild = self.root / "grandchild.pid"
+        self._arm(
+            "/bin/zsh -c 'trap \"\" TERM; exec /bin/sleep 25' &\n"
+            f"echo $! > {grandchild}\n/bin/sleep 20\n")
+        sent, patch = self._signal_spy()
+        with patch:
+            exit_code = self.driver.run_night(self.plan_path)
+        pid = int(grandchild.read_text().strip())
+        self.assertEqual(self.driver.EXIT_ABORTED, exit_code)
+        _result, refusal, deadline = self._records()
+        self.assertEqual("night_window_exceeded", refusal["refusal"]["reason"])
+        self.assertTrue(deadline["proven"])
+        self.assertIn(signal.SIGKILL, [number for _pgid, number in sent],
+                      "a TERM-ignoring member must force the escalation")
+        self.assertFalse(self._alive(pid), "the TERM-ignoring member survived")
+
+    # ---- (3) a census that never empties -----------------------------------
+
+    def test_a_census_that_never_empties_suppresses_the_courier(self) -> None:
+        self._arm("/bin/sleep 20\n")
+        census = ["9999 /bin/sleep 20"]
+        with (mock.patch.object(self.driver, "GROUP_CENSUS_WINDOW_S", 0.2,
+                                create=True),
+              mock.patch.object(self.driver, "_group_census",
+                                return_value=(False, census), create=True)):
+            exit_code = self.driver.run_night(self.plan_path)
+        night = self.custody / "night"
+        self.assertEqual(self.driver.EXIT_COURIER_FAILED, exit_code)
+        result, refusal, deadline = self._records()
+        unkilled = json.loads((night / "chain.unkilled").read_text())
+        self.assertEqual("REFUSED", result["verdict"])
+        self.assertEqual("night_chain_alive", result["aborted_reason"])
+        self.assertEqual("night_chain_alive", refusal["refusal"]["reason"])
+        self.assertEqual("night_window_exceeded",
+                         refusal["refusal"]["evidence"]["trigger"])
+        self.assertEqual(census, refusal["refusal"]["evidence"]["group_census"])
+        self.assertEqual(self.t0_epoch_s + 2 + 1,
+                         refusal["refusal"]["evidence"]["deadline_epoch_s"])
+        self.assertEqual(census, unkilled["group_census"])
+        self.assertFalse(deadline["proven"])
+        self.driver.run_courier.assert_not_called()
+
+    # ---- (4) a lawful abort is not interrupted -----------------------------
+
+    def test_an_abort_that_spends_its_whole_budget_is_not_interrupted(self) -> None:
+        """The shutdown allowance covers the chain's closing abort, with room.
+
+        The chain's end-of-window `abort-session` runs after the window is
+        spent and is bounded by ONE custody allowance (CUSTODY_BUDGET_S, the
+        seconds the driver exports). The grace must cover that allowance plus
+        the termination sequence, or the driver would kill the very operation
+        that closes the ledger session and leave it open under a live writer
+        lease. The scaled fixture runs in seconds; the inequality asserted
+        after it is the production one.
+        """
+        # Window ends 2 s after t0 (1 s after the fixture's clock); the chain
+        # keeps working for 3 s and closes cleanly, 1 s inside the deadline.
+        self._arm("/bin/sleep 3\nexit 0\n", window_max_s=2, grace_s=3.0)
+        exit_code = self.driver.run_night(self.plan_path)
+        night = self.custody / "night"
+        result = json.loads((night / "result.json").read_text())
+        self.assertEqual(self.driver.EXIT_GO, exit_code)
+        self.assertEqual("GO", result["verdict"])
+        self.assertEqual(0, result["chain_exit_code"])
+        self.assertIsNone(result["aborted_reason"])
+        self.assertFalse((night / "chain.deadline").exists())
+        self.assertEqual([], list(night.glob("refusal*.json")))
+        self.driver.run_courier.assert_called_once()
+        # The real arithmetic, with the real constants.
+        plan = self.driver._load_plan(self.plan_path)
+        budget_s = float(self.driver._chain_environment(plan, night)["CUSTODY_BUDGET_S"])
+        fresh = _load_driver(module_name="run_night_wallclock_constants")
+        self.assertEqual(120.0, budget_s)
+        self.assertEqual(300, fresh.WINDOW_SHUTDOWN_GRACE_S)
+        self.assertEqual(70, fresh.TERMINATION_BOUND_S)
+        self.assertLessEqual(
+            budget_s, fresh.WINDOW_SHUTDOWN_GRACE_S - fresh.TERMINATION_BOUND_S,
+            "the shutdown allowance must cover one custody budget plus termination")
+        self.assertEqual(
+            "chain terminated at the wall-clock deadline (window end + 300 s); "
+            "process-group termination proven",
+            fresh._window_exceeded_detail(fresh.WINDOW_SHUTDOWN_GRACE_S))
+
+    # ---- (B) the watchdog thread, with the loop blocked --------------------
+
+    def test_the_watchdog_fires_while_the_main_loop_is_blocked_on_the_volume(self) -> None:
+        """A census write that never returns must not swallow the deadline.
+
+        `_append_census` writes under the custody root -- the volume whose
+        blocked open held the 2026-09-16 night. A deadline checked only
+        between loop iterations is unreachable in that state, so the watchdog
+        thread terminates the group AND writes the refusal document itself:
+        otherwise the night's only report would be the dead-man's generic
+        `night_chain_alive`, 3900 s after the window end.
+        """
+        self._arm("/bin/sleep 20\n")
+        night = self.custody / "night"
+        fifo = self.root / "blocked-census.fifo"
+        os.mkfifo(fifo)
+        real_append = self.driver._append_census
+        appends = []
+
+        def blocking_append(path, probe, refusal):
+            appends.append(path)
+            if len(appends) == 1:            # the driver's pre-chain census
+                return real_append(path, probe, refusal)
+            with fifo.open("w"):             # no reader: blocks forever
+                pass
+            return real_append(path, probe, refusal)
+
+        outcome = {}
+
+        def run():
+            try:
+                outcome["exit_code"] = self.driver.run_night(self.plan_path)
+            except BaseException as error:   # recorded, never raised in a thread
+                outcome["error"] = error
+
+        with mock.patch.object(self.driver, "_append_census", blocking_append):
+            worker = threading.Thread(target=run, daemon=True)
+            worker.start()
+            try:
+                self._await(night / "refusal.json")
+                self._await(night / "chain.deadline")
+                _refusal = json.loads((night / "refusal.json").read_text())
+                deadline = json.loads((night / "chain.deadline").read_text())
+                pgid = json.loads((night / "chain.started").read_text())["pgid"]
+                self.assertEqual("night_window_exceeded",
+                                 _refusal["refusal"]["reason"])
+                self.assertTrue(deadline["proven"])
+                self.assertEqual(pgid, deadline["pgid"])
+                self.assertFalse(self._alive(pgid),
+                                 "the watchdog must terminate the group itself")
+            finally:
+                # Unblock the loop so the night can finish and be inspected.
+                reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+                os.close(reader)
+                worker.join(timeout=60)
+        self.assertFalse(worker.is_alive())
+        self.assertIsNone(outcome.get("error"))
+        result = json.loads((night / "result.json").read_text())
+        self.assertEqual("ABORTED", result["verdict"])
+        self.assertEqual("night_window_exceeded", result["aborted_reason"])
+        # Exactly one document for one cause: the resuming loop must not
+        # allocate a second copy of the refusal the watchdog already wrote.
+        self.assertEqual(["refusal.json"],
+                         [path.name for path in night.glob("refusal*.json")])
+        self.driver.run_courier.assert_called_once()
+
+    # ---- the schedule the deadline does and does not touch -----------------
+
+    def test_the_deadline_changes_no_plan_field_and_no_dead_man_instant(self) -> None:
+        fresh = _load_driver(module_name="run_night_wallclock_schedule")
+        self._write_plan(window_max_s=9000)
+        plan = fresh._load_plan(self.plan_path)
+        self.assertEqual(
+            plan.t0_epoch_s + plan.window_max_s + fresh.COURIER_DEADLINE_S,
+            fresh._completion_epoch_s(plan))
+        self.assertEqual(
+            60 * math.ceil((fresh._completion_epoch_s(plan) + fresh.DEADMAN_GRACE_S) / 60),
+            fresh.deadman_epoch(plan))
+        # 300 s to the deadline, <= 70 s to prove termination, <= 300 s of
+        # courier, against 3900 s of dead-man grace.
+        self.assertLessEqual(
+            plan.t0_epoch_s + plan.window_max_s + fresh.WINDOW_SHUTDOWN_GRACE_S
+            + fresh.TERMINATION_BOUND_S + fresh.COURIER_DEADLINE_S,
+            fresh.deadman_epoch(plan))
+        fields = {field.name for field in dataclasses.fields(night_gate.NightPlan)}
+        self.assertNotIn("custody_budget_s", fields)
+        self.assertNotIn("window_shutdown_grace_s", fields)
+        # The constant's own comment says why it is not the courier's number:
+        # the value 300 s is right, the OWNERSHIP matters, and a future
+        # courier retune must not silently move where the chain is killed.
+        comment = " ".join(
+            line.lstrip("# ") for line in
+            inspect.getsource(fresh).split("WINDOW_SHUTDOWN_GRACE_S = 300")[0]
+            .splitlines()[-4:])
+        self.assertIn("Separate shutdown allowance", comment)
+        self.assertIn("not derived from the courier deadline", comment)
 
 
 if __name__ == "__main__":

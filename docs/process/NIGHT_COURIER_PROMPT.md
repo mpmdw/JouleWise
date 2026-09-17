@@ -28,6 +28,21 @@ A driver-initiated abort keeps
 its own verdict and reason; report any calibration refusal as additional
 evidence, without replacing the driver's abort cause.
 
+One driver cause has two records of its own. `night_window_exceeded` means the
+chain was still running 300 seconds after the night's exclusive window ended
+(`t0` plus `window_max_s`), so the driver terminated the chain and everything
+it had started. Do not confuse it with the gate's `night_window_expired`,
+which means the window had already passed before anything ran. Read
+`{custody_root}/night/chain.deadline` when you see it: `deadline_epoch_s` is
+the instant the driver set as the stop, `fired_epoch_s` is when it stopped
+the chain, and `proven` is `true` only when the chain was reaped AND a census
+of its process group came back empty. If `proven` is `false`, the night
+reports `night_chain_alive` instead and `{custody_root}/night/chain.unkilled`
+lists, in `group_census`, the processes that were still running — say so
+plainly and say that no further night may be armed until a person clears
+them. Report the verdict, the reason, both timestamps, and whether
+termination was proven.
+
 Email Ed at claude.ai.copper531@passmail.net. Use plain words. State the
 verdict, the chain exit code, any refusal reason and detail, and the results
 branch name `night-results/<plan_id>` (updated 2026-09-15,

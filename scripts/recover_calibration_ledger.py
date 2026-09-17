@@ -226,6 +226,17 @@ def build_parser() -> argparse.ArgumentParser:
     abort.add_argument("--session-id", required=True)
     abort.add_argument("--plan", type=Path, required=True)
     abort.add_argument("--reason", required=True)
+    abort.add_argument(
+        "--custody-budget-s",
+        type=float,
+        help=(
+            "seconds of allowance for this abort's one custody read -- the "
+            "next slot's state, the only custody value the abort consumes. "
+            "The night chain passes the same seconds it passes the "
+            "reservation and the capture writer. Omitted, an inherited "
+            "JOULEWISE_NIGHT_CUSTODY_BUDGET_S marker still bounds the read."
+        ),
+    )
     advance = commands.add_parser(
         "advance-head-pin", help="guarded desk-only terminal head-pin advancement"
     )
@@ -520,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
                 plan_path=args.plan,
                 require_committed_pin=True,
                 repo_root=REPO_ROOT,
+                custody_budget_s=args.custody_budget_s,
             )
             print(canonical_json_bytes(output).decode("utf-8"))
             return 0
@@ -553,12 +565,18 @@ def main(argv: list[str] | None = None) -> int:
         # document carries the typed code to the driver, which reports
         # REFUSED / night_calibration_refused from it. Phase "abort" names
         # the chain step; the contract enumerates no phase set.
-        try:
-            budget_s = night_custody_budget_s()
-        except CalibrationLedgerError:
-            # A malformed marker is itself a refusal elsewhere; here it must
-            # not displace the refusal being reported.
-            budget_s = None
+        # The explicit flag is the abort's actual allowance whenever the chain
+        # passed one; the inherited marker is only the fallback for a desk run
+        # that named no budget. Reporting the marker while the flag bounded
+        # the read would put a number in the document that bounded nothing.
+        budget_s = args.custody_budget_s
+        if budget_s is None:
+            try:
+                budget_s = night_custody_budget_s()
+            except CalibrationLedgerError:
+                # A malformed marker is itself a refusal elsewhere; here it
+                # must not displace the refusal being reported.
+                budget_s = None
         return emit_calibration_refusal(
             code,
             phase="abort",
