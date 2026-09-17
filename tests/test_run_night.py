@@ -3762,8 +3762,13 @@ class WindowDeadlineTests(unittest.TestCase):
         after it is the production one.
         """
         # Window ends 2 s after t0 (1 s after the fixture's clock); the chain
-        # keeps working for 3 s and closes cleanly, 1 s inside the deadline.
-        self._arm("/bin/sleep 3\nexit 0\n", window_max_s=2, grace_s=3.0)
+        # keeps working for 3 s and closes cleanly, well inside the deadline.
+        # The allowance is scaled to 8 s so the margin (about 6 s) absorbs a
+        # loaded hosted runner: with 3.0 s the margin was 1 s and the test
+        # failed on two consecutive main runs (TEST-WALLCLOCK-ABORT-FIXTURE-
+        # MARGIN-01). The chain still exits on its own, so the test's duration
+        # does not grow; the production inequality below is unchanged.
+        self._arm("/bin/sleep 3\nexit 0\n", window_max_s=2, grace_s=8.0)
         exit_code = self.driver.run_night(self.plan_path)
         night = self.custody / "night"
         result = json.loads((night / "result.json").read_text())

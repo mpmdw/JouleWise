@@ -1,0 +1,12 @@
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+CLASS
+Ran 6 tests in 17.507s
+
+OK
