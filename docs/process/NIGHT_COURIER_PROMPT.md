@@ -20,7 +20,7 @@ and did nothing; it is never this night's verdict, never appears in
 as a duplicate launch if you find one, and take the verdict from `result.json`.
 Read `calibration-refusal.json` and any
 `calibration-refusal.json.<pid>.json` siblings when present. For calibration
-refusals, report the exact calibration code, budget in seconds, elapsed time,
+refusals, report the exact calibration code, budget in seconds, elapsed time, the `phase` (`reservation`, `writer_preflight`, `under_lease`, or `abort`; an `abort` phase means the capture slots completed and only the window-exhausted abort refused),
 and `existing_session` (whether a session already existed). `document_invalid`
 means the driver could not authenticate the document's schema, plan binding,
 or self-exit status; report that failure and preserve the evidence.
