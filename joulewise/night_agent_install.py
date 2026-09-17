@@ -646,18 +646,29 @@ PROBE_CODE_PATHS = (
     "joulewise/calibration_custody_worker.py",
 )
 # How many whole-corpus custody passes the capture writer makes inside ONE
-# budget: preflight snapshot, under-lease snapshot, enforcing readiness, and
-# slot validation (four today). The arm-time probe runs the reservation, which
+# budget. A pass is one sweep that opens and hashes every governed artifact of
+# every custody-bearing observation. The writer makes TWO that read bytes: the
+# preflight snapshot before it holds the writer lease, and one pass under the
+# lease. Its other two under-lease sweeps -- the enforcing readiness gate and
+# the slot validation -- read nothing, because lane CUSTODY-PASS-MEMO-01
+# memoizes the verified set on the shared CustodyDeadline and reuses it while
+# the lease is held and the physical ledger head digest is unchanged (see
+# bounded_custody_reasons in joulewise/calibration_ledger.py). The memo is
+# armed only after the lease is acquired, so the preflight pass never feeds a
+# later one. When the pre-capture repair actually mutates the ledger the head
+# digest moves, the memo invalidates and the writer pays a third honest pass;
+# CUSTODY_HEADROOM_FACTOR below covers exactly that case (2 x 1.5 = three
+# passes' worth of allowance). The arm-time probe runs the reservation, which
 # makes exactly ONE pass, so the probe's measured custody_elapsed_s must be
 # multiplied by this count before it can be compared with the budget the night
-# will hand the writer. Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up that
-# memoizes the under-lease passes and lowers this constant to 2; until it
-# lands, 4 is the true count and lowering it here would admit a night that
-# cannot finish its first slot.
-WRITER_CUSTODY_PASSES = 4
+# will hand the writer. A capture writer's success receipt now reports its own
+# custody_passes, so a future change that adds a pass back is visible in a real
+# night's receipt and not only here.
+WRITER_CUSTODY_PASSES = 2
 # Margin on top of the multiplied passes. A night's corpus grows with every
 # finalized slot and the writer's passes are not identical in cost, so admission
-# requires half a pass of slack rather than an exact fit.
+# requires half a pass of slack rather than an exact fit -- and at two passes
+# that slack is exactly the repaired-ledger third pass.
 CUSTODY_HEADROOM_FACTOR = 1.5
 
 

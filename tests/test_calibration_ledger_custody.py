@@ -1015,6 +1015,218 @@ class StrictReservationReadinessTests(unittest.TestCase):
             self._assert_refusal(f, completed, before, "calibration_ledger_recovery_required")
 
 
+class UnderLeaseCustodyMemoTests(unittest.TestCase):
+    """Lane CUSTODY-PASS-MEMO-01: reuse under the lease, never across it.
+
+    A whole-corpus CUSTODY PASS is one sweep that opens and hashes every
+    governed artifact of every custody-bearing observation in the ledger.
+    The capture writer used to make four of them inside one 120 s allowance
+    -- preflight snapshot, under-lease snapshot, enforcing readiness, slot
+    validation -- while the arm-time probe measured one, so a corpus costing
+    more than a quarter of the budget per pass armed a night that could not
+    finish its first slot.
+
+    The cure memoizes the VERIFIED SET on the shared `CustodyDeadline`: the
+    (attempt_id, locator, artifact hashes) entries a pass checked against the
+    bytes, keyed on the physical ledger head digest it checked them at. Every
+    test here names the exact property the memo must have; each one fails
+    against the four-pass base, which has no memo at all.
+    """
+
+    def _pass(self, fixture, deadline):
+        """One production snapshot load with custody verification bounded."""
+
+        return ledger.load_calibration_ledger_snapshot(
+            fixture.ledger, fixture.pin, repo_root=fixture.repo,
+            require_committed_pin=False, verify_custody=True, mode="issuing",
+            custody_deadline=deadline,
+        )
+
+    @staticmethod
+    def _deadline():
+        return ledger.CustodyDeadline(30.0, telemetry_stream=None)
+
+    @staticmethod
+    def _corrupt(root):
+        """Change one governed byte, exactly as a tampered artifact would."""
+
+        artifact = root / "events.jsonl"
+        artifact.write_bytes(artifact.read_bytes() + b"corrupted\n")
+
+    def test_healthy_slot_reads_the_corpus_twice_not_four_times(self):
+        """The writer's four sweeps collapse to two byte-reading passes."""
+
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as fixture:
+            deadline = self._deadline()
+            # 1. Preflight, before the writer lease exists.
+            self.assertEqual((), self._pass(fixture, deadline).refusal_reasons)
+            self.assertEqual(1, deadline.custody_passes)
+            self.assertIsNone(deadline.custody_memo)
+            deadline.arm_custody_memo()
+            # 2. Under-lease snapshot: reads the bytes and seeds the memo.
+            self.assertEqual((), self._pass(fixture, deadline).refusal_reasons)
+            self.assertEqual(2, deadline.custody_passes)
+            digest, verified = deadline.custody_memo
+            self.assertEqual(digest, self._pass(fixture, deadline).head_digest)
+            self.assertEqual(3, len(verified))
+            # 3. Enforcing readiness and 4. slot validation: no bytes read.
+            self.assertEqual((), self._pass(fixture, deadline).refusal_reasons)
+            self.assertEqual(2, deadline.custody_passes)
+
+    def test_a_pre_lease_pass_never_feeds_an_under_lease_pass(self):
+        """Corruption arriving between the preflight and the lease is seen.
+
+        The preflight runs while recovery, another writer, or a tamper can
+        still mutate the governed bytes, so it must not seed the memo. If it
+        did, the under-lease pass -- the one the writer places after
+        acquisition precisely so nothing can mutate first -- would report a
+        corpus that no longer exists.
+        """
+
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as fixture:
+            deadline = self._deadline()
+            self.assertEqual((), self._pass(fixture, deadline).refusal_reasons)
+            self.assertEqual(1, deadline.custody_passes)
+            self._corrupt(fixture.custodies[0])
+            deadline.arm_custody_memo()
+            snapshot = self._pass(fixture, deadline)
+            self.assertIn("calibration_ledger_custody_invalid",
+                          snapshot.refusal_reasons)
+            self.assertEqual(2, deadline.custody_passes)
+            # A refused pass is never memoized either: the next pass re-reads.
+            self.assertIsNone(deadline.custody_memo)
+            self.assertIn("calibration_ledger_custody_invalid",
+                          self._pass(fixture, deadline).refusal_reasons)
+            self.assertEqual(3, deadline.custody_passes)
+
+    def test_releasing_the_lease_ends_reuse(self):
+        """The memo stands for bytes the LEASE froze; it dies with the lease."""
+
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as fixture:
+            deadline = self._deadline()
+            deadline.arm_custody_memo()
+            self.assertEqual((), self._pass(fixture, deadline).refusal_reasons)
+            self.assertEqual(1, deadline.custody_passes)
+            deadline.clear_custody_memo()
+            self._corrupt(fixture.custodies[1])
+            snapshot = self._pass(fixture, deadline)
+            self.assertIn("calibration_ledger_custody_invalid",
+                          snapshot.refusal_reasons)
+            self.assertEqual(2, deadline.custody_passes)
+
+    def test_a_repair_that_mutates_the_ledger_forces_one_honest_re_read(self):
+        """The writer's pre-capture repair runs between two under-lease passes.
+
+        `repair_calibration_ledger` is called after the under-lease snapshot
+        and before the enforcing readiness gate. A repair that changes nothing
+        leaves the physical head digest alone and the memo stands; a repair
+        that appends -- here, abandoning a torn uncommitted record -- moves
+        the head digest, so the memo's key no longer matches and the next
+        pass reads the bytes again. The re-read is PROVEN, not assumed: a
+        governed artifact is corrupted at the same moment, so a memo that
+        ignored the head digest would report a sound corpus.
+        """
+
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as fixture:
+            deadline = self._deadline()
+            deadline.arm_custody_memo()
+            first = self._pass(fixture, deadline)
+            self.assertEqual((), first.refusal_reasons)
+            self.assertEqual(1, deadline.custody_passes)
+            # A torn tail: the writer's repair must abandon it, which appends.
+            with open(fixture.ledger, "ab") as handle:
+                handle.write(b'{"sequence": 4, "torn')
+            # The repair has not run yet, so the head digest is unchanged and
+            # the memo still answers -- the no-op-repair case, P = 2.
+            self.assertEqual(first.head_digest,
+                             self._pass(fixture, deadline).head_digest)
+            self.assertEqual(1, deadline.custody_passes)
+            inspection = ledger.repair_calibration_ledger(
+                fixture.ledger,
+                engine_identity="validate_powermetrics_fiducial",
+                attestation_reason="automatic pre-capture ledger recovery",
+            )
+            self.assertEqual("clean", inspection.state)
+            self.assertNotEqual(first.head_digest, inspection.head_digest)
+            self._corrupt(fixture.custodies[2])
+            repaired = self._pass(fixture, deadline)
+            self.assertEqual(inspection.head_digest, repaired.head_digest)
+            self.assertIn("calibration_ledger_custody_invalid",
+                          repaired.refusal_reasons)
+            self.assertEqual(2, deadline.custody_passes)
+
+    def test_an_append_by_another_writer_invalidates_the_memo(self):
+        """Any head-digest change, not only a repair, ends reuse.
+
+        The reservation command below is a real second process appending a
+        real receipt to the same ledger. The memo is keyed on the physical
+        head digest rather than on "did we call repair", so this case needs
+        no separate mechanism.
+        """
+
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as fixture:
+            deadline = self._deadline()
+            deadline.arm_custody_memo()
+            first = self._pass(fixture, deadline)
+            self.assertEqual((), first.refusal_reasons)
+            self.assertEqual(1, deadline.custody_passes)
+            completed, _ = fixture.reservation()
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            self._corrupt(fixture.custodies[0])
+            second = self._pass(fixture, deadline)
+            self.assertNotEqual(first.head_digest, second.head_digest)
+            self.assertIn("calibration_ledger_custody_invalid",
+                          second.refusal_reasons)
+            self.assertEqual(2, deadline.custody_passes)
+
+    def test_a_new_operation_starts_disarmed_and_uncounted(self):
+        """Abandonment and finalization take a FRESH allowance, not the memo."""
+
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as fixture:
+            deadline = self._deadline()
+            deadline.arm_custody_memo()
+            self.assertEqual((), self._pass(fixture, deadline).refusal_reasons)
+            following = deadline.next_operation()
+            self.assertFalse(following.custody_memo_armed)
+            self.assertIsNone(following.custody_memo)
+            self.assertEqual(0, following.custody_passes)
+
+    def test_reuse_needs_every_entry_the_pass_requires(self):
+        """A superset of the memoized entries is read, never assumed sound."""
+
+        deadline = self._deadline()
+        deadline.ledger_head_sha256 = "a" * 64
+        deadline.arm_custody_memo()
+        deadline.record_custody_memo({("one", "/mock/one", (("m.json", "b" * 64),))})
+        self.assertTrue(deadline.custody_memo_covers(
+            frozenset({("one", "/mock/one", (("m.json", "b" * 64),))})))
+        # A different expected hash for the same artifact is a different entry.
+        self.assertFalse(deadline.custody_memo_covers(
+            frozenset({("one", "/mock/one", (("m.json", "c" * 64),))})))
+        # An observation the memoized pass never covered forces a real pass.
+        self.assertFalse(deadline.custody_memo_covers(frozenset({
+            ("one", "/mock/one", (("m.json", "b" * 64),)),
+            ("two", "/mock/two", (("m.json", "b" * 64),)),
+        })))
+        # An unkeyed memo could never be invalidated, so it is never taken.
+        unkeyed = self._deadline()
+        unkeyed.arm_custody_memo()
+        unkeyed.record_custody_memo({("one", "/mock/one", ())})
+        self.assertIsNone(unkeyed.custody_memo)
+
+
 class NightCustodyBudgetTests(unittest.TestCase):
     """The inherited budget marker: bounded entries and a fail-closed gateway."""
 

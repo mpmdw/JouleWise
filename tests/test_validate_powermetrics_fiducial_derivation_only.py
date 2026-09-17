@@ -732,6 +732,15 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         third thing and are unchanged; they are still one JSON object per
         line, which is what lets a caller parse standard error line by line.
         Standard output stays exactly ONE JSON object: the receipt.
+
+        `custody_passes` is the third field of the same record: how many of
+        those whole-corpus sweeps actually opened and hashed the bytes.  A
+        healthy slot makes exactly TWO -- the preflight snapshot taken before
+        the writer lease exists, and one pass under the lease whose verified
+        set the enforcing readiness gate and the slot validation then reuse
+        (lane CUSTODY-PASS-MEMO-01).  Four, the count before the memo landed,
+        is what made the install-time headroom gate demand a pass four times
+        faster than the probe actually has to be.
         """
 
         receipt = json.loads(completed.stdout)
@@ -746,6 +755,18 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         self.assertNotIsInstance(observations, bool)
         self.assertIsInstance(observations, int)
         self.assertGreaterEqual(observations, 0)
+        passes = receipt["custody_passes"]
+        self.assertNotIsInstance(passes, bool)
+        self.assertIsInstance(passes, int)
+        # Exactly two: not "at most", because a memo that never reused would
+        # report four and a memo that reused across the lease boundary would
+        # report one -- and one is unsound, not an improvement.
+        self.assertEqual(
+            2, passes,
+            "a healthy slot must read the whole corpus exactly twice; "
+            "WRITER_CUSTODY_PASSES in joulewise/night_agent_install.py is "
+            "sized against this count",
+        )
         stderr_events = [
             json.loads(line)
             for line in completed.stderr.splitlines()

@@ -1430,6 +1430,13 @@ class _CaptureLedgerLifecycle:
         # neither.
         self.custody_preparation_elapsed_s: float | None = None
         self.custody_preparation_observations: int | None = None
+        # How many whole-corpus custody passes the preparation allowance
+        # actually read bytes for. Two on a healthy slot (the pre-lease
+        # preflight snapshot, and one pass under the lease that the memo
+        # serves to the enforcing readiness gate and the slot validation);
+        # three when recovery mutated the ledger under the lease and the
+        # memo's head-digest key invalidated.
+        self.custody_preparation_passes: int | None = None
         self.phase = "writer_preflight"
         self.claim_id = (
             stable_bracket_claim_id(
@@ -1444,6 +1451,17 @@ class _CaptureLedgerLifecycle:
         self.begun = False
         self.closed = False
         self._session_shape: Mapping[str, Any] | None = None
+
+    def _release_writer_lease(self) -> None:
+        """Release the lease and, with it, every memoized custody result.
+
+        The memo stands for bytes no other process could rewrite BECAUSE the
+        lease was held. Releasing the lease ends that guarantee, so the memo
+        must not survive the release.
+        """
+
+        self.custody_deadline.clear_custody_memo()
+        self.writer_lease.release()
 
     @property
     def is_bracket_session(self) -> bool:
@@ -1517,6 +1535,13 @@ class _CaptureLedgerLifecycle:
             _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
             self.writer_lease.acquire()
             self.phase = "under_lease"
+            # The lease now freezes every governed byte against other
+            # writers, so from here to the release a later custody pass may
+            # reuse an earlier one's verified set. Arming AFTER acquisition
+            # is the whole lease-boundary rule: the preflight pass above ran
+            # while recovery could still mutate first, so it never feeds the
+            # under-lease pass.
+            self.custody_deadline.arm_custody_memo()
             _writer_stage(WriterStage.AFTER_WRITER_LEASE)
             # Authenticate historical custody before recovery can mutate even
             # an existing session's append intent or partial evidence. Only
@@ -1541,7 +1566,7 @@ class _CaptureLedgerLifecycle:
             self.begun = True
             _writer_stage(WriterStage.AFTER_BEGUN)
         except Exception:
-            self.writer_lease.release()
+            self._release_writer_lease()
             raise
 
     def _validate_slot(self, *, ledger_snapshot: CalibrationLedgerSnapshot | None = None) -> None:
@@ -1630,6 +1655,7 @@ class _CaptureLedgerLifecycle:
         # the capture's duration rather than the custody work's.
         self.custody_preparation_elapsed_s = self.custody_deadline.elapsed_s
         self.custody_preparation_observations = self.custody_deadline.observations
+        self.custody_preparation_passes = self.custody_deadline.custody_passes
 
     def abandon(self, reason: str) -> Mapping[str, Any] | None:
         """Best-effort governed closure for an interrupted writer."""
@@ -1665,7 +1691,7 @@ class _CaptureLedgerLifecycle:
             self.closed = True
             return receipt
         finally:
-            self.writer_lease.release()
+            self._release_writer_lease()
 
     def finalize(
         self,
@@ -1765,7 +1791,7 @@ class _CaptureLedgerLifecycle:
             _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
             return receipt, head_pin_for_receipt(receipt)
         finally:
-            self.writer_lease.release()
+            self._release_writer_lease()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2652,6 +2678,11 @@ def main(argv: list[str] | None = None) -> int:
     # inside the budget. observations is how many custody-bearing observations
     # that allowance counted; it is legitimately 0 for a session's FIRST slot,
     # because none of its rows is finalized yet, and rises as slots finalize.
+    # custody_passes is how many of those whole-corpus passes actually read
+    # the bytes: 2 on a healthy slot and 3 when recovery mutated the ledger
+    # under the lease. It is the night's own record of the count the gate
+    # assumes (WRITER_CUSTODY_PASSES), so a drift between code and gate is
+    # visible in a real receipt instead of only in a constant.
     output = {
         "validation_id": validation_id,
         "status": evidence_payload["status"],
@@ -2661,6 +2692,7 @@ def main(argv: list[str] | None = None) -> int:
         "claim_evaluation_blocked_until_pin_commit": True,
         "custody_elapsed_s": ledger_lifecycle.custody_preparation_elapsed_s,
         "observations": ledger_lifecycle.custody_preparation_observations,
+        "custody_passes": ledger_lifecycle.custody_preparation_passes,
     }
     if bracket_mode:
         output["bracket_session"] = {
