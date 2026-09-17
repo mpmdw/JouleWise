@@ -1,0 +1,7 @@
+# Exhibit E — kernel row PREREG-CHAIN-DIGEST-ADDENDUM-01 (rank 227, P1) as registered on the bookkeeping branch
+
+## Goal
+The sealed D-079 identity-epoch 25G83 pre-registration (revision 1, configs/calibration/preregistration_d079_epoch_25g83_rev1.md line 144) pins the night chain's SHA-256 as b8bf5b0a85bb…; the tracked chain (scripts/night_chains/calibration_derivation_only.zsh) has since changed twice on 2026-09-17 for operational reasons only — bounded custody reads with the strict pre-reserve flag (PR #350) and the bounded end-of-window abort with the driver deadline (NIGHT-STALL-WALLCLOCK-ABORT-01) — to b5beea464d39…, with no change to any timing, capture, slot or settle constant. The night gate refuses an arm whose chain digest differs from the plan's pin (night_chain_digest_mismatch), and docs/process/NIGHT_HANDBACK.md said the digest was unchanged since sealing until 2026-09-17.
+
+## Acceptance summary
+A dated addendum to the pre-registration re-pins the chain-digest field to the current tracked chain digest, states that the two changes are operational (bounded reads, strict pre-reserve, bounded abort, driver deadline) and touch no timing, capture, slot or settle constant (the runsheet's regenerated region proves the constants byte-identical), and is ruled by the cold gate or Ed before the next arm (rule 11: a sealed pre-registration is not the magistrate's to amend). A regression pins that the pre-registration's digest equals the tracked chain's digest so the two can never drift silently again. Gated BEFORE the next arm.
