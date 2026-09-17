@@ -1326,6 +1326,47 @@ if _target:
             self.assertEqual(json.loads(completed.stdout)["terminal_result"],
                              "session_aborted")
 
+    def test_blocked_abort_publishes_the_typed_refusal_document(self):
+        """A timed-out abort must reach the courier as a DOCUMENT, not a line.
+
+        The chain runs this command as `abort_window_exhausted` with
+        `JOULEWISE_CALIBRATION_REFUSAL_PATH` exported. Reporting the timeout
+        only on the command's own stream leaves the driver with nothing but a
+        chain that exited 2, which it records as verdict `GO` with
+        `chain_exit_code` 2 — a night that hung its abort would be couriered
+        as a good night. The document carries the typed code and the phase.
+        """
+        import json
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+
+        with CustodyFixture() as f:
+            plan, root = self._finalized_slot(f)
+            marker = self._install_governed_read_barrier(f, root / "manifest.json")
+            self.assertFalse(f.refusal.exists())
+            before = f.bytes()
+            completed, elapsed = self._abort(f, plan)
+            self.assertTrue([json.loads(line) for line in marker.read_text().splitlines()],
+                            "the barrier proves the governed read was entered")
+            self.assertEqual(2, completed.returncode, completed.stdout)
+            self.assertLess(elapsed, 5.0, "3 s budget plus 2 s observed cleanup tolerance")
+            document = json.loads(f.refusal.read_text())
+            self.assertEqual("joulewise.calibration_refusal.v1", document["schema"])
+            self.assertEqual("calibration_ledger_custody_timeout", document["code"])
+            self.assertEqual("abort", document["phase"])
+            self.assertEqual(2, document["exit_code"])
+            self.assertEqual("custody-hang-plan", document["plan_id"])
+            self.assertEqual(str(f.ledger), document["ledger"]["path"])
+            self.assertEqual(3.0, document["budget_s"])
+            self.assertGreater(document["elapsed_s"], 0.0)
+            # The refusal itself is still exactly one JSON line on the stream,
+            # and the ledger and head pin are untouched by the timeout.
+            self.assertEqual(1, len(completed.stdout.splitlines()))
+            self.assertEqual("calibration_ledger_custody_timeout",
+                             json.loads(completed.stdout)["code"])
+            self.assertEqual(f.bytes(), before, "ledger and head pin unchanged")
+            f.assert_lease_reacquirable()
+            f.assert_workers_gone(completed)
+
 
 if __name__ == "__main__":
     unittest.main()
