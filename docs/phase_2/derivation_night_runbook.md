@@ -1387,12 +1387,15 @@ dead-man formula below leaves after the window end
 alternative is what held the 2026-09-16 night for 11 h 07 m.
 
 The 300 s grace covers the 120 s abort budget plus a writer overrun of up to
-180 s beyond its capture budget: the chain starts a slot only if
+180 s beyond its capture budget (a nominal figure: lease acquisition, any
+ledger repair and the closing write also consume the grace, so the real
+headroom is somewhat less): the chain starts a slot only if
 `next_start + 480 ≤ END`, and that 480 s budget is predictive (it never kills
 the writer). A larger overrun can have its lawful closing abort interrupted
 at +300 s, leaving an OPEN session that the next arm refuses and the desk
-recovers. The writer lease is a kernel `flock`, released when the process
-dies, so this leaves no stuck lease.
+recovers. The writer lease is a kernel `flock` (an exclusive file lock the
+operating system manages and releases when the holding process exits), so
+this leaves no stuck lease.
 
 **The dead-man check (updated 2026-09-15, INSTALL-WINDOWS-MULTI-01).**
 `scripts/run_night.py` defines `COURIER_DEADLINE_S = 300` (5 × 60 s),
