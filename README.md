@@ -1,5 +1,8 @@
 # JouleWise
 
+
+**Now (2026-09-17):** the unattended-night hang of 2026-09-16 is cured and merged (PR #350). Every custody-evidence read on the night path is now time-bounded and refuses with a named reason instead of waiting on a person; that refusal reaches the morning email; and a night can only be armed after a probe run from a launchd job proves the same reads complete in budget. **Next:** halve the capture writer's custody passes (CUSTODY-PASS-MEMO-01), settle the wall-clock abort grace (NIGHT-STALL-WALLCLOCK-ABORT-01) through the cold gate, then re-plan the equivalence night with the launchd probe as its dry run. Nothing is armed.
+
 Terms used on this page: a *measurement window* is one uninterrupted,
 calibrated collection session; a *pack* is the frozen campaign plan and its
 authenticated supporting files; a *detection floor* is the largest false
