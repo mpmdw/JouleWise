@@ -1,0 +1,41 @@
+{
+  "aborted_reason": "night_refused_not_quiet",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "7f67054fc78785487e173e0c1626ded5541e96f15a5f4c2b20a20c337b108564"
+    },
+    {
+      "path": "night/receipt.json",
+      "sha256": "478fb0bd7e0cd8aacc213c19c045cca3617b3ab5dbc0bdefb5f4a04652d8c634"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "478fb0bd7e0cd8aacc213c19c045cca3617b3ab5dbc0bdefb5f4a04652d8c634"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "2ac654b6cbbe7326a966bb4b985192ad54f42a34cf80e01c006ae741b607d644"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 0,
+  "census_hits": [],
+  "chain_exit_code": null,
+  "chain_sha256": null,
+  "ended_epoch_s": 1789684201.8377159,
+  "ended_monotonic_ns": 150943462744458,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "d079-epoch-25g83-derivation-n1-20260917",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal_documents": [
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1789684201.732521,
+  "started_monotonic_ns": 150943357550166,
+  "verdict": "REFUSED"
+}
