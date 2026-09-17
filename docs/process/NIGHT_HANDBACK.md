@@ -191,9 +191,16 @@ plan-pinned wrapper `<night root>/chain.zsh`, emitted by
 `scripts/gen_derivation_night.py`, which carries the night's environment as
 literals, verifies the tracked chain's bytes and `exec`s
 `scripts/night_chains/calibration_derivation_only.zsh` (SHA-256
-`b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf`, the value
-the pre-registration's chain-digest field already carries; unchanged since
-its sealing).
+`b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb` at this
+head). The pre-registration revision 1 (`configs/calibration/preregistration_d079_epoch_25g83_rev1.md`)
+still carries the digest of the chain as sealed, `b8bf5b0a85bb…`; the chain
+has since changed twice for operational reasons only (2026-09-17: bounded
+custody reads and the strict pre-reserve flag; the bounded end-of-window
+abort and the driver deadline), with no change to any timing, capture, slot
+or settle constant. The pre-registration's chain-digest field must be
+re-pinned by a dated addendum before the next arm (lane
+PREREG-CHAIN-DIGEST-ADDENDUM-01); an arm against the sealed digest refuses
+`night_chain_digest_mismatch`.
 
 **What happens with the result, fixed before the night** (runbook
 `docs/phase_2/derivation_night_runbook.md` §2.5). Let m be the number of
