@@ -1389,6 +1389,69 @@
       "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
       "stop_card": null
     },
+    "CUSTODY-PASS-MEMO-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-activation-9853dd2b/44-structural-bound-consult-report.md section 3 (writer budget model with numbers: P = 4 today on one budget, memoization keyed on the head digest collapses it to P = 2, or 3 when repair mutated; T <= 60 s at P = 2; headroom gate WRITER_CUSTODY_PASSES and the runbook wording)",
+          "docs/process_traces/2026-09-16-activation-9853dd2b/36-opus-counter-review-report.md finding F2 (four whole-corpus passes share the CustodyDeadline built at validate_powermetrics_fiducial.py:1863 while the reservation makes one; worked case T = 90 s passes the arm and times out on slot d01)",
+          "scripts/validate_powermetrics_fiducial.py:1862 (budget created), :2008 (preflight snapshot), :1517 (under-lease snapshot), :1526 (repair between passes), :1561 (enforcing readiness), :1573 (slot validation), :1634 and :1673 (the only resets)",
+          "joulewise/night_agent_install.py (WRITER_CUSTODY_PASSES beside PROBE_CODE_PATHS, and the headroom check in validate_probe_receipt)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CUSTODY-PASS-MEMO-01/acceptance",
+          "label": "CUSTODY-PASS-MEMO-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Memoize the verified set on the CustodyDeadline object, keyed on the physical ledger head digest together with the frozenset of (attempt_id, locator, artifact sha256) triples the pass requires, and reuse it only when the head digest is unchanged and the required set is a subset of the memoized one. Reuse is confined to a single writer lease (the exclusive claim the writer holds while it owns the ledger): the memo is never carried across a lease acquisition, because the under-lease authentication at validate_powermetrics_fiducial.py:1516-1517 exists precisely so that recovery cannot have mutated the corpus first, and repair_calibration_ledger at :1526 runs between passes 2 and 3, so a repair that mutates the head invalidates the memo and forces one honest re-read. Result: passes 2, 3 and 4 collapse into one when repair is a no-op (two passes per slot), three passes when repair mutated the head. Lower WRITER_CUSTODY_PASSES from 4 to 2 in joulewise/night_agent_install.py and change the runbook multiplier text with it (docs/phase_2/derivation_night_runbook.md section 1.2), so prose and gate cannot drift. Regressions: one proving a second pass under an unchanged head performs no filesystem re-read and returns the memoized verdict, and one proving a head-digest change between passes forces a fresh read. Gated BEFORE the next night arm; no change to what any pass verifies, only to how often identical work is repeated."
+      },
+      "authority": {
+        "label": "2026-09-17 activation 9853dd2b, NIGHT-RESERVE-HANG-01 review findings; registration by the magistrate, not a ruling",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "An unattended measurement night re-reads every governed artifact file named by the calibration ledger and re-checks each file's SHA-256 digest against the digest the ledger records; one sweep over the whole corpus is called a custody verification pass, and its wall-clock cost is written T below. Before the night is installed, an arm-time probe (a rehearsal run started by macOS's launchd service manager that performs the same work the night will perform and mints a receipt) measures exactly ONE pass and reports it as custody_elapsed_s (scripts/reserve_calibration_window_bracket.py:340, :346); the reservation step also makes one. The capture writer (scripts/validate_powermetrics_fiducial.py, the program that records one timed measurement slot) instead makes FOUR whole-corpus passes per slot -- preflight snapshot :2008, under-lease snapshot :1517, enforcing readiness :1561, and slot validation :1573 -- and all four spend from ONE shared CustodyDeadline budget (a wall-clock allowance object) created at :1862 and reset only on abandon :1634 and finalize :1673. Probe, reservation and writer all receive the same allowance B, default 120 s from CUSTODY_BUDGET_S in scripts/night_chains/calibration_derivation_only.zsh:178 and :241. The writer therefore needs 4T <= B, i.e. T <= 30 s, while the probe certifies only T <= 120 s: a receipt showing T = 90 s is a passing arm at the desk and a guaranteed calibration_ledger_custody_timeout refusal on the night's first slot (record 36 finding F2, record 44 section 3). The install-time headroom gate in joulewise/night_agent_install.py compensates for the redundancy rather than removing it: it carries WRITER_CUSTODY_PASSES = 4 and refuses an install unless custody_elapsed_s x WRITER_CUSTODY_PASSES x 1.5 <= custody_budget_s, so with B = 120 s the probe must show T <= 20 s. This lane removes the redundant passes so the writer costs two passes, not four, and the gate can be relaxed to match measured behaviour instead of guarding an inflated multiplier.",
+      "id": "CUSTODY-PASS-MEMO-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 223,
+      "status": "queued",
+      "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started. Sequencing per record 44 section 5: the structural bound and the two install admission gates land in the reserve-hang PR with WRITER_CUSTODY_PASSES = 4, and this lane is the gated follow-up that lowers the constant to 2, because the memo changes what enforcing-under-lease verifies and deserves its own review round. Must land before the next night arm; if it slips, the arm stays admissible only while the probe shows T <= 20 s.",
+      "stop_card": null
+    },
+    "CUSTODY-REAPING-ATTRIBUTION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-activation-9853dd2b/27-seat-A-delta-reaudit-report.md flag R1 (verification_gap, nonblocking): the late-child test reaps via children[0].wait(), a terminate-without-reap mutant passes both the base test at 0.286 s and the revised test at 0.141 s, so production-owned reaping is not independently proved; replay probe_reaping.py in /tmp/reaudit-A/mutation, evidence reaping-base.log and reaping-only.log",
+          "tests/test_calibration_custody_worker.py (late-child test; the reap it performs itself is what masks the mutant)",
+          "joulewise/calibration_custody_worker.py and the parent's spawn and collection path in joulewise/calibration_ledger.py (worker spawned at :2038, results required at :2100-2108)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CUSTODY-REAPING-ATTRIBUTION-01/acceptance",
+          "label": "CUSTODY-REAPING-ATTRIBUTION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A regression fails when production stops reaping the custody worker: the test must not call wait() on the child, and must observe from outside the parent -- for example, a separate process checking that no process in zombie state remains with the parent alive after the parent's custody call returns -- so that a terminate-without-reap mutant is killed. Demonstrate the kill by running the new test against a production copy with the reap removed and quoting the failing assertion. Existing custody-worker tests, including the launch-barrier and group-termination proofs, remain unchanged and still pass."
+      },
+      "authority": {
+        "label": "2026-09-17 activation 9853dd2b, NIGHT-RESERVE-HANG-01 review findings; registration by the magistrate, not a ruling",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The custody worker (joulewise/calibration_custody_worker.py) is a short-lived child process the parent spawns to perform custody reads; production is required to reap it, that is, to call wait() on the child after termination so that no zombie (a finished process whose exit status no one has collected) is left behind. The late-child regression in tests/test_calibration_custody_worker.py performs that reap itself, via children[0].wait(), before making its assertions. Because the test collects the exit status, a mutant of production that terminates the worker but never reaps it passes both the pre-delta test (0.286 s) and the post-delta test (0.141 s). The test therefore does not attribute reaping to production code, and no other test does: the delta re-audit recorded this as verification gap R1, with replay script probe_reaping.py under /tmp/reaudit-A/mutation and logs reaping-base.log and reaping-only.log. The behaviour predates the NIGHT-RESERVE-HANG-01 delta; what is missing is proof, not the reaping itself.",
+      "id": "CUSTODY-REAPING-ATTRIBUTION-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 226,
+      "status": "queued",
+      "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started; test-strength hardening, not night-critical. The re-audit recorded R1 as predating the delta and nonblocking; the replay materials under /tmp are scratch and may be gone, so the lane rebuilds the mutant rather than depending on them. Lands under the twelve-row gate.",
+      "stop_card": null
+    },
     "D080-TRIGGER-01": {
       "acceptance": {
         "evidence": [
@@ -3546,6 +3609,37 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "NIGHT-DOCUMENT-HASH-BOUND-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-activation-9853dd2b/44-structural-bound-consult-report.md section 2 row 15: driver run_night.py _artifact_list:611-631 hashes night.log, result and receipt under the night custody root, bounding object NONE, flagged as an adjacent class deliberately left out of the reserve-hang lane",
+          "scripts/run_night.py:611-631 (_artifact_list), :618-623 (rerun refusal entries added in fix round 3), :564-604 (driver loop with no wall-clock bound)",
+          "docs/process_traces/2026-09-16-activation-9853dd2b/44-structural-bound-consult-report.md section 4 (operator-configurable custody_root plus the standing iCloud-offload directive make a synced or evictable root a live possibility)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-DOCUMENT-HASH-BOUND-01/acceptance",
+          "label": "NIGHT-DOCUMENT-HASH-BOUND-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Document hashing in scripts/run_night.py runs under a bounded allowance, and expiry produces a typed outcome (a named refusal or a recorded per-document unreadable state) rather than an unbounded wait, so the courier -- the morning process that collects the night's documents and reports the verdict -- is never blocked and always receives a result it can interpret. Regression: replace one night document with a FIFO (a named pipe whose open or read blocks until a writer appears) and assert the inventory completes within the allowance with the typed outcome recorded, the other documents still inventoried, and the published verdict bytes unchanged."
+      },
+      "authority": {
+        "label": "2026-09-17 activation 9853dd2b, NIGHT-RESERVE-HANG-01 review findings; registration by the magistrate, not a ruling",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The night driver scripts/run_night.py builds an inventory of the night's own documents in _artifact_list (:611-631, extended at :618-623 for rerun refusal records), opening and SHA-256 hashing night.log, result.json, receipt.json and any refusal documents under the night custody root. Those reads have no time bound of any kind. This is the adjacent class to the defect the NIGHT-RESERVE-HANG-01 lane cured: the 2026-09-16 stall happened because an ordinary open() of a file under an iCloud-synced root blocked indefinitely while macOS held a file-access consent decision, and the process had no allowance that could expire. The governed-artifact reads on that path are now bounded; the night documents are not, and the custody root is operator-configurable, so a synced or evictable location reproduces the same shape. The driver loop itself has no wall-clock bound (:564-604), so a blocked hash here stalls the night with nothing to interrupt it.",
+      "id": "NIGHT-DOCUMENT-HASH-BOUND-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 225,
+      "status": "queued",
+      "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started; hardening, not night-critical. Deliberately out of the reserve-hang lane's scope, which covers governed calibration artifacts rather than night documents. Related but distinct from NIGHT-STALL-WALLCLOCK-ABORT-01, which would add the missing wall-clock bound to the driver loop; either lane alone narrows this exposure, both together close it.",
+      "stop_card": null
+    },
     "NIGHT-HANDBACK-GLOSS-01": {
       "acceptance": {
         "evidence": [
@@ -5375,6 +5469,37 @@
       "rank": 170,
       "status": "queued",
       "status_note": "2026-09-09: QUEUED by cold gate 44 (Q3), record-only. The comparability argument stands on its own: Low Power Mode changes frequency caps and scheduling, so a night measured under powermode 1 is a different machine state from a calibration taken under powermode 0, and the state is currently unrecorded in plan and receipt (observed AC Power powermode 1 on 2026-09-09). The paired refuter 45 dissents from GATING on powermode (it was shown not to be the cause of the local test failures); the judge's constraint therefore stands as a RECOMMENDATION to Ed, not a gate: prefer powermode 0 for real or pack-bound nights until the calibration corpus's powermode is recorded; REHEARSAL_STUB nights are unaffected. Ed is asked whether Low Power Mode was on during the 2026-09-08 replay 58d9225b (rc 0). Refuse-vs-flag is deferred to a cold-gate design decision.",
+      "stop_card": null
+    },
+    "PROBE-DRIVER-COPY-BINDING-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-16-activation-9853dd2b/39-seat-B-fix-round-3-opus-report.md section F3, paragraph 'Residual worth a magistrate eye': PROBE_CODE_PATHS resolves against plan.measurement_root, so the F3 fix binds the measurement clone's run_night.py while the LaunchAgent executes the driver checkout's copy, covered only by the committed-HEAD check",
+          "joulewise/night_agent_install.py:641-648 (PROBE_CODE_PATHS, five paths after fix round 3) and validate_probe_receipt's field-by-field code_digests comparison",
+          "docs/process_traces/2026-09-16-activation-9853dd2b/36-opus-counter-review-report.md finding F3 (the original omission, and the note that joulewise/night_gate.py:1020 catches committed changes only)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PROBE-DRIVER-COPY-BINDING-01/acceptance",
+          "label": "PROBE-DRIVER-COPY-BINDING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The probe receipt binds the driver checkout's scripts/run_night.py by content digest, alongside the measurement-clone paths already in PROBE_CODE_PATHS, and likewise every other program the installed plist executes from the driver checkout; install-time validation recomputes those digests from the driver checkout and refuses on any mismatch. Regression: mint a receipt that matches, then append one byte to the driver checkout's scripts/run_night.py without committing it, and assert the install exits 2 with a refusal naming code_digests and that no launchd bootstrap happened. The existing measurement-clone bindings and the committed-head check in joulewise/night_gate.py are unchanged."
+      },
+      "authority": {
+        "label": "2026-09-17 activation 9853dd2b, NIGHT-RESERVE-HANG-01 review findings; registration by the magistrate, not a ruling",
+        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "PROBE_CODE_PATHS in joulewise/night_agent_install.py:641-648 is the list of program files whose contents are hashed and recorded in the arm-time probe receipt as code_digests, so that editing any of them after a successful probe makes the install refuse. Every path in that list is resolved against plan.measurement_root, the measurement clone of the repository, so the receipt binds the measurement clone's copy of scripts/run_night.py. The night LaunchAgent (the macOS launchd job that actually runs the night) executes a different copy: the plist's @@REPO@@ placeholder is substituted with the DRIVER checkout, whose only binding is plan.repo_head, the git commit id of that checkout's committed head. A committed change to the driver checkout is therefore caught, but an uncommitted working-tree edit to the driver checkout's scripts/run_night.py after a successful probe changes what launchd will execute and leaves the receipt valid. The same gap covers any other driver-checkout program the plist executes.",
+      "id": "PROBE-DRIVER-COPY-BINDING-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 224,
+      "status": "queued",
+      "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started; hardening, not night-critical. The residual is narrower than the cured F3 defect: it requires an uncommitted edit in the driver checkout between a successful probe and the night. Lands under the twelve-row gate.",
       "stop_card": null
     },
     "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01": {
@@ -8554,5 +8679,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-16"
+  "updated": "2026-09-17"
 }
