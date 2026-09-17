@@ -101,6 +101,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_courier_unavailable` | The driver's delivery executable is unavailable; not a failed notice send. |
 | `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
 | `night_record_exists` | A write-once night record proves invocation already occurred. |
+| `night_calibration_refused` | The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause. |
 
 **Installer §1.3 refusals — cold-gate path.**
 
