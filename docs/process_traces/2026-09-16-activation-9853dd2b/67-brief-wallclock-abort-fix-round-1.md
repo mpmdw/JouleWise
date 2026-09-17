@@ -1,0 +1,17 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+# NIGHT-STALL-WALLCLOCK-ABORT-01 fix round 1 — refuter record 66 findings F1, F2 (test-only should-fix) and F5, F6, F7 (doc nits)
+
+Worktree `/Users/edr/code/JouleWise-wt-a221-fix`, branch `fix/2026-09-17-wallclock-abort-r1` from `a4d530cd`. Do NOT commit or run any git write (linked-worktree git metadata is outside your sandbox; the lead commits by pathspec). Do not edit anything outside WRITE_SCOPE; if another path must change, finish everything else and stop with NEEDS_SCOPE. Never touch `/Users/edr/code/JouleWise`, other worktrees, `~/night-custody`, `~/Library/LaunchAgents`, measurement roots, real `launchctl`, network. Tests: `TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest <module>`; bytecode to `/tmp` (`PYTHONPYCACHEPREFIX=/tmp/a221fix-pycache`). Counterfactuals: `cp -R` the worktree to `/tmp/a221fix-base`, restore files with read-only `git show a4d530cd:<path>`.
+
+The refuter (read-only: `nl -ba /Users/edr/code/JouleWise-wt-bk2-9853dd2b/docs/process_traces/2026-09-16-activation-9853dd2b/66-wallclock-abort-refuter-report.md`) found the code correct but two ordered clauses unpinned, and three doc nits:
+
+F1 (SHOULD-FIX, test-only): `scripts/run_night.py:~2419` `_group_census` — absent ⇔ rc 1 AND empty output; rc 2 (malformed), OSError, timeout → not absent with their own evidence line. Mutant `== 1` → `!= 0` survived 135 driver tests. Add one unit test over the five cases the refuter probed live: malformed argument (rc 2 → `(False, ['census_exit_2: …'])`), `TimeoutExpired` → `(False, ['census_failed: …'])`, `PermissionError` → `(False, ['census_failed: …'])`, a live member → `(False, ['<pid> <argv>'])`, empty → `(True, [])`. It must FAIL under the `!= 0` mutant.
+F2 (SHOULD-FIX, test-only): `scripts/run_night.py:~437` `_prove_group_absent` re-issues the current phase's signal on every census retry (a member forked by a survivor after the first signal inherits the pgid unsignalled). Mutant (delete the `_signal_group` line) survived. Add a regression asserting, with the fixture's existing `_signal_spy`, that `killpg` is called more than once per phase while the census keeps returning a member. Must FAIL under the mutant.
+F5 (NIT): the runbook §1.2 sentence "one shared custody budget" and the `scripts/run_night.py:~66–68` comment say "shared" although the abort now performs a single read; change to "one 120 s custody budget for the abort's single custody read" (keep the ruling's required sentence otherwise).
+F6 (NIT): add to runbook §1.2 the 300 s sizing rationale and its residual: the chain starts a slot only if `next_start + 480 ≤ END` and the 480 s capture budget is predictive (never kills), so the grace covers a writer overrun of up to 180 s beyond its budget; a larger overrun has its lawful closing abort interrupted at +300 s, leaving an OPEN session that the next arm refuses and the desk recovers (the writer lease is a kernel flock released when the process dies, so no stuck lease).
+F7 (NIT): `docs/process/NIGHT_HANDBACK.md:~569` gloss "re-signalled" in the timeline row: the census re-sends the phase's signal before each look because a member forked by a survivor after the first signal inherits the group unsignalled.
+
+Verification to paste: both mutants failing their new tests; `tests.test_run_night tests.test_docs_freshness` tails; compileall rc; `git status --short` / `git diff --stat` (only WRITE_SCOPE paths). Final message: the claude-codex-report/v1 envelope under 8000 bytes.
