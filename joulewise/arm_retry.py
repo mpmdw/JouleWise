@@ -49,6 +49,7 @@ COLD_GATE_CODES = {
     "night_courier_unavailable": "The driver's delivery executable is unavailable; not a failed notice send.",
     "night_plan_overruns_deadman": "Completion/dead-man schedule was refused; retained even if normally unreachable.",
     "night_record_exists": "A write-once night record proves invocation already occurred.",
+    "night_calibration_refused": "The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause.",
 }
 INSTALLER_REFUSALS = {
     "install_span_closed": "The selected transaction ended; never switch spans mid-install or bypass the plan cutoff.",

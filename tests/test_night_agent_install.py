@@ -150,6 +150,10 @@ if effect:
     marker.touch()
 elif marker.exists():
     marker.unlink()
+if action == "bootstrap" and "probe_receipt" in directive:
+    Path(directive["receipt_path"]).write_text(json.dumps(directive["probe_receipt"]))
+    Path(directive["receipt_path"] + ".process.json").write_text(json.dumps(
+        {"launchd_label": label, "chain_pgid": 999999, "driver_pid": 999998}))
 if "clock_file" in directive:
     Path(directive["clock_file"]).write_text(str(directive["clock"]))
 if directive.get("signal"):
@@ -978,7 +982,13 @@ class TransactionTests(unittest.TestCase):
         zero_returns = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
                         for child in ast.walk(node) if isinstance(child, ast.Return)
                         and isinstance(child.value, ast.Constant) and child.value.value == 0]
-        self.assertEqual(["uninstall"], zero_returns, "D7 is the only direct return-0 exception")
+        self.assertEqual(["uninstall", "main"], zero_returns,
+                         "only verified uninstall and the separate access probe return zero directly")
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        probe_branch = next(node for node in ast.walk(main) if isinstance(node, ast.If)
+                            and ast.unparse(node.test) == "args.launchd_probe")
+        self.assertEqual("launchd_probe", probe_branch.body[-2].value.func.id)
+        self.assertEqual("return 0", ast.unparse(probe_branch.body[-1]))
         teardown = next(node for node in ast.walk(tree)
                         if isinstance(node, ast.FunctionDef) and node.name == "_teardown")
         zero_assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)
@@ -1769,6 +1779,100 @@ class CapabilityTests(SignalTestCase):
             self.assertEqual("--python ignored on uninstall\n", result.stderr)
             self.assertEqual([], list(directory.glob("*.plist")))
             self.assertFalse(any(self.fake.loaded(label) for label in LABELS))
+
+
+class LaunchdAccessProbeTests(unittest.TestCase):
+    def setUp(self):
+        from types import SimpleNamespace
+        from tests.test_run_night import NightProbeTests, write_matching_probe_receipt
+        from joulewise import night_agent_install as engine
+        self.engine = engine
+        self.fixture = NightProbeTests()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.root = self.fixture.root
+        self.fake = FakeLaunchctl(self.root / "fake-launchctl")
+        self.prepared = SimpleNamespace(plan=self.fixture.plan, plan_path=self.fixture.plan_path,
+            repo=Path(__file__).resolve().parents[1], python=sys.executable,
+            courier_path="/usr/bin:/bin:/usr/sbin:/sbin")
+        receipt_path = write_matching_probe_receipt(self.fixture.plan_path)
+        self.receipt = json.loads(receipt_path.read_text())
+        self.receipt.update(chain_pgid=999999, driver_pid=999998)
+        self.pending = receipt_path.with_name("night_probe_receipt.pending.json")
+        self.label = engine.probe_label(self.fixture.plan.plan_id)
+        self.fake.directive(self.label, "bootstrap", probe_receipt=self.receipt,
+                            receipt_path=str(self.pending))
+
+    def test_temporary_launchd_job_bootstraps_boots_out_and_censuses_group(self):
+        from unittest import mock
+        real_run = subprocess.run
+        censuses = []
+        def runner(argv, **kwargs):
+            if argv[0] == "/usr/bin/pgrep":
+                censuses.append(argv)
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return real_run(argv, **kwargs)
+        with mock.patch.object(self.engine.subprocess, "run", side_effect=runner), \
+             mock.patch.object(self.engine.os, "killpg", side_effect=ProcessLookupError), \
+             contextlib.redirect_stdout(__import__('io').StringIO()):
+            record = self.engine.launchd_probe(self.prepared, str(self.fake.executable),
+                                               self.engine.Shield(), timeout_s=0.5)
+        self.assertEqual("ok", record["outcome"])
+        self.assertTrue(self.fixture.receipt.exists())
+        self.assertFalse(self.pending.exists())
+        self.assertTrue(any(line.startswith("bootstrap ") and self.label in line for line in self.fake.calls()))
+        self.assertIn("bootout gui/{}/{}".format(os.getuid(), self.label), self.fake.calls())
+        self.assertFalse(self.fake.loaded(self.label))
+        self.assertTrue(any("-g" in command and "999999" in command for command in censuses))
+        self.assertTrue(any(__import__("re").escape(self.label) in command[-1] for command in censuses))
+        self.assertFalse(list(self.root.glob("night-probe-job-*")))
+        self.assertFalse(list(self.root.rglob("chain.started")))
+
+    def test_failed_probe_receipt_still_boots_out_and_refuses(self):
+        from unittest import mock
+        real_run = subprocess.run
+        self.receipt["outcome"] = "refused"
+        self.fake.directive(self.label, "bootstrap", probe_receipt=self.receipt,
+                            receipt_path=str(self.pending))
+        def runner(argv, **kwargs):
+            if argv[0] == "/usr/bin/pgrep":
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return real_run(argv, **kwargs)
+        with mock.patch.object(self.engine.subprocess, "run", side_effect=runner), \
+             mock.patch.object(self.engine.os, "killpg", side_effect=ProcessLookupError):
+            with self.assertRaisesRegex(self.engine.Refused, "outcome") as caught:
+                self.engine.launchd_probe(self.prepared, str(self.fake.executable), self.engine.Shield(), timeout_s=0.2)
+        self.assertEqual(2, caught.exception.code)
+        self.assertFalse(self.fake.loaded(self.label))
+        self.assertFalse(self.fixture.receipt.exists())
+
+    def test_cleanup_refusal_reports_the_failure_it_interrupted(self):
+        """The finally block fails closed WITHOUT discarding the diagnostic."""
+        import itertools
+        from unittest import mock
+        # Bootstrap publishes no receipt (the wait loop times out) and bootout
+        # leaves the service loaded (the absence proof fails in the finally).
+        self.fake.directive(self.label, "bootstrap")
+        self.fake.directive(self.label, "bootout", loaded=True)
+        clock = itertools.count(0.0, 5.0)  # only launchd_probe reads this clock
+        with mock.patch.object(self.engine.time, "monotonic", side_effect=lambda: next(clock)):
+            with self.assertRaises(self.engine.Refused) as caught:
+                self.engine.launchd_probe(self.prepared, str(self.fake.executable),
+                                          self.engine.Shield(), timeout_s=0.5)
+        self.assertEqual(2, caught.exception.code)
+        self.assertIn("probe bootout absence unproven", str(caught.exception))
+        self.assertIn("probe receipt timeout", str(caught.exception))
+        self.assertIsInstance(caught.exception.__cause__, self.engine.Refused)
+        self.assertIn("probe receipt timeout", str(caught.exception.__cause__))
+        self.assertFalse(self.fixture.receipt.exists())
+
+    def test_survivor_or_unknown_census_refuses(self):
+        from unittest import mock
+        for rc, stdout in ((0, "4321 probe-worker\n"), (3, "")):
+            with self.subTest(rc=rc), mock.patch.object(self.engine.subprocess, "run",
+                    return_value=subprocess.CompletedProcess([], rc, stdout, "census fixture")):
+                with self.assertRaisesRegex(self.engine.Refused, "survivor or unknown"):
+                    self.engine.probe_process_census(self.label, self.fixture.plan_path, {"chain_pgid": 12345})
 
 
 if __name__ == "__main__":

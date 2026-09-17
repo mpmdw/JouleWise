@@ -9,6 +9,9 @@ diagnostic only; retry and exit policy never depends on exception text.
 from __future__ import annotations
 
 import json
+import math
+import os
+import time
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
@@ -33,6 +36,7 @@ class RefusalCode(str, Enum):
     LEDGER_OPERATION_CONFLICT = "calibration_ledger_operation_conflict"
     LEDGER_UNGOVERNED_BUSINESS = "calibration_ledger_ungoverned_business"
     LEDGER_BASELINE_MISSING = "calibration_ledger_baseline_missing"
+    LEDGER_CUSTODY_TIMEOUT = "calibration_ledger_custody_timeout"
     LEDGER_CUSTODY_INVALID = "calibration_ledger_custody_invalid"
     LEDGER_SNAPSHOT_REQUIRED = "calibration_ledger_snapshot_required"
     LEDGER_OFF_LEDGER_ARTIFACT = "calibration_ledger_off_ledger_artifact"
@@ -207,6 +211,7 @@ _DESCRIPTIONS: Mapping[RefusalCode, str] = MappingProxyType(
         RefusalCode.LEDGER_OPERATION_CONFLICT: "durable operation semantic content differs from its completed target commitment",
         RefusalCode.LEDGER_UNGOVERNED_BUSINESS: "a business receipt after protocol activation has no completed append intent",
         RefusalCode.LEDGER_BASELINE_MISSING: "the acceptance cutoff is not in the current chain",
+        RefusalCode.LEDGER_CUSTODY_TIMEOUT: "receipt-bound evidence custody verification exceeded its budget",
         RefusalCode.LEDGER_CUSTODY_INVALID: "receipt-bound evidence bytes are absent or hash-invalid",
         RefusalCode.LEDGER_SNAPSHOT_REQUIRED: "claim evaluation did not receive one immutable snapshot",
         RefusalCode.LEDGER_OFF_LEDGER_ARTIFACT: "a calibration artifact is not registered in the snapshot",
@@ -628,7 +633,59 @@ def emit_refusal(
     return record.process_exit
 
 
+def emit_calibration_refusal(
+    code: RefusalCode | str, *, phase: str, ledger_path, custody_context=None,
+    budget_s: float = 120.0, context=None, terminal_result=None, stream,
+) -> int:
+    """Publish an exclusive-create night refusal document plus existing stderr."""
+    destination = os.environ.get("JOULEWISE_CALIBRATION_REFUSAL_PATH")
+    record = refusal_record(code)
+    custody = dict(custody_context or {})
+    detail = " ".join(str((context or {}).get("detail") or record.description).splitlines())
+    if destination:
+        budget_s = budget_s if math.isfinite(budget_s) and budget_s > 0 else 120.0
+        payload = {
+            "schema": "joulewise.calibration_refusal.v1",
+            "code": record.code.value, "exit_code": record.process_exit,
+            "phase": phase, "plan_id": os.environ.get("JOULEWISE_NIGHT_PLAN_ID"),
+            "session_id": custody.get("session_id"),
+            "existing_session": bool(custody.get("existing_session", False)),
+            "ledger": {"path": str(ledger_path),
+                       "head_sha256": custody.get("ledger_head_sha256")},
+            "budget_s": custody.get("budget_s", budget_s),
+            "elapsed_s": custody.get("elapsed_s", 0.0),
+            "last_observation": custody.get("last_observation"),
+            "written_epoch_s": time.time(), "pid": os.getpid(), "detail": detail,
+        }
+        path = destination
+        # A refusal is exactly ONE JSON line on the stream, so a sibling-path
+        # notice or a write failure travels as a field inside that line rather
+        # than as a second line a caller parsing the whole stream would choke on.
+        notice: dict[str, str] = {}
+        try:
+            encoded = json.dumps(payload, sort_keys=True, allow_nan=False) + "\n"
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError:
+                path = f"{destination}.{os.getpid()}.json"
+                notice = {"refusal_document_existing": destination,
+                          "refusal_document": path}
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except (OSError, ValueError) as exc:
+            notice = notice | {"refusal_document": path,
+                               "refusal_document_error": str(exc)}
+        if notice:
+            context = dict(context or {}) | notice
+    return emit_refusal(code, context=context, terminal_result=terminal_result,
+                        stream=stream)
+
+
 __all__ = [
+    "emit_calibration_refusal",
     "REFUSAL_BY_CODE",
     "REFUSAL_INVENTORY",
     "RefusalCode",

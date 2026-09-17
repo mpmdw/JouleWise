@@ -437,6 +437,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         custody: Path,
         epoch: dict,
         derivation_only: bool = True,
+        extra_env: dict[str, str] | None = None,
     ):
         identity = custody.parent / f"{session_id}-{slot}-identity.json"
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -484,6 +485,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
                 "JW_FAKE_SAMPLER_ELAPSED_NS": "200000",
                 "JW_FAKE_TIME_SCALE": "0.001",
                 "JW_FAKE_TIME_ORIGIN": str(time.time()),
+                **(extra_env or {}),
             },
         )
 
@@ -675,6 +677,142 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             != acceptance["identity_epoch"].get(field)
         ]
         self.assertEqual(stale, ["os_build"])
+
+    def _healthy_derivation_capture(self, name, *, slot_count=1, extra_env=None):
+        """Run `slot_count` real derivation slots to success, in order."""
+
+        self._rekey_acceptance()
+        epoch, t1 = self._epoch("25G83")
+        declared = derivation_session_slots(2)
+        ledger, pin, session_id, custody = self._session(
+            name,
+            slots=declared,
+            session_kind=SESSION_KIND_DERIVATION,
+            epoch=epoch,
+            t1=t1,
+        )
+        runs = []
+        for slot in declared[:slot_count]:
+            completed = self._writer(
+                ledger=ledger,
+                pin=pin,
+                session_id=session_id,
+                slot=slot,
+                custody=custody[slot],
+                epoch=epoch,
+                extra_env=extra_env,
+            )
+            self.assertEqual(
+                completed.returncode, 0, completed.stdout + completed.stderr
+            )
+            runs.append(completed)
+        return runs if slot_count > 1 else runs[0]
+
+    def _assert_custody_timing_receipt(self, completed):
+        """The success receipt must carry the healthy-night custody timing.
+
+        `custody_elapsed_s` is the seconds the finalization operation's
+        custody allowance had been running when the receipt was written, and
+        `observations` is how many custody-bearing observation rows that pass
+        covered.  Together they are the only record a SUCCESSFUL night leaves
+        of how long its custody passes take -- the quantity the install-time
+        headroom gate is sized against -- because the writer's custody
+        deadline prints no telemetry and only an expiry carries the timing
+        into a refusal document.
+
+        The writer's standard-error contract is unchanged by the new fields.
+        That contract has two parts, and a healthy capture is judged against
+        both.  (1) Exactly one JSON line on a REFUSAL -- so a healthy capture,
+        which does not refuse, writes no refusal line at all.  (2) No bounded-
+        pass telemetry: the writer builds its custody deadline with
+        `telemetry_stream=None`, so no `calibration_custody_progress` or
+        `calibration_custody_complete` line may appear, because standard error
+        is reserved for that single refusal line.  Operational writer events
+        (`calibration_writer_arm_authorized`, the post-teardown census) are a
+        third thing and are unchanged; they are still one JSON object per
+        line, which is what lets a caller parse standard error line by line.
+        Standard output stays exactly ONE JSON object: the receipt.
+        """
+
+        receipt = json.loads(completed.stdout)
+        elapsed = receipt["custody_elapsed_s"]
+        self.assertNotIsInstance(elapsed, bool)
+        self.assertIsInstance(elapsed, float)
+        self.assertGreaterEqual(elapsed, 0.0)
+        # A whole fixture capture runs in well under the 120 s night budget;
+        # an implausible value means the field is not the deadline's clock.
+        self.assertLess(elapsed, 120.0)
+        observations = receipt["observations"]
+        self.assertNotIsInstance(observations, bool)
+        self.assertIsInstance(observations, int)
+        self.assertGreaterEqual(observations, 0)
+        stderr_events = [
+            json.loads(line)
+            for line in completed.stderr.splitlines()
+            if line.strip()
+        ]
+        for event in stderr_events:
+            self.assertNotIn(
+                event.get("event"),
+                {"calibration_custody_progress", "calibration_custody_complete"},
+                completed.stderr,
+            )
+            self.assertNotEqual(
+                event.get("schema"), "joulewise.calibration_refusal.v1",
+                completed.stderr,
+            )
+        # One object, not a stream: json.loads over the WHOLE stream would
+        # raise "Extra data" if the receipt ever gained a second line.
+        self.assertEqual(json.loads(completed.stdout), receipt)
+        return receipt
+
+    def test_success_receipt_carries_the_healthy_custody_timing(self) -> None:
+        """A night that SUCCEEDS must still report what its custody pass cost.
+
+        Two slots, not one, because `observations` is legitimately 0 on the
+        first: a session whose slots are all still unfinalized holds no
+        custody-bearing observation for the pass to cover.  The second slot's
+        preparation reads the row the first one finalized, so its count must
+        RISE.  A hardcoded zero -- or a reading taken off the fresh
+        finalization allowance, which counts nothing -- passes the first
+        assertion and fails this one.
+        """
+
+        first, second = self._healthy_derivation_capture(
+            "derivation-timing", slot_count=2,
+        )
+        first_receipt = self._assert_custody_timing_receipt(first)
+        second_receipt = self._assert_custody_timing_receipt(second)
+        self.assertEqual(first_receipt["observations"], 0)
+        self.assertGreater(second_receipt["observations"], 0)
+        # The new fields are additive: the terminal receipt a desk reader
+        # already depends on is unchanged.
+        for receipt in (first_receipt, second_receipt):
+            self.assertEqual(receipt["status"], "valid")
+            self.assertIn("ledger_head_pin_candidate", receipt)
+            self.assertIs(receipt["claim_evaluation_blocked_until_pin_commit"], True)
+
+    def test_capture_succeeds_with_the_night_budget_marker_inherited(self) -> None:
+        """The chain's exported budget marker reaches the writer by inheritance.
+
+        `JOULEWISE_NIGHT_CUSTODY_BUDGET_S` is exported once by the night chain,
+        so every process the chain starts -- including this writer -- carries
+        it.  Under the marker, any custody read that was handed no deadline of
+        its own is REFUSED rather than run unbounded.  The writer threads its
+        own deadline through every custody entry, so the marker must be inert
+        here: a healthy capture still finalizes, and still reports its timing.
+        No other test in this module runs the writer with the marker set --
+        both this module and the custody-hang fixture scrub the environment
+        down to PATH -- so without this test the inheritance path is unproven
+        on the success side.
+        """
+
+        completed = self._healthy_derivation_capture(
+            "derivation-marker",
+            extra_env={"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "120"},
+        )
+        receipt = self._assert_custody_timing_receipt(completed)
+        self.assertEqual(receipt["status"], "valid")
 
     def test_ordinary_mode_refuses_a_derivation_kind_slot_and_appends_nothing(
         self,
@@ -899,6 +1037,190 @@ class CaptureClassificationTests(unittest.TestCase):
         )
         self.assertEqual(under, "valid")
         self.assertIsNone(exceeds_under)
+
+
+
+
+class WriterCustodyDeadlineTests(unittest.TestCase):
+    def _ordinary_abandon(self, pause_at=None):
+        from unittest import mock
+        from joulewise import calibration_ledger as ledger
+        from tests import test_calibration_ledger as ledger_tests
+
+        fixture = ledger_tests.CalibrationLedgerTests(methodName="runTest")
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        custody = fixture._custody("ordinary-abandon")
+        (custody / "power_trace.csv").write_text("timestamp_s,power_w\n99.0,1.0\n")
+        lifecycle = validation_script._CaptureLedgerLifecycle(
+            ledger_path=fixture.ledger, head_pin_path=fixture.pin,
+            attempt_id="ordinary-abandon", custody_locator=str(custody),
+            identity_epoch=fixture.epoch, t1_bindings=fixture.t1,
+            require_committed_pin=False, custody_deadline=ledger.CustodyDeadline(2),
+        )
+        self.addCleanup(lifecycle.writer_lease.release)
+        lifecycle.begin()
+        before = fixture.ledger.read_bytes(), fixture.pin.read_bytes()
+        before_rows = [json.loads(line) for line in before[0].splitlines()]
+        self.assertEqual(before_rows[-1]["event"], "reservation")
+        self.assertEqual(before_rows[-1]["disposition"], "pending")
+        real_hashes = validation_script.ledger_artifact_hashes
+        real_finalize = validation_script.finalize_attempt_receipt
+        hashes_seen = []
+
+        def expire_after_hashing():
+            lifecycle.custody_deadline.check()
+            self.assertTrue(hashes_seen)
+            time.sleep(lifecycle.custody_deadline.remaining() + 0.02)
+
+        def hash_then_pause(*args, **kwargs):
+            hashes = real_hashes(*args, **kwargs)
+            self.assertEqual(set(hashes), set(ledger.GOVERNED_ARTIFACTS))
+            hashes_seen.append(hashes)
+            if pause_at == "hash_return":
+                expire_after_hashing()
+            return hashes
+
+        def finalize_after_pause(*args, **kwargs):
+            if pause_at == "finalizer_entry":
+                expire_after_hashing()
+            return real_finalize(*args, **kwargs)
+
+        refusal = None
+        with (
+            mock.patch.object(validation_script, "ledger_artifact_hashes",
+                              side_effect=hash_then_pause),
+            mock.patch.object(validation_script, "finalize_attempt_receipt",
+                              side_effect=finalize_after_pause),
+        ):
+            try:
+                receipt = lifecycle.abandon("fixture interruption")
+            except ledger.CalibrationLedgerError as exc:
+                refusal = exc.code
+        after = fixture.ledger.read_bytes(), fixture.pin.read_bytes()
+        after_rows = [json.loads(line) for line in after[0].splitlines()]
+        appended_events = [row["event"] for row in after_rows[len(before_rows):]]
+        self.assertEqual(len(hashes_seen), 1)
+        if pause_at:
+            self.assertEqual(
+                refusal, RefusalCode.LEDGER_CUSTODY_TIMEOUT,
+                f"expired abandonment appended {appended_events}; ledger_changed={after != before}",
+            )
+            self.assertEqual(after, before)
+            # The pending attempt already has its reservation intent; no new
+            # append-intent or finalization may follow the expired custody pass.
+            self.assertEqual(appended_events, [])
+            self.assertFalse(lifecycle.closed)
+        else:
+            self.assertIsNone(refusal)
+            self.assertEqual(receipt["disposition"], "abandoned")
+            self.assertEqual(dict(receipt["artifact_sha256"]), hashes_seen[0])
+            self.assertEqual(appended_events, ["append-intent", "finalization"])
+            self.assertEqual(after[1], before[1])
+            self.assertTrue(lifecycle.closed)
+        with ledger.CalibrationWriterLease(fixture.ledger):
+            pass
+
+    def test_ordinary_abandon_refuses_expiry_after_hashing_without_append(self):
+        self._ordinary_abandon("hash_return")
+
+    def test_ordinary_abandon_forwards_deadline_to_finalizer_append_guard(self):
+        self._ordinary_abandon("finalizer_entry")
+
+    def test_ordinary_abandon_within_budget_appends_abandoned_receipt(self):
+        self._ordinary_abandon()
+
+    def _stall(self, after_reads, *, night_budget_marker=False):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_read_barrier
+        with CustodyFixture() as fixture:
+            w = fixture.witness
+            state = w._state_real_writer("writer-custody-stall")
+            marker = install_read_barrier(fixture, after_reads=after_reads)
+            before = fixture.bytes()
+            command = [sys.executable, str(w.writer_script),
+                       *w._writer_capture_args(state)]
+            if "--custody-budget-s" in w.writer_script.read_text():
+                command += ["--custody-budget-s", "3"]
+            env = w._writer_env(state, mode="normal") | fixture.env
+            if night_budget_marker:
+                # What the night chain exports, inherited by the writer it
+                # starts. The writer threads its own deadline through every
+                # custody entry, so the marker must change nothing here: the
+                # blocked read is still cut by the writer's OWN allowance and
+                # still refuses `calibration_ledger_custody_timeout`, not the
+                # marker's `calibration_ledger_custody_invalid`.
+                env = env | {"JOULEWISE_NIGHT_CUSTODY_BUDGET_S": "120"}
+            completed, elapsed = fixture.run(command, env=env)
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertLess(elapsed, 5)
+            self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
+            self.assertEqual(fixture.bytes(), before)
+            self.assertFalse(Path(state["custody_locator"]).exists())
+            reads = [json.loads(line) for line in marker.read_text().splitlines()]
+            self.assertEqual(len(reads), after_reads + 1)
+            refusal = json.loads(fixture.refusal.read_text())
+            self.assertEqual(refusal["phase"], "writer_preflight" if after_reads == 0 else "under_lease")
+            self.assertTrue(refusal["existing_session"])
+            self.assertEqual(refusal["session_id"], state["session_id"])
+            fixture.assert_lease_reacquirable()
+            fixture.assert_workers_gone(completed)
+
+    def test_writer_preflight_stall_refuses_without_starting_slot(self):
+        self._stall(0)
+
+    def test_writer_stall_under_the_inherited_night_marker_still_times_out(self):
+        """The marker must not displace the writer's own custody timeout."""
+        self._stall(0, night_budget_marker=True)
+        self._stall(1, night_budget_marker=True)
+
+    def test_writer_under_lease_stall_preserves_open_session(self):
+        self._stall(1)
+
+    def test_final_artifact_timeout_preserves_existing_session(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_read_barrier
+        with CustodyFixture() as fixture:
+            w = fixture.witness
+            state = w._state_real_writer("writer-final-custody-stall")
+            custody = w._complete_custody(state["session_id"], "pre")
+            install_read_barrier(fixture)
+            fixture.env["JW_CUSTODY_BARRIER_TARGET"] = str(custody / "events.jsonl")
+            before = fixture.bytes()
+            # This calls the real finalization lifecycle under its real lease;
+            # no sampler or hardware is involved in the fixture.
+            code = (
+                "from pathlib import Path; "
+                "from scripts.validate_powermetrics_fiducial import _CaptureLedgerLifecycle; "
+                "from joulewise.calibration_ledger import CustodyDeadline,CalibrationLedgerError; "
+                f"l=_CaptureLedgerLifecycle(ledger_path=Path({str(fixture.ledger)!r}),"
+                f"head_pin_path=Path({str(fixture.pin)!r}),attempt_id={state['attempt_id']!r},"
+                f"custody_locator={str(custody)!r},identity_epoch={state['epoch']!r},"
+                f"t1_bindings={state['t1']!r},session_id={state['session_id']!r},slot='pre',"
+                "custody_deadline=CustodyDeadline(0.5)); "
+                "l.writer_lease.acquire();l.begun=True\n"
+                "try:\n l.finalize('valid')\nexcept CalibrationLedgerError as e:\n print(e.code.value)\n raise SystemExit(2)\n"
+            )
+            completed, _ = fixture.run([sys.executable, "-B", "-c", code])
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertEqual(completed.stdout.strip(), "calibration_ledger_custody_timeout")
+            self.assertEqual(fixture.bytes(), before)
+            fixture.assert_lease_reacquirable()
+            fixture.assert_workers_gone(completed)
+
+    def test_early_typed_writer_refusal_writes_document_and_preserves_collision(self):
+        from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
+        with CustodyFixture() as fixture:
+            fixture.refusal.write_bytes(b"prior\n")
+            completed, _ = fixture.run([
+                sys.executable, str(fixture.witness.writer_script),
+                "--ledger", str(fixture.ledger), "--head-pin", str(fixture.pin),
+            ])
+            self.assertEqual(completed.returncode, 2)
+            self.assertEqual(fixture.refusal.read_bytes(), b"prior\n")
+            documents = list(fixture.repo.glob("calibration-refusal.json.*.json"))
+            self.assertEqual(len(documents), 1)
+            refusal = json.loads(documents[0].read_text())
+            self.assertEqual(refusal["code"], RefusalCode.QUIET_MAC_AUTH_REQUIRED.value)
+            self.assertEqual(refusal["phase"], "writer_preflight")
 
 
 if __name__ == "__main__":

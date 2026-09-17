@@ -206,8 +206,8 @@ default ruling and the continuation.
   derived from **completion**: `t0 + window_max_s + 300 s`, where `t0` is the
   plan's start, `window_max_s` its window length, and 300 s (5 × 60 s) the
   allowance for the courier to email results. Add
-  3600 s (60 × 60 s), rounded up to a minute (§1.2). It fires daily at that
-  derived local hour and minute. Before completion it logs a stand-down;
+  3600 s (60 × 60 s), rounded up to a minute (§1.2). Its first recovery time is that derived local hour and minute;
+  the installed calendar repeats at that time until uninstalled. Before completion it logs a stand-down;
   after the courier delivery record `night/courier.sent` exists it skips;
   otherwise it uses the driver's existing recovery checks (§1.3).
 - **Driver preflight** — the install-time check that loads the driver module
@@ -1202,7 +1202,7 @@ refuses to emit a wrapper at all unless the window can hold the programmed
 span plus a **pre-settle allowance** of 300 s. The pre-settle allowance is the
 first of the three margin items above, isolated and made mandatory: the time
 spent INSIDE the window but BEFORE the settle begins — the chain's input
-preflight, its `--phase pre-reserve` readiness check and the session
+preflight, strict bounded readiness inside reservation and the session
 reservation, plus the driver's own gate work before it starts the chain at all.
 The refusal is arithmetic, and its message states both numbers:
 
@@ -1226,6 +1226,107 @@ finish: **programmed span 7680 s (128 min)**, **generator minimum 7980 s
 (133 min)**, **armed `window_max_s` 9000 s (150 min)**. Install spans (§1.3)
 are intervals in which the operator may install the jobs; they do not bound
 or contain the acquisition window.
+
+**The custody budget, and why one measured pass is not the whole bill.**
+`CUSTODY_BUDGET_S` (120 s unless the chain's caller overrides it) is the
+allowance for ONE preparation operation's custody work: checking that every
+governed file the ledger names is present and hashes to the recorded value.
+Call one sweep over all of those files a **custody pass**, and call its
+wall-clock cost T. The reservation makes exactly ONE pass, and the arm-time
+launchd access probe (§1.4) reports that one pass as the receipt field
+`custody_elapsed_s`. So the probe measures T; it does not measure the night's
+whole custody bill.
+
+`custody_elapsed_s` is measured slightly WIDE of the pass itself, and
+deliberately so. The clock it reports is the seconds since the operation's
+allowance object (`CustodyDeadline`) was constructed, and that construction
+happens before the ledger file is read and parsed. So `custody_elapsed_s`
+covers ledger read + ledger parse + the custody pass, not the pass alone: it
+is an over-report of T, never an under-report. Over-reporting is the safe
+direction here, because the number is used to decide whether FOUR passes fit
+inside one allowance — a gate that errs toward refusing a night, not toward
+arming one that cannot finish. Same field, same meaning, in the capture
+writer's own success receipt (below).
+
+The capture writer spends the SAME one allowance on FOUR passes per slot:
+its preflight snapshot, its under-lease snapshot, its enforcing readiness
+check and its slot validation. That count is the constant
+`WRITER_CUSTODY_PASSES` in `joulewise/night_agent_install.py`, and the
+installer refuses to arm unless
+
+```
+custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s
+```
+
+The 1.5 is half a pass of margin (**headroom**): the corpus grows with every
+finalized slot, and the four passes are not identical in cost. With
+`WRITER_CUSTODY_PASSES = 4` and a 120 s budget, a probe is admissible only if
+T ≤ 20 s. Worked case: a probe reporting T = 90 s passes the six-hour
+freshness check and every digest binding, yet the writer's four passes would
+need 360 s of a 120 s allowance — a guaranteed
+`calibration_ledger_custody_timeout` on slot `d01`. Such a night now refuses
+at the desk, at install time, naming `custody_elapsed_s`. A probe that
+verified zero observations while the ledger already holds finalized ones is
+refused too, naming `observations`: a pass over nothing certifies nothing.
+
+Lane CUSTODY-PASS-MEMO-01 is the ruled follow-up that memoizes the
+under-lease passes and lowers the constant to 2 (admitting T ≤ 40 s). Until
+it lands, 4 is the true count and the gate is sized to it. The lever is the
+gate, not a larger budget: enlarging `CUSTODY_BUDGET_S` spends window time
+the cadence arithmetic above has already allocated.
+
+**Where a healthy night's T comes from.** The gate above is sized against T,
+so T has to be observable on nights that WORK, not only on nights that refuse.
+The capture writer's success receipt — the single JSON object it prints to
+standard output, captured in `chain.stdout.log` — carries `custody_elapsed_s`
+and `observations` for exactly that reason. `custody_elapsed_s` is that slot's
+PREPARATION allowance — the one its preflight snapshot, under-lease snapshot,
+readiness check and slot validation shared — read at the end of preparation
+and measured the same wide way as the probe's field (ledger read + parse +
+passes). `observations` is how many custody-bearing observations that
+preparation counted; it is 0 for a session's first slot, because none of its
+rows is finalized yet, and rises as slots finalize. Read them out of
+`chain.stdout.log` after a night and you have the real per-slot series to
+check `WRITER_CUSTODY_PASSES × 1.5 × T ≤ CUSTODY_BUDGET_S` against, instead of
+a single arm-time sample.
+
+**The inherited budget marker.** The chain exports
+`JOULEWISE_NIGHT_CUSTODY_BUDGET_S` with the same seconds as
+`CUSTODY_BUDGET_S`, and every process it starts inherits it: the reservation,
+each capture writer, and the end-of-window session abort. A governed-file
+read that was handed no budget object of its own is bounded by that inherited
+value, and a read that cannot be bounded refuses
+`calibration_ledger_custody_invalid` rather than blocking. It is a BUDGET — a
+fresh allowance for each operation that starts under it — and not a clock
+time, because the session abort runs when the window is already spent and
+would otherwise refuse the one operation that closes the session.
+
+*What a fresh allowance per operation costs in the worst case.* The end-of-
+window abort (`abort_window_exhausted` in the chain, which runs
+`recover_calibration_ledger.py … abort-session`) reports the state of EVERY
+declared slot, and it checks one slot's custody per call, each call starting
+its own fresh allowance. So the abort's worst case — every slot's custody
+stalled until its allowance expires — is one budget per declared slot:
+
+```
+SLOT_COUNT × CUSTODY_BUDGET_S = 12 × 120 s = 1440 s = 24 min
+```
+
+`SLOT_COUNT` (12) and `CUSTODY_BUDGET_S` (120 s) are both set in the chain
+`scripts/night_chains/calibration_derivation_only.zsh`. The abort's own
+closing custody pass can add one more allowance, so the ceiling is 13 × 120 s
+= 1560 s = 26 min. Compare that with the span the dead-man formula below
+allows between the end of the acquisition window and the dead-man instant D:
+`COURIER_DEADLINE_S` (300 s) + `DEADMAN_GRACE_S` (3600 s) = 3900 s, both
+constants in `scripts/run_night.py`. The abort STARTS before the window end —
+it fires when the next slot's capture budget would cross it — so 1560 s is
+measured against at least that 3900 s. 1560 s < 3900 s, with roughly 39 min
+to spare: the dead-man does not fire and the courier still delivers the
+night's result. The alternative — an unbounded
+abort — is what hung the 2026-09-16 night, so a bounded 26 min worst case is
+the improvement, not a new risk. Shrink it further, if it ever matters, by
+lowering `CUSTODY_BUDGET_S` or `SLOT_COUNT`; both are chain variables and
+both also move the cadence arithmetic above.
 
 **The dead-man check (updated 2026-09-15, INSTALL-WINDOWS-MULTI-01).**
 `scripts/run_night.py` defines `COURIER_DEADLINE_S = 300` (5 × 60 s),
@@ -1277,9 +1378,10 @@ this order, and none is instantaneous:
    against its sidecar, and only then launches the wrapper.
 2. **The chain preflight.** The wrapper's own checks (one `git rev-parse`, the
    three input digests, one `shasum` of the tracked chain — all sub-second on
-   this hardware), then the chain's input preflight and its `--phase
-   pre-reserve` readiness check.
-3. **The session reservation.** The ledger call that opens the
+   this hardware), then the chain's input-presence checks.
+3. **The session reservation.** Its `--pre-reserve-strict` enforcing check
+   refuses before retry, recovery or append and uses one bounded custody pass.
+   This consumes window time up to the custody budget. The ledger call then opens the
    `derivation`-kind session and declares all twelve slots. The chain logs
    `chain_start` only after this returns; the settle begins immediately after.
 
@@ -1572,7 +1674,7 @@ is 3 when restoration succeeds, overridden by 4 when unloading cannot be
 established, or by 1 when restoration fails.
 
 The night job uses the local Month/Day/Hour/Minute from `t0`. The dead-man
-uses only Hour/Minute from `deadman_epoch(plan)` (§1.2), so it fires daily at
+uses only Hour/Minute from `deadman_epoch(plan)` (§1.2), so its calendar repeats at
 that local minute until uninstalled. A firing before completion logs a
 stand-down and writes no night record; after `night/courier.sent` it skips.
 If delivery is missing after completion, existing chain-alive and courier
@@ -1668,6 +1770,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_courier_unavailable` | The driver's delivery executable is unavailable; not a failed notice send. |
 | `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
 | `night_record_exists` | A write-once night record proves invocation already occurred. |
+| `night_calibration_refused` | The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause. |
 
 **Installer §1.3 refusals — cold-gate path.**
 
@@ -1806,12 +1909,71 @@ expected SHA-256 fingerprint of those bytes), and the
 chain re-check is this lane's wrapper `--verify` of §1.1b step 4 rather than
 that runbook's G2-a runsheet render.
 
+Before installation, exercise custody access through a temporary **LaunchAgent**
+(a macOS launchd job file), using the published plan and the pinned checkout:
+
+```zsh
+scripts/install_night_agent.sh --plan "$PLAN" --python "$PY" --launchd-probe
+# Only after exit 0, install through the ordinary arm sequence below.
+```
+
+A terminal inherits the owner's file-access consent; a launchd job does not
+inherit the terminal's consent. The probe therefore runs the production
+interpreter → chain → reservation path, using the real ledger and arguments.
+Its **verify-only** mode performs enforcing custody checks and stops before
+any session append, settle, or capture. It creates no `chain.started` record.
+A **receipt** is its non-authorizing record at
+`<plan_dir>/night_probe_receipt.json`. It binds the plan and wrapper bytes,
+measurement commit, ledger head (the digest of the latest record), ledger
+bytes, every reservation input file via `input_digests` (including the night
+plan, calibration plan, identity epoch and T1 bindings), relevant code
+fingerprints, and both interpreters' paths, versions and binary SHA-256
+fingerprints. The input list comes from the chain's actual expanded reservation
+arguments through the driver's production environment builder; render-only
+prints these input fingerprints. Installation recomputes the bindings and accepts
+only an `ok` receipt whose finish time and file modification time are less
+than six hours old; the finish time may be at most 60 s ahead of the clock.
+It also refuses the install unless the receipt's single measured custody pass
+leaves the capture writer room for its own passes —
+`custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤ custody_budget_s`, which is
+T ≤ 20 s at today's constant of 4 (§1.2) — and unless `observations` is
+greater than zero whenever the ledger already holds finalized observations. The temporary job has a 600 s
+limit (`--probe-timeout-s`) covering input binding reads and chain execution,
+with the reached phase recorded on timeout. Its supervised process group
+(the worker and its child processes) is terminated and checked for survivors;
+then it is booted out (unloaded), and must pass a process
+census (check for surviving processes) before the installer returns success.
+A missing/failed/stale/mismatched receipt refuses installation with exit 2.
+Rendering with `--render-only DIR` includes the probe job file; it starts no job.
+
+The driver first writes `night_probe_receipt.pending.json`; the installer
+publishes `night_probe_receipt.json` only after unloading and process cleanup
+are proven. An interrupted or failed cleanup leaves no installable receipt.
+Treat every Homebrew Python replacement as invalidating the successful launchd access probe; verify again.
+A replacement changes the executable fingerprint bound by the receipt; this
+is a conservative arm precondition, not a claim that every upgrade resets
+macOS consent. After answering a consent dialog, rerun successfully without
+further interaction before installation.
+
+Worked example, 2026-09-16: the 09:45 reservation read 190 governed files,
+3.33 GB under 38 iCloud custody locators, and waited 11 h 07 m until 20:52.
+No captures or verdict resulted. The root-cause record supports consent as
+the leading explanation, while cloud materialization (making remote file
+bytes locally available) remains an alternative. The reservation and each
+capture writer now share a whole-pass custody budget of 120 s, clipped ten
+seconds before the exclusive window end. Exhaustion produces the typed
+(machine-readable) `calibration_ledger_custody_timeout` refusal and preserves
+the night. The courier reads `calibration-refusal.json`, every numbered
+refusal listed by the result, and any later refusal siblings; it reports the
+code, budget, elapsed time, and whether a session already existed. No retry
+or ledger repair is authorized by this receipt or refusal.
+
 At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
 `python3` found through PATH selected macOS Python 3.9.6, which cannot import
 `datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
 (the executable running the driver). The installer flag `--python "$PY"`
 pins that path to the project interpreter defined in §0.2. Install and
-`--render-only DIR` (render the two job files into `DIR` without installing
+`--render-only DIR` (render the two night job files and access-probe file into `DIR` without installing
 anything) default to `<measurement_root>/.venv/bin/python` when
 `--python` is omitted. Even a stub checkout needs that venv or an absolute
 path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
@@ -2718,7 +2880,7 @@ record is `<NIGHT_ROOT>/night/chain.stderr.log` — read it first:
 
 | `FAIL <reason>` | Meaning | Operator action |
 |---|---|---|
-| `measurement_root is required` / `measurement_root must be an absolute path` / `measurement_root contains control characters` / `measurement_head must be a full 40-character lowercase SHA-1` | The driver's four-variable environment was malformed. | Should be impossible from a valid plan; treat as a driver or plan defect and escalate before re-arming. |
+| `measurement_root is required` / `measurement_root must be an absolute path` / `measurement_root contains control characters` / `measurement_head must be a full 40-character lowercase SHA-1` | The driver-supplied environment was malformed. | Should be impossible from a valid plan; treat as a driver or plan defect and escalate before re-arming. |
 | `night plan id does not match the wrapper` | `NIGHT_PLAN_ID` is not the plan this wrapper was frozen against. | The wrong wrapper was pinned, or a wrapper was reused across nights. Re-emit per night (§1.1b). |
 | `measurement_root does not match the wrapper` / `measurement_head does not match the wrapper` | The plan's clone path or head is not the one baked in at arm time. | The plan was edited after emission, or the wrong clone was named. Re-cut, re-author, re-emit. |
 | `checkout HEAD cannot be read` / `checkout HEAD does not equal measurement_head` | The clone is gone, is not a repository, or moved off H. | Stand down. Re-cut the clone at H (§0.2) and re-verify §0.8. |
@@ -2737,7 +2899,8 @@ Chain exits (`scripts/night_chains/calibration_derivation_only.zsh`):
 | exit 64 | A knob (`SLOT_COUNT`, `SETTLE_S`, `SLOT_CADENCE_S`, `SLOT_CAPTURE_BUDGET_S`, `WINDOW_END_EPOCH_S`) was not a non-negative integer string, or failed the positivity check — which covers `SLOT_CAPTURE_BUDGET_S` as well as `SLOT_COUNT`, `SLOT_CADENCE_S` and `SETTLE_S`. Refused before the settle, the reservation and any operator-log write. | The environment or plan is malformed. No window time was spent and no partial night exists. Fix at the desk; author a fresh plan for a later night. **Why the budget is in the positivity guard:** at `SLOT_CAPTURE_BUDGET_S=0` the window test `slot_start + budget > WINDOW_END_EPOCH_S` becomes vacuous, so a slot could start one second before the agent-free window ends and capture straight past it. |
 | exit 66 `derivation_chain_input_missing: <path>` | One of `PLAN`, `IDENTITY_EPOCH_JSON`, `T1_BINDINGS_JSON`, `CALIBRATION_LEDGER`, `LEDGER_HEAD_PIN` was absent. | The clone is incomplete or a path in the plan is wrong. Re-verify §0.2 and §0.4 before authoring the next night. |
 | exit 1 | **Ambiguous — read `chain.stderr.log` to disambiguate.** With a `FAIL <reason>` line it is a wrapper refusal (table above). Without one it is the tracked chain's own `:?required` guard, meaning the chain ran without the wrapper's environment. | Both are pre-window failures costing no window time. Resolve per the matching row above before re-arming. |
-| `readiness --phase pre-reserve` non-zero | The ledger was not ready; nothing was written and no window time was spent. It never authorizes ARM even when it passes. | Desk-repair the ledger; do not re-arm the same night on the same signature. |
+| Reservation enforcing preflight exits 2 | **Enforcing** means the decision is made while the reservation holds the writer lease (exclusive permission to change ledger state). `--pre-reserve-strict` refuses before retry, recovery or append, including interrupted claims. The check consumes up to the custody budget of window time. Only enforcing under-lease predicates can produce `ready_to_arm`; success also emits a `pre_reserve_readiness` diagnostic line. | `calibration_ledger_custody_timeout` stops with `night_stopped_preserved`, leaving ledger/session state unchanged; report the budget and elapsed time. `calibration_ledger_recovery_required` requires desk recovery. Other readiness refusals preserve their named cause. Do not retry or repair inside the window. |
+| Verify-only probe receipt | **Verify-only** performs access checks and stops before append, settle or capture. Its `outcome: ok` is non-authorizing arm-admission evidence; it is never a `ready_to_arm` result. | Install requires matching input and interpreter fingerprints and fresh receipt timestamps. A refused probe does not authorize capture, recovery or retry. |
 | `slot_end slot=dNN disposition=non-valid`, night continues | **Not a failure.** The writer exited 1: the row is finalized with a disposition other than `valid`, and the next declared slot runs on the unchanged cadence (§2.4). | Record the count of such slots. Do nothing else, and read no value. Exclusion is decided at issuance, by named mechanism. |
 | `slot_refused slot=dNN rc=2` + chain exits 2, session left OPEN | The writer REFUSED this capture (`emit_refusal` exits 2). The row is **not** finalized, so the chain stops rather than continuing over an unrecorded slot — and deliberately does not abort the session. | Read the refusal in `chain.stderr.log`, then **desk recovery**: `recover_calibration_ledger.py … abort-session --session-id <id> --plan <plan> --reason <the named reason>` (§2.4). Never a retry inside the window. Until the session is closed the next night cannot open at head-equals-pin. |
 | `slot_refused slot=dNN rc=<n≥3>` + chain exits with that status, session left OPEN | The writer crashed rather than refusing. Same dispatch branch, same unfinalized row. | Same desk recovery, and account for the crash before any further night is armed: a crash is a defect, not an outcome. |
@@ -2956,7 +3119,7 @@ means. A term is listed only if it does technical work.
 | `zsh -n` | §1.1b step 5 | A syntax check: zsh parses the file and runs none of it. |
 | census substring | §1.1b, §5 | The three strings the night's own 30 s process census matches; the generator refuses to bake any of them into an emitted literal. |
 | programmed span | §1.2 | Chain start to the end of the last slot's capture budget: settle + (slots − 1) × cadence + one budget = 7680 s for twelve slots. |
-| pre-settle allowance | §1.2 | 300 s INSIDE the window and BEFORE the settle — the chain's input preflight, its pre-reserve readiness check and the session reservation, plus the driver's pre-launch work. The generator refuses a window below programmed span + this. |
+| pre-settle allowance | §1.2 | 300 s INSIDE the window and BEFORE the settle — the chain's input preflight, strict bounded readiness inside reservation and the session reservation, plus the driver's pre-launch work. The generator refuses a window below programmed span + this. |
 | start-to-start cadence | §1.2 | Slot `d(k+1)` starts 600 s after `dk` STARTED; a long capture is never caught up by compressing a later slot. |
 | window_max_s / `WINDOW_END_EPOCH_S` | §1.2 | The plan's window length in seconds, and the exclusive window end the chain enforces. |
 | courier / courier deadline / courier allowance | §1.2, §2.1 | The process that emails the night's result; the 300 s the deadline arithmetic reserves for it AFTER the window ends. Distinct from the pre-settle allowance, which is spent inside the window; the two share a number by coincidence. |

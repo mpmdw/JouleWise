@@ -101,6 +101,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_courier_unavailable` | The driver's delivery executable is unavailable; not a failed notice send. |
 | `night_plan_overruns_deadman` | Completion/dead-man schedule was refused; retained even if normally unreachable. |
 | `night_record_exists` | A write-once night record proves invocation already occurred. |
+| `night_calibration_refused` | The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause. |
 
 **Installer §1.3 refusals — cold-gate path.**
 
@@ -477,6 +478,69 @@ checkout. Once authored, every armed plan's canonical
 `(plan_id, measurement_root, measurement_head)` is included in the magistrate
 relaunch prompt's frozen-checkout list until completion.
 
+Before installing a new calibration night, run the launchd access probe from
+that same pinned checkout, with the owner present. A **LaunchAgent** is a macOS
+launchd job file. A terminal inherits the owner's file-access consent; a
+launchd job does not inherit the terminal's consent, so a terminal preflight
+cannot establish unattended access. The temporary job uses the same driver
+and chain interpreters and the real reservation arguments, with **verify-only**
+meaning enforcing custody checks without appending a session, settling, or
+capturing data.
+
+After the published plan and wrapper have passed the earlier arm checks:
+
+```zsh
+# PLAN is the published <custody_root>/night_plan.json; PY is the pinned
+# absolute driver interpreter in the measurement checkout.
+scripts/install_night_agent.sh --plan "$PLAN" --python "$PY" --launchd-probe
+# Continue only after exit 0: the job was booted out (unloaded), and its
+# process census (a check for surviving processes) proved it gone.
+scripts/install_night_agent.sh --plan "$PLAN" --python "$PY"
+```
+
+The non-authorizing **receipt**, `<plan_dir>/night_probe_receipt.json`, is a
+record of successful access, never permission to capture. It binds the plan,
+measurement checkout commit, ledger head (the latest ledger record's digest),
+code fingerprints, wrapper and ledger bytes, and both interpreters' paths,
+versions and binary SHA-256 fingerprints. Install recomputes those bindings
+and requires success less than six hours old. A missing, stale, failed, or
+mismatched receipt refuses installation with exit 2 and the field name.
+`--probe-timeout-s 600` bounds the temporary job; `--probe-max-age-s 21600`
+sets the receipt age limit. The installer always unloads the temporary label
+`com.joulewise.night-probe.<plan_id>` and checks for surviving processes.
+`--render-only DIR` also renders its job file into `DIR`, without launchctl.
+The driver first writes `night_probe_receipt.pending.json`; the installer
+publishes `night_probe_receipt.json` only after unloading and process cleanup
+are proven. An interrupted or failed cleanup leaves no installable receipt.
+Treat every Homebrew Python replacement as invalidating the successful launchd access probe; verify again.
+An interpreter replacement changes the executable fingerprint the receipt
+binds. After a consent dialog, repeat the probe successfully without further
+interaction before installing.
+
+For the 2026-09-16 example, 190 governed files (3.33 GB) at 38 iCloud custody
+locators held the 09:45 reservation for 11 h 07 m, until 20:52; there were no
+captures or verdict. Consent is the leading explanation; materialization
+(a cloud file becoming locally available) remains an alternative in the
+root-cause record. The whole custody pass now has a 120 s budget, clipped ten
+seconds before the window ends. One **custody pass** is one sweep over every
+governed file the ledger names; the arm-time probe times exactly one, and the
+capture writer makes `WRITER_CUSTODY_PASSES` of them (4 today, in
+`joulewise/night_agent_install.py`) inside that one budget, so installation
+refuses unless `custody_elapsed_s × WRITER_CUSTODY_PASSES × 1.5 ≤
+custody_budget_s` — T ≤ 20 s at 4 passes and a 120 s budget — and unless the
+probe verified at least one observation while the ledger holds finalized ones.
+Lane CUSTODY-PASS-MEMO-01 lowers that constant to 2 when it lands. The chain
+also exports `JOULEWISE_NIGHT_CUSTODY_BUDGET_S`, a per-operation allowance in
+seconds that every process it starts inherits — reservation, capture writer
+and the end-of-window session abort alike — so a governed read that was handed
+no budget of its own is still bounded, and one that cannot be bounded refuses
+`calibration_ledger_custody_invalid` instead of blocking. A typed refusal means a machine-readable
+cause: `calibration_ledger_custody_timeout` stops and preserves the night.
+Read `calibration-refusal.json`, its `<pid>.json` siblings, and every path in
+`result.json.refusal_documents`; also discover later `refusal-NN.json` files.
+Report the exact code, budget, elapsed seconds, and `existing_session` so the
+owner knows whether an existing ledger session needs desk recovery.
+
 **Standing rules** <!-- F11 -->
 
 Author every new v2 plan with
@@ -494,7 +558,7 @@ driver checkout HEAD and `measurement_head` against the HEAD of the plan's
 `measurement_root`, while `--uninstall` checks neither pin and no longer
 needs `claude` on PATH or a Python virtual environment (a project-specific
 Python installation).
-Install and `--render-only DIR` (render the two job files to a directory
+Install and `--render-only DIR` (render the two night job files and the access-probe file to a directory
 without installing anything) default to `<measurement_root>/.venv/bin/python`;
 pass `--python /absolute/path/to/python` to select the interpreter (the
 executable running the driver). A stub checkout needs that venv or an absolute

@@ -41,6 +41,58 @@ execute the single parameterized public-CLI harness for every `operational` and
 `internal_invariant` rows. A witness identifier or an explain-only CLI response
 does not count as execution evidence.
 
+## Bounded custody verification
+
+A **custody locator** is the directory a receipt says its evidence lives in.
+**Governed artifacts** are the files whose SHA-256 hashes (byte fingerprints)
+that receipt binds. Successful night preparation still reads every bound file
+and compares its full hash at the original issuing locator. On 2026-09-16,
+reservation checked 190 files totaling 3.33 GB in 38 iCloud custody locators;
+an artifact open blocked for 11 hours 7 minutes, apparently awaiting macOS
+file-access consent. A successful directory probe did not bound that read.
+
+Night preparation therefore uses one shared **monotonic deadline** (a clock
+limit unaffected by wall-clock adjustments), normally 120 seconds and clipped
+by any supplied absolute deadline. A **read-only worker** (a separate process
+with no ledger writer imports or inherited writer descriptors) performs the
+frozen observation pass. Startup, directory probes, IPC (communication between
+processes), reads, hashing, and normal process exit share that allowance. The
+parent rejects incomplete or mismatched responses and checks expiry again
+before append. On expiry it terminates, kills if necessary, and reaps the
+worker (collects the finished child process's exit status so it does not linger),
+allowing at most five additional seconds for cleanup. The permanent
+writer-lock file remains; normal unwinding releases the operating-system lock.
+
+`calibration_ledger_custody_timeout` means evidence availability could not be
+verified within the allowance; it does **not** mean corruption. It exits 2,
+blocks arming, and preserves the ledger, head pin (the committed ledger-head
+fingerprint), and any existing session or recovery evidence. A window already
+expired when preparation starts retains `calibration_window_exhausted`.
+`--verify-only` runs the same enforcing reservation preflight and emits an
+interpreter/code-bound JSON receipt without appending. Refusals optionally
+write an exclusive-create `joulewise.calibration_refusal.v1` document at
+`JOULEWISE_CALIBRATION_REFUSAL_PATH`; an existing document is preserved and the
+new document uses the `.PID.json` sibling, where PID means process identifier.
+The append transaction always runs synchronously in the lease-holding parent,
+never inside the bounded worker.
+The capture writer shares one allowance across preflight and under-lease
+preparation; final artifact verification starts its own bounded operation.
+
+Every refusing command writes **exactly one** JSON line to standard error: the
+refusal payload itself. When a refusal document collides with an existing file,
+or cannot be written at all, that fact is carried as `refusal_document`,
+`refusal_document_existing`, and `refusal_document_error` fields inside that
+single line, never as a second line, so a caller may parse standard error whole.
+
+While a bounded pass runs, the command may also write `calibration_custody_progress`
+lines (one per directory probe or governed-artifact read, each naming the observation,
+locator, artifact, worker process identifier, and elapsed seconds) and one
+`calibration_custody_complete` line to standard error. Reservation does so; the
+**capture writer does not**, because its standard error is reserved for the single
+refusal line above. The writer's equivalent evidence is the refusal document's
+`last_observation`, which names the observation, locator, and artifact the bounded pass
+was reading when the allowance expired.
+
 ## Canonical encoding and lineage
 
 Every admitted physical record is canonical UTF-8 JSON followed by `LF`.
@@ -263,6 +315,21 @@ and closure. Those enforcing under-lease predicates are the only
 authenticated snapshot, not only the proposed session. A parser-clean result
 with a non-null `legacy_journal_path` is blocked by the machine gate.
 
+Night reservation uses `--execute --pre-reserve-strict`: any blocked readiness
+refuses immediately, before session retry, recovery, an append intent (a durable
+record of a planned append), or reservation. `--verify-only` implies this strict
+gate and stops before append. Both share one bounded custody pass under the
+writer lease. Without the strict flag, execution retains the existing session
+retry behavior for resumable callers.
+
+Strict success first emits one JSON line on standard output (stdout) with `pre_reserve_readiness`
+set to `ready`, `frozen_plan` containing the plan path, identifier, SHA-256 hash,
+and proposed session identifier, and `custody_elapsed_s`. The existing reservation
+success output or verify-only receipt follows. If no optional plan path was
+supplied, its diagnostic path is null; supplied plan bytes must match the declared
+identifier and hash. This is the enforcing gate's diagnostic, not a second
+advisory custody scan.
+
 ## Generated cross-layer refusal projection
 
 <!-- BEGIN GENERATED: calibration-refusal-registry -->
@@ -284,6 +351,7 @@ with a non-null `legacy_journal_path` is blocked by the machine gate.
 | `calibration_ledger_operation_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_operation_conflict` | `` | `` |
 | `calibration_ledger_ungoverned_business` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_ungoverned_business` | `` | `` |
 | `calibration_ledger_baseline_missing` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_baseline_missing` | `` | `` |
+| `calibration_ledger_custody_timeout` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_custody_timeout` | `` | `` |
 | `calibration_ledger_custody_invalid` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_custody_invalid` | `` | `` |
 | `calibration_ledger_snapshot_required` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_snapshot_required` | `` | `` |
 | `calibration_ledger_off_ledger_artifact` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_off_ledger_artifact` | `` | `` |
@@ -537,3 +605,92 @@ separator-only values such as `":"` and `"::"`, it
 emits exactly one stderr line per probe:
 `custody_backup_roots_disabled: <path>`. Replay remains silent for this shortcut;
 unrelated local paths and timeout/exception diagnostics are unchanged.
+
+## 2026-09-17 addendum: the night's inherited custody budget
+
+`JOULEWISE_NIGHT_CUSTODY_BUDGET_S` carries a **budget**: a fresh allowance in
+seconds for each custody operation that starts while it is set, never an
+absolute night deadline. The night chain exports it once, from the same
+`CUSTODY_BUDGET_S` it passes to the reservation and the capture writer, and
+every process the chain starts inherits it — including
+`recover_calibration_ledger.py abort-session`, which runs when the window is
+already spent. An absolute deadline would refuse exactly that operation,
+because a window with zero seconds left raises `calibration_window_exhausted`.
+An absent, empty, non-numeric, non-finite or non-positive value refuses
+`calibration_ledger_custody_invalid` with reason `night_custody_budget_invalid`
+rather than silently leaving reads unbounded; absence alone (the variable
+unset or empty) restores the previous behaviour exactly.
+
+Under the marker, the three custody entry points that already have a bounded
+worker route take it when their caller threaded no `CustodyDeadline`:
+`artifact_hashes`, `_custody_state`, and the snapshot's custody-verification
+branch. The deadline these build writes no `calibration_custody_progress` or
+`calibration_custody_complete` lines (its telemetry stream is `None`), because
+the bound can appear under any caller, including the capture writer, whose
+standard error is exactly one JSON refusal line.
+
+The `unset` key names the variable a desk operator has to clear, and it is
+there because the refusal code says something else. `calibration_ledger_custody_invalid`
+renders in the refusal registry as "receipt-bound evidence bytes are absent or
+hash-invalid", and the ledger wraps it as "primary evidence is unreadable".
+Under an inherited marker neither is true: the bytes are intact and the
+process is simply carrying the night's budget. Recovery is
+`unset JOULEWISE_NIGHT_CUSTODY_BUDGET_S`, so the refusal states that name
+instead of leaving the reader to find it in the source.
+
+`probe_custody` is the **sole gateway**: every unbounded governed read in the
+module reaches the filesystem through it. Under the marker it refuses
+`calibration_ledger_custody_invalid` with context
+`{"reason": "custody_read_unbounded_under_night_budget", "caller": <qualified
+name of the calling function>, "locator": <path>, "unset":
+"JOULEWISE_NIGHT_CUSTODY_BUDGET_S"}` unless the call passes the
+keyword-only `metadata_only=True`. Exactly one call site passes it —
+`_assert_absolute_nonsymlink_directory`, whose probe makes only `stat`-class
+calls and reads no governed bytes — and a unit test walks the module's syntax
+tree to keep that the only one. A call site that invents a new read shape with
+no bounded route therefore gets an immediate typed refusal naming itself,
+rather than an unbounded read.
+
+Auto-bounding never re-maps a replay locator. The bounded worker route reads
+the issuing locator, so when the ambient branch is asked for
+`mode="read_replay"` while `JOULEWISE_BACKUP_ROOTS` names a replacement root,
+it refuses with reason `custody_bounded_replay_unsupported` instead of reading
+different bytes. With no replacement root configured, replay and issuing
+resolve to the same path and the bounded route is taken.
+
+`scripts/run_night.py` `_chain_environment` pops the variable next to
+`NIGHT_VERIFY_ONLY`, so a desk shell's value can never outrank the chain's own
+export in a night the driver starts.
+
+### The capture writer's success receipt carries the custody timing
+
+On success the capture writer prints exactly one JSON object to standard
+output. That object now also carries `custody_elapsed_s` and `observations`.
+
+`custody_elapsed_s` is the number of seconds the PREPARATION allowance's
+`CustodyDeadline` had been running at the END of preparation — the single
+allowance shared by the preflight snapshot, the under-lease snapshot, the
+enforcing readiness check and the slot validation, read at the point the
+capture is about to start. It is read there, not at finalization, because the
+same deadline object keeps running through the capture and is replaced only
+in `finalize`; a later reading would report the capture's duration instead of
+the custody work's. That clock starts when the deadline is constructed, so it
+covers the ledger read and parse as well as the custody passes over the
+governed corpus; it therefore reports MORE than those passes alone. That is
+the conservative direction for the install-time headroom gate, which asks
+whether the passes fit inside the budget. `observations` is the number of
+custody-bearing observations that preparation counted; it is legitimately 0
+for the first slot of a session, because no row of it is finalized yet, and
+rises as slots finalize.
+
+They are in the receipt because nothing else records this on a healthy night.
+The writer builds its custody deadline with `telemetry_stream=None`, so no
+`calibration_custody_progress` or `calibration_custody_complete` line is
+written; and `CustodyDeadline.context()` reaches a reader only when the
+allowance expires. Before these fields, a night that SUCCEEDED left no record
+of how long its custody passes took — the exact quantity
+`WRITER_CUSTODY_PASSES` and the headroom factor are sized against.
+
+The fields are additive and the surrounding contracts are unchanged: standard
+output is still one JSON object, and standard error still carries exactly one
+JSON line on a refusal and no bounded-pass telemetry ever.

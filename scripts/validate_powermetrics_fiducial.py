@@ -51,7 +51,7 @@ from typing import Any, Callable, Mapping
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.calibration_exits import RefusalCode, emit_refusal  # noqa: E402
+from joulewise.calibration_exits import RefusalCode, emit_calibration_refusal  # noqa: E402
 from joulewise.calibration_epoch_continuation import acceptance_judged_epochs  # noqa: E402
 from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
@@ -78,6 +78,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
     CalibrationLedgerError,
     CalibrationLedgerSnapshot,
     CalibrationWriterLease,
+    inspect_calibration_ledger,
+    CustodyDeadline,
     calibration_readiness,
     abort_bracket_session,
     append_pending_receipt,
@@ -1339,6 +1341,7 @@ def _validate_reserved_bracket_slot(
     t1_bindings: Mapping[str, Any],
     require_committed_pin: bool = True,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    custody_deadline: CustodyDeadline | None = None,
 ) -> None:
     """Authenticate the exact predeclared slot before capture state exists."""
 
@@ -1346,7 +1349,7 @@ def _validate_reserved_bracket_slot(
         ledger_path,
         head_pin_path,
         require_committed_pin=require_committed_pin,
-        verify_custody=True, mode="issuing",
+        verify_custody=True, mode="issuing", custody_deadline=custody_deadline,
     )
     session = snapshot.bracket_session_by_id.get(session_id)
     # The session's own open receipt declares the ordered slot list; the next
@@ -1401,6 +1404,7 @@ class _CaptureLedgerLifecycle:
         derivation_only: bool = False,
         require_committed_pin: bool = True,
         preflight_snapshot: CalibrationLedgerSnapshot | None = None,
+        custody_deadline: CustodyDeadline | None = None,
     ) -> None:
         if (session_id is None) != (slot is None):
             raise CalibrationLedgerError(RefusalCode.WRITER_BRACKET_ARGUMENTS)
@@ -1419,6 +1423,14 @@ class _CaptureLedgerLifecycle:
         self.derivation_only = derivation_only
         self.require_committed_pin = require_committed_pin
         self.preflight_snapshot = preflight_snapshot
+        self.custody_deadline = custody_deadline or CustodyDeadline()
+        # What the PREPARATION allowance cost, read at the end of begin()
+        # (the last moment before the capture starts). Both stay None until
+        # then, so a lifecycle that refused during preparation reports
+        # neither.
+        self.custody_preparation_elapsed_s: float | None = None
+        self.custody_preparation_observations: int | None = None
+        self.phase = "writer_preflight"
         self.claim_id = (
             stable_bracket_claim_id(
                 session_id=session_id,
@@ -1504,7 +1516,20 @@ class _CaptureLedgerLifecycle:
         try:
             _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
             self.writer_lease.acquire()
+            self.phase = "under_lease"
             _writer_stage(WriterStage.AFTER_WRITER_LEASE)
+            # Authenticate historical custody before recovery can mutate even
+            # an existing session's append intent or partial evidence. Only
+            # the custody verification is wanted here; the slot binding keeps
+            # its pinned two checks (before the lease, and after recovery in
+            # _begin_once), so the snapshot itself is deliberately unused.
+            load_calibration_ledger_snapshot(
+                self.ledger_path, self.head_pin_path,
+                require_committed_pin=self.require_committed_pin,
+                verify_custody=True, mode="issuing",
+                custody_deadline=self.custody_deadline,
+            )
+            self.custody_deadline.check()
             repair_calibration_ledger(
                 self.ledger_path,
                 engine_identity="validate_powermetrics_fiducial",
@@ -1532,6 +1557,7 @@ class _CaptureLedgerLifecycle:
             t1_bindings=self.t1_bindings,
             require_committed_pin=self.require_committed_pin,
             ledger_snapshot=ledger_snapshot,
+            custody_deadline=self.custody_deadline,
         )
 
     def _begin_once(self) -> None:
@@ -1547,6 +1573,7 @@ class _CaptureLedgerLifecycle:
                 slot=self.slot,
                 attempt_id=self.attempt_id,
                 enforcing_under_lease=True,
+                custody_deadline=self.custody_deadline,
                 require_committed_pin=self.require_committed_pin,
             )
             if readiness.status != "ready":
@@ -1567,12 +1594,14 @@ class _CaptureLedgerLifecycle:
                 flush=True,
             )
             _writer_stage(WriterStage.AFTER_SLOT_VALIDATION)
+            self.custody_deadline.check()
             claim_bracket_session_slot(
                 self.ledger_path,
                 session_id=self.session_id,
                 slot=self.slot,
                 attempt_id=self.attempt_id,
                 claim_id=self.claim_id,
+                custody_deadline=self.custody_deadline,
                 _stage_boundary=lambda boundary: _writer_stage(
                     {
                         "intent-write": WriterStage.CLAIM_INTENT_WRITE,
@@ -1583,8 +1612,10 @@ class _CaptureLedgerLifecycle:
                 ),
             )
         else:
+            self.custody_deadline.check()
             append_pending_receipt(
                 self.ledger_path,
+                custody_deadline=self.custody_deadline,
                 attempt_id=self.attempt_id,
                 custody_locator=self.custody_locator,
                 identity_epoch=self.identity_epoch,
@@ -1592,6 +1623,13 @@ class _CaptureLedgerLifecycle:
                 head_pin_path=self.head_pin_path,
                 require_committed_pin=self.require_committed_pin,
             )
+        # Preparation is over; the capture itself starts next. Read the
+        # allowance's clock HERE, not at finalization: this same deadline
+        # object is not replaced until finalize, so its elapsed_s keeps
+        # running through the capture, and a reading taken later would report
+        # the capture's duration rather than the custody work's.
+        self.custody_preparation_elapsed_s = self.custody_deadline.elapsed_s
+        self.custody_preparation_observations = self.custody_deadline.observations
 
     def abandon(self, reason: str) -> Mapping[str, Any] | None:
         """Best-effort governed closure for an interrupted writer."""
@@ -1607,14 +1645,18 @@ class _CaptureLedgerLifecycle:
                     reason=reason,
                 )
             else:
+                self.custody_deadline = self.custody_deadline.next_operation()
+                artifacts = ledger_artifact_hashes(
+                    Path(self.custody_locator), custody_deadline=self.custody_deadline,
+                )
+                self.custody_deadline.check()
                 receipt = finalize_attempt_receipt(
                     self.ledger_path,
+                    custody_deadline=self.custody_deadline,
                     attempt_id=self.attempt_id,
                     disposition="abandoned",
                     custody_locator=self.custody_locator,
-                    artifact_sha256=ledger_artifact_hashes(
-                        Path(self.custody_locator)
-                    ),
+                    artifact_sha256=artifacts,
                     identity_epoch=self.identity_epoch,
                     t1_bindings=self.t1_bindings,
                     capture_wall_time_s=self.capture_wall_time_s,
@@ -1642,11 +1684,16 @@ class _CaptureLedgerLifecycle:
         ):
             raise ValueError("invalid evidence disposition is not registered")
         try:
-            artifacts = ledger_artifact_hashes(Path(self.custody_locator))
+            self.custody_deadline = self.custody_deadline.next_operation()
+            self.custody_deadline.ledger_head_sha256 = inspect_calibration_ledger(self.ledger_path).head_digest
+            artifacts = ledger_artifact_hashes(
+                Path(self.custody_locator), custody_deadline=self.custody_deadline)
+            self.custody_deadline.check()
             if self.is_bracket_session:
                 assert self.session_id is not None and self.slot is not None
                 receipt = finalize_bracket_session_slot(
                     self.ledger_path,
+                    custody_deadline=self.custody_deadline,
                     session_id=self.session_id,
                     slot=self.slot,
                     disposition=disposition,
@@ -1703,6 +1750,7 @@ class _CaptureLedgerLifecycle:
                 return receipt, head_pin
             receipt = finalize_attempt_receipt(
                 self.ledger_path,
+                custody_deadline=self.custody_deadline,
                 attempt_id=self.attempt_id,
                 disposition=disposition,
                 custody_locator=self.custody_locator,
@@ -1743,6 +1791,8 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=REPO_ROOT / "runs" / "instrument_validation",
     )
+    parser.add_argument("--custody-budget-s", type=float, default=120.0)
+    parser.add_argument("--custody-deadline-epoch-s", type=float)
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
     parser.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
     parser.add_argument(
@@ -1809,6 +1859,37 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    custody_deadline = None
+    ledger_lifecycle = None
+
+    def emit_refusal(code, *, context=None, terminal_result=None, stream):
+        # Report whatever phase and allowance the live lifecycle exposes, and
+        # fall back to the preflight ones. Refusing must never depend on a
+        # lifecycle object being fully constructed: a refusal raised while the
+        # lifecycle is being built would otherwise become an AttributeError.
+        deadline = getattr(ledger_lifecycle, "custody_deadline", None) or custody_deadline
+        return emit_calibration_refusal(
+            code,
+            phase=getattr(ledger_lifecycle, "phase", None) or "writer_preflight",
+            ledger_path=args.ledger,
+            custody_context=deadline.context() if deadline is not None else None,
+            budget_s=args.custody_budget_s, context=context,
+            terminal_result=terminal_result, stream=stream,
+        )
+
+    try:
+        # This command's standard error carries exactly one JSON line -- the
+        # refusal -- and its standard output stays empty until the receipt, so
+        # the bounded custody pass writes no progress diagnostics here.
+        custody_deadline = CustodyDeadline(
+            args.custody_budget_s, args.custody_deadline_epoch_s,
+            telemetry_stream=None,
+        )
+    except (CalibrationLedgerError, ValueError) as exc:
+        return emit_refusal(
+            exc.code if isinstance(exc, CalibrationLedgerError) else RefusalCode.WRITER_BRACKET_ARGUMENTS,
+            context={"detail": str(exc)}, stream=sys.stderr,
+        )
     _configure_writer_crash_authorization(
         args.test_writer_crash_authorization,
         entry_point=Path(__file__),
@@ -1948,10 +2029,15 @@ def main(argv: list[str] | None = None) -> int:
     screen_basis: dict[str, Any] | None = None
     # Authenticate continued epochs before any capture state exists. Reuse this
     # snapshot for the early slot check; the under-lease check still reloads it.
-    preflight_snapshot = load_calibration_ledger_snapshot(
-        args.ledger, args.head_pin, require_committed_pin=True,
-        verify_custody=True, mode="issuing",
-    )
+    try:
+        preflight_snapshot = load_calibration_ledger_snapshot(
+            args.ledger, args.head_pin, require_committed_pin=True,
+            verify_custody=True, mode="issuing", custody_deadline=custody_deadline,
+        )
+    except CalibrationLedgerError as exc:
+        return emit_refusal(exc.code or RefusalCode.LEDGER_MALFORMED,
+                            context=dict(exc.context) | {"detail": str(exc)},
+                            stream=sys.stderr)
     if args.derivation_only:
         try:
             _level_screen_s, basis = _derivation_only_screen_basis(
@@ -2053,6 +2139,7 @@ def main(argv: list[str] | None = None) -> int:
         slot=args.slot if bracket_mode else None,
         derivation_only=args.derivation_only,
         preflight_snapshot=preflight_snapshot,
+        custody_deadline=custody_deadline,
     )
     try:
         if bracket_mode and args.slot == "post":
@@ -2534,10 +2621,9 @@ def main(argv: list[str] | None = None) -> int:
             invalid_evidence_disposition=detection.projection_disposition,
         )
     except CalibrationLedgerError as exc:
-        if exc.code == RefusalCode.FINALIZATION_BINDING_CONFLICT:
-            # Binding conflict is corruption evidence.  Do not let the generic
-            # atexit abort mutate the open session underneath it. Other writer
-            # failures retain their automatic governed-abort handler.
+        if exc.code in {RefusalCode.FINALIZATION_BINDING_CONFLICT, RefusalCode.LEDGER_CUSTODY_TIMEOUT}:
+            # Preserve both binding conflicts and custody timeouts unchanged;
+            # an automatic abort must not mutate their recovery evidence.
             atexit.unregister(finalize_abandoned)
         return emit_refusal(
             exc.code or RefusalCode.LEDGER_MALFORMED,
@@ -2545,6 +2631,27 @@ def main(argv: list[str] | None = None) -> int:
             stream=sys.stderr,
         )
     atexit.unregister(finalize_abandoned)
+    # Healthy-night custody timing. Everything else that records how long a
+    # custody pass took is on a refusal path: the writer runs its deadline
+    # with telemetry_stream=None (its standard error carries exactly one JSON
+    # refusal line and nothing else), so the bounded passes print nothing, and
+    # CustodyDeadline.context() only reaches a reader when the deadline
+    # expires. A night that SUCCEEDS therefore left no timing behind -- and
+    # the install-time headroom gate (custody_elapsed_s x
+    # WRITER_CUSTODY_PASSES x CUSTODY_HEADROOM_FACTOR <= budget, in
+    # joulewise/night_agent_install.py) is sized against exactly that
+    # quantity. These two fields put it in the receipt.
+    #
+    # custody_elapsed_s is seconds since the PREPARATION allowance's
+    # CustodyDeadline was constructed: the one allowance the preflight
+    # snapshot, the under-lease snapshot, the enforcing readiness check and
+    # the slot validation all shared. Its clock starts at construction, before
+    # the ledger is read and parsed, so it covers read + parse + the custody
+    # passes rather than the passes alone -- an over-report, which is the
+    # conservative direction for a gate that asks whether those passes fit
+    # inside the budget. observations is how many custody-bearing observations
+    # that allowance counted; it is legitimately 0 for a session's FIRST slot,
+    # because none of its rows is finalized yet, and rises as slots finalize.
     output = {
         "validation_id": validation_id,
         "status": evidence_payload["status"],
@@ -2552,6 +2659,8 @@ def main(argv: list[str] | None = None) -> int:
         "output": str(out_dir),
         "ledger_head_pin_candidate": head_pin_candidate,
         "claim_evaluation_blocked_until_pin_commit": True,
+        "custody_elapsed_s": ledger_lifecycle.custody_preparation_elapsed_s,
+        "observations": ledger_lifecycle.custody_preparation_observations,
     }
     if bracket_mode:
         output["bracket_session"] = {

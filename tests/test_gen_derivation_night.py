@@ -202,6 +202,8 @@ class WrapperFixture:
         env = {
             "PATH": "/usr/bin:/bin",
             "NIGHT_PLAN_ID": "derivation-20260912",
+            "JOULEWISE_NIGHT_PLAN_ID": "derivation-20260912",
+            "NIGHT_DIR": str(self.night_root),
             "MEASUREMENT_ROOT": str(self.measurement_root),
             "MEASUREMENT_HEAD": self.head,
             "PY": f"{self.measurement_root}/.venv/bin/python",
@@ -263,21 +265,23 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.assertEqual((self.fixture.out.with_suffix(".zsh.sha256")).read_bytes(), first_sidecar)
 
     def test_every_required_chain_variable_is_exported_with_its_plan_value(self) -> None:
-        """All thirteen `:?required` guards of the chain (:43-55) must be fed.
+        """The wrapper feeds thirteen guards; the driver feeds two more.
 
-        Dropping any one export exits the chain 1 on its first guard: safe, but
-        the whole night is spent.  The values are the plan's, not defaults.
+        Dropping any required variable exits the chain 1 on its first guard:
+        safe, but the whole night is spent. Values come from the pinned plan.
         """
 
         self.assertEqual(self.fixture.emit().returncode, 0)
         exports = _exports(self.fixture.out.read_text())
         required = re.findall(r'^: "\$\{([A-Z0-9_]+):\?required\}"$', CHAIN_PATH.read_text(), re.M)
-        self.assertEqual(len(required), 13)
-        self.assertEqual(sorted(set(required) - set(exports)), [])
+        self.assertEqual(len(required), 15)
+        self.assertEqual(
+            sorted(set(required) - set(exports)), ["JOULEWISE_NIGHT_PLAN_ID", "NIGHT_DIR"]
+        )
         night = self.fixture.night_root
         measurement = self.fixture.measurement_root
         self.assertEqual(
-            {name: exports[name] for name in required},
+            {name: exports[name] for name in required if name in exports},
             {
                 "SESSION_ID": self.fixture.session_id,
                 "WINDOW_ID": "derivation-20260912",
@@ -448,7 +452,7 @@ class DerivationNightWrapperTests(unittest.TestCase):
     # --- the emitted wrapper, run the way the driver runs it --------------
 
     def test_the_wrapper_reaches_the_reservation_with_all_bindings(self) -> None:
-        """End-to-end: four driver variables in, twenty-four bindings out.
+        """End-to-end: driver environment in, twenty-four bindings out.
 
         This is the test that fails if any single link is wrong — routing
         preamble, exports, plan re-derivation, chain digest, or `exec`.
@@ -457,12 +461,10 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.assertEqual(self.fixture.emit().returncode, 0)
         result = self.fixture.run_wrapper()
         calls = self.fixture.calls()
-        self.assertEqual(len(calls), 2, result.stderr)
-        readiness, reservation = calls
-        self.assertIn("recover_calibration_ledger.py", readiness[0])
-        self.assertIn("readiness", readiness)
-        self.assertEqual(readiness[readiness.index("--phase") + 1], "pre-reserve")
-        self.assertEqual(readiness[readiness.index("--session-id") + 1], self.fixture.session_id)
+        # Enforcing readiness is inside reservation, before its first write.
+        self.assertEqual(len(calls), 1, result.stderr)
+        reservation = calls[0]
+        self.assertEqual(reservation[reservation.index("--session-id") + 1], self.fixture.session_id)
         self.assertIn("reserve_calibration_window_bracket.py", reservation[0])
         self.assertEqual(reservation[reservation.index("--slot-count") + 1], "12")
         self.assertEqual(reservation.count("--slot-attempt-id"), 12)
