@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 import sys
 from pathlib import Path
 from typing import Any, Mapping
@@ -26,7 +27,7 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.calibration_exits import RefusalCode, emit_refusal  # noqa: E402
+from joulewise.calibration_exits import RefusalCode, emit_calibration_refusal  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     BRACKET_SESSION_SCHEMA,
     BRACKET_SESSION_SLOTS,
@@ -38,6 +39,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     derivation_session_slots,
     CalibrationLedgerError,
     CalibrationWriterLease,
+    CustodyDeadline,
     append_bracket_session_receipt,
     calibration_readiness,
     calibration_session_status,
@@ -109,7 +111,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--identity-epoch-json", type=Path, required=True)
     parser.add_argument("--t1-bindings-json", type=Path, required=True)
+    parser.add_argument("--custody-budget-s", type=float, default=120.0)
+    parser.add_argument("--custody-deadline-epoch-s", type=float)
     parser.add_argument(
+        "--pre-reserve-strict", action="store_true",
+        help="refuse blocked readiness before any session retry; implied by --verify-only",
+    )
+    operation = parser.add_mutually_exclusive_group()
+    operation.add_argument("--verify-only", action="store_true",
+                           help="run enforcing preflight and stop before append")
+    operation.add_argument(
         "--execute",
         action="store_true",
         help="append the capability; without this flag only validate inputs",
@@ -188,6 +199,7 @@ def _declared_slot_sources(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    pre_reserve_strict = args.pre_reserve_strict or args.verify_only
     from scripts.validate_powermetrics_fiducial import (  # noqa: PLC0415
         _configure_writer_crash_authorization,
     )
@@ -196,7 +208,18 @@ def main(argv: list[str] | None = None) -> int:
         args.test_writer_crash_authorization,
         entry_point=Path(__file__),
     )
+    custody_deadline = None
+
+    def emit_refusal(code, *, context=None, stream):
+        return emit_calibration_refusal(
+            code, phase="reservation", ledger_path=args.ledger,
+            custody_context=custody_deadline.context() if custody_deadline else None,
+            budget_s=args.custody_budget_s, context=context, stream=stream,
+        )
+
     try:
+        if args.execute or args.verify_only:
+            custody_deadline = CustodyDeadline(args.custody_budget_s, args.custody_deadline_epoch_s)
         epoch = _json_object(args.identity_epoch_json)
         t1 = _json_object(args.t1_bindings_json)
         if args.plan is not None:
@@ -234,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
                 declared_slots=declared,
             )
         )
-        if not args.execute:
+        if not args.execute and not args.verify_only:
             output = {
                 "schema_version": OUTPUT_SCHEMA,
                 "status": "validated_not_reserved",
@@ -262,8 +285,18 @@ def main(argv: list[str] | None = None) -> int:
                     enforcing_under_lease=True,
                     require_committed_pin=not args.allow_uncommitted_pin_for_test,
                     repo_root=REPO_ROOT,
+                    custody_deadline=custody_deadline,
                 )
+                if readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_TIMEOUT:
+                    custody_deadline.refuse()
                 if readiness.status != "ready":
+                    # The night gate and verification cannot turn blocked
+                    # readiness into success via the resumable-session route.
+                    if pre_reserve_strict or readiness.refusal_code is RefusalCode.LEDGER_CUSTODY_INVALID:
+                        raise CalibrationLedgerError(
+                            readiness.refusal_code or RefusalCode.PRE_RESERVE_NOT_READY,
+                            context={"readiness": readiness.as_dict()},
+                        )
                     try:
                         calibration_session_status(
                             args.ledger,
@@ -272,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
                             plan_path=args.plan,
                             require_committed_pin=not args.allow_uncommitted_pin_for_test,
                             repo_root=REPO_ROOT,
+                            custody_deadline=custody_deadline,
                         )
                     except CalibrationLedgerError as exc:
                         if exc.code == RefusalCode.SESSION_NOT_FOUND:
@@ -293,6 +327,38 @@ def main(argv: list[str] | None = None) -> int:
                         file=sys.stderr,
                         flush=True,
                     )
+                custody_deadline.check()
+                if pre_reserve_strict:
+                    print(json.dumps({
+                        "pre_reserve_readiness": "ready",
+                        "frozen_plan": {
+                            "path": str(args.plan) if args.plan is not None else None,
+                            "plan_id": args.plan_id,
+                            "sha256": args.plan_sha256,
+                            "proposed_session_id": args.session_id,
+                        },
+                        "custody_elapsed_s": custody_deadline.elapsed_s,
+                    }, sort_keys=True), flush=True)
+                if args.verify_only:
+                    output = {
+                        "verify_only": "ok",
+                        "ledger_head_sha256": custody_deadline.ledger_head_sha256,
+                        "observations": custody_deadline.observations,
+                        "custody_elapsed_s": custody_deadline.elapsed_s,
+                        "custody_budget_s": custody_deadline.budget_s,
+                        "python": sys.executable, "python_version": platform.python_version(),
+                        "code_digests": {
+                            name: "sha256:" + hashlib.sha256((REPO_ROOT / name).read_bytes()).hexdigest()
+                            for name in (
+                                "scripts/reserve_calibration_window_bracket.py",
+                                "joulewise/calibration_ledger.py",
+                                "joulewise/calibration_custody_worker.py",
+                            )
+                        },
+                    }
+                    custody_deadline.check()
+                    print(json.dumps(output, sort_keys=True))
+                    return 0
                 receipt = append_bracket_session_receipt(
                     args.ledger,
                     session_id=args.session_id,
@@ -307,6 +373,7 @@ def main(argv: list[str] | None = None) -> int:
                     head_pin_path=args.head_pin,
                     require_committed_pin=not args.allow_uncommitted_pin_for_test,
                     repo_root=REPO_ROOT,
+                    custody_deadline=custody_deadline,
                     _stage_boundary=lambda boundary: _writer_stage(
                         {
                             "intent-write": WriterStage.RESERVATION_INTENT_WRITE,

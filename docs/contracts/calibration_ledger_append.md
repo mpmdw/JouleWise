@@ -41,6 +41,43 @@ execute the single parameterized public-CLI harness for every `operational` and
 `internal_invariant` rows. A witness identifier or an explain-only CLI response
 does not count as execution evidence.
 
+## Bounded custody verification
+
+A **custody locator** is the directory a receipt says its evidence lives in.
+**Governed artifacts** are the files whose SHA-256 hashes (byte fingerprints)
+that receipt binds. Successful night preparation still reads every bound file
+and compares its full hash at the original issuing locator. On 2026-09-16,
+reservation checked 190 files totaling 3.33 GB in 38 iCloud custody locators;
+an artifact open blocked for 11 hours 7 minutes, apparently awaiting macOS
+file-access consent. A successful directory probe did not bound that read.
+
+Night preparation therefore uses one shared **monotonic deadline** (a clock
+limit unaffected by wall-clock adjustments), normally 120 seconds and clipped
+by any supplied absolute deadline. A **read-only worker** (a separate process
+with no ledger writer imports or inherited writer descriptors) performs the
+frozen observation pass. Startup, directory probes, IPC (communication between
+processes), reads, hashing, and normal process exit share that allowance. The
+parent rejects incomplete or mismatched responses and checks expiry again
+before append. On expiry it terminates, kills if necessary, and reaps the
+worker (collects the finished child process's exit status so it does not linger),
+allowing at most five additional seconds for cleanup. The permanent
+writer-lock file remains; normal unwinding releases the operating-system lock.
+
+`calibration_ledger_custody_timeout` means evidence availability could not be
+verified within the allowance; it does **not** mean corruption. It exits 2,
+blocks arming, and preserves the ledger, head pin (the committed ledger-head
+fingerprint), and any existing session or recovery evidence. A window already
+expired when preparation starts retains `calibration_window_exhausted`.
+`--verify-only` runs the same enforcing reservation preflight and emits an
+interpreter/code-bound JSON receipt without appending. Refusals optionally
+write an exclusive-create `joulewise.calibration_refusal.v1` document at
+`JOULEWISE_CALIBRATION_REFUSAL_PATH`; an existing document is preserved and the
+new document uses the `.PID.json` sibling, where PID means process identifier.
+The append transaction always runs synchronously in the lease-holding parent,
+never inside the bounded worker.
+The capture writer shares one allowance across preflight and under-lease
+preparation; final artifact verification starts its own bounded operation.
+
 ## Canonical encoding and lineage
 
 Every admitted physical record is canonical UTF-8 JSON followed by `LF`.
@@ -263,6 +300,21 @@ and closure. Those enforcing under-lease predicates are the only
 authenticated snapshot, not only the proposed session. A parser-clean result
 with a non-null `legacy_journal_path` is blocked by the machine gate.
 
+Night reservation uses `--execute --pre-reserve-strict`: any blocked readiness
+refuses immediately, before session retry, recovery, an append intent (a durable
+record of a planned append), or reservation. `--verify-only` implies this strict
+gate and stops before append. Both share one bounded custody pass under the
+writer lease. Without the strict flag, execution retains the existing session
+retry behavior for resumable callers.
+
+Strict success first emits one stdout JSON line with `pre_reserve_readiness`
+set to `ready`, `frozen_plan` containing the plan path, identifier, SHA-256 hash,
+and proposed session identifier, and `custody_elapsed_s`. The existing reservation
+success output or verify-only receipt follows. If no optional plan path was
+supplied, its diagnostic path is null; supplied plan bytes must match the declared
+identifier and hash. This is the enforcing gate's diagnostic, not a second
+advisory custody scan.
+
 ## Generated cross-layer refusal projection
 
 <!-- BEGIN GENERATED: calibration-refusal-registry -->
@@ -284,6 +336,7 @@ with a non-null `legacy_journal_path` is blocked by the machine gate.
 | `calibration_ledger_operation_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_operation_conflict` | `` | `` |
 | `calibration_ledger_ungoverned_business` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_ungoverned_business` | `` | `` |
 | `calibration_ledger_baseline_missing` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_baseline_missing` | `` | `` |
+| `calibration_ledger_custody_timeout` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_custody_timeout` | `` | `` |
 | `calibration_ledger_custody_invalid` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_custody_invalid` | `` | `` |
 | `calibration_ledger_snapshot_required` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_snapshot_required` | `` | `` |
 | `calibration_ledger_off_ledger_artifact` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_off_ledger_artifact` | `` | `` |

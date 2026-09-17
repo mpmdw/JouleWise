@@ -1877,6 +1877,10 @@ historical window; that remains a separate lead-controlled step.
 
 ### D-117 §10 amendment — calibration-ledger refusals and governed exits
 
+The operational `calibration_ledger_custody_timeout` refusal stops the night
+with evidence preserved. It means receipt-bound evidence verification exceeded
+its whole-pass budget; it does not classify the evidence as corrupt.
+
 Use the emitted refusal `code`, never prose recognition. For any
 operator-emitted code, the registry route is available as structured JSON:
 
