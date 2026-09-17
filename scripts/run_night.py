@@ -64,8 +64,8 @@ CENSUS_INTERVAL_S = 30
 # R-7: min(600, max(3 * (5303 ms / 1000), 300)) from cold_start.json.
 COURIER_DEADLINE_S = 300
 # Separate shutdown allowance for the chain's bounded end-of-window abort (one
-# shared 120 s custody budget plus lease overhead); not derived from the
-# courier deadline.
+# 120 s custody budget for the abort's single custody read plus lease overhead);
+# not derived from the courier deadline.
 WINDOW_SHUTDOWN_GRACE_S = 300
 # One process-group SIGTERM or SIGKILL reaches the members that exist when it
 # is sent, and wait() only ever proves the DIRECT child ended. Proving the

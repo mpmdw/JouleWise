@@ -877,6 +877,35 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual([], list(night.glob("refusal*.json")))
         self.assertEqual([], list(night.glob("rerun.refusal*.json")))
 
+    def test_group_census_distinguishes_absence_from_failed_probes(self) -> None:
+        argv = ["/usr/bin/pgrep", "-lf", "-g", "4242", "."]
+        cases = (
+            ("malformed", subprocess.CompletedProcess(
+                argv, 2, stdout="", stderr="usage: pgrep ...\n"),
+             (False, ["census_exit_2: usage: pgrep ..."])),
+            ("timeout", subprocess.TimeoutExpired(argv, 0.25),
+             (False, [f"census_failed: TimeoutExpired: Command '{argv}' "
+                      "timed out after 0.25 seconds"])),
+            ("permission", PermissionError("census denied"),
+             (False, ["census_failed: PermissionError: census denied"])),
+            ("live member", subprocess.CompletedProcess(
+                argv, 0, stdout="6622 /bin/sleep 5\n", stderr=""),
+             (False, ["6622 /bin/sleep 5"])),
+            ("empty", subprocess.CompletedProcess(
+                argv, 1, stdout="", stderr=""), (True, [])),
+        )
+        for label, outcome, expected in cases:
+            with self.subTest(case=label), mock.patch.object(
+                self.driver.subprocess, "run"
+            ) as run:
+                if isinstance(outcome, Exception):
+                    run.side_effect = outcome
+                else:
+                    run.return_value = outcome
+                self.assertEqual(expected, self.driver._group_census(4242, 0.25))
+                run.assert_called_once_with(
+                    argv, capture_output=True, text=True, timeout=0.25, check=False)
+
     def test_census_refusal_terminates_group_and_records_abort(self) -> None:
         self.source.census_responses = [
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
@@ -3856,6 +3885,44 @@ class WindowDeadlineTests(unittest.TestCase):
             .splitlines()[-4:])
         self.assertIn("Separate shutdown allowance", comment)
         self.assertIn("not derived from the courier deadline", comment)
+
+
+class ProcessGroupRetryTests(unittest.TestCase):
+    def test_nonempty_census_resignals_every_retry_in_both_phases(self) -> None:
+        self.driver = _load_driver()
+        clock = [0.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        # Reuse the real-process fixture's spy, with a mocked signal transport
+        # underneath it: this regression needs neither pgrep nor a live group.
+        with mock.patch.object(self.driver.os, "killpg"):
+            sent, signal_patch = WindowDeadlineTests._signal_spy(self)
+            with (signal_patch,
+                  mock.patch.object(self.driver.time, "monotonic",
+                                    side_effect=lambda: clock[0]),
+                  mock.patch.object(self.driver.time, "sleep", side_effect=sleep),
+                  mock.patch.object(self.driver, "GROUP_CENSUS_WINDOW_S", 0.2),
+                  mock.patch.object(self.driver, "GROUP_CENSUS_INTERVAL_S", 0.1)):
+                for phase in (signal.SIGTERM, signal.SIGKILL):
+                    with self.subTest(phase=phase):
+                        sent.clear()
+
+                        def census(pgid, timeout_s):
+                            # Each look must be preceded by a fresh signal,
+                            # including retries for newly forked group members.
+                            self.assertEqual(
+                                [(4242, phase)] * probe.call_count, sent)
+                            return False, ["4242 /bin/sleep 20"]
+
+                        with mock.patch.object(
+                            self.driver, "_group_census", side_effect=census
+                        ) as probe:
+                            self.assertEqual(
+                                (False, ["4242 /bin/sleep 20"]),
+                                self.driver._prove_group_absent(4242, phase))
+                        self.assertGreater(len(sent), 1)
 
 
 if __name__ == "__main__":

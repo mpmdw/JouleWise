@@ -1377,7 +1377,7 @@ that case, read the chain exit code, not the verdict.
 *And the driver no longer waits for any of it indefinitely.* 120 s of abort is
 covered by the driver's own shutdown allowance, `WINDOW_SHUTDOWN_GRACE_S` =
 300 s in `scripts/run_night.py`: **end-of-window abort is bounded by one
-shared custody budget of 120 s; the driver terminates the chain 300 s after
+120 s custody budget for the abort's single custody read; the driver terminates the chain 300 s after
 the exclusive window end.** Proving the chain's whole process group gone takes
 at most 70 s after that (`TERMINATION_BOUND_S`: 30 s to reap the chain, 5 s of
 group census, 30 s after the SIGKILL escalation, 5 s of census), and the
@@ -1385,6 +1385,14 @@ courier then has its own 300 s — 670 s in total against the 3900 s the
 dead-man formula below leaves after the window end
 (`COURIER_DEADLINE_S` 300 s + `DEADMAN_GRACE_S` 3600 s). The unbounded
 alternative is what held the 2026-09-16 night for 11 h 07 m.
+
+The 300 s grace covers the 120 s abort budget plus a writer overrun of up to
+180 s beyond its capture budget: the chain starts a slot only if
+`next_start + 480 ≤ END`, and that 480 s budget is predictive (it never kills
+the writer). A larger overrun can have its lawful closing abort interrupted
+at +300 s, leaving an OPEN session that the next arm refuses and the desk
+recovers. The writer lease is a kernel `flock`, released when the process
+dies, so this leaves no stuck lease.
 
 **The dead-man check (updated 2026-09-15, INSTALL-WINDOWS-MULTI-01).**
 `scripts/run_night.py` defines `COURIER_DEADLINE_S = 300` (5 × 60 s),
