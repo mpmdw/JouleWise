@@ -3606,6 +3606,37 @@
       "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started; hardening, not night-critical. Deliberately out of the reserve-hang lane's scope, which covers governed calibration artifacts rather than night documents. Related but distinct from NIGHT-STALL-WALLCLOCK-ABORT-01, which would add the missing wall-clock bound to the driver loop; either lane alone narrows this exposure, both together close it.",
       "stop_card": null
     },
+    "NIGHT-GATE-QUIET-ADMISSION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md (findings 1–2; section 2.1 load and daemon observations)",
+          "docs/process_traces/2026-09-17-interactive-45a0774c/01-gate-redesign-consult.md (sections 2–4; advisory design)",
+          "docs/process_traces/2026-09-17-interactive-5c919872/01-brief-seat-quiet-admission.md (D1–D7 and eleven regressions)",
+          "joulewise/night_gate.py:57 (LOAD_MAX) and :947 (evaluate_night) on a90ab4e8"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-GATE-QUIET-ADMISSION-01/acceptance",
+          "label": "NIGHT-GATE-QUIET-ADMISSION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "the seat's eleven defect-shaped regressions in the brief (bind GO on the k-th consecutive quiet sample; expiry refuses with every sample journaled; low load with a busy daemon never admits; a finished burst under high load admits; census hit during binding is terminal; aggregate identity and observer accounting; v2 bytes and semantics unchanged; late GO preserves every absolute deadline; zero-capture successor requires delivery and no start; a hung sampler blocks neither census nor expiry; generator `--check` byte-identical without the flag) pass, with the counterfactual for the two load regressions shown failing against the legacy path; contract doc `docs/contracts/night_quiet_admission.md` passes the first-use test; distinct-lens refuters (contract vs execution) and a delta re-audit of every fix round; cold-gate packet 70 rulings applied before merge (a REFUSE on the cutoff proposition blocks arming a v4 plan, not the mechanism merge); lands under the twelve-row gate."
+      },
+      "authority": {
+        "label": "2026-09-17 interactive session 5c919872 (registration by the magistrate, not a ruling); the design consult is advisory; thresholds await cold gate 70.",
+        "path": "docs/process_traces/2026-09-17-interactive-5c919872/03-brief-lanes-registration-seat.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The unattended night gate, the pre-measurement check that allows or refuses an unattended run (`joulewise/night_gate.py`, `evaluate_night` at line 947 on `a90ab4e8`) decides once, at the planned start instant t0, whether the machine is quiet enough to measure, and one of its predicates is the 1-minute load average (the operating system's recent average of runnable or waiting work) against a fixed maximum of 2.0 (`LOAD_MAX`, line 57). Four consecutive nights produced zero data (2026-09-13 an agent in the census, the scan for active AI-agent processes; 09-15 load; 09-16 an 11 h file-consent hang, cured by PR #350; 09-17 load 3.66 with an EMPTY census, caused by a burst from Spotlight (macOS search indexing) and `mediaanalysisd` (macOS media analysis)). Three hours after the 09-17 refusal the load was 1.3–1.5 (the gate would have PASSED) while `fseventsd`, the file-system event logger, alone burned 85–100 % of one core, which is on the order of 5 W, i.e. ~300 J per 60 s slot against a ~5 J floor tolerance: the load average refuses clean machines and admits contaminated ones. Adopted design (gpt-6-astra xhigh consult `docs/process_traces/2026-09-17-interactive-45a0774c/01-gate-redesign-consult.md`, magistrate brief `docs/process_traces/2026-09-17-interactive-5c919872/01-brief-seat-quiet-admission.md`): a plan schema v4 carrying a sealed `quiet_admission` block (policy `cpu_interval_v1`, bind budget, sample interval, consecutive quiet samples, busy-core cutoff (busy-core equivalents measure busy CPU seconds per elapsed second, so 1.0 is one fully busy core), post-bind runway (the time reserved for acquisition after admission)); the driver polls inside a bind window, the bounded pre-reservation wait for sustained quiet, that starts at t0 and ends at min(t0 + bind, E − runway) where E = t0 + window is unchanged; GO (permission to start) on the first run of consecutive quiet intervals; the quiet predicate is busy CPU time per interval (per-process cumulative CPU deltas keyed by (pid, start time) and host idle, normalised to cores, observer (the sampler and its children) included, no daemon exemptions), the load average becomes diagnostic; census and every non-CPU hard predicate stay terminal (an immediate refusal, not a wait for improvement) on every sample; receipt v3 records every sample (`quiet_samples.jsonl`) and the top consumers on every GO and refusal; v2 plans keep byte-identical semantics; the desk retry policy (`joulewise/arm_retry.py`, NIGHT_HANDBACK R1) gains a separately evidenced zero-capture new-plan successor route. The numeric thresholds are provisional plan data pending cold-gate packet 70, the evidence submitted for independent adjudication (`docs/process_traces/2026-09-17-interactive-5c919872/70-coldgate-packet-quiet-admission/`), which rules the nine atomic propositions of the consult's section 4.",
+      "id": "NIGHT-GATE-QUIET-ADMISSION-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 231,
+      "status": "active",
+      "stop_card": null
+    },
     "NIGHT-HANDBACK-GLOSS-01": {
       "acceptance": {
         "evidence": [
@@ -5576,6 +5607,36 @@
       "status_note": "D-114 and PR #107 remove the T3-CHAR-PAIR-01 dependency and shelve commits 2-4. The residual repair is carried by fan-out PR #285; closure remains pending that landing plus magistrate option-A observation of an installed-INACTIVE state on Ed's host.",
       "stop_card": null
     },
+    "QUIET-PREDICATE-EVIDENCE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-17-interactive-45a0774c/01-gate-redesign-consult.md (section 2, Science blocker; section 4, proposition 4)",
+          "docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md (findings 1–2; section 2.1 load and daemon observations)",
+          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md:54–58 (Ed's gate-sensibility directive, 2026-09-10 ~04:20 PDT; citation supplied by the magistrate's resume ruling)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QUIET-PREDICATE-EVIDENCE-01/acceptance",
+          "label": "QUIET-PREDICATE-EVIDENCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "an evidence memo with real sampled numbers (state the sampling dates, machine state, and the exact commands), the derived cutoff with its physical rationale, the observer cost, and a recommendation the cold gate can AFFIRM or REJECT atomically; no threshold is written into any plan or code without that ruling; no `[QUIET-MAC]` exclusive window is consumed (sampling is read-only and may run beside other work, but the clean-state samples must come from a census-clean machine and say so)."
+      },
+      "authority": {
+        "label": "2026-09-17 interactive session 5c919872 (registration by the magistrate, not a ruling).",
+        "path": "docs/process_traces/2026-09-17-interactive-5c919872/03-brief-lanes-registration-seat.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The busy-core cutoff (busy CPU seconds per elapsed second; 1.0 busy-core equivalent means one fully busy core) in NIGHT-GATE-QUIET-ADMISSION-01, the night gate repair that checks whether an unattended run may start, has no evidence behind it yet; the consult (section 2, \"Science blocker\") and the standing sensible-gates ruling (every tolerance sized to the instrument) both require the number to be derived from what the instrument reads, not from wattage arithmetic. Establish the cutoff's discrimination in the instrument's units: (1) sample the `cpu_interval_v1` predicate (busy-core equivalents, including the observer: the sampler and its children) on this machine across quiet and contaminated states (clean-state samples require an empty census, the scan for active AI-agent processes), recording alongside it the `powermetrics` macOS power sampler's CPU package power and per-cluster active residency (the fraction of time each CPU cluster is active) for the same intervals; (2) read the accepted clean captures (the r6 acceptance `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json` and its evidence bundles) for their idle CPU power and residency, so the accepted idle level is the reference; (3) express the cutoff as the busy-core level whose excess energy over 60 s stays under the ~5 J floor tolerance relative to that reference, and state the observer's own cost; (4) deliver a short evidence memo the cold gate (independent adjudication) can rule on (proposition 4 of packet 70, currently expected REFUSE pending evidence).",
+      "id": "QUIET-PREDICATE-EVIDENCE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 232,
+      "status": "queued",
+      "stop_card": null
+    },
     "R7F-DX-PROSE-SCAN-01": {
       "acceptance": {
         "evidence": [
@@ -5747,7 +5808,7 @@
       "priority": "p1_phase_gate",
       "rank": 212,
       "status": "queued",
-      "status_note": "2026-09-16 (interactive session b0ae8462, merge wave): QUEUED; ARM-RETRY-CLASS-01 (PR #342, merge cb70e97f) and INSTALL-WINDOWS-MULTI-01 (PR #341, merge 2944a45d) are merged; both hard start dependencies are satisfied. Rank unchanged. Historical registration follows. 2026-09-16 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; AMENDED 00:40 PDT with Ed's ruling of 00:35 (Ed, 2026-09-16 00:35 PDT, verbatim as relayed by the interactive session b0ae8462: \"unless there's a scientific reason that's an unsound decision absolutely reduce the hours to 20 min\"): part (b) is ruled, not ruling-gated; the ruling arrived by relay, not by directive issue, and the lane's decision-log addendum is where it is recorded for the doctrine. Registration only, nothing changed. Status blocked until ARM-RETRY-CLASS-01 and INSTALL-WINDOWS-MULTI-01 land (hard start dependencies). The D-161 evidence fence and every t0 gate are untouched.",
+      "status_note": "2026-09-16 (interactive session b0ae8462, merge wave): QUEUED; ARM-RETRY-CLASS-01 (PR #342, merge cb70e97f) and INSTALL-WINDOWS-MULTI-01 (PR #341, merge 2944a45d) are merged; both hard start dependencies are satisfied. Rank unchanged. Historical registration follows. 2026-09-16 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; AMENDED 00:40 PDT with Ed's ruling of 00:35 (Ed, 2026-09-16 00:35 PDT, verbatim as relayed by the interactive session b0ae8462: \"unless there's a scientific reason that's an unsound decision absolutely reduce the hours to 20 min\"): part (b) is ruled, not ruling-gated; the ruling arrived by relay, not by directive issue, and the lane's decision-log addendum is where it is recorded for the doctrine. Registration only, nothing changed. Status blocked until ARM-RETRY-CLASS-01 and INSTALL-WINDOWS-MULTI-01 land (hard start dependencies). The D-161 evidence fence and every t0 gate are untouched. 2026-09-17 interactive 5c919872: the desk-side reconciliation of this ruling with the bind-window design is stage D7 of NIGHT-GATE-QUIET-ADMISSION-01 (arm_retry.py successor route, NIGHT_HANDBACK R1 sentence); the watchdog half is WATCHDOG-EARLY-REFUSAL-RELEASE-01.",
       "stop_card": null
     },
     "REGISTRY-ID-NAMING-01": {
@@ -6424,6 +6485,36 @@
       "rank": 148,
       "status": "shelved",
       "status_note": "D-174 scope freeze",
+      "stop_card": null
+    },
+    "SPOTLIGHT-FSEVENTS-ATTRIBUTION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md (findings 1–2; section 2.1 load, CPU-minutes and directory-link observations)",
+          "docs/process_traces/2026-09-17-interactive-45a0774c/01-gate-redesign-consult.md (section 1(c); custody migration is opinion, not a lane action)",
+          "docs/process_traces/2026-09-17-interactive-5c919872/03-brief-lanes-registration-seat.md (interactive session 5c919872: Spotlight exclusions and post-reboot observations)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SPOTLIGHT-FSEVENTS-ATTRIBUTION-01/acceptance",
+          "label": "SPOTLIGHT-FSEVENTS-ATTRIBUTION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "the three sudo observations recorded in a process-trace record with commands and outputs; a one-line finding naming the churn source or stating it did not recur; the Spotlight exclusions listed in the record as done."
+      },
+      "authority": {
+        "label": "2026-09-17 interactive session 5c919872 (registration by the magistrate, not a ruling); Ed executes the sudo items.",
+        "path": "docs/process_traces/2026-09-17-interactive-5c919872/03-brief-lanes-registration-seat.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The night gate, the check that permits or refuses an unattended measurement run, refused on 09-17 because of the load average (the operating system's recent average of runnable or waiting work). That load came from macOS background indexing processes (Spotlight, macOS search indexing, through `mdworker_shared`; and `mediaanalysisd`, macOS media analysis) and from `fseventsd`, the file-system event logger, which burned 1,152 CPU-minutes between the 09-15 boot and 18:1x on 09-17 with `/System/Volumes/Data/.fseventsd` saturated at 65,535 directory links; the churn's root cause is unattributed and needs root (administrator access). Done this session (2026-09-17 ~19:33 PDT, by the magistrate through System Settings → Spotlight → Search Privacy, screenshot-verified): Spotlight privacy exclusions added for `/Users/edr/code`, `/Users/edr/night-custody` and `/Users/edr/night-archive`. Still owed, Ed-side with sudo (commands run with administrator privileges): (1) `sudo fs_usage -w -f filesys` for a few minutes while `fseventsd` is busy, to name the writer; (2) `sudo ls /System/Volumes/Data/.fseventsd` piped to `wc -l` to count entries (do not delete the directory before the count and a copy of the listing are recorded; Apple documents that macOS recreates it if removed); (3) after the reboot of 2026-09-17 18:34 `fseventsd` idled at 0.3 % CPU at 19:22 with the same 65,535-link directory, so record whether the churn returns and when. Also on record from the consult (opinion, not a lane action): move primary calibration custody off the iCloud-synced backup root (`joulewise/arm_readiness.py:242` `backup_icloud`; `joulewise/calibration_ledger.py:5346`) only with byte-, hash- and locator-history preservation; not a prerequisite for the gate repair.",
+      "id": "SPOTLIGHT-FSEVENTS-ATTRIBUTION-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 233,
+      "status": "partial",
       "stop_card": null
     },
     "SUPERSESSION-CHAINED-RECOVERY-01": {
@@ -8283,6 +8374,36 @@
       "status_note": "2026-09-15 activation d6888966: registered by the magistrate from the record 19 PR #339 bench replay finding; not a ruling; not started. Sibling lanes REPLAY-FIXTURE-LEAK-01 and FIXTURE-FAKE-VLLM-LEAK-01 cover stale fixture residue and remain separate rows. Production parent-directory discovery semantics stay unchanged.",
       "stop_card": null
     },
+    "WATCHDOG-EARLY-REFUSAL-RELEASE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-17-interactive-45a0774c/01-gate-redesign-consult.md (section 2, Retry reconciliation)",
+          "scripts/magistrate_watchdog.py:771–790 on a90ab4e8 (plan_completion_epoch and plan_span_active; hold through nominal completion before courier.sent check)",
+          "docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md (launch 18:09 after the 15:30 refusal)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-EARLY-REFUSAL-RELEASE-01/acceptance",
+          "label": "WATCHDOG-EARLY-REFUSAL-RELEASE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "a regression where a refusal result plus `courier.sent` releases the hold before nominal completion, a second where a refusal file WITHOUT `courier.sent` keeps the hold, and a third where a started night keeps the hold through completion; the watchdog's existing armed-span, clock and reboot tests unchanged; lands under the twelve-row gate after NIGHT-GATE-QUIET-ADMISSION-01 (it consumes that lane's successor predicate)."
+      },
+      "authority": {
+        "label": "2026-09-17 interactive session 5c919872 (registration by the magistrate, not a ruling).",
+        "path": "docs/process_traces/2026-09-17-interactive-5c919872/03-brief-lanes-registration-seat.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The magistrate watchdog, the scheduler that relaunches the headless lead agent (`scripts/magistrate_watchdog.py:771–790` on `a90ab4e8`), uses a census hold (keeping that agent absent from the scan for active AI-agent processes) and holds the headless magistrate out of the machine for the whole armed span through nominal completion even when the night gate, the pre-measurement admission check, has already refused at t0 (the planned start instant) with zero capture; on 2026-09-17 that hold cost about 2.5 h of idle machine after a 15:30 refusal (harvest at 18:09). The consult (section 2, \"Retry reconciliation\") names this as the second half of the zero-capture successor route: once the driver has written its terminal refusal and the courier (the process that delivers the night's result) has delivered (`courier.sent`), the hold has nothing left to protect. Release the hold on positive terminal evidence, proof that the night has finished refusing (terminal refusal result + delivery handoff complete + no start claim), never on the mere existence of a refusal file, so that the successor activation can harvest and re-plan within minutes (the refusal fast-retry ruling A212 (REFUSAL-FAST-RETRY-01)'s ~20 min target).",
+      "id": "WATCHDOG-EARLY-REFUSAL-RELEASE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 234,
+      "status": "queued",
+      "stop_card": null
+    },
     "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01": {
       "acceptance": {
         "evidence": [
@@ -8702,7 +8823,7 @@
       "priority": "p3_hardening_candidates",
       "rank": 206,
       "status": "queued",
-      "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 (Ed at the machine) from the restart census; not started; registration only, no worktree was removed. The deletion step is gated on a cold-gate ruling or Ed's YES on the manifest because it is irreversible. Sibling lanes TEMP-HYGIENE-IW-TMP-01 and FIXTURE-ORPHAN-SENTINEL-01 cover the other two churn sources from the same restart.",
+      "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 (Ed at the machine) from the restart census; not started; registration only, no worktree was removed. The deletion step is gated on a cold-gate ruling or Ed's YES on the manifest because it is irreversible. Sibling lanes TEMP-HYGIENE-IW-TMP-01 and FIXTURE-ORPHAN-SENTINEL-01 cover the other two churn sources from the same restart. 2026-09-17 interactive 5c919872 inventory: 122 linked worktrees under /Users/edr/code/JouleWise-wt-*, 23 GB, none prunable by git; 58 carry uncommitted files (mostly one untracked seat artefact), 12 carry commits not on origin/main (feat/2026-09-04-fan-* and two design branches); 37 are detached cold-gate/consult trees. Deletion is irreversible and is Ed's call (rule 11); the inventory file is in the session's scratch, regenerate with `git worktree list --porcelain` plus per-tree `git status --porcelain` and `git rev-list --count origin/main..<branch>`.",
       "stop_card": null
     }
   },
