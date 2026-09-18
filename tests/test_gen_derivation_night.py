@@ -1083,3 +1083,44 @@ def _load_driver():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QuietPlanGeneratorTests(unittest.TestCase):
+    def setUp(self):
+        import contextlib
+        import io
+        self.enterContext(contextlib.redirect_stdout(io.StringIO()))
+        self.enterContext(contextlib.redirect_stderr(io.StringIO()))
+
+    def test_check_without_flag_is_byte_identical(self):
+        original = GEN.RUNSHEET_PATH.read_bytes()
+        self.assertEqual(GEN.main(['--check']), 0)
+        self.assertEqual(GEN.RUNSHEET_PATH.read_bytes(), original)
+
+    def test_explicit_flag_authors_new_v4_plan_and_bind_runsheet(self):
+        from tests.test_night_gate import make_plan
+        from tests.test_quiet_admission import POLICY
+        from joulewise.night_plan_writer import night_plan_json_bytes
+        from joulewise.night_gate import NightPlan
+        from dataclasses import replace
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            template, policy, target = root/'template.json', root/'policy.json', root/'new.json'
+            template.write_bytes(night_plan_json_bytes(replace(make_plan(), window_max_s=9000)))
+            before = template.read_bytes()
+            policy.write_text(json.dumps(POLICY))
+            args = ['--quiet-admission-json', str(policy), '--plan-template', str(template),
+                    '--new-plan', str(target), '--new-plan-id', 'fresh-night']
+            self.assertEqual(GEN.main(args), 0)
+            parsed = NightPlan.from_mapping(json.loads(target.read_bytes()))
+            self.assertEqual(parsed.window_max_s, 9600)
+            self.assertEqual(parsed.quiet_admission, POLICY)
+            self.assertEqual(template.read_bytes(), before)
+            self.assertIn('Bind allocation: 600 s', Path(str(target)+'.runsheet.md').read_text())
+            sealed = target.read_bytes()
+            self.assertEqual(GEN.main(args), 2)
+            self.assertEqual(target.read_bytes(), sealed)
+            bad = dict(POLICY, post_bind_budget_s=8999)
+            policy.write_text(json.dumps(bad))
+            with self.assertRaisesRegex(GEN.GenerationRefusal, '9000'):
+                GEN.author_quiet_plan(template, policy, root/'short.json', 'another-night')

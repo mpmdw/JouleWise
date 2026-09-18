@@ -16,6 +16,7 @@ import threading
 import time
 import uuid
 import math
+import multiprocessing
 from dataclasses import replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
@@ -42,7 +43,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # so importing this driver during preflight catches failures before installation.
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
-from joulewise import night_gate, t0_rehearsal
+from joulewise import night_gate, t0_rehearsal, quiet_admission
 from joulewise.measurement_liveness import observe_identity  # noqa: E402
 
 from joulewise.night_gate import (  # noqa: E402
@@ -122,6 +123,7 @@ _WRITE_ONCE_RECORDS = (
     "chain.started",
     "chain.exited",
     "courier.json",
+    "quiet_samples.jsonl",
 )
 
 
@@ -292,6 +294,16 @@ def _write_driver_refusal(
     carry it.
     """
 
+    if plan.quiet_admission is not None:
+        evidence = dict(evidence) if isinstance(evidence, Mapping) else {"driver_evidence": evidence}
+        try:
+            gate = json.loads((path.parent / "receipt.json").read_bytes())
+            evidence["top_consumers_at_decision"] = gate["top_consumers_at_decision"]
+            if "attribution_unavailable" in gate:
+                evidence["attribution_unavailable"] = gate["attribution_unavailable"]
+        except (OSError, ValueError, KeyError, TypeError):
+            evidence["top_consumers_at_decision"] = []
+            evidence["attribution_unavailable"] = "driver refused before interval attribution"
     refusal = _refusal_mapping(reason, detail, evidence)
     document = {
         "schema": REFUSAL_SCHEMA,
@@ -799,6 +811,7 @@ def _run_chain_once(
     *,
     command: list[str] | None = None,
     abort_on_census: bool = True,
+    shutdown_monotonic: float | None = None,
 ) -> tuple[int | None, dict[str, Any] | None, int, list[dict[str, Any]], bool]:
     """Run exactly one child session and continuously census it."""
 
@@ -846,6 +859,7 @@ def _run_chain_once(
             plan=plan,
             deadline_epoch_s=deadline_epoch_s,
             deadline_monotonic=(
+                shutdown_monotonic if shutdown_monotonic is not None else
                 time.monotonic() + (deadline_epoch_s - float(probes.now_epoch_s()))
             ),
         )
@@ -960,6 +974,7 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
         night_dir / "chain.unkilled",
         night_dir / "chain.deadline",
         night_dir / "censuses.jsonl",
+        night_dir / "quiet_samples.jsonl",
         night_dir / "chain.stdout.log",
         night_dir / "chain.stderr.log",
         night_dir / "courier.json",
@@ -1590,6 +1605,22 @@ def _write_standard_refusal_result(
     *,
     evidence: Any = None,
 ) -> None:
+    if plan.quiet_admission is not None and not (night_dir / "receipt.json").exists():
+        journal = night_dir / "quiet_samples.jsonl"
+        journal.touch(exist_ok=True)
+        raw = journal.read_bytes()
+        policy = quiet_admission.validate_policy(plan.quiet_admission, window_max_s=plan.window_max_s)
+        summary = dict(quiet_admission=policy,
+            bind_deadline_epoch_s=quiet_admission.bind_deadline_epoch(plan), go_epoch_s=None,
+            samples_total=len(raw.splitlines()), samples_quiet_run_at_go=0,
+            quiet_samples_sha256=hashlib.sha256(raw).hexdigest(), quiet_samples_lines=len(raw.splitlines()),
+            top_consumers_at_decision=[], load_avg_diagnostic={"error": "no interval observation"},
+            attribution_unavailable="driver refused before interval attribution")
+        receipt_reason = reason if reason in NIGHT_GATE_REASON_CODES else _CODES["probe_error"]
+        failed = night_gate.Receipt(night_gate.QUIET_RECEIPT_SCHEMA, plan.receipt_class,
+            plan.plan_id, "REFUSED", night_gate._conditions_tuple(night_gate._initial_conditions(plan.receipt_class)),
+            night_gate.Refusal(receipt_reason, f"{reason}: {detail}", ()), int(started_monotonic_ns), summary)
+        _write_bytes_exclusive(night_dir / "receipt.json", failed.to_json_bytes())
     if plan.receipt_class == "TRANSACTION_PACK" and not (night_dir / "receipt.json").exists():
         # §10.3: the frozen gate validator accepts gate codes only. Preserve
         # the driver cause in detail and in the authoritative refusal.json.
@@ -1958,6 +1989,257 @@ def _pack_refused_receipt(plan, error, probes):
         night_gate.Refusal(reason, str(error), ()), int(probes.monotonic_ns()))
 
 
+class _BindTask:
+    """Killable isolated worker; the parent alone owns journals and GO.
+
+    Fork keeps the injected probe seam usable without serializing callbacks.
+    Binding runs before the driver's chain/courier threads are started. Each
+    worker gets its own process group so a blocked top and its interpreter
+    are killed and reaped together, without waiting for a 30-second timeout.
+    """
+    def __init__(self, call):
+        context = multiprocessing.get_context("fork")
+        self.reader, writer = context.Pipe(duplex=False)
+        def work():
+            self.reader.close()
+            os.setsid()
+            try:
+                writer.send((True, call()))
+            except BaseException as error:
+                writer.send((False, f"{type(error).__name__}: {error}"))
+            finally:
+                writer.close()
+        self.process = context.Process(target=work)
+        self.process.start()
+        writer.close()
+
+    def ready(self):
+        return self.reader.poll() or not self.process.is_alive()
+
+    def result(self):
+        try:
+            okay, value = self.reader.recv()
+        except EOFError as error:
+            raise night_gate.ProbeError("binding worker exited without observations") from error
+        if not okay:
+            raise night_gate.ProbeError(value)
+        return value
+
+    def close(self):
+        # Kill the group even if the direct worker has exited: it might have
+        # left a child. PID is the dedicated group id, never the parent's.
+        try:
+            os.killpg(self.process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            if self.process.is_alive():
+                self.process.kill()
+        self.process.join(timeout=1)
+        self.reader.close()
+        if self.process.is_alive():
+            raise night_gate.ProbeError("binding worker could not be reaped")
+        self.process.close()
+
+
+class _BindStopped(Exception):
+    def __init__(self, refusal):
+        self.refusal = refusal
+
+
+def _binding_census(probes):
+    probe, refusal = agent_census(probes)
+    if (probe.exit_code not in (0, 1) or (probe.exit_code == 1 and probe.stdout.strip())
+            or (probe.exit_code == 0 and not probe.stdout.strip())):
+        refusal = night_gate.Refusal(_CODES["probe_error"], "binding census probe failed", (probe,))
+    return probe, refusal
+
+
+def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
+                     start_epoch_s=None, start_monotonic=None,
+                     sampler=None, task_factory=_BindTask,
+                     monotonic=time.monotonic, sleep=time.sleep):
+    """Poll explicit v4 policy under one absolute deadline, with a live census.
+
+    The injectable task seam models in-flight and hung workers without real
+    interval sleeps. Workers never write artifacts or start a chain.
+    """
+    policy = quiet_admission.validate_policy(plan.quiet_admission, window_max_s=plan.window_max_s)
+    start_epoch_s = float(probes.now_epoch_s()) if start_epoch_s is None else start_epoch_s
+    start_monotonic = monotonic() if start_monotonic is None else start_monotonic
+    deadline_epoch = quiet_admission.bind_deadline_epoch(plan)
+    deadline = start_monotonic + deadline_epoch - start_epoch_s
+    observer_pid = os.getpid()
+    sampler = sampler or (lambda: quiet_admission.sample_interval(
+        policy["sample_interval_s"], observer_pid=observer_pid))
+    journal = night_dir / "quiet_samples.jsonl"
+    journal.touch(exist_ok=True)  # never truncate, even on a failed invocation
+    lines = len(journal.read_bytes().splitlines())
+    quiet_run, last = 0, None
+    static = night_gate._finish(plan, probes, night_gate._initial_conditions(plan.receipt_class), None)
+    current = static
+    next_census, census_task = start_monotonic, None
+    baseline_boot = None
+    baseline_wall = start_epoch_s
+    pending = None
+
+    def stopped(reason, detail, evidence=()):
+        raise _BindStopped(night_gate.Refusal(reason, detail, evidence))
+
+    def check_census():
+        nonlocal next_census, census_task
+        if census_task is not None and census_task.ready():
+            task, census_task = census_task, None
+            try:
+                probe, refusal = task.result()
+                _append_census(night_dir / "censuses.jsonl", probe, refusal)
+                if refusal is not None:
+                    raise _BindStopped(refusal)
+            finally:
+                task.close()
+        if census_task is None and monotonic() >= next_census:
+            census_task = task_factory(lambda: _binding_census(probes))
+            next_census = monotonic() + CENSUS_INTERVAL_S
+
+    def await_task(call):
+        task = task_factory(call)
+        try:
+            while True:
+                check_census()
+                now = monotonic()
+                if now > deadline:
+                    stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+                if task.ready():
+                    value = task.result()
+                    # A ready sampler cannot race an already-running census.
+                    while census_task is not None:
+                        check_census()
+                        if monotonic() >= deadline and census_task is not None:
+                            stopped(_CODES["refused_not_quiet"], "bind deadline expired awaiting census")
+                        if census_task is not None:
+                            sleep(min(0.05, max(0, deadline - monotonic())))
+                    if monotonic() > deadline:
+                        stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+                    return value
+                if now >= deadline:
+                    stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+                sleep(min(0.05, deadline - now, max(0.001, next_census - now)))
+        finally:
+            task.close()
+
+    def hard_checks():
+        nonlocal current, baseline_boot, baseline_wall
+        current = await_task(lambda: night_gate.evaluate_dynamic_hard(plan, probes, static))
+        if not isinstance(current, night_gate.Receipt):
+            raise night_gate.ProbeError("malformed hard-predicate result")
+        if current.refusal is not None:
+            raise _BindStopped(current.refusal)
+        clock = next(row.measured for row in current.conditions if row.condition_id == "C4")
+        boot, wall = clock["boot_session_uuid"], clock["clock_epoch_s"]
+        if baseline_boot is not None and boot != baseline_boot:
+            stopped(_CODES["refused_boot_clock"], "boot identity changed during binding")
+        if wall < baseline_wall:
+            stopped(_CODES["refused_boot_clock"], "wall clock rolled back during binding")
+        baseline_boot, baseline_wall = boot, wall
+        return {row.condition_id: {"status": row.status, "measured": dict(row.measured)}
+                for row in current.conditions if row.condition_id in ("C3", "C4")}
+
+    def append_sample(sample, decision, hard, error=None):
+        nonlocal lines, last
+        entry = dict(sample, sample_index=lines + 1, hard_predicates=hard, decision=decision)
+        if error is not None:
+            entry["error"] = error
+        payload = (json.dumps(entry, sort_keys=True, allow_nan=False) + "\n").encode()
+        descriptor = os.open(journal, os.O_WRONLY | os.O_APPEND)
+        try:
+            _write_all(descriptor, payload)
+        finally:
+            os.close(descriptor)
+        lines += 1
+        if entry.get("metrics", {}).get("busy_cores") is not None:
+            last = entry
+
+    def finish(refusal=None):
+        metrics = last.get("metrics", {}) if last else {}
+        raw = journal.read_bytes()
+        summary = dict(quiet_admission=policy, bind_deadline_epoch_s=deadline_epoch,
+            go_epoch_s=None if refusal else float(probes.now_epoch_s()),
+            samples_total=lines, samples_quiet_run_at_go=0 if refusal else quiet_run,
+            quiet_samples_sha256=hashlib.sha256(raw).hexdigest(), quiet_samples_lines=len(raw.splitlines()),
+            top_consumers_at_decision=metrics.get("top_consumers", []),
+            load_avg_diagnostic=last.get("load_avg_diagnostic", {"error": "no completed observation"}) if last else {"error": "no completed observation"})
+        if not summary["top_consumers_at_decision"]:
+            summary["attribution_unavailable"] = "no measurable process deltas before decision"
+        if refusal and refusal.reason == _CODES["refused_not_quiet"] and "deadline" in refusal.detail:
+            refusal = replace(refusal, detail=refusal.detail + "; " + json.dumps(dict(
+                samples_total=lines, last_busy_cores=metrics.get("busy_cores"),
+                top_consumers=summary["top_consumers_at_decision"],
+                quiet_samples_sha256=summary["quiet_samples_sha256"], quiet_samples_lines=summary["quiet_samples_lines"]), sort_keys=True))
+        try:
+            authored = night_gate._safe_monotonic_ns(probes)
+        except night_gate.ProbeError:
+            authored = 0
+        return replace(current, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=summary,
+                       verdict="REFUSED" if refusal else ("REHEARSAL_ONLY" if plan.receipt_class == "REHEARSAL_STUB" else "GO"),
+                       refusal=refusal, authored_monotonic_ns=authored)
+
+    try:
+        if initial_census is not None:
+            probe, refusal = initial_census
+            if (probe.exit_code not in (0, 1) or (probe.exit_code == 1 and probe.stdout.strip())
+                    or (probe.exit_code == 0 and not probe.stdout.strip())):
+                refusal = night_gate.Refusal(_CODES["probe_error"], "initial census probe failed", (probe,))
+            if refusal:
+                raise _BindStopped(refusal)
+        static = await_task(lambda: night_gate.evaluate_static(plan, probes))
+        current = static
+        if static.refusal:
+            raise _BindStopped(static.refusal)
+        while monotonic() < deadline:
+            pending = dict(wall_start=float(probes.now_epoch_s()), monotonic_start=monotonic(),
+                           boot_identity=baseline_boot, raw_sha256={}, metrics={})
+            hard = hard_checks()
+            pending["boot_identity"] = baseline_boot
+            observation = await_task(sampler)
+            if not isinstance(observation, dict):
+                raise night_gate.ProbeError("malformed sampler output")
+            quiet_admission.validate_observation(observation, policy)
+            pending = observation
+            hard = hard_checks()
+            if observation["boot_identity"] != baseline_boot:
+                stopped(_CODES["refused_boot_clock"], "sample boot identity changed")
+            quiet = quiet_admission.is_quiet(observation["metrics"], policy)
+            quiet_run = quiet_run + 1 if quiet else 0
+            if quiet_run >= policy["consecutive_quiet_samples"]:
+                hard = hard_checks()  # final hard checks, including a fresh census
+            if monotonic() > deadline:
+                stopped(_CODES["refused_not_quiet"], "bind deadline expired before GO")
+            append_sample(observation, "quiet" if quiet else "WAIT", hard)
+            pending = None
+            if quiet_run >= policy["consecutive_quiet_samples"]:
+                if float(probes.now_epoch_s()) > deadline_epoch:
+                    stopped(_CODES["refused_boot_clock"], "wall clock passed absolute bind deadline")
+                if monotonic() > deadline:
+                    stopped(_CODES["refused_not_quiet"], "bind deadline expired writing final sample")
+                return finish()
+        stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+    except Exception as error:
+        refusal = error.refusal if isinstance(error, _BindStopped) else night_gate.Refusal(
+            _CODES["probe_error"], f"binding observation failed: {type(error).__name__}: {error}", ())
+        if pending is not None:
+            for name, clock in (("wall_end", probes.now_epoch_s), ("monotonic_end", monotonic)):
+                try:
+                    pending[name] = float(clock())
+                except Exception:
+                    pending[name] = None
+            hard = {row.condition_id: {"status": row.status, "measured": dict(row.measured)}
+                    for row in current.conditions if row.condition_id in ("C3", "C4")}
+            hard["terminal"] = _refusal_from_object(refusal)
+            append_sample(pending, "error", hard, refusal.detail)
+        return finish(refusal)
+    finally:
+        if census_task is not None:
+            census_task.close()
+
+
 def run_night(
     plan_path: Path,
     *,
@@ -1965,6 +2247,7 @@ def run_night(
     courier_bin: Path | None = None,
 ) -> int:
     probes = make_probes()
+    bind_start_epoch, bind_start_monotonic = time.time(), time.monotonic()
     initial_probe, initial_refusal = agent_census(probes)
     try:
         plan_path = plan_path.resolve(strict=True)
@@ -2052,6 +2335,10 @@ def run_night(
             receipt = evaluate_night(plan, probes, pack_arm_receipt=arm_state["path"])
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
             receipt = _pack_refused_receipt(plan, error, probes)
+    elif plan.quiet_admission is not None:
+        receipt = bind_until_quiet(plan, probes, night_dir,
+            initial_census=(initial_probe, initial_refusal),
+            start_epoch_s=bind_start_epoch, start_monotonic=bind_start_monotonic)
     else:
         # Reuse the first census for the legacy evaluator's census slot; no
         # filesystem or command probe preceded the driver's initial census.
@@ -2092,7 +2379,8 @@ def run_night(
         )
 
     rehearsal_effective = rehearsal or plan.receipt_class == "REHEARSAL_STUB"
-    if receipt.verdict != "GO" and not rehearsal_effective:
+    if receipt.verdict != "GO" and (not rehearsal_effective or (
+            plan.quiet_admission is not None and receipt.refusal is not None)):
         _write_gate_refusal(night_dir / "refusal.json", receipt)
         refusal = _refusal_from_object(receipt.refusal) or {}
         _write_result(
@@ -2200,6 +2488,9 @@ def run_night(
             claim_descriptor,
             command=command,
             abort_on_census=not rehearsal_effective,
+            **({"shutdown_monotonic": bind_start_monotonic + (
+                plan.t0_epoch_s + plan.window_max_s + WINDOW_SHUTDOWN_GRACE_S - bind_start_epoch)}
+               if plan.quiet_admission is not None else {}),
         )
     )
 

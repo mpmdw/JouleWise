@@ -37,6 +37,7 @@ import argparse
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -470,7 +471,8 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
     try:
         plan = NightPlan.from_mapping(raw)
     except PlanError as error:
-        raise GenerationRefusal(f"night plan is not an exact v2 plan: {error}") from error
+        version = "v4" if raw.get("schema") == "joulewise.night_plan.v4" else "v2"
+        raise GenerationRefusal(f"night plan is not an exact {version} plan: {error}") from error
     # An allow-list, not a pack-only refusal: TRANSACTION_PACK launches a pack
     # launcher instead of the plan's chain and REHEARSAL_STUB never runs the
     # chain at all, so a wrapper emitted for either would never execute.
@@ -505,6 +507,11 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
             f"MAX_DECLARED_SESSION_SLOTS ({MAX_DECLARED_SESSION_SLOTS}); the "
             "reservation would refuse it after the settle"
         )
+
+    if plan.quiet_admission is not None:
+        required_post_bind = max(9000, programmed_span_s(slot_count) + PRE_SETTLE_ALLOWANCE_S)
+        if plan.quiet_admission["post_bind_budget_s"] < required_post_bind:
+            raise GenerationRefusal(f"post_bind_budget_s must preserve at least {required_post_bind} s of derivation runway")
 
     # The window must hold the schedule the chain will actually run, or the
     # night opens its session and aborts part-way with window_exhausted.
@@ -836,7 +843,12 @@ def verify(spec: WrapperSpec, out_path: Path) -> tuple[bool, str, str]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", help="frozen v2 night plan JSON (emit mode)")
+    parser.add_argument("--plan", help="frozen v2/v4 night plan JSON (emit mode)")
+    parser.add_argument("--quiet-admission-json", type=Path,
+                        help="explicit provisional policy for NEW v4 plan authoring; no defaults")
+    parser.add_argument("--plan-template", type=Path, help="v2/v4 coordinates copied read-only for new-plan authoring")
+    parser.add_argument("--new-plan", type=Path, help="exclusive-create v4 plan output; never rewrites --plan-template")
+    parser.add_argument("--new-plan-id", help="required fresh id, different from the template's id")
     parser.add_argument("--session-id", help="the ledger session this night opens")
     parser.add_argument("--window-id", help="default: the night plan's plan_id")
     parser.add_argument("--evidence-root-id")
@@ -886,8 +898,73 @@ REQUIRED_EMIT_ARGS = (
 )
 
 
+def render_quiet_runsheet(plan):
+    policy = plan.quiet_admission
+    return (
+        f"# Derivation night {plan.plan_id}\n\n"
+        f"Plan v4; policy {policy['policy_id']}. All quiet-admission parameters are PROVISIONAL.\n\n"
+        f"Bind allocation: {policy['bind_max_s']} s; interval: {policy['sample_interval_s']} s; "
+        f"consecutive quiet samples: {policy['consecutive_quiet_samples']}; "
+        f"busy-core cutoff: {policy['busy_core_max']}.\n\n"
+        f"Post-bind allocation: {policy['post_bind_budget_s']} s. "
+        "The unchanged schedule is 600 + 11 × 600 + 480 = 7680 s; "
+        "300 s minimum pre-settle allowance gives 7980 s. The existing "
+        "9000 s allocation preserves a further 1020 s margin.\n\n"
+        f"t0 = {plan.t0_epoch_s}; window_max_s = {plan.window_max_s}; "
+        f"acquisition end E = {plan.t0_epoch_s + plan.window_max_s}. "
+        "GO never shifts E, completion, courier, shutdown or dead-man.\n"
+    )
+
+
+def author_quiet_plan(template_path, policy_path, output_path, new_id):
+    """Explicit new-plan authoring; template and existing plans are immutable."""
+    from dataclasses import replace
+    from joulewise.quiet_admission import validate_policy
+    from joulewise.night_plan_writer import night_plan_json_bytes
+    template = NightPlan.from_mapping(json.loads(template_path.read_text()))
+    policy = validate_policy(json.loads(policy_path.read_text()))
+    if template.receipt_class != DERIVATION_RECEIPT_CLASS:
+        raise GenerationRefusal("derivation v4 authoring requires DIAGNOSTIC_NO_PACK")
+    if not new_id or new_id == template.plan_id:
+        raise GenerationRefusal("new-plan-id must differ from the template's id")
+    _census_clean("new-plan-id", new_id)
+    if policy["post_bind_budget_s"] < 9000:
+        raise GenerationRefusal("post_bind_budget_s must preserve the existing 9000 s allocation")
+    if output_path.resolve() == template_path.resolve():
+        raise GenerationRefusal("new plan must not replace the template")
+    plan = replace(template, plan_id=new_id, quiet_admission=policy,
+                   window_max_s=max(template.window_max_s,
+                                    math.ceil(policy["bind_max_s"] + policy["post_bind_budget_s"])))
+    payload = night_plan_json_bytes(plan)
+    runsheet = Path(str(output_path) + ".runsheet.md")
+    if output_path.exists() or runsheet.exists():
+        raise GenerationRefusal("new-plan outputs already exist; never overwrite sealed artifacts")
+    # Exclusive creation remains authoritative if another writer races the precheck.
+    with output_path.open("xb") as stream:
+        stream.write(payload)
+    with runsheet.open("x") as stream:
+        stream.write(render_quiet_runsheet(plan))
+    return plan
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.quiet_admission_json is not None:
+        try:
+            if args.plan or args.check or args.verify:
+                raise GenerationRefusal("new-plan authoring cannot combine with --plan, --check or --verify")
+            if not args.plan_template or not args.new_plan or not args.new_plan_id:
+                raise GenerationRefusal("--quiet-admission-json requires --plan-template, --new-plan and --new-plan-id")
+            author_quiet_plan(args.plan_template, args.quiet_admission_json, args.new_plan,
+                              args.new_plan_id)
+        except (GenerationRefusal, OSError, ValueError) as error:
+            print(f"FAIL {error}", file=sys.stderr)
+            return 2
+        print(f"emitted new v4 plan {args.new_plan} and {args.new_plan}.runsheet.md")
+        return 0
+    if any((args.plan_template, args.new_plan, args.new_plan_id)):
+        print("FAIL new-plan options require --quiet-admission-json", file=sys.stderr)
+        return 2
     if args.plan is not None:
         missing = [
             f"--{name.replace('_', '-')}"

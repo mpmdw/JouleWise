@@ -1196,6 +1196,35 @@ own work before it starts the chain. Allocate **1320 s (22 min)**:
 WINDOW_MAX_S = 7680 + 1320 = 9000 s   (2 h 30 min)
 ```
 
+For an explicitly authored v4 plan, preserve this entire **9000 s post-bind
+allocation** and add the sealed bind allocation before it. With `bind_max_s =
+600`, author `window_max_s = 9600`: 600 s binding + 7680 s programmed span +
+300 s minimum pre-settle allowance + 1020 s remaining margin. Binding means
+observing interval CPU activity before reservation or a chain-start claim;
+it does not consume the reservation's settle or change any slot constant.
+Legacy v2 plans retain their one-shot load check and 9000 s allocation.
+The CPU cutoff and admission parameters are provisional, pending cold-gate
+evidence; the worked 0.05 busy-core value is not validated.
+
+To author a NEW v4 plan without changing the template or a sealed plan:
+
+```sh
+python3 scripts/gen_derivation_night.py \
+  --quiet-admission-json "$STAGE/quiet-policy.json" \
+  --plan-template "$STAGE/new-coordinates.json" \
+  --new-plan "$STAGE/new-night-plan.json" \
+  --new-plan-id "$NEW_PLAN_ID"
+```
+
+The template must already carry the new night's reviewed coordinates, fresh
+timing and custody paths; the output id must differ from its template id.
+The generator creates the plan and a `.runsheet.md` companion exclusively,
+requires at least 9000 s post-bind runway, and states the bind allocation.
+Then generate/verify the wrapper using the existing `--plan` mode with the
+new v4 plan. Without the explicit flag, `--check` and the reviewed v2 example
+are byte-identical. See [the complete admission contract](../contracts/night_quiet_admission.md)
+for sample accounting, receipts, deadline derivation and successor evidence.
+
 This is an operational allocation, not a measured completion guarantee. Do not
 shorten the settle, the cadence, the slot count or the capture budget to fit a
 window; shorten nothing and move `t0` earlier instead.
@@ -1794,7 +1823,7 @@ The **arm-time census** is the process inventory before publication. The **plan 
 
 A **listed install span** is a local-time interval from `run_night.INSTALL_SPANS`,
 resolved for its local date; an **epoch second** counts from 1970-01-01 00:00 UTC.
-`install_close_epoch(plan)` is the exclusive install cutoff, `t0 − 85 minutes`;
+`install_close_epoch(plan)` is the exclusive install cutoff, `t0 − ten minutes (the eight-minute REQUEST lead plus INSTALL_CLOSE_MARGIN_S = 2 × 60 s)`;
 `PLAN_MAX_AGE_S` is the night gate's 36-hour plan-age limit. A **dead-man** is
 the scheduled recovery job after planned completion. A **plist** is a launchd
 job file; **UNKNOWN** means a query cannot establish whether a job is loaded.
@@ -1818,8 +1847,8 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | Exact cause | Why A172 grants no retry exception |
 |---|---|
 | `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. |
-| `night_refused_not_quiet` | Machine quietness failed; load, power and thermal thresholds stay fixed. |
-| `night_refused_hid_idle` | User-input inactivity guard failed. |
+| `night_refused_not_quiet` | For v4, the bind window expired without sustained interval CPU quiet, or a terminal power/thermal predicate failed. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Legacy v2 keeps its one-shot load predicate. |
+| `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. |
 | `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. |
 | `night_refused_registration` | Required registration did not validate. |
 | `night_window_expired` | Measurement window expired. |
@@ -1867,9 +1896,11 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `HOLD_CENSUS` | A supervisor census hold alone does not establish the narrowly evidenced idle arm cause. |
 | `slot_refused` | A measurement slot refused; cure the finding before any further night. |
 
-Unknown or mixed causes, any receipt refusal, and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
+Unknown or mixed causes and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path; receipt refusals remain ineligible for same-plan retries. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
 
 R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
+
+Binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation, no session id and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. The successor requires a new id and digest, fresh notice, at least 60 s spacing, fresh install close and every observed NO preserved. Never re-arm the predecessor or put a new plan in same-candidate retry history.
 
 Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.
 

@@ -189,3 +189,46 @@ class NightPlanWriterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QuietPlanVersionTests(unittest.TestCase):
+    def test_v2_plan_bytes_and_semantics_unchanged(self):
+        from tests.test_night_gate import make_plan, FakeProbeSource
+        from joulewise import night_gate
+        fixture = Path(__file__).parent / 'night_gate_fixtures' / 'legacy_plan_v2.json'
+        raw = fixture.read_bytes()
+        plan = NightPlan.from_mapping(json.loads(raw))
+        self.assertIsNone(plan.quiet_admission)
+        self.assertEqual(raw, night_plan_json_bytes(plan))
+        source = FakeProbeSource()
+        with mock.patch.object(night_gate, 'D166_REGISTRATION_SHA256',
+                               hashlib.sha256(source.text['/custody/registration.json'].encode()).hexdigest()):
+            self.assertEqual(night_gate.evaluate_night(make_plan(), source.probes()).verdict, 'GO')
+        self.assertEqual(source.run_calls.count(night_gate.LOAD_AVG_ARGV), 1)
+        self.assertEqual(source.run_calls.count(night_gate.AGENT_CENSUS_ARGV), 1)
+        self.assertEqual(night_plan_mapping(plan)['schema'], 'joulewise.night_plan.v2')
+
+    def test_v4_requires_complete_valid_explicit_policy(self):
+        from tests.test_night_gate import make_plan
+        policy = dict(policy_id='cpu_interval_v1', bind_max_s=600,
+                      sample_interval_s=30, consecutive_quiet_samples=2,
+                      busy_core_max=0.05, post_bind_budget_s=9000)
+        plan = dataclasses.replace(make_plan(), window_max_s=9600, quiet_admission=policy)
+        value = night_plan_mapping(plan)
+        self.assertEqual(value['schema'], 'joulewise.night_plan.v4')
+        self.assertEqual(NightPlan.from_mapping(value), plan)
+        for key in policy:
+            bad = copy.deepcopy(value)
+            del bad['quiet_admission'][key]
+            with self.subTest(missing=key), self.assertRaises(PlanError):
+                NightPlan.from_mapping(bad)
+        for key, item in [('policy_id', 'future'), ('busy_core_max', float('nan')),
+                          ('sample_interval_s', 0), ('consecutive_quiet_samples', True),
+                          ('consecutive_quiet_samples', 1.5), ('bind_max_s', 59)]:
+            bad = copy.deepcopy(value)
+            bad['quiet_admission'][key] = item
+            with self.subTest(key=key, value=item), self.assertRaises(PlanError):
+                NightPlan.from_mapping(bad)
+        value['window_max_s'] = 9599
+        with self.assertRaises(PlanError):
+            NightPlan.from_mapping(value)

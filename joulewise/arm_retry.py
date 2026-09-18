@@ -28,8 +28,8 @@ RETRY_CAUSES = {
 # Explicit assignments are intentional: registry additions must force review.
 COLD_GATE_CODES = {
     "night_refused_agent_present": "Production census refusal, including a receipt at t0; never an idle arm event.",
-    "night_refused_not_quiet": "Machine quietness failed; load, power and thermal thresholds stay fixed.",
-    "night_refused_hid_idle": "User-input inactivity guard failed.",
+    "night_refused_not_quiet": "For v4, the bind window expired without sustained interval CPU quiet, or a terminal power/thermal predicate failed. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Legacy v2 keeps its one-shot load predicate.",
+    "night_refused_hid_idle": "Screensaver-configuration guard failed; this is not a live inactivity measurement.",
     "night_refused_boot_clock": "Measurement boot/clock guard failed; not a watchdog uncertainty tick.",
     "night_refused_registration": "Required registration did not validate.",
     "night_window_expired": "Measurement window expired.",
@@ -192,6 +192,49 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
         return Decision(False, "malformed_evidence")
 
 
+def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
+    """Eligibility for ONE new plan, never authorization to re-arm old bytes.
+
+    The caller supplies harvested positive evidence in C5.measured's
+    ``zero_capture_evidence``: chain_started_absent, reservation_absent,
+    session_id (explicit null), instrument_validation_empty. No missing field
+    means absence. ``delivery`` binds a completed courier.sent marker and its
+    message_id to this plan, plus the preserved successor count (zero).
+    Fresh-plan notice, spacing, install close and every observed NO must still
+    pass ordinary arming; retry_allowed retains its same-candidate semantics.
+    """
+    eligible = {"night_refused_not_quiet", "night_refused_agent_present",
+                "night_refused_hid_idle", "night_refused_boot_clock"}
+    try:
+        reason = result["aborted_reason"]
+        if (result["verdict"] != "REFUSED" or receipt["verdict"] != "REFUSED"
+                or reason not in eligible or receipt["refusal"]["reason"] != reason):
+            return Decision(False, "not_zero_capture_machine_refusal")
+        plan_id = result["plan_id"]
+        if (not isinstance(plan_id, str) or not plan_id
+                or receipt["plan_id"] != plan_id or delivery["plan_id"] != plan_id):
+            return Decision(False, "handoff_plan_mismatch")
+        if (result["chain_exit_code"] is not None or result["chain_sha256"] is not None):
+            return Decision(False, "chain_may_have_started")
+        rows = [row for row in receipt["conditions"] if row["condition_id"] == "C5"]
+        if len(rows) != 1:
+            return Decision(False, "missing_zero_capture_evidence")
+        evidence = rows[0]["measured"]["zero_capture_evidence"]
+        if (evidence["chain_started_absent"] is not True
+                or evidence["reservation_absent"] is not True
+                or evidence["session_id"] is not None
+                or evidence["instrument_validation_empty"] is not True):
+            return Decision(False, "start_reservation_or_capture_not_absent")
+        if (delivery["courier.sent"] is not True
+                or not isinstance(delivery["message_id"], str) or not delivery["message_id"]):
+            return Decision(False, "delivery_incomplete")
+        if type(delivery["successors_used"]) is not int or delivery["successors_used"] != 0:
+            return Decision(False, "successor_already_used")
+        return Decision(True, "new_plan_only")
+    except (KeyError, TypeError, ValueError):
+        return Decision(False, "missing_zero_capture_evidence")
+
+
 def render_policy() -> str:
     """Return the entire marked Markdown block, including its final newline."""
     lines = ["<!-- BEGIN ARM-RETRY-POLICY v1 -->", "",
@@ -206,8 +249,9 @@ def render_policy() -> str:
                       "| Exact cause | Why A172 grants no retry exception |", "|---|---|"])
         lines.extend("| `{}` | {} |".format(k, v) for k, v in rows.items())
     lines.extend(["",
-        "Unknown or mixed causes, any receipt refusal, and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.", "",
+        "Unknown or mixed causes and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path; receipt refusals remain ineligible for same-plan retries. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.", "",
         "R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least {} seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.".format(RETRY_INTERVAL_S), "",
+        "Binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation, no session id and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. The successor requires a new id and digest, fresh notice, at least 60 s spacing, fresh install close and every observed NO preserved. Never re-arm the predecessor or put a new plan in same-candidate retry history.", "",
         "Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.", "",
         "`prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.", "",
         "<!-- END ARM-RETRY-POLICY v1 -->", ""])

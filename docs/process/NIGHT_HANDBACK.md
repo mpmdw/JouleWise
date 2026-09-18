@@ -52,11 +52,12 @@ The **magistrate** is the headless lead agent that prepares and installs a night
 
 The **watchdog** is the supervisor that starts and stops magistrate sessions around measurement windows. The **night gate** checks prerequisites before measurements; its **receipt** records the decision and observations. The **driver** is the program that runs that check, launches the measurement chain and arranges result delivery by the **courier**. A **ledger** is the capture-history record; **custody** means retaining the files that establish what ran and what it produced. A **measurement pack** is the fixed collection of experiment instructions and inputs required by a pack-class plan. A **reviewed head**, written H, is the full Git commit identifier of the reviewed code and instructions. A **fingerprint** is the lowercase SHA-256 digest of exact file bytes. A **binding** is a recorded equality tying a plan to its file bytes, head or other fixed input; a **pin** is the expected value in that equality. A **sidecar** is a companion file, such as a stored fingerprint or previous job-file bytes. An **API** is a programmatic service interface, such as the mail-send operation. A **committed installation** means both jobs were loaded, verified and accepted by the installer's final time check; this is separate from recording a Git commit. **Noncommit evidence** positively establishes that this installation did not reach that state. A missing response does not establish noncommit.
 
-The **arm-time census** is the process inventory before publication. The **plan span** is the agent-free interval beginning 25 minutes before `t0`, the plan's scheduled measurement start, and ending under the existing chain and courier completion rules. Permission to retry an arm abort does not excuse a process inside that span. `production_census` uses the night gate's raw process check. `handoff_census` checks departure of owned processes only, and `_is_interactive_claude` recognizes command shape only; neither proves the arm or plan-span census clean. A172 changes none of them.
+The **arm-time census** is the process inventory before publication. The **plan span** is the agent-free interval beginning eight minutes before `t0`, the plan's scheduled measurement start, and ending under the existing chain and courier completion rules. Permission to retry an arm abort does not excuse a process inside that span. `production_census` uses the night gate's raw process check. `handoff_census` checks departure of owned processes only, and `_is_interactive_claude` recognizes command shape only; neither proves the arm or plan-span census clean. A172 changes none of them.
 
 A **listed install span** is a local-time interval from `run_night.INSTALL_SPANS`,
 resolved for its local date; an **epoch second** counts from 1970-01-01 00:00 UTC.
-`install_close_epoch(plan)` is the exclusive install cutoff, `t0 − 85 minutes`;
+`install_close_epoch(plan)` is the exclusive install cutoff, `t0 − 10 minutes`
+(the eight-minute REQUEST lead plus `INSTALL_CLOSE_MARGIN_S = 2 × 60 s`);
 `PLAN_MAX_AGE_S` is the night gate's 36-hour plan-age limit. A **dead-man** is
 the scheduled recovery job after planned completion. A **plist** is a launchd
 job file; **UNKNOWN** means a query cannot establish whether a job is loaded.
@@ -80,8 +81,8 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | Exact cause | Why A172 grants no retry exception |
 |---|---|
 | `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. |
-| `night_refused_not_quiet` | Machine quietness failed; load, power and thermal thresholds stay fixed. |
-| `night_refused_hid_idle` | User-input inactivity guard failed. |
+| `night_refused_not_quiet` | For v4, the bind window expired without sustained interval CPU quiet, or a terminal power/thermal predicate failed. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Legacy v2 keeps its one-shot load predicate. |
+| `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. |
 | `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. |
 | `night_refused_registration` | Required registration did not validate. |
 | `night_window_expired` | Measurement window expired. |
@@ -129,9 +130,11 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `HOLD_CENSUS` | A supervisor census hold alone does not establish the narrowly evidenced idle arm cause. |
 | `slot_refused` | A measurement slot refused; cure the finding before any further night. |
 
-Unknown or mixed causes, any receipt refusal, and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
+Unknown or mixed causes and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path; receipt refusals remain ineligible for same-plan retries. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
 
 R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
+
+Binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation, no session id and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. The successor requires a new id and digest, fresh notice, at least 60 s spacing, fresh install close and every observed NO preserved. Never re-arm the predecessor or put a new plan in same-candidate retry history.
 
 Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.
 

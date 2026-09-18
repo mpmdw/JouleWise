@@ -3932,3 +3932,322 @@ class ProcessGroupRetryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BindClock:
+    def __init__(self, late=0):
+        self.elapsed = float(late)
+        self.offset = 1000.0
+        self.sleeps = []
+
+    def monotonic(self):
+        return self.elapsed
+
+    def wall(self):
+        return self.offset + self.elapsed
+
+    def sleep(self, duration):
+        self.sleeps.append(duration)
+        self.elapsed = round(self.elapsed + duration, 9)
+
+
+class BindFakeTask:
+    def __init__(self, call, clock):
+        self.call, self.clock = call, clock
+        self.ends = clock.monotonic() + getattr(call, 'duration', 0)
+        self.hang = getattr(call, 'hang', False)
+        self.closed = False
+
+    def ready(self):
+        return not self.hang and self.clock.monotonic() >= self.ends
+
+    def result(self):
+        return self.call()
+
+    def close(self):
+        self.closed = True
+
+
+class QuietBindingTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_night_gate import FakeProbeSource, make_plan, REGISTRATION_TEXT
+        from tests.test_quiet_admission import POLICY
+        from dataclasses import replace
+        self.driver = _load_driver()
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.night = Path(self.temporary.name)
+        self.clock = BindClock()
+        self.source = FakeProbeSource()
+        self.plan = replace(make_plan(), window_max_s=9600, quiet_admission=dict(POLICY))
+        self.probes = replace(self.source.probes(), now_epoch_s=self.clock.wall,
+                             monotonic_ns=lambda: int(self.clock.monotonic() * 1e9))
+        patch = mock.patch.object(night_gate, 'D166_REGISTRATION_SHA256',
+                                 hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest())
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.tasks = []
+        self.samples = 0
+
+    def task(self, call):
+        task = BindFakeTask(call, self.clock)
+        self.tasks.append(task)
+        return task
+
+    def sampler(self, values, *, load=1.2, duration=30):
+        from tests.test_quiet_admission import metrics
+        def sample():
+            self.samples += 1
+            busy = values[min(self.samples - 1, len(values) - 1)]
+            return dict(wall_start=self.clock.wall() - duration, wall_end=self.clock.wall(),
+                monotonic_start=self.clock.monotonic() - duration, monotonic_end=self.clock.monotonic(),
+                interval_s=duration, boot_identity=BOOT_UUID,
+                raw_sha256=dict(ps_before='a'*64, ps_after='b'*64, top='c'*64),
+                metrics=metrics(busy), load_avg_diagnostic={'raw': str(load)})
+        sample.duration = duration
+        return sample
+
+    def bind(self, sampler, **kwargs):
+        receipt = self.driver.bind_until_quiet(self.plan, self.probes, self.night,
+            sampler=sampler, task_factory=self.task, monotonic=self.clock.monotonic,
+            sleep=self.clock.sleep, **kwargs)
+        self.assertTrue(all(task.closed for task in self.tasks))
+        value = json.loads(receipt.to_json_bytes())
+        self.assertEqual(night_gate.validate_receipt(value), [])
+        return receipt, value
+
+    def journal(self):
+        return [json.loads(line) for line in (self.night/'quiet_samples.jsonl').read_text().splitlines()]
+
+    def test_bind_go_on_second_consecutive_quiet_sample_at_k(self):
+        receipt, value = self.bind(self.sampler([.9, .9, .02, .9, .02, .02]))
+        self.assertEqual(receipt.verdict, 'GO')
+        self.assertEqual(self.samples, 6)
+        self.assertEqual(value['samples_total'], 6)
+        self.assertEqual(value['samples_quiet_run_at_go'], 2)
+        self.assertEqual(value['go_epoch_s'], 1180)
+        self.assertEqual([s['decision'] for s in self.journal()], ['WAIT', 'WAIT', 'quiet', 'WAIT', 'quiet', 'quiet'])
+        self.assertNotIn(night_gate.LOAD_AVG_ARGV, self.source.run_calls)
+        self.assertGreaterEqual(self.source.run_calls.count(night_gate.HID_IDLE_ARGV), 13)
+
+    def test_bind_expiry_refuses_with_every_sample_recorded(self):
+        receipt, value = self.bind(self.sampler([.9]))
+        self.assertEqual(receipt.refusal.reason, 'night_refused_not_quiet')
+        self.assertEqual(self.clock.monotonic(), 600)
+        self.assertEqual(len(self.journal()), 20)
+        self.assertEqual(value['quiet_samples_lines'], 20)
+        self.assertEqual(value['quiet_samples_sha256'], hashlib.sha256((self.night/'quiet_samples.jsonl').read_bytes()).hexdigest())
+        self.assertFalse((self.night/'refusal.json').exists())
+        self.assertIn('last_busy_cores', receipt.refusal.detail)
+        self.assertEqual(value['top_consumers_at_decision'][0]['command'], 'fseventsd')
+
+    def test_low_load_busy_daemon_never_admits(self):
+        receipt, value = self.bind(self.sampler([.9], load=1.2))
+        self.assertEqual(receipt.verdict, 'REFUSED')
+        self.assertTrue(all(s['decision'] == 'WAIT' for s in self.journal()))
+        self.assertEqual(value['load_avg_diagnostic'], {'raw': '1.2'})
+
+    def test_finished_burst_admits_despite_high_load(self):
+        receipt, value = self.bind(self.sampler([.02], load=3.7))
+        self.assertEqual(receipt.verdict, 'GO')
+        self.assertEqual(self.samples, 2)
+        self.assertEqual(value['load_avg_diagnostic'], {'raw': '3.7'})
+
+    def test_census_hit_during_bind_is_terminal_agent_present(self):
+        from dataclasses import replace
+        self.plan = replace(self.plan, quiet_admission=dict(self.plan.quiet_admission, consecutive_quiet_samples=3))
+        original = self.source.run
+        def run(argv):
+            if argv == night_gate.AGENT_CENSUS_ARGV and self.clock.monotonic() >= 90:
+                return _probe(argv, exit_code=0, stdout='123 agent\n')
+            return original(argv)
+        self.probes = replace(self.probes, run=run)
+        receipt, value = self.bind(self.sampler([.02]))
+        self.assertEqual(receipt.refusal.reason, 'night_refused_agent_present')
+        self.assertEqual(self.clock.monotonic(), 90)
+        self.assertEqual(value['samples_total'], 3)
+        self.assertIsNone(value['go_epoch_s'])
+
+    def test_late_go_preserves_absolute_deadlines(self):
+        original_end = self.plan.t0_epoch_s + self.plan.window_max_s
+        original_completion = self.driver._completion_epoch_s(self.plan)
+        original_deadman = self.driver.deadman_epoch(self.plan)
+        receipt, value = self.bind(self.sampler([.9]*16 + [.02, .02]))
+        self.assertEqual(value['go_epoch_s'], 1540)
+        self.assertEqual(self.plan.t0_epoch_s + self.plan.window_max_s, original_end)
+        self.assertEqual(self.driver._completion_epoch_s(self.plan), original_completion)
+        self.assertEqual(self.driver.deadman_epoch(self.plan), original_deadman)
+        self.assertEqual(value['bind_deadline_epoch_s'], 1600)
+
+    def test_late_driver_consumes_bind_allowance(self):
+        self.clock.elapsed = 300
+        receipt, value = self.bind(self.sampler([.9]))
+        self.assertEqual(self.clock.monotonic(), 600)
+        self.assertEqual(value['samples_total'], 10)
+        self.assertEqual(receipt.refusal.reason, 'night_refused_not_quiet')
+
+    def test_wall_rollback_never_extends_absolute_deadline(self):
+        original = self.sampler([.9])
+        def rollback():
+            observation = original()
+            self.clock.offset -= 100
+            return observation
+        rollback.duration = 30
+        receipt, value = self.bind(rollback)
+        self.assertEqual(receipt.refusal.reason, 'night_refused_boot_clock')
+        self.assertLessEqual(self.clock.monotonic(), 600)
+        self.assertEqual(value['bind_deadline_epoch_s'], 1600)
+
+    def test_sampler_hang_cannot_block_census_or_expiry(self):
+        sample = self.sampler([.02])
+        sample.hang = True
+        receipt, value = self.bind(sample)
+        self.assertEqual(self.clock.monotonic(), 600)
+        self.assertEqual(receipt.refusal.reason, 'night_refused_not_quiet')
+        censuses = [json.loads(s) for s in (self.night/'censuses.jsonl').read_text().splitlines()]
+        self.assertGreaterEqual(len(censuses), 20)
+        self.assertEqual(self.journal()[0]['decision'], 'error')
+        self.assertIn('attribution_unavailable', value)
+
+    def test_malformed_sampler_is_probe_error_never_quiet(self):
+        def malformed():
+            return {'metrics': {'busy_cores': 0}}
+        malformed.duration = 30
+        receipt, value = self.bind(malformed)
+        self.assertEqual(receipt.refusal.reason, 'night_probe_error')
+        self.assertEqual(value['samples_total'], 1)
+        self.assertEqual(self.journal()[0]['decision'], 'error')
+
+    def test_hard_probe_error_and_thermal_restriction_are_terminal(self):
+        self.source.raise_for[night_gate.PMSET_BATT_ARGV] = OSError('fixture failure')
+        receipt, value = self.bind(self.sampler([.02]))
+        self.assertEqual(receipt.refusal.reason, 'night_probe_error')
+        self.assertEqual(self.samples, 0)
+        self.assertIn('attribution_unavailable', value)
+
+    def test_journal_is_courier_artifact(self):
+        self.bind(self.sampler([.02]))
+        artifacts = self.driver._artifact_list(self.night.parent, self.night)
+        self.assertIn(str((self.night/'quiet_samples.jsonl').relative_to(self.night.parent)),
+                      [artifact['path'] for artifact in artifacts])
+
+    def test_final_census_wins_after_required_quiet_run(self):
+        from dataclasses import replace
+        original = self.source.run
+        calls_at_two = 0
+        def run(argv):
+            nonlocal calls_at_two
+            if argv == night_gate.AGENT_CENSUS_ARGV and self.samples == 2:
+                calls_at_two += 1
+                if calls_at_two == 2:
+                    return _probe(argv, exit_code=0, stdout='123 agent\n')
+            return original(argv)
+        self.probes = replace(self.probes, run=run)
+        receipt, value = self.bind(self.sampler([.02]))
+        self.assertEqual(receipt.refusal.reason, 'night_refused_agent_present')
+        self.assertIsNone(value['go_epoch_s'])
+        self.assertEqual(self.samples, 2)
+
+    def test_power_screensaver_thermal_and_malformed_census_are_terminal(self):
+        for argv, result, reason in [
+            (night_gate.PMSET_BATT_ARGV, _probe(night_gate.PMSET_BATT_ARGV, stdout="Now drawing from 'Battery Power'"), 'night_refused_not_quiet'),
+            (night_gate.HID_IDLE_ARGV, _probe(night_gate.HID_IDLE_ARGV, stdout='10'), 'night_refused_hid_idle'),
+            (night_gate.THERMAL_ARGV, _probe(night_gate.THERMAL_ARGV, stdout='CPU_Speed_Limit = 80'), 'night_refused_not_quiet'),
+            (night_gate.AGENT_CENSUS_ARGV, _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=2), 'night_probe_error'),
+        ]:
+            with self.subTest(argv=argv):
+                old = self.source.results[argv]
+                self.source.results[argv] = result
+                receipt, value = self.bind(self.sampler([.02]))
+                self.assertEqual(receipt.refusal.reason, reason)
+                self.assertEqual(self.samples, 0)
+                self.source.results[argv] = old
+
+    def test_v3_receipt_refuses_missing_attribution_and_inconsistent_count(self):
+        import copy
+        _, receipt = self.bind(self.sampler([.02]))
+        for key in ('quiet_admission', 'quiet_samples_sha256', 'samples_total'):
+            bad = copy.deepcopy(receipt)
+            del bad[key]
+            self.assertTrue(night_gate.validate_receipt(bad))
+        bad = copy.deepcopy(receipt)
+        bad['quiet_samples_lines'] += 1
+        self.assertTrue(night_gate.validate_receipt(bad))
+        bad = copy.deepcopy(receipt)
+        bad['top_consumers_at_decision'] = []
+        self.assertTrue(night_gate.validate_receipt(bad))
+        bad['attribution_unavailable'] = 'host-only accounting'
+        self.assertEqual(night_gate.validate_receipt(bad), [])
+
+
+class QuietDriverIntegrationTests(unittest.TestCase):
+    def fixture(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import POLICY
+        fixture = NightDriverTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.addCleanup(fixture.tearDown)
+        plan = replace(fixture.driver._load_plan(fixture.plan_path),
+                       window_max_s=9600, quiet_admission=dict(POLICY))
+        fixture.plan_path.unlink()  # fixture-only fresh publication
+        write_night_plan(fixture.plan_path, plan)
+        return fixture, plan
+
+    def test_v4_driver_calls_bind_and_keeps_shutdown_anchored_to_entry(self):
+        from dataclasses import replace
+        fixture, plan = self.fixture()
+        driver = fixture.driver
+        clock = BindClock()
+        clock.offset = plan.t0_epoch_s
+        probes = replace(fixture.source.probes(), now_epoch_s=clock.wall,
+                         monotonic_ns=lambda: int(clock.monotonic()*1e9))
+        driver.make_probes = lambda: probes
+        real_bind = driver.bind_until_quiet
+        def sample():
+            from tests.test_quiet_admission import metrics
+            return dict(wall_start=clock.wall()-270, wall_end=clock.wall(),
+                monotonic_start=clock.monotonic()-270, monotonic_end=clock.monotonic(),
+                interval_s=270, boot_identity=BOOT_UUID,
+                raw_sha256=dict(ps_before='a'*64, ps_after='b'*64, top='c'*64),
+                metrics=metrics(.02), load_avg_diagnostic={'raw':'3.7'})
+        sample.duration = 270
+        def bind(*args, **kwargs):
+            self.assertFalse((fixture.custody/'night/chain.started').exists())
+            return real_bind(*args, **kwargs, sampler=sample,
+                task_factory=lambda call: BindFakeTask(call, clock),
+                monotonic=clock.monotonic, sleep=clock.sleep)
+        driver.bind_until_quiet = bind
+        with mock.patch.object(driver.time, 'time', clock.wall), \
+             mock.patch.object(driver.time, 'monotonic', clock.monotonic), \
+             mock.patch.object(driver, '_run_chain_once', return_value=(0,None,0,[],True)) as chain:
+            self.assertEqual(driver.run_night(fixture.plan_path), driver.EXIT_GO)
+        self.assertEqual(clock.monotonic(), 540)
+        self.assertEqual(chain.call_args.kwargs['shutdown_monotonic'], 9900)
+        value = json.loads((fixture.custody/'night/receipt.json').read_bytes())
+        self.assertEqual(value['go_epoch_s'], plan.t0_epoch_s+540)
+        self.assertEqual(night_gate.validate_receipt(value), [])
+        self.assertTrue((fixture.custody/'night/chain.started').exists())
+        self.assertFalse((fixture.custody/'night/refusal.json').exists())
+
+    def test_early_v4_driver_refusal_has_receipt_and_unavailable_attribution(self):
+        fixture, plan = self.fixture()
+        driver = fixture.driver
+        driver._resolve_courier_bin = lambda _bin: (None, 'fixture unavailable', None)
+        self.assertEqual(driver.run_night(fixture.plan_path), driver.EXIT_COURIER_FAILED)
+        receipt = json.loads((fixture.custody/'night/receipt.json').read_bytes())
+        refusal = json.loads((fixture.custody/'night/refusal.json').read_bytes())
+        self.assertEqual(night_gate.validate_receipt(receipt), [])
+        self.assertEqual(receipt['schema'], night_gate.QUIET_RECEIPT_SCHEMA)
+        self.assertIn('attribution_unavailable', refusal['refusal']['evidence'])
+        self.assertFalse((fixture.custody/'night/chain.started').exists())
+
+    def test_supervised_worker_is_reaped_on_cancellation(self):
+        import time
+        driver = _load_driver()
+        task = driver._BindTask(lambda: time.sleep(60))
+        pid = task.process.pid
+        self.assertFalse(task.ready())
+        task.close()
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)

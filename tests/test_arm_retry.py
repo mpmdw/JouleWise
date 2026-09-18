@@ -435,3 +435,48 @@ class ArmRetryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ZeroCaptureSuccessorTests(unittest.TestCase):
+    def evidence(self):
+        result = dict(verdict='REFUSED', aborted_reason='night_refused_not_quiet',
+                      plan_id='predecessor', chain_exit_code=None, chain_sha256=None)
+        receipt = dict(verdict='REFUSED', plan_id='predecessor',
+                       refusal={'reason': 'night_refused_not_quiet'}, conditions=[
+            dict(condition_id='C5', measured={'zero_capture_evidence': dict(
+                chain_started_absent=True, reservation_absent=True, session_id=None,
+                instrument_validation_empty=True)})])
+        delivery = {'courier.sent': True, 'message_id': 'sent-message',
+                    'plan_id': 'predecessor', 'successors_used': 0}
+        return result, receipt, delivery
+
+    def test_zero_capture_successor_requires_delivery_and_no_start(self):
+        result, receipt, delivery = self.evidence()
+        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, receipt, {}).allowed)
+        decision = arm_retry.zero_capture_successor_allowed(result, receipt, delivery)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.reason, 'new_plan_only')
+        for field, bad in [('chain_started_absent', False), ('reservation_absent', False),
+                           ('session_id', 'a-session'), ('instrument_validation_empty', False)]:
+            changed = copy.deepcopy(receipt)
+            changed['conditions'][0]['measured']['zero_capture_evidence'][field] = bad
+            self.assertFalse(arm_retry.zero_capture_successor_allowed(result, changed, delivery).allowed)
+        for field in ('chain_started_absent', 'reservation_absent', 'session_id', 'instrument_validation_empty'):
+            changed = copy.deepcopy(receipt)
+            del changed['conditions'][0]['measured']['zero_capture_evidence'][field]
+            self.assertFalse(arm_retry.zero_capture_successor_allowed(result, changed, delivery).allowed)
+        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, receipt,
+            dict(delivery, successors_used=1)).allowed)
+        self.assertEqual(arm_retry.classify_abort('night_refused_not_quiet'), 'cold_gate')
+
+    def test_new_plan_cannot_masquerade_as_same_candidate_retry(self):
+        fixture = ArmRetryTests()
+        fixture.setUp()
+        fixture.attempts[0]['cause'] = 'night_refused_not_quiet'
+        self.assertEqual(fixture.decide().reason, 'cold_gate_history')
+        fixture.attempts[0]['cause'] = 'arm_transport'
+        candidate = dict(fixture.candidate, plan_id='new-successor')
+        raw = json.dumps(candidate).encode()
+        fixture.plan.update(plan_bytes=raw, saved_plan_bytes=raw)
+        fixture.notice.update(plan_id='new-successor', plan_sha256=hashlib.sha256(raw).hexdigest())
+        self.assertEqual(fixture.decide().reason, 'candidate_changed')

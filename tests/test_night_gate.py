@@ -1149,3 +1149,30 @@ class NightGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QuietGatePhaseTests(unittest.TestCase):
+    def test_static_and_dynamic_seams_cannot_authorize_v4_without_intervals(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import POLICY
+        plan = replace(make_plan(), window_max_s=9600, quiet_admission=dict(POLICY))
+        source = FakeProbeSource()
+        with mock.patch.object(night_gate, 'D166_REGISTRATION_SHA256',
+                               hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
+            static = night_gate.evaluate_static(plan, source.probes())
+            self.assertIsNone(static.refusal)
+            self.assertNotEqual(static.verdict, 'GO')
+            self.assertEqual(source.run_calls, [])
+            hard = night_gate.evaluate_dynamic_hard(plan, source.probes(), static)
+            self.assertIsNone(hard.refusal)
+            self.assertNotIn(night_gate.LOAD_AVG_ARGV, source.run_calls)
+            self.assertEqual(hard.verdict, 'PENDING')
+            self.assertTrue(night_gate.validate_receipt(json.loads(hard.to_json_bytes())))
+            with self.assertRaises(night_gate.PlanError):
+                night_gate.evaluate_night(plan, source.probes())
+
+    def test_v4_missing_block_never_falls_back_to_legacy(self):
+        mapping = plan_mapping()
+        mapping.update(schema=night_gate.QUIET_PLAN_SCHEMA, schema_version=4)
+        with self.assertRaises(night_gate.PlanError):
+            night_gate.NightPlan.from_mapping(mapping)

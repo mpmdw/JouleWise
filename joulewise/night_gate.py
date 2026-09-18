@@ -13,7 +13,7 @@ import math
 import os
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
@@ -24,6 +24,9 @@ PLAN_SCHEMA = "joulewise.night_plan.v2"
 PLAN_SCHEMA_VERSION = 2
 PACK_PLAN_SCHEMA = "joulewise.night_plan.v3"
 PACK_PLAN_SCHEMA_VERSION = 3
+QUIET_PLAN_SCHEMA = "joulewise.night_plan.v4"
+QUIET_PLAN_SCHEMA_VERSION = 4
+QUIET_RECEIPT_SCHEMA = "joulewise.unattended_night_receipt.v3"
 RECEIPT_CLASSES = (
     "DIAGNOSTIC_NO_PACK",
     "REHEARSAL_STUB",
@@ -141,6 +144,11 @@ _RECEIPT_KEYS = {
     "refusal",
     "authored_monotonic_ns",
 }
+_QUIET_RECEIPT_KEYS = {
+    "quiet_admission", "bind_deadline_epoch_s", "go_epoch_s", "samples_total",
+    "samples_quiet_run_at_go", "quiet_samples_sha256", "quiet_samples_lines",
+    "top_consumers_at_decision", "load_avg_diagnostic",
+}
 _CONDITION_KEYS = {"condition_id", "status", "basis", "evidence", "measured"}
 _REFUSAL_KEYS = {"reason", "detail", "evidence"}
 _PROBE_RESULT_KEYS = {"argv", "exit_code", "stdout", "stderr", "monotonic_ns"}
@@ -208,6 +216,7 @@ class NightPlan:
     custody_root: str
     registration_path: str | None
     pack_night: dict[str, object] | None = None
+    quiet_admission: dict[str, object] | None = None
 
     @staticmethod
     def from_mapping(value: Mapping[str, object]) -> "NightPlan":
@@ -215,9 +224,14 @@ class NightPlan:
             raise PlanError("night_plan_malformed", "plan must be an object")
         keys = set(value)
         is_pack = value.get("receipt_class") == "TRANSACTION_PACK"
+        is_quiet = value.get("schema") == QUIET_PLAN_SCHEMA and not is_pack
         expected_keys = _PLAN_KEYS | {"pack_night"} if is_pack else _PLAN_KEYS
+        if is_quiet:
+            expected_keys = expected_keys | {"quiet_admission"}
         expected_schema = PACK_PLAN_SCHEMA if is_pack else PLAN_SCHEMA
         expected_version = PACK_PLAN_SCHEMA_VERSION if is_pack else PLAN_SCHEMA_VERSION
+        if is_quiet:
+            expected_schema, expected_version = QUIET_PLAN_SCHEMA, QUIET_PLAN_SCHEMA_VERSION
         if keys != expected_keys:
             missing = sorted(repr(item) for item in expected_keys - keys)
             extra = sorted(repr(item) for item in keys - expected_keys)
@@ -345,6 +359,13 @@ class NightPlan:
                 "night_plan_malformed",
                 f"registration_path is required for {receipt_class}",
             )
+        quiet_admission = None
+        if is_quiet:
+            from joulewise.quiet_admission import validate_policy
+            try:
+                quiet_admission = validate_policy(value["quiet_admission"], window_max_s=window_max_s)
+            except (ValueError, OverflowError) as exc:
+                raise PlanError("night_plan_malformed", str(exc)) from exc
         return NightPlan(
             plan_id=plan_id,
             receipt_class=receipt_class,
@@ -359,6 +380,7 @@ class NightPlan:
             custody_root=custody_root,
             registration_path=registration,
             pack_night=pack_night,
+            quiet_admission=quiet_admission,
         )
 
 
@@ -387,6 +409,7 @@ class Receipt:
     conditions: tuple[ConditionRow, ...]
     refusal: Refusal | None
     authored_monotonic_ns: int
+    admission: Mapping[str, object] | None = None
 
     def to_json_bytes(self) -> bytes:
         value = {
@@ -422,6 +445,8 @@ class Receipt:
             },
             "authored_monotonic_ns": self.authored_monotonic_ns,
         }
+        if self.admission is not None:
+            value.update(self.admission)
         return (
             json.dumps(value, sort_keys=True, indent=2, ensure_ascii=True) + "\n"
         ).encode("utf-8")
@@ -943,14 +968,7 @@ def _evaluate_pack_conditions(plan, probes, rows, arm_path):
         {"arm_sha256": verified["receipt_sha256"]})
     return arm
 
-
-def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pack_conditions=None) -> Receipt:
-    # Retained compatibility argument has no authority; custody is re-evaluated.
-    del pack_conditions
-    pack_arm = None
-    rows = _initial_conditions(plan.receipt_class)
-    evidence: list[ProbeResult] = []
-
+def _check_static_start(plan, probes, rows, evidence):
     if (
         plan.receipt_class in {"DIAGNOSTIC_NO_PACK", "REHEARSAL_STUB"}
         and (not isinstance(plan.registration_path, str) or not plan.registration_path)
@@ -1032,7 +1050,13 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
             ),
         )
 
+
+def _check_census(plan, probes, rows, evidence, *, strict=False):
     census_result, census_refusal = agent_census(probes)
+    if strict and (census_result.exit_code not in (0, 1)
+                   or (census_result.exit_code == 1 and census_result.stdout.strip())
+                   or (census_result.exit_code == 0 and not census_result.stdout.strip())):
+        census_refusal = Refusal("night_probe_error", "malformed or failed binding census", (census_result,))
     evidence.append(census_result)
     rows["C3"].evidence.append(_probe_citation(census_result))
     rows["C3"].measured = {
@@ -1042,6 +1066,8 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     if census_refusal is not None:
         return _finish(plan, probes, rows, census_refusal)
 
+
+def _check_chain_identity(plan, probes, rows, evidence):
     if plan.receipt_class == "REHEARSAL_STUB":
         rows["C5"].measured.update(
             {
@@ -1116,25 +1142,8 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
         else "window, plan freshness, measurement HEAD, and chain identity passed"
     )
 
-    if plan.receipt_class == "TRANSACTION_PACK" and plan.pack_night is None:
-        return _finish(
-            plan,
-            probes,
-            rows,
-            Refusal(
-                "night_refused_class_unbuilt",
-                "stage 3 not implemented: TRANSACTION_PACK is pack-bound and stays under E-10 (ruling R-10)",
-                (),
-            ),
-        )
 
-    if plan.receipt_class == "TRANSACTION_PACK":
-        try:
-            pack_arm = _evaluate_pack_conditions(plan, probes, rows, pack_arm_receipt)
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError, ImportError) as exc:
-            return _finish(plan, probes, rows, Refusal(
-                getattr(exc, "reason", "launch_go_receipt_invalid"), str(exc), ()))
-
+def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
     # R-6's unattended HID predicate precedes the remaining quiet predicates.
     try:
         hid = _run(probes, HID_IDLE_ARGV)
@@ -1143,6 +1152,10 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     evidence.append(hid)
     rows["C3"].evidence.append(_probe_citation(hid))
     rows["C3"].measured["hid_idle_raw"] = hid.stdout
+    if not legacy_load and not _completed_ok(hid):
+        return _probe_refusal(plan, probes, rows, evidence, ProbeError("screensaver probe failed"))
+    if not legacy_load and not re.fullmatch(r"[0-9]+", hid.stdout.strip()):
+        return _probe_refusal(plan, probes, rows, evidence, ProbeError("screensaver output malformed"))
     if not _completed_ok(hid) or hid.stdout.strip() != "0":
         return _finish(
             plan,
@@ -1161,6 +1174,9 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
         evidence.append(batt)
         rows["C3"].evidence.append(_probe_citation(batt))
         rows["C3"].measured["ac_power_raw"] = batt.stdout
+        if not legacy_load and (not _completed_ok(batt) or not any(
+                power in batt.stdout for power in ("AC Power", "Battery Power"))):
+            raise ProbeError("power observation malformed or failed")
         if not _completed_ok(batt) or "AC Power" not in batt.stdout:
             return _finish(
                 plan,
@@ -1181,6 +1197,8 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
         rows["C3"].measured["displaysleep"] = (
             None if display_match is None else display_match.group(1)
         )
+        if not legacy_load and (not _completed_ok(settings) or display_match is None):
+            raise ProbeError("display configuration observation malformed or failed")
         if not _completed_ok(settings) or display_match is None:
             return _finish(
                 plan,
@@ -1193,29 +1211,30 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
                 ),
             )
 
-        load = _run(probes, LOAD_AVG_ARGV)
-        evidence.append(load)
-        rows["C3"].evidence.append(_probe_citation(load))
-        rows["C3"].measured["load_average_raw"] = load.stdout
-        load_match = _LOAD_AVG_RE.fullmatch(load.stdout.strip())
-        if not _completed_ok(load) or load_match is None:
-            raise ProbeError(
-                "load average output malformed: "
-                f"exit={load.exit_code}, stdout={load.stdout[:200]!r}"
-            )
-        load_1m = float(load_match.group(1))
-        rows["C3"].measured["load_1m"] = load_1m
-        if load_1m > LOAD_MAX:
-            return _finish(
-                plan,
-                probes,
-                rows,
-                Refusal(
-                    "night_refused_not_quiet",
-                    f"load_average predicate failed (maximum {LOAD_MAX})",
-                    tuple(evidence),
-                ),
-            )
+        if legacy_load:
+            load = _run(probes, LOAD_AVG_ARGV)
+            evidence.append(load)
+            rows["C3"].evidence.append(_probe_citation(load))
+            rows["C3"].measured["load_average_raw"] = load.stdout
+            load_match = _LOAD_AVG_RE.fullmatch(load.stdout.strip())
+            if not _completed_ok(load) or load_match is None:
+                raise ProbeError(
+                    "load average output malformed: "
+                    f"exit={load.exit_code}, stdout={load.stdout[:200]!r}"
+                )
+            load_1m = float(load_match.group(1))
+            rows["C3"].measured["load_1m"] = load_1m
+            if load_1m > LOAD_MAX:
+                return _finish(
+                    plan,
+                    probes,
+                    rows,
+                    Refusal(
+                        "night_refused_not_quiet",
+                        f"load_average predicate failed (maximum {LOAD_MAX})",
+                        tuple(evidence),
+                    ),
+                )
 
         thermal = _run(probes, THERMAL_ARGV)
         evidence.append(thermal)
@@ -1252,8 +1271,11 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     except ProbeError as exc:
         return _probe_refusal(plan, probes, rows, evidence, exc)
     rows["C3"].status = "PASS"
-    rows["C3"].measured["detail"] = "agent, HID, AC, display, load, and thermal predicates passed"
+    rows["C3"].measured["detail"] = ("agent, HID, AC, display, load, and thermal predicates passed"
+        if legacy_load else "agent, screensaver configuration, AC, display and thermal predicates passed")
 
+
+def _check_clock(plan, probes, rows, evidence, *, pack_arm=None):
     # C4 is deliberately local-only: boot UUID plus an epoch/monotonic pair.
     try:
         boot = _run(probes, BOOT_SESSION_ARGV)
@@ -1299,6 +1321,9 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     }
     rows["C4"].evidence.append("clock:epoch+monotonic")
 
+
+def _check_registration(plan, probes, rows, evidence):
+    clock_monotonic_ns = rows["C4"].measured.get("clock_monotonic_ns")
     if plan.receipt_class in {"DIAGNOSTIC_NO_PACK", "REHEARSAL_STUB"}:
         try:
             registration_text = probes.read_text(plan.registration_path)
@@ -1329,13 +1354,90 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
         rows["C1"].status = "PASS"
         rows["C1"].measured["detail"] = "D-166 registration hash passed"
 
-    return _finish(
-        plan,
-        probes,
-        rows,
-        None,
-        authored_monotonic_ns=clock_monotonic_ns,
-    )
+
+
+def evaluate_static(plan: NightPlan, probes: Probes) -> Receipt:
+    """V4 static evidence only; a partial result is never launch authority."""
+    from joulewise.quiet_admission import validate_policy
+    rows = _initial_conditions(plan.receipt_class)
+    evidence = []
+    try:
+        validate_policy(plan.quiet_admission, window_max_s=plan.window_max_s)
+        if plan.receipt_class == "TRANSACTION_PACK":
+            raise ValueError("quiet admission is packless only")
+    except (ValueError, OverflowError) as error:
+        return _finish(plan, probes, rows, Refusal("night_plan_malformed", str(error), ()))
+    for check in (_check_static_start, _check_chain_identity, _check_registration):
+        refused = check(plan, probes, rows, evidence)
+        if refused is not None:
+            return refused
+    return replace(_finish(plan, probes, rows, None), verdict="PENDING")
+
+
+def evaluate_dynamic_hard(plan: NightPlan, probes: Probes, static: Receipt) -> Receipt:
+    """Re-observe every hard predicate; CPU admission belongs to the driver."""
+    rows = {row.condition_id: _MutableCondition(row.status, row.basis, list(row.evidence),
+                                               dict(row.measured)) for row in static.conditions}
+    evidence = []
+    refused = _check_census(plan, probes, rows, evidence, strict=True)
+    if refused is not None:
+        return refused
+    refused = _check_machine(plan, probes, rows, evidence, legacy_load=False)
+    if refused is not None:
+        return refused
+    refused = _check_clock(plan, probes, rows, evidence)
+    if refused is not None:
+        return refused
+    return replace(_finish(plan, probes, rows, None,
+                   authored_monotonic_ns=rows["C4"].measured["clock_monotonic_ns"]), verdict="PENDING")
+
+
+def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pack_conditions=None) -> Receipt:
+    """Legacy one-shot composition, preserving probe order and receipt bytes.
+
+    A v4 caller must use the supervised driver bind loop; no one-shot call can
+    authorize an interval plan.
+    """
+    del pack_conditions
+    rows = _initial_conditions(plan.receipt_class)
+    evidence = []
+    pack_arm = None
+    if plan.quiet_admission is not None:
+        raise PlanError("night_probe_error", "v4 requires supervised interval admission in run_night")
+    for check in (_check_static_start, _check_census, _check_chain_identity):
+        refused = check(plan, probes, rows, evidence)
+        if refused is not None:
+            return refused
+    if plan.receipt_class == "TRANSACTION_PACK" and plan.pack_night is None:
+        return _finish(
+            plan,
+            probes,
+            rows,
+            Refusal(
+                "night_refused_class_unbuilt",
+                "stage 3 not implemented: TRANSACTION_PACK is pack-bound and stays under E-10 (ruling R-10)",
+                (),
+            ),
+        )
+
+    if plan.receipt_class == "TRANSACTION_PACK":
+        try:
+            pack_arm = _evaluate_pack_conditions(plan, probes, rows, pack_arm_receipt)
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError, ImportError) as exc:
+            return _finish(plan, probes, rows, Refusal(
+                getattr(exc, "reason", "launch_go_receipt_invalid"), str(exc), ()))
+
+    refused = _check_machine(plan, probes, rows, evidence)
+    if refused is not None:
+        return refused
+    refused = _check_clock(plan, probes, rows, evidence, pack_arm=pack_arm)
+    if refused is not None:
+        return refused
+    refused = _check_registration(plan, probes, rows, evidence)
+    if refused is not None:
+        return refused
+    return _finish(plan, probes, rows, None,
+                   authored_monotonic_ns=rows["C4"].measured["clock_monotonic_ns"])
 
 
 def _exact_keys(value: object, expected: set[str], where: str, defects: list[str]) -> bool:
@@ -1370,11 +1472,69 @@ def _validate_probe(value: object, where: str, defects: list[str]) -> None:
         defects.append(f"{where}.monotonic_ns: must be a non-negative integer")
 
 
+def _validate_quiet_receipt(value, defects):
+    from joulewise.quiet_admission import validate_policy
+    try:
+        policy = validate_policy(value["quiet_admission"])
+    except (ValueError, OverflowError):
+        defects.append("quiet_admission: invalid policy")
+        policy = None
+    if value["receipt_class"] == "TRANSACTION_PACK":
+        defects.append("quiet receipt is packless only")
+    for key in ("samples_total", "samples_quiet_run_at_go", "quiet_samples_lines"):
+        if type(value[key]) is not int or value[key] < 0:
+            defects.append(f"{key}: expected nonnegative integer")
+    if (type(value["samples_total"]) is int and type(value["samples_quiet_run_at_go"]) is int
+            and value["samples_quiet_run_at_go"] > value["samples_total"]):
+        defects.append("samples_quiet_run_at_go: exceeds samples_total")
+    if value["samples_total"] != value["quiet_samples_lines"]:
+        defects.append("quiet_samples_lines: differs from samples_total")
+    if not isinstance(value["quiet_samples_sha256"], str) or _SHA256_RE.fullmatch(value["quiet_samples_sha256"]) is None:
+        defects.append("quiet_samples_sha256: invalid digest")
+    deadline, go = value["bind_deadline_epoch_s"], value["go_epoch_s"]
+    def finite(number):
+        try:
+            return type(number) in (int, float) and math.isfinite(number)
+        except OverflowError:
+            return False
+    if not finite(deadline):
+        defects.append("bind_deadline_epoch_s: invalid epoch")
+    if value["verdict"] in {"GO", "REHEARSAL_ONLY"}:
+        if not finite(go) or not finite(deadline) or go > deadline:
+            defects.append("go_epoch_s: must complete by bind deadline")
+        if policy and (type(value["samples_quiet_run_at_go"]) is not int
+                or value["samples_quiet_run_at_go"] < policy["consecutive_quiet_samples"]):
+            defects.append("samples_quiet_run_at_go: insufficient consecutive intervals")
+    elif go is not None or value["samples_quiet_run_at_go"] != 0:
+        defects.append("refusal: GO fields must be null/zero")
+    consumers = value["top_consumers_at_decision"]
+    if not isinstance(consumers, list) or len(consumers) > 10:
+        defects.append("top_consumers_at_decision: expected at most ten consumers")
+    elif not consumers and (not isinstance(value.get("attribution_unavailable"), str)
+                           or not value["attribution_unavailable"]):
+        defects.append("attribution_unavailable: required when no consumers are available")
+    else:
+        for item in consumers:
+            if (not isinstance(item, Mapping) or type(item.get("pid")) is not int
+                    or not isinstance(item.get("command"), str)
+                    or not finite(item.get("busy_cores")) or item["busy_cores"] < 0
+                    or type(item.get("observer")) is not bool):
+                defects.append("top_consumers_at_decision: malformed consumer")
+    if not isinstance(value["load_avg_diagnostic"], Mapping):
+        defects.append("load_avg_diagnostic: expected diagnostic object")
+
+
 def validate_receipt(value: Mapping[str, object]) -> list[str]:
     defects: list[str] = []
-    if not _exact_keys(value, _RECEIPT_KEYS, "receipt", defects):
+    quiet = isinstance(value, Mapping) and value.get("schema") == QUIET_RECEIPT_SCHEMA
+    expected = _RECEIPT_KEYS | _QUIET_RECEIPT_KEYS if quiet else _RECEIPT_KEYS
+    if quiet and "attribution_unavailable" in value:
+        expected = expected | {"attribution_unavailable"}
+    if not _exact_keys(value, expected, "receipt", defects):
         return defects
-    if value.get("schema") != SCHEMA:
+    if quiet:
+        _validate_quiet_receipt(value, defects)
+    if not quiet and value.get("schema") != SCHEMA:
         defects.append(f"schema: must be {SCHEMA}")
     receipt_class = value.get("receipt_class")
     if receipt_class not in RECEIPT_CLASSES:
