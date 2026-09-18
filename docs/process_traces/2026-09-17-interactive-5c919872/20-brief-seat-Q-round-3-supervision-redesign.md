@@ -3,8 +3,8 @@ BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: ["joulewise/night_gate.py","joulewise/night_plan_writer.py","joulewise/arm_retry.py","joulewise/quiet_admission.py","scripts/run_night.py","scripts/gen_derivation_night.py","tests/test_night_gate.py","tests/test_night_plan_writer.py","tests/test_arm_retry.py","tests/test_run_night.py","tests/test_gen_derivation_night.py","tests/test_quiet_admission.py","tests/night_gate_fixtures/**","docs/process/NIGHT_HANDBACK.md","docs/phase_2/derivation_night_runbook.md","docs/contracts/night_quiet_admission.md","docs/contracts/pack_night_go_receipt.md"]
 BASE_HEAD: 5c5a3323
-BASELINE_MANIFEST: __BASELINE_MANIFEST__
-BASELINE_DIGEST: __BASELINE_DIGEST__
+BASELINE_MANIFEST: .codex-bridge/baselines/mag-5c919872-gate-quiet-r3-2155.json
+BASELINE_DIGEST: sha256:06ec851c177889fb9340627ae600abcc0cdd083e7f85a05cb6a8b087b589fbd9
 LEASE_ID: lease-79c5a1766616453fb93e93b7cea20ffd
 
 # Seat Q round 3 — bind-loop supervision REDESIGN per the adopted consult (not a patch)
