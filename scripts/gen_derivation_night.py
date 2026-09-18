@@ -509,7 +509,7 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
         )
 
     if plan.quiet_admission is not None:
-        required_post_bind = max(9000, programmed_span_s(slot_count) + PRE_SETTLE_ALLOWANCE_S)
+        required_post_bind = programmed_span_s(slot_count) + PRE_SETTLE_ALLOWANCE_S
         if plan.quiet_admission["post_bind_budget_s"] < required_post_bind:
             raise GenerationRefusal(f"post_bind_budget_s must preserve at least {required_post_bind} s of derivation runway")
 
@@ -905,7 +905,8 @@ def render_quiet_runsheet(plan):
         f"Plan v4; policy {policy['policy_id']}. All quiet-admission parameters are PROVISIONAL.\n\n"
         f"Bind allocation: {policy['bind_max_s']} s; interval: {policy['sample_interval_s']} s; "
         f"consecutive quiet samples: {policy['consecutive_quiet_samples']}; "
-        f"busy-core cutoff: {policy['busy_core_max']}.\n\n"
+        f"busy-core cutoff: {policy['busy_core_max']}; "
+        f"cutoff authority: {policy['cutoff_authority']}.\n\n"
         f"Post-bind allocation: {policy['post_bind_budget_s']} s. "
         "The unchanged schedule is 600 + 11 × 600 + 480 = 7680 s; "
         "300 s minimum pre-settle allowance gives 7980 s. The existing "
@@ -928,8 +929,9 @@ def author_quiet_plan(template_path, policy_path, output_path, new_id):
     if not new_id or new_id == template.plan_id:
         raise GenerationRefusal("new-plan-id must differ from the template's id")
     _census_clean("new-plan-id", new_id)
-    if policy["post_bind_budget_s"] < 9000:
-        raise GenerationRefusal("post_bind_budget_s must preserve the existing 9000 s allocation")
+    required_post_bind = programmed_span_s(PRE_REGISTERED_SLOT_COUNT) + PRE_SETTLE_ALLOWANCE_S
+    if policy["post_bind_budget_s"] < required_post_bind:
+        raise GenerationRefusal(f"post_bind_budget_s must preserve at least {required_post_bind} s of derivation runway")
     if output_path.resolve() == template_path.resolve():
         raise GenerationRefusal("new plan must not replace the template")
     plan = replace(template, plan_id=new_id, quiet_admission=policy,

@@ -1610,7 +1610,7 @@ def _write_standard_refusal_result(
         journal.touch(exist_ok=True)
         raw = journal.read_bytes()
         policy = quiet_admission.validate_policy(plan.quiet_admission, window_max_s=plan.window_max_s)
-        summary = dict(quiet_admission=policy,
+        summary = dict(quiet_admission=policy, admission_is_capture_evidence=False,
             bind_deadline_epoch_s=quiet_admission.bind_deadline_epoch(plan), go_epoch_s=None,
             samples_total=len(raw.splitlines()), samples_quiet_run_at_go=0,
             quiet_samples_sha256=hashlib.sha256(raw).hexdigest(), quiet_samples_lines=len(raw.splitlines()),
@@ -2106,21 +2106,21 @@ def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
                 check_census()
                 now = monotonic()
                 if now > deadline:
-                    stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+                    stopped(_CODES["refused_bind_expired"], "bind deadline expired")
                 if task.ready():
                     value = task.result()
                     # A ready sampler cannot race an already-running census.
                     while census_task is not None:
                         check_census()
                         if monotonic() >= deadline and census_task is not None:
-                            stopped(_CODES["refused_not_quiet"], "bind deadline expired awaiting census")
+                            stopped(_CODES["refused_bind_expired"], "bind deadline expired awaiting census")
                         if census_task is not None:
                             sleep(min(0.05, max(0, deadline - monotonic())))
                     if monotonic() > deadline:
-                        stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+                        stopped(_CODES["refused_bind_expired"], "bind deadline expired")
                     return value
                 if now >= deadline:
-                    stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+                    stopped(_CODES["refused_bind_expired"], "bind deadline expired")
                 sleep(min(0.05, deadline - now, max(0.001, next_census - now)))
         finally:
             task.close()
@@ -2160,15 +2160,17 @@ def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
     def finish(refusal=None):
         metrics = last.get("metrics", {}) if last else {}
         raw = journal.read_bytes()
-        summary = dict(quiet_admission=policy, bind_deadline_epoch_s=deadline_epoch,
+        summary = dict(quiet_admission=policy, admission_is_capture_evidence=False, bind_deadline_epoch_s=deadline_epoch,
             go_epoch_s=None if refusal else float(probes.now_epoch_s()),
             samples_total=lines, samples_quiet_run_at_go=0 if refusal else quiet_run,
             quiet_samples_sha256=hashlib.sha256(raw).hexdigest(), quiet_samples_lines=len(raw.splitlines()),
             top_consumers_at_decision=metrics.get("top_consumers", []),
             load_avg_diagnostic=last.get("load_avg_diagnostic", {"error": "no completed observation"}) if last else {"error": "no completed observation"})
+        if last and "boot_identity_unavailable" in last:
+            summary["boot_identity_unavailable"] = last["boot_identity_unavailable"]
         if not summary["top_consumers_at_decision"]:
             summary["attribution_unavailable"] = "no measurable process deltas before decision"
-        if refusal and refusal.reason == _CODES["refused_not_quiet"] and "deadline" in refusal.detail:
+        if refusal and refusal.reason == _CODES["refused_bind_expired"] and "deadline" in refusal.detail:
             refusal = replace(refusal, detail=refusal.detail + "; " + json.dumps(dict(
                 samples_total=lines, last_busy_cores=metrics.get("busy_cores"),
                 top_consumers=summary["top_consumers_at_decision"],
@@ -2201,8 +2203,12 @@ def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
             observation = await_task(sampler)
             if not isinstance(observation, dict):
                 raise night_gate.ProbeError("malformed sampler output")
-            quiet_admission.validate_observation(observation, policy)
+            quiet_admission.validate_observation(observation, policy, allow_unavailable_boot=True)
             pending = observation
+            if "boot_identity_unavailable" in observation:
+                raise night_gate.ProbeError("boot_identity_unavailable: " + observation["boot_identity_unavailable"])
+            if observation["census"]["exit_code"] == 0:
+                stopped(_CODES["refused_agent_present"], "sampler census hit: " + observation["census"]["stdout"])
             hard = hard_checks()
             if observation["boot_identity"] != baseline_boot:
                 stopped(_CODES["refused_boot_clock"], "sample boot identity changed")
@@ -2211,16 +2217,16 @@ def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
             if quiet_run >= policy["consecutive_quiet_samples"]:
                 hard = hard_checks()  # final hard checks, including a fresh census
             if monotonic() > deadline:
-                stopped(_CODES["refused_not_quiet"], "bind deadline expired before GO")
+                stopped(_CODES["refused_bind_expired"], "bind deadline expired before GO")
             append_sample(observation, "quiet" if quiet else "WAIT", hard)
             pending = None
             if quiet_run >= policy["consecutive_quiet_samples"]:
                 if float(probes.now_epoch_s()) > deadline_epoch:
                     stopped(_CODES["refused_boot_clock"], "wall clock passed absolute bind deadline")
                 if monotonic() > deadline:
-                    stopped(_CODES["refused_not_quiet"], "bind deadline expired writing final sample")
+                    stopped(_CODES["refused_bind_expired"], "bind deadline expired writing final sample")
                 return finish()
-        stopped(_CODES["refused_not_quiet"], "bind deadline expired")
+        stopped(_CODES["refused_bind_expired"], "bind deadline expired")
     except Exception as error:
         refusal = error.refusal if isinstance(error, _BindStopped) else night_gate.Refusal(
             _CODES["probe_error"], f"binding observation failed: {type(error).__name__}: {error}", ())

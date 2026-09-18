@@ -80,10 +80,11 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 
 | Exact cause | Why A172 grants no retry exception |
 |---|---|
-| `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. |
-| `night_refused_not_quiet` | For v4, the bind window expired without sustained interval CPU quiet, or a terminal power/thermal predicate failed. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Legacy v2 keeps its one-shot load predicate. |
-| `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. |
-| `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. |
+| `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182. |
+| `night_refused_not_quiet` | One-shot load refusal for v2, or a terminal power/thermal predicate failure. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182. |
+| `night_refused_bind_expired` | Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182. |
+| `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182. |
+| `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182. |
 | `night_refused_registration` | Required registration did not validate. |
 | `night_window_expired` | Measurement window expired. |
 | `night_plan_stale` | Plan age or pinned head failed; not a stale notice. |
@@ -134,7 +135,7 @@ Unknown or mixed causes and every capture, clock, custody, ledger or pre-registr
 
 R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
 
-Binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation, no session id and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. The successor requires a new id and digest, fresh notice, at least 60 s spacing, fresh install close and every observed NO preserved. Never re-arm the predecessor or put a new plan in same-candidate retry history.
+D-182: binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation or ledger session, no capture writer run and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. successor_arm_allowed requires a new id and digest, fresh notice, at least 60 s after the predecessor's terminal write, and now before the successor's own install_close_epoch. Every observed NO on any notice thread still stops. Never re-arm the predecessor or put a new plan in same-candidate retry history.
 
 Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.
 

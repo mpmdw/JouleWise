@@ -22,6 +22,7 @@ import tempfile
 
 from tests.git_fixture import init_git_fixture
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1097,6 +1098,29 @@ class QuietPlanGeneratorTests(unittest.TestCase):
         self.assertEqual(GEN.main(['--check']), 0)
         self.assertEqual(GEN.RUNSHEET_PATH.read_bytes(), original)
 
+    def test_build_spec_enforces_window_and_computed_post_bind_minimum(self):
+        from tests.test_quiet_admission import POLICY
+        with _census_clean_temporary_directory() as directory:
+            fixture = WrapperFixture(Path(directory))
+            args = GEN.build_parser().parse_args(['--plan', str(fixture.plan_path)])
+            policy = dict(POLICY, post_bind_budget_s=7980)
+            fixture.write_plan(schema='joulewise.night_plan.v4', schema_version=4,
+                               quiet_admission=policy, window_max_s=8579)
+            with self.assertRaisesRegex(GEN.GenerationRefusal, 'bind_max_s \\+ post_bind_budget_s'):
+                GEN.build_spec(args)
+            fixture.write_plan(schema='joulewise.night_plan.v4', schema_version=4,
+                               quiet_admission=dict(policy, post_bind_budget_s=7979), window_max_s=9600)
+            with self.assertRaisesRegex(GEN.GenerationRefusal, 'at least 7980'):
+                GEN.build_spec(args)
+            fixture.write_plan(schema='joulewise.night_plan.v4', schema_version=4,
+                               quiet_admission=policy, window_max_s=8580)
+            emitted = fixture.emit()
+            self.assertEqual(emitted.returncode, 0, emitted.stderr)
+            # A schedule change must move the floor; a literal 7980 mutant fails.
+            with mock.patch.object(GEN, 'PRE_SETTLE_ALLOWANCE_S', 301):
+                with self.assertRaisesRegex(GEN.GenerationRefusal, 'at least 7981'):
+                    GEN.build_spec(args)
+
     def test_explicit_flag_authors_new_v4_plan_and_bind_runsheet(self):
         from tests.test_night_gate import make_plan
         from tests.test_quiet_admission import POLICY
@@ -1115,12 +1139,21 @@ class QuietPlanGeneratorTests(unittest.TestCase):
             parsed = NightPlan.from_mapping(json.loads(target.read_bytes()))
             self.assertEqual(parsed.window_max_s, 9600)
             self.assertEqual(parsed.quiet_admission, POLICY)
+            self.assertEqual(parsed.quiet_admission['busy_core_max'], 0.0)
+            self.assertIn('TEST-ONLY-NOT-A-RULING', Path(str(target)+'.runsheet.md').read_text())
             self.assertEqual(template.read_bytes(), before)
             self.assertIn('Bind allocation: 600 s', Path(str(target)+'.runsheet.md').read_text())
             sealed = target.read_bytes()
             self.assertEqual(GEN.main(args), 2)
             self.assertEqual(target.read_bytes(), sealed)
-            bad = dict(POLICY, post_bind_budget_s=8999)
+            bad = dict(POLICY, post_bind_budget_s=7979)
             policy.write_text(json.dumps(bad))
-            with self.assertRaisesRegex(GEN.GenerationRefusal, '9000'):
+            with self.assertRaisesRegex(GEN.GenerationRefusal, '7980'):
                 GEN.author_quiet_plan(template, policy, root/'short.json', 'another-night')
+            for field in POLICY:
+                missing = dict(POLICY)
+                del missing[field]
+                policy.write_text(json.dumps(missing))
+                with self.subTest(missing=field), self.assertRaises(ValueError):
+                    GEN.author_quiet_plan(template, policy, root/'missing.json', 'missing-policy-key')
+                self.assertFalse((root/'missing.json').exists())

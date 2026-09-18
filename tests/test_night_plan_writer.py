@@ -212,7 +212,8 @@ class QuietPlanVersionTests(unittest.TestCase):
         from tests.test_night_gate import make_plan
         policy = dict(policy_id='cpu_interval_v1', bind_max_s=600,
                       sample_interval_s=30, consecutive_quiet_samples=2,
-                      busy_core_max=0.05, post_bind_budget_s=9000)
+                      busy_core_max=0.0, post_bind_budget_s=9000,
+                      cutoff_authority='TEST-ONLY-NOT-A-RULING')
         plan = dataclasses.replace(make_plan(), window_max_s=9600, quiet_admission=policy)
         value = night_plan_mapping(plan)
         self.assertEqual(value['schema'], 'joulewise.night_plan.v4')
@@ -220,15 +221,20 @@ class QuietPlanVersionTests(unittest.TestCase):
         for key in policy:
             bad = copy.deepcopy(value)
             del bad['quiet_admission'][key]
-            with self.subTest(missing=key), self.assertRaises(PlanError):
+            with self.subTest(missing=key), self.assertRaises(PlanError) as raised:
                 NightPlan.from_mapping(bad)
+            self.assertEqual(raised.exception.reason, 'night_plan_malformed')
         for key, item in [('policy_id', 'future'), ('busy_core_max', float('nan')),
-                          ('sample_interval_s', 0), ('consecutive_quiet_samples', True),
+                          ('sample_interval_s', 0), ('sample_interval_s', 30.5),
+                          ('cutoff_authority', ''), ('cutoff_authority', '  '),
+                          ('cutoff_authority', None), ('busy_core_max', -1),
+                          ('consecutive_quiet_samples', True),
                           ('consecutive_quiet_samples', 1.5), ('bind_max_s', 59)]:
             bad = copy.deepcopy(value)
             bad['quiet_admission'][key] = item
-            with self.subTest(key=key, value=item), self.assertRaises(PlanError):
+            with self.subTest(key=key, value=item), self.assertRaises(PlanError) as raised:
                 NightPlan.from_mapping(bad)
+            self.assertEqual(raised.exception.reason, 'night_plan_malformed')
         value['window_max_s'] = 9599
         with self.assertRaises(PlanError):
             NightPlan.from_mapping(value)

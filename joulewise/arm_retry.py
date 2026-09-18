@@ -1,4 +1,4 @@
-"""D-180 clause 2 desk policy; no observations, I/O, or measurement authority.
+"""D-180 clause 2 and D-182 desk policy; no I/O or measurement authority.
 
 Python 3.9 and stdlib only. The foreground caller supplies the live driver's
 resolved schedule and the gate's age limit; this module must not import either
@@ -27,10 +27,11 @@ RETRY_CAUSES = {
 
 # Explicit assignments are intentional: registry additions must force review.
 COLD_GATE_CODES = {
-    "night_refused_agent_present": "Production census refusal, including a receipt at t0; never an idle arm event.",
-    "night_refused_not_quiet": "For v4, the bind window expired without sustained interval CPU quiet, or a terminal power/thermal predicate failed. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Legacy v2 keeps its one-shot load predicate.",
-    "night_refused_hid_idle": "Screensaver-configuration guard failed; this is not a live inactivity measurement.",
-    "night_refused_boot_clock": "Measurement boot/clock guard failed; not a watchdog uncertainty tick.",
+    "night_refused_agent_present": "Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182.",
+    "night_refused_not_quiet": "One-shot load refusal for v2, or a terminal power/thermal predicate failure. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182.",
+    "night_refused_bind_expired": "Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182.",
+    "night_refused_hid_idle": "Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182.",
+    "night_refused_boot_clock": "Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182.",
     "night_refused_registration": "Required registration did not validate.",
     "night_window_expired": "Measurement window expired.",
     "night_plan_stale": "Plan age or pinned head failed; not a stale notice.",
@@ -193,17 +194,19 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
 
 
 def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
-    """Eligibility for ONE new plan, never authorization to re-arm old bytes.
+    """D-182 eligibility for ONE new plan, never authority to re-arm old bytes.
 
     The caller supplies harvested positive evidence in C5.measured's
     ``zero_capture_evidence``: chain_started_absent, reservation_absent,
-    session_id (explicit null), instrument_validation_empty. No missing field
+    session_id (explicit null), capture_writer_ran (explicit false), and
+    instrument_validation_empty. No missing field
     means absence. ``delivery`` binds a completed courier.sent marker and its
     message_id to this plan, plus the preserved successor count (zero).
-    Fresh-plan notice, spacing, install close and every observed NO must still
-    pass ordinary arming; retry_allowed retains its same-candidate semantics.
+    ``successor_arm_allowed`` separately enforces fresh-plan arming, 60 s
+    from the terminal write, install close and every observed NO.
+    retry_allowed retains its same-candidate semantics.
     """
-    eligible = {"night_refused_not_quiet", "night_refused_agent_present",
+    eligible = {"night_refused_not_quiet", "night_refused_bind_expired", "night_refused_agent_present",
                 "night_refused_hid_idle", "night_refused_boot_clock"}
     try:
         reason = result["aborted_reason"]
@@ -223,6 +226,7 @@ def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
         if (evidence["chain_started_absent"] is not True
                 or evidence["reservation_absent"] is not True
                 or evidence["session_id"] is not None
+                or evidence["capture_writer_ran"] is not False
                 or evidence["instrument_validation_empty"] is not True):
             return Decision(False, "start_reservation_or_capture_not_absent")
         if (delivery["courier.sent"] is not True
@@ -233,6 +237,36 @@ def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
         return Decision(True, "new_plan_only")
     except (KeyError, TypeError, ValueError):
         return Decision(False, "missing_zero_capture_evidence")
+
+
+def successor_arm_allowed(now_epoch_s, plan, notice, result, receipt, delivery) -> Decision:
+    """Apply D-182 to a fresh candidate after harvested eligibility is proved.
+
+    plan/notice use retry_allowed's evidence format. result.ended_epoch_s is
+    the predecessor's terminal result write time; delivery.plan_sha256 binds
+    its harvested bytes. No predecessor attempt enters same-plan history.
+    """
+    eligible = zero_capture_successor_allowed(result, receipt, delivery)
+    if not eligible.allowed:
+        return eligible
+    try:
+        now = _number(now_epoch_s)
+        terminal = _number(result["ended_epoch_s"])
+        if now - terminal < RETRY_INTERVAL_S:
+            return Decision(False, "successor_spacing")
+        candidate = json.loads(plan["plan_bytes"])
+        old_digest = delivery["plan_sha256"]
+        if not isinstance(old_digest, str) or re.fullmatch(r"[0-9a-f]{64}", old_digest) is None:
+            return Decision(False, "missing_predecessor_digest")
+        if (candidate["plan_id"] == result["plan_id"]
+                or hashlib.sha256(plan["plan_bytes"]).hexdigest() == old_digest):
+            return Decision(False, "predecessor_rearm")
+        if (_number(notice["sent_epoch_s"]) < terminal
+                or notice["message_id"] == delivery["message_id"]):
+            return Decision(False, "notice_not_fresh")
+        return retry_allowed(now, plan, [], notice)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return Decision(False, "malformed_successor_evidence")
 
 
 def render_policy() -> str:
@@ -251,7 +285,7 @@ def render_policy() -> str:
     lines.extend(["",
         "Unknown or mixed causes and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path; receipt refusals remain ineligible for same-plan retries. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.", "",
         "R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least {} seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.".format(RETRY_INTERVAL_S), "",
-        "Binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation, no session id and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. The successor requires a new id and digest, fresh notice, at least 60 s spacing, fresh install close and every observed NO preserved. Never re-arm the predecessor or put a new plan in same-candidate retry history.", "",
+        "D-182: binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation or ledger session, no capture writer run and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. successor_arm_allowed requires a new id and digest, fresh notice, at least 60 s after the predecessor's terminal write, and now before the successor's own install_close_epoch. Every observed NO on any notice thread still stops. Never re-arm the predecessor or put a new plan in same-candidate retry history.", "",
         "Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.", "",
         "`prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.", "",
         "<!-- END ARM-RETRY-POLICY v1 -->", ""])

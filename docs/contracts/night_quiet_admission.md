@@ -8,17 +8,16 @@ and receipt v3. It does not migrate an existing plan or authorize measurement.
 A transaction pack is a separately authorized collection of experiment inputs;
 its v3 plan and existing receipt/GO contracts retain their current behavior.
 
-All admission policy numbers are **PROVISIONAL**. In particular, the 0.05
-busy-core cutoff used in examples and tests is a placeholder, not a validated
-threshold. Scientific adequacy awaits cold-gate proposition 4 and the evidence
-lane. A cold gate is an independent adjudication of a named proposition; it
-also owns sampling duration/count and acceptable observer cost. The magistrate
-(the lead coordinator) owns implementation sequencing and presentation, not
-scientific thresholds or new process rules. No environment variable changes
-any admission parameter. This document describes the implemented mechanism;
-the lead must reconcile the older pack contract's universal receipt-shape
-clause before adoption, and any prospective pre-registration authority remains
-with the lead and cold gate.
+All admission policy numbers are **PROVISIONAL**. No cutoff is proposed or
+validated here. Cold-gate ruling 70 proposition 4 refused activation pending
+`QUIET-PREDICATE-EVIDENCE-01`: measured effects through the actual floor
+pipeline and the clean-machine distribution, including observer cost. A cold
+gate is an independent adjudication of a named proposition. It rules the
+scientific cutoff; the magistrate (lead coordinator) owns implementation and
+sequencing. The sealed policy must name the affirming ruling in
+`cutoff_authority`; merely naming a path does not authenticate or supply that
+ruling. No environment variable changes a parameter. The prospective packless
+v4 receipt exception is recorded in the [pack receipt contract](pack_night_go_receipt.md).
 
 ## Why interval activity matters
 
@@ -30,19 +29,27 @@ load was **1.3–1.5**, which would pass, while `fseventsd` continuously consume
 **85–100% of one core**. Load measures runnable/waiting work over time, not
 the energy contamination of the upcoming observation interval.
 
-At approximately **5 W per busy performance core**, a 60 s slot could carry
-**5 W × 60 s = 300 J** against a roughly **5 J** claim-side tolerance per
-floor. This illustrates the discrimination failure; it neither validates a
-linear CPU-to-power model nor makes that tolerance a spare contamination
-budget. Evidence: [the executed harvest record](../process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md),
-findings 1–2 and the observations they cite.
+A capture slot has a **480 s budget**. Using the illustrative assumption of
+**5 W per busy core** over that entire budget gives 2400 J for one core.
+The rejected arithmetic examples **0.05 core → 120 J per slot** and
+**0.01 core → 24 J per slot** are not candidate cutoffs. D-078 clause 11's
+instrument bars are approximately **1 J attribution limit** and **5 J
+claim-side bar** per floor. A 1 J ceiling at 5 W/core over 480 s would imply
+**0.0004 core**, below even the sampler's measured cost before including the
+census. The earlier observer measurement omitted the census and cannot set
+the full sampler floor; the native smoke below measures it again with census.
+These calculations assume full-budget duration and a linear power model;
+core mix and cancellation in the experiment's contrast must be measured.
+**This is why the cutoff must be measured, not computed.** The numerical
+examples authorize nothing. Evidence: [the executed harvest record](../process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md),
+findings 1–2, and [D-078 clause 11](../decision_log.md).
 
 ## Sealed policy and version dispatch
 
 V2 packless plans retain exactly their existing key set, serialized bytes and
 one-shot admission at t0, including the load predicate. Transaction-pack v3
 is unchanged. V4 is packless, has every v2 field, schema
-`joulewise.night_plan.v4`, integer schema_version 4, and this required block:
+`joulewise.night_plan.v4`, integer schema_version 4, and this required block (a non-admitting validation example, never a real plan):
 
 ```json
 "quiet_admission": {
@@ -50,14 +57,20 @@ is unchanged. V4 is packless, has every v2 field, schema
   "bind_max_s": 600,
   "sample_interval_s": 30,
   "consecutive_quiet_samples": 2,
-  "busy_core_max": 0.05,
+  "busy_core_max": 0.0,
+  "cutoff_authority": "TEST-ONLY-NOT-A-RULING",
   "post_bind_budget_s": 9000
 }
 ```
 
 Every key is required and extra keys refuse. Only `cpu_interval_v1` is
-recognized. Every number must be finite and positive; the consecutive count
-must be an integer of at least one. The bind allocation must hold the sample
+recognized. All numbers must be finite. Durations and the consecutive count must be
+positive; the sample interval is a whole number of seconds and the consecutive
+count is an integer of at least one. The cutoff is nonnegative: zero explicitly
+admits nothing, even a zero-CPU observation. `cutoff_authority` is a required
+nonempty string naming the record path of the gate ruling that affirmed the
+cutoff. No v4 plan can be authored without naming who affirmed its cutoff;
+test fixtures use the literal above, which is not activation authority. The bind allocation must hold the sample
 interval times the required count, and window_max_s must hold bind_max_s plus
 post_bind_budget_s. There is no implicit policy for an old or malformed plan.
 
@@ -83,7 +96,11 @@ decaying `%CPU` average.
 Between snapshots it runs `/usr/bin/top -l 2 -s <interval> -n 0`. The first CPU
 usage sample is discarded; only the second is used. Its idle percentage is
 converted to a fraction, and `sysctl -n hw.logicalcpu` supplies the core count.
-Missing or malformed required evidence refuses. `sysctl -n vm.loadavg` is
+Missing or malformed required evidence refuses. A failed or malformed
+`sysctl -n kern.bootsessionuuid` read is retained as
+`boot_identity_unavailable: <reason>`; the sampler completes its metrics, but
+the interval is an ERROR and admission refuses with `night_probe_error`. The
+receipt also carries the unavailable reason. `sysctl -n vm.loadavg` is
 retained only as a diagnostic, including a diagnostic error if unavailable.
 The logical CPU count is also recorded; it is required to compute host busy
 cores and is never an independent threshold.
@@ -100,7 +117,7 @@ host busy time includes such work, kernel time and other unattributed activity.
 process_busy_cores = sum(measurable CPU-second deltas) / elapsed_seconds
 host_busy_cores    = logical_cpu_count × (1 − idle_fraction)
 busy_cores         = max(process_busy_cores, host_busy_cores)
-quiet             = busy_cores ≤ busy_core_max
+quiet             = busy_core_max > 0 and busy_cores ≤ busy_core_max
 ```
 
 All processes count. There are no daemon exemptions or name-based bans. The
@@ -109,6 +126,16 @@ observer (driver interpreter and its descendants) counts too and is labelled
 the ten largest process deltas are recorded with PID, command, start identity,
 busy cores and observer flag. Ten is a presentation limit; the aggregate uses
 all measurable processes. Host-only work can exceed process attribution.
+
+The native read-only smoke is `python3 -B -m joulewise.quiet_admission
+--sample-interval-s 30`. Its metrics line includes busy_cores, host_busy_cores,
+observer_cpu_s, the top three consumers and load_avg_diagnostic.
+`observer_cpu_s` is the change in user plus system CPU time of this interpreter
+and its reaped children over the whole round, including one
+`AGENT_CENSUS_ARGV` pgrep probe, both ps snapshots, top, sysctl reads and parsing.
+It is reported without subtraction. The driver still supervises census at its
+independent cadence; a census hit in the sampler is terminal too. The lead runs
+this smoke natively; injected tests are not hardware cost evidence.
 
 ## Terminal versus WAIT and responsive supervision
 
@@ -142,13 +169,15 @@ No intermediate `refusal.json` is written for WAIT.
 Receipt `joulewise.unattended_night_receipt.v3` retains the old condition rows
 and adds quiet_admission, bind_deadline_epoch_s, go_epoch_s (null on refusal),
 samples_total, samples_quiet_run_at_go, quiet_samples_sha256,
-quiet_samples_lines, top_consumers_at_decision and load_avg_diagnostic.
+quiet_samples_lines, top_consumers_at_decision, load_avg_diagnostic and the
+required literal `admission_is_capture_evidence: false`.
 If attribution is unavailable it adds a nonempty attribution_unavailable
-reason. On expiry `night_refused_not_quiet` includes the sample count, last
+reason. On expiry `night_refused_bind_expired` includes the sample count, last
 measured busy cores/top consumers and journal digest/count. V2 receipts keep
-their exact existing validation. Admission is not a certificate that the
-later capture window remained clean; reservation, settle and subsequent daemon
-activity remain distinct evidence.
+their exact existing validation. Admission is not capture evidence because
+after GO the chain first reserves and then runs a 600 s settle before the first capture slot.
+`night_refused_not_quiet` retains the legacy one-shot load meaning and terminal
+power/thermal predicate failures; bind expiry has the separate code above.
 
 ## Timing that cannot slide
 
@@ -175,27 +204,29 @@ The chain starts immediately after GO, reserves, settles for 600 s, then
 runs twelve slots at 600 s start-to-start cadence with a 480 s final capture
 budget: **600 + 11 × 600 + 480 = 7680 s**. The minimum pre-settle allowance is
 300 s, giving 7980 s; the existing 9000 s allocation retains another 1020 s.
-V4 adds B before that entire allocation. No measurement, settle, slot, capture,
-claim or shutdown constant is changed.
+A v4 plan using that 9000 s allocation adds B before it; validation enforces
+the computed 7980 s minimum rather than making 9000 s a new lower bound.
+No measurement, settle, slot, capture, claim or shutdown constant is changed.
 
 ## Authoring and successor routing
 
 `gen_derivation_night.py --quiet-admission-json POLICY --plan-template TEMPLATE
 --new-plan OUTPUT --new-plan-id FRESH_ID` reads coordinates without rewriting
-the template, requires a different id, preserves at least 9000 s post-bind
-runway, and exclusively creates the new v4 plan and OUTPUT.runsheet.md. The
+the template, requires a different id, requires post-bind runway at least the computed schedule plus pre-settle
+allowance (7980 s for twelve slots), and exclusively creates the new v4 plan and OUTPUT.runsheet.md. The
 template must carry the new night's fresh timing, custody and reviewed inputs.
 Generate its wrapper afterward with the existing `--plan OUTPUT` invocation.
 Without the flag the legacy `--check` output remains byte-identical.
 
-Binding observations inside the window are not retries. A terminal
+**D-182** authorizes this route. Binding observations inside the window are not retries. A terminal
 zero-capture machine-state refusal permits **ONE new-plan successor** only
 when `zero_capture_successor_allowed(result, receipt, delivery)` receives:
 
-- Matching terminal REFUSED result/receipt, with exactly not_quiet,
+- Matching terminal REFUSED result/receipt, with exactly not_quiet, bind_expired,
   agent_present, hid_idle or boot_clock as the refusal reason.
 - Explicit C5.measured.zero_capture_evidence with chain_started_absent=true,
-  reservation_absent=true, session_id=null and instrument_validation_empty=true.
+  reservation_absent=true, session_id=null, capture_writer_ran=false and
+  instrument_validation_empty=true.
   The last assertion means `runs/instrument_validation` was positively
   inventoried empty. Missing evidence is not absence. The desk caller owns
   harvesting these facts; a bare refusal receipt cannot supply them by itself.
@@ -203,8 +234,12 @@ when `zero_capture_successor_allowed(result, receipt, delivery)` receives:
   an explicit successors_used count of zero from preserved history.
 
 The pure helper establishes eligibility only; it does not publish or arm.
-Ordinary fresh-plan arming still requires a new id and digest, fresh notice,
-at least 60 s spacing, fresh install close and every observed NO preserved.
+`successor_arm_allowed(now, plan, notice, result, receipt, delivery)` then
+checks a new id and digest against delivery.plan_sha256, a fresh notice after
+the predecessor's terminal write (result.ended_epoch_s), at least 60 s since
+that write and now before the successor's own install_close_epoch. It composes
+ordinary fresh-plan `retry_allowed` with empty history; every observed NO on
+any notice thread still stops.
 The predecessor stays immutable. `classify_abort` retains its classes and
 `retry_allowed` its existing same-plan rules: neither a cold refusal nor a
 changed digest can masquerade as another same-candidate attempt. This work

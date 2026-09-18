@@ -1204,7 +1204,10 @@ observing interval CPU activity before reservation or a chain-start claim;
 it does not consume the reservation's settle or change any slot constant.
 Legacy v2 plans retain their one-shot load check and 9000 s allocation.
 The CPU cutoff and admission parameters are provisional, pending cold-gate
-evidence; the worked 0.05 busy-core value is not validated.
+proposition 4 and the evidence lane. No candidate cutoff is supplied. The JSON
+must include a nonempty `cutoff_authority` naming the affirming ruling; no key
+has a generator default. Validation fixtures use a non-admitting zero cutoff
+and `TEST-ONLY-NOT-A-RULING`, never an activation policy.
 
 To author a NEW v4 plan without changing the template or a sealed plan:
 
@@ -1219,7 +1222,9 @@ python3 scripts/gen_derivation_night.py \
 The template must already carry the new night's reviewed coordinates, fresh
 timing and custody paths; the output id must differ from its template id.
 The generator creates the plan and a `.runsheet.md` companion exclusively,
-requires at least 9000 s post-bind runway, and states the bind allocation.
+requires post-bind runway at least the computed 7980 s schedule minimum,
+validates window_max_s ≥ bind_max_s + post_bind_budget_s, and states the bind
+allocation. The 9000 s post-bind allocation above retains the existing margin.
 Then generate/verify the wrapper using the existing `--plan` mode with the
 new v4 plan. Without the explicit flag, `--check` and the reviewed v2 example
 are byte-identical. See [the complete admission contract](../contracts/night_quiet_admission.md)
@@ -1846,10 +1851,11 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 
 | Exact cause | Why A172 grants no retry exception |
 |---|---|
-| `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. |
-| `night_refused_not_quiet` | For v4, the bind window expired without sustained interval CPU quiet, or a terminal power/thermal predicate failed. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Legacy v2 keeps its one-shot load predicate. |
-| `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. |
-| `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. |
+| `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182. |
+| `night_refused_not_quiet` | One-shot load refusal for v2, or a terminal power/thermal predicate failure. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182. |
+| `night_refused_bind_expired` | Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182. |
+| `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182. |
+| `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182. |
 | `night_refused_registration` | Required registration did not validate. |
 | `night_window_expired` | Measurement window expired. |
 | `night_plan_stale` | Plan age or pinned head failed; not a stale notice. |
@@ -1900,7 +1906,7 @@ Unknown or mixed causes and every capture, clock, custody, ledger or pre-registr
 
 R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least 60 seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.
 
-Binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation, no session id and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. The successor requires a new id and digest, fresh notice, at least 60 s spacing, fresh install close and every observed NO preserved. Never re-arm the predecessor or put a new plan in same-candidate retry history.
+D-182: binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation or ledger session, no capture writer run and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. successor_arm_allowed requires a new id and digest, fresh notice, at least 60 s after the predecessor's terminal write, and now before the successor's own install_close_epoch. Every observed NO on any notice thread still stops. Never re-arm the predecessor or put a new plan in same-candidate retry history.
 
 Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.
 

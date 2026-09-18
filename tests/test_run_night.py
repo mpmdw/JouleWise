@@ -4001,7 +4001,8 @@ class QuietBindingTests(unittest.TestCase):
             busy = values[min(self.samples - 1, len(values) - 1)]
             return dict(wall_start=self.clock.wall() - duration, wall_end=self.clock.wall(),
                 monotonic_start=self.clock.monotonic() - duration, monotonic_end=self.clock.monotonic(),
-                interval_s=duration, boot_identity=BOOT_UUID,
+                interval_s=duration, boot_identity=BOOT_UUID, observer_cpu_s=0.2,
+                census=dict(exit_code=1, stdout='', stderr=''),
                 raw_sha256=dict(ps_before='a'*64, ps_after='b'*64, top='c'*64),
                 metrics=metrics(busy), load_avg_diagnostic={'raw': str(load)})
         sample.duration = duration
@@ -4020,6 +4021,7 @@ class QuietBindingTests(unittest.TestCase):
         return [json.loads(line) for line in (self.night/'quiet_samples.jsonl').read_text().splitlines()]
 
     def test_bind_go_on_second_consecutive_quiet_sample_at_k(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         receipt, value = self.bind(self.sampler([.9, .9, .02, .9, .02, .02]))
         self.assertEqual(receipt.verdict, 'GO')
         self.assertEqual(self.samples, 6)
@@ -4031,8 +4033,9 @@ class QuietBindingTests(unittest.TestCase):
         self.assertGreaterEqual(self.source.run_calls.count(night_gate.HID_IDLE_ARGV), 13)
 
     def test_bind_expiry_refuses_with_every_sample_recorded(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         receipt, value = self.bind(self.sampler([.9]))
-        self.assertEqual(receipt.refusal.reason, 'night_refused_not_quiet')
+        self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
         self.assertEqual(self.clock.monotonic(), 600)
         self.assertEqual(len(self.journal()), 20)
         self.assertEqual(value['quiet_samples_lines'], 20)
@@ -4042,18 +4045,21 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(value['top_consumers_at_decision'][0]['command'], 'fseventsd')
 
     def test_low_load_busy_daemon_never_admits(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         receipt, value = self.bind(self.sampler([.9], load=1.2))
         self.assertEqual(receipt.verdict, 'REFUSED')
         self.assertTrue(all(s['decision'] == 'WAIT' for s in self.journal()))
         self.assertEqual(value['load_avg_diagnostic'], {'raw': '1.2'})
 
     def test_finished_burst_admits_despite_high_load(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         receipt, value = self.bind(self.sampler([.02], load=3.7))
         self.assertEqual(receipt.verdict, 'GO')
         self.assertEqual(self.samples, 2)
         self.assertEqual(value['load_avg_diagnostic'], {'raw': '3.7'})
 
     def test_census_hit_during_bind_is_terminal_agent_present(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         from dataclasses import replace
         self.plan = replace(self.plan, quiet_admission=dict(self.plan.quiet_admission, consecutive_quiet_samples=3))
         original = self.source.run
@@ -4069,6 +4075,7 @@ class QuietBindingTests(unittest.TestCase):
         self.assertIsNone(value['go_epoch_s'])
 
     def test_late_go_preserves_absolute_deadlines(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         original_end = self.plan.t0_epoch_s + self.plan.window_max_s
         original_completion = self.driver._completion_epoch_s(self.plan)
         original_deadman = self.driver.deadman_epoch(self.plan)
@@ -4080,13 +4087,15 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(value['bind_deadline_epoch_s'], 1600)
 
     def test_late_driver_consumes_bind_allowance(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         self.clock.elapsed = 300
         receipt, value = self.bind(self.sampler([.9]))
         self.assertEqual(self.clock.monotonic(), 600)
         self.assertEqual(value['samples_total'], 10)
-        self.assertEqual(receipt.refusal.reason, 'night_refused_not_quiet')
+        self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
 
     def test_wall_rollback_never_extends_absolute_deadline(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         original = self.sampler([.9])
         def rollback():
             observation = original()
@@ -4099,17 +4108,19 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(value['bind_deadline_epoch_s'], 1600)
 
     def test_sampler_hang_cannot_block_census_or_expiry(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         sample = self.sampler([.02])
         sample.hang = True
         receipt, value = self.bind(sample)
         self.assertEqual(self.clock.monotonic(), 600)
-        self.assertEqual(receipt.refusal.reason, 'night_refused_not_quiet')
+        self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
         censuses = [json.loads(s) for s in (self.night/'censuses.jsonl').read_text().splitlines()]
         self.assertGreaterEqual(len(censuses), 20)
         self.assertEqual(self.journal()[0]['decision'], 'error')
         self.assertIn('attribution_unavailable', value)
 
     def test_malformed_sampler_is_probe_error_never_quiet(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         def malformed():
             return {'metrics': {'busy_cores': 0}}
         malformed.duration = 30
@@ -4118,7 +4129,35 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(value['samples_total'], 1)
         self.assertEqual(self.journal()[0]['decision'], 'error')
 
+    def test_boot_identity_unavailable_is_error_in_journal_and_receipt(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05
+        sample = self.sampler([.02])
+        def unavailable():
+            return dict(sample(), boot_identity=None,
+                        boot_identity_unavailable='OSError: fixture sysctl denied')
+        unavailable.duration = 30
+        receipt, value = self.bind(unavailable)
+        self.assertEqual(receipt.refusal.reason, 'night_probe_error')
+        self.assertEqual(value['samples_total'], 1)
+        self.assertIsNone(value['go_epoch_s'])
+        self.assertFalse(value['admission_is_capture_evidence'])
+        self.assertEqual(self.journal()[0]['decision'], 'error')
+        self.assertEqual(value['boot_identity_unavailable'], 'OSError: fixture sysctl denied')
+        self.assertEqual(value['boot_identity_unavailable'], self.journal()[0]['boot_identity_unavailable'])
+        self.assertTrue(value['top_consumers_at_decision'])
+
+    def test_sampler_census_hit_is_terminal(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05
+        sample = self.sampler([.02])
+        def hit():
+            return dict(sample(), census=dict(exit_code=0, stdout='42 agent\n', stderr=''))
+        hit.duration = 30
+        receipt, value = self.bind(hit)
+        self.assertEqual(receipt.refusal.reason, 'night_refused_agent_present')
+        self.assertIsNone(value['go_epoch_s'])
+
     def test_hard_probe_error_and_thermal_restriction_are_terminal(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         self.source.raise_for[night_gate.PMSET_BATT_ARGV] = OSError('fixture failure')
         receipt, value = self.bind(self.sampler([.02]))
         self.assertEqual(receipt.refusal.reason, 'night_probe_error')
@@ -4126,12 +4165,14 @@ class QuietBindingTests(unittest.TestCase):
         self.assertIn('attribution_unavailable', value)
 
     def test_journal_is_courier_artifact(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         self.bind(self.sampler([.02]))
         artifacts = self.driver._artifact_list(self.night.parent, self.night)
         self.assertIn(str((self.night/'quiet_samples.jsonl').relative_to(self.night.parent)),
                       [artifact['path'] for artifact in artifacts])
 
     def test_final_census_wins_after_required_quiet_run(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         from dataclasses import replace
         original = self.source.run
         calls_at_two = 0
@@ -4149,6 +4190,7 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(self.samples, 2)
 
     def test_power_screensaver_thermal_and_malformed_census_are_terminal(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         for argv, result, reason in [
             (night_gate.PMSET_BATT_ARGV, _probe(night_gate.PMSET_BATT_ARGV, stdout="Now drawing from 'Battery Power'"), 'night_refused_not_quiet'),
             (night_gate.HID_IDLE_ARGV, _probe(night_gate.HID_IDLE_ARGV, stdout='10'), 'night_refused_hid_idle'),
@@ -4164,9 +4206,16 @@ class QuietBindingTests(unittest.TestCase):
                 self.source.results[argv] = old
 
     def test_v3_receipt_refuses_missing_attribution_and_inconsistent_count(self):
+        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         import copy
         _, receipt = self.bind(self.sampler([.02]))
-        for key in ('quiet_admission', 'quiet_samples_sha256', 'samples_total'):
+        self.assertIs(receipt['admission_is_capture_evidence'], False)
+        for invalid in (True, None, 0, 'false'):
+            self.assertTrue(night_gate.validate_receipt(dict(receipt, admission_is_capture_evidence=invalid)))
+        bad = copy.deepcopy(receipt)
+        bad['quiet_admission']['busy_core_max'] = 0.0
+        self.assertTrue(night_gate.validate_receipt(bad))
+        for key in ('quiet_admission', 'quiet_samples_sha256', 'samples_total', 'admission_is_capture_evidence'):
             bad = copy.deepcopy(receipt)
             del bad[key]
             self.assertTrue(night_gate.validate_receipt(bad))
@@ -4181,7 +4230,7 @@ class QuietBindingTests(unittest.TestCase):
 
 
 class QuietDriverIntegrationTests(unittest.TestCase):
-    def fixture(self):
+    def fixture(self, **policy_overrides):
         from dataclasses import replace
         from tests.test_quiet_admission import POLICY
         fixture = NightDriverTests()
@@ -4189,14 +4238,14 @@ class QuietDriverIntegrationTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         self.addCleanup(fixture.tearDown)
         plan = replace(fixture.driver._load_plan(fixture.plan_path),
-                       window_max_s=9600, quiet_admission=dict(POLICY))
+                       window_max_s=9600, quiet_admission=dict(POLICY, **policy_overrides))
         fixture.plan_path.unlink()  # fixture-only fresh publication
         write_night_plan(fixture.plan_path, plan)
         return fixture, plan
 
     def test_v4_driver_calls_bind_and_keeps_shutdown_anchored_to_entry(self):
         from dataclasses import replace
-        fixture, plan = self.fixture()
+        fixture, plan = self.fixture(busy_core_max=0.05)
         driver = fixture.driver
         clock = BindClock()
         clock.offset = plan.t0_epoch_s
@@ -4208,7 +4257,8 @@ class QuietDriverIntegrationTests(unittest.TestCase):
             from tests.test_quiet_admission import metrics
             return dict(wall_start=clock.wall()-270, wall_end=clock.wall(),
                 monotonic_start=clock.monotonic()-270, monotonic_end=clock.monotonic(),
-                interval_s=270, boot_identity=BOOT_UUID,
+                interval_s=270, boot_identity=BOOT_UUID, observer_cpu_s=0.2,
+                census=dict(exit_code=1, stdout='', stderr=''),
                 raw_sha256=dict(ps_before='a'*64, ps_after='b'*64, top='c'*64),
                 metrics=metrics(.02), load_avg_diagnostic={'raw':'3.7'})
         sample.duration = 270

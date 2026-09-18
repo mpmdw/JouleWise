@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import resource
 import subprocess
 import time
 from datetime import datetime
@@ -19,20 +20,36 @@ from typing import Mapping
 
 
 POLICY_KEYS = {"policy_id", "bind_max_s", "sample_interval_s",
-               "consecutive_quiet_samples", "busy_core_max", "post_bind_budget_s"}
+               "consecutive_quiet_samples", "busy_core_max", "post_bind_budget_s",
+               "cutoff_authority"}
 PS_ARGV = ("/bin/ps", "-Ao", "pid,ppid,lstart,time,comm")
+BOOT_ARGV = ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid")
+LOGICAL_CPU_ARGV = ("/usr/sbin/sysctl", "-n", "hw.logicalcpu")
+LOAD_ARGV = ("/usr/sbin/sysctl", "-n", "vm.loadavg")
+
+
+def top_argv(interval_s):
+    """Darwin top accepts whole seconds only, including for float inputs."""
+    if (type(interval_s) not in (int, float) or not math.isfinite(interval_s)
+            or interval_s <= 0 or interval_s != round(interval_s)):
+        raise ValueError("sample_interval_s must be a positive integer number of seconds")
+    return ("/usr/bin/top", "-l", "2", "-s", str(int(round(interval_s))), "-n", "0")
 
 
 def validate_policy(value, *, window_max_s=None):
     if not isinstance(value, Mapping) or set(value) != POLICY_KEYS:
-        raise ValueError("quiet_admission must have exactly all six policy keys")
+        raise ValueError("quiet_admission must have exactly all seven policy keys")
     if value["policy_id"] != "cpu_interval_v1":
         raise ValueError("unknown quiet_admission policy_id")
-    for key in POLICY_KEYS - {"policy_id"}:
+    if not isinstance(value["cutoff_authority"], str) or not value["cutoff_authority"].strip():
+        raise ValueError("cutoff_authority must name a non-empty cutoff ruling record path")
+    for key in POLICY_KEYS - {"policy_id", "cutoff_authority"}:
         number = value[key]
         if (isinstance(number, bool) or not isinstance(number, (int, float))
-                or not math.isfinite(number) or number <= 0):
-            raise ValueError(f"quiet_admission.{key} must be finite and positive")
+                or not math.isfinite(number) or number < 0
+                or (number == 0 and key != "busy_core_max")):
+            raise ValueError(f"quiet_admission.{key} must be finite and positive (cutoff may be zero)")
+    top_argv(value["sample_interval_s"])
     if type(value["consecutive_quiet_samples"]) is not int:
         raise ValueError("consecutive_quiet_samples must be an integer >= 1")
     if value["bind_max_s"] < value["sample_interval_s"] * value["consecutive_quiet_samples"]:
@@ -148,24 +165,40 @@ def is_quiet(metrics, policy):
     busy = metrics["busy_cores"]
     if isinstance(busy, bool) or not isinstance(busy, (int, float)) or not math.isfinite(busy) or busy < 0:
         raise ValueError("invalid busy_cores")
-    return busy <= policy["busy_core_max"]
+    # Zero is the explicitly non-admitting validation-fixture sentinel.
+    return policy["busy_core_max"] > 0 and busy <= policy["busy_core_max"]
 
 
-def validate_observation(value, policy):
+def validate_observation(value, policy, *, allow_unavailable_boot=False):
     """Reject missing or non-finite worker evidence before it can be quiet."""
     required = {"wall_start", "wall_end", "monotonic_start", "monotonic_end", "interval_s",
-                "boot_identity", "raw_sha256", "metrics", "load_avg_diagnostic"}
+                "boot_identity", "raw_sha256", "metrics", "load_avg_diagnostic",
+                "observer_cpu_s", "census"}
+    if isinstance(value, dict) and "boot_identity_unavailable" in value:
+        reason = value["boot_identity_unavailable"]
+        if not isinstance(reason, str) or not reason.strip() or value.get("boot_identity") is not None:
+            raise ValueError("malformed boot_identity_unavailable evidence")
+        required.add("boot_identity_unavailable")
     if not isinstance(value, dict) or set(value) != required:
         raise ValueError("sampler observation keys are not exact")
-    for key in ("wall_start", "wall_end", "monotonic_start", "monotonic_end", "interval_s"):
+    for key in ("wall_start", "wall_end", "monotonic_start", "monotonic_end", "interval_s", "observer_cpu_s"):
         if type(value[key]) not in (int, float) or not math.isfinite(value[key]):
             raise ValueError(f"invalid sampler {key}")
+    if value["observer_cpu_s"] < 0:
+        raise ValueError("invalid observer CPU cost")
+    census = value["census"]
+    if (not isinstance(census, dict) or set(census) != {"exit_code", "stdout", "stderr"}
+            or type(census["exit_code"]) is not int or census["exit_code"] not in (0, 1)
+            or not isinstance(census["stdout"], str) or not isinstance(census["stderr"], str)
+            or (census["exit_code"] == 1 and census["stdout"].strip())
+            or (census["exit_code"] == 0 and not census["stdout"].strip())):
+        raise ValueError("malformed sampler census")
     if (value["interval_s"] < policy["sample_interval_s"]
             or value["monotonic_end"] - value["monotonic_start"] < value["interval_s"]
             or value["wall_end"] < value["wall_start"]):
         raise ValueError("sampler interval incomplete or clocks regressed")
     import uuid
-    if str(uuid.UUID(value["boot_identity"])) != value["boot_identity"]:
+    if "boot_identity_unavailable" not in value and str(uuid.UUID(value["boot_identity"])) != value["boot_identity"]:
         raise ValueError("invalid sampler boot identity")
     raw = value["raw_sha256"]
     if (not isinstance(raw, dict) or set(raw) != {"ps_before", "ps_after", "top"}
@@ -192,6 +225,8 @@ def validate_observation(value, policy):
             raise ValueError("malformed top consumer")
     if not isinstance(metrics["unaccounted"], list) or not isinstance(value["load_avg_diagnostic"], dict):
         raise ValueError("missing accounting/load diagnostics")
+    if "boot_identity_unavailable" in value and not allow_unavailable_boot:
+        raise ValueError(f"boot_identity_unavailable: {value['boot_identity_unavailable']}")
 
 
 def sample_interval(interval_s, *, observer_pid=None):
@@ -201,34 +236,64 @@ def sample_interval(interval_s, *, observer_pid=None):
     command has a local bound too, but the driver's absolute deadline and
     concurrent census are independent of those command bounds.
     """
-    if not math.isfinite(interval_s) or interval_s <= 0:
-        raise ValueError("sample interval must be finite and positive")
+    argv = top_argv(interval_s)
+    from joulewise.night_gate import AGENT_CENSUS_ARGV
+    def observer_cpu():
+        usages = (resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN))
+        return sum(usage.ru_utime + usage.ru_stime for usage in usages)
+    cpu_start = observer_cpu()
     observer_pid = os.getpid() if observer_pid is None else observer_pid
     def run(argv, timeout=30):
         return subprocess.run(argv, capture_output=True, text=True, check=True,
                               timeout=timeout, env={**os.environ, "LC_ALL": "C"}).stdout
     wall_start, mono_start = time.time(), time.monotonic()
-    boot = run(("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid")).strip()
+    unavailable = {}
+    try:
+        boot = run(BOOT_ARGV).strip()
+        import uuid
+        boot = str(uuid.UUID(boot))
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        boot = None
+        unavailable["boot_identity_unavailable"] = f"{type(error).__name__}: {error}"
     before_text = run(PS_ARGV)
     ps_start = time.monotonic()
-    top_text = run(("/usr/bin/top", "-l", "2", "-s", str(interval_s), "-n", "0"), interval_s + 30)
+    top_text = run(argv, interval_s + 30)
     after_text = run(PS_ARGV)
     ps_end = time.monotonic()
-    logical_cpu = int(run(("/usr/sbin/sysctl", "-n", "hw.logicalcpu")).strip())
+    logical_cpu = int(run(LOGICAL_CPU_ARGV).strip())
     # Failure of loadavg is diagnostic; it cannot authorize or veto admission.
     try:
-        load = {"raw": run(("/usr/sbin/sysctl", "-n", "vm.loadavg")).strip()}
+        load = {"raw": run(LOAD_ARGV).strip()}
     except (OSError, subprocess.SubprocessError) as error:
         load = {"error": str(error)}
     metrics = interval_metrics(parse_ps(before_text), parse_ps(after_text),
         interval_s=ps_end - ps_start, idle_fraction=second_top_idle_fraction(top_text),
         logical_cpu=logical_cpu, observer_pid=observer_pid, wall_start=wall_start)
-    return dict(wall_start=wall_start, wall_end=time.time(),
+    # Include one real census in the measured observer round, as in binding.
+    census = subprocess.run(AGENT_CENSUS_ARGV, capture_output=True, text=True, check=False,
+                            timeout=30, env={**os.environ, "LC_ALL": "C"})
+    observation = dict(wall_start=wall_start, wall_end=time.time(),
                 monotonic_start=mono_start, monotonic_end=time.monotonic(),
                 interval_s=ps_end - ps_start, boot_identity=boot,
                 raw_sha256={name: hashlib.sha256(raw.encode()).hexdigest() for name, raw in
                             (("ps_before", before_text), ("ps_after", after_text), ("top", top_text))},
-                metrics=metrics, load_avg_diagnostic=load)
+                metrics=metrics, load_avg_diagnostic=load,
+                census=dict(exit_code=census.returncode, stdout=census.stdout, stderr=census.stderr),
+                **unavailable)
+    observation["observer_cpu_s"] = observer_cpu() - cpu_start
+    return observation
+
+
+def smoke_metrics(observation):
+    """Compact native smoke evidence; never admission or capture authority."""
+    metrics = observation["metrics"]
+    result = dict(busy_cores=metrics["busy_cores"], host_busy_cores=metrics["host_busy_cores"],
+                  observer_cpu_s=observation["observer_cpu_s"],
+                  top_consumers=metrics["top_consumers"][:3],
+                  load_avg_diagnostic=observation["load_avg_diagnostic"])
+    if "boot_identity_unavailable" in observation:
+        result["boot_identity_unavailable"] = observation["boot_identity_unavailable"]
+    return result
 
 
 if __name__ == "__main__":
@@ -236,4 +301,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample-interval-s", type=float, required=True)
     args = parser.parse_args()
-    print(json.dumps(sample_interval(args.sample_interval_s), sort_keys=True, allow_nan=False))
+    print(json.dumps(smoke_metrics(sample_interval(args.sample_interval_s)), sort_keys=True, allow_nan=False))

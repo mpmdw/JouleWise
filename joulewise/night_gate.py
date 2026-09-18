@@ -64,6 +64,7 @@ NIGHT_GATE_REASON_CODES = frozenset(
     {
         "night_refused_agent_present",
         "night_refused_not_quiet",
+        "night_refused_bind_expired",
         "night_refused_hid_idle",
         "night_refused_boot_clock",
         "night_refused_registration",
@@ -79,12 +80,14 @@ NIGHT_GATE_REASON_CODES = frozenset(
     }
 )
 
-# Codes the DRIVER (scripts/run_night.py) emits after the gate has said GO.
-# They live here so the registry has one home (ruling R-8); the gate itself
-# never emits them.  Cold gate coldgate-e10 (2026-09-01) d.3 and the Opus
+# Codes the DRIVER (scripts/run_night.py) emits. Bind expiry is the one shared
+# admission code: the driver supervises binding and writes a v3 gate receipt.
+# They live here so the registry has one home (ruling R-8).
+# Cold gate coldgate-e10 (2026-09-01) d.3 and the Opus
 # refuter's once-only finding are their forcing problems.
 NIGHT_DRIVER_REASON_CODES = frozenset(
     {
+        "night_refused_bind_expired",   # v4 bind deadline expired; D-182 successor route
         "night_aborted_agent_present",   # census hit while the chain ran; chain group terminated
         "night_chain_already_started",   # O_EXCL claim on chain.started failed: never start the chain twice (D-078)
         "night_calibration_refused",     # typed reservation/writer refusal, including invalid transport documents
@@ -97,7 +100,7 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
         "night_window_exceeded",  # driver wall-clock deadline: chain terminated after the exclusive window end plus shutdown grace
     }
 )
-if NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES:
+if NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES != {"night_refused_bind_expired"}:
     raise RuntimeError("night gate and driver reason-code registries overlap")
 
 # First-refusal precedence.  Probe failures use ``night_probe_error`` at the
@@ -148,6 +151,7 @@ _QUIET_RECEIPT_KEYS = {
     "quiet_admission", "bind_deadline_epoch_s", "go_epoch_s", "samples_total",
     "samples_quiet_run_at_go", "quiet_samples_sha256", "quiet_samples_lines",
     "top_consumers_at_decision", "load_avg_diagnostic",
+    "admission_is_capture_evidence",
 }
 _CONDITION_KEYS = {"condition_id", "status", "basis", "evidence", "measured"}
 _REFUSAL_KEYS = {"reason", "detail", "evidence"}
@@ -1474,6 +1478,13 @@ def _validate_probe(value: object, where: str, defects: list[str]) -> None:
 
 def _validate_quiet_receipt(value, defects):
     from joulewise.quiet_admission import validate_policy
+    if value["admission_is_capture_evidence"] is not False:
+        defects.append("admission_is_capture_evidence: must be false")
+    if "boot_identity_unavailable" in value:
+        if (not isinstance(value["boot_identity_unavailable"], str)
+                or not value["boot_identity_unavailable"].strip()
+                or value["verdict"] != "REFUSED"):
+            defects.append("boot_identity_unavailable: requires a reason and REFUSED verdict")
     try:
         policy = validate_policy(value["quiet_admission"])
     except (ValueError, OverflowError):
@@ -1500,6 +1511,8 @@ def _validate_quiet_receipt(value, defects):
     if not finite(deadline):
         defects.append("bind_deadline_epoch_s: invalid epoch")
     if value["verdict"] in {"GO", "REHEARSAL_ONLY"}:
+        if policy and policy["busy_core_max"] == 0:
+            defects.append("quiet_admission: zero cutoff cannot authorize admission")
         if not finite(go) or not finite(deadline) or go > deadline:
             defects.append("go_epoch_s: must complete by bind deadline")
         if policy and (type(value["samples_quiet_run_at_go"]) is not int
@@ -1527,9 +1540,12 @@ def _validate_quiet_receipt(value, defects):
 def validate_receipt(value: Mapping[str, object]) -> list[str]:
     defects: list[str] = []
     quiet = isinstance(value, Mapping) and value.get("schema") == QUIET_RECEIPT_SCHEMA
+    receipt_codes = NIGHT_GATE_REASON_CODES if quiet else NIGHT_GATE_REASON_CODES - {"night_refused_bind_expired"}
     expected = _RECEIPT_KEYS | _QUIET_RECEIPT_KEYS if quiet else _RECEIPT_KEYS
     if quiet and "attribution_unavailable" in value:
         expected = expected | {"attribution_unavailable"}
+    if quiet and "boot_identity_unavailable" in value:
+        expected = expected | {"boot_identity_unavailable"}
     if not _exact_keys(value, expected, "receipt", defects):
         return defects
     if quiet:
@@ -1605,7 +1621,7 @@ def validate_receipt(value: Mapping[str, object]) -> list[str]:
     if refusal_value is not None:
         if _exact_keys(refusal_value, _REFUSAL_KEYS, "refusal", defects):
             reason = refusal_value.get("reason")
-            if not isinstance(reason, str) or reason not in NIGHT_GATE_REASON_CODES:
+            if not isinstance(reason, str) or reason not in receipt_codes:
                 defects.append("refusal.reason: is not registered")
             detail = refusal_value.get("detail")
             if not isinstance(detail, str) or not detail:
@@ -1620,7 +1636,7 @@ def validate_receipt(value: Mapping[str, object]) -> list[str]:
     if verdict == "REFUSED":
         if not isinstance(refusal_value, Mapping):
             defects.append("refusal: REFUSED verdict requires a refusal object")
-        elif refusal_value.get("reason") not in NIGHT_GATE_REASON_CODES:
+        elif refusal_value.get("reason") not in receipt_codes:
             defects.append("refusal.reason: REFUSED verdict requires a registered gate code")
     elif (
         isinstance(verdict, str)
