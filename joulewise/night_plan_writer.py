@@ -1,4 +1,4 @@
-"""Canonical writer for frozen v2 packless and v3 pack night plans."""
+"""Canonical writer for v2 packless, v3 pack and explicit v4 quiet plans."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 
 from joulewise.night_gate import (
     PACK_PLAN_SCHEMA, PACK_PLAN_SCHEMA_VERSION, PLAN_SCHEMA,
-    PLAN_SCHEMA_VERSION, NightPlan,
+    PLAN_SCHEMA_VERSION, QUIET_PLAN_SCHEMA, QUIET_PLAN_SCHEMA_VERSION, NightPlan,
 )
 
 
@@ -21,6 +21,9 @@ def night_plan_mapping(plan: NightPlan) -> dict[str, Any]:
     if not isinstance(plan, NightPlan):
         raise TypeError("plan must be a NightPlan")
     fields = dataclasses.asdict(plan)
+    is_quiet = plan.quiet_admission is not None
+    if not is_quiet:
+        del fields["quiet_admission"]
     is_pack = plan.receipt_class == "TRANSACTION_PACK"
     if not is_pack and plan.pack_night is None:
         del fields["pack_night"]
@@ -29,6 +32,8 @@ def night_plan_mapping(plan: NightPlan) -> dict[str, Any]:
         "schema_version": PACK_PLAN_SCHEMA_VERSION if is_pack else PLAN_SCHEMA_VERSION,
         **fields,
     }
+    if is_quiet:
+        value.update(schema=QUIET_PLAN_SCHEMA, schema_version=QUIET_PLAN_SCHEMA_VERSION)
     # Keep the producer and consumer in one executable contract.
     NightPlan.from_mapping(value)
     return value
@@ -63,7 +68,11 @@ def write_night_plan(path: str | os.PathLike[str], plan: NightPlan) -> Path:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        os.replace(temporary, target)
+        if plan.quiet_admission is not None:
+            # Publishing a new quiet plan never replaces existing sealed bytes.
+            os.link(temporary, target)
+        else:
+            os.replace(temporary, target)
         directory = os.open(target.parent, os.O_RDONLY)
         try:
             os.fsync(directory)

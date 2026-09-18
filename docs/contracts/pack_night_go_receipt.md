@@ -137,6 +137,8 @@ refused pack night. A refused pack night writes NO GO file; its refusal remains
 in `night/receipt.json`. The night_gate receipt validator is NOT modified
 (`joulewise/night_gate.py:122–130,979–985`). Only the condition shape is shared.
 
+For `joulewise.night_plan.v4` (packless) plans the receipt schema is `joulewise.unattended_night_receipt.v3`, validated by the versioned validator; the v2 `_RECEIPT_KEYS` shape and the v2 validation path for every existing class, including every transaction-pack v3 class, are byte-for-byte unchanged (cold-gate ruling 70 Q8 and Q10; magistrate synthesis 13; 2026-09-17).
+
 | Custody locator | Schema / transport |
 |---|---|
 | `night/go-census.json` under plan `custody_root` | Immutable `_census_record` snapshot bound by C3 evidence; the append-only running census journal cannot replace this snapshot |
@@ -1034,6 +1036,8 @@ S3 — GO conditions REUSE night_gate's condition shape `{condition_id, status, 
 `_CONDITION_IDS` ordering, `_STATUSES` vocabulary, no duplicates. [Superseded by §10.1 F2: GO is a separate
 create-once 0600 `night/go_receipt.json`; `night/receipt.json` retains `_RECEIPT_KEYS` for EVERY class,
 including refused pack nights, which emit NO GO file. The night_gate receipt validator is NOT modified.]
+
+For `joulewise.night_plan.v4` (packless) plans the receipt schema is `joulewise.unattended_night_receipt.v3`, validated by the versioned validator; the v2 `_RECEIPT_KEYS` shape and the v2 validation path for every existing class, including every transaction-pack v3 class, are byte-for-byte unchanged (cold-gate ruling 70 Q8 and Q10; magistrate synthesis 13; 2026-09-17).
 
 S4 — "disjoint roots": superseded in shape and predicates by §10.3's frozen
 `ProductionRootSpec` derivations, HEAD-pinned inventory, complete loader census,

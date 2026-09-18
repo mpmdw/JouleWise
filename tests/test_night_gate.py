@@ -1040,6 +1040,7 @@ class NightGateTests(unittest.TestCase):
         expected = {
             "night_refused_agent_present",
             "night_refused_not_quiet",
+            "night_refused_bind_expired",
             "night_refused_hid_idle",
             "night_refused_boot_clock",
             "night_refused_registration",
@@ -1055,6 +1056,7 @@ class NightGateTests(unittest.TestCase):
         }
         self.assertEqual(night_gate.NIGHT_GATE_REASON_CODES, expected)
         coverage = {
+            "night_refused_bind_expired": "test_bind_expiry_code_is_v3_only",
             "night_refused_agent_present": "test_a_census_that_finds_lines_refuses_and_preserves_them",
             "night_refused_not_quiet": "test_each_quiet_predicate_fails_closed_with_its_name_in_detail",
             "night_refused_hid_idle": "test_hid_idle_requires_the_exact_zero_value",
@@ -1081,6 +1083,7 @@ class NightGateTests(unittest.TestCase):
             night_gate.NIGHT_DRIVER_REASON_CODES,
             {
                 "night_calibration_refused",
+                "night_refused_bind_expired",
                 "night_aborted_agent_present",
                 "night_chain_already_started",
                 "night_chain_alive",
@@ -1092,11 +1095,18 @@ class NightGateTests(unittest.TestCase):
                 "night_window_exceeded",
             },
         )
-        self.assertFalse(night_gate.NIGHT_DRIVER_REASON_CODES & night_gate.NIGHT_GATE_REASON_CODES)
+        self.assertEqual(night_gate.NIGHT_DRIVER_REASON_CODES & night_gate.NIGHT_GATE_REASON_CODES, {"night_refused_bind_expired"})
         source = inspect.getsource(night_gate)
         body = source.split("NIGHT_DRIVER_REASON_CODES = frozenset(", 1)[1].split("\n)\n", 1)[1]
-        for code in night_gate.NIGHT_DRIVER_REASON_CODES:
+        for code in night_gate.NIGHT_DRIVER_REASON_CODES - {"night_refused_bind_expired"}:
             self.assertNotIn(f'"{code}"', body, code)
+
+    def test_bind_expiry_code_is_v3_only(self):
+        source = FakeProbeSource()
+        receipt = json.loads(night_gate.evaluate_night(make_plan(), source.probes()).to_json_bytes())
+        receipt['verdict'] = 'REFUSED'
+        receipt['refusal'] = dict(reason='night_refused_bind_expired', detail='bind expired', evidence=[])
+        self.assertIn('refusal.reason: is not registered', night_gate.validate_receipt(receipt))
 
     def test_valid_v3_pack_without_driver_arguments_lifts_unbuilt_fence(self):
         plan = make_plan("TRANSACTION_PACK", pack_night={
@@ -1149,3 +1159,99 @@ class NightGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QuietGatePhaseTests(unittest.TestCase):
+    def test_v4_failed_or_empty_boot_probe_is_probe_error(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import POLICY
+        plan = replace(make_plan(), window_max_s=9600, quiet_admission=dict(POLICY))
+        for code, stdout in ((2, ''), (2, BOOT_UUID), (0, ''), (0, '  \n')):
+            with self.subTest(code=code, stdout=stdout):
+                source = FakeProbeSource()
+                with mock.patch.object(night_gate, 'D166_REGISTRATION_SHA256',
+                                       hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
+                    static = night_gate.evaluate_static(plan, source.probes())
+                self.assertIsNone(static.refusal)
+                source.results[night_gate.BOOT_SESSION_ARGV] = result(
+                    night_gate.BOOT_SESSION_ARGV, exit_code=code, stdout=stdout, stderr='fixture probe failure')
+                receipt = night_gate.evaluate_dynamic_hard(plan, source.probes(), static)
+                self.assertEqual(receipt.refusal.reason, 'night_probe_error')
+
+    def test_v2_receipt_bytes_and_validation_match_original_legacy_scenarios(self):
+        """Compare the actual pre-v4 evaluator, including pack-class refusals."""
+        import dataclasses
+        import subprocess
+        import sys
+        import types
+        baseline = types.ModuleType('night_gate_pre_v4_regression')
+        baseline.__file__ = night_gate.__file__
+        sys.modules[baseline.__name__] = baseline
+        self.addCleanup(sys.modules.pop, baseline.__name__)
+        raw = subprocess.check_output(['git', 'show', 'a90ab4e8:joulewise/night_gate.py'],
+                                      cwd=Path(__file__).resolve().parents[1], text=True)
+        exec(raw, baseline.__dict__)
+        scenarios = [(None, None, 1005),
+            (night_gate.LOAD_AVG_ARGV, '{ 3.70 1.00 1.00 }', 1005),
+            (night_gate.PMSET_BATT_ARGV, "Now drawing from 'Battery Power'", 1005),
+            (night_gate.HID_IDLE_ARGV, '10', 1005),
+            (night_gate.THERMAL_ARGV, 'CPU_Speed_Limit = 80', 1005),
+            (night_gate.BOOT_SESSION_ARGV, 'bad boot', 1005),
+            (night_gate.AGENT_CENSUS_ARGV, '42 agent', 1005),
+            (None, None, 1061)]
+        for receipt_class in night_gate.RECEIPT_CLASSES:
+            for argv, stdout, now in scenarios:
+                with self.subTest(receipt_class=receipt_class, argv=argv, now=now):
+                    receipts = []
+                    for engine in (baseline, night_gate):
+                        source = FakeProbeSource(now_epoch_s=now)
+                        if argv:
+                            source.results[argv] = result(argv, stdout=stdout)
+                        source.results = {key: engine.ProbeResult(**dataclasses.asdict(value))
+                                          for key, value in source.results.items()}
+                        with mock.patch.object(engine, 'D166_REGISTRATION_SHA256',
+                                               hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
+                            receipt = engine.evaluate_night(make_plan(receipt_class), source.probes())
+                        receipts.append(receipt.to_json_bytes())
+                    self.assertEqual(receipts[0], receipts[1])
+                    value = json.loads(receipts[0])
+                    self.assertEqual(baseline.validate_receipt(value), night_gate.validate_receipt(value))
+                    self.assertEqual(set(value), baseline._RECEIPT_KEYS)
+
+        for code, stdout in ((2, ''), (2, BOOT_UUID), (0, '')):
+            receipts = []
+            for engine in (baseline, night_gate):
+                source = FakeProbeSource()
+                source.results[night_gate.BOOT_SESSION_ARGV] = result(
+                    night_gate.BOOT_SESSION_ARGV, exit_code=code, stdout=stdout)
+                source.results = {key: engine.ProbeResult(**dataclasses.asdict(value))
+                                  for key, value in source.results.items()}
+                receipt = engine.evaluate_night(make_plan(), source.probes())
+                self.assertEqual(receipt.refusal.reason, 'night_refused_boot_clock')
+                receipts.append(receipt.to_json_bytes())
+            self.assertEqual(*receipts)
+
+    def test_static_and_dynamic_seams_cannot_authorize_v4_without_intervals(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import POLICY
+        plan = replace(make_plan(), window_max_s=9600, quiet_admission=dict(POLICY))
+        source = FakeProbeSource()
+        with mock.patch.object(night_gate, 'D166_REGISTRATION_SHA256',
+                               hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
+            static = night_gate.evaluate_static(plan, source.probes())
+            self.assertIsNone(static.refusal)
+            self.assertNotEqual(static.verdict, 'GO')
+            self.assertEqual(source.run_calls, [])
+            hard = night_gate.evaluate_dynamic_hard(plan, source.probes(), static)
+            self.assertIsNone(hard.refusal)
+            self.assertNotIn(night_gate.LOAD_AVG_ARGV, source.run_calls)
+            self.assertEqual(hard.verdict, 'PENDING')
+            self.assertTrue(night_gate.validate_receipt(json.loads(hard.to_json_bytes())))
+            with self.assertRaises(night_gate.PlanError):
+                night_gate.evaluate_night(plan, source.probes())
+
+    def test_v4_missing_block_never_falls_back_to_legacy(self):
+        mapping = plan_mapping()
+        mapping.update(schema=night_gate.QUIET_PLAN_SCHEMA, schema_version=4)
+        with self.assertRaises(night_gate.PlanError):
+            night_gate.NightPlan.from_mapping(mapping)

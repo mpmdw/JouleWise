@@ -20,7 +20,7 @@ RETRY = {
 }
 # Independent literals, not derived from the implementation or renderer.
 COLD = {
-    "night_refused_agent_present", "night_refused_not_quiet",
+    "night_refused_agent_present", "night_refused_not_quiet", "night_refused_bind_expired",
     "night_refused_hid_idle", "night_refused_boot_clock",
     "night_refused_registration", "night_window_expired", "night_plan_stale",
     "night_plan_malformed", "night_chain_digest_mismatch",
@@ -435,3 +435,93 @@ class ArmRetryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ZeroCaptureSuccessorTests(unittest.TestCase):
+    def evidence(self):
+        result = dict(verdict='REFUSED', aborted_reason='night_refused_not_quiet',
+                      plan_id='predecessor', chain_exit_code=None, chain_sha256=None)
+        receipt = dict(verdict='REFUSED', plan_id='predecessor',
+                       refusal={'reason': 'night_refused_not_quiet'}, conditions=[
+            dict(condition_id='C5', measured={'zero_capture_evidence': dict(
+                chain_started_absent=True, reservation_absent=True, session_id=None,
+                instrument_validation_empty=True, capture_writer_ran=False)})])
+        delivery = {'courier.sent': True, 'message_id': 'sent-message',
+                    'plan_id': 'predecessor', 'successors_used': 0}
+        return result, receipt, delivery
+
+    def test_zero_capture_successor_requires_delivery_and_no_start(self):
+        result, receipt, delivery = self.evidence()
+        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, receipt, {}).allowed)
+        decision = arm_retry.zero_capture_successor_allowed(result, receipt, delivery)
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.reason, 'new_plan_only')
+        for field, bad in [('chain_started_absent', False), ('reservation_absent', False),
+                           ('session_id', 'a-session'), ('instrument_validation_empty', False),
+                           ('capture_writer_ran', True)]:
+            changed = copy.deepcopy(receipt)
+            changed['conditions'][0]['measured']['zero_capture_evidence'][field] = bad
+            self.assertFalse(arm_retry.zero_capture_successor_allowed(result, changed, delivery).allowed)
+        for field in ('chain_started_absent', 'reservation_absent', 'session_id', 'instrument_validation_empty', 'capture_writer_ran'):
+            changed = copy.deepcopy(receipt)
+            del changed['conditions'][0]['measured']['zero_capture_evidence'][field]
+            self.assertFalse(arm_retry.zero_capture_successor_allowed(result, changed, delivery).allowed)
+        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, receipt,
+            dict(delivery, successors_used=1)).allowed)
+        self.assertEqual(arm_retry.classify_abort('night_refused_not_quiet'), 'cold_gate')
+        fixture = ArmRetryTests()
+        fixture.setUp()
+        result['ended_epoch_s'] = fixture.now - 60
+        notice = dict(fixture.notice, attempt=1, latest_abort_epoch_s=None)
+        # A different id cannot cover reuse of the predecessor's bytes digest.
+        decision = arm_retry.successor_arm_allowed(fixture.now, fixture.plan, notice,
+            result, receipt, dict(delivery, plan_sha256=notice['plan_sha256']))
+        self.assertEqual(decision.reason, 'predecessor_rearm')
+        # Conversely, old same-candidate history cannot authorize new bytes.
+        candidate = dict(fixture.candidate, plan_id='new-successor')
+        raw = json.dumps(candidate).encode()
+        fixture.plan.update(plan_bytes=raw, saved_plan_bytes=raw)
+        fixture.notice.update(plan_id='new-successor', plan_sha256=hashlib.sha256(raw).hexdigest())
+        self.assertEqual(fixture.decide().reason, 'candidate_changed')
+
+    def test_bind_expiry_stays_cold_and_uses_d182_successor_route(self):
+        result, receipt, delivery = self.evidence()
+        result['aborted_reason'] = receipt['refusal']['reason'] = 'night_refused_bind_expired'
+        self.assertEqual(arm_retry.classify_abort('night_refused_bind_expired'), 'cold_gate')
+        self.assertIn('D-182', arm_retry.COLD_GATE_CODES['night_refused_bind_expired'])
+        self.assertTrue(arm_retry.zero_capture_successor_allowed(result, receipt, delivery).allowed)
+
+    def test_d182_successor_spacing_install_close_notice_no_and_identity(self):
+        fixture = ArmRetryTests()
+        fixture.setUp()
+        result, receipt, delivery = self.evidence()
+        result['ended_epoch_s'] = fixture.now - 60
+        delivery['plan_sha256'] = 'b' * 64
+        notice = dict(fixture.notice, attempt=1, latest_abort_epoch_s=None)
+        def decide(**overrides):
+            inputs = dict(now_epoch_s=fixture.now, plan=fixture.plan, notice=notice,
+                          result=result, receipt=receipt, delivery=delivery)
+            inputs.update(overrides)
+            return arm_retry.successor_arm_allowed(**inputs)
+        self.assertTrue(decide().allowed)
+        self.assertEqual(decide(now_epoch_s=fixture.now-0.01).reason, 'successor_spacing')
+        self.assertEqual(decide(plan=dict(fixture.plan, install_close_epoch_s=fixture.now)).reason, 'install_closed')
+        self.assertEqual(decide(notice=dict(notice, latest_no_epoch_s=fixture.now-100)).reason, 'owner_no')
+        self.assertEqual(decide(notice=dict(notice, sent_epoch_s=fixture.now-61)).reason, 'notice_not_fresh')
+        self.assertEqual(decide(notice=dict(notice, message_id=delivery['message_id'])).reason, 'notice_not_fresh')
+        self.assertEqual(decide(delivery=dict(delivery, plan_sha256=notice['plan_sha256'])).reason, 'predecessor_rearm')
+        predecessor = dict(fixture.candidate, plan_id=result['plan_id'])
+        self.assertEqual(decide(plan=dict(fixture.plan, plan_bytes=json.dumps(predecessor).encode())).reason, 'predecessor_rearm')
+        self.assertFalse(decide(delivery={}).allowed)
+
+    def test_new_plan_cannot_masquerade_as_same_candidate_retry(self):
+        fixture = ArmRetryTests()
+        fixture.setUp()
+        fixture.attempts[0]['cause'] = 'night_refused_not_quiet'
+        self.assertEqual(fixture.decide().reason, 'cold_gate_history')
+        fixture.attempts[0]['cause'] = 'arm_transport'
+        candidate = dict(fixture.candidate, plan_id='new-successor')
+        raw = json.dumps(candidate).encode()
+        fixture.plan.update(plan_bytes=raw, saved_plan_bytes=raw)
+        fixture.notice.update(plan_id='new-successor', plan_sha256=hashlib.sha256(raw).hexdigest())
+        self.assertEqual(fixture.decide().reason, 'candidate_changed')

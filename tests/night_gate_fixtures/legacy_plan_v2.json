@@ -1,0 +1,16 @@
+{
+  "authored_epoch_s": 900.0,
+  "chain_path": "/custody/chain.zsh",
+  "chain_sha256_path": "/custody/chain.zsh.sha256",
+  "custody_root": "/custody",
+  "measurement_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "measurement_root": "/measurement-checkout",
+  "plan_id": "night-001",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "registration_path": "/custody/registration.json",
+  "repo_head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "t0_epoch_s": 1000.0,
+  "window_max_s": 60
+}
