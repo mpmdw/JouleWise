@@ -1,0 +1,40 @@
+```json
+{"schema":"claude-codex-report/v1","genre":"review","status":"findings","completion":"complete","summary":"313 head tests pass; seven mutant families survive prescribed regressions. No worktree writes.","workspace":{"base_requested":"a2671902","base_mode":"exact","head_start":"a267190279afbb6660a5433f34a654ad36042eb5","head_end":"a267190279afbb6660a5433f34a654ad36042eb5","upstream_end":null,"branch":null},"pathspec":[],"unowned_dirty":[],"verdict":{"sources":{"brief":"01 seat brief","fix":"08 fix-round brief"},"replay":"python3 -B /tmp/refute_mutants.py ID makes a fresh copy. /tmp/refute-evidence/ID.{diff,json}: patches, exact unittest commands and outputs. R1-R10 = brief regressions.","findings":[
+{"id":"F1","severity":"blocker","at":"tests/test_quiet_admission.py:27","against":"brief:91: \"any name exemption\"","mutant":"07b: omit mds_stores from quiet_admission.py:156 aggregate.","command":"python3 -B /tmp/refute_mutants.py 07b","observed":"R3/R6 and CPU module: OK. Added mds case: True is not false."},
+{"id":"F2","severity":"blocker","at":"tests/test_quiet_admission.py:30","against":"brief:92: \"stale `%CPU` use.\"","mutant":"08: read pcpu; delta = percent_cpu * interval / 100.","command":"python3 -B /tmp/refute_mutants.py 08","observed":"Both R4s: OK. Added percent_cpu=90, delta=0 case passes HEAD; mutant: AssertionError: False is not true."},
+{"id":"F3","severity":"blocker","at":"tests/test_quiet_admission.py:33","against":"brief:94: \"PID reused with a new `lstart` is a new identity\"","mutant":"10c: quiet_admission.py:95 identity = pid.","command":"python3 -B /tmp/refute_mutants.py 10c","observed":"R6: Ran 1 test, OK. Entire CPU module: Ran 9 tests, OK."},
+{"id":"F4","severity":"blocker","at":"tests/test_run_night.py:4077","against":"brief:96: \"leaves `E`, completion, courier and dead-man exactly as for GO at t0\"","mutant":"05 resets deadline each sample; 13 resets plan t0 to GO inside run_night.","command":"python3 -B /tmp/refute_mutants.py 05 13","observed":"R8: OK for both. Driver integration kills 13: 10440.0 != 9900."},
+{"id":"F5","severity":"blocker","at":"tests/test_arm_retry.py:453","against":"brief:97: \"the successor cannot reuse the predecessor's digest\"","mutant":"15c removes predecessor-digest guard; 15d removes history digest guard.","command":"python3 -B /tmp/refute_mutants.py 15c 15d","observed":"R9: OK. Other tests kill both: 'allowed' != 'predecessor_rearm'; 'allowed' != 'candidate_changed'."},
+{"id":"F6","severity":"blocker","at":"tests/test_run_night.py:4110","against":"brief:98: \"census still runs at cadence and the deadline still fires\"","mutant":"16b: _BindTask.ready at run_night.py:2016 calls self.process.join().","command":"python3 -B /tmp/refute_mutants.py 16b","observed":"R10 OK (fake task). Added worker test passes HEAD; mutant: ready() blocked for 1s on hung sampler; parent cannot census or expire."},
+{"id":"F7","severity":"should_fix","at":"tests/test_gen_derivation_night.py:1105","against":"fix:36: \"regression for both refusals.\"","mutant":"21a accepts runway 7979; 21b accepts bind + runway - 1.","command":"python3 -B /tmp/refute_mutants.py 21a 21b","observed":"Named test: AttributeError: 'NoneType' object has no attribute 'lower'. Complete fixtures: GenerationRefusal not raised."}
+],"table_columns":["mutant","test","result","assertion/error excerpt"],"mutant_table":[
+["01 first quiet GO","R1","KILLED","samples_quiet_run_at_go: insufficient consecutive intervals"],
+["02 no busy reset","R1","KILLED","5 != 6"],
+["03 polling after GO","R1","KILLED","'REFUSED' != 'GO'"],
+["04 truncated journal","R2","KILLED","1 != 20"],
+["05 deadline reset","R2,R8,late-driver","SURVIVED R8; KILLED watchdog elsewhere","R8 OK; R2/late-driver: watchdog 10s"],
+["06a load pass; b load veto","R3,R4 (driver)","KILLED","'GO' != 'REFUSED'; 'REFUSED' != 'GO'"],
+["07a fseventsd+mds; b mds only","R3,R6","KILLED a; SURVIVED b","a: True is not false / 0 != 0.2; b: OK"],
+["08 stale percent CPU","R4 (CPU+driver)","SURVIVED","OK; added zero-delta case: False is not true"],
+["09 census replay","R5","KILLED","AttributeError: 'NoneType' object has no attribute 'reason'"],
+["10a pid accounting; b exit loss; c pid parser","R6","KILLED a,b; SURVIVED c","a: CPU counter regressed; b: 0.2 != 0.3; c: OK"],
+["11a observer subtracted; b unlabelled","R6","KILLED","0.18000000000000005 != 0.2; False is not true"],
+["12a v2 default; b implicit v4","R7; generator --check","KILLED","policy is not None; 1 != 0; generated region drifted"],
+["13 GO shifts deadlines","R8","SURVIVED","OK; integration: 10440.0 != 9900"],
+["14 wall rollback","wall-rollback R8 companion","KILLED watchdog","10s external termination"],
+["15a bare refusal; b started/reserved; c,d reused digest","R9","KILLED a,b; SURVIVED c,d","True is not false; digest cases OK"],
+["16a synchronous sample; b blocking ready","R10","KILLED a; SURVIVED b","a: 0.0 != 600; b: OK"],
+["17 malformed becomes quiet","malformed-sampler R10 companion","KILLED","AttributeError: 'NoneType' object has no attribute 'reason'"],
+["18a float argv; b no integer check","fix7 exact-argv; v4 validation","KILLED","'30.0' != '30'; ValueError not raised"],
+["19a old expiry code; b retry class","R2; fix4 classification","KILLED","'night_refused_not_quiet' != 'night_refused_bind_expired'; 'retry' != 'cold_gate'"],
+["20a empty authority; b cutoff default","fix2-3 v4 validation","KILLED","PlanError not raised (both)"],
+["21a runway 7979; b window one short","fix10 generator boundary regression","KILLED","NoneType.lower error; complete fixtures: GenerationRefusal not raised"]
+],"timing":"313 tests/91.036s. Module test seconds: gate .361, CPU .013, writer .011, retry .282, driver 53.050, generator 37.292. Only >10s: test_run_night.py:2731, 17.039s (pre-existing 15s FIFO test).","inspection":"Six-module grep: sleep(60) at test_run_night.py:138,140,4298 is cancelled fixture work (.025s for new case). Fake bind clocks; mocked ps/top/sysctl. V2 bytes/verdicts/base receipt comparisons pass.","next_step":"Lead: add parser/worker cases, connect R8/R9 integration checks, fix generator arguments, rerun mutants."},"verification":[
+{"id":"V1","kind":"suite","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_night_gate tests.test_quiet_admission tests.test_night_plan_writer tests.test_arm_retry tests.test_run_night tests.test_gen_derivation_night","cwd":"/tmp/refute-exec","observed":{"result":"pass","exit_code":0,"tail":["Ran 313 tests in 90.400s","OK (skipped=9)"]},"expected":{"exit_code":0,"tail_regex":"OK"}},
+{"id":"V2","kind":"build","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 scripts/gen_derivation_night.py --check && PYTHONPYCACHEPREFIX=/tmp/refute-compile-final python3 -m compileall -q scripts joulewise","cwd":"/tmp/refute-exec","observed":{"result":"pass","exit_code":0,"tail":["PASS generated derivation-night wrapper region matches"]},"expected":{"exit_code":0,"tail_regex":"PASS"}},
+{"id":"V4","kind":"test","cmd":"TMPDIR=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'from tests.test_quiet_admission import legacy_counterfactual; legacy_counterfactual()'","cwd":"/tmp/refute-exec","observed":{"result":"pass","exit_code":1,"tail":["test_low_load_busy_daemon_never_admits: load=1.2, process_busy_cores=0.9; AssertionError: 'GO' != 'REFUSED'","test_finished_burst_admits_despite_high_load: load=3.7, process_busy_cores=0.02; AssertionError: 'REFUSED' != 'GO'"]},"expected":{"exit_code":1,"tail_regex":"AssertionError"}}
+],"flags":[
+{"id":"E1","kind":"environment","level":"nonblocking","text":"9 skipped. No live sampler. Orphan census exited 2: ps PermissionError.","needs":"Native checks remain lead-owned."},
+{"id":"E2","kind":"verification_gap","level":"nonblocking","text":"05/14: external 10s termination, not assertion kills. 35 variants/57 executions; six supplemental HEAD controls passed.","needs":"Bound mutant tests."}
+]}
+```

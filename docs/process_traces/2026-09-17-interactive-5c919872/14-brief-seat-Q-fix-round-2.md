@@ -2,14 +2,14 @@ SESSION_MODE: delegated
 BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: ["joulewise/night_gate.py","joulewise/night_plan_writer.py","joulewise/arm_retry.py","joulewise/quiet_admission.py","scripts/run_night.py","scripts/gen_derivation_night.py","tests/test_night_gate.py","tests/test_night_plan_writer.py","tests/test_arm_retry.py","tests/test_run_night.py","tests/test_gen_derivation_night.py","tests/test_quiet_admission.py","tests/night_gate_fixtures/**","docs/process/NIGHT_HANDBACK.md","docs/phase_2/derivation_night_runbook.md","docs/contracts/night_quiet_admission.md","docs/contracts/pack_night_go_receipt.md"]
-BASE_HEAD: __BASE__
+BASE_HEAD: 649eefd2
 BASELINE_MANIFEST: __BASELINE_MANIFEST__
 BASELINE_DIGEST: __BASELINE_DIGEST__
 LEASE_ID: lease-79c5a1766616453fb93e93b7cea20ffd
 
 # Seat Q fix round 2 — refuter findings (contract lens F1–F3, execution lens below)
 
-Branch `feat/2026-09-17-night-gate-quiet-admission` in `/Users/edr/code/JouleWise-wt-gate-quiet`, head `__BASE__` (your fix round 1 `a2671902` plus two lead bench commits: `536fd4db` widens the `top` percentage tolerance to 1.0 because `top` rounds user/sys/idle independently — live lines 100.26 and 99.98 — and `649eefd2` adds the regression that kills the strict mutant; read both with `git show`). Same rules as before: leave every change unstaged (the lead commits by pathspec), do NOT push, nothing outside WRITE_SCOPE, no `launchctl`, no `~/night-custody`, no network, no `sudo`. Do not end your turn before every item is done or a genuine early return is required.
+Branch `feat/2026-09-17-night-gate-quiet-admission` in `/Users/edr/code/JouleWise-wt-gate-quiet`, head `649eefd2` (your fix round 1 `a2671902` plus two lead bench commits: `536fd4db` widens the `top` percentage tolerance to 1.0 because `top` rounds user/sys/idle independently — live lines 100.26 and 99.98 — and `649eefd2` adds the regression that kills the strict mutant; read both with `git show`). Same rules as before: leave every change unstaged (the lead commits by pathspec), do NOT push, nothing outside WRITE_SCOPE, no `launchctl`, no `~/night-custody`, no network, no `sudo`. Do not end your turn before every item is done or a genuine early return is required.
 
 The two refuter reports are tracked at `docs/process_traces/2026-09-17-interactive-5c919872/12-refuter-contract-astra.md` and `13-refuter-execution-astra.md` (read-only, absolute path under `/Users/edr/code/JouleWise/` if your worktree predates them). Each finding below is dispositioned by the lead; apply exactly what the disposition says.
 
@@ -23,7 +23,23 @@ The two refuter reports are tracked at `docs/process_traces/2026-09-17-interacti
 
 ## Execution lens
 
-__EXEC_FINDINGS__
+Report `13-refuter-execution-astra.md` (313 head tests pass; 35 mutant variants; replay patches under `/tmp/refute-evidence/ID.{diff,json}` may still exist). Two real defects and five test-strength gaps; every one is dispositioned FIX.
+
+**E-F6 (BLOCKER, real defect, `scripts/run_night.py` ~:2016 `_BindTask.ready`).** `ready()` calls `self.process.join()`, so a hung sampler blocks the parent: no census, no expiry (mutant 16b; the refuter's added worker test shows `ready()` blocking 1 s on a hung sampler; the prescribed regression 10 passes with a fake task and therefore proves nothing about the real task). Disposition: `ready()` must be non-blocking (`join(0)`/`is_alive()` or a poll on the result pipe with zero timeout); the bind loop's census and deadline checks run on every tick regardless of the sampler's state; on deadline expiry the parent terminates and reaps a still-running sampler. Regression: a REAL `_BindTask` wrapping a worker that sleeps forever; assert `ready()` returns within 50 ms, that a census probe injected during the hang is evaluated, and that the deadline fires and the worker is reaped (no zombie); this test must fail against the `join()` mutant.
+
+**E-F7 (SHOULD-FIX, real defect + broken test, `scripts/gen_derivation_night.py` and `tests/test_gen_derivation_night.py` ~:1105).** The named regression crashes (`AttributeError: 'NoneType' object has no attribute 'lower'`) and with complete fixtures `GenerationRefusal` is NOT raised for `post_bind_budget_s` 7979 or `window_max_s = bind + runway − 1` (mutants 21a/21b survive). Disposition: make `build_spec` (and the authoring path) refuse both cases with `GenerationRefusal`, the 7980 computed from the schedule constants, and fix the test so both refusals are asserted with complete fixtures; paste the two failing assertions against the pre-fix copy.
+
+**E-F1 (test strength, `tests/test_quiet_admission.py` ~:27).** Omitting `mds_stores` alone from the aggregate survives regressions 3 and 6 (only the `fseventsd` case is exercised). Disposition: parametrise the name-exemption regression over every daemon named in the consult (`fseventsd`, `mdworker_shared`, `mds`, `mds_stores`, `mediaanalysisd`, `deleted_helper`, `cloudd`, `bird`, `softwareupdated`, `backupd`) and over an arbitrary name, asserting each contributes exactly its delta to the aggregate.
+
+**E-F2 (test strength, ~:30).** Reading the decaying `%CPU` column instead of interval deltas survives regression 4. Disposition: add the refuter's counterexample to regression 4: a process with `%CPU` 90 in the snapshot but zero cumulative delta contributes 0 busy-cores (quiet), and a process with `%CPU` 0 but a large delta contributes its delta (busy).
+
+**E-F3 (test strength, ~:33).** Parser identity by pid alone survives regression 6 (the test exercises the accounting layer, not `parse_ps`). Disposition: extend regression 6 to the parser: two `ps` snapshots where the same pid appears with a different `lstart` in the second must yield two identities and no delta between them; assert on `parse_ps` output directly.
+
+**E-F4 (test strength, `tests/test_run_night.py` ~:4077).** Regression 8 does not kill "deadline reset each sample" (05) or "plan t0 reset to GO" (13); the driver integration test kills 13 (`10440.0 != 9900`). Disposition: make regression 8 assert the four derived instants (forced shutdown, completion, courier boundary, dead-man) and the bind deadline as exact numbers computed from the fixture's t0 for GO at t0+0 and t0+540, and assert the bind deadline is unchanged after three samples; both mutants must fail it.
+
+**E-F5 (test strength, `tests/test_arm_retry.py` ~:453).** Regression 9 does not exercise predecessor-digest reuse (15c/15d); other tests kill them (`'allowed' != 'predecessor_rearm'`, `'candidate_changed'`). Disposition: fold both digest cases into regression 9 so the named test kills them.
+
+Also from the refuter's inspection: mutants 05 and 14 were "killed" only by the 10 s external watchdog on the late-driver/rollback companions, not by an assertion; make those two companions assert a `night_refused_bind_expired` result within the fake clock (no real waiting) so they fail by assertion.
 
 ## Verification you must run and paste
 
