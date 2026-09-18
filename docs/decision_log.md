@@ -225,7 +225,7 @@ be re-derived by a future agent gets an entry here.
 | D-179 | REPORTED PHASE ENERGY — fixed ordered 50-member mean; 20 independent units (10 repeats + 10 ABBA blocks), stratified t9 interval plus recorded kind bounds; attribution floor beside; runtime-observed ratio of totals; both Qwen3 v5 registrations before frozen specs; closed typed refusals through D-173 custody; X5 remains RETIRED_FALLBACK; normative home `docs/contracts/paper_reported_energy.md` | adjudicated (magistrate synthesis, 2026-09-08; S2 fix rulings installed; production issuance unregistered) |
 | D-180 | ARM RECOVERABILITY AND STEERABILITY — install spans recur within a day; pre-authorized retry class for non-physics arm aborts (idle interactive session, stale notice hash, uncertain tick, transport) without a cold gate; idle interactive sessions not foreign at the arm-time census of stub nights (plan span unchanged); remote control between windows; lanes INSTALL-WINDOWS-MULTI-01 / ARM-RETRY-CLASS-01 / ARM-CENSUS-IDLE-INTERACTIVE-01 / REMOTE-CONTROL-BETWEEN-WINDOWS-01 | ratified by Ed (2026-09-10; decided ≠ done, each clause lands under gates) |
 | D-181 | WINDOWS RUN WHENEVER THE MACHINE IS QUIET — no cadence rule (clean census, day or night, several windows per day when the gates pass; every soundness fence unchanged); Fable 5.1 is the final eyes on every merge (gate rows 7/12 unchanged, final head sha in row 12); the owner's hands step for the first pack night prepared and emailed; lanes INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01 promoted to the head of the agent lane behind the 09-15 harvest event | ratified by Ed (2026-09-14, directive issue #337; recorded verbatim, nothing installed by the entry) |
-| D-182 | ZERO-CAPTURE MACHINE-STATE REFUSAL LICENSES ONE NEW-PLAN SUCCESSOR — a night that refuses on machine state (census, load or CPU quietness, bind-window expiry, screensaver configuration, boot clock) with zero capture licenses ONE new-plan successor once the courier has delivered: new plan id, fresh notice, ≥ 60 s spacing, bounded by the new plan's install close; never a re-arm of the same plan; every observed NO still stops; physics/evidence refusals and every gate at the successor's own t0 unchanged | ratified by Ed (2026-09-17, interactive session 5c919872, "affirm of course" to the text put to him; recorded verbatim, nothing installed by the entry) |
+| D-182 | ZERO-CAPTURE MACHINE-STATE REFUSAL LICENSES ONE NEW-PLAN SUCCESSOR — a night that refuses on machine state (census, load or CPU quietness, bind-window expiry, screensaver configuration, boot clock) with zero capture licenses ONE new-plan successor once the courier has delivered: new plan id, fresh notice, ≥ 60 s spacing, bounded by the new plan's install close; never a re-arm of the same plan; every observed NO still stops; physics/evidence refusals and every gate at the successor's own t0 unchanged | ratified by Ed (2026-09-16 00:35 PDT for t0 refusals, lane record 06 amendment of activation 08ca8197; re-affirmed and extended to bind-window expiry 2026-09-17, interactive session 5c919872, "affirm of course"; recorded verbatim, nothing installed by the entry) |
 
 ---
 
@@ -11963,9 +11963,16 @@ Recorded by the magistrate through this PR the same way directive #337 became D-
 nothing is installed by this entry. Implementation lanes: the desk-side successor
 route is stage D7 of NIGHT-GATE-QUIET-ADMISSION-01 (kernel 231: `joulewise/arm_retry.py`,
 NIGHT_HANDBACK R1) and the watchdog-side release of the census hold is
-WATCHDOG-EARLY-REFUSAL-RELEASE-01 (kernel 234). This entry discharges the
-"awaiting Ed's ruling" status of A212 part (b) recorded in
-`docs/process_traces/2026-09-15-activation-08ca8197/06-refusal-fast-retry-lane-registration.md`.
+WATCHDOG-EARLY-REFUSAL-RELEASE-01 (kernel 234). Provenance correction (Opus pairing refuter on
+ruling 70, record 12): Ed had ALREADY ruled A212 part (b) on 2026-09-16 00:35 PDT
+("unless there's a scientific reason that's an unsound decision absolutely reduce the
+hours to 20 min"), recorded as the amendment at lines 44–61 of
+`docs/process_traces/2026-09-15-activation-08ca8197/06-refusal-fast-retry-lane-registration.md`
+and corroborated at `docs/process/automation_history_2026-09-16.md:286-288`; packet 70's
+exhibit E stopped four lines short of that amendment, so cold-gate ruling 70 Q9 rejected
+the route as unauthorised. This entry therefore (a) promotes the 09-16 ruling from a lane
+record to the decision log, (b) extends it to the bind-window expiry class, which did not
+exist on 09-16, and (c) carries Ed's 09-17 re-affirmation of the consolidated text.
 
 **The rule (Ed's affirmed text):**
 
@@ -11994,8 +12001,9 @@ successor's own `install_close_epoch` lies ahead; the refused plan is never
 re-armed. *Every observed NO still stops*: a NO on any notice thread halts the
 successor exactly as it halts a first arm.
 
-**Why now.** Cold-gate ruling 70 (Q9) REJECTED the successor route because no
-tracked rule authorised it; the 2026-09-17 refusal at 15:30 was harvested at
+**Why now.** Cold-gate ruling 70 (Q9) REJECTED the successor route on a packet that
+omitted the 09-16 amendment (see Status); the consolidated rule now lives where a cold
+judge reads first. The 2026-09-17 refusal at 15:30 was harvested at
 18:09 and produced no successor, roughly three hours of idle quiet machine
 against the ~20-minute target of REFUSAL-FAST-RETRY-01. D-181 already forbids
 artificial spacing between windows; this entry supplies the authorisation D-181
