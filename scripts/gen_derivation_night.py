@@ -922,8 +922,11 @@ def author_quiet_plan(template_path, policy_path, output_path, new_id):
     from dataclasses import replace
     from joulewise.quiet_admission import validate_policy
     from joulewise.night_plan_writer import night_plan_json_bytes
-    template = NightPlan.from_mapping(json.loads(template_path.read_text()))
-    policy = validate_policy(json.loads(policy_path.read_text()))
+    try:
+        template = NightPlan.from_mapping(json.loads(template_path.read_text()))
+        policy = validate_policy(json.loads(policy_path.read_text()), window_max_s=template.window_max_s)
+    except ValueError as error:
+        raise GenerationRefusal(f"invalid quiet admission: {error}") from error
     if template.receipt_class != DERIVATION_RECEIPT_CLASS:
         raise GenerationRefusal("derivation v4 authoring requires DIAGNOSTIC_NO_PACK")
     if not new_id or new_id == template.plan_id:
@@ -934,9 +937,7 @@ def author_quiet_plan(template_path, policy_path, output_path, new_id):
         raise GenerationRefusal(f"post_bind_budget_s must preserve at least {required_post_bind} s of derivation runway")
     if output_path.resolve() == template_path.resolve():
         raise GenerationRefusal("new plan must not replace the template")
-    plan = replace(template, plan_id=new_id, quiet_admission=policy,
-                   window_max_s=max(template.window_max_s,
-                                    math.ceil(policy["bind_max_s"] + policy["post_bind_budget_s"])))
+    plan = replace(template, plan_id=new_id, quiet_admission=policy)
     payload = night_plan_json_bytes(plan)
     runsheet = Path(str(output_path) + ".runsheet.md")
     if output_path.exists() or runsheet.exists():

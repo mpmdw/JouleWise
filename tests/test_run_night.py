@@ -1473,6 +1473,42 @@ runpy.run_path(script, run_name='__main__')
             night_log,
         )
 
+    def test_legacy_write_once_tuple_matches_base(self):
+        import ast
+        base = ast.parse(subprocess.check_output(
+            ['git', 'show', 'a90ab4e8:scripts/run_night.py'], cwd=REPO_ROOT, text=True))
+        assignment = next(node for node in base.body if isinstance(node, ast.Assign)
+                          and any(isinstance(t, ast.Name) and t.id == '_WRITE_ONCE_RECORDS' for t in node.targets))
+        self.assertEqual(self.driver._WRITE_ONCE_RECORDS, ast.literal_eval(assignment.value))
+
+    def test_v2_existing_quiet_journal_reaches_legacy_evaluator(self):
+        night = self.custody / 'night'
+        night.mkdir()
+        journal = night / 'quiet_samples.jsonl'
+        journal.write_text('pre-existing unrelated journal\n')
+        with mock.patch.object(self.driver, 'evaluate_night', side_effect=RuntimeError('legacy evaluated')) as evaluate:
+            with self.assertRaisesRegex(RuntimeError, 'legacy evaluated'):
+                self.driver.run_night(self.plan_path)
+        evaluate.assert_called_once()
+        self.assertIsNone(evaluate.call_args.args[0].quiet_admission)
+        self.assertEqual(journal.read_text(), 'pre-existing unrelated journal\n')
+        self.assertFalse((night / 'rerun.refusal.json').exists())
+
+    def test_v4_existing_quiet_journal_blocks_rerun(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import POLICY
+        plan = replace(self.driver._load_plan(self.plan_path), window_max_s=9600,
+                       quiet_admission=dict(POLICY))
+        self.plan_path.unlink()
+        write_night_plan(self.plan_path, plan)
+        night = self.custody / 'night'
+        night.mkdir()
+        (night / 'quiet_samples.jsonl').write_text('retained\n')
+        with mock.patch.object(self.driver, 'bind_until_quiet') as bind:
+            self.assertEqual(self.driver.run_night(self.plan_path), self.driver.EXIT_REFUSED)
+        bind.assert_not_called()
+        self.assertEqual((night / 'quiet_samples.jsonl').read_text(), 'retained\n')
+
     def test_write_once_rerun_preserves_the_first_nights_records(self) -> None:
         first_exit, first_calls = self._run_night()
         night = self.custody / "night"
@@ -3939,6 +3975,7 @@ class BindClock:
         self.elapsed = float(late)
         self.offset = 1000.0
         self.sleeps = []
+        self.limit = None
 
     def monotonic(self):
         return self.elapsed
@@ -3947,6 +3984,8 @@ class BindClock:
         return self.offset + self.elapsed
 
     def sleep(self, duration):
+        if self.limit is not None and self.elapsed + duration > self.limit + 1e-9:
+            raise AssertionError('bind exceeded the original monotonic deadline')
         self.sleeps.append(duration)
         self.elapsed = round(self.elapsed + duration, 9)
 
@@ -4085,16 +4124,63 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(self.driver._completion_epoch_s(self.plan), original_completion)
         self.assertEqual(self.driver.deadman_epoch(self.plan), original_deadman)
         self.assertEqual(value['bind_deadline_epoch_s'], 1600)
+        # Test the actual driver consumer as well as the bind producer, so a
+        # t0 rewrite after GO cannot pass this named regression.
+        integration = QuietDriverIntegrationTests()
+        self.addCleanup(integration.doCleanups)
+        for go_offset in (0, 540):
+            with self.subTest(go_offset=go_offset):
+                integration.assert_driver_deadlines(go_offset)
+        # Three completed samples cannot restart the remaining bind allowance.
+        phase = QuietBindingTests()
+        phase.setUp()
+        self.addCleanup(phase.doCleanups)
+        phase.clock.limit = 600
+        sample = phase.sampler([.9])
+        deadlines = []
+        def observed():
+            observation = sample()
+            deadlines.append(phase.driver.quiet_admission.bind_deadline_epoch(phase.plan))
+            if phase.samples == 3:
+                observed.hang = True
+            return observation
+        observed.duration = 30
+        refused, decision = phase.bind(observed)
+        self.assertEqual(refused.refusal.reason, 'night_refused_bind_expired')
+        self.assertEqual(deadlines, [1600, 1600, 1600])
+        self.assertEqual(decision['bind_deadline_epoch_s'], 1600)
+        self.assertEqual(phase.clock.monotonic(), 600)
 
     def test_late_driver_consumes_bind_allowance(self):
         self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         self.clock.elapsed = 300
+        self.clock.limit = 600
         receipt, value = self.bind(self.sampler([.9]))
+        self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
         self.assertEqual(self.clock.monotonic(), 600)
         self.assertEqual(value['samples_total'], 10)
         self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
 
     def test_wall_rollback_never_extends_absolute_deadline(self):
+        self.clock.limit = 600
+        sample = self.sampler([.9])
+        sample.hang = True
+        original_sleep = self.clock.sleep
+        rolled_back = False
+        def sleep(duration):
+            nonlocal rolled_back
+            original_sleep(duration)
+            if self.clock.elapsed >= 90 and not rolled_back:
+                self.clock.offset -= 100
+                rolled_back = True
+        self.clock.sleep = sleep
+        receipt, value = self.bind(sample)
+        self.assertTrue(rolled_back)
+        self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
+        self.assertEqual(self.clock.monotonic(), 600)
+        self.assertEqual(value['bind_deadline_epoch_s'], 1600)
+
+    def test_observed_wall_rollback_is_terminal_boot_clock(self):
         self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         original = self.sampler([.9])
         def rollback():
@@ -4109,15 +4195,92 @@ class QuietBindingTests(unittest.TestCase):
 
     def test_sampler_hang_cannot_block_census_or_expiry(self):
         self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
-        sample = self.sampler([.02])
-        sample.hang = True
-        receipt, value = self.bind(sample)
+        import threading
+        import time
+        from dataclasses import replace
+        census_ticks = []
+        original_run = self.probes.run
+        def run(argv):
+            if argv == night_gate.AGENT_CENSUS_ARGV:
+                census_ticks.append(self.clock.monotonic())
+            return original_run(argv)
+        self.probes = replace(self.probes, run=run)
+        def sample():
+            while True:
+                time.sleep(3600)
+        class Task(self.driver._BindTask):
+            closed = False
+            def close(task):
+                if not task.closed:
+                    super(Task, task).close()
+                    task.closed = True
+        task = Task(sample)
+        pid = task.process.pid
+        self.addCleanup(task.close)
+        entered = threading.Event()
+        outcomes = []
+        def check_ready():
+            entered.set()
+            try:
+                at = time.perf_counter()
+                outcomes.append((task.ready(), time.perf_counter() - at))
+            except Exception as error:
+                outcomes.append(error)
+        thread = threading.Thread(target=check_ready, daemon=True)
+        thread.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            thread.join(0.05)
+            self.assertFalse(thread.is_alive(), 'ready() blocked beyond 50 ms on a real hung worker')
+            self.assertFalse(outcomes[0][0])
+            self.assertLess(outcomes[0][1], 0.05)
+            fake_task = self.task
+            def supervised(call):
+                if call is sample:
+                    self.tasks.append(task)
+                    return task
+                return fake_task(call)
+            self.task = supervised
+            self.clock.limit = 600
+            receipt, value = self.bind(sample)
+        finally:
+            if thread.is_alive():
+                # Unblock a join() mutant before close() joins the same child;
+                # concurrent multiprocessing joins can race their exit status.
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                thread.join(1)
+                self.assertFalse(thread.is_alive(), 'ready helper did not unblock after worker termination')
+            task.close()
+            thread.join(1)
         self.assertEqual(self.clock.monotonic(), 600)
         self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
         censuses = [json.loads(s) for s in (self.night/'censuses.jsonl').read_text().splitlines()]
         self.assertGreaterEqual(len(censuses), 20)
+        # A worker launched at the cadence is collected on the next 50 ms
+        # supervisor tick; assert bounded evaluation rather than exact pickup.
+        for due in (30, 90, 570):
+            self.assertTrue(any(due <= tick <= due + 0.05 + 1e-9 for tick in census_ticks), census_ticks)
         self.assertEqual(self.journal()[0]['decision'], 'error')
         self.assertIn('attribution_unavailable', value)
+        self.assertTrue(task.closed)
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)
+
+    def test_changed_boot_identity_is_terminal_boot_clock(self):
+        original = self.sampler([.02])
+        def changed():
+            observation = original()
+            self.source.results[night_gate.BOOT_SESSION_ARGV] = _probe(
+                night_gate.BOOT_SESSION_ARGV, stdout='11111111-1111-4111-8111-111111111111')
+            return observation
+        changed.duration = 30
+        receipt, value = self.bind(changed)
+        self.assertEqual(receipt.refusal.reason, 'night_refused_boot_clock')
+        self.assertEqual(self.samples, 1)
+        self.assertIsNone(value['go_epoch_s'])
 
     def test_malformed_sampler_is_probe_error_never_quiet(self):
         self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
@@ -4244,6 +4407,9 @@ class QuietDriverIntegrationTests(unittest.TestCase):
         return fixture, plan
 
     def test_v4_driver_calls_bind_and_keeps_shutdown_anchored_to_entry(self):
+        self.assert_driver_deadlines(540)
+
+    def assert_driver_deadlines(self, go_offset):
         from dataclasses import replace
         fixture, plan = self.fixture(busy_core_max=0.05)
         driver = fixture.driver
@@ -4268,14 +4434,37 @@ class QuietDriverIntegrationTests(unittest.TestCase):
                 task_factory=lambda call: BindFakeTask(call, clock),
                 monotonic=clock.monotonic, sleep=clock.sleep)
         driver.bind_until_quiet = bind
+        if go_offset == 0:
+            # Boundary control for the downstream driver only. The +540 case
+            # above uses the real interval loop; this is not admission evidence.
+            from tests.test_quiet_admission import metrics
+            receipt = driver.evaluate_night(replace(plan, quiet_admission=None), probes)
+            admission = dict(quiet_admission=plan.quiet_admission, admission_is_capture_evidence=False,
+                bind_deadline_epoch_s=plan.t0_epoch_s+600, go_epoch_s=plan.t0_epoch_s,
+                samples_total=2, samples_quiet_run_at_go=2, quiet_samples_lines=2,
+                quiet_samples_sha256='a'*64, top_consumers_at_decision=metrics(.02)['top_consumers'],
+                load_avg_diagnostic={'raw': '3.7'})
+            driver.bind_until_quiet = lambda *args, **kwargs: replace(
+                receipt, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=admission)
         with mock.patch.object(driver.time, 'time', clock.wall), \
              mock.patch.object(driver.time, 'monotonic', clock.monotonic), \
-             mock.patch.object(driver, '_run_chain_once', return_value=(0,None,0,[],True)) as chain:
+             mock.patch.object(driver, '_run_chain_once', return_value=(0,None,0,[],True)) as chain, \
+             mock.patch.object(driver, '_finish_reporting', wraps=driver._finish_reporting) as reporting:
             self.assertEqual(driver.run_night(fixture.plan_path), driver.EXIT_GO)
-        self.assertEqual(clock.monotonic(), 540)
+        self.assertEqual(clock.monotonic(), go_offset)
         self.assertEqual(chain.call_args.kwargs['shutdown_monotonic'], 9900)
+        chain_plan = chain.call_args.args[1]
+        t0 = fixture.t0_epoch_s
+        self.assertEqual(chain_plan.t0_epoch_s, t0)
+        # Exact instants from this fixture's scheduled t0, never from GO.
+        self.assertEqual(chain_plan.t0_epoch_s + chain_plan.window_max_s + driver.WINDOW_SHUTDOWN_GRACE_S, t0+9900)
+        self.assertEqual(driver._completion_epoch_s(chain_plan), t0+9900)
+        self.assertEqual(chain_plan.t0_epoch_s + chain_plan.window_max_s + driver.COURIER_DEADLINE_S, t0+9900)
+        self.assertEqual(driver.deadman_epoch(chain_plan), t0+13500)
+        self.assertEqual(reporting.call_args.kwargs['deadman_epoch_s'], t0+13500)
         value = json.loads((fixture.custody/'night/receipt.json').read_bytes())
-        self.assertEqual(value['go_epoch_s'], plan.t0_epoch_s+540)
+        self.assertEqual(value['go_epoch_s'], t0+go_offset)
+        self.assertEqual(value['bind_deadline_epoch_s'], t0+600)
         self.assertEqual(night_gate.validate_receipt(value), [])
         self.assertTrue((fixture.custody/'night/chain.started').exists())
         self.assertFalse((fixture.custody/'night/refusal.json').exists())

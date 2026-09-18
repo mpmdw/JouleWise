@@ -1162,6 +1162,22 @@ if __name__ == "__main__":
 
 
 class QuietGatePhaseTests(unittest.TestCase):
+    def test_v4_failed_or_empty_boot_probe_is_probe_error(self):
+        from dataclasses import replace
+        from tests.test_quiet_admission import POLICY
+        plan = replace(make_plan(), window_max_s=9600, quiet_admission=dict(POLICY))
+        for code, stdout in ((2, ''), (2, BOOT_UUID), (0, ''), (0, '  \n')):
+            with self.subTest(code=code, stdout=stdout):
+                source = FakeProbeSource()
+                with mock.patch.object(night_gate, 'D166_REGISTRATION_SHA256',
+                                       hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
+                    static = night_gate.evaluate_static(plan, source.probes())
+                self.assertIsNone(static.refusal)
+                source.results[night_gate.BOOT_SESSION_ARGV] = result(
+                    night_gate.BOOT_SESSION_ARGV, exit_code=code, stdout=stdout, stderr='fixture probe failure')
+                receipt = night_gate.evaluate_dynamic_hard(plan, source.probes(), static)
+                self.assertEqual(receipt.refusal.reason, 'night_probe_error')
+
     def test_v2_receipt_bytes_and_validation_match_original_legacy_scenarios(self):
         """Compare the actual pre-v4 evaluator, including pack-class refusals."""
         import dataclasses
@@ -1201,6 +1217,19 @@ class QuietGatePhaseTests(unittest.TestCase):
                     value = json.loads(receipts[0])
                     self.assertEqual(baseline.validate_receipt(value), night_gate.validate_receipt(value))
                     self.assertEqual(set(value), baseline._RECEIPT_KEYS)
+
+        for code, stdout in ((2, ''), (2, BOOT_UUID), (0, '')):
+            receipts = []
+            for engine in (baseline, night_gate):
+                source = FakeProbeSource()
+                source.results[night_gate.BOOT_SESSION_ARGV] = result(
+                    night_gate.BOOT_SESSION_ARGV, exit_code=code, stdout=stdout)
+                source.results = {key: engine.ProbeResult(**dataclasses.asdict(value))
+                                  for key, value in source.results.items()}
+                receipt = engine.evaluate_night(make_plan(), source.probes())
+                self.assertEqual(receipt.refusal.reason, 'night_refused_boot_clock')
+                receipts.append(receipt.to_json_bytes())
+            self.assertEqual(*receipts)
 
     def test_static_and_dynamic_seams_cannot_authorize_v4_without_intervals(self):
         from dataclasses import replace

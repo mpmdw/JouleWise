@@ -1102,20 +1102,25 @@ class QuietPlanGeneratorTests(unittest.TestCase):
         from tests.test_quiet_admission import POLICY
         with _census_clean_temporary_directory() as directory:
             fixture = WrapperFixture(Path(directory))
-            args = GEN.build_parser().parse_args(['--plan', str(fixture.plan_path)])
+            args = GEN.build_parser().parse_args([
+                '--plan', str(fixture.plan_path), '--session-id', fixture.session_id,
+                '--evidence-root-id', 'EVR-derivation-20260912',
+                '--calibration-plan', str(fixture.frozen_plan),
+                '--identity-epoch-json', str(fixture.night_root / 'identity_epoch.json'),
+                '--t1-bindings-json', str(fixture.night_root / 't1_bindings.json')])
             policy = dict(POLICY, post_bind_budget_s=7980)
-            fixture.write_plan(schema='joulewise.night_plan.v4', schema_version=4,
-                               quiet_admission=policy, window_max_s=8579)
-            with self.assertRaisesRegex(GEN.GenerationRefusal, 'bind_max_s \\+ post_bind_budget_s'):
-                GEN.build_spec(args)
-            fixture.write_plan(schema='joulewise.night_plan.v4', schema_version=4,
-                               quiet_admission=dict(policy, post_bind_budget_s=7979), window_max_s=9600)
-            with self.assertRaisesRegex(GEN.GenerationRefusal, 'at least 7980'):
-                GEN.build_spec(args)
+            for window, runway, message in ((8579, 7980, 'bind_max_s \\+ post_bind_budget_s'),
+                                            (9600, 7979, 'at least 7980')):
+                with self.subTest(window=window, runway=runway):
+                    fixture.write_plan(schema='joulewise.night_plan.v4', schema_version=4,
+                                       quiet_admission=dict(policy, post_bind_budget_s=runway), window_max_s=window)
+                    with self.assertRaisesRegex(GEN.GenerationRefusal, message):
+                        GEN.build_spec(args)
             fixture.write_plan(schema='joulewise.night_plan.v4', schema_version=4,
                                quiet_admission=policy, window_max_s=8580)
             emitted = fixture.emit()
             self.assertEqual(emitted.returncode, 0, emitted.stderr)
+            GEN.build_spec(args)  # complete fixture reaches emission, not None.lower
             # A schedule change must move the floor; a literal 7980 mutant fails.
             with mock.patch.object(GEN, 'PRE_SETTLE_ALLOWANCE_S', 301):
                 with self.assertRaisesRegex(GEN.GenerationRefusal, 'at least 7981'):
@@ -1130,7 +1135,7 @@ class QuietPlanGeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             template, policy, target = root/'template.json', root/'policy.json', root/'new.json'
-            template.write_bytes(night_plan_json_bytes(replace(make_plan(), window_max_s=9000)))
+            template.write_bytes(night_plan_json_bytes(replace(make_plan(), window_max_s=9600)))
             before = template.read_bytes()
             policy.write_text(json.dumps(POLICY))
             args = ['--quiet-admission-json', str(policy), '--plan-template', str(template),
@@ -1154,6 +1159,32 @@ class QuietPlanGeneratorTests(unittest.TestCase):
                 missing = dict(POLICY)
                 del missing[field]
                 policy.write_text(json.dumps(missing))
-                with self.subTest(missing=field), self.assertRaises(ValueError):
+                with self.subTest(missing=field), self.assertRaises(GEN.GenerationRefusal):
                     GEN.author_quiet_plan(template, policy, root/'missing.json', 'missing-policy-key')
                 self.assertFalse((root/'missing.json').exists())
+
+    def test_authoring_refuses_short_window_and_post_bind_runway(self):
+        from dataclasses import replace
+        from tests.test_night_gate import make_plan
+        from tests.test_quiet_admission import POLICY
+        from joulewise.night_plan_writer import night_plan_json_bytes
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for window, runway in ((8579, 7980), (9600, 7979)):
+                with self.subTest(window=window, runway=runway):
+                    template, policy = root/'template.json', root/'policy.json'
+                    target = root/f'new-{window}-{runway}.json'
+                    template.write_bytes(night_plan_json_bytes(replace(make_plan(), window_max_s=window)))
+                    policy.write_text(json.dumps(dict(POLICY, post_bind_budget_s=runway)))
+                    with self.assertRaises(GEN.GenerationRefusal):
+                        GEN.author_quiet_plan(template, policy, target, 'fresh-night')
+                    self.assertFalse(target.exists())
+                    # The same typed refusal is required for a malformed v4
+                    # template, not only v2 coordinates with an added policy.
+                    mapping = json.loads(template.read_text())
+                    mapping.update(schema='joulewise.night_plan.v4', schema_version=4,
+                                   quiet_admission=json.loads(policy.read_text()))
+                    template.write_text(json.dumps(mapping))
+                    with self.assertRaises(GEN.GenerationRefusal):
+                        GEN.author_quiet_plan(template, policy, target, 'fresh-night')
+                    self.assertFalse(target.exists())

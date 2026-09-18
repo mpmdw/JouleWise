@@ -6,7 +6,20 @@ sealed plan is a JSON document whose exact bytes are bound by a SHA-256
 fingerprint before execution. This mechanism adds explicit packless plan v4
 and receipt v3. It does not migrate an existing plan or authorize measurement.
 A transaction pack is a separately authorized collection of experiment inputs;
-its v3 plan and existing receipt/GO contracts retain their current behavior.
+its v3 plan and existing receipt contracts retain their current behavior.
+
+## Terms
+
+- **t0** is the scheduled start time in the sealed plan.
+- **GO** is the gate's permission to start the chain of measurement operations.
+- **Bind window** is the bounded period before a reservation claims ledger slots or the driver claims `chain.started`; its **bind allocation**, `bind_max_s`, is the maximum duration allowed from t0.
+- **Sample interval**, `sample_interval_s`, is the elapsed span over which two cumulative CPU counters are differenced.
+- **Consecutive quiet samples**, `consecutive_quiet_samples`, is the required uninterrupted count of intervals meeting the sealed CPU limit; one busy interval resets the count to zero.
+- **Busy-core equivalent** is one second of CPU work per elapsed second: 0.9 means 90% of one logical core, regardless of the machine's core count.
+- **Observer** means the driver, sampler interpreter and their child processes; **observer cost** is their CPU work, which must be counted rather than subtracted.
+- **Terminal versus WAIT** distinguishes a refusal that ends this invocation immediately from an excessive-CPU observation that continues binding without writing a refusal artifact.
+- **Attribution** means identifying which observed processes contributed CPU work, alongside any work only visible in the host total.
+- **Cutoff authority**, `cutoff_authority`, is the required record path naming the gate ruling that affirmed the sealed CPU limit; naming a path alone does not authenticate the ruling.
 
 All admission policy numbers are **PROVISIONAL**. No cutoff is proposed or
 validated here. Cold-gate ruling 70 proposition 4 refused activation pending
@@ -74,13 +87,6 @@ test fixtures use the literal above, which is not activation authority. The bind
 interval times the required count, and window_max_s must hold bind_max_s plus
 post_bind_budget_s. There is no implicit policy for an old or malformed plan.
 
-The **bind window** is the bounded period before any reservation (claiming
-ledger slots) or chain-start claim (`chain.started`). The **sample interval**
-is the elapsed span over which CPU counters are differenced. A **busy-core
-equivalent** is one second of CPU work per elapsed second: 0.9 means 90% of
-one logical core, irrespective of how many cores the machine contains.
-**Consecutive quiet samples** means an uninterrupted run of intervals at or
-below the sealed cutoff; one busy interval resets the count to zero.
 
 ## Rebuilding one observation
 
@@ -215,6 +221,8 @@ No measurement, settle, slot, capture, claim or shutdown constant is changed.
 the template, requires a different id, requires post-bind runway at least the computed schedule plus pre-settle
 allowance (7980 s for twelve slots), and exclusively creates the new v4 plan and OUTPUT.runsheet.md. The
 template must carry the new night's fresh timing, custody and reviewed inputs.
+Its window must already hold the bind allocation plus post-bind runway;
+authoring refuses an undersized window and never extends it silently.
 Generate its wrapper afterward with the existing `--plan OUTPUT` invocation.
 Without the flag the legacy `--check` output remains byte-identical.
 

@@ -26,11 +26,44 @@ class CpuIntervalTests(unittest.TestCase):
 
     def test_low_load_busy_daemon_never_admits(self):
         self.assertFalse(qa.is_quiet(metrics(0.9, load=1.2), dict(POLICY, busy_core_max=0.05)))
+        for command in ('fseventsd', 'mdworker_shared', 'mds', 'mds_stores',
+                        'mediaanalysisd', 'deleted_helper', 'cloudd', 'bird',
+                        'softwareupdated', 'backupd', 'arbitrary-program'):
+            with self.subTest(command=command):
+                observed = qa.interval_metrics(
+                    {(2, 'old'): row(2, 10, command=command)},
+                    {(2, 'old'): row(2, 37, command=command)},
+                    interval_s=30, idle_fraction=1, logical_cpu=16, observer_pid=99, wall_start=100)
+                self.assertAlmostEqual(observed['process_busy_cores'], 0.9)
+                self.assertAlmostEqual(observed['busy_cores'], 0.9)
+                self.assertFalse(qa.is_quiet(observed, dict(POLICY, busy_core_max=0.05)))
 
     def test_finished_burst_admits_despite_high_load(self):
         self.assertTrue(qa.is_quiet(metrics(0.02, load=3.7), dict(POLICY, busy_core_max=0.05)))
+        # Deliberately supply stale percent CPU alongside cumulative snapshots.
+        # Admission must ignore it in both directions.
+        for percent_cpu, delta, expected_quiet in ((90, 0, True), (0, 27, False)):
+            with self.subTest(percent_cpu=percent_cpu, delta=delta):
+                before = {(2, 'old'): dict(row(2, 100), percent_cpu=percent_cpu)}
+                after = {(2, 'old'): dict(row(2, 100 + delta), percent_cpu=percent_cpu)}
+                observed = qa.interval_metrics(before, after, interval_s=30,
+                    idle_fraction=1, logical_cpu=16, observer_pid=99, wall_start=100)
+                self.assertEqual(observed['busy_cores'], delta / 30)
+                self.assertEqual(qa.is_quiet(observed, dict(POLICY, busy_core_max=0.05)), expected_quiet)
 
     def test_cpu_aggregate_identity_and_observer_accounting(self):
+        header = 'PID PPID STARTED TIME COMM\n'
+        first_start, second_start = 'Thu Sep 17 19:00:00 2026', 'Thu Sep 17 19:00:10 2026'
+        first = qa.parse_ps(header + f'42 1 {first_start} 0:10.00 old-command\n')
+        second = qa.parse_ps(header + f'42 1 {second_start} 0:01.00 new-command\n')
+        self.assertEqual(set(first), {(42, first_start)})
+        self.assertEqual(set(second), {(42, second_start)})
+        self.assertEqual(len(set(first) | set(second)), 2)
+        self.assertFalse(set(first) & set(second))
+        observed = qa.interval_metrics(first, second, interval_s=30, idle_fraction=1,
+            logical_cpu=16, observer_pid=99, wall_start=first[(42, first_start)]['start_epoch_s'] + 1)
+        self.assertAlmostEqual(observed['busy_cores'], 1 / 30)  # new lifetime, not 1 - 10
+        self.assertEqual(observed['unaccounted'][0]['start_identity'], first_start)
         before = {(pid, 'old'): row(pid, 1) for pid in range(10, 20)}
         after = {(pid, 'old'): row(pid, 1.6) for pid in range(10, 20)}
         result = qa.interval_metrics(before, after, interval_s=30, idle_fraction=1,

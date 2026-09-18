@@ -1279,7 +1279,7 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
         if legacy_load else "agent, screensaver configuration, AC, display and thermal predicates passed")
 
 
-def _check_clock(plan, probes, rows, evidence, *, pack_arm=None):
+def _check_clock(plan, probes, rows, evidence, *, pack_arm=None, strict_probe=False):
     # C4 is deliberately local-only: boot UUID plus an epoch/monotonic pair.
     try:
         boot = _run(probes, BOOT_SESSION_ARGV)
@@ -1287,6 +1287,9 @@ def _check_clock(plan, probes, rows, evidence, *, pack_arm=None):
         return _probe_refusal(plan, probes, rows, evidence, exc)
     evidence.append(boot)
     rows["C4"].evidence.append(_probe_citation(boot))
+    if strict_probe and (not _completed_ok(boot) or not boot.stdout.strip()):
+        return _probe_refusal(plan, probes, rows, evidence,
+                              ProbeError("kern.bootsessionuuid probe failed or returned no identity"))
     boot_session_uuid = boot.stdout.strip().lower()
     canonical_uuid: str | None = None
     if _completed_ok(boot):
@@ -1389,7 +1392,7 @@ def evaluate_dynamic_hard(plan: NightPlan, probes: Probes, static: Receipt) -> R
     refused = _check_machine(plan, probes, rows, evidence, legacy_load=False)
     if refused is not None:
         return refused
-    refused = _check_clock(plan, probes, rows, evidence)
+    refused = _check_clock(plan, probes, rows, evidence, strict_probe=True)
     if refused is not None:
         return refused
     return replace(_finish(plan, probes, rows, None,

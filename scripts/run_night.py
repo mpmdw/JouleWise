@@ -123,8 +123,8 @@ _WRITE_ONCE_RECORDS = (
     "chain.started",
     "chain.exited",
     "courier.json",
-    "quiet_samples.jsonl",
 )
+_QUIET_WRITE_ONCE_RECORDS = _WRITE_ONCE_RECORDS + ("quiet_samples.jsonl",)
 
 
 def _build_code_map(codes: set[str] | frozenset[str]) -> dict[str, str]:
@@ -1522,9 +1522,11 @@ def _completion_epoch_s(plan: NightPlan) -> float:
     return plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S
 
 
-def _existing_record(night_dir: Path) -> Path | None:
+def _existing_record(night_dir: Path, plan: NightPlan | None = None) -> Path | None:
+    records = (_QUIET_WRITE_ONCE_RECORDS if plan is not None and plan.quiet_admission is not None
+               else _WRITE_ONCE_RECORDS)
     return next(
-        (night_dir / name for name in _WRITE_ONCE_RECORDS if (night_dir / name).exists()),
+        (night_dir / name for name in records if (night_dir / name).exists()),
         None,
     )
 
@@ -2014,7 +2016,8 @@ class _BindTask:
         writer.close()
 
     def ready(self):
-        return self.reader.poll() or not self.process.is_alive()
+        # Never wait for the worker here: census and expiry must run each tick.
+        return self.reader.poll(0) or not self.process.is_alive()
 
     def result(self):
         try:
@@ -2265,7 +2268,7 @@ def run_night(
     custody_root = Path(plan.custody_root)
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
-    existing = _existing_record(night_dir)
+    existing = _existing_record(night_dir, plan)
     if existing is not None:
         _write_rerun_refusal(night_dir, plan, existing)
         return EXIT_REFUSED

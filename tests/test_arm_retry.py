@@ -469,6 +469,20 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
         self.assertFalse(arm_retry.zero_capture_successor_allowed(result, receipt,
             dict(delivery, successors_used=1)).allowed)
         self.assertEqual(arm_retry.classify_abort('night_refused_not_quiet'), 'cold_gate')
+        fixture = ArmRetryTests()
+        fixture.setUp()
+        result['ended_epoch_s'] = fixture.now - 60
+        notice = dict(fixture.notice, attempt=1, latest_abort_epoch_s=None)
+        # A different id cannot cover reuse of the predecessor's bytes digest.
+        decision = arm_retry.successor_arm_allowed(fixture.now, fixture.plan, notice,
+            result, receipt, dict(delivery, plan_sha256=notice['plan_sha256']))
+        self.assertEqual(decision.reason, 'predecessor_rearm')
+        # Conversely, old same-candidate history cannot authorize new bytes.
+        candidate = dict(fixture.candidate, plan_id='new-successor')
+        raw = json.dumps(candidate).encode()
+        fixture.plan.update(plan_bytes=raw, saved_plan_bytes=raw)
+        fixture.notice.update(plan_id='new-successor', plan_sha256=hashlib.sha256(raw).hexdigest())
+        self.assertEqual(fixture.decide().reason, 'candidate_changed')
 
     def test_bind_expiry_stays_cold_and_uses_d182_successor_route(self):
         result, receipt, delivery = self.evidence()
