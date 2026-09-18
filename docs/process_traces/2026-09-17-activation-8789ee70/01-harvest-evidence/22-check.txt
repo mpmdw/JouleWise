@@ -1,0 +1,14 @@
+Desk epoch watch (identity comparison only; no capture authorization)
+ACTIVE acceptance: d079_calibration_acceptance_v2_n17_r6
+field                  expected                                                         observed                                                         status
+os_build               25F84                                                            25G83                                                            MISMATCH
+hardware_model         Mac15,9                                                          Mac15,9                                                          match
+powermetrics_sha256    d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5 MISMATCH
+mlx_version            0.31.2                                                           0.31.2                                                           match
+mismatched fields: os_build, powermetrics_sha256
+
+Registration dry run (counts and states only; no measured value)
+d079-epoch-25g83-derivation-n1-20260917: absent
+prefix pending or unresolved rows: 0
+registration admissible for prepare-candidate: no
+  blocker: session d079-epoch-25g83-derivation-n1-20260917 is not in the ledger
