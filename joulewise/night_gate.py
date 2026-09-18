@@ -1487,6 +1487,19 @@ def _validate_quiet_receipt(value, defects):
         if (not isinstance(value["journal_failure"], str) or not value["journal_failure"].strip()
                 or value["verdict"] != "REFUSED"):
             defects.append("journal_failure: requires a reason and REFUSED verdict")
+    if "supervision_residue" in value:
+        residue = value["supervision_residue"]
+        if (value["verdict"] != "REFUSED" or not isinstance(residue, list)
+                or not 1 <= len(residue) <= 32):
+            defects.append("supervision_residue: requires 1..32 jobs and REFUSED verdict")
+        else:
+            for job in residue:
+                if (not isinstance(job, Mapping) or set(job) != {"job_id", "kind", "pid", "state"}
+                        or not isinstance(job["job_id"], str) or not job["job_id"]
+                        or not isinstance(job["kind"], str) or job["kind"] not in {"static", "hard", "sample", "census"}
+                        or (job["pid"] is not None and (type(job["pid"]) is not int or job["pid"] <= 0))
+                        or not isinstance(job["state"], str) or job["state"] not in {"launch_pending", "unreaped"}):
+                    defects.append("supervision_residue: malformed job")
     if "observer_cpu_s" in value:
         cost = value["observer_cpu_s"]
         if type(cost) not in (int, float) or not math.isfinite(cost) or cost < 0:
@@ -1558,7 +1571,7 @@ def validate_receipt(value: Mapping[str, object]) -> list[str]:
     if quiet and "boot_identity_unavailable" in value:
         expected = expected | {"boot_identity_unavailable"}
     if quiet:
-        expected = expected | ({"journal_failure", "observer_cpu_s"} & set(value))
+        expected = expected | ({"journal_failure", "observer_cpu_s", "supervision_residue"} & set(value))
     if not _exact_keys(value, expected, "receipt", defects):
         return defects
     if quiet:

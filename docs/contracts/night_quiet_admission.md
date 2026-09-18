@@ -175,12 +175,17 @@ control channel before fake time advances. No test waits a real sample interval.
 ### Supervision
 
 The **supervisor** is the parent tick loop that owns the absolute deadline.
-No operation on that path waits for worker progress, an end-of-file indication,
-filesystem completion or child exit. Every tick checks the fixed monotonic
+**EOF** means end-of-file; **exec** is the operating-system step that starts a
+worker executable. The **cleanup budget** is the one wall-clock second allowed
+for finalization after the decision is latched.
+Cold-gate ruling 71 states its bar verbatim: “no operation on the tick path (and on the path from expiry to the returned receipt) may wait on anything outside the ticker's own control — worker progress, EOF, filesystem completion including `exec`, child exit — and every remaining wait is bounded by a constant small against the 30 s census cadence, so that every census fires within its interval and an expired deadline yields a returned REFUSED receipt within one tick plus the 1 s cleanup budget whatever the worker, filesystem or child are doing.”
+Every tick checks the fixed monotonic
 deadline, services census cadence, advances every live transport, and polls
 cleanup, in that order. Static checks, pre-sample checks, sampling, post-sample
 checks, final checks and cleanup are explicit phases; none blocks those steps.
-Exec startup runs on a launcher thread rather than inside the ticker.
+Exec startup runs on a daemon launcher thread rather than inside the ticker.
+Both service threads start before the bind deadline is established; the
+conversion uses the original entry clocks, so startup consumes the window.
 
 Every job has a dedicated nonblocking pipe. Its **frame** is a four-byte
 big-endian length followed by one JSON envelope `{job_id, ok, result | error}`.
@@ -207,7 +212,15 @@ sample when an interval is in progress, and refuses with
 Cancellation immediately signals the dedicated group; reaping polls
 `waitpid(WNOHANG)` (a non-waiting child-exit check). A worker that hangs after
 publication is cancelled too. The parent returns only after its direct children
-are reaped. Journal work belongs to one parent thread, receiving immutable
+are reaped or the cleanup budget expires. This budget bounds the entire cleanup phase, including a
+launcher still waiting for exec and a child that has not exited. A refused
+receipt lists any remaining jobs in **`supervision_residue`**: each entry gives
+the job ID, kind, PID (null when no child exists yet), and `launch_pending` or
+`unreaped` state. A late exec completion after cancellation is killed as a
+process group and reaped by the daemon launcher itself; the ticker never waits
+for it. A daemon does not hold process exit open.
+
+Journal work belongs to one parent thread, receiving immutable
 records through a bounded, nonblocking queue. It owns append order, incremental
 SHA-256 and line counts, and **acknowledgements** issued after a successful
 flush and synchronization. Census writes use this thread too. GO requires the
@@ -215,7 +228,11 @@ final sample acknowledgement, followed by final hard checks; a slow journal
 cannot make old hard predicates authorize a later GO. Queue saturation or a write failure forbids GO
 and is reported as `journal_failure`; a blocked writer cannot prevent worker
 termination. Cleanup allows writer finalization at most one wall-clock second after the
-latched decision, then reports failure without waiting for the writer. This
+latched decision, within the same whole-cleanup budget, then reports failure
+without waiting for the writer. Bookkeeping mutexes in the queue never cover
+write, flush or synchronization. Any writer failure, including a thread exit
+raised during synchronization, records its exception type and text before the
+thread exits. This
 never adds admission time.
 On journal failure the receipt hash/count describe the acknowledged durable
 prefix; an interrupted write cannot be represented as acknowledged evidence.

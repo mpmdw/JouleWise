@@ -12,7 +12,9 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -50,18 +52,18 @@ def worker(args):
             return
         time.sleep(3600)
     elif mode == 'partial_header':
+        ack('fault')
         os.write(fd, payload[:2])
-        ack('fault')
     elif mode == 'partial_body':
-        os.write(fd, payload[:5])
         ack('fault')
+        os.write(fd, payload[:5])
     elif mode == 'recv_stall':
         os.write(fd, payload[:5])
         ack('fault')
         time.sleep(3600)
     elif mode == 'oversize':
-        os.write(fd, (256 * 1024 + 1).to_bytes(4, 'big'))
         ack('fault')
+        os.write(fd, (256 * 1024 + 1).to_bytes(4, 'big'))
         while True:
             os.write(fd, b'x' * 65536)
     elif mode == 'empty':
@@ -71,6 +73,15 @@ def worker(args):
         qa.publish_observation(fd, spec['id'], lambda: 'x' * (256 * 1024))
         return
     elif mode in ('startup_hang', 'presend_hang'):
+        ack('fault')
+        time.sleep(3600)
+    elif mode == 'term_delay':
+        def delayed_exit(signum, _frame):
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            ack('signalled')
+            time.sleep(2.5)
+            os._exit(0)
+        signal.signal(signal.SIGTERM, delayed_exit)
         ack('fault')
         time.sleep(3600)
     elif mode == 'slow':
@@ -118,8 +129,12 @@ class Bench:
         night_gate.D166_REGISTRATION_SHA256 = hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()
         self.tick_cost = []
         self.chunk_early = []
+        self.chunk_deadlines = []
+        self.result_probes = []
         self.blocked_writer = None
         self.block_event = None
+        self.writer_entered = threading.Event()
+        self.expiry_wall = None
 
     def dispatch(self, kind, job_id, call, request, launcher):
         from tests.test_quiet_admission import metrics
@@ -130,7 +145,7 @@ class Bench:
         if kind == 'sample':
             self.samples += 1
             mode = self.scenario.removesuffix('_late')
-            if mode in ('journal_block', 'journal_error', 'journal_saturation', 'census_hit', 'round_cost', 'large_frame', 'census_stall_hit', 'journal_late_power'):
+            if mode in ('journal_block', 'journal_error', 'journal_system_exit', 'journal_saturation', 'census_hit', 'round_cost', 'large_frame', 'census_stall_hit', 'journal_late_power'):
                 mode = 'normal'
             if self.scenario == 'presend_hang' and self.samples > 1:
                 mode = 'normal'
@@ -159,7 +174,8 @@ class Bench:
             sys.executable, '-B', str(Path(__file__).resolve()), '--worker', str(fd),
             str(child.fileno()), json.dumps(spec)), launcher, test_pass_fds=(child.fileno(),))
         self.tasks.append(dict(task=task, kind=kind, mode=mode, control=control, child=child,
-            buffer=b'', events=[], ack=False, eof=False, sent=0, began=self.now, max_bytes=0, max_reads=0, max_buffer=0))
+            buffer=b'', events=[], ack=False, eof=False, sent=0, began=self.now, max_bytes=0, max_reads=0, max_buffer=0,
+            ack_until=time.monotonic()+1, result_checked=False))
         return task
 
     def controls(self):
@@ -188,6 +204,18 @@ class Bench:
 
     def sleep(self, duration):
         self.controls()
+        if self.blocked_writer is not None:
+            assert self.writer_entered.is_set(), 'journal barrier fault not acknowledged'
+        if self.scenario == 'slow':
+            # Inspect the actual ticker's local deadline, including after every
+            # transport chunk; checking only the receipt's epoch misses resets.
+            ticker = sys._getframe(1)
+            assert ticker.f_code.co_name == 'bind_until_quiet'
+            actual = ticker.f_locals['deadline']
+            chunks = sum(e['stage'] == 'chunk' for r in self.tasks for e in r['events'])
+            assert actual == 600, f'bind deadline changed after chunk {chunks}: {actual} != 600'
+            if chunks and chunks > len(self.chunk_deadlines):
+                self.chunk_deadlines.append([chunks, actual])
         if self.scenario == 'journal_late_power' and self.now >= 60 and self.blocked_writer is not None:
             argv = self.gate.PMSET_BATT_ARGV
             self.source.results[argv] = self.gate.ProbeResult(argv, 0, "Now drawing from 'Battery Power'", '', 0)
@@ -197,11 +225,28 @@ class Bench:
         # the separate control channel acknowledges each actual fault point.
         for row in self.tasks:
             task = row['task']
-            if task.cancelled:
-                continue
-            if not row['ack']:
+            # Cancellation is NOT evidence that the injected fault was reached.
+            # Fault workers must ACK even if a complete/invalid frame cancelled
+            # them before this sleep call; unlaunched normal jobs have no fault.
+            if not row['ack'] and (not task.cancelled or row['mode'] != 'normal'):
+                assert time.monotonic() < row['ack_until'], f"fault ACK missing: {row['mode']} {task.job_id}"
                 time.sleep(.001)
                 return
+            if task.cancelled:
+                continue
+            if row['mode'] == 'startup_hang' and not row['result_checked']:
+                assert task.process.poll() is None, 'startup fault worker exited'
+                began = time.perf_counter()
+                try:
+                    task.result()
+                except self.gate.ProbeError as error:
+                    assert 'not published' in str(error)
+                else:
+                    raise AssertionError('unpublished result was accepted')
+                elapsed = time.perf_counter()-began
+                assert elapsed < .05, f'result() waited on startup worker: {elapsed}'
+                row['result_checked'] = True
+                self.result_probes.append(['startup', elapsed])
             if row['kind'] != 'sample' and row['mode'] not in ('startup_hang', 'presend_hang') and not task.ready():
                 time.sleep(.001)
                 return
@@ -232,6 +277,14 @@ class Bench:
                             self.controls()
                             time.sleep(.001)
                         assert any(e['stage'] == 'published' for e in row['events']), 'publication fault not acknowledged'
+                        task.advance()
+                        assert task.ready(), 'published frame was not consumed'
+                        assert task.process.poll() is None, 'post-publication worker exited'
+                        began = time.perf_counter()
+                        task.result()  # exercise the real cached accessor BEFORE cancellation
+                        elapsed = time.perf_counter()-began
+                        assert elapsed < .05, f'result() waited on published worker: {elapsed}'
+                        self.result_probes.append(['published', elapsed])
                     if first_release or row['mode'] != 'postsend_hang':
                         time.sleep(.001)
                         return
@@ -239,38 +292,75 @@ class Bench:
                     # waits for child exit must not freeze the test's clock.
         live_samples = [row for row in self.tasks if not row['task'].cancelled and
                         (row['kind'] == 'sample' or row['mode'] in ('startup_hang', 'presend_hang'))]
-        if live_samples or (self.blocked_writer is not None and not self.blocked_writer.failure and self.now < 600):
+        # Once fsync has acknowledged its injected fault, fake time must also
+        # run while awaiting an ACK that a swallowed-exception mutant lost.
+        failed_write = self.scenario in ('journal_error', 'journal_system_exit') and self.writer_entered.is_set()
+        if live_samples or failed_write or (self.blocked_writer is not None and not self.blocked_writer.failure and self.now < 600):
+            for row in self.tasks:
+                if row['mode'] != 'normal':
+                    assert row['ack'], f"fake time advanced without fault ACK: {row['mode']}"
             self.now = min(600, self.now + 5)
+            if self.now == 600 and self.expiry_wall is None:
+                self.expiry_wall = time.perf_counter()
         time.sleep(.001)
 
     def journal_factory(self, directory):
-        import threading
         outer = self
         class Blocked(self.driver._BindJournal):
             def _run(self):
-                if outer.scenario == 'journal_error':
-                    self.failure = 'OSError: injected journal write failure'
-                    self.done = True
-                    return
                 if outer.scenario == 'journal_saturation':
                     import queue
                     self.requests = queue.Queue(maxsize=1)
                 # A barrier holds actual journal I/O off the deadline thread.
                 # It is released only after the supervisor returns its refusal.
+                outer.writer_entered.set()
                 outer.block_event.wait()
                 super()._run()
         self.block_event = threading.Event()
+        if self.scenario in ('journal_error', 'journal_system_exit'):
+            # The real writer/handler runs; only the fsync boundary raises.
+            return self.driver._BindJournal(directory)
         writer = Blocked(directory)
+        assert self.writer_entered.wait(1), 'journal barrier fault not acknowledged'
         self.blocked_writer = writer
         return writer
 
     def run(self):
         writer_args = {'journal_factory': self.journal_factory} if self.scenario.startswith('journal_') else {}
+        original_killpg = os.killpg
+        def signal_boundary(pid, sig):
+            if self.scenario == 'term_delay_late' and any(
+                    r['mode'] == 'term_delay' and getattr(r['task'].process, 'pid', None) == pid for r in self.tasks):
+                sig = signal.SIGTERM
+            return original_killpg(pid, sig)
+        original_fsync = os.fsync
+        def write_boundary(fd):
+            if self.scenario in ('journal_error', 'journal_system_exit'):
+                self.writer_entered.set()
+                error = SystemExit if self.scenario == 'journal_system_exit' else OSError
+                raise error('injected journal write failure')
+            return original_fsync(fd)
         before = self.driver._bind_cpu()
-        receipt = self.driver.bind_until_quiet(self.plan, self.probes, self.directory,
-            test_dispatch=self.dispatch, monotonic=lambda: self.now, sleep=self.sleep, wall_clock=lambda: 1000+self.now, **writer_args)
+        with mock.patch.object(os, 'fsync', write_boundary), mock.patch.object(os, 'killpg', signal_boundary):
+            receipt = self.driver.bind_until_quiet(self.plan, self.probes, self.directory,
+                test_dispatch=self.dispatch, monotonic=lambda: self.now, sleep=self.sleep, wall_clock=lambda: 1000+self.now, **writer_args)
+        returned_after_expiry = time.perf_counter()-self.expiry_wall if self.expiry_wall is not None else None
         after = self.driver._bind_cpu()
         self.controls()
+        if self.scenario == 'slow' and receipt.refusal:
+            # The ticker catches callback assertions as probe errors. Surface
+            # this exact invariant assertion again outside that catch boundary.
+            assert 'bind deadline changed' not in receipt.refusal.detail, receipt.refusal.detail
+        if self.scenario == 'term_delay_late':
+            assert returned_after_expiry <= 1.05, f'expiry-to-receipt exceeded tick + cleanup budget: {returned_after_expiry:.3f}s'
+            assert receipt.admission.get('supervision_residue'), 'unreaped child omitted from receipt'
+            sample = next(r for r in self.tasks if r['kind'] == 'sample')
+            assert sample['ack'] and {'stage': 'signalled'} in sample['events'], 'signal fault not acknowledged'
+            task = sample['task']
+            assert task.process.poll() is None, 'slow-exit child exited before receipt'
+            original_killpg(task.process.pid, signal.SIGKILL)
+            task.process.wait(timeout=1)
+            task.reaped = True
         if self.scenario.startswith('descendant'):
             until = time.monotonic() + .5
             while not all(row['eof'] for row in self.tasks) and time.monotonic() < until:
@@ -284,6 +374,8 @@ class Bench:
         for row in self.tasks:
             task = row['task']
             pid = getattr(task.process, 'pid', None)
+            if row['mode'] != 'normal':
+                assert row['ack'], f"fault ACK missing: {row['mode']} {task.job_id}"
             assert task.closed, 'worker was not reaped'
             if pid is not None:
                 try:
@@ -300,12 +392,77 @@ class Bench:
         samples = [json.loads(line) for line in samples_path.read_text().splitlines()] if samples_path.exists() else []
         return dict(receipt=value, samples=samples, tasks=tasks, now=self.now,
                     census_ticks=self.census_ticks, sample_jobs=self.samples,
-                    chunk_early=self.chunk_early, measured_cpu=after-before)
+                    chunk_early=self.chunk_early, chunk_deadlines=self.chunk_deadlines,
+                    result_probes=self.result_probes, returned_after_expiry=returned_after_expiry,
+                    journal_entered=self.writer_entered.is_set(), measured_cpu=after-before)
+
+
+def launch_pending_case(directory):
+    """Block real Popen.__init__ in the real daemon, then permit the late exec."""
+    bench = Bench('launch_pending', directory)
+    entered, release = threading.Event(), threading.Event()
+    original_init = subprocess.Popen.__init__
+    def exec_boundary(process, *args, **kwargs):
+        if threading.current_thread().name == 'night-bind-launch':
+            entered.set()  # Separate launch-fault ACK; no child exists yet.
+            release.wait()
+        original_init(process, *args, **kwargs)
+    expiry = None
+    def tick_sleep(duration):
+        nonlocal expiry
+        assert entered.wait(1), 'exec fault not acknowledged'
+        if bench.now < 600:
+            bench.now += 5
+            if bench.now == 600:
+                expiry = time.perf_counter()
+        time.sleep(.001)
+    try:
+        with mock.patch.object(subprocess.Popen, '__init__', exec_boundary):
+            receipt = bench.driver.bind_until_quiet(bench.plan, bench.probes, directory,
+                test_dispatch=bench.dispatch, monotonic=lambda: bench.now,
+                sleep=tick_sleep, wall_clock=lambda: 1000+bench.now)
+            elapsed = time.perf_counter()-expiry
+            assert elapsed <= 1.05, f'expiry-to-receipt exceeded tick + cleanup budget: {elapsed:.3f}s'
+            assert entered.is_set() and not release.is_set(), 'exec was not blocked through receipt'
+            value = json.loads(receipt.to_json_bytes())
+            assert value['verdict'] == 'REFUSED'
+            residue = value.get('supervision_residue', [])
+            assert residue and residue[0]['job_id'] == 'census-1', 'launch-pending job omitted from receipt'
+            assert all(row['state'] == 'launch_pending' for row in residue), residue
+            assert not bench.gate.validate_receipt(value), bench.gate.validate_receipt(value)
+            release.set()
+            until = time.monotonic()+1
+            while not all(row['task'].launch_done for row in bench.tasks) and time.monotonic() < until:
+                time.sleep(.001)
+        tasks = []
+        for row in bench.tasks:
+            task = row['task']
+            assert task.launch_done, 'late launcher did not finish'
+            pid = getattr(task.process, 'pid', None)
+            if pid is not None:
+                assert task.reaped, 'late child was not reaped by launcher'
+                assert task.process.returncode == -signal.SIGKILL, 'late child survived cancellation'
+                try:
+                    os.waitpid(pid, os.WNOHANG)
+                except ChildProcessError:
+                    pass
+                else:
+                    raise AssertionError('late child left a zombie')
+            row['control'].close()
+            row['child'].close()
+            tasks.append(dict(id=task.job_id, kind=row['kind'], pid=pid, reaped=task.reaped,
+                max_reads=0, max_bytes=0, max_buffer=0))
+        return dict(receipt=value, tasks=tasks, now=bench.now, returned_after_expiry=elapsed,
+                    census_ticks=bench.census_ticks, sample_jobs=0)
+    finally:
+        release.set()
 
 
 if __name__ == '__main__':
     if sys.argv[1] == '--worker':
         worker(sys.argv[2:])
+    elif sys.argv[1] == 'launch_pending':
+        print(json.dumps(launch_pending_case(Path(sys.argv[2]))), flush=True)
     else:
         bench = Bench(sys.argv[1], Path(sys.argv[2]))
         print(json.dumps(bench.run()), flush=True)

@@ -4435,22 +4435,11 @@ class QuietDriverIntegrationTests(unittest.TestCase):
         self.assertFalse((fixture.custody/'night/chain.started').exists())
 
     def test_supervised_worker_is_reaped_on_cancellation(self):
-        import time
-        driver = _load_driver()
-        launcher = driver._BindLauncher()
-        task = driver._BindTask('cancel', lambda fd: (sys.executable, '-c', 'import time; time.sleep(60)'), launcher)
-        until = time.monotonic() + 2
-        while not task.launch_done and time.monotonic() < until:
-            time.sleep(.001)
-        pid = task.process.pid
-        self.assertFalse(task.ready())
-        task.cancel()
-        while not task.poll_cleanup() and time.monotonic() < until:
-            time.sleep(.001)
-        self.assertTrue(task.closed)
-        launcher.stop()
-        with self.assertRaises(ChildProcessError):
-            os.waitpid(pid, os.WNOHANG)
+        # The child ACKs its installed SIGTERM handler before fake time moves;
+        # delayed exit makes blocking wait/reap mutations observable.
+        result = BindSupervisionProcessTests().scenario('term_delay_late')
+        self.assertLessEqual(result['returned_after_expiry'], 1.05)
+        self.assertTrue(result['receipt']['supervision_residue'])
 
 
 class BindSupervisionProcessTests(unittest.TestCase):
@@ -4504,6 +4493,8 @@ class BindSupervisionProcessTests(unittest.TestCase):
         self.assert_expired(result)
         self.assertEqual(result['census_ticks'], list(range(0, 600, 30)))
         self.assertEqual(result['sample_jobs'], 0)
+        self.assertEqual([row[0] for row in result['result_probes']], ['startup'])
+        self.assertLess(result['result_probes'][0][1], .05)
 
     def test_header_plus_one_byte_never_blocks_recv(self):
         result = self.scenario('recv_stall_late')
@@ -4543,6 +4534,8 @@ class BindSupervisionProcessTests(unittest.TestCase):
         sample = next(task for task in result['tasks'] if task['kind'] == 'sample')
         self.assertTrue(sample['ready'])
         self.assertIn({'stage':'published'}, sample['events'])
+        self.assertEqual([row[0] for row in result['result_probes']], ['published'])
+        self.assertLess(result['result_probes'][0][1], .05)
 
     def test_exit_without_result_is_error_never_quiet(self):
         result = self.scenario('empty')
@@ -4568,6 +4561,7 @@ class BindSupervisionProcessTests(unittest.TestCase):
         self.assertEqual(result['census_ticks'], [0, 30])
         self.assertEqual(result['receipt']['go_epoch_s'], 1030)
         self.assertEqual(result['sample_jobs'], 1)
+        self.assertEqual(result['chunk_deadlines'], [[1,600],[2,600],[3,600]])
 
     def test_blocked_journal_never_blocks_deadline_or_grants_go(self):
         result = self.scenario('journal_block')
@@ -4575,6 +4569,7 @@ class BindSupervisionProcessTests(unittest.TestCase):
         self.assertIn('journal_failure', result['receipt'])
         self.assertEqual(result['census_ticks'], list(range(0, 600, 30)))
         self.assertIsNone(result['receipt']['go_epoch_s'])
+        self.assertTrue(result['journal_entered'])
 
     def test_descendant_descriptor_and_group_cancellation(self):
         for fault in ('descendant_hang_late', 'descendant_exit'):
@@ -4619,9 +4614,42 @@ class BindSupervisionProcessTests(unittest.TestCase):
         for mode, detail in (('journal_error', 'write failure'), ('journal_saturation', 'queue saturated')):
             with self.subTest(mode=mode):
                 result = self.scenario(mode)
+                self.assertIn('journal_failure', result['receipt'])
                 self.assertEqual(result['receipt']['refusal']['reason'], 'night_probe_error')
                 self.assertIn(detail, result['receipt']['journal_failure'])
                 self.assertIsNone(result['receipt']['go_epoch_s'])
+                self.assertTrue(result['journal_entered'])
+
+    def test_journal_system_exit_records_failure_before_thread_exit(self):
+        result = self.scenario('journal_system_exit')
+        self.assertEqual(result['receipt']['verdict'], 'REFUSED')
+        self.assertIn('journal_failure', result['receipt'])
+        self.assertIn('SystemExit: injected journal write failure', result['receipt']['journal_failure'])
+        self.assertIsNone(result['receipt']['go_epoch_s'])
+        self.assertTrue(result['journal_entered'])
+
+    def test_signalled_child_cannot_hold_cleanup_past_budget(self):
+        result = self.scenario('term_delay_late')
+        self.assert_expired(result)
+        self.assertLessEqual(result['returned_after_expiry'], 1.05)
+        residue = result['receipt']['supervision_residue']
+        self.assertEqual(len(residue), 1)
+        self.assertEqual(residue[0]['kind'], 'sample')
+        self.assertEqual(residue[0]['state'], 'unreaped')
+
+    def test_pending_exec_returns_receipt_then_launcher_reaps_late_child(self):
+        result = self.scenario('launch_pending')
+        self.assert_expired(result)
+        self.assertEqual(result['census_ticks'], list(range(0,600,30)))
+        self.assertLessEqual(result['returned_after_expiry'], 1.05)
+        self.assertEqual(result['receipt']['supervision_residue'][0]['job_id'], 'census-1')
+        self.assertTrue(any(task['pid'] is not None and task['reaped'] for task in result['tasks']))
+        # The versioned validator accepts residue only on a refused v3 receipt.
+        receipt = result['receipt']
+        for residue in ([], [{'job_id':'x','kind':'sample','pid':True,'state':'unreaped'}]):
+            with self.subTest(residue=residue):
+                self.assertTrue(night_gate.validate_receipt(dict(receipt, supervision_residue=residue)))
+        self.assertTrue(night_gate.validate_receipt(dict(receipt, verdict='GO')))
 
     def test_production_worker_argv_are_exact(self):
         driver = _load_driver()

@@ -2049,10 +2049,14 @@ class _BindLauncher:
     """Exec may wait for the executable's filesystem: do it off the ticker."""
     def __init__(self):
         self.requests = queue.Queue(maxsize=_BIND_MAX_JOBS)
+        self.stopping = False
+        # Bounded bootstrap: service threads start before the bind deadline is established.
         threading.Thread(target=self._run, daemon=True, name='night-bind-launch').start()
 
     def _run(self):
         while True:
+            if self.stopping and self.requests.empty():
+                return
             task = self.requests.get()
             if task is None:
                 return
@@ -2068,14 +2072,29 @@ class _BindLauncher:
             except Exception as error:
                 task.launch_error = f'{type(error).__name__}: {error}'
             finally:
+                if task.cancelled:
+                    # Popen may finish after the ticker has returned its refusal.
+                    # This daemon owns late-launch reaping; no ticker waits here.
+                    task.cancel()
+                    if getattr(task.process, 'pid', None) is not None:
+                        task.process.wait()
+                        task.reaped = True
                 os.close(task.writer)
                 task.launch_done = True
 
     def submit(self, task):
+        # Bookkeeping-length mutex: Queue.get releases it in Condition.wait;
+        # the launcher never holds it across exec or other I/O.
         self.requests.put_nowait(task)
 
     def stop(self):
-        self.requests.put_nowait(None)
+        # Bookkeeping-length mutex: Queue.get releases it in Condition.wait;
+        # the launcher never holds it across exec or other I/O.
+        self.stopping = True
+        try:
+            self.requests.put_nowait(None)
+        except queue.Full:
+            pass  # The daemon drains cancelled jobs, then observes stopping.
 
 
 class _BindTask:
@@ -2180,6 +2199,10 @@ class _BindTask:
         if not self.cancelled:
             return False
         self.cancel()  # also reaches descendants when their direct parent exited
+        if not self.launch_done:
+            # Launch pending: the daemon owns any late child; the global cleanup
+            # budget, not this flag, bounds the return of the refused receipt.
+            return False
         pid = getattr(self.process, 'pid', None)
         if pid is not None and not self.reaped:
             try:
@@ -2189,7 +2212,7 @@ class _BindTask:
                     self.process.returncode = os.waitstatus_to_exitcode(status)
             except ChildProcessError:
                 self.reaped = True
-        if self.launch_done and (pid is None or self.reaped):
+        if pid is None or self.reaped:
             if not self.closed:
                 os.close(self.reader)
                 self.closed = True
@@ -2207,6 +2230,7 @@ class _BindJournal:
         self.failure = None
         self.submitted = 0
         self.done = False
+        # Bounded bootstrap: service threads start before the bind deadline is established.
         threading.Thread(target=self._run, daemon=True, name='night-bind-journal').start()
 
     def _run(self):
@@ -2234,8 +2258,10 @@ class _BindJournal:
                             digest.update(payload)
                             lines += 1
                         self.snapshot = (serial, digest.hexdigest(), lines)
-        except Exception as error:
+        except BaseException as error:
             self.failure = f'{type(error).__name__}: {error}'
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                raise
         finally:
             self.done = True
 
@@ -2250,6 +2276,8 @@ class _BindJournal:
             self.failure = 'journal record exceeds 256 KiB cap'
             return None
         try:
+            # Bookkeeping-length mutex; the writer never holds it across I/O:
+            # Queue.get releases it in Condition.wait; write/flush/fsync follow get.
             self.requests.put_nowait((self.submitted + 1, kind, payload))
             self.submitted += 1
             return self.submitted
@@ -2260,6 +2288,8 @@ class _BindJournal:
     def stop(self):
         # Nonblocking sentinel submission; a stuck writer is never joined.
         try:
+            # Bookkeeping-length mutex; the writer never holds it across I/O:
+            # Queue.get releases it in Condition.wait; write/flush/fsync follow get.
             self.requests.put_nowait(None)
         except queue.Full:
             self.failure = self.failure or 'journal queue saturated during cleanup'
@@ -2297,10 +2327,12 @@ def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
     policy = quiet_admission.validate_policy(plan.quiet_admission, window_max_s=plan.window_max_s)
     start_epoch_s = float(probes.now_epoch_s()) if start_epoch_s is None else start_epoch_s
     start_monotonic = monotonic() if start_monotonic is None else start_monotonic
-    deadline_epoch = quiet_admission.bind_deadline_epoch(plan)
-    deadline = start_monotonic + deadline_epoch - start_epoch_s
     cpu_start = _bind_cpu()
     writer, launcher = journal_factory(night_dir), _BindLauncher()
+    # Establish once AFTER thread bootstrap, using the entry clocks above:
+    # time spent starting the threads consumes, rather than extends, the window.
+    deadline_epoch = quiet_admission.bind_deadline_epoch(plan)
+    deadline = start_monotonic + deadline_epoch - start_epoch_s
     current = night_gate.Receipt(night_gate.SCHEMA, plan.receipt_class, plan.plan_id, 'PENDING',
         night_gate._conditions_tuple(night_gate._initial_conditions(plan.receipt_class)), None, 0)
     static = current
@@ -2419,12 +2451,14 @@ def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
                     if not writer_stopped:
                         writer.stop()
                         writer_stopped = True
-                    if not jobs:
-                        if writer.done:
-                            break
-                        if time.perf_counter() >= cleanup_until:
+                    if not jobs and writer.done:
+                        break
+                    # One clock comparison bounds ALL cleanup, including exec
+                    # that has not returned and children that have not exited.
+                    if time.perf_counter() >= cleanup_until:
+                        if not writer.done:
                             writer.failure = writer.failure or 'journal acknowledgement unavailable at cleanup deadline'
-                            break
+                        break
                     # Refusal already latched: fake admission time need not advance during reaping.
                     sleep(0)
                     time.sleep(0.001)
@@ -2537,6 +2571,16 @@ def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
         top_consumers_at_decision=metrics.get('top_consumers', []),
         load_avg_diagnostic=last.get('load_avg_diagnostic', {}) if last else {'error': 'no completed observation'},
         observer_cpu_s=max(0, _bind_cpu() - cpu_start))
+    if jobs:
+        # At most 32 cached job descriptions and pipe closes; no filesystem or exit wait.
+        summary['supervision_residue'] = [dict(job_id=key, kind=kind,
+            pid=getattr(job.process, 'pid', None),
+            state='launch_pending' if not job.launch_done else 'unreaped')
+            for key, (job, kind, _) in jobs.items()]
+        for job, _, _ in jobs.values():
+            if not job.closed:
+                os.close(job.reader)
+                job.closed = True
     if writer.failure:
         summary['journal_failure'] = writer.failure
         if refusal is None:
