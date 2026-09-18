@@ -1,0 +1,4 @@
+PR #357 (D-182) quick-tier evidence, run by the magistrate in /Users/edr/code/JouleWise-wt-d182
+ee949534: QUICK SUMMARY tier=quick modules=153 excluded=84 failures=0 seconds=94.115 result=PASS
+73519988: QUICK SUMMARY tier=quick modules=153 excluded=84 failures=0 seconds=94.515 result=PASS
+The change is prose in docs/decision_log.md plus two record files; the last full replay is record 73 of activation 9853dd2b.
