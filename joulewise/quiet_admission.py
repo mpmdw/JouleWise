@@ -113,7 +113,9 @@ def second_top_idle_fraction(text):
     percentages = [float(item) for item in match.groups()]
     if any(not math.isfinite(item) or not 0 <= item <= 100 for item in percentages):
         raise ValueError("invalid top CPU percentage")
-    if abs(sum(percentages) - 100) > 0.1:
+    # top rounds user, sys and idle independently (observed live: 9.36 + 3.6 + 87.3 = 100.26,
+    # 1.53 + 7.17 + 91.28 = 99.98); allow one percentage point, refuse anything wider.
+    if abs(sum(percentages) - 100) > 1.0:
         raise ValueError("top CPU percentages do not sum to 100")
     return percentages[2] / 100
 
