@@ -1,0 +1,2 @@
+Ruling written (12,436 bytes, the only new file; branch worktree untouched): Q1 REJECT (the brief never contains "a lock held by another thread"; bounded in-process mutexes are within the bar, F3's exec-wait is not), Q2 AFFIRM one scoped round 4 with the fifth forbidden and explicit §9 justification, Q3 AFFIRM the split with four boundary conditions, Q4 AFFIRM code-enforced fail-closed v4 refusal, Q5 REJECT (`--observation` is a descriptor-writing worker entry, not a sampling CLI); probe `tests.test_quiet_admission` 12 OK at 23:36:47.
+rc=0
