@@ -67,6 +67,16 @@ class CpuIntervalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             qa.parse_ps('bad output')
 
+    def test_second_top_idle_fraction_tolerates_top_rounding_but_not_gaps(self):
+        # Live 2026-09-17 20:38 PDT: top printed 9.36% user, 3.6% sys, 87.3% idle (sum 100.26)
+        # and the strict 0.1 tolerance refused a valid sample; the "> 0.1" mutant must fail here.
+        two = "CPU usage: 0% user, 0% sys, 100% idle\nCPU usage: 9.36% user, 3.6% sys, 87.3% idle \n"
+        self.assertAlmostEqual(qa.second_top_idle_fraction(two), 0.873)
+        low = "CPU usage: 0% user, 0% sys, 100% idle\nCPU usage: 1.53% user, 7.17% sys, 91.28% idle\n"
+        self.assertAlmostEqual(qa.second_top_idle_fraction(low), 0.9128)
+        with self.assertRaises(ValueError):
+            qa.second_top_idle_fraction("CPU usage: 0% user, 0% sys, 100% idle\nCPU usage: 1.0% user, 1.0% sys, 96.5% idle\n")
+
 
 class SamplerCommandTests(unittest.TestCase):
     def test_top_argv_uses_integer_seconds(self):
