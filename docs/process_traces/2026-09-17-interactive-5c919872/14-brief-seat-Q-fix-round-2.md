@@ -3,8 +3,8 @@ BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: ["joulewise/night_gate.py","joulewise/night_plan_writer.py","joulewise/arm_retry.py","joulewise/quiet_admission.py","scripts/run_night.py","scripts/gen_derivation_night.py","tests/test_night_gate.py","tests/test_night_plan_writer.py","tests/test_arm_retry.py","tests/test_run_night.py","tests/test_gen_derivation_night.py","tests/test_quiet_admission.py","tests/night_gate_fixtures/**","docs/process/NIGHT_HANDBACK.md","docs/phase_2/derivation_night_runbook.md","docs/contracts/night_quiet_admission.md","docs/contracts/pack_night_go_receipt.md"]
 BASE_HEAD: 649eefd2
-BASELINE_MANIFEST: __BASELINE_MANIFEST__
-BASELINE_DIGEST: __BASELINE_DIGEST__
+BASELINE_MANIFEST: .codex-bridge/baselines/mag-5c919872-gate-quiet-fix2-2120.json
+BASELINE_DIGEST: sha256:f216315722282936e68d4420dfecee37b86e52494222150cd026ce7a20c15ba7
 LEASE_ID: lease-79c5a1766616453fb93e93b7cea20ffd
 
 # Seat Q fix round 2 — refuter findings (contract lens F1–F3, execution lens below)
