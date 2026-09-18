@@ -1,0 +1,24 @@
+# Magistrate code-reading diff gate (twelve-row gate row 7) — NIGHT-GATE-QUIET-ADMISSION-01 at 13d53ce2, 2026-09-18 01:0x PDT
+
+Read in full by the magistrate (Fable 5.1, interactive session 5c919872), not delegated: `joulewise/quiet_admission.py` (whole file at 13d53ce2), and the diffs `a90ab4e8..13d53ce2` of `joulewise/night_gate.py`, `joulewise/night_plan_writer.py`, `joulewise/arm_retry.py`, `scripts/gen_derivation_night.py`, `scripts/run_night.py` (894 diff lines). Tests and docs were read through the refuters' and audits' evidence, not line by line.
+
+## Design-level questions and answers
+
+1. **Can a v4 night admit on anything but the sealed policy?** No. `validate_policy` demands exactly seven keys; `busy_core_max` may be zero and zero never admits (`is_quiet` requires `busy_core_max > 0`); `cutoff_authority` must be a non-empty string; there is no default anywhere on the driver, gate, generator or writer paths; the receipt validator rejects a GO whose policy cutoff is zero.
+2. **Does the load average still decide anything for v4?** No. `_check_machine(..., legacy_load=False)` skips the load probe for the v4 hard checks; load is carried only as `load_avg_diagnostic` from the sampler.
+3. **Are the non-CPU predicates terminal on every sample with a fresh census?** Yes. Census jobs run on the 30 s cadence as separate workers; a census refusal stops the binding with `night_refused_agent_present`; the sampler's own interval census hit also stops it; pre-sample and post-sample hard checks (`evaluate_dynamic_hard`) re-run screensaver, AC, display, thermal and boot/clock, and a boot-identity change or a wall-clock rollback between checks is `night_refused_boot_clock`.
+4. **Do v2 plans keep byte-identical one-shot semantics?** Yes by construction: `evaluate_night` is the same probe order composed from the split helpers with `legacy_load=True`; `_WRITE_ONCE_RECORDS` is untouched and the journal joins only `_QUIET_WRITE_ONCE_RECORDS`; the refusal-writing condition adds a clause that is false for v2; the 24-scenario byte comparison in the tests is the executed proof.
+5. **Do any deadlines move with GO?** No. The chain's forced-shutdown instant is `bind_start_monotonic + (t0 + window_max_s + WINDOW_SHUTDOWN_GRACE_S − bind_start_epoch)`, a function of the plan only; completion, courier and dead-man derivations are untouched in the diff; GO must fall within `[baseline_wall, bind_deadline_epoch]` or the binding refuses.
+6. **Is the bind loop bounded under ruling 71's bar?** Every tick: one deadline comparison, at most one census submission, ≤ 32 jobs × ≤ 4 non-blocking reads of ≤ 64 KiB, ≤ 32 `waitpid(WNOHANG)`, flag-only readiness and cached results, non-blocking journal submission; cleanup is bounded by `perf_counter() + 1 s` regardless of job or writer state, with unreaped or unlaunched jobs listed in `supervision_residue`; the launcher daemon owns late-exec children. The audit's operation table agrees row by row.
+7. **Is admission evidence kept distinct from capture evidence?** Yes: `admission_is_capture_evidence: false` is a required literal in receipt v3; after GO the chain still reserves and then settles 600 s before slot d01.
+8. **Successor route under D-182?** `zero_capture_successor_allowed` demands positive evidence (chain.started absent, reservation absent, session null, writer not run, `runs/instrument_validation` empty), `courier.sent` true with a message id, and zero successors used; `successor_arm_allowed` demands ≥ 60 s after the terminal write, a new id AND a new digest, a fresh notice newer than the terminal write, then the ordinary `retry_allowed` bounds. `classify_abort`/`retry_allowed` unchanged.
+
+## Notes carried into the PR (none blocking)
+
+- A driver-side reason on a v4 refusal before any interval attribution is written to the v3 gate receipt as `night_probe_error` with the original code in `detail`, mirroring the TRANSACTION_PACK §10.3 pattern; `refusal.json` carries the true code.
+- `boot_identity_unavailable` on a sample is terminal (`night_probe_error`) rather than an ERROR sample with continued binding; the safer of the two readings of the brief, consistent with D3.
+- The observer's `claude` interactive session appears in `top_consumers` with `observer: false` on the lead's smoke because the observer is the Python interpreter, not the session; correct.
+- Whole-round `observer_cpu_s` on this desktop: 1.15 cpu-s per 30 s round (interpreter start-ups for four workers included); the cold judge's 0.0072-core figure measured the sampler body alone. Lane 232 must quote the whole-round number.
+- Follow-up lanes to register: TEST-BIND-SUPERVISION-ENV-SENSITIVITY-01 (journal-block test vs `PYTHONPYCACHEPREFIX`, record 28 G1); QUIET-PREDICATE-EVIDENCE-01 harness note (`--observation` needs the pipe; the flagless CLI is the smoke route).
+
+Verdict for row 7: PASS at 13d53ce2.
