@@ -1483,6 +1483,14 @@ def _validate_quiet_receipt(value, defects):
     from joulewise.quiet_admission import validate_policy
     if value["admission_is_capture_evidence"] is not False:
         defects.append("admission_is_capture_evidence: must be false")
+    if "journal_failure" in value:
+        if (not isinstance(value["journal_failure"], str) or not value["journal_failure"].strip()
+                or value["verdict"] != "REFUSED"):
+            defects.append("journal_failure: requires a reason and REFUSED verdict")
+    if "observer_cpu_s" in value:
+        cost = value["observer_cpu_s"]
+        if type(cost) not in (int, float) or not math.isfinite(cost) or cost < 0:
+            defects.append("observer_cpu_s: expected nonnegative whole-round CPU seconds")
     if "boot_identity_unavailable" in value:
         if (not isinstance(value["boot_identity_unavailable"], str)
                 or not value["boot_identity_unavailable"].strip()
@@ -1549,6 +1557,8 @@ def validate_receipt(value: Mapping[str, object]) -> list[str]:
         expected = expected | {"attribution_unavailable"}
     if quiet and "boot_identity_unavailable" in value:
         expected = expected | {"boot_identity_unavailable"}
+    if quiet:
+        expected = expected | ({"journal_failure", "observer_cpu_s"} & set(value))
     if not _exact_keys(value, expected, "receipt", defects):
         return defects
     if quiet:

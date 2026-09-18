@@ -12,7 +12,6 @@ import json
 import math
 import os
 import re
-import resource
 import subprocess
 import time
 from datetime import datetime
@@ -175,7 +174,7 @@ def validate_observation(value, policy, *, allow_unavailable_boot=False):
     """Reject missing or non-finite worker evidence before it can be quiet."""
     required = {"wall_start", "wall_end", "monotonic_start", "monotonic_end", "interval_s",
                 "boot_identity", "raw_sha256", "metrics", "load_avg_diagnostic",
-                "observer_cpu_s", "census"}
+                "census"}
     if isinstance(value, dict) and "boot_identity_unavailable" in value:
         reason = value["boot_identity_unavailable"]
         if not isinstance(reason, str) or not reason.strip() or value.get("boot_identity") is not None:
@@ -183,11 +182,9 @@ def validate_observation(value, policy, *, allow_unavailable_boot=False):
         required.add("boot_identity_unavailable")
     if not isinstance(value, dict) or set(value) != required:
         raise ValueError("sampler observation keys are not exact")
-    for key in ("wall_start", "wall_end", "monotonic_start", "monotonic_end", "interval_s", "observer_cpu_s"):
+    for key in ("wall_start", "wall_end", "monotonic_start", "monotonic_end", "interval_s"):
         if type(value[key]) not in (int, float) or not math.isfinite(value[key]):
             raise ValueError(f"invalid sampler {key}")
-    if value["observer_cpu_s"] < 0:
-        raise ValueError("invalid observer CPU cost")
     census = value["census"]
     if (not isinstance(census, dict) or set(census) != {"exit_code", "stdout", "stderr"}
             or type(census["exit_code"]) is not int or census["exit_code"] not in (0, 1)
@@ -240,10 +237,6 @@ def sample_interval(interval_s, *, observer_pid=None):
     """
     argv = top_argv(interval_s)
     from joulewise.night_gate import AGENT_CENSUS_ARGV
-    def observer_cpu():
-        usages = (resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN))
-        return sum(usage.ru_utime + usage.ru_stime for usage in usages)
-    cpu_start = observer_cpu()
     observer_pid = os.getpid() if observer_pid is None else observer_pid
     def run(argv, timeout=30):
         return subprocess.run(argv, capture_output=True, text=True, check=True,
@@ -271,7 +264,7 @@ def sample_interval(interval_s, *, observer_pid=None):
     metrics = interval_metrics(parse_ps(before_text), parse_ps(after_text),
         interval_s=ps_end - ps_start, idle_fraction=second_top_idle_fraction(top_text),
         logical_cpu=logical_cpu, observer_pid=observer_pid, wall_start=wall_start)
-    # Include one real census in the measured observer round, as in binding.
+    # Preserve the interval census; the parent measures whole-round observer cost.
     census = subprocess.run(AGENT_CENSUS_ARGV, capture_output=True, text=True, check=False,
                             timeout=30, env={**os.environ, "LC_ALL": "C"})
     observation = dict(wall_start=wall_start, wall_end=time.time(),
@@ -282,15 +275,14 @@ def sample_interval(interval_s, *, observer_pid=None):
                 metrics=metrics, load_avg_diagnostic=load,
                 census=dict(exit_code=census.returncode, stdout=census.stdout, stderr=census.stderr),
                 **unavailable)
-    observation["observer_cpu_s"] = observer_cpu() - cpu_start
     return observation
 
 
-def smoke_metrics(observation):
+def smoke_metrics(observation, observer_cpu_s):
     """Compact native smoke evidence; never admission or capture authority."""
     metrics = observation["metrics"]
     result = dict(busy_cores=metrics["busy_cores"], host_busy_cores=metrics["host_busy_cores"],
-                  observer_cpu_s=observation["observer_cpu_s"],
+                  observer_cpu_s=observer_cpu_s,
                   top_consumers=metrics["top_consumers"][:3],
                   load_avg_diagnostic=observation["load_avg_diagnostic"])
     if "boot_identity_unavailable" in observation:
@@ -298,9 +290,54 @@ def smoke_metrics(observation):
     return result
 
 
-if __name__ == "__main__":
+def prepare_result_descriptor(descriptor):
+    """Call before any tool launch so descendants cannot retain result EOF."""
+    os.set_inheritable(descriptor, False)
+
+
+def publish_observation(descriptor, job_id, call):
+    """Worker-only blocking publication, with a capped JSON envelope."""
+    prepare_result_descriptor(descriptor)
+    limit = 256 * 1024
+    try:
+        value = dict(job_id=job_id, ok=True, result=call())
+        payload = json.dumps(value, allow_nan=False, separators=(',', ':')).encode()
+        if len(payload) > limit:
+            raise ValueError('serialized binding payload exceeds 256 KiB cap')
+    except BaseException as error:
+        payload = json.dumps(dict(job_id=job_id, ok=False,
+            error=f'{type(error).__name__}: {error}'[:4096]), separators=(',', ':')).encode()
+    frame = len(payload).to_bytes(4, 'big') + payload
+    try:
+        offset = 0
+        while offset < len(frame):
+            offset += os.write(descriptor, frame[offset:])
+    finally:
+        os.close(descriptor)
+
+
+def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sample-interval-s", type=float, required=True)
-    args = parser.parse_args()
-    print(json.dumps(smoke_metrics(sample_interval(args.sample_interval_s)), sort_keys=True, allow_nan=False))
+    parser.add_argument('--sample-interval-s', type=float, required=True)
+    parser.add_argument('--observation', action='store_true')
+    parser.add_argument('--observer-pid', type=int)
+    parser.add_argument('--job-id')
+    parser.add_argument('--result-fd', type=int)
+    args = parser.parse_args(argv)
+    top_argv(args.sample_interval_s)
+    if args.observation:
+        if args.job_id is None or args.result_fd is None:
+            parser.error('--observation requires --job-id and --result-fd')
+        prepare_result_descriptor(args.result_fd)
+        publish_observation(args.result_fd, args.job_id, lambda: sample_interval(
+            args.sample_interval_s, observer_pid=args.observer_pid))
+    else:
+        from scripts.run_night import smoke_observation_round
+        observation, cost = smoke_observation_round(args.sample_interval_s)
+        print(json.dumps(smoke_metrics(observation, cost), sort_keys=True, allow_nan=False))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

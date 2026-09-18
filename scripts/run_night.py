@@ -16,8 +16,9 @@ import threading
 import time
 import uuid
 import math
-import multiprocessing
-from dataclasses import replace
+import queue
+import resource
+from dataclasses import asdict, replace
 from datetime import date, datetime, time as wall_time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -1991,262 +1992,669 @@ def _pack_refused_receipt(plan, error, probes):
         night_gate.Refusal(reason, str(error), ()), int(probes.monotonic_ns()))
 
 
-class _BindTask:
-    """Killable isolated worker; the parent alone owns journals and GO.
+# A bounded protocol and two parent-owned service threads keep filesystem and
+# exec work off the deadline-owning path. Neither service thread grants GO.
+_BIND_MAX_PAYLOAD = 256 * 1024
+_BIND_READ_BYTES = 64 * 1024
+_BIND_READ_CALLS = 4
+_BIND_MAX_JOBS = 32
+# Seven tools each allow 30 s beyond the interval; add 5 s for exec/encoding.
+_BIND_SAMPLE_GRACE_S = 7 * 30 + 5
+_BIND_JOURNAL_FLUSH_S = 1.0  # refusal cleanup only; never extends admission
 
-    Fork keeps the injected probe seam usable without serializing callbacks.
-    Binding runs before the driver's chain/courier threads are started. Each
-    worker gets its own process group so a blocked top and its interpreter
-    are killed and reaped together, without waiting for a 30-second timeout.
-    """
-    def __init__(self, call):
-        context = multiprocessing.get_context("fork")
-        self.reader, writer = context.Pipe(duplex=False)
-        def work():
-            self.reader.close()
-            os.setsid()
+
+def _bind_cpu():
+    # Two rusage syscalls and fixed arithmetic; neither call waits for child exit.
+    return sum(u.ru_utime + u.ru_stime for u in (
+        resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)))
+
+
+def _receipt_decode(value):
+    value = dict(value)
+    value['conditions'] = tuple(night_gate.ConditionRow(**dict(row, evidence=tuple(row['evidence'])))
+                                for row in value['conditions'])
+    if value['refusal'] is not None:
+        refusal = value['refusal']
+        value['refusal'] = night_gate.Refusal(refusal['reason'], refusal['detail'], tuple(
+            ProbeResult(**dict(row, argv=tuple(row['argv']))) for row in refusal['evidence']))
+    return night_gate.Receipt(**value)
+
+
+def _bind_worker_result(kind, request):
+    probes = make_probes()
+    if kind == 'census':
+        probe, refusal = _binding_census(probes)
+        return _census_record(probe, refusal)
+    if kind == 'smoke-hard':
+        # Identical read-only machine/clock probes, without authorizing a plan.
+        return [_json_value(probes.run(argv)) for argv in (
+            night_gate.PMSET_BATT_ARGV, night_gate.HID_IDLE_ARGV,
+            night_gate.PMSET_GENERAL_ARGV, night_gate.THERMAL_ARGV,
+            night_gate.BOOT_SESSION_ARGV)]
+    plan = NightPlan(**request['plan'])
+    receipt = (night_gate.evaluate_static(plan, probes) if kind == 'static' else
+               night_gate.evaluate_dynamic_hard(plan, probes, _receipt_decode(request['static'])))
+    return json.loads(receipt.to_json_bytes())
+
+
+def _bind_worker(kind, job_id, descriptor, request):
+    # Tool descendants must never inherit the publication descriptor.
+    quiet_admission.prepare_result_descriptor(descriptor)
+    quiet_admission.publish_observation(descriptor, job_id,
+        lambda: _bind_worker_result(kind, json.loads(request)))
+    return 0
+
+
+class _BindLauncher:
+    """Exec may wait for the executable's filesystem: do it off the ticker."""
+    def __init__(self):
+        self.requests = queue.Queue(maxsize=_BIND_MAX_JOBS)
+        threading.Thread(target=self._run, daemon=True, name='night-bind-launch').start()
+
+    def _run(self):
+        while True:
+            task = self.requests.get()
+            if task is None:
+                return
             try:
-                writer.send((True, call()))
-            except BaseException as error:
-                writer.send((False, f"{type(error).__name__}: {error}"))
+                if not task.cancelled:
+                    argv = task.argv(task.writer)
+                    # Publish the Popen object before __init__: pid becomes
+                    # visible even if Popen is waiting for exec's error pipe.
+                    task.process = subprocess.Popen.__new__(subprocess.Popen)
+                    task.process.__init__(argv, start_new_session=True, close_fds=True, cwd=str(REPO_ROOT),
+                        pass_fds=(task.writer,) + task.test_pass_fds, stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as error:
+                task.launch_error = f'{type(error).__name__}: {error}'
             finally:
-                writer.close()
-        self.process = context.Process(target=work)
-        self.process.start()
-        writer.close()
+                os.close(task.writer)
+                task.launch_done = True
+
+    def submit(self, task):
+        self.requests.put_nowait(task)
+
+    def stop(self):
+        self.requests.put_nowait(None)
+
+
+class _BindTask:
+    """One nonblocking, capped frame; publication does not require child exit."""
+    def __init__(self, job_id, argv, launcher, *, test_pass_fds=()):
+        self.job_id, self.argv = job_id, argv
+        self.test_pass_fds = test_pass_fds
+        self.reader, self.writer = os.pipe()
+        os.set_blocking(self.reader, False)
+        self.process = None
+        self.launch_done = False
+        self.launch_error = None
+        self.cancelled = self.reaped = self.closed = False
+        self.buffer = bytearray()
+        self.length = None
+        self.envelope = None
+        self.bytes_last_tick = 0
+        self.reads_last_tick = 0
+        try:
+            launcher.submit(self)
+        except queue.Full as error:
+            os.close(self.reader)
+            os.close(self.writer)
+            raise night_gate.ProbeError('binding launch queue saturated') from error
+
+    def _error(self, text):
+        self.envelope = dict(job_id=self.job_id, ok=False, error=text)
+
+    def advance(self):
+        # At most four nonblocking reads / 64 KiB; never await EOF or a frame.
+        self.bytes_last_tick = 0
+        self.reads_last_tick = 0
+        if self.envelope is not None or self.closed or self.cancelled:
+            return
+        if self.launch_error:
+            self._error(self.launch_error)
+            return
+        for _ in range(_BIND_READ_CALLS):
+            need = (4 if self.length is None else 4 + self.length) - len(self.buffer)
+            try:
+                self.reads_last_tick += 1
+                chunk = os.read(self.reader, min(need, _BIND_READ_BYTES - self.bytes_last_tick))
+            except BlockingIOError:
+                return
+            except OSError as error:
+                self._error(f'pipe read failed: {error}')
+                return
+            if not chunk:
+                self._error('premature EOF before complete binding result')
+                return
+            self.bytes_last_tick += len(chunk)
+            self.buffer.extend(chunk)
+            if self.length is None and len(self.buffer) == 4:
+                self.length = int.from_bytes(self.buffer, 'big')
+                if not 0 < self.length <= _BIND_MAX_PAYLOAD:
+                    self._error('binding payload length exceeds cap or is empty')
+                    return
+            if self.length is not None and len(self.buffer) == 4 + self.length:
+                # Decode only one complete frame, capped at 256 KiB.
+                try:
+                    value = json.loads(self.buffer[4:], parse_constant=lambda value: (_ for _ in ()).throw(ValueError('nonfinite JSON')))
+                    keys = {'job_id', 'ok', 'result' if value.get('ok') is True else 'error'}
+                    if (set(value) != keys or value['job_id'] != self.job_id
+                            or type(value['ok']) is not bool
+                            or (not value['ok'] and not isinstance(value['error'], str))):
+                        raise ValueError('invalid binding envelope')
+                    self.envelope = value
+                except (ValueError, TypeError, AttributeError, RecursionError) as error:
+                    self._error(f'malformed binding frame: {error}')
+                return
+            if self.bytes_last_tick >= _BIND_READ_BYTES:
+                return
 
     def ready(self):
-        # Never wait for the worker here: census and expiry must run each tick.
-        return self.reader.poll(0) or not self.process.is_alive()
+        # Cached flag lookup only; no child progress or transport operation.
+        return self.envelope is not None
 
     def result(self):
+        # Cached capped object only; never read, join, or wait for EOF here.
+        if self.envelope is None:
+            raise night_gate.ProbeError('binding result is not published')
+        if not self.envelope['ok']:
+            raise night_gate.ProbeError(self.envelope['error'])
+        return self.envelope['result']
+
+    def cancel(self):
+        # One process-group signal and a fallback signal are non-waiting syscalls.
+        self.cancelled = True
+        pid = getattr(self.process, 'pid', None)
+        if pid is not None:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                if not self.reaped:
+                    try:
+                        os.kill(pid, signal.SIGKILL)  # exec has not yet called setsid
+                    except ProcessLookupError:
+                        pass
+
+    def poll_cleanup(self):
+        # One WNOHANG reap per tick; neither launch completion nor exit is awaited.
+        if not self.cancelled:
+            return False
+        self.cancel()  # also reaches descendants when their direct parent exited
+        pid = getattr(self.process, 'pid', None)
+        if pid is not None and not self.reaped:
+            try:
+                found, status = os.waitpid(pid, os.WNOHANG)
+                if found:
+                    self.reaped = True
+                    self.process.returncode = os.waitstatus_to_exitcode(status)
+            except ChildProcessError:
+                self.reaped = True
+        if self.launch_done and (pid is None or self.reaped):
+            if not self.closed:
+                os.close(self.reader)
+                self.closed = True
+            return True
+        return False
+
+
+class _BindJournal:
+    """Only this parent thread opens/writes/fsyncs journals; ACK follows fsync."""
+    def __init__(self, night_dir):
+        self.night_dir = night_dir
+        self.requests = queue.Queue(maxsize=32)
+        # An immutable snapshot is published in one assignment by the writer.
+        self.snapshot = (0, hashlib.sha256(b'').hexdigest(), 0)
+        self.failure = None
+        self.submitted = 0
+        self.done = False
+        threading.Thread(target=self._run, daemon=True, name='night-bind-journal').start()
+
+    def _run(self):
+        digest, lines = hashlib.sha256(), 0
         try:
-            okay, value = self.reader.recv()
-        except EOFError as error:
-            raise night_gate.ProbeError("binding worker exited without observations") from error
-        if not okay:
-            raise night_gate.ProbeError(value)
-        return value
+            path = self.night_dir / 'quiet_samples.jsonl'
+            # Startup replay is also off the ticker; never truncate old bytes.
+            with path.open('ab+') as samples:
+                samples.seek(0)
+                for chunk in iter(lambda: samples.read(65536), b''):
+                    digest.update(chunk)
+                    lines += chunk.count(b'\n')
+                self.snapshot = (0, digest.hexdigest(), lines)
+                with (self.night_dir / 'censuses.jsonl').open('ab') as censuses:
+                    while True:
+                        item = self.requests.get()
+                        if item is None or self.failure:
+                            break
+                        serial, kind, payload = item
+                        handle = samples if kind == 'sample' else censuses
+                        handle.write(payload)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                        if kind == 'sample':
+                            digest.update(payload)
+                            lines += 1
+                        self.snapshot = (serial, digest.hexdigest(), lines)
+        except Exception as error:
+            self.failure = f'{type(error).__name__}: {error}'
+        finally:
+            self.done = True
 
-    def close(self):
-        # Kill the group even if the direct worker has exited: it might have
-        # left a child. PID is the dedicated group id, never the parent's.
+    def submit(self, kind, value):
+        # Immutable capped bytes + put_nowait; no filesystem operation or wait.
         try:
-            os.killpg(self.process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            if self.process.is_alive():
-                self.process.kill()
-        self.process.join(timeout=1)
-        self.reader.close()
-        if self.process.is_alive():
-            raise night_gate.ProbeError("binding worker could not be reaped")
-        self.process.close()
+            payload = (json.dumps(value, sort_keys=True, allow_nan=False) + '\n').encode()
+        except (ValueError, TypeError, RecursionError) as error:
+            self.failure = f'journal record encoding failed: {error}'
+            return None
+        if len(payload) > _BIND_MAX_PAYLOAD:
+            self.failure = 'journal record exceeds 256 KiB cap'
+            return None
+        try:
+            self.requests.put_nowait((self.submitted + 1, kind, payload))
+            self.submitted += 1
+            return self.submitted
+        except queue.Full:
+            self.failure = 'journal queue saturated'
+            return None
 
-
-class _BindStopped(Exception):
-    def __init__(self, refusal):
-        self.refusal = refusal
+    def stop(self):
+        # Nonblocking sentinel submission; a stuck writer is never joined.
+        try:
+            self.requests.put_nowait(None)
+        except queue.Full:
+            self.failure = self.failure or 'journal queue saturated during cleanup'
 
 
 def _binding_census(probes):
     probe, refusal = agent_census(probes)
     if (probe.exit_code not in (0, 1) or (probe.exit_code == 1 and probe.stdout.strip())
             or (probe.exit_code == 0 and not probe.stdout.strip())):
-        refusal = night_gate.Refusal(_CODES["probe_error"], "binding census probe failed", (probe,))
+        refusal = night_gate.Refusal(_CODES['probe_error'], 'binding census probe failed', (probe,))
     return probe, refusal
 
 
-def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
-                     start_epoch_s=None, start_monotonic=None,
-                     sampler=None, task_factory=_BindTask,
-                     monotonic=time.monotonic, sleep=time.sleep):
-    """Poll explicit v4 policy under one absolute deadline, with a live census.
+def _bind_argv(kind, job_id, descriptor, request):
+    if kind == 'sample':
+        return (sys.executable, '-B', '-m', 'joulewise.quiet_admission', '--observation',
+                '--sample-interval-s', str(request['interval']), '--observer-pid', str(request['observer_pid']),
+                '--job-id', job_id, '--result-fd', str(descriptor))
+    return (sys.executable, '-B', str(REPO_ROOT / 'scripts/run_night.py'), '_bind-worker',
+            '--kind', kind, '--job-id', job_id, '--result-fd', str(descriptor),
+            '--request', json.dumps(request, separators=(',', ':')))
 
-    The injectable task seam models in-flight and hung workers without real
-    interval sleeps. Workers never write artifacts or start a chain.
+
+def bind_until_quiet(plan, probes, night_dir, *, initial_census=None,
+                     start_epoch_s=None, start_monotonic=None, sampler=None,
+                     test_dispatch=None, monotonic=time.monotonic, sleep=time.sleep,
+                     wall_clock=time.time, journal_factory=_BindJournal):
+    """One ticker owns deadlines; explicit test_dispatch never forks callbacks.
+
+    Test dispatch may provide deterministic jobs for pure state-machine tests,
+    or argv substitutions for real-exec fault tests. Production always execs.
     """
+    if sampler is not None and test_dispatch is None:
+        raise ValueError("injected samplers require the explicit test_dispatch hook")
     policy = quiet_admission.validate_policy(plan.quiet_admission, window_max_s=plan.window_max_s)
     start_epoch_s = float(probes.now_epoch_s()) if start_epoch_s is None else start_epoch_s
     start_monotonic = monotonic() if start_monotonic is None else start_monotonic
     deadline_epoch = quiet_admission.bind_deadline_epoch(plan)
     deadline = start_monotonic + deadline_epoch - start_epoch_s
-    observer_pid = os.getpid()
-    sampler = sampler or (lambda: quiet_admission.sample_interval(
-        policy["sample_interval_s"], observer_pid=observer_pid))
-    journal = night_dir / "quiet_samples.jsonl"
-    journal.touch(exist_ok=True)  # never truncate, even on a failed invocation
-    lines = len(journal.read_bytes().splitlines())
-    quiet_run, last = 0, None
-    static = night_gate._finish(plan, probes, night_gate._initial_conditions(plan.receipt_class), None)
-    current = static
-    next_census, census_task = start_monotonic, None
-    baseline_boot = None
-    baseline_wall = start_epoch_s
-    pending = None
+    cpu_start = _bind_cpu()
+    writer, launcher = journal_factory(night_dir), _BindLauncher()
+    current = night_gate.Receipt(night_gate.SCHEMA, plan.receipt_class, plan.plan_id, 'PENDING',
+        night_gate._conditions_tuple(night_gate._initial_conditions(plan.receipt_class)), None, 0)
+    static = current
+    jobs, sequence = {}, 0
+    foreground = None
+    censuses = []
+    next_census = start_monotonic
+    phase, refusal = 'static', None
+    quiet_run, attempted, last = 0, 0, None
+    pending, hard = None, {}
+    baseline_boot, baseline_wall = None, start_epoch_s
+    final_ack = None
+    writer_stopped = False
+    cleanup_until = None
+    go_epoch = None
 
-    def stopped(reason, detail, evidence=()):
-        raise _BindStopped(night_gate.Refusal(reason, detail, evidence))
+    def start(kind, call, request):
+        # Constant plan fields + capped cached receipt; pipe creation/queueing only, exec is off-thread.
+        nonlocal sequence
+        if len(jobs) >= _BIND_MAX_JOBS:
+            raise night_gate.ProbeError('binding job limit reached')
+        sequence += 1
+        job_id = f'{kind}-{sequence}'
+        job = (test_dispatch(kind, job_id, call, request, launcher) if test_dispatch else
+               _BindTask(job_id, lambda fd: _bind_argv(kind, job_id, fd, request), launcher))
+        jobs[job_id] = (job, kind, monotonic())
+        return job
 
-    def check_census():
-        nonlocal next_census, census_task
-        if census_task is not None and census_task.ready():
-            task, census_task = census_task, None
-            try:
-                probe, refusal = task.result()
-                _append_census(night_dir / "censuses.jsonl", probe, refusal)
-                if refusal is not None:
-                    raise _BindStopped(refusal)
-            finally:
-                task.close()
-        if census_task is None and monotonic() >= next_census:
-            census_task = task_factory(lambda: _binding_census(probes))
-            next_census = monotonic() + CENSUS_INTERVAL_S
+    def census_call():
+        return _census_record(*_binding_census(probes))
 
-    def await_task(call):
-        task = task_factory(call)
-        try:
-            while True:
-                check_census()
-                now = monotonic()
-                if now > deadline:
-                    stopped(_CODES["refused_bind_expired"], "bind deadline expired")
-                if task.ready():
-                    value = task.result()
-                    # A ready sampler cannot race an already-running census.
-                    while census_task is not None:
-                        check_census()
-                        if monotonic() >= deadline and census_task is not None:
-                            stopped(_CODES["refused_bind_expired"], "bind deadline expired awaiting census")
-                        if census_task is not None:
-                            sleep(min(0.05, max(0, deadline - monotonic())))
-                    if monotonic() > deadline:
-                        stopped(_CODES["refused_bind_expired"], "bind deadline expired")
-                    return value
-                if now >= deadline:
-                    stopped(_CODES["refused_bind_expired"], "bind deadline expired")
-                sleep(min(0.05, deadline - now, max(0.001, next_census - now)))
-        finally:
-            task.close()
-
-    def hard_checks():
-        nonlocal current, baseline_boot, baseline_wall
-        current = await_task(lambda: night_gate.evaluate_dynamic_hard(plan, probes, static))
-        if not isinstance(current, night_gate.Receipt):
-            raise night_gate.ProbeError("malformed hard-predicate result")
-        if current.refusal is not None:
-            raise _BindStopped(current.refusal)
-        clock = next(row.measured for row in current.conditions if row.condition_id == "C4")
-        boot, wall = clock["boot_session_uuid"], clock["clock_epoch_s"]
-        if baseline_boot is not None and boot != baseline_boot:
-            stopped(_CODES["refused_boot_clock"], "boot identity changed during binding")
-        if wall < baseline_wall:
-            stopped(_CODES["refused_boot_clock"], "wall clock rolled back during binding")
-        baseline_boot, baseline_wall = boot, wall
-        return {row.condition_id: {"status": row.status, "measured": dict(row.measured)}
-                for row in current.conditions if row.condition_id in ("C3", "C4")}
-
-    def append_sample(sample, decision, hard, error=None):
-        nonlocal lines, last
-        entry = dict(sample, sample_index=lines + 1, hard_predicates=hard, decision=decision)
+    def append_sample(decision, error=None):
+        nonlocal pending, attempted, last, final_ack
+        if pending is None:
+            return
+        attempted += 1
+        entry = dict(pending, sample_index=attempted, hard_predicates=hard, decision=decision)
         if error is not None:
-            entry["error"] = error
-        payload = (json.dumps(entry, sort_keys=True, allow_nan=False) + "\n").encode()
-        descriptor = os.open(journal, os.O_WRONLY | os.O_APPEND)
-        try:
-            _write_all(descriptor, payload)
-        finally:
-            os.close(descriptor)
-        lines += 1
-        if entry.get("metrics", {}).get("busy_cores") is not None:
+            entry.update(error=error.detail, error_code=error.reason,
+                         wall_end=wall_clock(),
+                         monotonic_end=monotonic())
+        final_ack = writer.submit('sample', entry)
+        if entry.get('metrics', {}).get('busy_cores') is not None:
             last = entry
+        pending = None
 
-    def finish(refusal=None):
-        metrics = last.get("metrics", {}) if last else {}
-        raw = journal.read_bytes()
-        summary = dict(quiet_admission=policy, admission_is_capture_evidence=False, bind_deadline_epoch_s=deadline_epoch,
-            go_epoch_s=None if refusal else float(probes.now_epoch_s()),
-            samples_total=lines, samples_quiet_run_at_go=0 if refusal else quiet_run,
-            quiet_samples_sha256=hashlib.sha256(raw).hexdigest(), quiet_samples_lines=len(raw.splitlines()),
-            top_consumers_at_decision=metrics.get("top_consumers", []),
-            load_avg_diagnostic=last.get("load_avg_diagnostic", {"error": "no completed observation"}) if last else {"error": "no completed observation"})
-        if last and "boot_identity_unavailable" in last:
-            summary["boot_identity_unavailable"] = last["boot_identity_unavailable"]
-        if not summary["top_consumers_at_decision"]:
-            summary["attribution_unavailable"] = "no measurable process deltas before decision"
-        if refusal and refusal.reason == _CODES["refused_bind_expired"] and "deadline" in refusal.detail:
-            refusal = replace(refusal, detail=refusal.detail + "; " + json.dumps(dict(
-                samples_total=lines, last_busy_cores=metrics.get("busy_cores"),
-                top_consumers=summary["top_consumers_at_decision"],
-                quiet_samples_sha256=summary["quiet_samples_sha256"], quiet_samples_lines=summary["quiet_samples_lines"]), sort_keys=True))
-        try:
-            authored = night_gate._safe_monotonic_ns(probes)
-        except night_gate.ProbeError:
-            authored = 0
-        return replace(current, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=summary,
-                       verdict="REFUSED" if refusal else ("REHEARSAL_ONLY" if plan.receipt_class == "REHEARSAL_STUB" else "GO"),
-                       refusal=refusal, authored_monotonic_ns=authored)
+    def stop(reason, detail, evidence=()):
+        nonlocal phase, refusal, cleanup_until
+        if phase == 'cleanup':
+            return
+        refusal = night_gate.Refusal(reason, detail, evidence)
+        phase = 'cleanup'
+        cleanup_until = time.perf_counter() + _BIND_JOURNAL_FLUSH_S
+        # Signal the bounded job set immediately, before even queuing evidence.
+        for job, _, _ in jobs.values():
+            job.cancel()
+        append_sample('error', refusal)
+
+    def hard_done(value):
+        nonlocal current, baseline_boot, baseline_wall, hard
+        current = value if isinstance(value, night_gate.Receipt) else _receipt_decode(value)
+        if current.refusal:
+            stop(current.refusal.reason, current.refusal.detail, current.refusal.evidence)
+            return
+        clock = next(row.measured for row in current.conditions if row.condition_id == 'C4')
+        boot, wall = clock['boot_session_uuid'], clock['clock_epoch_s']
+        if baseline_boot is not None and boot != baseline_boot:
+            stop(_CODES['refused_boot_clock'], 'boot identity changed during binding')
+        elif wall < baseline_wall:
+            stop(_CODES['refused_boot_clock'], 'wall clock rolled back during binding')
+        baseline_boot, baseline_wall = boot, wall
+        hard = {row.condition_id: {'status': row.status, 'measured': dict(row.measured)}
+                for row in current.conditions if row.condition_id in ('C3', 'C4')}
+
+    if initial_census is not None:
+        probe, initial_refusal = initial_census
+        if (probe.exit_code not in (0, 1) or (probe.exit_code == 1 and probe.stdout.strip())
+                or (probe.exit_code == 0 and not probe.stdout.strip())):
+            initial_refusal = night_gate.Refusal(_CODES['probe_error'], 'initial census probe failed', (probe,))
+        if initial_refusal:
+            stop(initial_refusal.reason, initial_refusal.detail, initial_refusal.evidence)
 
     try:
-        if initial_census is not None:
-            probe, refusal = initial_census
-            if (probe.exit_code not in (0, 1) or (probe.exit_code == 1 and probe.stdout.strip())
-                    or (probe.exit_code == 0 and not probe.stdout.strip())):
-                refusal = night_gate.Refusal(_CODES["probe_error"], "initial census probe failed", (probe,))
-            if refusal:
-                raise _BindStopped(refusal)
-        static = await_task(lambda: night_gate.evaluate_static(plan, probes))
-        current = static
-        if static.refusal:
-            raise _BindStopped(static.refusal)
-        while monotonic() < deadline:
-            pending = dict(wall_start=float(probes.now_epoch_s()), monotonic_start=monotonic(),
-                           boot_identity=baseline_boot, raw_sha256={}, metrics={})
-            hard = hard_checks()
-            pending["boot_identity"] = baseline_boot
-            observation = await_task(sampler)
-            if not isinstance(observation, dict):
-                raise night_gate.ProbeError("malformed sampler output")
-            quiet_admission.validate_observation(observation, policy, allow_unavailable_boot=True)
-            pending = observation
-            if "boot_identity_unavailable" in observation:
-                raise night_gate.ProbeError("boot_identity_unavailable: " + observation["boot_identity_unavailable"])
-            if observation["census"]["exit_code"] == 0:
-                stopped(_CODES["refused_agent_present"], "sampler census hit: " + observation["census"]["stdout"])
-            hard = hard_checks()
-            if observation["boot_identity"] != baseline_boot:
-                stopped(_CODES["refused_boot_clock"], "sample boot identity changed")
-            quiet = quiet_admission.is_quiet(observation["metrics"], policy)
-            quiet_run = quiet_run + 1 if quiet else 0
-            if quiet_run >= policy["consecutive_quiet_samples"]:
-                hard = hard_checks()  # final hard checks, including a fresh census
-            if monotonic() > deadline:
-                stopped(_CODES["refused_bind_expired"], "bind deadline expired before GO")
-            append_sample(observation, "quiet" if quiet else "WAIT", hard)
-            pending = None
-            if quiet_run >= policy["consecutive_quiet_samples"]:
-                if float(probes.now_epoch_s()) > deadline_epoch:
-                    stopped(_CODES["refused_boot_clock"], "wall clock passed absolute bind deadline")
-                if monotonic() > deadline:
-                    stopped(_CODES["refused_bind_expired"], "bind deadline expired writing final sample")
-                return finish()
-        stopped(_CODES["refused_bind_expired"], "bind deadline expired")
-    except Exception as error:
-        refusal = error.refusal if isinstance(error, _BindStopped) else night_gate.Refusal(
-            _CODES["probe_error"], f"binding observation failed: {type(error).__name__}: {error}", ())
-        if pending is not None:
-            for name, clock in (("wall_end", probes.now_epoch_s), ("monotonic_end", monotonic)):
-                try:
-                    pending[name] = float(clock())
-                except Exception:
-                    pending[name] = None
-            hard = {row.condition_id: {"status": row.status, "measured": dict(row.measured)}
-                    for row in current.conditions if row.condition_id in ("C3", "C4")}
-            hard["terminal"] = _refusal_from_object(refusal)
-            append_sample(pending, "error", hard, refusal.detail)
-        return finish(refusal)
+        while True:
+            try:
+                # 1. Two clock reads and comparisons; absolute deadline is never recomputed.
+                now = monotonic()
+                if now >= deadline and phase != 'cleanup':
+                    stop(_CODES['refused_bind_expired'], 'bind deadline expired')
+                # 2. At most one cadence submission, using a bounded nonblocking queue.
+                if phase != 'cleanup' and now >= next_census:
+                    censuses.append(start('census', census_call, {}))
+                    next_census += CENSUS_INTERVAL_S
+                # A local timeout interrupts this interval, resets the run, and retries.
+                if phase == 'sample' and foreground is not None:
+                    began = next(at for job, _, at in jobs.values() if job is foreground)
+                    if now >= began + policy['sample_interval_s'] + _BIND_SAMPLE_GRACE_S:
+                        foreground.cancel()
+                        foreground = None
+                        quiet_run = 0
+                        append_sample('error', night_gate.Refusal(_CODES['probe_error'], 'sample local deadline expired', ()))
+                        phase = 'ack'
+
+                # 3. Fixed job-count cap times fixed read/byte budgets; no worker waits.
+                for job, _, _ in list(jobs.values()):
+                    job.advance()
+                # 4. Fixed job-count cap times WNOHANG; cleanup runs on EVERY tick.
+                for key, (job, _, _) in list(jobs.items()):
+                    if job.poll_cleanup():
+                        del jobs[key]
+
+                # All processing below handles bounded cached results, never pipe I/O.
+                if writer.failure and phase != 'cleanup':
+                    stop(_CODES['probe_error'], 'journal failure: ' + writer.failure)
+                if phase == 'cleanup':
+                    if not writer_stopped:
+                        writer.stop()
+                        writer_stopped = True
+                    if not jobs:
+                        if writer.done:
+                            break
+                        if time.perf_counter() >= cleanup_until:
+                            writer.failure = writer.failure or 'journal acknowledgement unavailable at cleanup deadline'
+                            break
+                    # Refusal already latched: fake admission time need not advance during reaping.
+                    sleep(0)
+                    time.sleep(0.001)
+                    continue
+
+                for done in list(censuses):
+                    if not done.ready():
+                        continue
+                    censuses.remove(done)
+                    done.cancel()
+                    record = done.result()
+                    writer.submit('census', record)
+                    if record['refusal']:
+                        rejected = record['refusal']
+                        stop(rejected['reason'], rejected['detail'])
+                        break
+                if phase == 'cleanup':
+                    continue
+
+                if foreground is not None and foreground.ready():
+                    done, foreground = foreground, None
+                    done.cancel()
+                    value = done.result()
+                    if phase == 'static':
+                        static = value if isinstance(value, night_gate.Receipt) else _receipt_decode(value)
+                        current = static
+                        if static.refusal:
+                            stop(static.refusal.reason, static.refusal.detail, static.refusal.evidence)
+                            continue
+                        phase = 'pre'
+                    elif phase in ('pre', 'post', 'final'):
+                        old_phase = phase
+                        hard_done(value)
+                        if phase == 'cleanup':
+                            continue
+                        if old_phase == 'pre':
+                            pending['boot_identity'] = baseline_boot
+                            phase = 'sample'
+                        elif old_phase == 'post':
+                            if pending['boot_identity'] != baseline_boot:
+                                stop(_CODES['refused_boot_clock'], 'sample boot identity changed')
+                                continue
+                            quiet = quiet_admission.is_quiet(pending['metrics'], policy)
+                            quiet_run = quiet_run + 1 if quiet else 0
+                            append_sample('quiet' if quiet else 'WAIT')
+                            phase = 'go-ack' if quiet_run >= policy['consecutive_quiet_samples'] else 'ack'
+                        else:
+                            phase = 'go-ack' if censuses else 'go-ready'
+                    elif phase == 'sample':
+                        quiet_admission.validate_observation(value, policy, allow_unavailable_boot=True)
+                        pending = value
+                        if 'boot_identity_unavailable' in value:
+                            raise night_gate.ProbeError('boot_identity_unavailable: ' + value['boot_identity_unavailable'])
+                        if value['census']['exit_code'] == 0:
+                            stop(_CODES['refused_agent_present'], 'sampler census hit: ' + value['census']['stdout'])
+                            continue
+                        phase = 'post'
+
+                # ACK and reaping are flags only; final checks follow storage ACK
+                # so a slow filesystem cannot age hard predicates into a later GO.
+                if phase in ('ack', 'go-ack') and writer.snapshot[0] >= (final_ack or math.inf):
+                    if phase == 'go-ack':
+                        if not censuses and not jobs:
+                            phase = 'final'
+                    else:
+                        phase = 'pre'
+                if phase == 'go-ready':
+                    if censuses:
+                        phase = 'go-ack'  # refresh final checks after delayed census
+                    elif not jobs:
+                        go_epoch = wall_clock()
+                        if go_epoch < baseline_wall or go_epoch > deadline_epoch:
+                            stop(_CODES['refused_boot_clock'], 'wall clock moved outside final-check/bind bounds')
+                        else:
+                            phase = 'cleanup'
+                            cleanup_until = time.perf_counter() + _BIND_JOURNAL_FLUSH_S
+                        continue
+
+                if foreground is None:
+                    if phase == 'static':
+                        foreground = start('static', lambda: night_gate.evaluate_static(plan, probes), {'plan': asdict(plan)})
+                    elif phase in ('pre', 'post', 'final'):
+                        if phase == 'pre':
+                            pending = dict(wall_start=wall_clock(),
+                                monotonic_start=now, boot_identity=baseline_boot, raw_sha256={}, metrics={})
+                        foreground = start('hard', lambda: night_gate.evaluate_dynamic_hard(plan, probes, static),
+                            {'plan': asdict(plan), 'static': json.loads(static.to_json_bytes())})
+                    elif phase == 'sample':
+                        foreground = start('sample', sampler, {'interval': policy['sample_interval_s'], 'observer_pid': os.getpid()})
+                # Yield at most 50 ms; this is an explicit bounded timer, not a worker wait.
+                if phase in ('ack', 'go-ack', 'go-ready') or (foreground is not None and foreground.ready()):
+                    sleep(0)
+                    time.sleep(0.001)
+                else:
+                    sleep(min(0.05, max(0, deadline - monotonic())))
+            except Exception as error:
+                stop(_CODES['probe_error'], f'binding observation failed: {type(error).__name__}: {error}')
     finally:
-        if census_task is not None:
-            census_task.close()
+        if not writer_stopped:
+            writer.stop()
+        launcher.stop()
+
+    # Immutable ACK snapshot only: no finish-time journal read or child wait.
+    _, digest, lines = writer.snapshot
+    metrics = last.get('metrics', {}) if last else {}
+    summary = dict(quiet_admission=policy, admission_is_capture_evidence=False,
+        bind_deadline_epoch_s=deadline_epoch, go_epoch_s=None if refusal else go_epoch,
+        samples_total=lines, samples_quiet_run_at_go=0 if refusal else quiet_run,
+        quiet_samples_sha256=digest, quiet_samples_lines=lines,
+        top_consumers_at_decision=metrics.get('top_consumers', []),
+        load_avg_diagnostic=last.get('load_avg_diagnostic', {}) if last else {'error': 'no completed observation'},
+        observer_cpu_s=max(0, _bind_cpu() - cpu_start))
+    if writer.failure:
+        summary['journal_failure'] = writer.failure
+        if refusal is None:
+            refusal = night_gate.Refusal(_CODES['probe_error'], 'journal failure: ' + writer.failure, ())
+            summary.update(go_epoch_s=None, samples_quiet_run_at_go=0)
+    if last and 'boot_identity_unavailable' in last:
+        summary['boot_identity_unavailable'] = last['boot_identity_unavailable']
+    if not summary['top_consumers_at_decision']:
+        summary['attribution_unavailable'] = 'no measurable process deltas before decision'
+    if refusal and refusal.reason == _CODES['refused_bind_expired']:
+        refusal = replace(refusal, detail=refusal.detail + '; ' + json.dumps(dict(
+            samples_total=lines, last_busy_cores=metrics.get('busy_cores'),
+            top_consumers=summary['top_consumers_at_decision'], quiet_samples_sha256=digest,
+            quiet_samples_lines=lines), sort_keys=True))
+    return replace(current, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=summary,
+        verdict='REFUSED' if refusal else ('REHEARSAL_ONLY' if plan.receipt_class == 'REHEARSAL_STUB' else 'GO'),
+        refusal=refusal, authored_monotonic_ns=max(0, int(monotonic() * 1e9)))
+
+
+def smoke_observation_round(interval_s):
+    """Plan-free read-only round using production exec, census and journal work.
+
+    This measures overhead; it never evaluates a cutoff or grants admission.
+    The parent brackets startup through reaping and final durable journal ACK.
+    """
+    import tempfile
+    quiet_admission.top_argv(interval_s)
+    cpu_start = _bind_cpu()
+    with tempfile.TemporaryDirectory(prefix='jw-observer-round-') as directory:
+        writer, launcher = _BindJournal(Path(directory)), _BindLauncher()
+        jobs = {}
+        sequence, phase = 0, 0
+        foreground = None
+        censuses = []
+        observation = error = None
+        submitted = None
+        now = time.monotonic()
+        # Three hard-check rounds, five tools at 30 s each, plus sample grace.
+        deadline = now + interval_s + _BIND_SAMPLE_GRACE_S + 3 * 5 * PROBE_TIMEOUT_S
+        next_census = now
+        cleanup_until = None
+        writer_stopped = False
+        def start(kind):
+            nonlocal sequence
+            if len(jobs) >= _BIND_MAX_JOBS:
+                raise night_gate.ProbeError('observer smoke job limit reached')
+            sequence += 1
+            name = f'{kind}-{sequence}'
+            request = {'interval': interval_s, 'observer_pid': os.getpid()} if kind == 'sample' else {}
+            task = _BindTask(name, lambda fd: _bind_argv(kind, name, fd, request), launcher)
+            jobs[name] = task
+            return task
+        try:
+            while True:
+                # One clock comparison; the smoke engineering deadline is fixed.
+                now = time.monotonic()
+                if error is None and now >= deadline:
+                    error = 'observer smoke deadline expired'
+                # One bounded cadence submission; never wait for an older census.
+                if error is None and phase < 5 and now >= next_census:
+                    censuses.append(start('census'))
+                    next_census += CENSUS_INTERVAL_S
+                # Fixed 32-job cap times the per-job nonblocking byte budget.
+                for task in list(jobs.values()):
+                    task.advance()
+                # Each cleanup attempt is a group signal and WNOHANG, never wait().
+                for key, task in list(jobs.items()):
+                    if task.poll_cleanup():
+                        del jobs[key]
+                try:
+                    if phase == 5:
+                        if writer.done:
+                            if writer.failure:
+                                raise night_gate.ProbeError(writer.failure)
+                            break
+                        if now >= cleanup_until:
+                            raise night_gate.ProbeError('observer journal finalization exceeded cleanup allowance')
+                    if writer.failure:
+                        error = writer.failure
+                    if error:
+                        for task in jobs.values():
+                            task.cancel()
+                        if not jobs:
+                            raise night_gate.ProbeError(error)
+                    else:
+                        for done in list(censuses):
+                            if done.ready():
+                                censuses.remove(done)
+                                done.cancel()
+                                writer.submit('census', done.result())
+                        if foreground is not None and foreground.ready():
+                            done, foreground = foreground, None
+                            done.cancel()
+                            value = done.result()
+                            if phase == 1:
+                                observation = value
+                            phase += 1
+                        if foreground is None and phase < 4:
+                            foreground = start('sample' if phase == 1 else 'smoke-hard')
+                        if phase == 4 and submitted is None:
+                            submitted = writer.submit('sample', observation)
+                        if phase == 4 and submitted is not None and writer.snapshot[0] >= submitted and not censuses and not jobs:
+                            writer.stop()
+                            writer_stopped = True
+                            phase = 5
+                            cleanup_until = now + _BIND_JOURNAL_FLUSH_S
+                except night_gate.ProbeError as caught:
+                    if error and not jobs:
+                        raise
+                    error = str(caught)
+                # Explicit 10 ms timer; no readiness or filesystem wait.
+                time.sleep(.01)
+        finally:
+            if not writer_stopped:
+                writer.stop()
+            launcher.stop()
+        cost = max(0, _bind_cpu() - cpu_start)
+    return observation, cost
 
 
 def run_night(
@@ -2941,6 +3349,11 @@ def build_parser() -> argparse.ArgumentParser:
     worker.add_argument("--receipt", required=True, type=Path)
     worker.add_argument("--progress", required=True, type=Path)
     worker.add_argument("--deadline", required=True, type=float)
+    bind_worker = subcommands.add_parser("_bind-worker", help=argparse.SUPPRESS)
+    bind_worker.add_argument("--kind", required=True, choices=("census", "static", "hard", "smoke-hard"))
+    bind_worker.add_argument("--job-id", required=True)
+    bind_worker.add_argument("--result-fd", required=True, type=int)
+    bind_worker.add_argument("--request", required=True)
     scheduling = subcommands.add_parser("schedule")
     scheduling.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
     preflight = subcommands.add_parser("preflight")
@@ -2954,6 +3367,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "_bind-worker":
+        return _bind_worker(args.kind, args.job_id, args.result_fd, args.request)
     if args.command == "_probe-worker":
         return _probe_worker(args.plan, args.receipt, args.progress, args.deadline)
     if args.command == "probe":

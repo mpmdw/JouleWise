@@ -4003,8 +4003,14 @@ class BindFakeTask:
     def result(self):
         return self.call()
 
-    def close(self):
+    def advance(self):
+        pass
+
+    def cancel(self):
         self.closed = True
+
+    def poll_cleanup(self):
+        return self.closed
 
 
 class QuietBindingTests(unittest.TestCase):
@@ -4028,7 +4034,7 @@ class QuietBindingTests(unittest.TestCase):
         self.tasks = []
         self.samples = 0
 
-    def task(self, call):
+    def task(self, kind, job_id, call, request, launcher):
         task = BindFakeTask(call, self.clock)
         self.tasks.append(task)
         return task
@@ -4040,7 +4046,7 @@ class QuietBindingTests(unittest.TestCase):
             busy = values[min(self.samples - 1, len(values) - 1)]
             return dict(wall_start=self.clock.wall() - duration, wall_end=self.clock.wall(),
                 monotonic_start=self.clock.monotonic() - duration, monotonic_end=self.clock.monotonic(),
-                interval_s=duration, boot_identity=BOOT_UUID, observer_cpu_s=0.2,
+                interval_s=duration, boot_identity=BOOT_UUID,
                 census=dict(exit_code=1, stdout='', stderr=''),
                 raw_sha256=dict(ps_before='a'*64, ps_after='b'*64, top='c'*64),
                 metrics=metrics(busy), load_avg_diagnostic={'raw': str(load)})
@@ -4049,8 +4055,8 @@ class QuietBindingTests(unittest.TestCase):
 
     def bind(self, sampler, **kwargs):
         receipt = self.driver.bind_until_quiet(self.plan, self.probes, self.night,
-            sampler=sampler, task_factory=self.task, monotonic=self.clock.monotonic,
-            sleep=self.clock.sleep, **kwargs)
+            sampler=sampler, test_dispatch=self.task, monotonic=self.clock.monotonic,
+            sleep=self.clock.sleep, wall_clock=self.clock.wall, **kwargs)
         self.assertTrue(all(task.closed for task in self.tasks))
         value = json.loads(receipt.to_json_bytes())
         self.assertEqual(night_gate.validate_receipt(value), [])
@@ -4087,7 +4093,8 @@ class QuietBindingTests(unittest.TestCase):
         self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
         receipt, value = self.bind(self.sampler([.9], load=1.2))
         self.assertEqual(receipt.verdict, 'REFUSED')
-        self.assertTrue(all(s['decision'] == 'WAIT' for s in self.journal()))
+        self.assertTrue(all(s['decision'] == 'WAIT' for s in self.journal()[:-1]))
+        self.assertEqual(self.journal()[-1]['error_code'], 'night_refused_bind_expired')
         self.assertEqual(value['load_avg_diagnostic'], {'raw': '1.2'})
 
     def test_finished_burst_admits_despite_high_load(self):
@@ -4150,6 +4157,11 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(deadlines, [1600, 1600, 1600])
         self.assertEqual(decision['bind_deadline_epoch_s'], 1600)
         self.assertEqual(phase.clock.monotonic(), 600)
+        # The new local allowance interrupts each hung attempt before global expiry.
+        errors = [entry for entry in phase.journal() if entry['decision'] == 'error']
+        self.assertEqual([entry['error_code'] for entry in errors],
+            ['night_probe_error', 'night_probe_error', 'night_refused_bind_expired'])
+        self.assertEqual([entry['monotonic_end'] for entry in errors], [335, 580, 600])
 
     def test_late_driver_consumes_bind_allowance(self):
         self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
@@ -4179,6 +4191,8 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
         self.assertEqual(self.clock.monotonic(), 600)
         self.assertEqual(value['bind_deadline_epoch_s'], 1600)
+        self.assertEqual([entry['error_code'] for entry in self.journal()],
+            ['night_probe_error', 'night_probe_error', 'night_refused_bind_expired'])
 
     def test_observed_wall_rollback_is_terminal_boot_clock(self):
         self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
@@ -4194,80 +4208,17 @@ class QuietBindingTests(unittest.TestCase):
         self.assertEqual(value['bind_deadline_epoch_s'], 1600)
 
     def test_sampler_hang_cannot_block_census_or_expiry(self):
-        self.plan.quiet_admission['busy_core_max'] = 0.05  # injected test threshold
-        import threading
-        import time
-        from dataclasses import replace
-        census_ticks = []
-        original_run = self.probes.run
-        def run(argv):
-            if argv == night_gate.AGENT_CENSUS_ARGV:
-                census_ticks.append(self.clock.monotonic())
-            return original_run(argv)
-        self.probes = replace(self.probes, run=run)
-        def sample():
-            while True:
-                time.sleep(3600)
-        class Task(self.driver._BindTask):
-            closed = False
-            def close(task):
-                if not task.closed:
-                    super(Task, task).close()
-                    task.closed = True
-        task = Task(sample)
-        pid = task.process.pid
-        self.addCleanup(task.close)
-        entered = threading.Event()
-        outcomes = []
-        def check_ready():
-            entered.set()
-            try:
-                at = time.perf_counter()
-                outcomes.append((task.ready(), time.perf_counter() - at))
-            except Exception as error:
-                outcomes.append(error)
-        thread = threading.Thread(target=check_ready, daemon=True)
-        thread.start()
-        try:
-            self.assertTrue(entered.wait(1))
-            thread.join(0.05)
-            self.assertFalse(thread.is_alive(), 'ready() blocked beyond 50 ms on a real hung worker')
-            self.assertFalse(outcomes[0][0])
-            self.assertLess(outcomes[0][1], 0.05)
-            fake_task = self.task
-            def supervised(call):
-                if call is sample:
-                    self.tasks.append(task)
-                    return task
-                return fake_task(call)
-            self.task = supervised
-            self.clock.limit = 600
-            receipt, value = self.bind(sample)
-        finally:
-            if thread.is_alive():
-                # Unblock a join() mutant before close() joins the same child;
-                # concurrent multiprocessing joins can race their exit status.
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                thread.join(1)
-                self.assertFalse(thread.is_alive(), 'ready helper did not unblock after worker termination')
-            task.close()
-            thread.join(1)
-        self.assertEqual(self.clock.monotonic(), 600)
+        # Real transport/process tests below exercise the supervisor seam. This
+        # pure test asserts the newly distinct local and absolute decisions.
+        sample = self.sampler([.9])
+        sample.hang = True
+        receipt, value = self.bind(sample)
         self.assertEqual(receipt.refusal.reason, 'night_refused_bind_expired')
-        censuses = [json.loads(s) for s in (self.night/'censuses.jsonl').read_text().splitlines()]
-        self.assertGreaterEqual(len(censuses), 20)
-        # A worker launched at the cadence is collected on the next 50 ms
-        # supervisor tick; assert bounded evaluation rather than exact pickup.
-        for due in (30, 90, 570):
-            self.assertTrue(any(due <= tick <= due + 0.05 + 1e-9 for tick in census_ticks), census_ticks)
-        self.assertEqual(self.journal()[0]['decision'], 'error')
-        self.assertIn('attribution_unavailable', value)
-        self.assertTrue(task.closed)
-        with self.assertRaises(ChildProcessError):
-            os.waitpid(pid, os.WNOHANG)
+        entries = self.journal()
+        self.assertEqual(entries[0]['error_code'], 'night_probe_error')
+        self.assertEqual(entries[0]['monotonic_end'], 245)
+        self.assertEqual(entries[-1]['error_code'], 'night_refused_bind_expired')
+        self.assertGreaterEqual(len((self.night/'censuses.jsonl').read_text().splitlines()), 20)
 
     def test_changed_boot_identity_is_terminal_boot_clock(self):
         original = self.sampler([.02])
@@ -4411,7 +4362,9 @@ class QuietDriverIntegrationTests(unittest.TestCase):
 
     def assert_driver_deadlines(self, go_offset):
         from dataclasses import replace
-        fixture, plan = self.fixture(busy_core_max=0.05)
+        # The synthetic 270 s observation now declares its actual interval;
+        # a 30 s policy would correctly time it out at 30 + 215 s.
+        fixture, plan = self.fixture(busy_core_max=0.05, sample_interval_s=270)
         driver = fixture.driver
         clock = BindClock()
         clock.offset = plan.t0_epoch_s
@@ -4423,7 +4376,7 @@ class QuietDriverIntegrationTests(unittest.TestCase):
             from tests.test_quiet_admission import metrics
             return dict(wall_start=clock.wall()-270, wall_end=clock.wall(),
                 monotonic_start=clock.monotonic()-270, monotonic_end=clock.monotonic(),
-                interval_s=270, boot_identity=BOOT_UUID, observer_cpu_s=0.2,
+                interval_s=270, boot_identity=BOOT_UUID,
                 census=dict(exit_code=1, stdout='', stderr=''),
                 raw_sha256=dict(ps_before='a'*64, ps_after='b'*64, top='c'*64),
                 metrics=metrics(.02), load_avg_diagnostic={'raw':'3.7'})
@@ -4431,8 +4384,8 @@ class QuietDriverIntegrationTests(unittest.TestCase):
         def bind(*args, **kwargs):
             self.assertFalse((fixture.custody/'night/chain.started').exists())
             return real_bind(*args, **kwargs, sampler=sample,
-                task_factory=lambda call: BindFakeTask(call, clock),
-                monotonic=clock.monotonic, sleep=clock.sleep)
+                test_dispatch=lambda kind, job_id, call, request, launcher: BindFakeTask(call, clock),
+                monotonic=clock.monotonic, sleep=clock.sleep, wall_clock=clock.wall)
         driver.bind_until_quiet = bind
         if go_offset == 0:
             # Boundary control for the downstream driver only. The +540 case
@@ -4484,9 +4437,213 @@ class QuietDriverIntegrationTests(unittest.TestCase):
     def test_supervised_worker_is_reaped_on_cancellation(self):
         import time
         driver = _load_driver()
-        task = driver._BindTask(lambda: time.sleep(60))
+        launcher = driver._BindLauncher()
+        task = driver._BindTask('cancel', lambda fd: (sys.executable, '-c', 'import time; time.sleep(60)'), launcher)
+        until = time.monotonic() + 2
+        while not task.launch_done and time.monotonic() < until:
+            time.sleep(.001)
         pid = task.process.pid
         self.assertFalse(task.ready())
-        task.close()
+        task.cancel()
+        while not task.poll_cleanup() and time.monotonic() < until:
+            time.sleep(.001)
+        self.assertTrue(task.closed)
+        launcher.stop()
         with self.assertRaises(ChildProcessError):
             os.waitpid(pid, os.WNOHANG)
+
+
+class BindSupervisionProcessTests(unittest.TestCase):
+    """Actual ticker/transport/reaping under a separate 8 s wall-clock watchdog."""
+    def scenario(self, name):
+        with tempfile.TemporaryDirectory(prefix='jw-bind-fault-') as directory:
+            root = Path(directory)
+            command = (sys.executable, '-B', str(REPO_ROOT/'tests/night_gate_fixtures/bind_supervision.py'), name, directory)
+            worker = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                      text=True, start_new_session=True)
+            try:
+                stdout, stderr = worker.communicate(timeout=8)
+            except subprocess.TimeoutExpired:
+                self.fail(f'external watchdog (8 s): bind supervisor blocked in {name}')
+            finally:
+                # Disposable supervisor and independently sessioned workers are
+                # reclaimed even when a blocking mutant trips the watchdog.
+                registry = root/'workers'
+                pids = [int(pid) for pid in registry.read_text().splitlines()] if registry.exists() else []
+                for pid in [worker.pid, *pids]:
+                    try:
+                        os.killpg(pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass
+                if worker.poll() is None:
+                    worker.kill()
+                worker.communicate(timeout=1)
+            self.assertEqual(worker.returncode, 0, stderr)
+            result = json.loads(stdout)
+        for task in result['tasks']:
+            if task['pid'] is not None:
+                self.assertTrue(task['reaped'], task)
+            self.assertLessEqual(task['max_reads'], 4, task)
+            self.assertLessEqual(task['max_bytes'], 65536, task)
+            self.assertLessEqual(task['max_buffer'], 262148, task)
+        self.assertEqual(result['receipt']['bind_deadline_epoch_s'], 1600)
+        return result
+
+    def assert_expired(self, result):
+        self.assertEqual(result['receipt']['refusal']['reason'], 'night_refused_bind_expired')
+        self.assertEqual(result['now'], 600)
+        self.assertIsNone(result['receipt']['go_epoch_s'])
+
+    def test_blocking_join_startup_and_post_publication(self):
+        # Each subcase is also available individually to the mutant runner.
+        self.test_startup_hang_is_nonblocking()
+        self.test_post_send_hang_is_consumed_once_and_reaped()
+
+    def test_startup_hang_is_nonblocking(self):
+        result = self.scenario('startup_hang')
+        self.assert_expired(result)
+        self.assertEqual(result['census_ticks'], list(range(0, 600, 30)))
+        self.assertEqual(result['sample_jobs'], 0)
+
+    def test_header_plus_one_byte_never_blocks_recv(self):
+        result = self.scenario('recv_stall_late')
+        self.assert_expired(result)
+        self.assertEqual(result['samples'][-1]['error_code'], 'night_refused_bind_expired')
+        self.assertEqual(result['census_ticks'], list(range(400, 600, 30)))
+
+    def test_partial_header_and_body_eof_are_errors(self):
+        for fault in ('partial_header', 'partial_body'):
+            with self.subTest(fault=fault):
+                result = self.scenario(fault)
+                self.assertEqual(result['receipt']['refusal']['reason'], 'night_probe_error')
+                self.assertIn('premature EOF', result['samples'][0]['error'])
+                self.assertEqual(result['samples'][0]['decision'], 'error')
+                self.assertEqual(result['sample_jobs'], 1)
+
+    def test_pre_send_local_timeout_and_late_global_expiry(self):
+        result = self.scenario('presend_hang')
+        self.assertEqual(result['receipt']['verdict'], 'GO')
+        self.assertEqual(result['sample_jobs'], 2)
+        self.assertEqual(result['samples'][0]['error_code'], 'night_probe_error')
+        self.assertEqual(result['samples'][0]['monotonic_end'], 245)
+        self.assertEqual(result['samples'][1]['decision'], 'quiet')
+        self.assertEqual(result['receipt']['go_epoch_s'], 1275)
+        self.assertEqual(result['census_ticks'], list(range(0, 276, 30)))
+        late = self.scenario('presend_hang_late')
+        self.assert_expired(late)
+        self.assertEqual(late['sample_jobs'], 1)
+        self.assertEqual(late['samples'][0]['error_code'], 'night_refused_bind_expired')
+
+    def test_post_send_hang_is_consumed_once_and_reaped(self):
+        result = self.scenario('postsend_hang')
+        self.assertEqual(result['receipt']['verdict'], 'GO')
+        self.assertEqual(result['sample_jobs'], 1)
+        self.assertEqual(len(result['samples']), 1)
+        self.assertEqual(result['receipt']['go_epoch_s'], 1030)
+        sample = next(task for task in result['tasks'] if task['kind'] == 'sample')
+        self.assertTrue(sample['ready'])
+        self.assertIn({'stage':'published'}, sample['events'])
+
+    def test_exit_without_result_is_error_never_quiet(self):
+        result = self.scenario('empty')
+        self.assertEqual(result['receipt']['refusal']['reason'], 'night_probe_error')
+        self.assertEqual(result['samples'][0]['decision'], 'error')
+        self.assertIn('premature EOF', result['samples'][0]['error'])
+
+    def test_oversized_length_and_flood_are_bounded(self):
+        result = self.scenario('oversize')
+        self.assertEqual(result['receipt']['refusal']['reason'], 'night_probe_error')
+        self.assertIn('exceeds cap', result['samples'][0]['error'])
+        sample = next(task for task in result['tasks'] if task['kind'] == 'sample')
+        self.assertEqual(sample['max_buffer'], 4, 'oversize body was allocated/read')
+        self.assertLessEqual(sample['max_bytes'], 4)
+        serialized = self.scenario('serialize_oversize')
+        self.assertEqual(serialized['receipt']['refusal']['reason'], 'night_probe_error')
+        self.assertIn('serialized binding payload exceeds', serialized['samples'][0]['error'])
+
+    def test_slow_chunks_keep_census_and_deadline_fixed(self):
+        result = self.scenario('slow')
+        self.assertEqual(result['receipt']['verdict'], 'GO')
+        self.assertEqual(result['chunk_early'], [[0,False,10],[1,False,20],[2,False,30]])
+        self.assertEqual(result['census_ticks'], [0, 30])
+        self.assertEqual(result['receipt']['go_epoch_s'], 1030)
+        self.assertEqual(result['sample_jobs'], 1)
+
+    def test_blocked_journal_never_blocks_deadline_or_grants_go(self):
+        result = self.scenario('journal_block')
+        self.assert_expired(result)
+        self.assertIn('journal_failure', result['receipt'])
+        self.assertEqual(result['census_ticks'], list(range(0, 600, 30)))
+        self.assertIsNone(result['receipt']['go_epoch_s'])
+
+    def test_descendant_descriptor_and_group_cancellation(self):
+        for fault in ('descendant_hang_late', 'descendant_exit'):
+            with self.subTest(fault=fault):
+                result = self.scenario(fault)
+                events = [event for task in result['tasks'] for event in task['events'] if 'descendant' in event]
+                self.assertEqual(len(events), 1)
+                self.assertTrue(events[0]['fd_closed'], 'grandchild inherited result descriptor')
+                self.assertIn(result['receipt']['refusal']['reason'], ('night_refused_bind_expired', 'night_probe_error'))
+                # The fixture grandchild holds the independent control socket
+                # open for its entire life. EOF proves cancellation reached it;
+                # no ps permission or same-process mock is involved.
+                sample = next(task for task in result['tasks'] if task['kind'] == 'sample')
+                self.assertTrue(sample['control_eof'], 'grandchild survived group cancellation')
+
+    def test_census_hit_interrupts_a_real_hung_sample(self):
+        result = self.scenario('census_hit')
+        self.assertEqual(result['receipt']['refusal']['reason'], 'night_refused_agent_present')
+        self.assertEqual(result['now'], 90)
+        self.assertEqual(result['census_ticks'], [0,30,60,90])
+        self.assertEqual(result['sample_jobs'], 1)
+
+    def test_parent_measures_whole_round_cost(self):
+        result = self.scenario('round_cost')
+        cost = result['receipt']['observer_cpu_s']
+        self.assertGreater(cost, 0)
+        self.assertLessEqual(cost, result['measured_cpu'])
+        self.assertLess(result['measured_cpu'] - cost, .1)
+        self.assertGreaterEqual(sum(task['kind'] == 'hard' for task in result['tasks']), 3)
+        self.assertGreaterEqual(sum(task['kind'] == 'census' for task in result['tasks']), 2)
+        self.assertEqual(result['receipt']['quiet_samples_lines'], 1)
+
+    def test_large_frame_is_incremental_and_still_bounded(self):
+        result = self.scenario('large_frame')
+        self.assertEqual(result['receipt']['verdict'], 'GO')
+        sample = next(task for task in result['tasks'] if task['kind'] == 'sample')
+        self.assertGreater(sample['max_buffer'], 200000)
+        self.assertLessEqual(sample['max_reads'], 4)
+        self.assertLessEqual(sample['max_bytes'], 65536)
+
+    def test_journal_failure_and_saturation_are_terminal(self):
+        for mode, detail in (('journal_error', 'write failure'), ('journal_saturation', 'queue saturated')):
+            with self.subTest(mode=mode):
+                result = self.scenario(mode)
+                self.assertEqual(result['receipt']['refusal']['reason'], 'night_probe_error')
+                self.assertIn(detail, result['receipt']['journal_failure'])
+                self.assertIsNone(result['receipt']['go_epoch_s'])
+
+    def test_production_worker_argv_are_exact(self):
+        driver = _load_driver()
+        self.assertEqual(driver._bind_argv('sample', 'sample-1', 42,
+            {'interval': 30, 'observer_pid': 7}),
+            (sys.executable, '-B', '-m', 'joulewise.quiet_admission', '--observation',
+             '--sample-interval-s', '30', '--observer-pid', '7', '--job-id', 'sample-1', '--result-fd', '42'))
+        for kind in ('census', 'static', 'hard', 'smoke-hard'):
+            self.assertEqual(driver._bind_argv(kind, kind+'-1', 42, {}),
+                (sys.executable, '-B', str(SCRIPT_PATH), '_bind-worker', '--kind', kind,
+                 '--job-id', kind+'-1', '--result-fd', '42', '--request', '{}'))
+
+    def test_stalled_census_does_not_suppress_later_census(self):
+        result = self.scenario('census_stall_hit')
+        self.assertEqual(result['receipt']['refusal']['reason'], 'night_refused_agent_present')
+        self.assertEqual(result['now'], 90)
+        self.assertEqual(result['census_ticks'], [0,30,60,90])
+        self.assertIsNone(result['receipt']['go_epoch_s'])
+
+    def test_final_hard_checks_follow_delayed_journal_ack(self):
+        result = self.scenario('journal_late_power')
+        self.assertEqual(result['receipt']['refusal']['reason'], 'night_refused_not_quiet')
+        self.assertGreaterEqual(result['now'], 60)
+        self.assertEqual(result['sample_jobs'], 1)
+        self.assertIsNone(result['receipt']['go_epoch_s'])

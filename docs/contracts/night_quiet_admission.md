@@ -17,7 +17,7 @@ its v3 plan and existing receipt contracts retain their current behavior.
 - **Consecutive quiet samples**, `consecutive_quiet_samples`, is the required uninterrupted count of intervals meeting the sealed CPU limit; one busy interval resets the count to zero.
 - **Busy-core equivalent** is one second of CPU work per elapsed second: 0.9 means 90% of one logical core, regardless of the machine's core count.
 - **Observer** means the driver, sampler interpreter and their child processes; **observer cost** is their CPU work, which must be counted rather than subtracted.
-- **Terminal versus WAIT** distinguishes a refusal that ends this invocation immediately from an excessive-CPU observation that continues binding without writing a refusal artifact.
+- **Terminal versus WAIT** distinguishes a refusal that ends this invocation immediately from an excessive-CPU observation that continues binding without writing a refusal artifact. An **ERROR** sample records an incomplete or invalid observation; it never counts as quiet.
 - **Attribution** means identifying which observed processes contributed CPU work, alongside any work only visible in the host total.
 - **Cutoff authority**, `cutoff_authority`, is the required record path naming the gate ruling that affirmed the sealed CPU limit; naming a path alone does not authenticate the ruling.
 
@@ -137,8 +137,13 @@ The native read-only smoke is `python3 -B -m joulewise.quiet_admission
 --sample-interval-s 30`. Its metrics line includes busy_cores, host_busy_cores,
 observer_cpu_s, the top three consumers and load_avg_diagnostic.
 `observer_cpu_s` is the change in user plus system CPU time of this interpreter
-and its reaped children over the whole round, including one
-`AGENT_CENSUS_ARGV` pgrep probe, both ps snapshots, top, sysctl reads and parsing.
+and its reaped children over the whole parent-supervised round, using `RUSAGE_SELF` plus
+`RUSAGE_CHILDREN` deltas. The bracket starts before launching workers and ends
+after their reaping and the final journal acknowledgement. It includes worker
+interpreter startup, census and pre/post/final hard-check workers, both ps
+snapshots, top, sysctl reads, parsing, transport and journal work. The sampler
+itself does not estimate this value. A binding receipt reports the same parent
+bracket over the entire binding invocation; the smoke brackets one round.
 It is reported without subtraction. The driver still supervises census at its
 independent cadence; a census hit in the sampler is terminal too. The lead runs
 this smoke natively; injected tests are not hardware cost evidence.
@@ -150,18 +155,71 @@ excess CPU and continues binding without writing a refusal artifact. Only
 excess CPU becomes WAIT. Agent census hits, AC-power loss, screensaver
 configuration failure, thermal restriction, boot/clock failure, invalid plan,
 registration/digest failure and malformed required observations stay terminal.
-Probe failures use `night_probe_error`. The screensaver check reads the
+Probe failures use `night_probe_error`; the local observation timeout described
+below is the explicit exception that records ERROR and permits another interval. The screensaver check reads the
 configured `idleTime`, which must be zero; it does not measure live inactivity.
 The display setting is parsed and recorded without imposing a new value.
 Thermal output without `CPU_Speed_Limit` passes; present limits must be 100.
 
 The driver checks static evidence once, then hard machine predicates at every
 sample and again immediately before GO (permission to start). Census workers
-also run every 30 s while any sample or hard probe is in flight. A census hit
+also start every 30 s while any sample or hard probe is in flight, even if an
+earlier census has not published. A pending census prevents GO. A census hit
 wins over a completed quiet run. Workers run in dedicated process groups and
 are killed/reaped on terminal refusal or deadline expiry. A hung `top` cannot
-block the supervisor, census or deadline. Tests inject fake tasks and clocks;
-they never wait a real sampling interval.
+block the supervisor, census or deadline. Pure policy tests use injected jobs;
+supervision tests run real exec workers in a disposable process with a separate
+wall-clock watchdog. Workers acknowledge their fault point over a separate
+control channel before fake time advances. No test waits a real sample interval.
+
+### Supervision
+
+The **supervisor** is the parent tick loop that owns the absolute deadline.
+No operation on that path waits for worker progress, an end-of-file indication,
+filesystem completion or child exit. Every tick checks the fixed monotonic
+deadline, services census cadence, advances every live transport, and polls
+cleanup, in that order. Static checks, pre-sample checks, sampling, post-sample
+checks, final checks and cleanup are explicit phases; none blocks those steps.
+Exec startup runs on a launcher thread rather than inside the ticker.
+
+Every job has a dedicated nonblocking pipe. Its **frame** is a four-byte
+big-endian length followed by one JSON envelope `{job_id, ok, result | error}`.
+The 256 KiB payload cap includes diagnostics; an oversized length is rejected
+before reading or allocating its body. Worker serialization above the cap
+publishes a small error envelope. Each job gets at most four raw reads and
+64 KiB per tick, with at most 32 jobs tracked. A would-block result means
+pending; premature end-of-file means ERROR. Only a complete frame is decoded.
+Publication is that complete frame, not worker exit. Cached result access
+performs no I/O. Each worker is an exec subprocess in a new process group;
+its result descriptor is non-inheritable before it launches any tool. Standard
+error goes to the null device, with zero bytes retained and no unread pipe.
+
+The **local allowance** for one sampler is `sample_interval_s + 215` seconds:
+seven tool timeouts of 30 seconds beyond the interval (210 seconds), plus five
+seconds for startup and serialization. This engineering supervision allowance
+is always capped by the absolute bind deadline; it is neither a quietness
+threshold nor an extension. Local expiry records an ERROR sample with
+`night_probe_error`, resets the quiet run, and permits another interval if time
+remains. Absolute expiry wins at the boundary, records an interrupted ERROR
+sample when an interval is in progress, and refuses with
+`night_refused_bind_expired`. Malformed required evidence remains terminal.
+
+Cancellation immediately signals the dedicated group; reaping polls
+`waitpid(WNOHANG)` (a non-waiting child-exit check). A worker that hangs after
+publication is cancelled too. The parent returns only after its direct children
+are reaped. Journal work belongs to one parent thread, receiving immutable
+records through a bounded, nonblocking queue. It owns append order, incremental
+SHA-256 and line counts, and **acknowledgements** issued after a successful
+flush and synchronization. Census writes use this thread too. GO requires the
+final sample acknowledgement, followed by final hard checks; a slow journal
+cannot make old hard predicates authorize a later GO. Queue saturation or a write failure forbids GO
+and is reported as `journal_failure`; a blocked writer cannot prevent worker
+termination. Cleanup allows writer finalization at most one wall-clock second after the
+latched decision, then reports failure without waiting for the writer. This
+never adds admission time.
+On journal failure the receipt hash/count describe the acknowledged durable
+prefix; an interrupted write cannot be represented as acknowledged evidence.
+Normal receipts describe the complete journal. Finishing never re-reads it.
 
 Each attempted interval appends one JSON line to `night/quiet_samples.jsonl`:
 sample index, wall and monotonic start/end, boot identity, raw ps-before,
@@ -176,7 +234,8 @@ Receipt `joulewise.unattended_night_receipt.v3` retains the old condition rows
 and adds quiet_admission, bind_deadline_epoch_s, go_epoch_s (null on refusal),
 samples_total, samples_quiet_run_at_go, quiet_samples_sha256,
 quiet_samples_lines, top_consumers_at_decision, load_avg_diagnostic and the
-required literal `admission_is_capture_evidence: false`.
+required literal `admission_is_capture_evidence: false`. The parent also
+reports `observer_cpu_s`; `journal_failure` is present only on refusal.
 If attribution is unavailable it adds a nonempty attribution_unavailable
 reason. On expiry `night_refused_bind_expired` includes the sample count, last
 measured busy cores/top consumers and journal digest/count. V2 receipts keep

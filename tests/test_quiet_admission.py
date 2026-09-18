@@ -139,7 +139,6 @@ class SamplerCommandTests(unittest.TestCase):
         def usage(kind):
             return SimpleNamespace(ru_utime=cpu[0] / 2, ru_stime=0)
         with mock.patch.object(qa.subprocess, 'run', side_effect=run) as command, \
-             mock.patch.object(qa.resource, 'getrusage', side_effect=usage), \
              mock.patch.object(qa.time, 'time', side_effect=[1000, 1030]), \
              mock.patch.object(qa.time, 'monotonic', side_effect=[0, 0, 30, 30]):
             observed = qa.sample_interval(30.0, observer_pid=42)
@@ -158,9 +157,9 @@ class SamplerCommandTests(unittest.TestCase):
         ])
         self.assertEqual(calls[2].kwargs['timeout'], 60)
         self.assertFalse(calls[-1].kwargs['check'])  # pgrep exit 1 is an empty census
-        self.assertAlmostEqual(observed['observer_cpu_s'], 1.0)  # 0.6 round + 0.4 census
+        self.assertNotIn('observer_cpu_s', observed)  # parent measures startup + all workers + journal
         qa.validate_observation(observed, POLICY)
-        self.assertEqual(set(qa.smoke_metrics(observed)), {
+        self.assertEqual(set(qa.smoke_metrics(observed, 1.0)), {
             'busy_cores', 'host_busy_cores', 'observer_cpu_s', 'top_consumers', 'load_avg_diagnostic'})
 
     def test_boot_read_failure_retains_metrics_but_is_never_quiet(self):
@@ -168,9 +167,36 @@ class SamplerCommandTests(unittest.TestCase):
         self.assertEqual(len(calls), 7)
         self.assertIsNone(observed['boot_identity'])
         self.assertIn('sysctl denied', observed['boot_identity_unavailable'])
-        self.assertIn('observer_cpu_s', qa.smoke_metrics(observed))
+        self.assertIn('observer_cpu_s', qa.smoke_metrics(observed, 1.0))
         with self.assertRaisesRegex(ValueError, 'boot_identity_unavailable'):
             qa.validate_observation(observed, dict(POLICY, busy_core_max=1))
+
+
+class ObservationWorkerCliTests(unittest.TestCase):
+    def test_full_observation_mode_uses_framed_publication(self):
+        import os
+        import json
+        read_fd, write_fd = os.pipe()
+        self.addCleanup(os.close, read_fd)
+        observation = {'fixture': 'full observation'}
+        with mock.patch.object(qa, 'sample_interval', return_value=observation) as sample:
+            self.assertEqual(qa.main(['--observation', '--sample-interval-s', '30',
+                '--observer-pid', '42', '--job-id', 'sample-1', '--result-fd', str(write_fd)]), 0)
+        raw = os.read(read_fd, 4096)
+        self.assertEqual(int.from_bytes(raw[:4], 'big'), len(raw)-4)
+        self.assertEqual(json.loads(raw[4:]), dict(job_id='sample-1', ok=True, result=observation))
+        sample.assert_called_once_with(30.0, observer_pid=42)
+
+    def test_smoke_prints_parent_round_cost(self):
+        import io
+        import json
+        from contextlib import redirect_stdout
+        observed, _ = SamplerCommandTests().observe()
+        out = io.StringIO()
+        with mock.patch('scripts.run_night.smoke_observation_round', return_value=(observed, 2.75)) as round_, redirect_stdout(out):
+            self.assertEqual(qa.main(['--sample-interval-s', '30']), 0)
+        round_.assert_called_once_with(30.0)
+        self.assertEqual(json.loads(out.getvalue())['observer_cpu_s'], 2.75)
 
 
 def legacy_counterfactual():
