@@ -1,0 +1,13 @@
+The courier duty for this night is complete. Recap for a reader who only sees this message:
+
+**Outcome.** Night d079-epoch-25g83-derivation-n2-20260919 finished with verdict GO and chain exit code 0. No refusal of any kind exists in the night directory. There is no refusal.json, no numbered refusal record, no calibration refusal, no duplicate-launch rerun record, and no chain.deadline or chain.unkilled. The chain exited on its own about 26 minutes before the window's end.
+
+**What ran.** The gate passed every row at 05:00:03 PDT. The chain opened a 12-slot derivation session, settled 600 s, ran all twelve slots on the 600 s cadence, and logged derivation_night_complete at 07:03:39 PDT. Ledger dispositions are 7 valid (d01, d03, d05, d07, d09, d11, d12) and 5 non-valid (d02, d04, d06, d08, d10). I read no member values and did not apply the section 2.5 equivalence rule, which belongs to the magistrate's harvest. All 247 censuses were empty and the launchd error stream is empty.
+
+**Results branch.** The driver pushed night-results/d079-epoch-25g83-derivation-n2-20260919. I verified it on origin with ls-remote at commit d9ec2ad9, equal to the local results-clone head.
+
+**Watchdog.** State path /Users/edr/night-custody/magistrate/state.json, age 57.841 s at message construction, last decision HOLD_CENSUS. The watchdog is alive. Its hold reason is a non-empty production census inside the plan span, which was the chain itself and should clear now.
+
+**Files written.** courier.heartbeat at start and refreshed at the end. courier.sent written at 07:05:47 PDT with the Gmail message id 1a0b9fc98dcd292e after the send was accepted.
+
+**Next lane.** The handback assigns the harvest to the relaunched magistrate, gated on the 07:35:00 PDT completion boundary and the presence of courier.sent. Both gates are now satisfied by time or by this run. That harvest, the desk commit of the sequence 176 pin candidate, the section 2.5 check, and the agent uninstall from the clone are the magistrate's steps, so I stopped here rather than preempt them. Nothing needs Ed's action unless the section 2.5 outcome names him.
