@@ -20,6 +20,7 @@ from joulewise.identity_pins import (
 )
 from typing import Any, Iterable
 from unittest import mock
+from tests.test_campaign_generator_core import generation_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -426,11 +427,19 @@ def floor_reference_ids(cell: dict[str, Any]) -> list[str]:
     ]
 
 
-def link_successor_self_check_inputs(output_root: Path) -> None:
+def link_successor_self_check_inputs(
+    output_root: Path, *, repository: Path = ROOT
+) -> None:
     if not (output_root / "joulewise").exists():
-        (output_root / "joulewise").symlink_to(ROOT / "joulewise", target_is_directory=True)
-    for source_dir in (ROOT / "configs", ROOT / "configs/campaigns", ROOT / "configs/floor_mint"):
-        target_dir = output_root / source_dir.relative_to(ROOT)
+        (output_root / "joulewise").symlink_to(
+            repository / "joulewise", target_is_directory=True
+        )
+    for source_dir in (
+        repository / "configs",
+        repository / "configs/campaigns",
+        repository / "configs/floor_mint",
+    ):
+        target_dir = output_root / source_dir.relative_to(repository)
         target_dir.mkdir(parents=True, exist_ok=True)
         for source in source_dir.iterdir():
             # Never import committed successor-generation artifacts as
@@ -446,10 +455,16 @@ def link_successor_self_check_inputs(output_root: Path) -> None:
         output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
     )
     if not successor_contrast.exists():
-        successor_contrast.symlink_to(CONTRAST_PACK, target_is_directory=True)
+        successor_contrast.symlink_to(
+            repository / CONTRAST_PACK.relative_to(ROOT), target_is_directory=True
+        )
 
 
 class D117FloorQwen251p5BPlanTests(unittest.TestCase):
+    def generation_repository(self) -> Path:
+        """Exercise working-tree generators with their generation-time head input."""
+        return generation_repository(self, ROOT)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.plan = load_json(PACK_ROOT / "calibration_plan.json")
@@ -679,6 +694,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 self.assertEqual(list(escape_root.iterdir()), [])
 
     def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
+        repository = self.generation_repository()
         successor_suffix = unminted_successor_family_suffix()
         successor_token = successor_suffix.removeprefix("_")
         next_suffix = f"_v{int(successor_suffix.removeprefix('_v')) + 1}"
@@ -707,12 +723,12 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             preserved = subprocess.run(
                 [
                     sys.executable,
-                    str(GENERATOR),
+                    str(repository / GENERATOR.relative_to(ROOT)),
                     "--output-root",
                     str(output_root),
                     "--preserve-current-frozen-bytes",
                 ],
-                cwd=ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -729,7 +745,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             )
             command = [
                 sys.executable,
-                str(GENERATOR),
+                str(repository / GENERATOR.relative_to(ROOT)),
                 "--output-root",
                 str(output_root),
                 "--pack-id",
@@ -740,7 +756,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             ]
             generated = subprocess.run(
                 command,
-                cwd=ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -803,7 +819,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                         )
             checked = subprocess.run(
                 [*command, "--check"],
-                cwd=ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -917,7 +933,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 self_referential["README.md"],
             )
 
-            link_successor_self_check_inputs(output_root)
+            link_successor_self_check_inputs(output_root, repository=repository)
             embedded_check = subprocess.run(
                 [
                     sys.executable,

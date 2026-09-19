@@ -1,0 +1,2 @@
+Ruling written (9.0 KB, 08:04 PDT, within budget): Q1 option (a) delete the liveness floor (zero-service passes, `clock` still dies on the kernel ceiling, both signatures NOT FOUND); Q2 option (b) with an exact deterministic `burn_profile` test that kills burn-noop; Q3 affirmed (`.05` preempted, `1e-3` late-start); 43 tests OK at 37ca3c35.
+rc=0

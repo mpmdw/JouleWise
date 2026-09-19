@@ -1137,6 +1137,35 @@
       "status": "shelved",
       "stop_card": null
     },
+    "CI-DOCS-ONLY-SKIP-MASKS-RED-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/07a-adjudication-head-pin-drift.md (hosted checks skipped after the failing commit)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CI-DOCS-ONLY-SKIP-MASKS-RED-01/acceptance",
+          "label": "CI-DOCS-ONLY-SKIP-MASKS-RED-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A documentation-only run re-reports the last full test result, or fails when that result failed. The harvest procedure checks the last full run. Verification demonstrates that documentation-only pushes after a failing full run cannot report a recovered test result without a subsequent passing full run."
+      },
+      "authority": {
+        "label": "2026-09-19 registration by the project lead; records work and pending questions, not a ruling",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Correct the documentation-only filter in hosted continuous integration (CI), the automated checks run after a push. It skips the quick test tier, the fast subset of tests, so a documentation-only push after a failing commit reports green without demonstrating recovery. The main branch's quick tier was red from commit `22b92ec7` (03:12 PDT on 2026-09-19), through four green-looking runs, until `2f79e633`. The harvest procedure, which collects and reviews a completed night's results, must check the last full test run rather than simply the most recent run.",
+      "id": "CI-DOCS-ONLY-SKIP-MASKS-RED-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 245,
+      "status": "queued",
+      "stop_card": null
+    },
     "CLAIM-NONISSUANCE-RECEIPT-01": {
       "acceptance": {
         "evidence": [
@@ -2924,6 +2953,35 @@
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five. The audit's argument for sequence: the unowned floor-producer finding from the companion audit becomes a small task instead of a risky one only if this lands first, because under the current design owning it means hand-copying about 2900 lines twice. Ordered last of the five on cost, but it gates the cheapness of the others.",
       "stop_card": null
     },
+    "GENERATOR-HEAD-FILE-BYTE-PIN-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/07-opus-contract-refuter.md (Part B)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/07a-adjudication-head-pin-drift.md (adopted ledger relation and pending generator question)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/GENERATOR-HEAD-FILE-BYTE-PIN-01/acceptance",
+          "label": "GENERATOR-HEAD-FILE-BYTE-PIN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cold gate records whether the live generators may replace the exact head-file byte pin with the ledger relation: the committed head is at or ahead of the acceptance cutoff on the same authenticated chain. Preserve the separate acceptance-cutoff binding. This entry registers the question; removing the mechanism requires the ruling first."
+      },
+      "authority": {
+        "label": "2026-09-19 registration by the project lead; records work and pending questions, not a ruling",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Submit the live campaign generators in `configs/campaigns/d117_floor_qwen3-1p7b_v5`, `configs/campaigns/d117_floor_qwen3-8b_v5`, and `configs/campaigns/d117_contrast_v5` for a cold-gate decision (independent adjudication from a fresh session) about the ledger-head file byte pin, a digest fixing the exact contents of `configs/calibration/calibration_ledger_head.json`. That committed file identifies the latest calibration-ledger entry and legitimately advances after each measurement night; including its old bytes in the drift-refusal set (inputs whose change prevents regeneration) makes regeneration refuse after every night. The acceptance binding already exists separately: `LEDGER_HEAD_SHA256` is the digest at the accepted calibration's ledger cutoff. The emitted `issued_ledger_head.file_sha256`, the recorded digest of the head file itself, has no consumer. May the byte pin be replaced by the semantic relation that the committed head is at or ahead of the acceptance cutoff? Rule 11 requires independent adjudication before dropping a mechanism.",
+      "id": "GENERATOR-HEAD-FILE-BYTE-PIN-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 244,
+      "status": "queued",
+      "stop_card": null
+    },
     "ICLOUD-CUSTODY-LOCATOR-01": {
       "acceptance": {
         "evidence": [
@@ -3046,6 +3104,36 @@
       "rank": 215,
       "status": "queued",
       "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from its post-merge review; registration only; not started. The INSTALL-WINDOWS-MULTI-01 status flip is that session's post-merge batch unless it hands it here.",
+      "stop_card": null
+    },
+    "INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-b165c535/03-diagnostic-invalid-captures-astra.md (cadence comparison and attribution limits)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/01-n2-20260919-harvest-record.md (13 invalid captures across the two nights)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01/acceptance",
+          "label": "INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Executed evidence attributes the cadence change and states whether the requested 100 ms cadence can be restored or the instrument must be characterised again. Record exact commands, operating-system and sampler identities, estimator versions, and remaining uncertainty. Any system-level probe requiring `sudo` (administrator privileges) is handed to Ed; agent-free measurement remains a separate lead-controlled step."
+      },
+      "authority": {
+        "label": "2026-09-19 registration by the project lead; records work and pending questions, not a ruling",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Attribute the changed sampling cadence, the time between delivered samples, on macOS build 25G83. The `powermetrics` macOS power sampler delivers samples about every 0.245 s despite a requested 100 ms interval; the calibration accepted in `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json` was characterised at about 0.120 s. The clock-anchor estimator, which aligns the sampler's clock with the measurement clock, also changed version. The diagnostic in `docs/process_traces/2026-09-19-activation-b165c535/03-diagnostic-invalid-captures-astra.md` ranks the coarser cadence first among causes of the 13 invalid captures out of 24 across the two nights and the changed timing-uncertainty bound, but does not prove that the sampler executable alone caused it. Distinguish the sampler executable, the operating-system scheduler that dispatches work, and the estimator using executed evidence.",
+      "id": "INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 243,
+      "status": "queued",
+      "status_note": "2026-09-19 — READY [AGENT] for analysis and investigation; partly [ED-EXTERNAL] if a system-level probe needs administrator privileges. Existing sampler-identity and successor-calibration entries do not own this causal attribution.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
@@ -4035,7 +4123,7 @@
       "priority": "p2_next_slice",
       "rank": 230,
       "status": "queued",
-      "status_note": "2026-09-17 activation 9853dd2b: docs contradiction found at the arm; magistrate registration, not a ruling; the 09-16 root was NOT moved (the launch charge forbids moving plan directories this session did not author). Goes to the cold gate or Ed before the next harvest retires or retains a root. 2026-09-18 headless activation f0b608b7 (record 01): the 09-16 harvest archive `~/night-archive/d079-epoch-25g83-derivation-n1-20260916-harvest-20260916/`, found empty by arm record 21, was re-harvested byte-exact from the retained live root (20/20 sums OK against the live root and the copy, `SHA256SUMS` inside the archive, inventories identical); the 09-16 root remains retained under this lane's rule and may now be retired when the lane rules, with a complete archive. The 09-17 plan root was retired 2026-09-18 19:26 (arm record 21, step 0).",
+      "status_note": "2026-09-17 activation 9853dd2b: docs contradiction found at the arm; magistrate registration, not a ruling; the 09-16 root was NOT moved (the launch charge forbids moving plan directories this session did not author). Goes to the cold gate or Ed before the next harvest retires or retains a root. 2026-09-18 headless activation f0b608b7 (record 01): the 09-16 harvest archive `~/night-archive/d079-epoch-25g83-derivation-n1-20260916-harvest-20260916/`, found empty by arm record 21, was re-harvested byte-exact from the retained live root (20/20 sums OK against the live root and the copy, `SHA256SUMS` inside the archive, inventories identical); the 09-16 root remains retained under this lane's rule and may now be retired when the lane rules, with a complete archive. The 09-17 plan root was retired 2026-09-18 19:26 (arm record 21, step 0). 2026-09-19 — A third retained, inert night root (the directory holding a completed night's plan and evidence), `d079-epoch-25g83-derivation-n2-20260919`, now remains alongside the 2026-09-16 and `n1-20260919` roots.",
       "stop_card": null
     },
     "NIGHT-STALL-WALLCLOCK-ABORT-01": {
@@ -5692,6 +5780,34 @@
       "status": "queued",
       "stop_card": null
     },
+    "QUIET-LOAD-MEMORY-PROFILE-DIFFERENTIAL-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/08-coldgate-packet-d5-t1-liveness-floor/11-opus-contract-refuter.md (Q2, missing proof of buffer writes)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QUIET-LOAD-MEMORY-PROFILE-DIFFERENTIAL-01/acceptance",
+          "label": "QUIET-LOAD-MEMORY-PROFILE-DIFFERENTIAL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A differential test demonstrates memory work in the memory profile and fails when buffer writes are removed while generator-state advancement remains. Record the measured page-fault or resident-memory difference so that state advancement alone cannot satisfy the test."
+      },
+      "authority": {
+        "label": "2026-09-19 registration by the project lead; records work and pending questions, not a ruling",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Prove that the quiet-predicate sampling harness, the program collecting evidence for a test of whether the machine is quiet enough to measure, performs memory work under `--profile memory`. That synthetic-load mode promises 16 MB of touched memory pages per iteration. The test that rejects a no-op burn, a replacement load routine that does nothing, proves that the load generator advances its state but does not prove it writes the memory buffer. Add a differential test comparing actual memory work with a version that omits the writes, using page faults (events that bring memory pages into the process) or a resident-set delta (a change in the process's physically resident memory).",
+      "id": "QUIET-LOAD-MEMORY-PROFILE-DIFFERENTIAL-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 246,
+      "status": "queued",
+      "stop_card": null
+    },
     "QUIET-PREDICATE-EVIDENCE-01": {
       "acceptance": {
         "evidence": [
@@ -5720,7 +5836,7 @@
       "priority": "p1_phase_gate",
       "rank": 232,
       "status": "queued",
-      "status_note": "2026-09-18 interactive 5c919872: the merged sampler's `--observation` mode is the driver's worker entry (needs `--job-id` and `--result-fd`, writes a framed envelope); sampling for this lane goes through the flagless smoke CLI (`python3 -B -m joulewise.quiet_admission --sample-interval-s 30`, whole-round observer cost 1.15 cpu-s per 30 s round on the desktop) or a harness that supplies the pipe; quote no observer floor from the worker mode (cold-gate ruling 71 Q5). 2026-09-18 headless activation f0b608b7 (record 14 of activation d8ca3a36, decisions 1–7): the campaign is two-stage — stage A is this lane (desk harness plus the observer-only and contaminated states now; census-clean idle and synthetic-load states only from a non-agent context, since a `claude -p` magistrate and every interactive session are themselves in the census), stage B is QUIET-PREDICATE-STAGE-B-CONFIRMATION-01 (240). Corrections to this text: the slot is 480 s, not 60 s; the ≈5 J floor tolerance is a clearance bar for the claim, not a contamination budget — the derivation bounds the incremental false effect; the reference is a fresh 25G83 census-clean idle recorded with the same harness in the same session as the load states (the r6 idle numbers, 0.07–0.70 W CPU rail, median ≈ 0.10 W, are the historical consistency check only); observer cost is the whole-round figure (1.15 cpu-s per 30 s round on the desktop; 1.67–1.80 under three seats), bracketed, never subtracted; E-placed and P-placed loads reported separately, worse bound taken. The sampling harness `scripts/sample_quiet_predicate_evidence.py` (collect / load / summarize, 31 offline tests) is on branch `feat/2026-09-18-quiet-predicate-evidence-harness` at `98336969`, bench-verified live (record 20), UNMERGED.",
+      "status_note": "2026-09-18 interactive 5c919872: the merged sampler's `--observation` mode is the driver's worker entry (needs `--job-id` and `--result-fd`, writes a framed envelope); sampling for this lane goes through the flagless smoke CLI (`python3 -B -m joulewise.quiet_admission --sample-interval-s 30`, whole-round observer cost 1.15 cpu-s per 30 s round on the desktop) or a harness that supplies the pipe; quote no observer floor from the worker mode (cold-gate ruling 71 Q5). 2026-09-18 headless activation f0b608b7 (record 14 of activation d8ca3a36, decisions 1–7): the campaign is two-stage — stage A is this lane (desk harness plus the observer-only and contaminated states now; census-clean idle and synthetic-load states only from a non-agent context, since a `claude -p` magistrate and every interactive session are themselves in the census), stage B is QUIET-PREDICATE-STAGE-B-CONFIRMATION-01 (240). Corrections to this text: the slot is 480 s, not 60 s; the ≈5 J floor tolerance is a clearance bar for the claim, not a contamination budget — the derivation bounds the incremental false effect; the reference is a fresh 25G83 census-clean idle recorded with the same harness in the same session as the load states (the r6 idle numbers, 0.07–0.70 W CPU rail, median ≈ 0.10 W, are the historical consistency check only); observer cost is the whole-round figure (1.15 cpu-s per 30 s round on the desktop; 1.67–1.80 under three seats), bracketed, never subtracted; E-placed and P-placed loads reported separately, worse bound taken. The sampling harness `scripts/sample_quiet_predicate_evidence.py` (collect / load / summarize, 31 offline tests) is on branch `feat/2026-09-18-quiet-predicate-evidence-harness` at `98336969`, bench-verified live (record 20), UNMERGED. 2026-09-19 — Stage A, the sampling-harness implementation, has pull request #360 open from `feat/2026-09-18-quiet-predicate-evidence-harness` after five fix rounds and two cold gates (independent adjudications); records are under `docs/process_traces/2026-09-19-activation-d0b83820/`. After merge, the Stage A evidence campaign measures joules per 480 s slot under synthetic load on a quiet machine with no agent session.",
       "stop_card": null
     },
     "QUIET-PREDICATE-STAGE-B-CONFIRMATION-01": {
@@ -5937,6 +6053,44 @@
       "rank": 212,
       "status": "queued",
       "status_note": "2026-09-16 (interactive session b0ae8462, merge wave): QUEUED; ARM-RETRY-CLASS-01 (PR #342, merge cb70e97f) and INSTALL-WINDOWS-MULTI-01 (PR #341, merge 2944a45d) are merged; both hard start dependencies are satisfied. Rank unchanged. Historical registration follows. 2026-09-16 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; AMENDED 00:40 PDT with Ed's ruling of 00:35 (Ed, 2026-09-16 00:35 PDT, verbatim as relayed by the interactive session b0ae8462: \"unless there's a scientific reason that's an unsound decision absolutely reduce the hours to 20 min\"): part (b) is ruled, not ruling-gated; the ruling arrived by relay, not by directive issue, and the lane's decision-log addendum is where it is recorded for the doctrine. Registration only, nothing changed. Status blocked until ARM-RETRY-CLASS-01 and INSTALL-WINDOWS-MULTI-01 land (hard start dependencies). The D-161 evidence fence and every t0 gate are untouched. 2026-09-17 interactive 5c919872: the desk-side reconciliation of this ruling with the bind-window design is stage D7 of NIGHT-GATE-QUIET-ADMISSION-01 (arm_retry.py successor route, NIGHT_HANDBACK R1 sentence); the watchdog half is WATCHDOG-EARLY-REFUSAL-RELEASE-01.",
+      "stop_card": null
+    },
+    "REGISTRATION-NIGHT-COUNT-RULING-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/01-n2-20260919-harvest-record.md (two-night outcomes, counting ambiguity, and the sent decision email)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REGISTRATION-NIGHT-COUNT-RULING-01/acceptance",
+          "label": "REGISTRATION-NIGHT-COUNT-RULING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed's written answer is preserved and explicitly resolves whether both nights count, only the second counts, or the failed equivalence comparison requires resolving the instrument before further registration. No registration night is armed while the answer is pending."
+      },
+      "authority": {
+        "label": "2026-09-19 registration by the project lead; records work and pending questions, not a ruling",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed supplies a written answer to the three options in Gmail message 1a0ba221b52d3e38 before any registration night is armed",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "Ed written registration-night counting ruling"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Obtain Ed's written ruling on which completed nights count toward the three-night registration, the measurement schedule fixed before collecting data. For the macOS build 25G83 instrument epoch (a fixed operating-system and sampler identity), directive issue 316 prescribed one equivalence night, a comparison with the previously accepted calibration, to decide PASS or FAIL; on FAIL, \"night one counts as registration night one\". Two equivalence nights ran on 2026-09-19: the first was INCONCLUSIVE because only four observations survived validity checks, below the required six; the second FAILED with seven retained observations, six above the level screen (the allowed magnitude) and a range ten times the bracket screen (the allowed spread). The rule does not say whether the first night's four observations count. Email Gmail id `1a0ba221b52d3e38` asks Ed to choose: (a) both nights count; (b) only the second counts; or (c) treat FAIL as the instrument answer and resolve the instrument first. No registration night may be armed, meaning scheduled and enabled for collection, before the written answer arrives.",
+      "id": "REGISTRATION-NIGHT-COUNT-RULING-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 242,
+      "status": "blocked",
       "stop_card": null
     },
     "REGISTRY-ID-NAMING-01": {
@@ -7352,6 +7506,34 @@
       "rank": 229,
       "status": "queued",
       "status_note": "2026-09-17 activation 9853dd2b: FIX MERGED as PR #356 (main 3fc54a6a; Opus refuter CONFIRM record 79; full replay record 80, 6352 tests 0 failures). The lane stays open for the refuter's two residual test-strength points only: (1) the widened fixture no longer discriminates partial-grace mutants (a grace/2 driver survives; sibling exact-arithmetic assertions cover it); (2) the test never asserts that the chain actually outlived the window end, so a later window_max_s edit could make it pass vacuously — add an explicit chain-end-vs-window-end assertion. Hosted CI failed the same shard a third time on the docs-only main 3d8e5807 before the fix; the successor confirms hosted CI green on 3fc54a6a or later.",
+      "stop_card": null
+    },
+    "TEST-WRITES-PAPER-BUILD-ARTIFACT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md (three delegated sessions reported the unowned paper-build output)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-WRITES-PAPER-BUILD-ARTIFACT-01/acceptance",
+          "label": "TEST-WRITES-PAPER-BUILD-ARTIFACT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Identify the writing test and make its generated paper output use a temporary directory. Verify the affected test still checks its intended behavior and leaves no `docs/paper/build/out/draft-v1.html` or other new paper-build output in the checkout."
+      },
+      "authority": {
+        "label": "2026-09-19 registration by the project lead; records work and pending questions, not a ruling",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Find the quick-tier test, a test in the fast subset of the suite, that writes `docs/paper/build/out/draft-v1.html` inside the checkout and route its output to a temporary directory. The generated paper page is ignored by Git and untracked, but delegated test sessions detect it as an unowned dirty path (an output outside their authorized write scope); three sessions in this activation stopped with exit code 77 for that reason.",
+      "id": "TEST-WRITES-PAPER-BUILD-ARTIFACT-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 247,
+      "status": "queued",
       "stop_card": null
     },
     "THREAT-MODEL-PRUNE-01": {
@@ -8985,5 +9167,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-18"
+  "updated": "2026-09-19"
 }

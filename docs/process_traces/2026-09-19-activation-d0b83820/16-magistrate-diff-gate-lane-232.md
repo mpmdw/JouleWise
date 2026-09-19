@@ -1,0 +1,23 @@
+# Record 16 — magistrate diff gate (gate-ledger rows 7/8), lane QUIET-PREDICATE-EVIDENCE-01 harness, branch `feat/2026-09-18-quiet-predicate-evidence-harness` at `d74b1be5` (lead, 2026-09-19 08:4x PDT)
+
+## What the magistrate read, in full
+
+- `git diff 3df43458 37ca3c35 -- tests/test_sample_quiet_predicate_evidence.py` (fix round 2, seat 06; read in this session before the commit `37ca3c35`): `import resource`; `STARTUP_CPU_S = 0.5` with its provenance comment; `FakeClock.ratio`; the real-load test's assertion block replaced exactly by adjudication 01a §3 (aggregate ceiling, per-period ceiling, liveness floor, kernel lower bound, kernel ceiling); the two fake-clock regressions with record 11's texts and ruling 10's stricter pins where they hold (`[4, 5]`; `< 1e-3` on the late-start case; `.05` on the preempted case — the seat's F3 contradiction, affirmed by cold gate packet 08 Q3).
+- `git diff 37ca3c35 d74b1be5 -- tests/test_sample_quiet_predicate_evidence.py` (fix round 3, seat 10): exactly the one-line deletion ruling 10 ordered (`self.assertGreater(claimed_s, 0.0, …)`), `test_burn_profiles_advance_their_generator` (refuter 11's two-profile loop plus the judge's exact scalar LCG first value), and `test_load_worker_runs_its_window_after_the_rendezvous` verbatim from refuter 11. Nothing else.
+- The production script `scripts/sample_quiet_predicate_evidence.py` is unchanged since `498ad1d0` (the lead's own bench fix of 09-18); its contract lines 771–778 were read again for this gate: measured CPU ceiling, absolute wall deadlines, no catch-up, "not a real-time scheduling guarantee".
+
+## Design-level questions answered
+
+1. **Does the real-load test now assert only what the contract promises?** Yes. Every remaining assertion is an upper bound on a quantity starvation can only lower, the kernel lower bound whose right-hand side starvation relaxes, configuration, or lifecycle (`error is None`, exit 0, reaped). Delta re-audit round 3 (record 11) enumerated all ten assertions and executed the four correct-code schedules plus the control: 0 failures each; its E6 note that the 15 s readiness / `start + duration + 10` result timeouts would fail a worker withheld past them is the bounded-completion requirement the rulings retained, not a delivery minimum.
+2. **Is the kill set intact after deleting the floor?** Yes: eight mutants (`cores`, `alignment`, `observer`, `clock`, `catchup-capped`, `burn-noop`, `burn-constant`, `window-skip`) each ≥ 1 failure at `d74b1be5` (records 10 and 11, independently). `clock` dies on the kernel ceiling (3.16–3.19 s > 0.92 s), as refutation 12 predicted and the cold judge and Opus refuter both executed.
+3. **Is `STARTUP_CPU_S = 0.5` sized to the instrument?** Measured `charged_s − claimed_s` over six unmodified runs this session: 0.334–0.348 s (seat 06 three runs, re-audit three runs), so the 0.92 s ceiling has ≈ 0.27 s margin on this host at 0.1 core × 3 s. The comment's "≈ 0.19 s" is the record-12 clean start-up figure; the measured quantity includes unreported loop CPU. Nit, dispositioned below.
+4. **Anything overbuilt or lying (row 8 prune)?** (a) The test name `test_real_load_tracks_point_one_core_and_guards_worker_budget` still says "tracks point one core"; its leading comment now states the contract in one sentence. KEPT: the name is the anchor five audit records and eight mutation runs cite; renaming would cost more record churn than the clarity gained, and the comment is the first line a reader sees. (b) The `≈ 0.19 s` comment: FIXED at the bench in the post-review commit named in the PR body (row 10 covers it). (c) `resource` is used (lines 648/650); the harness itself already imports `resource`, so the platform surface is unchanged. Nothing dead.
+
+## Same-signature statements (both, for row 5)
+
+- "real-load assertion fails on correct code under scheduler starvation": none found (record 11 E1/E6; cold judge probe; refuter 11 probe).
+- "assertion keyed to a quantity starvation destroys": none found in the failing direction (record 11 E6).
+
+## Verdict
+
+MERGE-READY subject to: Opus counter-review (record 13) on `d74b1be5`, the full sharded replay at the bench (record 14), hosted CI on the PR head, and the terminal review of the exact merge candidate. The gap record 11 named (its detached worktree could not see packet 08's ruling/refuter files, which live on the bookkeeping branch) is closed here: the magistrate read the round-3 diff against ruling 10's exact deletion and refuter 11's two test texts and found them verbatim. Bench note: briefs for detached-worktree seats must cite bookkeeping-branch records by absolute path (the 09-17 lesson, repeated once more).
