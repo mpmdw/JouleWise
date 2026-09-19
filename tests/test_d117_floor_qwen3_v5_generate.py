@@ -6,6 +6,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,10 @@ from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
 from scripts import issue_g2a_prefill_prompt_pin as issuer
 from scripts import select_g2a_prefill_length as selector
+from tests.test_campaign_generator_core import (
+    GENERATION_LEDGER_HEAD_BYTES,
+    GENERATION_LEDGER_HEAD_SHA256,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,8 +51,8 @@ MODEL_PANEL_ROWS = {
 }
 
 
-def load_generator(pack_id: str):
-    path = ROOT / "configs/campaigns" / pack_id / "generate_configs.py"
+def load_generator(pack_id: str, *, repository: Path = ROOT):
+    path = repository / "configs/campaigns" / pack_id / "generate_configs.py"
     spec = importlib.util.spec_from_file_location(f"{pack_id}_generator", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -267,6 +272,29 @@ def family_marker(members: list[dict[str, object]]) -> dict[str, object]:
 
 class D117FloorQwen3V5PackTests(unittest.TestCase):
     maxDiff = None
+
+    def generation_repository(self, root: Path) -> Path:
+        """Give in-process and subprocess generation the same historical input."""
+        repository = root / "repository"
+        subprocess.run(
+            ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
+            check=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
+            GENERATION_LEDGER_HEAD_SHA256,
+        )
+        (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
+            GENERATION_LEDGER_HEAD_BYTES
+        )
+        # The clone carries COMMITTED bytes; grade the working tree's generators
+        # (counter-review record 15 F1: an uncommitted generator edit must not
+        # be invisible to this test).
+        for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+            relative = Path("configs/campaigns") / pack_id / "generate_configs.py"
+            shutil.copy2(ROOT / relative, repository / relative)
+        return repository
 
     def test_routing_constants_are_the_only_producer_routing_sources(self) -> None:
         observed = {}
@@ -562,10 +590,11 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
     def test_generators_are_deterministic_closed_and_checkable(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-floor-v5-") as temporary:
             root = Path(temporary)
+            repository = self.generation_repository(root)
             pin = fixture_prefill_pin(root)
             for profile, pack_id, _model_id, model_name, plan_id in FLOORS:
                 with self.subTest(pack_id=pack_id):
-                    module = load_generator(pack_id)
+                    module = load_generator(pack_id, repository=repository)
                     module.configure_prefill_pin(pin)
                     first = root / f"{pack_id}-first"
                     second = root / f"{pack_id}-second"
@@ -592,12 +621,15 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                     checked = subprocess.run(
                         [
                             sys.executable,
-                            str(ROOT / "configs/campaigns" / pack_id / "generate_configs.py"),
+                            str(
+                                repository / "configs/campaigns" / pack_id
+                                / "generate_configs.py"
+                            ),
                             "--check",
                             "--output-root",
                             str(first),
                         ],
-                        cwd=ROOT,
+                        cwd=repository,
                         env={"PYTHONDONTWRITEBYTECODE": "1"},
                         check=False,
                         capture_output=True,
@@ -767,9 +799,10 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
     def test_contrast_references_resolve_to_matching_floor_plan_digests(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-floor-link-") as temporary:
             output = Path(temporary)
+            repository = self.generation_repository(output)
             pin = fixture_prefill_pin(output)
             for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
-                module = load_generator(pack_id)
+                module = load_generator(pack_id, repository=repository)
                 module.configure_prefill_pin(pin)
                 module.generate(output)
 
@@ -814,6 +847,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
     def test_arm_registry_and_pack_record_accept_the_v5_floor_roster(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-floor-roster-") as temporary:
             output = Path(temporary)
+            repository = self.generation_repository(output)
             pin = fixture_prefill_pin(output)
             registry, _raw = arm_readiness.load_registry(ROOT)
             installed = registry["freeze_evidence_lifecycle"]["successor_policy"][
@@ -829,7 +863,7 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
             )
             pack_roots: list[tuple[str, Path]] = []
             for profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
-                module = load_generator(pack_id)
+                module = load_generator(pack_id, repository=repository)
                 module.configure_prefill_pin(pin)
                 module.generate(output)
                 pack = output / "configs/campaigns" / pack_id

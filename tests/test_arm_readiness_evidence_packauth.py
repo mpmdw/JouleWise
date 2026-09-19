@@ -46,6 +46,10 @@ from test_arm_readiness_evidence_author import (  # noqa: E402
     make_author_fixture,
 )
 from test_arm_readiness_lifecycle import git  # noqa: E402
+from tests.test_campaign_generator_core import (  # noqa: E402
+    GENERATION_LEDGER_HEAD_BYTES,
+    GENERATION_LEDGER_HEAD_SHA256,
+)
 
 RECORDED_FREEZE = ROOT / "tests/fixtures/packauth_recorded_freeze"
 RECEIPT_RELATIVE = "identity_pin_projection.receipts/projection-0001.json"
@@ -540,6 +544,15 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
 
     def test_external_pinned_input_drift_is_checked_in_derivation_mode(self) -> None:
         repository, pack = self.committed_clone()
+        # Install the generator's historical declared input only in this clone.
+        self.assertEqual(
+            hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
+            GENERATION_LEDGER_HEAD_SHA256,
+        )
+        head = repository / "configs/calibration/calibration_ledger_head.json"
+        head.write_bytes(GENERATION_LEDGER_HEAD_BYTES)
+        git(repository, "add", head.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "install generation-time fixture head")
         successor = repository / "configs/campaigns/d117_floor_qwen25_1p5b_v4"
         emit = evidence._generator_command(str(pack / "generate_configs.py"))[:-1]
         emit.extend(
@@ -584,7 +597,12 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
         )
         self.assertEqual(preserve.returncode, 0, preserve.stderr.decode())
         self.assertNotEqual(regenerate.returncode, 0)
-        self.assertIn(b"pinned input drifted", regenerate.stderr)
+        self.assertIn(
+            (
+                f"pinned input drifted: {acceptance.relative_to(repository).as_posix()}"
+            ).encode(),
+            regenerate.stderr,
+        )
         recorded = self.recorded_generator(
             repository, successor, preserve_current_frozen_bytes=True
         )
