@@ -613,11 +613,15 @@ class PowerRecorder:
                     # Do not poll/wait here: reaping the recorder while the
                     # final observer bracket is open would charge the entire
                     # recorder's CPU to that one round's RUSAGE_CHILDREN.
+                    # Signal the supervised sudo process, which forwards TERM
+                    # using its launch privilege; do not signal the root group.
                     try:
-                        os.killpg(self.process.pid, signal.SIGTERM)
+                        os.kill(self.process.pid, signal.SIGTERM)
                         self.metadata["term_sent"] = True
                     except ProcessLookupError:
                         pass
+                    except PermissionError as exc:
+                        self.metadata.setdefault("signal_errors", []).append(str(exc))
                     self.kill_timer = threading.Timer(5, self.force_stop)
                     self.kill_timer.daemon = True
                     self.kill_timer.start()
@@ -628,10 +632,12 @@ class PowerRecorder:
                 try:
                     # Unreaped child PID cannot be reused. Signalling an
                     # already-exited zombie is harmless and is not reaping.
-                    os.killpg(self.process.pid, signal.SIGKILL)
+                    os.kill(self.process.pid, signal.SIGKILL)
                     self.metadata["kill_sent"] = True
                 except ProcessLookupError:
                     pass
+                except PermissionError as exc:
+                    self.metadata.setdefault("signal_errors", []).append(str(exc))
 
     def finish(self):
         self.request_stop()
@@ -843,8 +849,10 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
         interior_anchor = dict(anchor)
         if anchor.get("status") == "bounded":
             interior_anchor["effective_clock_anchor_bound_s"] += start.monotonic_after_s - start.monotonic_before_s
-        session["interior"] = reduce_interior(frames, interior_anchor,
-            start.epoch_s + args.interior_offset_s, args.interior_s)
+        # Use the wall/monotonic mapping in the actual start bracket to map
+        # the frozen scheduled start, preserving the bracket uncertainty.
+        interior_epoch = start.epoch_s - (session["start_drift_s"] or 0) + args.interior_offset_s
+        session["interior"] = reduce_interior(frames, interior_anchor, interior_epoch, args.interior_s)
     for row in rows:
         align = row["alignment"]
         why = str(anchor.get("detail", anchor.get("reason", "clock anchor unresolved")))

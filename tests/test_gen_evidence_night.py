@@ -127,6 +127,36 @@ class EvidenceGeneratorTests(unittest.TestCase):
         with self.assertRaisesRegex(generator.GenerationRefusal, "exists"):
             generator.generate(self.f.plan_path)
 
+    def test_protocol_reread_mutation_refuses_before_execute(self):
+        generator.generate(self.f.plan_path)
+        from scripts import run_night
+        night = self.f.custody / 'night'
+        env = run_night._chain_environment(self.f.plan, night)
+        env.update(EVIDENCE_PLAN_PATH=str(self.f.plan_path))
+        manifest = campaign.manifest_for(self.f.plan)
+        (self.f.repo / campaign.PROTOCOL_PATH).write_text('{}')
+        with patch.dict(os.environ, env), \
+                patch.object(campaign, 'verify_environment', return_value=(self.f.plan, manifest, 'a'*64)), \
+                patch.object(campaign, 'execute') as execute:
+            self.assertEqual(campaign.main(['run']), 2)
+        execute.assert_not_called()
+        refusal = json.loads((night / 'refusal.json').read_text())
+        self.assertIn('protocol changed after manifest verification', refusal['refusal']['detail'])
+
+    @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for wrapper refusal fixture')
+    def test_wrapper_source_mismatch_writes_typed_preexecute_refusal(self):
+        generator.generate(self.f.plan_path)
+        from scripts import run_night
+        night = self.f.custody / 'night'
+        (self.f.repo / campaign.CHAIN_PATH).write_text('# changed source\n')
+        result = subprocess.run(['/bin/zsh', self.f.plan.chain_path],
+            env=run_night._chain_environment(self.f.plan, night), capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        refusal = json.loads((night / 'refusal.json').read_text())
+        self.assertEqual(run_night.validate_refusal(refusal), [])
+        self.assertIn('chain_source_sha256_mismatch', refusal['refusal']['detail'])
+        self.assertFalse((night / 'evidence_processes.jsonl').exists())
+
 
 if __name__ == "__main__":
     unittest.main()

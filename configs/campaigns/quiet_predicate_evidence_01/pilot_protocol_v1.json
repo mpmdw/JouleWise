@@ -8,10 +8,11 @@
     ],
     "one_profile": true,
     "one_qos": true,
+    "smallest_holdable_share": 0.05,
     "upper_bound": "one-sided 95% paired-contrast upper bound"
   },
   "busy_cores_role": "covariate_only",
-  "cadence_exclusion": "envelope start drift greater than 5 s from the frozen schedule",
+  "cadence_exclusion": "start_drift: absolute collector start drift greater than 10 s from the frozen schedule",
   "chain_source_sha256": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
   "envelope_s": 600,
   "envelopes": 12,
@@ -20,7 +21,10 @@
     "ac_not_AC_Power_or_probe_error",
     "CPU_Speed_Limit_below_100_or_thermal_probe_error",
     "clock_anchor_unresolved",
-    "incomplete_interior_support"
+    "incomplete_interior_support",
+    "collect_error",
+    "cleanup_unproven",
+    "start_drift"
   ],
   "interior_offset_s": 60,
   "interior_s": 480,
@@ -51,7 +55,7 @@
     "s_pair": "sample SD of retained disjoint differences, df = n - 1",
     "s_upper": "s_pair * sqrt((n - 1) / chi_square_quantile(0.10, n - 1))"
   },
-  "start_drift_max_s": 5,
+  "start_drift_max_s": 10,
   "stop_branches": {
     "block_two_upper_bound_above_1_J": "no cutoff qualifies",
     "observer_floor_above_smallest_holdable_share": "no cutoff qualifies",
@@ -62,9 +66,9 @@
     "retained disjoint pairs (e1,e2), (e3,e4), ..., (e11,e12); even minus odd interior joules; sample SD and upper 90% bound",
     "overlapping adjacent differences and SD, maximum absolute difference: diagnostics only, never sizing",
     "all single-envelope values and SD, first-to-last retained drift: diagnostics only, never sizing",
-    "name every original adjacent pair with absolute difference above 3 * s_pair; never exclude by magnitude",
+    "name every overlapping original adjacent pair with absolute difference above 3 * s_pair; diagnostic only; never exclude by magnitude",
     "whole-round observer cpu-s, self plus reaped children including recorder; never subtracted",
-    "busy-core median/max and per-round values",
+    "recorder journal joined by monotonic support: per-envelope busy-core median/max and clean-machine distribution; covariates only",
     "cadence and native sample counts",
     "boot_id, os_build, sw_vers, powermetrics identity",
     "all named exclusions; partial observations retained; PROVISIONAL, no cutoff authority"

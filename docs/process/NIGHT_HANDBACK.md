@@ -133,7 +133,21 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `HOLD_CENSUS` | A supervisor census hold alone does not establish the narrowly evidenced idle arm cause. |
 | `slot_refused` | A measurement slot refused; cure the finding before any further night. |
 
-The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling.
+The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling. Its serialized form is pinned by
+`test_ruled_registration_serialization_requires_dated_ruling_amendment`; any
+amendment requires a dated test comment with the ruling (2026-09-19, record 61a).
+
+For the QPE evidence pilot, isolated `collect_error` and `cleanup_unproven`
+envelopes are excluded while the frozen cadence continues. Two consecutive
+cleanup failures or a chain refusal/crash abort with a typed refusal document.
+A pre-execute refusal has no process journal and nothing to clean. The executor
+or courier writes one idempotent cleanup record, proved by process absence,
+and the courier reads it and reports success, partial evidence or refusal.
+Dispatch uses the admitted receipt's payload identity, never a fresh wrapper
+read. This delivery rule includes unproven evidence cleanup (61a addendum 2).
+The registered interior starts 60 seconds after the scheduled envelope start;
+actual-start drift is recorded and excluded as `start_drift` above 10 seconds.
+
 
 Unknown or mixed causes and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path; receipt refusals remain ineligible for same-plan retries. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
 

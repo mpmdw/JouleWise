@@ -50,12 +50,13 @@ def generate(plan_path, *, out=None, chain_template=CHAIN_PATH):
              "set -euo pipefail", "export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence",
              "export PYTHONDONTWRITEBYTECODE=1"]
     lines += [f"export {key}={_quote(value)}" for key, value in exports.items()]
-    for name, value in (("NIGHT_PLAN_ID", plan.plan_id), ("MEASUREMENT_ROOT", plan.measurement_root),
-                        ("MEASUREMENT_HEAD", plan.measurement_head)):
-        lines.append(f'[[ "${{{name}:-}}" == {_quote(value)} ]] || exit 64')
     lines += [f"export PY={_quote(plan.measurement_root + '/.venv/bin/python')}",
               f"export PYTHONPATH={_quote(plan.measurement_root)}",
-              f'[[ "$(/usr/bin/shasum -a 256 {_quote(plan.measurement_root + "/" + CHAIN_PATH)} | /usr/bin/awk \'{{print $1}}\')" == "$EVIDENCE_CHAIN_SOURCE_SHA256" ]] || exit 65',
+              'refuse() { "$PY" -B -m joulewise.quiet_predicate_campaign refuse --reason "$1"; exit 2; }']
+    for name, value in (("NIGHT_PLAN_ID", plan.plan_id), ("MEASUREMENT_ROOT", plan.measurement_root),
+                        ("MEASUREMENT_HEAD", plan.measurement_head)):
+        lines.append(f'[[ "${{{name}:-}}" == {_quote(value)} ]] || refuse {_quote(name + " mismatch")}')
+    lines += [f'[[ "$(/usr/bin/shasum -a 256 {_quote(plan.measurement_root + "/" + CHAIN_PATH)} | /usr/bin/awk \'{{print $1}}\')" == "$EVIDENCE_CHAIN_SOURCE_SHA256" ]] || refuse chain_source_sha256_mismatch',
               f'exec /bin/zsh {_quote(plan.measurement_root + "/" + CHAIN_PATH)}']
     wrapper = ("\n".join(lines) + "\n").encode()
     artifacts = {manifest_path: manifest_bytes, target: wrapper,

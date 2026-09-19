@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -43,7 +44,7 @@ D166_REGISTRATION_PATH = (
     "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
 )
 QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json"
-QPE01_PILOT_REGISTRATION_SHA256 = "8fd65255d2167e1817a04f0326002a33d03f4947c1fb2977913b2b099fd76f2f"
+QPE01_PILOT_REGISTRATION_SHA256 = "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
 EVIDENCE_CHAIN_PATH = "scripts/night_chains/quiet_predicate_evidence.zsh"
 # Amended only by cold-gate ruling; each entry names its authority.
 RULED_REGISTRATIONS = {
@@ -1182,7 +1183,7 @@ def _check_chain_identity(plan, probes, rows, evidence):
                 source = _run(probes, ("/usr/bin/git", "-C", plan.measurement_root,
                                       "show", f"{plan.measurement_head}:{EVIDENCE_CHAIN_PATH}"))
                 if source.exit_code != 0:
-                    raise ValueError("tracked evidence chain source unavailable")
+                    raise ProbeError("tracked evidence chain source unavailable")
                 measured = hashlib.sha256(source.stdout.encode("utf-8")).hexdigest()
                 actual = probes.read_text(str(Path(plan.measurement_root) / EVIDENCE_CHAIN_PATH))
                 if (chain_literal(chain_text, "EVIDENCE_CHAIN_SOURCE_SHA256") != measured or
@@ -1190,8 +1191,10 @@ def _check_chain_identity(plan, probes, rows, evidence):
                     raise ValueError("evidence chain source differs from measurement_head or pinned wrapper")
                 rows["C5"].measured.update(payload_kind=kind, chain_source_sha256=measured)
                 rows["C5"].evidence.append(f"chain_source:{plan.measurement_head}:{EVIDENCE_CHAIN_PATH}")
-        except Exception as exc:
+        except ValueError as exc:
             return _finish(plan, probes, rows, Refusal("night_chain_digest_mismatch", str(exc), tuple(evidence)))
+        except (ProbeError, OSError, subprocess.SubprocessError) as exc:
+            return _probe_refusal(plan, probes, rows, evidence, exc)
     rows["C5"].status = "PASS"
     rows["C5"].measured["detail"] = (
         "window, plan freshness, and measurement HEAD passed; chain identity not evaluated "

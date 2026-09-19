@@ -1264,6 +1264,21 @@ class QuietGatePhaseTests(unittest.TestCase):
 
 
 class EvidenceRegistrationTests(unittest.TestCase):
+    def test_ruled_registration_serialization_requires_dated_ruling_amendment(self):
+        # 2026-09-19: record 61a S1/S4 + 56x R2 re-pin the frozen pilot.
+        # Any membership/metadata amendment needs its cold-gate ruling and a
+        # dated update here. Record-path existence awaits the lead-owned traces.
+        serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
+        self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
+                         '1dcdb38b8f69a1e475a53c0efc01ef79754c7a36ef04a03c51e94e6d0a74e315')
+
+    def test_unavailable_chain_source_is_probe_error_not_digest_mismatch(self):
+        source = self.source()
+        argv = next(argv for argv in source.results if len(argv) > 4 and argv[0] == '/usr/bin/git' and argv[3] == 'show')
+        source.results[argv] = result(argv, exit_code=1, stderr='fixture unavailable')
+        receipt = night_gate.evaluate_night(make_plan(), source.probes())
+        self.assertEqual(receipt.refusal.reason, 'night_probe_error')
+
     def source(self, registration=None, wrapper_extra=""):
         root = Path(__file__).resolve().parents[1]
         chain = (root / night_gate.EVIDENCE_CHAIN_PATH).read_text()

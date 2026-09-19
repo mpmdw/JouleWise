@@ -568,6 +568,40 @@ runpy.run_path(script, run_name="__main__")
             self.assertTrue(all(r["power"]["cpu_w"] == 2 for r in rows))
             self.assertTrue(all(r["alignment"]["error_bound_j"] > 0 for r in rows))
 
+    def test_scheduled_interior_does_not_move_with_two_second_collector_start_drift(self):
+        clock = FakeClock()
+        clock.now = 2
+        recorder = Mock()
+        recorder.metadata = {'cleanup': {'returncode':0}}
+        frames = [{**aligned_fixture()[0], 'start_s':1000., 'end_s':1600., 'elapsed_s':600}]
+        recorder.finish.return_value = (frames, {'status':'bounded', 'effective_clock_anchor_bound_s':0,
+            'admissible_lower_epoch_s':1000, 'admissible_upper_epoch_s':1000})
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            args = collect_args(tmp, power=True)
+            args.duration_s, args.interior_offset_s, args.interior_s = 600, 60, 480
+            args.envelope_start_mono_s = 0
+            with patch.object(harness, 'reduce_interior', wraps=harness.reduce_interior) as reduce:
+                session, _ = harness.collect(args, clock=clock, recorder_factory=Mock(return_value=recorder),
+                                             round_runner=fake_round, metadata_reader=lambda: {})
+            self.assertEqual(reduce.call_args.args[2:], (1060, 480))
+            self.assertEqual(session['start_drift_s'], 2)
+            self.assertEqual(session['deadline_mono_s'], 600)
+            self.assertTrue(session['interior']['complete_support'])
+
+    def test_power_supervised_stop_eperm_is_logged_and_finish_still_reaps(self):
+        recorder = harness.PowerRecorder(Path('/tmp/absent-fixture-power.plist'), 100, FakeClock(), 5)
+        recorder.process = Mock(pid=123)
+        recorder.process.wait.return_value = 0
+        with patch.object(harness.os, 'kill', side_effect=PermissionError('foreign supervisor')), \
+                patch.object(harness.threading, 'Timer'), \
+                patch.object(harness, 'parse_frames', return_value=([], None)), \
+                patch.object(harness, 'align_frames', return_value=([], {'status':'unresolved'})):
+            recorder.request_stop()
+            recorder.force_stop()
+            recorder.finish()
+        recorder.process.wait.assert_called_once()
+        self.assertEqual(len(recorder.metadata['signal_errors']), 2)
+
     def test_smoke_supervision_deadline_and_module_restoration(self):
         from scripts import run_night
         clock = FakeClock()
@@ -632,7 +666,7 @@ runpy.run_path(script, run_name="__main__")
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(harness.subprocess, "Popen", return_value=process) as launch, \
                 patch.object(harness.threading, "Timer", side_effect=make_timer), \
-                patch.object(harness.os, "killpg") as kill, \
+                patch.object(harness.os, "kill") as kill, \
                 patch.object(harness, "identity", return_value={"pid": 123, "start_identity": "fixture"}), \
                 patch.object(harness, "command_text", return_value=(None, "fixture process list unavailable")):
             path = Path(tmp) / "power.plist"
@@ -722,6 +756,28 @@ class LoadTests(unittest.TestCase):
         self.assertGreater(len(periods), 0, "worker reported no period rows for its window")
         self.assertAlmostEqual(sum(p["cpu_used_s"] for p in periods), .3, delta=.001)
         self.assertEqual(clock.monotonic(), 4.0)   # rendezvous at 1.0 plus the 3 s window
+        # N3: load() Process.start() failure must close both real Pipe ends.
+        parent, child = harness.multiprocessing.get_context("spawn").Pipe()
+        failed = Mock()
+        failed.start.side_effect = OSError("fixture start failed")
+        guarded = SimpleNamespace(Pipe=lambda: (parent, child), Process=lambda **kwargs: failed)
+        try:
+            with tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(harness.multiprocessing, "get_context", return_value=guarded):
+                args = harness.parser().parse_args(["load", "--cores", ".1", "--duration-s", "1",
+                    "--qos", "user-initiated", "--profile", "scalar", "--seed", "1",
+                    "--log", str(Path(tmp) / "load.json")])
+                report = harness.load(args)
+                self.assertIn("fixture start failed", report["error"])
+                self.assertTrue(parent.closed)
+                self.assertTrue(child.closed)
+                failed.join.assert_not_called()
+        finally:
+            parent.close()
+            child.close()
+
+    @unittest.skipUnless(sys.platform == "darwin", "native QoS requires macOS")
+    def test_load_join_ladder_accepts_delayed_exit_and_reports_escalation(self):
         # S1/S2 / probe_c: load()'s real join ladder must accept a one-second
         # post-result exit and expose escalation with a short test-only grace.
         context = harness.multiprocessing.get_context("spawn")
@@ -748,25 +804,6 @@ class LoadTests(unittest.TestCase):
                 else:
                     self.assertIsNone(report["error"])
                     self.assertEqual(child["exitcode"], 0)
-        # N3: load() Process.start() failure must close both real Pipe ends.
-        parent, child = context.Pipe()
-        failed = Mock()
-        failed.start.side_effect = OSError("fixture start failed")
-        guarded = SimpleNamespace(Pipe=lambda: (parent, child), Process=lambda **kwargs: failed)
-        try:
-            with tempfile.TemporaryDirectory() as tmp, \
-                    patch.object(harness.multiprocessing, "get_context", return_value=guarded):
-                args = harness.parser().parse_args(["load", "--cores", ".1", "--duration-s", "1",
-                    "--qos", "user-initiated", "--profile", "scalar", "--seed", "1",
-                    "--log", str(Path(tmp) / "load.json")])
-                report = harness.load(args)
-                self.assertIn("fixture start failed", report["error"])
-                self.assertTrue(parent.closed)
-                self.assertTrue(child.closed)
-                failed.join.assert_not_called()
-        finally:
-            parent.close()
-            child.close()
 
     @unittest.skipUnless(sys.platform == "darwin", "native QoS requires macOS")
     def test_native_qos_classes_read_back_in_subprocess(self):

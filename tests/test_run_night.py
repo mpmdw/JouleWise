@@ -4768,17 +4768,99 @@ class EvidenceProbeTests(unittest.TestCase):
         self.assertEqual(len(paths), 11)
         self.assertIn('night/evidence/envelope-02/raw/power.plist', paths)
 
-    def test_cleanup_residue_suppresses_courier_before_launch(self):
-        from joulewise import quiet_predicate_campaign as campaign
+    def admitted_night(self, plan=None, evidence=True):
+        from tests.test_night_gate import EvidenceRegistrationTests, FakeProbeSource
+        plan = plan or self.f.plan
+        source = EvidenceRegistrationTests().source() if evidence else FakeProbeSource()
+        # Authenticate with the gate fixture, then keep the actual plan identity.
+        from tests.test_night_gate import make_plan
+        receipt = json.loads(night_gate.evaluate_night(make_plan(), source.probes()).to_json_bytes())
+        receipt['plan_id'] = plan.plan_id
+        self.assertEqual(night_gate.validate_receipt(receipt), [])
         night = self.f.custody / 'night'
-        night.mkdir()
+        night.mkdir(exist_ok=True)
+        (night / 'receipt.json').write_text(json.dumps(receipt))
         (night / 'chain.started').write_text('{}')
-        (night / 'evidence_processes.jsonl').write_text('{"kind":"collector","pgid":99999999}\n')
-        with mock.patch.object(campaign, 'cleanup_groups', return_value={'cleanup_proven':False,'residue':[99999999]}), mock.patch.object(self.driver.subprocess, 'Popen') as launch:
-            outcome = self.driver.run_courier(self.f.custody, self.f.plan, Path('/tmp/no-courier'))
-        self.assertFalse(outcome['sent'])
-        self.assertIn('residue', outcome['last_error'])
-        launch.assert_not_called()
+        return night
+
+    def deliver(self, plan=None):
+        # REAL courier control path; only external delivery and liveness are fake.
+        with mock.patch.object(self.driver.subprocess, 'Popen') as launch, \
+                mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)), \
+                mock.patch.object(self.driver, '_watchdog_liveness_for_courier', return_value=('fixture', 0, 'idle')):
+            result = self.driver.run_courier(self.f.custody, plan or self.f.plan, Path('/tmp/fixture-courier'))
+        self.assertEqual(result['attempted'], 1, result)
+        self.assertTrue(result['sent'], result)
+        launch.assert_called_once()
+        return launch.call_args.args[0]
+
+    def test_successful_evidence_night_courier_reads_existing_executor_cleanup(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        # Same producer the real executor calls; one immutable record.
+        cleanup = campaign.cleanup_record(night)
+        self.assertTrue(cleanup['cleanup_proven'])
+        (night / 'evidence_outcome.json').write_text(json.dumps({'outcome':'complete'}))
+        before = (night / 'evidence_cleanup.json').read_bytes()
+        with mock.patch.object(campaign, 'cleanup_groups', side_effect=AssertionError('must read existing record')):
+            argv = self.deliver()
+            self.deliver()
+        self.assertIn('Read this existing record', argv[2])
+        self.assertEqual((night / 'evidence_cleanup.json').read_bytes(), before)
+
+    def test_preexecute_manifest_mismatch_writes_typed_refusal_and_courier_runs(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        manifest = self.f.custody / 'evidence_manifest.json'
+        manifest.write_text(manifest.read_text() + ' ')
+        env = self.driver._chain_environment(self.f.plan, night)
+        env.update(EVIDENCE_PLAN_PATH=str(self.f.plan_path), EVIDENCE_MANIFEST_SHA256='0'*64)
+        with mock.patch.dict(os.environ, env), mock.patch.object(campaign, 'execute') as execute:
+            self.assertEqual(campaign.main(['run']), 2)
+        execute.assert_not_called()
+        self.assertFalse((night / 'evidence_processes.jsonl').exists())
+        refusal = json.loads((night / 'refusal.json').read_text())
+        self.assertEqual(self.driver.validate_refusal(refusal), [])
+        self.assertIn('manifest_sha256 mismatch', refusal['refusal']['detail'])
+        self.deliver()
+        self.assertTrue(json.loads((night / 'evidence_cleanup.json').read_text())['cleanup_proven'])
+
+    def test_evidence_identity_dispatches_cleanup_without_reading_wrapper(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        Path(self.f.plan.chain_path).unlink()
+        with mock.patch.object(campaign, 'cleanup_groups', return_value={'cleanup_proven':True, 'residue':[]}) as cleanup:
+            self.deliver()
+        cleanup.assert_called_once()
+        self.assertTrue((night / 'evidence_cleanup.json').exists())
+
+    def test_rehearsal_and_wrapper_missing_calibration_always_deliver(self):
+        from dataclasses import replace
+        from joulewise import quiet_predicate_campaign as campaign
+        Path(self.f.plan.chain_path).unlink()
+        for kind in ('REHEARSAL_STUB', 'DIAGNOSTIC_NO_PACK'):
+            with self.subTest(kind=kind):
+                plan = replace(self.f.plan, receipt_class=kind)
+                self.admitted_night(plan, evidence=False)
+                with mock.patch.object(campaign, 'cleanup_groups', side_effect=AssertionError('not evidence')):
+                    self.deliver(plan)
+                self.assertFalse((self.f.custody / 'night/evidence_cleanup.json').exists())
+
+    def test_cleanup_residue_is_reported_and_does_not_suppress_courier(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        with mock.patch.object(campaign, 'cleanup_groups', return_value={'cleanup_proven':False,'residue':[99999999]}):
+            self.deliver()
+        self.assertFalse(json.loads((night / 'evidence_cleanup.json').read_text())['cleanup_proven'])
+        self.assertEqual(json.loads((night / 'evidence_outcome.json').read_text())['outcome'], 'refused')
+
+    def test_evidence_worker_crash_progress_keeps_typed_failure_schema(self):
+        progress = self.f.custody / 'progress.json'
+        with mock.patch.object(self.driver, '_evidence_probe_worker', side_effect=RuntimeError('fixture crash')):
+            with self.assertRaisesRegex(RuntimeError, 'fixture crash'):
+                self.driver._probe_worker(self.f.plan_path, self.f.custody/'receipt.json', progress, time.monotonic()+10)
+        self.assertEqual(json.loads(progress.read_text())['record']['schema'], 'joulewise.night_evidence_probe_receipt.v1')
 
 
 @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for calibration probe fixture')

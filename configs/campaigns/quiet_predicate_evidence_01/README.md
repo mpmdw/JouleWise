@@ -18,12 +18,14 @@ GO, the chain settles for 600 seconds, then schedules 12 consecutive 600-second
 envelopes. Each analysis interval is the interior 480 seconds, starting 60
 seconds into its envelope. There is no load generator. Absolute start times
 prevent cumulative schedule drift; collection ends at each scheduled envelope
-boundary. Late starts remain visible, and starts more than five seconds late
+boundary. Late starts remain visible, and starts more than ten seconds from schedule
 are excluded. Nothing is compressed, retried or topped up.
 
 The chain runs `quiet_admission.sample_interval` every 30 seconds as a recorder.
 It writes `evidence_busy_cores.jsonl`, never `quiet_samples.jsonl`. Its busy-core
-numbers are covariates: they describe the machine and are **never an exclusion
+intervals are joined to scheduled envelopes by monotonic support; the summary
+reports each envelope's median/max and the distribution for envelopes passing
+census, AC and thermal probes. These numbers are covariates: they describe the machine and are **never an exclusion
 or admission input**. Observer CPU cost includes the whole observer and its
 reaped children, including the recorder and census, and is never subtracted.
 
@@ -31,7 +33,11 @@ Envelopes are excluded only by frozen, named mechanisms: the census is not
 clean or is unknown; the AC probe does not report “AC Power” or errors; a
 `CPU_Speed_Limit` is below 100 or the thermal probe errors; the clock anchor is
 unresolved; or native sample support does not cover the complete interior.
-The frozen schedule also excludes start drift above five seconds. Partial
+A collector failure is `collect_error`; unproven per-envelope cleanup is
+`cleanup_unproven`. Both exclude that envelope and continue on the frozen
+cadence. Two consecutive cleanup failures or a chain refusal/crash (including
+a dead recorder) abort with a typed refusal document.
+The frozen schedule also excludes `start_drift` above ten seconds. Partial
 rows, original power files and exclusion reasons remain in the evidence.
 Energy is integrated over native support, not inferred by multiplying a
 whole-envelope mean by 480 seconds. CPU+GPU+ANE joules are the main quantity;
@@ -57,11 +63,13 @@ rounding these factors for sizing. **Independence and normality of the pair
 differences are assumptions of this construction**, not pilot findings.
 
 The next plan can be authored only after the pilot's spread is measured.
-Its target is δ = 1 J and its sample size is
+The source for all five sizing constants is `pilot_protocol_v1.json`: δ = 1 J,
+multiplier 8, minimum 3 pairs, stop above 24 pairs, and smallest holdable
+block-two share 0.05 core. Code reads these registered values. Its sample size is
 `n_pairs = max(3, ceil(8 * s_upper² / δ²))`. The eleven overlapping adjacent
 differences and twelve single-envelope values remain diagnostics only; neither
 sizes block two. The report includes their spreads, first-to-last retained
-energy drift, and names every original adjacent pair with `|Δ| > 3 * s_pair`.
+energy drift, and names every overlapping original adjacent pair with `|Δ| > 3 * s_pair`.
 Excluded observations remain visible in those diagnostics; magnitude is never
 an exclusion rule. Missing observations remain explicit and cannot bridge a gap.
 
@@ -82,6 +90,9 @@ line, and never starts collection, synthetic load or power sampling. It is not
 permission to arm. Follow NIGHT_HANDBACK for lead-owned review and arming.
 
 At runtime, collector, recorder, power and sampler groups are journaled and
-terminated under bounded cleanup budgets. The driver checks that cleanup
-before launching a courier. The courier may describe completed envelopes,
+terminated under bounded cleanup budgets. Only a process-absence census
+proves cleanup; a denied group signal is logged, and the power recorder keeps
+its supervised stop path. The executor or driver writes one cleanup record;
+the courier reads it and reports even pre-execute refusals and unproven cleanup.
+A missing process journal means nothing was launched and nothing needs cleaning. The courier may describe completed envelopes,
 exclusions and uncertainty; it cannot make a scientific decision.

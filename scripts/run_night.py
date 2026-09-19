@@ -1138,6 +1138,11 @@ def _courier_argv(
         "You must include these watchdog fields in the email body. An age greater "
         "than 900 seconds, or an unavailable age, means the watchdog is dead.\n"
     )
+    cleanup_path = custody_root / "night/evidence_cleanup.json"
+    if cleanup_path.exists():
+        prompt += (f"\nEvidence cleanup record: {cleanup_path}. Read this existing record and "
+                   "night/evidence_outcome.json; report success, partial evidence or refusal, "
+                   "including unproven cleanup and all refusal documents. Never recreate the record.\n")
     return (
         str(courier_bin),
         "-p",
@@ -1236,26 +1241,32 @@ def _acquire_courier_lock(night_dir: Path) -> int | None:
 
 
 def _evidence_cleanup_error(plan, night_dir):
-    """No courier agent while an evidence collector/recorder/sampler survives."""
+    """Record evidence cleanup for delivery, using only admitted identity."""
     if not (night_dir / "chain.started").exists():
         return None
     try:
-        if night_gate.probe_payload_kind(Path(plan.chain_path).read_text()) != "quiet_predicate_evidence":
+        receipt = json.loads((night_dir / "receipt.json").read_bytes())
+        if receipt.get("plan_id") != plan.plan_id or night_gate.validate_receipt(receipt):
             return None
-        from joulewise.quiet_predicate_campaign import cleanup_groups, process_groups
-        journal = night_dir / "evidence_processes.jsonl"
-        cleanup = cleanup_groups(journal, budget_s=30)
-        _write_json(night_dir / "evidence_cleanup.json", cleanup)
-        if not cleanup["cleanup_proven"] or process_groups(journal):
-            return "evidence collector/recorder/sampler residue; courier suppressed"
+        c5 = next((row for row in receipt["conditions"] if row["condition_id"] == "C5"), {})
+        if c5.get("status") != "PASS" or c5.get("measured", {}).get("payload_kind") != "quiet_predicate_evidence":
+            return None
+        from joulewise.quiet_predicate_campaign import cleanup_record, write_refusal
+        cleanup = cleanup_record(night_dir)
         path = night_dir / "evidence_outcome.json"
         outcome = json.loads(path.read_text()) if path.exists() else None
-        if not isinstance(outcome, dict) or outcome.get("outcome") not in {"complete", "refused"}:
+        if not isinstance(outcome, dict):
             _write_json(path, {"outcome": "refused", "error": "chain ended without evidence outcome",
-                               "cleanup_proven": True})
+                               "cleanup_proven": cleanup["cleanup_proven"]})
+            if not _refusal_paths(night_dir):
+                write_refusal(night_dir, plan, "chain ended without evidence outcome")
+        if not cleanup["cleanup_proven"]:
+            return "evidence collector/recorder/sampler cleanup unproven; report the cleanup record"
         return None
-    except (OSError, ValueError, KeyError) as exc:
-        return f"evidence outcome/cleanup unproven; courier suppressed: {exc}"
+    except FileNotFoundError:
+        return None  # Rehearsal and earlier admission refusals have no evidence identity.
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return f"evidence outcome/cleanup unavailable: {exc}"
 
 
 def run_courier(
@@ -1272,7 +1283,7 @@ def run_courier(
     night_dir.mkdir(parents=True, exist_ok=True)
     error = _evidence_cleanup_error(plan, night_dir)
     if error:
-        return {"attempted": 0, "sent": False, "heartbeat_seen": False, "last_error": error}
+        _append_log(custody_root, error)  # Delivery reports refusal/partial/cleanup failures too.
     heartbeat = night_dir / "courier.heartbeat"
     sent = night_dir / "courier.sent"
     attempts_path = night_dir / "courier.attempts.jsonl"
@@ -3359,6 +3370,9 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
         _atomic_probe_json(receipt_path, {"outcome": "refused", "refusal_code": str(exc)})
         return 2
     if payload_kind == "quiet_predicate_evidence":
+        phase("evidence-dispatch", {"schema": "joulewise.night_evidence_probe_receipt.v1",
+              "plan_id": plan.plan_id, "measurement_head": plan.measurement_head,
+              "verify_only": True, "collect_started": False, "load_started": False})
         return _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase)
     phase("bindings", {"plan_id": plan.plan_id, "measurement_head": plan.measurement_head})
     bindings = probe_bindings(plan, plan_path, sys.executable)

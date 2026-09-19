@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -37,27 +38,27 @@ def tracked_bytes(root, head, name):
     return data
 
 
+def frozen_protocol(raw=None):
+    """The byte-pinned registration is the single source of protocol values."""
+    if raw is None:
+        raw = (Path(__file__).resolve().parents[1] / PROTOCOL_PATH).read_bytes()
+    if digest(raw) != night_gate.QPE01_PILOT_REGISTRATION_SHA256:
+        raise ValueError("protocol is not the ruled pilot registration")
+    return json.loads(raw)
+
+
 def validate_protocol(protocol, source_digest):
-    fixed = {"schema": "joulewise.quiet_predicate_pilot.v1", "receipt_class": "DIAGNOSTIC_NO_PACK",
-             "window_max_s": 9000, "settle_s": 600, "envelopes": 12, "envelope_s": 600,
-             "interior_offset_s": 60, "interior_s": 480, "sample_interval_s": 30,
-             "minimum_retained": 8, "minimum_adjacent_pairs": 4,
-             "pairing_rule": "disjoint_original_adjacent_pairs_both_retained_no_bridging",
-             "load_generator": False,
-             "recorder_journal": "evidence_busy_cores.jsonl", "busy_cores_role": "covariate_only",
-             "chain_source_sha256": source_digest}
-    if not isinstance(protocol, dict) or any(protocol.get(k) != v for k, v in fixed.items()):
+    if protocol != frozen_protocol() or protocol.get("chain_source_sha256") != source_digest:
         raise ValueError("frozen pilot protocol mismatch; CLI overrides are forbidden")
     return protocol
 
 
 def manifest_for(plan):
-    files = {name: digest(tracked_bytes(plan.measurement_root, plan.measurement_head, name))
-             for name in MANIFEST_PATHS}
-    raw = (Path(plan.measurement_root) / PROTOCOL_PATH).read_bytes()
-    if files[PROTOCOL_PATH] != night_gate.QPE01_PILOT_REGISTRATION_SHA256:
-        raise ValueError("protocol is not the ruled pilot registration")
-    validate_protocol(json.loads(raw), files[CHAIN_PATH])
+    contents = {name: tracked_bytes(plan.measurement_root, plan.measurement_head, name)
+                for name in MANIFEST_PATHS}
+    files = {name: digest(raw) for name, raw in contents.items()}
+    protocol = frozen_protocol(contents[PROTOCOL_PATH])
+    validate_protocol(protocol, files[CHAIN_PATH])
     registration = Path(plan.registration_path)
     if not registration.is_absolute():
         registration = Path(plan.measurement_root) / registration
@@ -65,7 +66,7 @@ def manifest_for(plan):
         raise ValueError("evidence registration must be the tracked pilot protocol")
     if plan.receipt_class != "DIAGNOSTIC_NO_PACK" or plan.quiet_admission is not None:
         raise ValueError("evidence pilot requires v2 DIAGNOSTIC_NO_PACK")
-    if plan.window_max_s != 9000:
+    if plan.window_max_s != protocol["window_max_s"]:
         raise ValueError("window_max_s must equal the frozen protocol's 9000 s")
     return {"schema": MANIFEST_SCHEMA, "plan_id": plan.plan_id,
             "measurement_head": plan.measurement_head, "files": files}
@@ -130,10 +131,12 @@ def group_absent(pgid):
 
 def process_groups(path):
     if not path.exists():
-        raise ValueError("evidence process journal missing")
+        return set()  # A pre-execute refusal launched no supervised children.
     groups = set()
     for line in path.read_text().splitlines():
         row = json.loads(line)
+        if not isinstance(row, dict):
+            raise ValueError("invalid evidence process journal row")
         pgid = row["pgid"]
         if type(pgid) is not int or pgid <= 1 or pgid == os.getpgrp():
             raise ValueError("unsafe evidence process group identity")
@@ -148,7 +151,7 @@ def cleanup_groups(path, children=(), budget_s=30, exclude=()):
     """One budget for TERM, KILL, reaping and all group censuses; fail closed."""
     deadline = time.monotonic() + budget_s
     term_until = min(deadline, time.monotonic() + min(20, budget_s * .67))
-    known, checked, errors = set(), set(), []
+    known, checked, errors, signal_errors = set(), set(), [], []
     pending = set()
     while time.monotonic() < deadline:
         for child in children:
@@ -162,24 +165,54 @@ def cleanup_groups(path, children=(), budget_s=30, exclude=()):
         for pgid in sorted(pending):
             if time.monotonic() >= deadline:
                 break
-            if group_absent(pgid):
-                append_event(path, {"kind": "cleanup", "pgid": pgid, "state": "absent"})
-                checked.add(pgid)
-            else:
-                try:
+            try:
+                if group_absent(pgid):
+                    append_event(path, {"kind": "cleanup", "pgid": pgid, "state": "absent"})
+                    checked.add(pgid)
+                else:
                     os.killpg(pgid, signal.SIGTERM if time.monotonic() < term_until else signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                except PermissionError as exc:
-                    errors.append(str(exc))
+            except ProcessLookupError:
+                pass  # Only the next census can prove absence.
+            except PermissionError as exc:
+                signal_errors.append(f"pgid={pgid}: {exc}")
+            except OSError as exc:
+                errors.append(str(exc))
         if pending <= checked:
             # New groups journaled during teardown must be included too.
-            if not (process_groups(path) - set(exclude)):
+            try:
+                if not (process_groups(path) - set(exclude)):
+                    break
+            except (OSError, ValueError, KeyError) as exc:
+                errors.append(str(exc))
                 break
         time.sleep(min(.05, max(0, deadline - time.monotonic())))
-    residue = sorted((known - checked) | (process_groups(path) - set(exclude)))
+    try:
+        pending = process_groups(path) - set(exclude)
+    except (OSError, ValueError, KeyError) as exc:
+        errors.append(str(exc))
+    residue = sorted((known - checked) | pending)
     return {"budget_s": budget_s, "groups": sorted(known), "residue": residue,
+            "signal_errors": sorted(set(signal_errors)),
             "errors": sorted(set(errors)), "cleanup_proven": not residue and not errors}
+
+
+def cleanup_record(night_dir, children=()):
+    """Executor or courier writes once; every later reader uses that outcome."""
+    import fcntl
+    from scripts.sample_quiet_predicate_evidence import write_json
+    path = night_dir / "evidence_cleanup.json"
+    with (night_dir / "evidence_cleanup.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not path.exists():
+            write_json(path, cleanup_groups(night_dir / "evidence_processes.jsonl", children, budget_s=30))
+        return json.loads(path.read_text())
+
+
+def write_refusal(night_dir, plan, detail):
+    from scripts.run_night import _write_driver_refusal
+    night_dir.mkdir(parents=True, exist_ok=True)
+    return _write_driver_refusal(night_dir / "refusal.json", plan, "night_probe_error",
+                                 "evidence chain refused: " + detail)
 
 
 def record_covariates(protocol, night_dir):
@@ -206,7 +239,6 @@ def record_covariates(protocol, night_dir):
 
 def hard_exclusions(rows):
     """Named mechanisms only. This function never reads busy-core values."""
-    import re
     excluded = set()
     if not rows or any(row.get("census_clean") is not True for row in rows):
         excluded.add("census_not_clean_or_unknown")
@@ -260,27 +292,29 @@ def chi_square_lower_decile(df):
     return (low + high) / 2
 
 
-def size_block_two(s_upper, delta_j=1):
+def size_block_two(s_upper, protocol=None):
     if type(s_upper) not in (float, int) or not math.isfinite(s_upper) or s_upper < 0:
         raise ValueError("s_upper must be a finite nonnegative upper confidence bound")
-    return max(3, math.ceil(8 * s_upper ** 2 / delta_j ** 2))
+    sizing = (frozen_protocol() if protocol is None else protocol)["sizing"]
+    return max(sizing["minimum_pairs"], math.ceil(sizing["multiplier"] * s_upper ** 2 / sizing["delta_j"] ** 2))
 
 
-def stop_branch(*, s_upper=None, observer_floor=None, smallest_share=.05, block_two_upper_j=None):
+def stop_branch(*, s_upper=None, observer_floor=None, block_two_upper_j=None, protocol=None):
     """Apply only ruled stop conditions; absent evidence is never a pass."""
-    import math
+    protocol = frozen_protocol() if protocol is None else protocol
+    smallest_share = protocol["block_two"]["smallest_holdable_share"]
     for value in (s_upper, observer_floor, smallest_share, block_two_upper_j):
         if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
             raise ValueError("stop-branch evidence must be finite and nonnegative")
     causes = []
-    pairs = None if s_upper is None else size_block_two(s_upper)
-    if pairs is not None and pairs > 24:
+    pairs = None if s_upper is None else size_block_two(s_upper, protocol)
+    if pairs is not None and pairs > protocol["sizing"]["maximum_pairs"]:
         causes.append("sized_pairs_above_24")
     if observer_floor is not None and observer_floor > smallest_share:
         causes.append("observer_floor_above_smallest_holdable_share")
-    if block_two_upper_j is not None and block_two_upper_j > 1:
+    if block_two_upper_j is not None and block_two_upper_j > protocol["sizing"]["delta_j"]:
         causes.append("block_two_upper_bound_above_1_J")
-    return {"outcome": "no cutoff qualifies" if causes else "no decision", "causes": causes, "pairs": pairs}
+    return {"outcome": protocol["stop_branches"][causes[0]] if causes else "no decision", "causes": causes, "pairs": pairs}
 
 
 def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
@@ -288,16 +322,36 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     import statistics
     from scripts import sample_quiet_predicate_evidence as harness
     values, all_rows = [], []
+    journal = directory.parent / protocol["recorder_journal"]
+    covariates = [json.loads(line) for line in journal.read_text().splitlines() if line] if journal.exists() else []
+    clean_busy = []
     for entry in envelopes:
+        excluded = []
+        if entry.get("collector_exit", 0) != 0:
+            excluded.append("collect_error")
+        if entry.get("cleanup", {}).get("cleanup_proven") is False:
+            excluded.append("cleanup_unproven")
+        scheduled = entry.get("scheduled_mono_s")
+        support = [r for r in covariates if scheduled is not None and
+                   r["monotonic_start"] >= scheduled and
+                   r["monotonic_end"] <= scheduled + protocol["envelope_s"]]
+        busy = [(r.get("observation") or {}).get("metrics", {}).get("busy_cores") for r in support]
+        distribution = harness.quantiles(busy)
+        entry = {**entry, "busy_cores": {**distribution, "median": distribution["p50"]},
+                 "busy_cores_samples": len([v for v in busy if harness.number(v) is not None]),
+                 "recorder_observer_cpu_s": sum(r.get("observer_cpu_s") or 0 for r in support)}
         out = directory / f"envelope-{entry['index']:02d}"
         try:
             session = json.loads((out / "session.json").read_text())
             rows = [json.loads(line) for line in (out / "rounds.jsonl").read_text().splitlines() if line]
         except (OSError, ValueError) as exc:
-            values.append({**entry, "excluded": ["incomplete_interior_support"], "error": str(exc), "joules": None})
+            values.append({**entry, "excluded": excluded + ["incomplete_interior_support"], "error": str(exc), "joules": None})
             continue
         all_rows.extend(rows)
-        excluded = hard_exclusions(rows)
+        hard = hard_exclusions(rows)
+        excluded.extend(hard)
+        if not hard:
+            clean_busy.extend(busy)
         interior = session.get("interior", {})
         if (session.get("power") or {}).get("anchor", {}).get("status") != "bounded":
             excluded.append("clock_anchor_unresolved")
@@ -305,7 +359,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             excluded.append("incomplete_interior_support")
         entry = {**entry, "collector_start_drift_s": session.get("start_drift_s")}
         if max(abs(entry["start_drift_s"]), abs(session.get("start_drift_s") or 0)) > protocol["start_drift_max_s"]:
-            excluded.append("envelope_start_drift_above_5_s")
+            excluded.append("start_drift")
         if any(row.get("os_build_valid") is not True or row.get("os_build") != session.get("os_build") or
                row.get("session") != session.get("session") for row in rows):
             raise ValueError("pilot row/session identity mismatch")
@@ -335,10 +389,17 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     df = len(deltas) - 1 if len(deltas) >= 2 else None
     factor = math.sqrt(df / chi_square_lower_decile(df)) if sufficient else None
     s_upper = pair_sd * factor if sufficient else None
-    stop = stop_branch(s_upper=s_upper)
+    # Whole-round measured cost, including rejected envelopes; never subtract
+    # it from energy or use it as an envelope retention input.
+    observer_rows = [r for r in all_rows if harness.number(r.get("observer_cpu_s")) is not None
+                     and harness.number(r.get("round_mono_start_s")) is not None
+                     and harness.number(r.get("round_mono_end_s")) is not None
+                     and r["round_mono_end_s"] > r["round_mono_start_s"]]
+    observer_support_s = sum(r["round_mono_end_s"] - r["round_mono_start_s"] for r in observer_rows)
+    observer_floor = sum(r["observer_cpu_s"] for r in observer_rows) / observer_support_s if observer_support_s else None
+    stop = stop_branch(s_upper=s_upper, observer_floor=observer_floor, protocol=protocol)
     unfiltered = [v["joules"] for v in values if v["joules"] is not None]
     large_pairs = [d for d in overlapping if pair_sd is not None and abs(d["delta_j"]) > 3 * pair_sd]
-    busy = [(r.get("observation") or {}).get("metrics", {}).get("busy_cores") for r in all_rows]
     report = {"schema": "joulewise.quiet_predicate_pilot_summary.v1", "evidence_status": "PROVISIONAL",
         "status": "SPREAD_RECORDED" if sufficient else "INCONCLUSIVE", "envelopes": values,
         "retained": len(retained), "sizing_pairs": deltas, "retained_pairs": len(deltas),
@@ -350,13 +411,20 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         "single_envelope_role": "diagnostic_only; never used for sizing",
         "first_to_last_retained_drift_j": retained[-1]["joules"] - retained[0]["joules"] if len(retained) >= 2 else None,
         "pairs_above_3_pair_sd": large_pairs,
+        "pairs_above_3_pair_sd_role": "overlapping adjacent differences; diagnostic only",
         "max_abs_delta_j": max((abs(d["delta_j"]) for d in overlapping), default=None),
-        "busy_cores": harness.quantiles(busy), "busy_cores_role": "covariate_only; never excluded",
+        "busy_cores": harness.quantiles(clean_busy), "busy_cores_role": "covariate_only; never excluded",
+        "busy_cores_source": protocol["recorder_journal"],
+        "busy_cores_support": "recorder intervals fully within each scheduled envelope",
+        "clean_machine_busy_cores": harness.quantiles(clean_busy),
+        "clean_machine_definition": "envelopes passing census, AC and thermal hard probes; independent of energy retention",
+        "observer_floor_cores": observer_floor, "observer_support_s": observer_support_s,
         "s_upper": s_upper,
         "s_upper_reason": "one-sided upper 90% chi-square bound; independent normal pair differences assumed"
             if sufficient else "fewer than four retained disjoint pairs or eight retained envelopes; no top-up",
         "block_two_pairs": stop["pairs"], "block_two_stop": stop,
-        "block_two_pairs_reason": "ruling 46b: max(3, ceil(8 * s_upper**2 / 1 J**2)); stop above 24 pairs"
+        "block_two_pairs_reason": "ruling 46b: " + protocol["sizing"]["formula"] +
+            f"; delta_j={protocol['sizing']['delta_j']}; stop above {protocol['sizing']['maximum_pairs']} pairs"
             if sufficient else "INCONCLUSIVE; no sizing",
         "whole_campaign_observer_cpu_s": observer_cpu_s,
         "observer_definition": "SELF + reaped CHILDREN, including collector, recorder, sampler and census; never subtracted",
@@ -371,7 +439,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         f"Diagnostics only: {len(overlapping)} overlapping differences (SD {report['adjacent_pair_sd_j']} J); " +
         f"single-envelope SD {report['unfiltered_single_envelope_sd_j']} J; " +
         f"first-to-last retained drift {report['first_to_last_retained_drift_j']} J. " +
-        f"Pairs with |delta| > 3 * s_pair: {large_pairs}. Values are in summary.json.\n\n" +
+        f"Overlapping adjacent pairs with |delta| > 3 * s_pair: {large_pairs}. Values are in summary.json.\n\n" +
         "Busy cores are recorded covariates and never an exclusion input. " +
         "Every exclusion and partial interior is retained in summary.json. No top-up, cutoff or activation authority. " +
         "Block two is not authored by this summary.\n")
@@ -388,6 +456,7 @@ def execute(plan, protocol, night_dir):
     journal.touch(exist_ok=False)
     env = {**os.environ, "EVIDENCE_PROCESS_JOURNAL": str(journal)}
     children, envelopes = [], []
+    consecutive_cleanup_failures = 0
     outcome, error = "refused", None
     cpu_start = harness.cpu_total()
     go = time.monotonic()
@@ -428,49 +497,65 @@ def execute(plan, protocol, night_dir):
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup})
             append_event(night_dir / "evidence_envelopes.jsonl", envelopes[-1])
             print(f"envelope_end index={index} rc={code} cleanup_proven={cleanup['cleanup_proven']}", flush=True)
-            if not cleanup["cleanup_proven"]:
-                raise ValueError("collector/recorder/sampler cleanup unproven")
+            consecutive_cleanup_failures = 0 if cleanup["cleanup_proven"] else consecutive_cleanup_failures + 1
+            if consecutive_cleanup_failures >= 2:
+                raise ValueError("two consecutive cleanup_unproven envelopes")
             if recorder.poll() is not None:
                 raise ValueError("evidence covariate recorder exited early")
-            if code != 0:
-                raise ValueError(f"collector failed with exit {code}; evidence retained")
-        outcome = "complete"
+        outcome = "partial" if any(e["collector_exit"] != 0 or not e["cleanup"]["cleanup_proven"] for e in envelopes) else "complete"
     except (OSError, ValueError, KeyboardInterrupt, subprocess.SubprocessError) as exc:
         error = f"{type(exc).__name__}: {exc}"
     finally:
         for signum in old:
             signal.signal(signum, signal.SIG_IGN)
-        cleanup = cleanup_groups(journal, children, budget_s=30)
+        cleanup = cleanup_record(night_dir, children)
         try:
             pilot_summary(directory, protocol, envelopes,
                           harness.cpu_total() - cpu_start if cleanup["cleanup_proven"] else None)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             outcome, error = "refused", "pilot summary failed: " + str(exc)
-        harness.write_json(night_dir / "evidence_cleanup.json", cleanup)
+        if not cleanup["cleanup_proven"]:
+            outcome, error = "refused", error or "final evidence cleanup unproven"
+        if outcome == "refused":
+            write_refusal(night_dir, plan, error or "evidence execution aborted")
         harness.write_json(night_dir / "evidence_outcome.json", {"outcome": outcome, "error": error,
             "envelopes_attempted": len(envelopes), "cleanup_proven": cleanup["cleanup_proven"]})
         for signum, handler in old.items():
             signal.signal(signum, handler)
     print(f"evidence_end outcome={outcome} cleanup_proven={cleanup['cleanup_proven']}", flush=True)
-    return 0 if outcome == "complete" and cleanup["cleanup_proven"] else 2
+    return 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("verify", "run", "record"))
+    parser.add_argument("command", choices=("verify", "run", "record", "refuse"))
+    parser.add_argument("--reason", default="evidence wrapper refused before execution")
     args = parser.parse_args(argv)
     try:
+        if args.command == "refuse":
+            raise ValueError(args.reason)
         plan, manifest, sha = verify_environment()
         if args.command == "verify":
             print(f"VERIFY_ONLY_OK manifest={sha}")
             return 0
         if os.environ.get("NIGHT_VERIFY_ONLY") == "1":
             raise ValueError("verify-only mode refuses execution")
-        protocol = json.loads((Path(plan.measurement_root) / PROTOCOL_PATH).read_text())
+        raw = (Path(plan.measurement_root) / PROTOCOL_PATH).read_bytes()
+        if digest(raw) != manifest["files"][PROTOCOL_PATH]:
+            raise ValueError("protocol changed after manifest verification")
+        protocol = validate_protocol(frozen_protocol(raw), manifest["files"][CHAIN_PATH])
         if args.command == "record":
             return record_covariates(protocol, Path(os.environ["NIGHT_DIR"]))
         return execute(plan, protocol, Path(os.environ["NIGHT_DIR"]))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        if args.command != "verify":
+            # The plan was admitted by the driver; refuse even if manifest
+            # verification failed before execute could create a journal.
+            try:
+                plan = night_gate.NightPlan.from_mapping(json.loads(Path(os.environ["EVIDENCE_PLAN_PATH"]).read_text()))
+                write_refusal(Path(os.environ["NIGHT_DIR"]), plan, str(exc))
+            except (OSError, ValueError, KeyError) as refusal_error:
+                print(f"EVIDENCE_REFUSAL_TRANSPORT_FAILED {refusal_error}", file=sys.stderr)
         print(f"EVIDENCE_REFUSED {exc}", file=sys.stderr)
         return 2
 

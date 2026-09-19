@@ -22,9 +22,10 @@ def good_round(busy=0):
 
 
 class CampaignTests(unittest.TestCase):
-    def summarize(self, energies, excluded=(), missing=()):
+    def summarize(self, energies, excluded=(), missing=(), observer_core=None, recorder=False, drift=0):
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
-            root = Path(tmp)
+            root = Path(tmp) / 'evidence'
+            root.mkdir()
             entries = []
             for index, energy in enumerate(energies, 1):
                 if index in missing:
@@ -36,15 +37,66 @@ class CampaignTests(unittest.TestCase):
                     'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':energy, 'combined_w':energy}}}}
                 row = good_round()
+                if observer_core is not None:
+                    row.update(observer_cpu_s=30 * observer_core, round_mono_start_s=index*600, round_mono_end_s=index*600+30)
                 if index in excluded:
                     row['census_clean'] = False
                 (out / 'session.json').write_text(json.dumps(session))
                 (out / 'rounds.jsonl').write_text(json.dumps(row) + '\n')
-                entries.append({'index':index, 'start_drift_s':0})
+                entries.append({'index':index, 'scheduled_mono_s':index*600, 'start_drift_s':drift})
+                if recorder:
+                    campaign.append_event(root.parent / PROTOCOL['recorder_journal'], {
+                        'monotonic_start':index*600, 'monotonic_end':index*600+30,
+                        'observation':{'metrics':{'busy_cores':99 if index == 5 else .01}}, 'observer_cpu_s':.2})
             campaign.pilot_summary(root, PROTOCOL, entries)
             memo = (root / 'summary.md').read_text()
             self.assertIn('normally distributed', memo)
             return json.loads((root / 'summary.json').read_text())
+
+    def test_recorder_excursion_joins_only_envelope_five_never_retention(self):
+        report = self.summarize([10]*12, recorder=True)
+        self.assertEqual(report['retained'], 12)
+        self.assertEqual([r['busy_cores']['max'] for r in report['envelopes']], [.01]*4+[99]+[.01]*7)
+        self.assertEqual(report['envelopes'][4]['busy_cores']['median'], 99)
+        self.assertEqual(report['clean_machine_busy_cores']['max'], 99)
+        excluded = self.summarize([10]*12, recorder=True, excluded={5})
+        self.assertEqual(excluded['clean_machine_busy_cores']['max'], .01)
+        self.assertEqual(excluded['envelopes'][4]['busy_cores']['max'], 99)
+
+    def test_twelve_constant_energies_point_one_observer_core_stops(self):
+        report = self.summarize([10]*12, observer_core=.1)
+        self.assertEqual(report['retained'], 12)
+        self.assertEqual(report['s_upper'], 0)
+        self.assertAlmostEqual(report['observer_floor_cores'], .1)
+        self.assertEqual(report['block_two_stop']['outcome'], 'no cutoff qualifies')
+        self.assertEqual(report['block_two_stop']['causes'], ['observer_floor_above_smallest_holdable_share'])
+
+    def test_start_drift_ten_seconds_included_beyond_excluded_by_name(self):
+        self.assertEqual(self.summarize([10]*12, drift=10)['retained'], 12)
+        report = self.summarize([10]*12, drift=10.01)
+        self.assertEqual(report['retained'], 0)
+        self.assertEqual(report['envelopes'][0]['excluded'], ['start_drift'])
+
+    def test_foreign_group_eperm_is_logged_absence_alone_proves_cleanup(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            path = Path(tmp)/'groups.jsonl'
+            campaign.append_event(path, {'kind':'power','pgid':99999999})
+            with patch.object(campaign, 'group_absent', side_effect=[False, True]), \
+                    patch.object(campaign.os, 'killpg', side_effect=PermissionError('foreign group')):
+                result = campaign.cleanup_groups(path, budget_s=1)
+            self.assertTrue(result['cleanup_proven'], result)
+            self.assertTrue(result['signal_errors'])
+            self.assertEqual(result['errors'], [])
+            self.assertEqual(result['residue'], [])
+
+    def test_missing_journal_trivially_clean_malformed_journal_returns_error(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            path = Path(tmp)/'groups.jsonl'
+            self.assertTrue(campaign.cleanup_groups(path)['cleanup_proven'])
+            path.write_text('{bad')
+            result = campaign.cleanup_groups(path)
+            self.assertFalse(result['cleanup_proven'])
+            self.assertTrue(result['errors'])
 
     def test_disjoint_pairs_drop_exactly_one_original_pair_for_each_exclusion(self):
         original = {(1,2), (3,4), (5,6), (7,8), (9,10), (11,12)}
@@ -149,6 +201,31 @@ class CampaignTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 campaign.size_block_two(upper)
 
+    def test_all_five_sizing_constants_are_read_from_frozen_protocol(self):
+        import copy
+        sha = campaign.digest((ROOT / campaign.CHAIN_PATH).read_bytes())
+        self.assertEqual(PROTOCOL['block_two']['smallest_holdable_share'], .05)
+        for section, key, value in (('sizing','delta_j',2), ('sizing','multiplier',4),
+                ('sizing','minimum_pairs',5), ('sizing','maximum_pairs',7),
+                ('block_two','smallest_holdable_share',.2)):
+            changed = copy.deepcopy(PROTOCOL)
+            changed[section][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                campaign.validate_protocol(changed, sha)
+            # Isolate consumers: the runtime cannot bypass file-owned values.
+            with patch.object(campaign, 'frozen_protocol', return_value=changed):
+                expected = max(changed['sizing']['minimum_pairs'], math.ceil(changed['sizing']['multiplier'] / changed['sizing']['delta_j']**2))
+                self.assertEqual(campaign.size_block_two(1), expected)
+                self.assertEqual(campaign.size_block_two(0), changed['sizing']['minimum_pairs'])
+                stop = campaign.stop_branch(s_upper=1, observer_floor=.1)
+                self.assertEqual('sized_pairs_above_24' in stop['causes'], expected > changed['sizing']['maximum_pairs'])
+                self.assertEqual('observer_floor_above_smallest_holdable_share' in stop['causes'], .1 > changed['block_two']['smallest_holdable_share'])
+        for key in ('sizing', 'stop_branches', 'exclusions', 'power_interval_ms', 'start_drift_max_s', 'block_two'):
+            changed = copy.deepcopy(PROTOCOL)
+            changed.pop(key)
+            with self.subTest(missing=key), self.assertRaises(ValueError):
+                campaign.validate_protocol(changed, sha)
+
     def test_busy_cores_never_exclude_and_each_hard_mechanism_does(self):
         self.assertEqual(campaign.hard_exclusions([good_round(999)]), [])
         for mutate, name in (
@@ -224,7 +301,7 @@ class CampaignTests(unittest.TestCase):
 
 
 class FrozenExecutorTests(unittest.TestCase):
-    def test_twelve_protocol_envelopes_one_recorder_no_load_and_cleanup(self):
+    def exercise(self, errors=(), cleanup_failures=(), recorder_dead=False):
         from dataclasses import replace
         from types import SimpleNamespace
         from tests.test_night_gate import make_plan
@@ -245,29 +322,51 @@ class FrozenExecutorTests(unittest.TestCase):
                     out = Path(argv[argv.index('--out')+1])
                     out.mkdir()
                     index = int(argv[argv.index('--repeat')+1])
+                    self.index = index
                     self.end = float(argv[argv.index('--envelope-start-mono-s')+1])+600
                     session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
                         'power':{'anchor':{'status':'bounded'}},'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                     (out/'session.json').write_text(json.dumps(session))
                     (out/'rounds.jsonl').write_text(json.dumps(good_round())+'\n')
-            def poll(self): return self.returncode
+            def poll(self):
+                if recorder_dead and 'record' in self.argv:
+                    self.returncode = 1
+                return self.returncode
             def wait(self, timeout):
                 clock.now = max(clock.now, self.end)
-                self.returncode = 0
-                return 0
+                self.returncode = 1 if self.index in errors else 0
+                return self.returncode
+        real_cleanup = campaign.cleanup_groups
+        cleanup_count = 0
+        def cleanup(*args, **kwargs):
+            nonlocal cleanup_count
+            result = real_cleanup(*args, **kwargs)
+            if kwargs.get('exclude'):
+                cleanup_count += 1
+                if cleanup_count in cleanup_failures:
+                    result['cleanup_proven'] = False
+            return result
         def terminate(pgid, sig): processes[pgid].returncode = -sig
         with tempfile.TemporaryDirectory() as tmp, patch.object(campaign,'time',clock), \
                 patch.object(campaign.subprocess,'Popen',side_effect=Child), \
                 patch.object(campaign,'group_absent',side_effect=lambda pgid:processes[pgid].returncode is not None), \
-                patch.object(campaign.os,'killpg',side_effect=terminate):
+                patch.object(campaign.os,'killpg',side_effect=terminate), \
+                patch.object(campaign,'cleanup_groups',side_effect=cleanup):
             plan=replace(make_plan(),t0_epoch_s=1000,window_max_s=9000)
-            self.assertEqual(campaign.execute(plan,PROTOCOL,Path(tmp)),0)
+            rc = campaign.execute(plan,PROTOCOL,Path(tmp))
             cleanup=json.loads((Path(tmp)/'evidence_cleanup.json').read_text())
             self.assertTrue(cleanup['cleanup_proven'])
             summary=json.loads((Path(tmp)/'evidence/summary.json').read_text())
-            self.assertEqual(summary['retained'],12)
-            self.assertEqual(len(summary['adjacent_pairs']),11)
+            outcome=json.loads((Path(tmp)/'evidence_outcome.json').read_text())
+            refusals=list(Path(tmp).glob('refusal*.json'))
+            return rc, summary, outcome, len(refusals), calls
+
+    def test_twelve_protocol_envelopes_one_recorder_no_load_and_cleanup(self):
+        rc, summary, outcome, refusals, calls = self.exercise()
+        self.assertEqual(rc, 0)
+        self.assertEqual(summary['retained'],12)
+        self.assertEqual(len(summary['adjacent_pairs']),11)
         self.assertEqual(len(calls),13)
         self.assertEqual(sum('record' in cmd for cmd in calls),1)
         self.assertEqual(sum('collect' in cmd for cmd in calls),12)
@@ -276,3 +375,30 @@ class FrozenExecutorTests(unittest.TestCase):
             self.assertEqual(cmd[cmd.index('--duration-s')+1],'600')
             self.assertEqual(cmd[cmd.index('--interior-s')+1],'480')
             self.assertEqual(cmd[cmd.index('--sample-interval-s')+1],'30')
+
+    def test_envelope_three_collect_error_continues_frozen_cadence_retains_eleven(self):
+        rc, summary, outcome, refusals, calls = self.exercise(errors={3})
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome['envelopes_attempted'], 12)
+        self.assertEqual(summary['retained'], 11)
+        self.assertEqual(summary['envelopes'][2]['excluded'], ['collect_error'])
+        self.assertEqual(outcome['outcome'], 'partial')
+        self.assertEqual(refusals, 0)
+        starts = [float(a[a.index('--envelope-start-mono-s')+1]) for a in calls if 'collect' in a]
+        self.assertEqual(starts, list(range(600, 7800, 600)))
+
+    def test_isolated_cleanup_unproven_continues_but_two_consecutive_refuse(self):
+        for failures, attempted, retained, refusal_count in (({3}, 12, 11, 0), ({3,5}, 12, 10, 0), ({3,4}, 4, 2, 1)):
+            with self.subTest(failures=failures):
+                rc, summary, outcome, refusals, _ = self.exercise(cleanup_failures=failures)
+                self.assertEqual(outcome['envelopes_attempted'], attempted)
+                self.assertEqual(summary['retained'], retained)
+                self.assertEqual(summary['envelopes'][2]['excluded'], ['cleanup_unproven'])
+                self.assertEqual(refusals, refusal_count)
+                self.assertEqual(rc, 2 if refusal_count else 0)
+
+    def test_dead_covariate_recorder_refuses_with_document(self):
+        rc, summary, outcome, refusals, _ = self.exercise(recorder_dead=True)
+        self.assertEqual(rc, 2)
+        self.assertEqual(outcome['envelopes_attempted'], 1)
+        self.assertEqual(refusals, 1)
