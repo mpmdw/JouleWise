@@ -2483,7 +2483,12 @@ def verify_ledger_head_pin() -> dict[str, Any]:
     # joulewise/calibration_ledger.py, reached through --head-pin at run time,
     # and is not attempted here.
     pin_rel = LEDGER_HEAD_REL
-    pin = json.loads((REPO_ROOT / pin_rel).read_text(encoding="utf-8"))
+    try:
+        pin = json.loads((REPO_ROOT / pin_rel).read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        # Name the file, as every other pinned-input refusal does
+        # (counter-review record 38 F1).
+        raise ValueError(f"ledger head pin is not valid JSON: {pin_rel.as_posix()}") from exc
     cutoff = json.loads(
         (REPO_ROOT / acceptance_pin()["rel"]).read_text(encoding="utf-8")
     )["ledger_cutoff"]
@@ -2493,7 +2498,7 @@ def verify_ledger_head_pin() -> dict[str, Any]:
         or isinstance(pin.get("sequence"), bool)
         or not isinstance(pin.get("sequence"), int)
     ):
-        raise ValueError("ledger head pin shape invalid")
+        raise ValueError(f"ledger head pin shape invalid: {pin_rel.as_posix()}")
     if cutoff["head_digest"] != LEDGER_HEAD_SHA256:
         raise ValueError(
             f"acceptance ledger cutoff drifted: {acceptance_pin()['rel'].as_posix()}"

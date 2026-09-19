@@ -119,7 +119,21 @@ class GeneratorHeadPinRelationTests(unittest.TestCase):
                 for sequence in (True, "176", 176.0, None):
                     with self.subTest(sequence=sequence):
                         self.write_pin(module, {**self.cutoff_pin(module), "sequence": sequence})
-                        self.assert_refused_without_writes(module, "ledger head pin shape invalid")
+                        self.assert_refused_without_writes(
+                            module,
+                            f"ledger head pin shape invalid: {module.LEDGER_HEAD_REL.as_posix()}",
+                        )
+
+    def test_corrupt_pin_json_refuses_naming_the_file(self) -> None:
+        # Counter-review record 38 F1: a corrupt head-pin file must refuse with
+        # the path named, like every other pinned input, not a JSON traceback.
+        for module in self.generators():
+            with self.subTest(pack_id=module.PACK_REL.name):
+                (self.repository / module.LEDGER_HEAD_REL).write_text("{not json\n", encoding="utf-8")
+                self.assert_refused_without_writes(
+                    module,
+                    f"ledger head pin is not valid JSON: {module.LEDGER_HEAD_REL.as_posix()}",
+                )
 
     def test_missing_or_extra_keys_refuse_shape(self) -> None:
         for module in self.generators():
@@ -134,7 +148,10 @@ class GeneratorHeadPinRelationTests(unittest.TestCase):
                 for label, value in malformed.items():
                     with self.subTest(shape=label):
                         self.write_pin(module, value)
-                        self.assert_refused_without_writes(module, "ledger head pin shape invalid")
+                        self.assert_refused_without_writes(
+                            module,
+                            f"ledger head pin shape invalid: {module.LEDGER_HEAD_REL.as_posix()}",
+                        )
 
     def test_acceptance_byte_drift_refuses_before_head_check(self) -> None:
         for module in self.generators():
