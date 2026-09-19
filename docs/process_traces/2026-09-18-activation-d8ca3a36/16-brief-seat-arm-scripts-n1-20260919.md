@@ -2,10 +2,10 @@ SESSION_MODE: delegated
 BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: ["docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/**","docs/process/NIGHT_HANDBACK.md","configs/production_custody_inventory.json"]
-BASE_HEAD: __BASE_HEAD__
-BASELINE_MANIFEST: __BASELINE_MANIFEST__
-BASELINE_DIGEST: __BASELINE_DIGEST__
-LEASE_ID: __LEASE_ID__
+BASE_HEAD: 1907b53870f5db8878ec4c93723c701ef6ea6ffe
+BASELINE_MANIFEST: .codex-bridge/baselines/arm-prep-n1-20260919-d8ca3a36.json
+BASELINE_DIGEST: sha256:997b0723c5f8a4d6769d9c7c18f6ff50b26a56acef2321646a826a97f393a333
+LEASE_ID: lease-71090f0edbb041b588fb68bf1d77f3f5
 
 # Seat brief — arm scripts and handback rewrite for the v2 equivalence night `d079-epoch-25g83-derivation-n1-20260919` (t0 2026-09-19 00:00:00 PDT = epoch 1789801200)
 
