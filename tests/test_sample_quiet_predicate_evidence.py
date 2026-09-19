@@ -339,6 +339,9 @@ class CollectionTests(unittest.TestCase):
             self.assertTrue(all(path.is_relative_to(out) for path in created))
             self.assertEqual(list(root.iterdir()), [out])
 
+    @unittest.skipUnless(sys.platform == "darwin", "real collect subprocess runs the macOS census and "
+                         "power-policy probes (pmset, sysctl); on Linux every round errors and, since fix "
+                         "round 4, an all-error session exits 1 by design")
     def test_real_collect_no_power_reaps_all_recorded_workers(self):
         with tempfile.TemporaryDirectory() as tmp:
             # One second is the minimum top sampling interval; use one interval.
@@ -649,6 +652,10 @@ class LoadTests(unittest.TestCase):
         self.assertGreater(len(periods), 0, "worker reported no period rows for its window")
         self.assertAlmostEqual(sum(p["cpu_used_s"] for p in periods), .3, delta=.001)
         self.assertEqual(clock.monotonic(), 4.0)   # rendezvous at 1.0 plus the 3 s window
+
+    @unittest.skipUnless(sys.platform == "darwin", "real spawned worker uses native QoS; "
+                         "hosted Linux shards feed the runner via stdin, which spawn cannot re-import")
+    def test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child(self):
         # S1/S2 / probe_c: load()'s real join ladder must accept a one-second
         # post-result exit and expose escalation with a short test-only grace.
         context = harness.multiprocessing.get_context("spawn")
