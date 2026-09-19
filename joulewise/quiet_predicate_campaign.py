@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -40,7 +41,9 @@ def validate_protocol(protocol, source_digest):
     fixed = {"schema": "joulewise.quiet_predicate_pilot.v1", "receipt_class": "DIAGNOSTIC_NO_PACK",
              "window_max_s": 9000, "settle_s": 600, "envelopes": 12, "envelope_s": 600,
              "interior_offset_s": 60, "interior_s": 480, "sample_interval_s": 30,
-             "minimum_retained": 8, "load_generator": False,
+             "minimum_retained": 8, "minimum_adjacent_pairs": 4,
+             "pairing_rule": "disjoint_original_adjacent_pairs_both_retained_no_bridging",
+             "load_generator": False,
              "recorder_journal": "evidence_busy_cores.jsonl", "busy_cores_role": "covariate_only",
              "chain_source_sha256": source_digest}
     if not isinstance(protocol, dict) or any(protocol.get(k) != v for k, v in fixed.items()):
@@ -227,8 +230,37 @@ def hard_exclusions(rows):
     return sorted(excluded)
 
 
+def chi_square_lower_decile(df):
+    """Invert regularized lower gamma P(df/2, x/2), using only stdlib.
+
+    The pilot needs df=3..5; support 3..11 for diagnostic cross-checks.
+    At the lower decile x/2 < df/2, so the positive gamma series converges
+    quickly without subtracting a nearly-one upper-tail probability.
+    """
+    if type(df) is not int or not 3 <= df <= 11:
+        raise ValueError("chi-square degrees of freedom must be in 3..11")
+    shape = df / 2
+    low, high = 0., float(df)
+    for _ in range(80):
+        mid = (low + high) / 2
+        x = mid / 2
+        term = total = 1 / shape
+        for k in range(1, 1000):
+            term *= x / (shape + k)
+            total += term
+            if term <= total * 1e-15:
+                break
+        else:
+            raise ArithmeticError("lower gamma series did not converge")
+        probability = total * math.exp(-x + shape * math.log(x) - math.lgamma(shape))
+        if probability < .10:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
+
+
 def size_block_two(s_upper, delta_j=1):
-    import math
     if type(s_upper) not in (float, int) or not math.isfinite(s_upper) or s_upper < 0:
         raise ValueError("s_upper must be a finite nonnegative upper confidence bound")
     return max(3, math.ceil(8 * s_upper ** 2 / delta_j ** 2))
@@ -252,7 +284,7 @@ def stop_branch(*, s_upper=None, observer_floor=None, smallest_share=.05, block_
 
 
 def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
-    """Retain exclusions and unfiltered values; do not infer a confidence model."""
+    """Apply ruling 46b to fixed pairs; preserve unfiltered diagnostics."""
     import statistics
     from scripts import sample_quiet_predicate_evidence as harness
     values, all_rows = [], []
@@ -286,31 +318,63 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
                        "observer_cpu_s": sum(row.get("observer_cpu_s") or 0 for row in rows),
                        "censuses": [{"round": r["round"], "clean": r.get("census_clean")} for r in rows]})
     retained = [v for v in values if not v["excluded"] and v["joules"] is not None]
-    deltas = [{"left": a["index"], "right": b["index"], "delta_j": b["joules"] - a["joules"]}
-              for a, b in zip(values, values[1:]) if not a["excluded"] and not b["excluded"]
-              and a.get("boot_id") == b.get("boot_id") and a.get("os_build") == b.get("os_build")
-              and a["joules"] is not None and b["joules"] is not None]
+    # Index identity, not position in a filtered list, fixes the original pairs.
+    by_index = {v["index"]: v for v in values}
+    overlapping = []
+    for index in range(1, protocol["envelopes"]):
+        a, b = by_index.get(index), by_index.get(index + 1)
+        if a is None or b is None or a["joules"] is None or b["joules"] is None:
+            continue
+        overlapping.append({"left": index, "right": index + 1,
+            "delta_j": b["joules"] - a["joules"],
+            "retained": not a["excluded"] and not b["excluded"]
+                and a.get("boot_id") == b.get("boot_id") and a.get("os_build") == b.get("os_build")})
+    deltas = [d for d in overlapping if d["retained"] and d["left"] % 2 == 1]
     sufficient = len(retained) >= protocol["minimum_retained"] and len(deltas) >= protocol["minimum_adjacent_pairs"]
+    pair_sd = statistics.stdev(d["delta_j"] for d in deltas) if len(deltas) >= 2 else None
+    df = len(deltas) - 1 if len(deltas) >= 2 else None
+    factor = math.sqrt(df / chi_square_lower_decile(df)) if sufficient else None
+    s_upper = pair_sd * factor if sufficient else None
+    stop = stop_branch(s_upper=s_upper)
+    unfiltered = [v["joules"] for v in values if v["joules"] is not None]
+    large_pairs = [d for d in overlapping if pair_sd is not None and abs(d["delta_j"]) > 3 * pair_sd]
     busy = [(r.get("observation") or {}).get("metrics", {}).get("busy_cores") for r in all_rows]
     report = {"schema": "joulewise.quiet_predicate_pilot_summary.v1", "evidence_status": "PROVISIONAL",
         "status": "SPREAD_RECORDED" if sufficient else "INCONCLUSIVE", "envelopes": values,
-        "retained": len(retained), "adjacent_pairs": deltas,
-        "pair_sd_j": statistics.stdev(d["delta_j"] for d in deltas) if len(deltas) >= 2 else None,
+        "retained": len(retained), "sizing_pairs": deltas, "retained_pairs": len(deltas),
+        "adjacent_pairs": overlapping, "adjacent_pairs_role": "diagnostic_only; never used for sizing",
+        "adjacent_pair_sd_j": statistics.stdev(d["delta_j"] for d in overlapping) if len(overlapping) >= 2 else None,
+        "pair_sd_j": pair_sd, "pair_df": df, "s_upper_factor": factor,
         "single_envelope_sd_j": statistics.stdev(v["joules"] for v in retained) if len(retained) >= 2 else None,
-        "max_abs_delta_j": max((abs(d["delta_j"]) for d in deltas), default=None),
+        "unfiltered_single_envelope_sd_j": statistics.stdev(unfiltered) if len(unfiltered) >= 2 else None,
+        "single_envelope_role": "diagnostic_only; never used for sizing",
+        "first_to_last_retained_drift_j": retained[-1]["joules"] - retained[0]["joules"] if len(retained) >= 2 else None,
+        "pairs_above_3_pair_sd": large_pairs,
+        "max_abs_delta_j": max((abs(d["delta_j"]) for d in overlapping), default=None),
         "busy_cores": harness.quantiles(busy), "busy_cores_role": "covariate_only; never excluded",
-        "s_upper": None, "s_upper_reason": "confidence construction for dependent adjacent differences requires lead ruling",
-        "block_two_pairs": None, "block_two_pairs_reason": "requires the ruled upper 90% confidence bound; no plug-in sizing",
+        "s_upper": s_upper,
+        "s_upper_reason": "one-sided upper 90% chi-square bound; independent normal pair differences assumed"
+            if sufficient else "fewer than four retained disjoint pairs or eight retained envelopes; no top-up",
+        "block_two_pairs": stop["pairs"], "block_two_stop": stop,
+        "block_two_pairs_reason": "ruling 46b: max(3, ceil(8 * s_upper**2 / 1 J**2)); stop above 24 pairs"
+            if sufficient else "INCONCLUSIVE; no sizing",
         "whole_campaign_observer_cpu_s": observer_cpu_s,
         "observer_definition": "SELF + reaped CHILDREN, including collector, recorder, sampler and census; never subtracted",
         "cutoff_authority": False, "top_up": False}
     harness.write_json(directory / "summary.json", report)
     (directory / "summary.md").write_text(
         "# QPE-01 pilot (PROVISIONAL, descriptive)\n\n" +
-        f"Status: {report['status']}. Retained {len(retained)}/{protocol['envelopes']} envelopes; {len(deltas)} adjacent differences.\n\n" +
-        f"Adjacent-pair SD: {report['pair_sd_j']} J. Busy cores are recorded covariates and never an exclusion input.\n\n" +
+        f"Status: {report['status']}. Retained {len(retained)}/{protocol['envelopes']} envelopes; {len(deltas)} disjoint pairs.\n\n" +
+        f"Disjoint-pair sample SD: {pair_sd} J (df={df}); upper 90% bound: {s_upper} J. " +
+        "This chi-square construction assumes independent, normally distributed pair differences.\n\n" +
+        f"Block-two pairs: {stop['pairs']}; sizing stop: {stop['outcome']}. No sizing when INCONCLUSIVE.\n\n" +
+        f"Diagnostics only: {len(overlapping)} overlapping differences (SD {report['adjacent_pair_sd_j']} J); " +
+        f"single-envelope SD {report['unfiltered_single_envelope_sd_j']} J; " +
+        f"first-to-last retained drift {report['first_to_last_retained_drift_j']} J. " +
+        f"Pairs with |delta| > 3 * s_pair: {large_pairs}. Values are in summary.json.\n\n" +
+        "Busy cores are recorded covariates and never an exclusion input. " +
         "Every exclusion and partial interior is retained in summary.json. No top-up, cutoff or activation authority. " +
-        "Block two cannot be sized until the upper 90% confidence construction is ruled.\n")
+        "Block two is not authored by this summary.\n")
     return report
 
 

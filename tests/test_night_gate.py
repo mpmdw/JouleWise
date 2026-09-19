@@ -1280,12 +1280,13 @@ class EvidenceRegistrationTests(unittest.TestCase):
     def test_protocol_digest_and_source_are_the_ruled_files(self):
         source = self.source()
         self.assertEqual(hashlib.sha256(source.text['/custody/registration.json'].encode()).hexdigest(), night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+        self.assertIn(night_gate.QPE01_PILOT_REGISTRATION_SHA256, night_gate.RULED_REGISTRATIONS)
         receipt = night_gate.evaluate_night(make_plan(), source.probes())
         self.assertEqual(receipt.verdict, "GO")
         c1 = next(row for row in receipt.conditions if row.condition_id == "C1").measured
         c5 = next(row for row in receipt.conditions if row.condition_id == "C5").measured
         self.assertEqual(c1['registration_bound_chain_source_sha256'], c5['chain_source_sha256'])
-        self.assertEqual(c1['registration_ruling'], 'cold gate 10 Q1/Q2 (2026-09-19)')
+        self.assertEqual(c1['registration_ruling'], 'cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b')
         self.assertNotIn('D-166', c1['detail'])
 
     def test_chain_measurement_not_advisory_sidecar_is_binding(self):

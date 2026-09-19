@@ -25,21 +25,31 @@
   "interior_offset_s": 60,
   "interior_s": 480,
   "load_generator": false,
-  "minimum_adjacent_pairs": 6,
+  "minimum_adjacent_pairs": 4,
   "minimum_retained": 8,
+  "pairing_rule": "disjoint_original_adjacent_pairs_both_retained_no_bridging",
   "power_interval_ms": 100,
   "receipt_class": "DIAGNOSTIC_NO_PACK",
   "recorder_journal": "evidence_busy_cores.jsonl",
-  "ruling": "cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a",
+  "ruling": "cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b",
   "sample_interval_s": 30,
   "schema": "joulewise.quiet_predicate_pilot.v1",
   "settle_s": 600,
   "sizing": {
+    "assumption": "independent normally distributed disjoint pair differences",
+    "chi_square_lower_tail_probability": 0.1,
+    "confidence": 0.9,
     "delta_j": 1,
     "formula": "max(3, ceil(8 * s_upper**2 / delta_j**2))",
     "maximum_pairs": 24,
     "minimum_pairs": 3,
-    "s_upper": "upper 90% confidence bound on the adjacent-pair SD"
+    "multiplier": 8,
+    "reference_factors": {
+      "n_4": 2.266,
+      "n_6": 1.762
+    },
+    "s_pair": "sample SD of retained disjoint differences, df = n - 1",
+    "s_upper": "s_pair * sqrt((n - 1) / chi_square_quantile(0.10, n - 1))"
   },
   "start_drift_max_s": 5,
   "stop_branches": {
@@ -49,8 +59,10 @@
   },
   "summary": [
     "interior rail-sum and combined joules",
-    "adjacent-pair differences and SD, maximum absolute difference",
-    "single-envelope SD",
+    "retained disjoint pairs (e1,e2), (e3,e4), ..., (e11,e12); even minus odd interior joules; sample SD and upper 90% bound",
+    "overlapping adjacent differences and SD, maximum absolute difference: diagnostics only, never sizing",
+    "all single-envelope values and SD, first-to-last retained drift: diagnostics only, never sizing",
+    "name every original adjacent pair with absolute difference above 3 * s_pair; never exclude by magnitude",
     "whole-round observer cpu-s, self plus reaped children including recorder; never subtracted",
     "busy-core median/max and per-round values",
     "cadence and native sample counts",

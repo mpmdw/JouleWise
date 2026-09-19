@@ -43,13 +43,13 @@ D166_REGISTRATION_PATH = (
     "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
 )
 QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json"
-QPE01_PILOT_REGISTRATION_SHA256 = "f474b6686eb1195ecc79303cef401487d8095b7fe410eda31e631d6f996835fc"
+QPE01_PILOT_REGISTRATION_SHA256 = "8fd65255d2167e1817a04f0326002a33d03f4947c1fb2977913b2b099fd76f2f"
 EVIDENCE_CHAIN_PATH = "scripts/night_chains/quiet_predicate_evidence.zsh"
 # Amended only by cold-gate ruling; each entry names its authority.
 RULED_REGISTRATIONS = {
     D166_REGISTRATION_SHA256: {"label": "D-166 dominance criterion", "ruling": "D-165/D-166", "binds_chain": False},
     QPE01_PILOT_REGISTRATION_SHA256: {"label": "QPE-01 idle-variance pilot protocol v1",
-        "ruling": "cold gate 10 Q1/Q2 (2026-09-19)", "binds_chain": True},
+        "ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b", "binds_chain": True},
 }
 
 

@@ -6,7 +6,7 @@ choose or activate a limit. All results are **PROVISIONAL**. Stage B and a
 separate cold-gate ruling remain necessary before activation.
 
 The frozen registration is `pilot_protocol_v1.json`, under cold gate 10 Q1/Q2
-(2026-09-19), adjudication 10a. Its exact SHA-256 fingerprint is a key in
+(2026-09-19), adjudication 10a and sizing ruling 46b. Its exact SHA-256 fingerprint is a key in
 `night_gate.RULED_REGISTRATIONS`. That table can change only by cold-gate ruling.
 The registration also names the fingerprint of the tracked evidence chain
 source. The gate measures that source at the plan's measurement commit and
@@ -38,15 +38,32 @@ whole-envelope mean by 480 seconds. CPU+GPU+ANE joules are the main quantity;
 combined power is a cross-check. OS build, boot identity, tool identity,
 per-round AC/thermal results, cadence and observer cost accompany the numbers.
 
-At least eight retained envelopes and six original adjacent pairs are needed;
-otherwise the pilot is INCONCLUSIVE. Exclusion does not make formerly separated
-envelopes adjacent. There is no top-up. The next plan can be authored only after
-the pilot's spread is measured. Its target is δ = 1 J and its sample size is
-`n = max(3, ceil(8 * s_upper² / δ²))` pairs, where `s_upper` is the upper 90%
-confidence bound on the adjacent-pair standard deviation, not the point SD.
-The confidence construction for overlapping adjacent differences is still a
-lead-ruling dependency: this implementation records the SD and leaves
-`s_upper` and the next sample size unset rather than silently choosing a model.
+Sizing uses the six fixed, disjoint pairs `(e1,e2), (e3,e4), …, (e11,e12)`.
+Each difference is the second envelope's interior joules minus the first's.
+A pair survives only when both envelopes are retained and share boot and OS
+identity. Excluding one envelope drops exactly its original pair; pairs are
+never re-formed across a gap. At least eight retained envelopes and four
+retained disjoint pairs are required (`minimum_adjacent_pairs` counts these
+disjoint pairs). Otherwise the pilot is INCONCLUSIVE and leaves the upper
+bound and sizing unset. There is no top-up.
+
+For `n` retained pairs, `s_pair` is the sample standard deviation of their
+differences, with `n − 1` degrees of freedom. The one-sided upper 90% confidence
+bound is `s_upper = s_pair * sqrt((n − 1) / χ²(0.10, n − 1))`, using the
+chi-square lower-tail 10th percentile. The factors are approximately 1.762
+for six pairs and 2.266 for four pairs. The implementation numerically inverts
+the regularized gamma function using the Python standard library, without
+rounding these factors for sizing. **Independence and normality of the pair
+differences are assumptions of this construction**, not pilot findings.
+
+The next plan can be authored only after the pilot's spread is measured.
+Its target is δ = 1 J and its sample size is
+`n_pairs = max(3, ceil(8 * s_upper² / δ²))`. The eleven overlapping adjacent
+differences and twelve single-envelope values remain diagnostics only; neither
+sizes block two. The report includes their spreads, first-to-last retained
+energy drift, and names every original adjacent pair with `|Δ| > 3 * s_pair`.
+Excluded observations remain visible in those diagnostics; magnitude is never
+an exclusion rule. Missing observations remain explicit and cannot bridge a gap.
 
 The pre-registered negative result is **“no cutoff qualifies”** if the sized
 sample exceeds 24 pairs, the observer's own busy-core floor exceeds the smallest
