@@ -1,0 +1,21 @@
+{
+"argv": [
+"scripts/sample_quiet_predicate_evidence.py",
+"collect",
+"--state",
+"contaminated-2seats-2claude",
+"--repeat",
+"1",
+"--duration-s",
+"95",
+"--sample-interval-s",
+"30",
+"--out",
+"/Users/edr/night-archive/qpe-232/contaminated-2seats-20260918T185907",
+"--power"
+],
+"boot_id": "CD5B815A-DF9B-4FC7-921A-8E97D8ABA867",
+"os_build": "25G83",
+"repeat": "1",
+"state": "contaminated-2seats-2claude"
+}

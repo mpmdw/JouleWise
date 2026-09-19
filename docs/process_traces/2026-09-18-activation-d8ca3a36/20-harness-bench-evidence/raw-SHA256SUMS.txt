@@ -1,0 +1,3 @@
+54481eabdb3a7f3a740fe2f37c484ea79b98d66919c9b7b242705970d10e2d99  /Users/edr/night-archive/qpe-232/contaminated-2seats-20260918T185907/raw/powermetrics-contaminated-2seats-2claude-1.plist
+2d71915168ff832fea78aa76c06cbb176e0a823a728ea34fcb6f1ebebbe88929  /Users/edr/night-archive/qpe-232/contaminated-2seats-20260918T185907/raw/powermetrics-contaminated-2seats-2claude-1.processes.txt
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /Users/edr/night-archive/qpe-232/contaminated-2seats-20260918T185907/raw/powermetrics-contaminated-2seats-2claude-1.stderr
