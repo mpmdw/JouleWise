@@ -5,6 +5,8 @@ from __future__ import annotations
 from contextlib import nullcontext
 import hashlib
 import importlib.util
+import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -33,6 +35,32 @@ GENERATION_LEDGER_HEAD_BYTES = (
 GENERATION_LEDGER_HEAD_SHA256 = (
     "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902"
 )
+def generation_repository(case: unittest.TestCase, root: Path = ROOT) -> Path:
+    """Disposable ``git clone --shared`` of ``root`` carrying the generation-time
+    head-pin bytes and the working tree's d117 generator files, so a generator
+    is exercised as a function of its declared inputs while uncommitted
+    generator edits stay visible (counter-review record 15 F1). One home for the
+    helper the frozen-path test modules share (delta re-audit record 27 R2).
+    Removed after ``case`` finishes."""
+    temporary = tempfile.TemporaryDirectory(prefix="d117-head-fixture-", dir="/tmp")
+    case.addCleanup(temporary.cleanup)
+    repository = Path(temporary.name) / "repository"
+    subprocess.run(
+        ("git", "clone", "-q", "--shared", str(root), str(repository)),
+        check=True,
+        capture_output=True,
+    )
+    case.assertEqual(
+        hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
+        GENERATION_LEDGER_HEAD_SHA256,
+    )
+    (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
+        GENERATION_LEDGER_HEAD_BYTES
+    )
+    for source in (root / "configs/campaigns").glob("d117_*/generate_configs.py"):
+        shutil.copy2(source, repository / source.relative_to(root))
+    return repository
+
 D117_GENERATORS = tuple(
     sorted((ROOT / "configs/campaigns").glob("d117_*/generate_configs.py"))
 )

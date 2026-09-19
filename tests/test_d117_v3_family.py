@@ -14,10 +14,7 @@ from typing import Any
 
 from joulewise.arm_readiness import committed_pack_tree_sha256
 from joulewise.calibration_bracketing import acceptance_allowance_rule
-from tests.test_campaign_generator_core import (
-    GENERATION_LEDGER_HEAD_BYTES,
-    GENERATION_LEDGER_HEAD_SHA256,
-)
+from tests.test_campaign_generator_core import generation_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -140,28 +137,7 @@ class D117V3FamilyTests(unittest.TestCase):
 
     def generation_repository(self) -> Path:
         """Exercise working-tree generators with their generation-time head input."""
-        temporary = tempfile.TemporaryDirectory(
-            prefix="d117-head-fixture-", dir="/tmp"
-        )
-        self.addCleanup(temporary.cleanup)
-        repository = Path(temporary.name) / "repository"
-        subprocess.run(
-            ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
-            check=True,
-            capture_output=True,
-        )
-        self.assertEqual(
-            hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
-            GENERATION_LEDGER_HEAD_SHA256,
-        )
-        (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
-            GENERATION_LEDGER_HEAD_BYTES
-        )
-        # A clone starts at HEAD; overlay sources so uncommitted generator edits
-        # remain visible, including the other families used by successor tests.
-        for source in (ROOT / "configs/campaigns").glob("d117_*/generate_configs.py"):
-            shutil.copy2(source, repository / source.relative_to(ROOT))
-        return repository
+        return generation_repository(self, ROOT)
 
     def assert_r6_pin(self, actual: dict[str, Any]) -> None:
         self.assertEqual(
@@ -181,6 +157,14 @@ class D117V3FamilyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="d117-v2-to-v3-") as temp:
             output_root = Path(temp)
             repository = self.generation_repository()
+            # The executed generators are the clone's copies: prove those bytes
+            # are unchanged by the run too (delta re-audit record 27 R1).
+            clone_before = {
+                family["v2"]: sha256(
+                    repository / "configs/campaigns" / family["v2"] / "generate_configs.py"
+                )
+                for family in FAMILIES
+            }
             for family in FAMILIES:
                 with self.subTest(family=family["v3"]):
                     command = generator_command(
@@ -211,6 +195,15 @@ class D117V3FamilyTests(unittest.TestCase):
                         text=True,
                     )
                     self.assertEqual(checked.returncode, 0, checked.stderr)
+            self.assertEqual(
+                {
+                    family["v2"]: sha256(
+                        repository / "configs/campaigns" / family["v2"] / "generate_configs.py"
+                    )
+                    for family in FAMILIES
+                },
+                clone_before,
+            )
         self.assertEqual(
             {
                 family["v2"]: sha256(

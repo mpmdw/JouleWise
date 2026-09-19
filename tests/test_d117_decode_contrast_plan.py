@@ -24,10 +24,7 @@ from joulewise.identity_pins import (
 from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.run_campaign import load_order_entries
 from tests.git_fixture import init_git_fixture
-from tests.test_campaign_generator_core import (
-    GENERATION_LEDGER_HEAD_BYTES,
-    GENERATION_LEDGER_HEAD_SHA256,
-)
+from tests.test_campaign_generator_core import generation_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -823,28 +820,7 @@ class D117GammaPlanTest(unittest.TestCase):
 
     def generation_repository(self) -> Path:
         """Exercise working-tree generators with their generation-time head input."""
-        temporary = tempfile.TemporaryDirectory(
-            prefix="d117-head-fixture-", dir="/tmp"
-        )
-        self.addCleanup(temporary.cleanup)
-        repository = Path(temporary.name) / "repository"
-        subprocess.run(
-            ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
-            check=True,
-            capture_output=True,
-        )
-        self.assertEqual(
-            hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
-            GENERATION_LEDGER_HEAD_SHA256,
-        )
-        (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
-            GENERATION_LEDGER_HEAD_BYTES
-        )
-        # A clone starts at HEAD; overlay sources so uncommitted generator edits
-        # remain visible, including the other families used by successor tests.
-        for source in (ROOT / "configs/campaigns").glob("d117_*/generate_configs.py"):
-            shutil.copy2(source, repository / source.relative_to(ROOT))
-        return repository
+        return generation_repository(self, ROOT)
 
     def setUp(self) -> None:
         self.plan = read_json(PACK / "calibration_plan.json")
