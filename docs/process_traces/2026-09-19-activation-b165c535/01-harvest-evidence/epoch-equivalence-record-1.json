@@ -1,0 +1,165 @@
+{
+  "schema_version": "joulewise.epoch_equivalence_check.v1",
+  "reference_envelope": {
+    "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+    "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+    "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+    "screen_rule": "range_equals_screen",
+    "corpus_n": 17,
+    "raw_corpus_maximum_s": "0.03289849371536248",
+    "raw_corpus_range_s": "0.00972358928879385",
+    "level_screen_s": "0.032898493715362",
+    "bracket_screen_s": "0.009724",
+    "maximum_budgetable_drift_s": "0.010164834757777545"
+  },
+  "session": {
+    "session_id": "d079-epoch-25g83-derivation-n1-20260919",
+    "session_kind": "derivation",
+    "state": "finalized",
+    "abort_reason": null,
+    "declared_slots": [
+      "d01",
+      "d02",
+      "d03",
+      "d04",
+      "d05",
+      "d06",
+      "d07",
+      "d08",
+      "d09",
+      "d10",
+      "d11",
+      "d12"
+    ]
+  },
+  "slot_outcomes": [
+    {
+      "slot": "d01",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
+      "b_fiducial_s": "0.041133514338919874",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d02",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d02",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d03",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
+      "b_fiducial_s": "0.04200278099548145",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d04",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d04",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d05",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
+      "b_fiducial_s": "0.172710636067422",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d06",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d06",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d07",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d07",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d08",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d08",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d09",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d09",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d10",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d10",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d11",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d11",
+      "b_fiducial_s": null,
+      "retained": false,
+      "outcome": "disposition",
+      "detail": "ordinary-invalid"
+    },
+    {
+      "slot": "d12",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
+      "b_fiducial_s": "0.03255031906139217",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    }
+  ],
+  "retained": [
+    {
+      "slot": "d01",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
+      "b_fiducial_s": "0.041133514338919874"
+    },
+    {
+      "slot": "d03",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
+      "b_fiducial_s": "0.04200278099548145"
+    },
+    {
+      "slot": "d05",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
+      "b_fiducial_s": "0.172710636067422"
+    },
+    {
+      "slot": "d12",
+      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
+      "b_fiducial_s": "0.03255031906139217"
+    }
+  ],
+  "m": 4,
+  "maximum_s": null,
+  "maximum_slot": null,
+  "minimum_s": null,
+  "minimum_slot": null,
+  "range_s": null,
+  "level_screen_comparison": null,
+  "bracket_screen_comparison": null,
+  "verdict": "INCONCLUSIVE",
+  "verdict_reason": "m=4 is below the minimum 6; issue 316 directs one more equivalence night"
+}

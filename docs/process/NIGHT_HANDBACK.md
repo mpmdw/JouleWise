@@ -434,9 +434,38 @@ RECORD: harvest and uninstall complete; no measurement or successor arm
 is established by this historical block. D-182's separate positive evidence
 and ordinary fresh-plan gates apply to the proposed successor.
 
+<<<<<<< Updated upstream
 ## Executed — d079-epoch-25g83-derivation-n1-20260919 (2026-09-18, ARMED)
 
 Armed 2026-09-18 19:38:28 PDT by headless activation d8ca3a36 as the D-182 successor of the 09-17 refusal: triple `(d079-epoch-25g83-derivation-n1-20260919, /Users/edr/JouleWise-measurement-20260919-derivation, d595aa9f42cdc3d49d0ecae5f2ef33321fd6f90f)`, plan sha256 `78edf5667807432912eec9ce381be8baed563cf7b4cf0efe217b8840d3ddda66`, t0 2026-09-19 00:00:00 PDT, notice `1a0b78109400cce8` accepted 19:33:32 before publication at 19:37:23, probe ok, both agents installed from the clone. Record: `docs/process_traces/2026-09-18-activation-d8ca3a36/21-arm-record-n1-20260919.md`. Outcome: see the harvest record of the next activation.
+=======
+## Executed — d079-epoch-25g83-derivation-n1-20260919 (2026-09-19, GO, harvested, INCONCLUSIVE)
+
+Armed 2026-09-18 19:38:28 PDT by activation d8ca3a36 (arm record
+`../process_traces/2026-09-18-activation-d8ca3a36/21-arm-record-n1-20260919.md`, H `d595aa9f`).
+Fired at 00:00:00 PDT on 2026-09-19: gate GO on every row (census EMPTY, load
+0.32, AC, chain digest `a830b521…`); the chain opened the derivation session,
+settled 600 s, ran all twelve slots on the 600 s cadence and exited 0 at
+02:03:35; 247 censuses, all empty; results branch
+`night-results/d079-epoch-25g83-derivation-n1-20260919` (`7f13bfa6`); courier
+delivered at 02:05 (`1a0b8e9d530d5e5c`). Harvested 02:38–03:0x by activation
+b165c535 (byte-exact copy to
+`~/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919`,
+86/86 checksums OK against the live root); the completed harvest is
+[record 01](../process_traces/2026-09-19-activation-b165c535/01-n1-20260919-harvest-record.md).
+
+Slot outcomes: d01, d03, d05, d12 `valid`; d02, d04, d06, d08, d09, d11
+`ordinary-invalid` (`not_all_pulses_detected`); d07, d10 `ordinary-invalid`
+(`clock_anchor_unresolved`, 0 pulses). The terminal pin candidate (126 /
+`ffd12051…`) was committed at the desk before the §2.5 check (runbook §3
+item 4). `scripts/epoch_equivalence_check.py` from two checkouts at H:
+**EPOCH_EQUIVALENCE INCONCLUSIVE (m = 4 < 6)**, records byte-identical. Under
+directive issue 316 the ONE next action is one more equivalence night under a
+fresh plan id; nothing else. Both night agents were uninstalled from the clone
+(rc 0). The clone and the night root are RETAINED (a session opened).
+RECORD: harvest and uninstall for this night are complete; the successor
+equivalence night is prepared under this handback's §Next lane.
+>>>>>>> Stashed changes
 
 ## Where the results are
 

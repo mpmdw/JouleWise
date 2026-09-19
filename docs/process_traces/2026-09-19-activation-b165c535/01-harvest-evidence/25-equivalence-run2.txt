@@ -1,0 +1,37 @@
+Epoch equivalence check (directive issue 316)
+  This tool judges one closed derivation night against the envelope in force.
+  It issues nothing, continues nothing, and writes no addendum.
+
+Reference envelope (the acceptance in force; issue 316)
+  acceptance_id: d079_calibration_acceptance_v2_n17_r6
+  artifact: configs/calibration/calibration_acceptance_d079_v2_n17_r6.json  sha256 0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d
+    loaded by joulewise.calibration_bracketing.load_calibration_acceptance_bound
+  screen rule registered for this generation: range_equals_screen
+  corpus n = 17 (artifact derivation_corpus.n; registry corpus_n; they agree)
+  raw corpus maximum_s = 0.03289849371536248  [artifact decimal_derivation.source_statistics]
+  raw corpus range_s   = 0.00972358928879385  [artifact decimal_derivation.source_statistics]
+  OPERATIVE level screen   preflight_level_screen_s   = 0.032898493715362  [validator registry _D102_GENERATION_DERIVATIONS operatives]
+  OPERATIVE bracket screen bracket_screen_s           = 0.009724  [validator registry _D102_GENERATION_DERIVATIONS operatives]
+  budget ceiling           maximum_budgetable_drift_s = 0.010164834757777545  [validator registry _D102_GENERATION_DERIVATIONS operatives]
+    artifact decimal_derivation.ratified_operatives agrees with the registry on all three, or this tool refuses
+    NOTE: the operative comparators differ from the raw statistics by quantization; no floor is in force under this screen rule; issue 316 rules the OPERATIVE value is the one compared against.
+
+Session: d079-epoch-25g83-derivation-n1-20260919  kind=derivation state=finalized abort_reason=none declared=12
+  d01: valid+resolved 0.041133514338919874
+  d02: ordinary-invalid
+  d03: valid+resolved 0.04200278099548145
+  d04: ordinary-invalid
+  d05: valid+resolved 0.172710636067422
+  d06: ordinary-invalid
+  d07: ordinary-invalid
+  d08: ordinary-invalid
+  d09: ordinary-invalid
+  d10: ordinary-invalid
+  d11: ordinary-invalid
+  d12: valid+resolved 0.03255031906139217
+
+Retained m = 4 (rows with disposition valid whose stored anchor-v3 replay resolved)
+  m=4 is below the minimum 6; issue 316 directs one more equivalence night
+
+EPOCH_EQUIVALENCE: INCONCLUSIVE (m=4)
+record written: /tmp/magistrate-b165c535/epoch-equivalence-record-2.json

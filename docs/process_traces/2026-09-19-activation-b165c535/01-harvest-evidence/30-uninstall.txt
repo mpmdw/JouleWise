@@ -1,0 +1,1 @@
+first invocation 02:41:59 PDT: no output, rc not captured (zsh pipestatus); second invocation 02:5x PDT: no output, rc=0; launchctl list | grep -c joulewise.night -> 0; ~/Library/LaunchAgents holds only com.joulewise.magistrate.plist
