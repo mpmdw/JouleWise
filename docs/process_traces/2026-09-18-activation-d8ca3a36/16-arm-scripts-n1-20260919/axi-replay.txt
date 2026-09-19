@@ -1,0 +1,72 @@
+MODULE START tests.test_axi_controller_events
+test_campaign_prebundle_process_failure_retains_identity_receipt_and_row (test_axi_controller_events.AxiControllerEventTests.test_campaign_prebundle_process_failure_retains_identity_receipt_and_row) ... error: campaign start identity unavailable
+FAIL
+test_campaign_projects_diagnostics_to_frozen_validator_reason_enum (test_axi_controller_events.AxiControllerEventTests.test_campaign_projects_diagnostics_to_frozen_validator_reason_enum) ... ok
+test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure (test_axi_controller_events.AxiControllerEventTests.test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure) ... error: campaign start identity unavailable
+FAIL
+test_cancelled_terminal_survives_structured_runtime_failure (test_axi_controller_events.AxiControllerEventTests.test_cancelled_terminal_survives_structured_runtime_failure) ... ok
+test_dispatch_receipts_are_identity_bound_and_immutable_even_without_bundle (test_axi_controller_events.AxiControllerEventTests.test_dispatch_receipts_are_identity_bound_and_immutable_even_without_bundle) ... ok
+test_spec_off_and_on_use_the_same_v2_event_shapes (test_axi_controller_events.AxiControllerEventTests.test_spec_off_and_on_use_the_same_v2_event_shapes) ... ok
+test_spec_on_controller_emits_request_events_and_artifacts (test_axi_controller_events.AxiControllerEventTests.test_spec_on_controller_emits_request_events_and_artifacts) ... ok
+
+======================================================================
+FAIL: test_campaign_prebundle_process_failure_retains_identity_receipt_and_row (test_axi_controller_events.AxiControllerEventTests.test_campaign_prebundle_process_failure_retains_identity_receipt_and_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_axi_controller_events.py", line 309, in test_campaign_prebundle_process_failure_retains_identity_receipt_and_row
+    self.assertEqual(result, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure (test_axi_controller_events.AxiControllerEventTests.test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_axi_controller_events.py", line 360, in test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure
+    self.assertEqual(result, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: 2 != 1
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.867s
+
+FAILED (failures=2)
+MODULE FAIL tests.test_axi_controller_events tests=7 failures=2 errors=0 skipped=0 seconds=0.867
+SHARD SUMMARY index=1/1 modules=1 tests=7 failures=2 errors=0 skipped=0 result=FAIL
+FAIL tests.test_axi_controller_events seconds=1.633
+MODULE START tests.test_axi_controller_events
+test_campaign_prebundle_process_failure_retains_identity_receipt_and_row (test_axi_controller_events.AxiControllerEventTests.test_campaign_prebundle_process_failure_retains_identity_receipt_and_row) ... error: campaign start identity unavailable
+FAIL
+test_campaign_projects_diagnostics_to_frozen_validator_reason_enum (test_axi_controller_events.AxiControllerEventTests.test_campaign_projects_diagnostics_to_frozen_validator_reason_enum) ... ok
+test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure (test_axi_controller_events.AxiControllerEventTests.test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure) ... error: campaign start identity unavailable
+FAIL
+test_cancelled_terminal_survives_structured_runtime_failure (test_axi_controller_events.AxiControllerEventTests.test_cancelled_terminal_survives_structured_runtime_failure) ... ok
+test_dispatch_receipts_are_identity_bound_and_immutable_even_without_bundle (test_axi_controller_events.AxiControllerEventTests.test_dispatch_receipts_are_identity_bound_and_immutable_even_without_bundle) ... ok
+test_spec_off_and_on_use_the_same_v2_event_shapes (test_axi_controller_events.AxiControllerEventTests.test_spec_off_and_on_use_the_same_v2_event_shapes) ... ok
+test_spec_on_controller_emits_request_events_and_artifacts (test_axi_controller_events.AxiControllerEventTests.test_spec_on_controller_emits_request_events_and_artifacts) ... ok
+
+======================================================================
+FAIL: test_campaign_prebundle_process_failure_retains_identity_receipt_and_row (test_axi_controller_events.AxiControllerEventTests.test_campaign_prebundle_process_failure_retains_identity_receipt_and_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_axi_controller_events.py", line 309, in test_campaign_prebundle_process_failure_retains_identity_receipt_and_row
+    self.assertEqual(result, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure (test_axi_controller_events.AxiControllerEventTests.test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_axi_controller_events.py", line 360, in test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure
+    self.assertEqual(result, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: 2 != 1
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.867s
+
+FAILED (failures=2)
+MODULE FAIL tests.test_axi_controller_events tests=7 failures=2 errors=0 skipped=0 seconds=0.867
+SHARD SUMMARY index=1/1 modules=1 tests=7 failures=2 errors=0 skipped=0 result=FAIL
+RERUN /opt/homebrew/opt/python@3.14/bin/python3.14 /Users/edr/code/JouleWise-wt-arm-prep/scripts/quick_suite.py --module tests.test_axi_controller_events
