@@ -1,0 +1,95 @@
+{
+  "authored_monotonic_ns": 40765327563875,
+  "conditions": [
+    {
+      "basis": null,
+      "condition_id": "C1",
+      "evidence": [
+        "registration:configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
+      ],
+      "measured": {
+        "detail": "D-166 registration hash passed",
+        "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json",
+        "registration_sha256": "dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265"
+      },
+      "status": "PASS"
+    },
+    {
+      "basis": "no_pack_by_design",
+      "condition_id": "C2",
+      "evidence": [],
+      "measured": {},
+      "status": "NOT_APPLICABLE"
+    },
+    {
+      "basis": null,
+      "condition_id": "C3",
+      "evidence": [
+        "probe:/usr/bin/pgrep -lf codex|claude|t3",
+        "probe:/usr/bin/defaults -currentHost read com.apple.screensaver idleTime",
+        "probe:/usr/bin/pmset -g batt",
+        "probe:/usr/bin/pmset -g",
+        "probe:/usr/sbin/sysctl -n vm.loadavg",
+        "probe:/usr/bin/pmset -g therm"
+      ],
+      "measured": {
+        "ac_power_raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=23003235)\t80%; AC attached; not charging present: true\n",
+        "agent_census_exit_code": 1,
+        "agent_census_stdout": "",
+        "cpu_speed_limit": null,
+        "detail": "agent, HID, AC, display, load, and thermal predicates passed",
+        "displaysleep": "0",
+        "hid_idle_raw": "0\n",
+        "load_1m": 0.46,
+        "load_average_raw": "{ 0.46 0.92 1.27 }\n",
+        "pmset_g_raw": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            10\n sleep                0 (sleep prevented by powerd)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         0\n tcpkeepalive         1\n powermode            0\n womp                 1\n",
+        "thermal_raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "basis": null,
+      "condition_id": "C4",
+      "evidence": [
+        "probe:/usr/sbin/sysctl -n kern.bootsessionuuid",
+        "clock:epoch+monotonic"
+      ],
+      "measured": {
+        "boot_session_uuid": "cd5b815a-df9b-4fc7-921a-8e97d8aba867",
+        "clock_epoch_s": 1789819203.860715,
+        "clock_monotonic_ns": 40765327563875
+      },
+      "status": "PASS"
+    },
+    {
+      "basis": null,
+      "condition_id": "C5",
+      "evidence": [
+        "chain:/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/chain.zsh",
+        "chain_sha256:/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/chain.zsh.sha256"
+      ],
+      "measured": {
+        "authored_epoch_s": 1789812824.0,
+        "chain_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/chain.zsh",
+        "chain_sha256": "355dc18d8cf0455d159c3c405aa4cce6fefe465645cf7e8d94be480742bb51cb",
+        "chain_sha256_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/chain.zsh.sha256",
+        "detail": "window, plan freshness, measurement HEAD, and chain identity passed",
+        "driver_checkout_head": "22b92ec764f445b01c6e1cc110ca93c6679a27d5",
+        "expected_chain_sha256": "355dc18d8cf0455d159c3c405aa4cce6fefe465645cf7e8d94be480742bb51cb",
+        "measurement_checkout_head": "22b92ec764f445b01c6e1cc110ca93c6679a27d5",
+        "measurement_root": "/Users/edr/JouleWise-measurement-20260919-derivation-n2",
+        "observed_epoch_s": 1789819203.807988,
+        "plan_measurement_head": "22b92ec764f445b01c6e1cc110ca93c6679a27d5",
+        "plan_repo_head": "22b92ec764f445b01c6e1cc110ca93c6679a27d5",
+        "t0_epoch_s": 1789819200.0,
+        "window_max_s": 9000
+      },
+      "status": "PASS"
+    }
+  ],
+  "plan_id": "d079-epoch-25g83-derivation-n2-20260919",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal": null,
+  "schema": "joulewise.unattended_night_receipt.v2",
+  "verdict": "GO"
+}
