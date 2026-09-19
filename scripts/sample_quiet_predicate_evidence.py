@@ -445,21 +445,6 @@ def production_round(interval_s, deadline, raw_dir, clock):
             "cleanup_incomplete": residue}
 
 
-def stop_process(process, grace_s=5):
-    """TERM the sudo supervisor (which forwards it), then KILL after grace."""
-    if process.poll() is not None:
-        return {"returncode": process.wait(), "term": False, "kill": False}
-    process.terminate()
-    try:
-        return {"returncode": process.wait(timeout=grace_s), "term": True, "kill": False}
-    except subprocess.TimeoutExpired:
-        process.kill()
-        try:
-            return {"returncode": process.wait(timeout=grace_s), "term": True, "kill": True}
-        except subprocess.TimeoutExpired:
-            return reasons({"returncode": None, "term": True, "kill": True}, "process not reaped after KILL")
-
-
 class PowerRecorder:
     def __init__(self, path, interval_ms, clock, deadline):
         self.path, self.clock, self.deadline = path, clock, deadline
@@ -633,7 +618,7 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                "alignment_model": ALIGNMENT_MODEL,
                "network_time_provenance_reason": "not established by this desk harness",
                "observer_definition": "SELF + reaped CHILDREN over production smoke incl. raw/stamp hooks; recorder CPU excluded",
-               "round_workers": [], "power": None, "error": None}
+               "round_workers": [], "power": None, "error": None, "error_rounds": 0}
     start = clock.stamp()
     deadline = start.monotonic_before_s + args.duration_s
     session["start_stamp"] = asdict(start)
@@ -714,6 +699,9 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
             elif cleanup and cleanup["returncode"] not in (0, -signal.SIGTERM, 128 + signal.SIGTERM):
                 session["error"] = (session["error"] or "") + f"; powermetrics exit {cleanup['returncode']}"
         session["end_stamp"] = asdict(clock.stamp())
+    session["error_rounds"] = sum(row["status"] == "error" for row in rows)
+    if session["error_rounds"] and not any(row["status"] == "complete" for row in rows):
+        session["error"] = session["error"] or "no round completed successfully"
     for row in rows:
         align = row["alignment"]
         why = str(anchor.get("detail", anchor.get("reason", "clock anchor unresolved")))
@@ -898,7 +886,12 @@ def load(args):
                       "period_s": args.period_ms / 1000, "qos": args.qos,
                       "profile": args.profile, "seed": args.seed + index}
             process = context.Process(target=load_worker, args=(child, config))
-            process.start()
+            try:
+                process.start()
+            except BaseException:
+                parent.close()
+                child.close()
+                raise
             child.close()
             children.append(process)
             connections.append(parent)
@@ -929,7 +922,7 @@ def load(args):
         report["error"] = f"{type(exc).__name__}: {exc}"
     finally:
         for process in children:
-            process.join(timeout=.5)
+            process.join(timeout=5)
             if process.is_alive():
                 process.terminate()
                 process.join(timeout=1)
@@ -939,6 +932,10 @@ def load(args):
         for connection in connections:
             connection.close()
         report["cleanup"] = [{"pid": p.pid, "exitcode": p.exitcode, "alive": p.is_alive()} for p in children]
+        escalated = [row for row in report["cleanup"] if row["alive"] or row["exitcode"] != 0]
+        if escalated and report["error"] is None:
+            report["error"] = "worker cleanup escalated: " + "; ".join(
+                f"pid {row['pid']} exitcode {row['exitcode']}" for row in escalated)
         write_json(log, report)
     return report
 
@@ -975,8 +972,10 @@ def aggregate(rows):
         result["coverage_s"][rail] = den
         result["alignment_bound_w"][rail] = (math.fsum(b for _, _, b in values) / den
             if den and all(number(b) is not None for _, _, b in values) else None)
-    compared = [(r["observation"]["metrics"]["busy_cores"], r["load_setting"])
+    compared = [((r.get("observation") or {}).get("metrics", {}).get("busy_cores"), r["load_setting"])
                 for r in complete if r.get("observation") and number(r.get("load_setting")) is not None]
+    if any(number(busy) is None for busy, _ in compared):
+        raise ValueError("load comparison requires finite busy_cores")
     result["load_compared_rounds"] = len(compared)
     result["load_disagreement_rounds"] = sum(abs(busy - setting) > max(.02, .1 * setting)
                                               for busy, setting in compared)
@@ -994,21 +993,29 @@ def summarize(directory, reference_state=None):
     # their sampler census. They remain in the explicitly unknown group.
     def condition(row):
         return row.get("census_clean") if type(row.get("census_clean")) is bool else None
+    has_os_build = any("os_build" in row for row in rows)
+    def comparison_key(row):
+        return (condition(row), row.get("boot_id"), row.get("os_build"))
+    def comparison_fields(key):
+        clean, boot_id, os_build = key
+        return {"census_clean": clean, "boot_id": boot_id,
+                **({"os_build": os_build} if has_os_build else {})}
     reference_rows = [r for r in rows if r["state"] == reference_state]
     if rows and reference_state is not None and not reference_rows:
         raise ValueError("reference state is absent")
-    reference_conditions = {condition(r) for r in reference_rows}
-    reference = ({"census_clean": next(iter(reference_conditions)), **aggregate(reference_rows)}
+    reference_conditions = {comparison_key(r) for r in reference_rows}
+    reference = ({**comparison_fields(next(iter(reference_conditions))), **aggregate(reference_rows)}
                  if len(reference_conditions) == 1 else None)
-    references = {clean: aggregate([r for r in reference_rows if condition(r) is clean])
-                  for clean in reference_conditions}
+    references = {key: aggregate([r for r in reference_rows if comparison_key(r) == key])
+                  for key in reference_conditions}
     groups = []
-    keys = {(r["state"], str(r["repeat"]), condition(r)) for r in rows}
-    for state, repeat, clean in sorted(keys, key=lambda k: (k[0], k[1], str(k[2]))):
-        subset = [r for r in rows if (r["state"], str(r["repeat"]), condition(r)) == (state, repeat, clean)]
-        group_reference = references.get(clean)
+    keys = {(r["state"], str(r["repeat"]), comparison_key(r)) for r in rows}
+    for state, repeat, key in sorted(keys, key=lambda k: (k[0], k[1], str(k[2]))):
+        subset = [r for r in rows if (r["state"], str(r["repeat"]), comparison_key(r)) == (state, repeat, key)]
+        group_reference = references.get(key)
+        clean = key[0]
         entry = {"state": state, "repeat": repeat, "sessions": sorted({r["session"] for r in subset}),
-                 "census_clean": clean, "census_clean_reason": "whole-round census condition unavailable" if clean is None else "derived from round censuses",
+                 **comparison_fields(key), "census_clean_reason": "whole-round census condition unavailable" if clean is None else "derived from round censuses",
                  **aggregate(subset), "delta_j_480": {}, "delta_alignment_bound_j_480": {}}
         for rail in RAILS:
             value = entry["power"][rail]
@@ -1030,9 +1037,9 @@ def summarize(directory, reference_state=None):
         values = [p.get(key, default) for p in provenance]
         return (values[0] if all(v == values[0] for v in values) else None) if values else default
     summary = reasons({"schema": SCHEMA, "reference_state": reference_state, "reference": reference,
-                       "reference_reason": "reference absent or spans census conditions; see references_by_census",
-                       "references_by_census": [{"census_clean": clean, **references[clean]}
-                                                for clean in sorted(references, key=str)],
+                       "reference_reason": "reference absent or spans census conditions, boots or OS builds; see references_by_census",
+                       "references_by_census": [{**comparison_fields(key), **references[key]}
+                                                for key in sorted(references, key=str)],
                        "status": "complete" if rows else "no_rounds",
                        "reason": "descriptive summary" if rows else "no rounds.jsonl rows found",
                        "evidence_status": "PROVISIONAL",
@@ -1043,7 +1050,10 @@ def summarize(directory, reference_state=None):
                            "unavailable or differs across sessions; see session_provenance"),
                        "session_provenance": provenance,
                        "groups": groups, "sources": [str(p.relative_to(directory)) for p in paths],
-                       "aggregation": "complete rounds only; duration-weighted rail coverage; reference pooled across repeats within the same census_clean condition only; bounds add without independence assumptions"})
+                       "aggregation": "complete rounds only; duration-weighted rail coverage; reference pooled across repeats within the same census_clean condition, boot_id and OS build only; bounds add without independence assumptions"})
+    for field in ("reference", "alignment_model"):
+        if summary[field] is not None:
+            summary.pop(field + "_reason", None)
     write_json(directory / "summary.json", summary)
     def fmt(value):
         return "null" if value is None else f"{value:.6g}"

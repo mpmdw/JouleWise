@@ -16,7 +16,8 @@ from unittest.mock import Mock, patch
 from scripts import sample_quiet_predicate_evidence as harness
 
 
-# Measured child start-up CPU ≈ 0.19 s on this host, record 12; the floor is sized to the instrument, not to delivery.
+# Headroom on the kernel-charged CPU ceiling: measured child start-up plus
+# unreported CPU ≈ 0.34–0.35 s on this host (records 06/11), with a 0.5 s floor.
 STARTUP_CPU_S = 0.5
 
 
@@ -92,6 +93,15 @@ def fake_round(interval, deadline, raw_dir, clock):
             "error": "deadline" if partial else None,
             "observation": None if partial else {"metrics": {"busy_cores": .2, "host_busy_cores": .2}},
             "observer_cpu_s": .01, "end_stamp": asdict(clock.stamp()), "workers": [], "argv": []}
+
+
+def delayed_exit_load_worker(connection, config):
+    """Probe C: deliver the result, then need time for child shutdown."""
+    connection.send({"ready": True})
+    connection.recv()
+    connection.send({"periods": []})
+    connection.close()
+    harness.time.sleep(config["seed"])
 
 
 def assert_null_reasons(test, value):
@@ -403,6 +413,7 @@ runpy.run_path(script, run_name="__main__")
             self.assertEqual([r["status"] for r in rows], ["complete", "complete", "partial"])
             self.assertEqual(rows[-1]["round_mono_end_s"], 5)
             self.assertIsNone(session["error"])
+            self.assertEqual(session["error_rounds"], 0)
             self.assertTrue(session["powermetrics_needs_root"])
             self.assertFalse(session["sudo_policy_probed"])
             for row in persisted:
@@ -442,6 +453,32 @@ runpy.run_path(script, run_name="__main__")
             self.assertIn("test round failed", session["error"])
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["status"], "error")
+        # S3 / probe_a B: collect() must surface all-error rounds through main(),
+        # while one returned error among three rounds must not abort the chain.
+        real_collect = harness.collect
+        for statuses, expected_exit in ((["error"] * 3, 1), (["complete", "error", "complete"], 0)):
+            with self.subTest(statuses=statuses), tempfile.TemporaryDirectory() as tmp:
+                pending = iter(statuses)
+                def round_runner(interval, deadline, raw_dir, clock):
+                    result = fake_round(interval, deadline, raw_dir, clock)
+                    result["status"] = next(pending)
+                    result["error"] = "RuntimeError: smoke blew up" if result["status"] == "error" else None
+                    return result
+                def collect_for_cli(args):
+                    return real_collect(args, clock=FakeClock(), round_runner=round_runner,
+                                        metadata_reader=lambda: {})
+                with patch.object(harness, "collect", side_effect=collect_for_cli):
+                    self.assertEqual(harness.main(["collect", "--no-power", "--out", tmp,
+                        "--state", "idle", "--repeat", "1", "--duration-s", "3",
+                        "--sample-interval-s", "1"]), expected_exit)
+                session = json.loads((Path(tmp) / "session.json").read_text())
+                rows = [json.loads(line) for line in (Path(tmp) / "rounds.jsonl").read_text().splitlines()]
+                self.assertEqual([row["status"] for row in rows], statuses)
+                self.assertEqual(session["error_rounds"], statuses.count("error"))
+                if expected_exit:
+                    self.assertTrue(session["error"])
+                else:
+                    self.assertIsNone(session["error"])
 
     def test_completed_power_collection_reduces_each_round_after_one_finish(self):
         recorder = Mock()
@@ -505,22 +542,6 @@ runpy.run_path(script, run_name="__main__")
                 os.close(writer)
             except OSError:
                 pass
-
-    def test_term_then_kill_and_reap(self):
-        process = Mock()
-        process.poll.return_value = None
-        process.wait.side_effect = [subprocess.TimeoutExpired("fake", 5), -9]
-        result = harness.stop_process(process)
-        self.assertEqual(result, {"returncode": -9, "term": True, "kill": True})
-        self.assertEqual(process.method_calls, [unittest.mock.call.poll(), unittest.mock.call.terminate(),
-            unittest.mock.call.wait(timeout=5), unittest.mock.call.kill(), unittest.mock.call.wait(timeout=5)])
-
-    def test_exited_recorder_is_reaped_without_signal(self):
-        process = Mock()
-        process.poll.return_value = 0
-        process.wait.return_value = 0
-        self.assertFalse(harness.stop_process(process)["term"])
-        process.terminate.assert_not_called()
 
     def test_power_deadline_signals_independently_and_reaps_after_observer_bracket(self):
         clock = FakeClock()
@@ -628,6 +649,72 @@ class LoadTests(unittest.TestCase):
         self.assertGreater(len(periods), 0, "worker reported no period rows for its window")
         self.assertAlmostEqual(sum(p["cpu_used_s"] for p in periods), .3, delta=.001)
         self.assertEqual(clock.monotonic(), 4.0)   # rendezvous at 1.0 plus the 3 s window
+        # S1/S2 / probe_c: load()'s real join ladder must accept a one-second
+        # post-result exit and expose escalation of a child still sleeping at 5 s.
+        context = harness.multiprocessing.get_context("spawn")
+        def process(*, target, args):
+            return context.Process(target=delayed_exit_load_worker, args=args)
+        guarded = SimpleNamespace(Pipe=context.Pipe, Process=process)
+        for delay, expected_exit in ((1, 0), (60, 1)):
+            with self.subTest(exit_delay=delay), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(harness.multiprocessing, "get_context", return_value=guarded):
+                log = Path(tmp) / "load.json"
+                self.assertEqual(harness.main(["load", "--cores", ".1", "--duration-s", "1",
+                    "--qos", "user-initiated", "--profile", "scalar",
+                    "--seed", str(delay), "--log", str(log)]), expected_exit)
+                report = json.loads(log.read_text())
+                child = report["cleanup"][0]
+                self.assertFalse(child["alive"])
+                if expected_exit:
+                    self.assertEqual(child["exitcode"], -harness.signal.SIGTERM)
+                    self.assertIn(f"worker cleanup escalated: pid {child['pid']} exitcode {child['exitcode']}",
+                                  report["error"])
+                else:
+                    self.assertIsNone(report["error"])
+                    self.assertEqual(child["exitcode"], 0)
+        # N3: load() Process.start() failure must close both real Pipe ends.
+        parent, child = context.Pipe()
+        failed = Mock()
+        failed.start.side_effect = OSError("fixture start failed")
+        guarded = SimpleNamespace(Pipe=lambda: (parent, child), Process=lambda **kwargs: failed)
+        try:
+            with tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(harness.multiprocessing, "get_context", return_value=guarded):
+                args = harness.parser().parse_args(["load", "--cores", ".1", "--duration-s", "1",
+                    "--qos", "user-initiated", "--profile", "scalar", "--seed", "1",
+                    "--log", str(Path(tmp) / "load.json")])
+                report = harness.load(args)
+                self.assertIn("fixture start failed", report["error"])
+                self.assertTrue(parent.closed)
+                self.assertTrue(child.closed)
+                failed.join.assert_not_called()
+        finally:
+            parent.close()
+            child.close()
+
+    @unittest.skipUnless(sys.platform == "darwin", "native QoS requires macOS")
+    def test_native_qos_classes_read_back_in_subprocess(self):
+        # S6: set_qos() must apply the requested class, not merely label the report.
+        # A fresh subprocess leaves the test runner's own QoS unchanged.
+        code = '''import ctypes, json
+from scripts import sample_quiet_predicate_evidence as harness
+lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+lib.pthread_self.argtypes = []
+lib.pthread_self.restype = ctypes.c_void_p
+lib.pthread_get_qos_class_np.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_int)]
+lib.pthread_get_qos_class_np.restype = ctypes.c_int
+rows = []
+for qos in ("background", "user-initiated"):
+    harness.set_qos(qos)
+    cls, priority = ctypes.c_uint(), ctypes.c_int()
+    result = lib.pthread_get_qos_class_np(lib.pthread_self(), ctypes.byref(cls), ctypes.byref(priority))
+    rows.append([qos, result, cls.value])
+print(json.dumps(rows))
+'''
+        result = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True,
+                                text=True, timeout=20, cwd=Path(harness.__file__).resolve().parents[1])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [["background", 0, 0x09], ["user-initiated", 0, 0x19]])
 
     @unittest.skipUnless(sys.platform == "darwin", "native QoS requires macOS")
     def test_real_load_tracks_point_one_core_and_guards_worker_budget(self):
@@ -768,6 +855,36 @@ class SummaryTests(unittest.TestCase):
             for group in result["groups"]:
                 if group["census_clean"] is not True:
                     self.assertIsNone(group["delta_j_480"]["cpu_w"])
+        # S5 / probe_d: summarize() must neither average 1 W and 9 W across
+        # boots nor compare the second boot's load to the first boot's idle.
+        for field, identities in (("boot_id", ("boot-A-macOS-25G80", "boot-B-macOS-25G83")),
+                                  ("os_build", ("25G80", "25G83"))):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                rows = [{**self.fixture_row("idle", "1", watts), "boot_id": "same-boot",
+                         field: value, "census_clean": True}
+                        for value, watts in zip(identities, (1, 9))]
+                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+                result = harness.summarize(root, "idle")
+                self.assertEqual(len(result["groups"]), 2)
+                self.assertEqual({g[field]: g["power"]["cpu_w"] for g in result["groups"]},
+                                 dict(zip(identities, (1, 9))))
+                self.assertTrue(all("boot_id" in g for g in result["groups"]))
+                self.assertIsNone(result["reference"])
+                self.assertIn(field.replace("_id", "").replace("os_build", "OS build"),
+                              result["reference_reason"])
+                self.assertEqual(len(result["references_by_census"]), 2)
+                rows.append({**rows[1], "state": "loaded", "power": self.fixture_row("loaded", "1", 5)["power"]})
+                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+                result = harness.summarize(root, "idle")
+                loaded = next(g for g in result["groups"] if g["state"] == "loaded")
+                self.assertEqual(loaded["delta_j_480"]["cpu_w"], -1920)
+                # Without the matching reference, do not borrow another boot/build.
+                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in (rows[0], rows[2])))
+                result = harness.summarize(root, "idle")
+                loaded = next(g for g in result["groups"] if g["state"] == "loaded")
+                self.assertIsNone(loaded["delta_j_480"]["cpu_w"])
+                assert_null_reasons(self, result)
 
     def test_empty_directory_cli_writes_reasoned_null_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -778,6 +895,8 @@ class SummaryTests(unittest.TestCase):
             self.assertEqual(summary["evidence_status"], "PROVISIONAL")
             self.assertIsNone(summary["reference"])
             self.assertEqual(summary["groups"], [])
+            self.assertEqual(summary["references_by_census"], [])
+            self.assertNotIn("alignment_model_reason", summary)
             assert_null_reasons(self, summary)
 
     def test_summary_preserves_exact_session_provenance(self):
@@ -787,6 +906,11 @@ class SummaryTests(unittest.TestCase):
             session = json.loads((Path(tmp) / "session.json").read_text())
             result = harness.summarize(tmp, "idle")
             persisted = json.loads((Path(tmp) / "summary.json").read_text())
+            # S4 / probe_a A: summarize() must remove reasons for resolved siblings.
+            for key in ("reference", "alignment_model"):
+                self.assertIsNotNone(result[key])
+                self.assertNotIn(key + "_reason", result)
+                self.assertNotIn(key + "_reason", persisted)
             for key in ("evidence_status", "alignment_model", "network_time_provenance",
                         "network_time_provenance_reason"):
                 self.assertEqual(result[key], session[key])
@@ -839,6 +963,12 @@ class SummaryTests(unittest.TestCase):
             self.assertEqual(result["groups"][0]["load_compared_rounds"], 0)
             with self.assertRaisesRegex(ValueError, "absent"):
                 harness.summarize(root, "missing")
+            # N2: aggregate() sees a foreign truthy observation with no busy_cores;
+            # refuse with ValueError rather than leaking a KeyError from indexing.
+            for observation in ({"foreign": True}, {"metrics": {}}):
+                row.update(observation=observation, load_setting=.2)
+                with self.assertRaisesRegex(ValueError, "busy_cores"):
+                    harness.aggregate([row])
 
 
 if __name__ == "__main__":
