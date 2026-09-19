@@ -24,3 +24,7 @@
 ## Verdict (pending the merge-head addendum)
 
 MERGE under D-072 after: main `0c529f99` merged into the branch; targeted modules green on the merge head; records-only merge; gate-ledger 12/12; hosted CI on the PR head.
+
+## Addendum — merge candidate
+
+Main `0c529f99` merged into the branch → `a1622f7e7b8e5b85408ea2b4693f68fb58e717fa` (diff vs main = the five B1 files, +319/−56); seven affected modules OK at that head (record 49: head-pin relation 11, generator core 7, v5 generate 13, packauth 27, v3 family 5, gen_state 44, harness 45). The records-only merge of this bookkeeping branch onto it is the exact merge candidate (row 12); no code delta.
