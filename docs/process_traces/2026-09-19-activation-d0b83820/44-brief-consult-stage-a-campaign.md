@@ -1,0 +1,24 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: []
+
+# Design consult (read-only, one round, explicit licence to disagree) — QUIET-PREDICATE-EVIDENCE-01 Stage A: how the evidence campaign runs on a quiet machine with no agent session
+
+Cwd is a clean worktree at main `0c529f99` (`git log -1`), which now carries `scripts/sample_quiet_predicate_evidence.py` (merged PR #360). Never touch `/Users/edr/code/JouleWise` (canonical root) or any other worktree; write nothing but `/tmp` scratch; no `sudo`, no `powermetrics`, no live `collect`. Interpreter `/Users/edr/code/JouleWise/.venv/bin/python` (read-only). Do not end your turn before every question has an answer or a named reason it has none.
+
+## The problem
+
+Cold gate 70 (`docs/process_traces/2026-09-17-interactive-5c919872/71-coldgate-packet-supervision-stop-or-split/` and the synthesis in `docs/process_traces/2026-09-17-interactive-5c919872/13-*`) ruled that NO busy-core cutoff for the night gate's quiet-admission predicate (`joulewise/quiet_admission.py`, plan schema v4 `quiet_admission` block, `docs/contracts/night_quiet_admission.md`) may be activated until lane 232 supplies joules per 480 s slot in the instrument's units under controlled synthetic load. The harness exists (`scripts/sample_quiet_predicate_evidence.py`: `collect` runs production-shaped observation rounds with `powermetrics` while `load` injects a fixed busy-core share; `summarize` groups rows by state / repeat / census condition / boot / OS build and reports PROVISIONAL means and Δ J per 480 s; read its module docstring and `collect`/`load`/`summarize` signatures). What does NOT exist: the campaign that runs it. Constraints: (1) `collect` with power is `[QUIET-MAC]` work — no agent session (Claude, Codex) may be alive on the machine while it runs (AGENTS.md machine-state safety; the night driver's census refuses on any such process); (2) the only unattended executor on this machine is the night LaunchAgent pair installed under the NIGHT_HANDBACK procedure from a plan (`docs/phase_2/derivation_night_runbook.md`, `scripts/run_night.py`, `scripts/install_night_agent.sh`, `joulewise/night_plan_writer.py`; plan schema v2 for calibration nights, v4 with a sealed `quiet_admission` block); (3) the machine is on macOS 25G83 with a `powermetrics` cadence ≈ 0.245 s instead of the 100 ms requested (kernel lane 243, unresolved) — the harness's evidence is joules over 480 s windows, so cadence affects resolution, not the integral; (4) Ed wants unattended windows with zero owner input, several per day when quiet, never artificially scarce.
+
+## Questions
+
+Q1. Executor shape. Options: (a) a NEW night-plan kind (`quiet_predicate_evidence`) whose chain script runs `collect` + `load` rounds instead of a calibration derivation, installed by the same LaunchAgent pair under NIGHT_HANDBACK (email-then-arm, census, courier, dead-man); (b) a one-off launchd job authored outside the night machinery (a desk campaign) — say what gates it would lack; (c) run it INSIDE an ordinary v2 calibration night's settle period or after its slots — say why not. Name the option, its blast radius on `scripts/run_night.py` / the plan writer / the courier, and the smallest change set.
+Q2. Campaign design in the instrument's units: which load levels (busy-core shares: candidates 0, 0.05, 0.1, 0.2, 0.5, 1.0), how many 480 s slots per level, what ordering (interleaved vs blocked; repeats across boots), what the idle reference is, and what the summary must show for the cutoff to be sized — give the arithmetic (the D-078 attribution limit ≈ 1 J, claim-side bar ≈ 5 J; the night gate's question is "does this much background CPU move a 480 s slot's joules by more than the instrument can see?"). How many hours of quiet machine is that, and can it be split across several windows (Ed: several per day when quiet)?
+Q3. What the memo must state before any cutoff is proposed (PROVISIONAL labels, provenance, boot/OS-build grouping, alignment bounds — the harness already emits these), and what would make the campaign's result INADMISSIBLE (census not clean, cadence drift, thermal, AC power) — map each to the harness's existing fields or name the gap.
+Q4. Authority: which parts are lead authority (a plan kind is a contract change? the plan writer's schema? the courier's summary?) and which go to the cold gate (rule 11) or Ed. Name the boundary precisely.
+Q5. Disagree with any premise above if the evidence says so; propose the smallest thing that gets real numbers first.
+
+## Report
+
+`claude-codex-report/v1` envelope for `--genre review`; JSON header under 8000 bytes; every claim with file:line; recommendation first, alternatives with the reason each lost; the exact list of files a seat would touch under the recommended option.
