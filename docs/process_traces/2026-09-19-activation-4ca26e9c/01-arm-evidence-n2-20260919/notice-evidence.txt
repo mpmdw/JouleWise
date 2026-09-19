@@ -1,0 +1,7 @@
+notice attempt 1 for d079-epoch-25g83-derivation-n2-20260919 sent by activation 4ca26e9c via the Gmail MCP tool
+Gmail accepted: message id 1a0b9295e7b733be, thread id 1a0b9295e7b733be, to claude.ai.copper531@passmail.net, cc claude2.glaring610@passmail.net
+sent_epoch_s 1789812921 (2026-09-19T03:15:21-0700)
+body = arm-attempts/000001/notice-body.txt verbatim + one appended channel note (headless activation cannot read replies; NO via directive issue or standdown.request)
+plan sha256 d76776571029fc73df8599d2bc28973cf3d224af75dfcfdc96ed0c7c7e17557c; H 22b92ec764f445b01c6e1cc110ca93c6679a27d5
+fresh checks at fill time: standdown.request absent; STOP absent; directives []
+arm censuses 1/2 (step3): foreign_pids [26016, 26021] = this activation's own idle codex mcp-server helper (no workloads), same shape as the 09-17 and 09-18 arms; magistrate exits before REQUEST

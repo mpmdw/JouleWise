@@ -459,6 +459,10 @@ fresh plan id; nothing else. Both night agents were uninstalled from the clone
 RECORD: harvest and uninstall for this night are complete; the successor
 equivalence night is prepared under this handback's §Next lane.
 
+## Executed — d079-epoch-25g83-derivation-n2-20260919 (2026-09-19, ARMED)
+
+Armed 2026-09-19 03:15:29 PDT by headless activation 4ca26e9c as the runbook §2.5 INCONCLUSIVE successor of night one: triple `(d079-epoch-25g83-derivation-n2-20260919, /Users/edr/JouleWise-measurement-20260919-derivation-n2, 22b92ec764f445b01c6e1cc110ca93c6679a27d5)`, plan sha256 `d76776571029fc73df8599d2bc28973cf3d224af75dfcfdc96ed0c7c7e17557c`, t0 05:00:00 PDT (1789819200), notice Gmail `1a0b9295e7b733be` accepted 03:15:21 before publication (03:15:25) and install (03:15:28); ledger restored byte-exact from the night-one clone (126 rows, `c004eee5…`) and authenticated head-equals-pin 126 / `ffd12051…`; probe admitted (`custody_elapsed_s` 1.82); both agents loaded and verified against the plan schedule. Arm record `../process_traces/2026-09-19-activation-4ca26e9c/01-arm-record-n2-20260919.md`. RECORD: this block establishes installation only; the result, harvest and §2.5 outcome are the successor's to append.
+
 ## Where the results are
 
 - Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919`;

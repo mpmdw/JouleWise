@@ -1,0 +1,48 @@
+{
+  "chain_pgid": 26808,
+  "chain_python": {
+    "path": "/Users/edr/JouleWise-measurement-20260919-derivation-n2/.venv/bin/python",
+    "sha256": "d483cfdc272ddd1bfd8f6f595b65cdc2f00b8e503f0deab65b20e8faeb986132",
+    "version": "3.13.1"
+  },
+  "chain_sha256": "355dc18d8cf0455d159c3c405aa4cce6fefe465645cf7e8d94be480742bb51cb",
+  "chain_source_sha256": "b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb",
+  "cleanup_proven": true,
+  "code_digests": {
+    "joulewise/calibration_custody_worker.py": "sha256:16f048032a036cf33ee54a53418763115f50f42165e3852a50acd0d91fd7330a",
+    "joulewise/calibration_ledger.py": "sha256:8e022d73ea9ae1123adb1078514d74d7130a4cf414b0c9c740071eb3ea238db7",
+    "scripts/reserve_calibration_window_bracket.py": "sha256:bcfdb7227fbd58fac9822df023ecb3058a7eec12ce30f8d0240c3c121cfed94e",
+    "scripts/run_night.py": "sha256:c9e23ce3ef92d56c7274bb3d9bb7d207414d3cf3ece74e5cec7098f8f3fdfe86",
+    "scripts/validate_powermetrics_fiducial.py": "sha256:349c99ff39c3b6c9ac227b835109278c35eea37664d796979ef01dbec267346c"
+  },
+  "custody_budget_s": 120.0,
+  "custody_elapsed_s": 1.8233035829980508,
+  "driver_pid": 26807,
+  "driver_python": {
+    "path": "/Users/edr/JouleWise-measurement-20260919-derivation-n2/.venv/bin/python",
+    "sha256": "d483cfdc272ddd1bfd8f6f595b65cdc2f00b8e503f0deab65b20e8faeb986132",
+    "version": "3.13.1"
+  },
+  "finished_epoch_s": 1789812928.586287,
+  "input_digests": {
+    "/Users/edr/JouleWise-measurement-20260919-derivation-n2/configs/calibration/calibration_ledger_head.json": "sha256:4e59bd820b28d392b09f5f16d652935565ba4389068886e3b436529058bca809",
+    "/Users/edr/JouleWise-measurement-20260919-derivation-n2/runs/calibration_observation_ledger.jsonl": "sha256:c004eee59b1bf837ff00ff94be19d3e3debb2e8bd9736bcc187931dc620193c5",
+    "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/calibration_plan.json": "sha256:9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072",
+    "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/identity-epoch.json": "sha256:b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607",
+    "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/night_plan.json": "sha256:d76776571029fc73df8599d2bc28973cf3d224af75dfcfdc96ed0c7c7e17557c",
+    "/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/t1-bindings.json": "sha256:8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98"
+  },
+  "launchd_label": "com.joulewise.night-probe.d079-epoch-25g83-derivation-n2-20260919",
+  "ledger_head_sha256": "ffd12051155e65af1ac428b92932f4a398db07001079e1defd44e1c92a86de9b",
+  "ledger_pin_sha256": "4e59bd820b28d392b09f5f16d652935565ba4389068886e3b436529058bca809",
+  "ledger_sha256": "c004eee59b1bf837ff00ff94be19d3e3debb2e8bd9736bcc187931dc620193c5",
+  "measurement_head": "22b92ec764f445b01c6e1cc110ca93c6679a27d5",
+  "observations": 50,
+  "outcome": "ok",
+  "phase": "revalidation",
+  "plan_id": "d079-epoch-25g83-derivation-n2-20260919",
+  "plan_sha256": "d76776571029fc73df8599d2bc28973cf3d224af75dfcfdc96ed0c7c7e17557c",
+  "refusal_code": null,
+  "schema": "joulewise.night_probe_receipt.v1",
+  "started_epoch_s": 1789812926.191114
+}

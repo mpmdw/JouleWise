@@ -1,0 +1,27 @@
+NIGHT_DATE=20260919 PLAN_ID=d079-epoch-25g83-derivation-n2-20260919
+CHECK: test "${remote_main%%$'\t'*}" = "$H"
+CHECK: for p in "$MEASUREMENT_ROOT" "$NIGHT_ROOT" "$STAGE"; do test ! -e "$p"; test ! -L "$p"; done
+CHECK: test "$(git rev-parse HEAD)" = "$H"
+Python 3.13.1
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: pip install --upgrade pip
+WARNING: The candidate selected for download or install is a yanked version: 'charset-normalizer' candidate (version 3.4.8 at https://files.pythonhosted.org/packages/11/49/fe5a8572a70cd9cba79f80af9388ac8c5c914ed4459b956f940244e499a5/charset_normalizer-3.4.8-cp313-cp313-macosx_10_13_universal2.whl (from https://pypi.org/simple/charset-normalizer/) (requires-python:>=3.7))
+Reason for being yanked: <none given>
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: pip install --upgrade pip
+CHECK: installed packages equal env/mac-measurement-lock.txt
+lock matches
+CHECK: test ! -e "$CALIBRATION_LEDGER"; test ! -L "$CALIBRATION_LEDGER"
+CHECK: test -f "$LEDGER_SOURCE"; test ! -L "$LEDGER_SOURCE"
+CHECK: byte equality /Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl /Users/edr/JouleWise-measurement-20260919-derivation-n2/runs/calibration_observation_ledger.jsonl
+c004eee59b1bf837ff00ff94be19d3e3debb2e8bd9736bcc187931dc620193c5  /Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl
+c004eee59b1bf837ff00ff94be19d3e3debb2e8bd9736bcc187931dc620193c5  /Users/edr/JouleWise-measurement-20260919-derivation-n2/runs/calibration_observation_ledger.jsonl
+CHECK: test "$(shasum -a 256 "$LEDGER_SOURCE" | cut -d" " -f1)" = "$LEDGER_SOURCE_EXPECTED_SHA256"
+CHECK: test "$(wc -l < "$CALIBRATION_LEDGER" | tr -d " ")" = 126
+CHECK: not s.refusal_reasons, s.refusal_reasons
+CHECK: (s.head_sequence,s.head_digest)==(p["sequence"],p["head_digest"])
+authenticated head-equals-pin 126 ffd12051155e65af1ac428b92932f4a398db07001079e1defd44e1c92a86de9b
+CHECK: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+STEP1 OK

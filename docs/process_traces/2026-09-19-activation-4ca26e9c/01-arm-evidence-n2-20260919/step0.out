@@ -1,0 +1,22 @@
+== launchd labels (must be only the magistrate)
+com.joulewise.magistrate
+CHECK: test "$labels" = com.joulewise.magistrate
+CHECK: no night plists under ~/Library/LaunchAgents
+== discovery (retained roots only; the watchdog fences active spans only)
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/night_plan.json
+CHECK: exactly the two retained roots (09-16, n1-20260919) are discoverable
+== night one: courier delivered, harvest archive matches the live root
+  86 OK
+CHECK: 86 OK, none FAILED
+== night one clone: at its H, clean, ledger 126 rows with the expected digest, pin 126
+pin 126 ok
+== night two paths must not exist yet
+== machine
+{ 1.87 1.66 1.58 }
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=23003235)	80%; AC attached; not charging present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+STEP0 OK
