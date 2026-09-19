@@ -1,0 +1,6 @@
+test_night_gate                          Ran 70 tests in 0.506s OK 
+test_gen_evidence_night                  Ran 5 tests in 1.034s OK 
+test_quiet_predicate_campaign            Ran 8 tests in 0.234s OK 
+test_sample_quiet_predicate_evidence     Ran 54 tests in 7.095s OK 
+test_run_night                           Ran 192 tests in 105.018s OK 
+test_night_agent_install                 Ran 61 tests in 608.778s OK 
