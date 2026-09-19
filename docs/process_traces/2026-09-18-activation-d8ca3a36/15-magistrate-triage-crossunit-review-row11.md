@@ -16,3 +16,5 @@ DONE with findings: no blocker; one docs-vs-code defect (R1) and four seam-test 
 ## CI re-run outcome
 
 (pending at the time of writing; appended below when the re-run finishes)
+
+Re-run of the failed jobs on run 35321237232 (started 18:4x PDT, finished ≈ 19:00): `test (3.13, 5)` FAILED AGAIN on the same assertion; `test (3.11, 1/3/4)` and `test (3.13, 1/3/4)` passed; shards 2/5/6 of 3.11 and 2/6 of 3.13 were cancelled by fail-fast. Two identical failures on the hosted runner against a local pass is reproducible environment sensitivity, not a flake; root-cause seat (brief 18, record 19) launched; fix under lane 237 or a new lane per its finding. Row 11's disposition above stands (no blocker; fix forward).
