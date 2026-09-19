@@ -1266,11 +1266,29 @@ class QuietGatePhaseTests(unittest.TestCase):
 class EvidenceRegistrationTests(unittest.TestCase):
     def test_ruled_registration_serialization_requires_dated_ruling_amendment(self):
         # 2026-09-19: record 61a S1/S4 + 56x R2 re-pin the frozen pilot.
+        # 2026-09-19 (re-audit 64 R1): each entry now names its tracked records.
         # Any membership/metadata amendment needs its cold-gate ruling and a
-        # dated update here. Record-path existence awaits the lead-owned traces.
+        # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '1dcdb38b8f69a1e475a53c0efc01ef79754c7a36ef04a03c51e94e6d0a74e315')
+                         '81c6a189845394a089641d9582e7c278890b9f5afb39b4250addfdfdafb5e5e1')
+
+    def test_every_ruled_registration_names_tracked_records_that_exist(self):
+        # Ruling 61a S4: prose authority is not enough; each entry's records
+        # must be tracked files, and a decision-log anchor must be a heading.
+        root = Path(__file__).resolve().parents[1]
+        for sha, entry in night_gate.RULED_REGISTRATIONS.items():
+            with self.subTest(registration=entry['label']):
+                self.assertEqual(set(entry), {'label', 'ruling', 'binds_chain', 'records'})
+                self.assertTrue(entry['records'], 'an entry without records is prose-only authority')
+                for ref in entry['records']:
+                    path, _, anchor = ref.partition('#')
+                    self.assertFalse(Path(path).is_absolute(), ref)
+                    self.assertTrue((root / path).is_file(), ref)
+                    if anchor:
+                        headings = [line for line in (root / path).read_text().splitlines()
+                                    if line.startswith('## ' + anchor + ':')]
+                        self.assertTrue(headings, ref)
 
     def test_unavailable_chain_source_is_probe_error_not_digest_mismatch(self):
         source = self.source()
@@ -1342,7 +1360,7 @@ class EvidenceRegistrationTests(unittest.TestCase):
         handback = ' '.join((root/'docs/process/NIGHT_HANDBACK.md').read_text().split())
         runbook = ' '.join((root/'docs/phase_2/derivation_night_runbook.md').read_text().split())
         courier = ' '.join((root/'docs/process/NIGHT_COURIER_PROMPT.md').read_text().split())
-        for clause in ('The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling.',
+        for clause in ('The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling and the tracked records that hold it (`records`; a test asserts each exists).',
                        '`probe receipt kind does not match payload kind`', '`probe payload kind ambiguous`',
                        'sealed manifest, harness and registration digests',
                        '`joulewise.night_evidence_probe_receipt.v1`'):

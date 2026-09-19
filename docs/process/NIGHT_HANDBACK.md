@@ -143,7 +143,7 @@ Every actual attempt sends a newly accepted notice and repeats the existing noti
 
 <!-- END ARM-RETRY-POLICY v1 -->
 
-The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling. Its serialized form is pinned by
+The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling and the tracked records that hold it (`records`; a test asserts each exists). Its serialized form is pinned by
 `test_ruled_registration_serialization_requires_dated_ruling_amendment`; any
 amendment requires a dated test comment with the ruling (2026-09-19, record 61a).
 

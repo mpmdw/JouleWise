@@ -46,11 +46,17 @@ D166_REGISTRATION_PATH = (
 QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json"
 QPE01_PILOT_REGISTRATION_SHA256 = "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
 EVIDENCE_CHAIN_PATH = "scripts/night_chains/quiet_predicate_evidence.zsh"
-# Amended only by cold-gate ruling; each entry names its authority.
+# Amended only by cold-gate ruling; each entry names its authority ("ruling",
+# surfaced in the receipt) and the tracked records that hold it ("records":
+# repo-relative paths, optionally "#<heading id>" inside a decision log;
+# tests/test_night_gate.py asserts each exists — ruling 61a S4).
 RULED_REGISTRATIONS = {
-    D166_REGISTRATION_SHA256: {"label": "D-166 dominance criterion", "ruling": "D-165/D-166", "binds_chain": False},
+    D166_REGISTRATION_SHA256: {"label": "D-166 dominance criterion", "ruling": "D-165/D-166", "binds_chain": False,
+        "records": ("docs/decision_log.md#D-165", "docs/decision_log.md#D-166")},
     QPE01_PILOT_REGISTRATION_SHA256: {"label": "QPE-01 idle-variance pilot protocol v1",
-        "ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b", "binds_chain": True},
+        "ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b", "binds_chain": True,
+        "records": ("docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/10-coldgate-fable-ruling.md",
+                    "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md")},
 }
 
 
