@@ -92,3 +92,7 @@ Under either (a) or (b) the projection falls at or below the 19 floor because th
 2. **`--uninstall` rc captured on the first invocation** this time (rc 0, silent): night one's finding 3 is answered by procedure; the arm-scripts README note remains a bench item.
 3. The two equivalence nights are both retained, discoverable, inert roots (09-16, n1-20260919 and n2-20260919 plus their clones): the §0.7 "expect no output" wording versus retention (lane NIGHT-ROOT-RETENTION-DISCOVERY-01, rank 230) now has three instances.
 4. Hosted CI on main `9edc85fd`: not re-checked this activation (docs-only landings since `22b92ec7`).
+
+## Addendum (07:58 PDT) — the action taken
+
+Decision email to Ed sent as Gmail `1a0ba221b52d3e38` (to `claude.ai.copper531@passmail.net`, cc `claude2.glaring610@passmail.net`, subject "DECISION NEEDED: equivalence night two FAILED (m=7) — does night one count toward the registration? (a)/(b)/(c)"), carrying the verdict, the seven retained values, the two-night context, the arithmetic table above and the (c) recommendation. Bookkeeping landed on main `2f79e633` (record, evidence, RUN_STATE block, and the pin merge). Hosted CI run 35449733694 on that head was in progress at send time (post-merge confirmation per Ed's 09-16 ruling). Lane 232 fix round 2 launched next (brief 06) as the decision-independent work slice.
