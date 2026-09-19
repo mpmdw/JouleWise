@@ -7254,37 +7254,6 @@
       "status_note": "2026-09-15 activation 08ca8197: registered at the interactive session b0ae8462's request from its record 16 flag F3; registration only; not started; not night-critical. First deliverable is the classification of the 8 literal-path files into filesystem-touching versus string-asserting, then the structural guard. Related: WORKTREE-PRUNE-01 (worktree hygiene) and the seat-side quick/touched tiers the interactive session is building.",
       "stop_card": null
     },
-    "TEST-LARGE-FRAME-ARGV-PORTABILITY-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-18-activation-d8ca3a36/19-rootcause-ci-large-frame-astra.md:20–25 (F1 cause, F4 test-only fix shape, F6 distinct-lane recommendation)",
-          "docs/process_traces/2026-09-18-activation-d8ca3a36/15-magistrate-triage-crossunit-review-row11.md:7–20 (same hosted job and assertion failed twice; provisional timing diagnosis superseded by record 19)",
-          "tests/night_gate_fixtures/bind_supervision.py:152–175 (parent-side expansion and launcher lambda)",
-          "tests/test_run_night.py:4605–4611 (existing large-frame assertions)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/TEST-LARGE-FRAME-ARGV-PORTABILITY-01/acceptance",
-          "label": "TEST-LARGE-FRAME-ARGV-PORTABILITY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The new regression fails on the unmodified fixture with the measured byte count and passes after the change; the existing assertions in `test_large_frame_is_incremental_and_still_bounded` remain byte-identical; the whole `tests.test_run_night` module is green locally; hosted CI's `test (3.13, 5)` job is green on the PR head (the only Linux execution of the counterfactual); no platform skip is introduced; lands under the twelve-row review gate."
-      },
-      "authority": {
-        "label": "registration by the magistrate (headless activation f0b608b7), not a ruling",
-        "path": "docs/process_traces/2026-09-18-activation-f0b608b7/04-brief-seat-kernel-registrations.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "The real-exec fault bench (a test fixture that launches actual child processes and injects failures), `tests/night_gate_fixtures/bind_supervision.py`, drives bind-supervision regressions: tests of how the night driver supervises worker processes (short-lived child processes performing individual checks) inside the bind window, the bounded wait for sustained quiet starting at t0 (the planned measurement start instant). The night gate is the check that decides whether an unattended measurement may start. For `large_frame`, the parent builds a 200,000-character string and passes the whole worker specification as ONE argv string (one command-line argument; measured 200,884 bytes including its terminating NUL). Linux's `execve(2)` MAX_ARG_STRLEN caps one string at 131,072 bytes on the hosted runner's 4-KiB pages and refuses the launch with E2BIG (argument list too long); macOS has no such per-string cap. Thus `test_large_frame_is_incremental_and_still_bounded` passes on this Mac but failed twice identically on hosted `ubuntu-latest` job `test (3.13, 5)` on main `b55909e3` with `'REFUSED' != 'GO'`: the driver records the launch error as `night_probe_error`. Production is unaffected by this fixture defect: sample workers receive only small identifiers; the uncapped production request is the separate BIND-REQUEST-PAYLOAD-CAP-01 lane. Fix only the test: expand the large string inside the worker, record the largest argv string per launched task in the bench, and add a regression requiring every launched string to stay under 131,072 bytes, which fails against the old fixture. In flight this activation on branch `fix/2026-09-18-large-frame-argv-portability`; seat brief `docs/process_traces/2026-09-18-activation-f0b608b7/02-brief-seat-argv-fix.md`.",
-      "id": "TEST-LARGE-FRAME-ARGV-PORTABILITY-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 238,
-      "status": "active",
-      "stop_card": null
-    },
     "TEST-PGREP-DIALECT-MULTILINE-01": {
       "acceptance": {
         "evidence": [
