@@ -4838,19 +4838,82 @@ class EvidenceProbeTests(unittest.TestCase):
         self.assertTrue(argv)
         self.assertIn('evidence outcome/cleanup unavailable: ImportError', (self.f.custody / 'night.log').read_text())
 
-    def test_garbled_evidence_outcome_gets_a_refusal_document(self):
-        # Fresh-eyes record 71 S2: {} or an unknown outcome state is no outcome.
+    def _repaired(self, raw_bytes):
+        # Consult record 76: any malformed outcome becomes the refused mapping
+        # with exactly one schema-valid refusal document; the courier launches.
         from joulewise import quiet_predicate_campaign as campaign
         night = self.admitted_night()
         (night / 'evidence_processes.jsonl').write_text('')
         campaign.cleanup_record(night)
-        for garbled in ({}, {'outcome': 'weird'}):
-            (night / 'evidence_outcome.json').write_text(json.dumps(garbled))
-            for stale in (night / 'refusal.json',):
-                stale.unlink(missing_ok=True)
-            self.deliver()
-            self.assertEqual(json.loads((night / 'evidence_outcome.json').read_text())['outcome'], 'refused')
-            self.assertTrue((night / 'refusal.json').exists(), garbled)
+        if raw_bytes is None:
+            (night / 'evidence_outcome.json').unlink(missing_ok=True)
+        else:
+            (night / 'evidence_outcome.json').write_bytes(raw_bytes)
+        argv = self.deliver()
+        self.assertTrue(argv)
+        outcome = json.loads((night / 'evidence_outcome.json').read_text())
+        self.assertEqual(outcome, {'outcome': 'refused', 'error': 'chain ended without evidence outcome',
+                                   'cleanup_proven': True})
+        refusals = self.driver._refusal_paths(night)
+        self.assertEqual(len(refusals), 1, refusals)
+        self.assertEqual(self.driver.validate_refusal(json.loads(refusals[0].read_text())), [])
+        return night
+
+    def test_missing_evidence_outcome_is_repaired(self):
+        self._repaired(None)
+
+    def test_invalid_json_evidence_outcome_is_repaired(self):
+        for raw in (b'{not-json', b'\xff'):
+            with self.subTest(raw=raw):
+                self._repaired(raw)
+
+    def test_list_evidence_outcome_is_repaired(self):
+        self._repaired(b'[]')
+
+    def test_missing_outcome_state_is_repaired(self):
+        self._repaired(b'{}')
+
+    def test_list_outcome_state_is_repaired(self):
+        self._repaired(json.dumps({'outcome': []}).encode())
+
+    def test_numeric_outcome_state_is_repaired(self):
+        self._repaired(json.dumps({'outcome': 5}).encode())
+
+    def test_unknown_outcome_state_is_repaired(self):
+        self._repaired(json.dumps({'outcome': 'weird'}).encode())
+
+    def _untouched(self, state):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        campaign.cleanup_record(night)
+        raw = json.dumps({'outcome': state, 'error': None}).encode()
+        (night / 'evidence_outcome.json').write_bytes(raw)
+        self.deliver()
+        self.assertEqual((night / 'evidence_outcome.json').read_bytes(), raw)
+        return night
+
+    def test_complete_outcome_is_untouched(self):
+        night = self._untouched('complete')
+        self.assertEqual(self.driver._refusal_paths(night), [])
+
+    def test_partial_outcome_is_untouched(self):
+        night = self._untouched('partial')
+        self.assertEqual(self.driver._refusal_paths(night), [])
+
+    def test_refused_outcome_and_existing_refusal_are_untouched(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        campaign.cleanup_record(night)
+        raw = json.dumps({'outcome': 'refused', 'error': 'executor said so'}).encode()
+        (night / 'evidence_outcome.json').write_bytes(raw)
+        campaign.write_refusal(night, self.f.plan, 'executor said so')
+        before = [p.read_bytes() for p in self.driver._refusal_paths(night)]
+        self.assertEqual(len(before), 1)
+        self.deliver()
+        self.assertEqual((night / 'evidence_outcome.json').read_bytes(), raw)
+        self.assertEqual([p.read_bytes() for p in self.driver._refusal_paths(night)], before)
 
     def test_evidence_identity_dispatches_cleanup_without_reading_wrapper(self):
         from joulewise import quiet_predicate_campaign as campaign

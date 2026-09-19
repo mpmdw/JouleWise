@@ -1241,36 +1241,61 @@ def _acquire_courier_lock(night_dir: Path) -> int | None:
 
 
 def _evidence_cleanup_error(plan, night_dir):
-    """Record evidence cleanup for delivery, using only admitted identity."""
-    if not (night_dir / "chain.started").exists():
-        return None
+    """Best-effort evidence repair; never suppress delivery via Exception.
+
+    Consult record 76 (escalation 74a): for ANY content of evidence_outcome.json
+    the courier launches, an invalid outcome is replaced by a refused one, and a
+    refusal document exists; valid outcomes are never rewritten. Storage that
+    cannot be written at all is the caller's prerequisite (ruling 76a).
+    """
     try:
+        def parse_outcome(raw):
+            try:
+                return json.loads(raw)
+            except Exception:  # noqa: BLE001 — any decode failure is "no outcome"
+                return None
+
+        if not (night_dir / "chain.started").exists():
+            return None
         receipt = json.loads((night_dir / "receipt.json").read_bytes())
         if receipt.get("plan_id") != plan.plan_id or night_gate.validate_receipt(receipt):
             return None
-        c5 = next((row for row in receipt["conditions"] if row["condition_id"] == "C5"), {})
-        if c5.get("status") != "PASS" or c5.get("measured", {}).get("payload_kind") != "quiet_predicate_evidence":
+        c5 = next((row for row in receipt["conditions"]
+                   if row["condition_id"] == "C5"), {})
+        if (c5.get("status") != "PASS"
+                or c5.get("measured", {}).get("payload_kind") != "quiet_predicate_evidence"):
             return None
+
         from joulewise.quiet_predicate_campaign import cleanup_record, write_refusal
         cleanup = cleanup_record(night_dir)
+        cleanup_proven = cleanup["cleanup_proven"] is True
         path = night_dir / "evidence_outcome.json"
-        outcome = json.loads(path.read_text()) if path.exists() else None
-        # Fresh-eyes 71 S2: a garbled outcome ({} or an unknown state) is no
-        # outcome; the refusal document must exist for the courier to report.
-        if not (isinstance(outcome, dict) and outcome.get("outcome") in {"complete", "partial", "refused"}):
-            path.unlink(missing_ok=True)  # _write_json is create-only; a garbled file is replaced.
-            _write_json(path, {"outcome": "refused", "error": "chain ended without evidence outcome",
-                               "cleanup_proven": cleanup["cleanup_proven"]})
-            if not _refusal_paths(night_dir):
-                write_refusal(night_dir, plan, "chain ended without evidence outcome")
-        if not cleanup["cleanup_proven"]:
+        try:
+            raw = path.read_bytes()
+        except FileNotFoundError:
+            raw = b""
+        outcome = parse_outcome(raw)
+        state = outcome.get("outcome") if isinstance(outcome, dict) else None
+        detail = "chain ended without evidence outcome"
+        if not (isinstance(state, str) and state in {"complete", "partial", "refused"}):
+            path.unlink(missing_ok=True)  # _write_json is create-only
+            _write_json(path, {"outcome": "refused", "error": detail,
+                               "cleanup_proven": cleanup_proven})
+            state = "refused"
+        elif state == "refused":
+            recorded_error = outcome.get("error")
+            if isinstance(recorded_error, str) and recorded_error:
+                detail = recorded_error
+        if state == "refused" and not _refusal_paths(night_dir):
+            write_refusal(night_dir, plan, detail)
+        if not cleanup_proven:
             return "evidence collector/recorder/sampler cleanup unproven; report the cleanup record"
         return None
-    except FileNotFoundError:
-        return None  # Rehearsal and earlier admission refusals have no evidence identity.
-    except Exception as exc:  # noqa: BLE001 — fresh-eyes 71 S1: this function only
-        # returns a diagnostic for the courier; no exception may suppress delivery.
-        return f"evidence outcome/cleanup unavailable: {type(exc).__name__}: {exc}"
+    except Exception as exc:  # noqa: BLE001 — this function only returns a diagnostic
+        try:
+            return f"evidence outcome/cleanup unavailable: {type(exc).__name__}: {exc}"
+        except Exception:  # noqa: BLE001
+            return "evidence outcome/cleanup unavailable; diagnostic formatting failed"
 
 
 def run_courier(
