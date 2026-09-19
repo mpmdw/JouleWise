@@ -17,3 +17,7 @@
 ## Order
 
 Lane GENERATOR-HEAD-FILE-BYTE-PIN-01 (kernel 244) moves from "cold-gate question" to READY [AGENT] with this record as its contract: after #361 merges → seat (Astra xhigh, `WRITE_SCOPE`: the two live generators + `tests/test_campaign_generator_core.py` + `tests/test_d117_floor_qwen3_v5_generate.py` + a new regression module) → refuters (contract + execution) → delta re-audit → Opus counter-review → full replay → PR.
+
+## Addendum (09:38 PDT)
+
+Bench note: the lead removed the judge's worktree at ≈09:36 while the Opus refuter was still trimming its answer there; the refuter's final file (10.3 KB) was recovered from `/tmp/magistrate-d0b83820/opus-gate2-scratch/` and replaces the earlier copy. One nuance in the refuter's Q2 versus the ruling: the refuter would keep the Exhibit E fixture and retire only the v5-facing `generation_repository()` head-bytes write; the ruling removes the ALPHA/BETA fixture (those labels ARE the live v5 generators, `GENERATOR_CASES`). Adjudication stands with the ruling; the B1 seat verifies the label → generator mapping before removing anything. Lesson for the seat-launch rules: never remove a worktree while any seat launched into it is alive.

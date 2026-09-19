@@ -1,6 +1,11 @@
 # 11 — Opus contract-lens refuter (read-only), GENERATOR-HEAD-FILE-BYTE-PIN-01
 
-Independent of the cold-gate judge's ruling (not seen). Worktree @ `a5905f67`; charter digest recomputed, MATCHES the packet pin.
+Independent of the cold-gate judge's ruling (not seen). Worktree @ `a5905f67`;
+charter digest recomputed, MATCHES the packet pin. (NOTE: the worktree
+`JouleWise-wt-coldgate2-d0b83820` was deleted out from under this seat at
+≈09:36 while the answer was being trimmed; this file is the verbatim answer,
+written to the permitted scratch dir. Copy it to
+`docs/process_traces/2026-09-19-activation-d0b83820/09-coldgate-packet-generator-head-file-byte-pin/11-opus-contract-refuter.md`.)
 
 ## Q1 — ruled option: (a), with one amendment
 
@@ -34,9 +39,9 @@ Three candidates; only the first survives.
    relation) passes ordering and fails a byte test. The byte pin catches that —
    but only by refusing *every* advance, licit ones included. It is not
    recoverable in a generator: the ledger is not a declared generator input
-   (`external_inputs` in the committed `d117_floor_qwen25_1p5b_v3/plan_tree.json`
-   lists only `settled_corpus.json` and the prefill candidate). It IS recovered
-   where R1.4 puts it — `joulewise/calibration_ledger.py:2600-2613` compares the
+   (committed `d117_floor_qwen25_1p5b_v3/plan_tree.json` `external_inputs` lists
+   only `settled_corpus.json` and the prefill candidate). It IS recovered where
+   R1.4 puts it — `joulewise/calibration_ledger.py:2600-2613` compares the
    physical chain to the committed pin (`calibration_ledger_rollback`,
    `…_head_mismatch`, `…_head_uncommitted`), reached because the pack passes
    `--head-pin` at RUN time (`…qwen3-1p7b_v5/generate_configs.py:1625`).
@@ -52,10 +57,10 @@ Three candidates; only the first survives.
 3. **FAILS: "a regenerated live pack becomes non-reproducible."** Opposite: the
    v5 pack is **not committed** (`git ls-files` → `generate_configs.py` alone),
    so under (a) it is emitted from declared constants only and stays
-   byte-identical across advances. The option-(d) variant of recording the
-   *observed* head digest is strictly worse — pack bytes would become a function
+   byte-identical across advances. (The option-(d) variant of recording the
+   *observed* head digest is strictly worse: pack bytes would become a function
    of an undeclared mutable file, destroying the closure
-   `test_generators_are_deterministic_closed_and_checkable` proves.
+   `test_generators_are_deterministic_closed_and_checkable` proves.)
 
 ### Adversarial pass against (b) — REFUTED, it breaks constraint (iii)
 
@@ -66,9 +71,9 @@ its digest (`generator.sha256 = 120b60e8…` for `d117_floor_qwen25_1p5b_v3`;
 emitted at `…qwen3-1p7b_v5/generate_configs.py:2862-2865`). Worse, the v2 → v3
 successor path derives the successor's source **from the v2 file's own text**:
 `embedded_generator_bytes()`, `…qwen25_1p5b_v2/generate_configs.py:381-391`,
-reads `SOURCE_PATH` and substitutes the family suffix. So a constant edit in v2
-changes the emitted v3 bytes → changes the v3 pack's `generator.sha256` → the
-committed v3 pack no longer reproduces, and
+reads `SOURCE_PATH` and substitutes the family suffix. A constant edit in v2
+therefore changes the emitted v3 bytes → changes the v3 pack's
+`generator.sha256` → the committed v3 pack no longer reproduces, and
 `test_unedited_v2_generators_emit_v3_successors` fails for a *new* reason. (b)
 cannot keep frozen packs byte-identical without re-committing them — which is
 unfreezing them. **(b) is out.**
@@ -107,9 +112,8 @@ untouched, and insert after the loop:
     if (sequence == cutoff["sequence"]
             and head_pin["head_digest"] != cutoff["head_digest"]):
         raise ValueError("ledger head pin diverges from the acceptance cutoff")
-    # Chain extension BEYOND the cutoff (D-109 R1.4 `diverged`) is evaluation-
-    # owned: the ledger is not a declared generator input.  See
-    # joulewise/calibration_ledger.py:2600.
+    # Chain extension BEYOND the cutoff (R1.4 `diverged`) is evaluation-owned:
+    # the ledger is not a declared generator input (calibration_ledger.py:2600).
 ```
 
 Delete `LEDGER_HEAD_FILE_SHA256` (211-213). Manifest 2886-2890: drop
@@ -133,16 +137,15 @@ function of its declared inputs. Only the *v5-facing* fixture
 (`generation_repository()` + call sites in
 `tests/test_d117_floor_qwen3_v5_generate.py`) retires in the B1 lane.
 
-## Q3 — regressions that must exist afterwards (defect-shaped)
+## Q3 — regressions required afterwards (defect-shaped)
 
 1. Pin advanced past the cutoff (176, valid digest) → generation succeeds,
    pack bytes **byte-identical** to a run at sequence 76.
-2. Pin rolled back (sequence 75) → `ledger head pin behind the acceptance
-   cutoff: 75 < 76`.
+2. Pin rolled back (75) → `ledger head pin behind the acceptance cutoff: 75 < 76`.
 3. Pin AT the cutoff sequence with a different `head_digest` → `ledger head pin
    diverges from the acceptance cutoff` — the only divergence case a generator
    can see; must not be dropped.
-4. `ledger_schema` altered → schema message; extra/missing key or a bool/str
+4. `ledger_schema` altered → schema message; extra/missing key or bool/str
    `sequence` → `ledger head pin shape invalid`.
 5. Another pinned input drifted (`POLICY_REL`, acceptance artifact,
    `NEG8_SETTLED_REL`) → still `pinned input drifted: <path>`, tuple length
@@ -153,7 +156,7 @@ function of its declared inputs. Only the *v5-facing* fixture
    `test_unedited_v2_generators_emit_v3_successors` still pass with the byte pin
    intact.
 
-**Obsolete after the lane:** `generation_repository()` and its four call sites in
+**Obsolete:** `generation_repository()` + its four call sites in
 `tests/test_d117_floor_qwen3_v5_generate.py`; any assertion that a *v5* generator
 raises `pinned input drifted` / `external input drift` for
 `calibration_ledger_head.json` — *replaced* by regressions 2–4, never deleted.
