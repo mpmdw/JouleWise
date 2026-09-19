@@ -4610,6 +4610,13 @@ class BindSupervisionProcessTests(unittest.TestCase):
         self.assertLessEqual(sample['max_reads'], 4)
         self.assertLessEqual(sample['max_bytes'], 65536)
 
+    def test_large_frame_keeps_each_worker_argument_below_linux_limit(self):
+        result = self.scenario('large_frame')
+        # Linux MAX_ARG_STRLEN is 32 4-KiB pages, including NUL; see execve(2).
+        for task in result['tasks']:
+            with self.subTest(job_id=task['id'], kind=task['kind']):
+                self.assertLess(task['max_arg_bytes'], 131072)
+
     def test_journal_failure_and_saturation_are_terminal(self):
         for mode, detail in (('journal_error', 'write failure'), ('journal_saturation', 'queue saturated')):
             with self.subTest(mode=mode):
