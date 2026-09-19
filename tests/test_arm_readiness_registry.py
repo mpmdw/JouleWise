@@ -22,6 +22,10 @@ from joulewise.arm_readiness import (
     validate_freeze_receipt,
 )
 from tests.test_arm_readiness_schemas import sample_freeze
+from tests.test_campaign_generator_core import (
+    GENERATION_LEDGER_HEAD_BYTES,
+    GENERATION_LEDGER_HEAD_SHA256,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,6 +95,31 @@ EXPECTED_ROW_IDS = [
 
 class ArmReadinessRegistryTests(unittest.TestCase):
     maxDiff = None
+
+    def generation_repository(self) -> Path:
+        """Exercise working-tree generators with their generation-time head input."""
+        temporary = tempfile.TemporaryDirectory(
+            prefix="d117-head-fixture-", dir="/tmp"
+        )
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        subprocess.run(
+            ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
+            check=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
+            GENERATION_LEDGER_HEAD_SHA256,
+        )
+        (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
+            GENERATION_LEDGER_HEAD_BYTES
+        )
+        # A clone starts at HEAD; overlay sources so uncommitted generator edits
+        # remain visible, including the other families used by successor tests.
+        for source in (ROOT / "configs/campaigns").glob("d117_*/generate_configs.py"):
+            shutil.copy2(source, repository / source.relative_to(ROOT))
+        return repository
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -270,11 +299,7 @@ class ArmReadinessRegistryTests(unittest.TestCase):
 
     def test_generators_check_both_without_and_with_committed_freeze_receipts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            frozen_clone = Path(temporary) / "frozen-repo"
-            subprocess.run(
-                ["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(frozen_clone)],
-                check=True,
-            )
+            frozen_clone = self.generation_repository()
             overlay = [
                 "joulewise/arm_readiness.py",
                 "joulewise/clock_reference.py",
@@ -423,11 +448,7 @@ class ArmReadinessRegistryTests(unittest.TestCase):
                     generated_path.read_bytes(),
                 )
 
-            clone = Path(temporary) / "draft-repo"
-            subprocess.run(
-                ["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(clone)],
-                check=True,
-            )
+            clone = self.generation_repository()
             for relative in overlay:
                 target = clone / relative
                 target.parent.mkdir(parents=True, exist_ok=True)

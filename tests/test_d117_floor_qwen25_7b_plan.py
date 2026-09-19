@@ -33,6 +33,10 @@ from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.extract_detection_floors import main as extract_main
 from scripts.run_campaign import load_order_entries
 from tests.git_fixture import init_git_fixture
+from tests.test_campaign_generator_core import (
+    GENERATION_LEDGER_HEAD_BYTES,
+    GENERATION_LEDGER_HEAD_SHA256,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -417,17 +421,19 @@ def observed_manifest_block_order(rows: list[dict]) -> list[tuple[int, str, int]
     ]
 
 
-def link_successor_self_check_inputs(output_root: Path) -> None:
+def link_successor_self_check_inputs(
+    output_root: Path, *, repository: Path = REPO_ROOT
+) -> None:
     if not (output_root / "joulewise").exists():
         (output_root / "joulewise").symlink_to(
-            REPO_ROOT / "joulewise", target_is_directory=True
+            repository / "joulewise", target_is_directory=True
         )
     for source_dir in (
-        REPO_ROOT / "configs",
-        REPO_ROOT / "configs/campaigns",
-        REPO_ROOT / "configs/floor_mint",
+        repository / "configs",
+        repository / "configs/campaigns",
+        repository / "configs/floor_mint",
     ):
-        target_dir = output_root / source_dir.relative_to(REPO_ROOT)
+        target_dir = output_root / source_dir.relative_to(repository)
         target_dir.mkdir(parents=True, exist_ok=True)
         for source in source_dir.iterdir():
             # Never import committed successor-generation artifacts as
@@ -443,11 +449,38 @@ def link_successor_self_check_inputs(output_root: Path) -> None:
         output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
     )
     if not successor_contrast.exists():
-        successor_contrast.symlink_to(CONTRAST_PACK, target_is_directory=True)
+        successor_contrast.symlink_to(
+            repository / CONTRAST_PACK.relative_to(REPO_ROOT), target_is_directory=True
+        )
 
 
 class D117Qwen25SevenBPlanTests(unittest.TestCase):
     maxDiff = None
+
+    def generation_repository(self) -> Path:
+        """Exercise working-tree generators with their generation-time head input."""
+        temporary = tempfile.TemporaryDirectory(
+            prefix="d117-head-fixture-", dir="/tmp"
+        )
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        subprocess.run(
+            ("git", "clone", "-q", "--shared", str(REPO_ROOT), str(repository)),
+            check=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
+            GENERATION_LEDGER_HEAD_SHA256,
+        )
+        (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
+            GENERATION_LEDGER_HEAD_BYTES
+        )
+        # A clone starts at HEAD; overlay sources so uncommitted generator edits
+        # remain visible, including the other families used by successor tests.
+        for source in (REPO_ROOT / "configs/campaigns").glob("d117_*/generate_configs.py"):
+            shutil.copy2(source, repository / source.relative_to(REPO_ROOT))
+        return repository
 
     def test_exact_inventory_hashes_and_sidecars(self) -> None:
         # Exclude interpreter byte-code caches: importing
@@ -578,7 +611,14 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         )
 
     def test_target_status_inventory_and_invalid_modes_are_fail_closed(self) -> None:
-        successor = GENERATOR_MODULE.GenerationIdentity(
+        repository = self.generation_repository()
+        spec = importlib.util.spec_from_file_location(
+            "d117_beta_generation_fixture", repository / GENERATOR.relative_to(REPO_ROOT)
+        )
+        assert spec is not None and spec.loader is not None
+        generator_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(generator_module)
+        successor = generator_module.GenerationIdentity(
             pack_id="d117_floor_qwen25_7b_v2",
             family_suffix="_v2",
             preserve_current_frozen_bytes=False,
@@ -589,20 +629,20 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertTrue(successor.target_is_successor_family)
         self.assertEqual(successor.target_status, "unfrozen_draft")
         with mock.patch.object(
-            GENERATOR_MODULE,
+            generator_module,
             "ARM_READINESS_ATTACHMENT",
             {"freeze_receipt": {"sha256": "0" * 64}},
         ):
-            current = GENERATOR_MODULE.GenerationIdentity()
+            current = generator_module.GenerationIdentity()
             self.assertEqual(current.target_status, "frozen_by_d134_receipt")
         source = GENERATOR.read_text(encoding="utf-8")
         self.assertEqual(
             source.count('"draft_status": emitted_draft_status()'), 6
         )
-        artifacts = GENERATOR_MODULE.build_artifacts(successor)
+        artifacts = generator_module.build_artifacts(successor)
         expected = {
-            *(successor.pack_rel / path for path in GENERATOR_MODULE.expected_pack_files()),
-            GENERATOR_MODULE.extraction_spec_rel(successor),
+            *(successor.pack_rel / path for path in generator_module.expected_pack_files()),
+            generator_module.extraction_spec_rel(successor),
         }
         self.assertEqual(set(artifacts), expected)
         for pack_id, suffix, preserve in (
@@ -613,17 +653,25 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 output_root = Path(temp)
                 rejected = subprocess.run(
                     [
-                        sys.executable, str(GENERATOR), "--output-root", str(output_root),
+                        sys.executable,
+                        str(repository / GENERATOR.relative_to(REPO_ROOT)),
+                        "--output-root", str(output_root),
                         "--pack-id", pack_id, "--family-suffix", suffix,
                         "--preserve-current-frozen-bytes"
                         if preserve else "--no-preserve-current-frozen-bytes",
                     ],
-                    cwd=REPO_ROOT, check=False, capture_output=True, text=True,
+                    cwd=repository, check=False, capture_output=True, text=True,
                 )
                 self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn(
+                    "preserve mode requires the current target identity"
+                    if preserve else "family suffix ordinal must be positive",
+                    rejected.stderr,
+                )
                 self.assertEqual(checkout_inventory(output_root), set())
 
     def test_generation_refuses_symlinked_write_inventory_before_any_write(self) -> None:
+        repository = self.generation_repository()
         successor = GENERATOR_MODULE.GenerationIdentity(
             pack_id="d117_floor_qwen25_7b_v2",
             family_suffix="_v2",
@@ -659,7 +707,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 rejected = subprocess.run(
                     [
                         sys.executable,
-                        str(GENERATOR),
+                        str(repository / GENERATOR.relative_to(REPO_ROOT)),
                         "--output-root",
                         str(output_root),
                         "--pack-id",
@@ -668,7 +716,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                         successor.family_suffix,
                         "--no-preserve-current-frozen-bytes",
                     ],
-                    cwd=REPO_ROOT,
+                    cwd=repository,
                     check=False,
                     capture_output=True,
                     text=True,
@@ -681,6 +729,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 self.assertEqual(list(escape_root.iterdir()), [])
 
     def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
+        repository = self.generation_repository()
         successor_suffix = unminted_successor_family_suffix()
         successor_token = successor_suffix.removeprefix("_")
         next_suffix = f"_v{int(successor_suffix.removeprefix('_v')) + 1}"
@@ -709,12 +758,12 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             preserved = subprocess.run(
                 [
                     sys.executable,
-                    str(GENERATOR),
+                    str(repository / GENERATOR.relative_to(REPO_ROOT)),
                     "--output-root",
                     str(output_root),
                     "--preserve-current-frozen-bytes",
                 ],
-                cwd=REPO_ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -731,7 +780,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             )
             command = [
                 sys.executable,
-                str(GENERATOR),
+                str(repository / GENERATOR.relative_to(REPO_ROOT)),
                 "--output-root",
                 str(output_root),
                 "--pack-id",
@@ -742,7 +791,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             ]
             generated = subprocess.run(
                 command,
-                cwd=REPO_ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -805,7 +854,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                         )
             checked = subprocess.run(
                 [*command, "--check"],
-                cwd=REPO_ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -919,7 +968,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 self_referential["README.md"],
             )
 
-            link_successor_self_check_inputs(output_root)
+            link_successor_self_check_inputs(output_root, repository=repository)
             embedded_check = subprocess.run(
                 [
                     sys.executable,
