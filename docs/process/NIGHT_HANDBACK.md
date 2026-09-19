@@ -155,18 +155,18 @@ All agents must still close before the plan span: the unchanged night gate recor
 
 ## Purpose of this night
 
-Plan `d079-epoch-25g83-derivation-n1-20260919` is the proposed D-182
-new-plan successor of the 09-17 zero-capture load refusal, recorded in the
-Executed block below. This is preparation, not a claim that anything is
-armed. Its own plan id, session id, roots, desk inputs, wrapper and notice
-are bound at the bench. The predecessor's positive no-capture evidence,
-completed courier delivery and zero-successor count remain arm preconditions.
+Plan `d079-epoch-25g83-derivation-n2-20260919` is the proposed second
+equivalence night after night one's INCONCLUSIVE verdict (m = 4 < 6), recorded
+in the Executed block below. Directive issue 316 / runbook §2.5 fixes this
+one next action; this is not a D-182 zero-capture successor or a re-arm.
+This is preparation, not a claim that anything is armed. Its fresh plan id,
+session id, t0, roots, desk inputs, wrapper and notice are bound at the bench.
 
-This `DIAGNOSTIC_NO_PACK` v2/2 plan is scheduled for **2026-09-19 00:00:00
-PDT / 07:00:00 UTC**, `t0_epoch_s = 1789801200`. Its 9000-second acquisition
-window ends at 02:30:00 PDT / 09:30:00 UTC (1789810200). The completion /
-courier boundary is 02:35:00 PDT / 09:35:00 UTC (1789810500). The daily
-dead-man is 03:35 PDT / 10:35 UTC (1789814100), until uninstalled. The arm
+This `DIAGNOSTIC_NO_PACK` v2/2 plan (`joulewise.night_plan.v2`) is scheduled
+for **2026-09-19 05:00:00 PDT / 12:00:00 UTC**, `t0_epoch_s = 1789819200`. Its 9000-second acquisition
+window ends at 07:30:00 PDT / 14:30:00 UTC (1789828200). The completion /
+courier boundary is 07:35:00 PDT / 14:35:00 UTC (1789828500). The daily
+dead-man is 08:35 PDT / 15:35 UTC (1789832100), until uninstalled. The arm
 record will establish whether installation happened; no capture is run by
 the preparation scripts.
 
@@ -176,13 +176,13 @@ directive issue 316 ruled on 2026-09-10, transcribed as revision 3 of
 dated addendum under D-102. The 2026-09-02 macOS update moved `os_build`
 from 25F84 to 25G83 and replaced the `/usr/bin/powermetrics` binary, so the
 issued D-079 calibration acceptance (`d079_calibration_acceptance_v2_n17_r6`)
-no longer matches this machine and ordinary capture refuses. Night one asks
+no longer matches this machine and ordinary capture refuses. Night two asks
 one instrument question: did the update move the clock-anchor bound outside
 the envelope the instrument was already characterised against? The night
 opens one agent-free `derivation`-kind ledger session of 12 declared slots
-at head-equals-pin (ledger head sequence 76), settles once for 600 s, then
+at head-equals-pin (ledger head sequence 126), settles once for 600 s, then
 takes twelve derivation-only `powermetrics` fiducial captures at a 600 s
-start-to-start cadence (programmed span 7680 s). No model runs, no
+start-to-start cadence with a 480 s capture budget (programmed span 7680 s). No model runs, no
 measurement pack, no Git, no claim output. The plan's `chain_path` is the
 plan-pinned wrapper `<night root>/chain.zsh`, emitted by
 `scripts/gen_derivation_night.py`, which carries the night's environment as
@@ -213,23 +213,27 @@ No member value is read by anyone before the session is terminal; the desk
 tool `scripts/epoch_equivalence_check.py` applies the rule at harvest.
 
 **Pins.** `repo_head = measurement_head = H`. The new triple is
-`(d079-epoch-25g83-derivation-n1-20260919, /Users/edr/JouleWise-measurement-20260919-derivation, __H__)`.
+`(d079-epoch-25g83-derivation-n2-20260919, /Users/edr/JouleWise-measurement-20260919-derivation-n2, __H__)`.
 H is the reviewed, merged and pushed main commit containing this handback
 rewrite and the pending-arm inventory entry. The magistrate fills H in
 `arm-env.zsh` after that commit lands, before cutting the clone; the plan
 and notice record its full SHA as both `repo_head` and `measurement_head`.
 The pre-registration revision-3 file SHA-256 at preparation is
-`06ac72ba5542cf176732a4360568abe0da49f50a697fe3f7725b395a334dafac`. Its ledger pin remains sequence 76 /
-`08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`.
+`06ac72ba5542cf176732a4360568abe0da49f50a697fe3f7725b395a334dafac`. Its ledger pin is sequence 126 /
+`ffd12051155e65af1ac428b92932f4a398db07001079e1defd44e1c92a86de9b`
+(committed as `e39b45e6`).
 
 The fresh GitHub clone is
-`/Users/edr/JouleWise-measurement-20260919-derivation`, detached at H, with
-Python 3.13 from `env/mac-measurement-lock.txt`. Its ledger is copied
-byte-exact from the canonical ledger and authenticated head-equals-pin with
-custody verification. The custody root is
-`/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919`;
+`/Users/edr/JouleWise-measurement-20260919-derivation-n2`, detached at H, with
+Python 3.13 from `env/mac-measurement-lock.txt`. Its `runs/calibration_observation_ledger.jsonl` is restored
+byte-exact from the night-one clone's 126-record ledger,
+`/Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl`,
+and authenticated head-equals-pin with custody verification
+(`verify_custody=True`); the canonical root's 76-record copy is stale and
+is not the source. The custody root is
+`/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919`;
 `SESSION_ID` equals the plan id and `EVIDENCE_ROOT_ID` is
-`evidence-d079-epoch-25g83-derivation-n1-20260919`. The calibration plan is
+`evidence-d079-epoch-25g83-derivation-n2-20260919`. The calibration plan is
 the committed `configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json`
 copied byte-exact into that root. The desk-input writer supplies
 `identity-epoch.json` and `t1-bindings.json`; the generator pins their bytes
@@ -242,26 +246,20 @@ reads nothing else from it.
 **Census.** This is a real night: the t0 census has no idle-interactive
 exemption (that exemption is stub-only, ARM-CENSUS-IDLE-INTERACTIVE-01), and
 the arm-time census classifies every `codex|claude|t3` match by ancestry and
-aborts on any foreign process. The first candidate for this plan id (t0
-05:40:00 PDT, H `82ea3eef`) was never published: Ed's interactive session
-(pid 7066) stayed alive past its own 04:14 exit announcement because its
-terminal was never closed, and the candidate lapsed at its 05:30 install
-close (its staged plan and night root preserved unpublished under record 02's
-evidence). This commit re-plans the same id to the t0 above, chosen at the
-moment the census cleared plus the arm-to-t0 floor and a margin; nothing is
-published while any foreign agent process lives.
+aborts on any foreign process. Night one's arm and result are recorded in
+its Executed block below.
 
-**Timeline.** Install on 2026-09-18 inside the whole-day span
-[00:00, 24:00) PDT (1789714800 → 1789801200), after the accepted notice and
-strictly before **23:50:00 PDT** / 06:50:00 UTC (1789800600). REQUEST and
-the magistrate's exit boundary are **23:52:00 PDT** / 06:52:00 UTC
-(1789800720); TERM is 23:54:00 / 06:54:00 UTC (1789800840), and KILL is
-23:55:00 / 06:55:00 UTC (1789800900). The notice is generated from staged
+**Timeline.** Install on 2026-09-19 inside the whole-day span
+[00:00, 24:00) PDT (1789801200 → 1789887600), after the accepted notice and
+strictly before **04:50:00 PDT** / 11:50:00 UTC (1789818600). REQUEST and
+the magistrate's exit boundary are **04:52:00 PDT** / 11:52:00 UTC
+(1789818720); TERM is 04:54:00 / 11:54:00 UTC (1789818840), and KILL is
+04:55:00 / 11:55:00 UTC (1789818900). The notice is generated from staged
 bytes. Power, powermode, census, load and probe evidence are recorded at
-the bench. The step-0 script prepares byte-preserving retirement of both
-09-16 and 09-17 roots out of discovery, leaving both clones untouched;
-retirement is not claimed complete here. A230's standing-text conflict
-remains for the owning authority; this preparation changes no rule.
+the bench. Night one's root and clone are RETAINED and remain discoverable
+because a session opened; the 09-16 root is likewise retained and discoverable.
+A230's standing-text conflict remains open for the owning authority; this
+preparation changes no rule.
 The consolidated notice with these pins is sent after commit H
 and before the plan is moved into its discoverable place; Ed's NO on the
 notice thread stands the night down.
@@ -434,16 +432,11 @@ RECORD: harvest and uninstall complete; no measurement or successor arm
 is established by this historical block. D-182's separate positive evidence
 and ordinary fresh-plan gates apply to the proposed successor.
 
-<<<<<<< Updated upstream
 ## Executed — d079-epoch-25g83-derivation-n1-20260919 (2026-09-18, ARMED)
 
 Armed 2026-09-18 19:38:28 PDT by headless activation d8ca3a36 as the D-182 successor of the 09-17 refusal: triple `(d079-epoch-25g83-derivation-n1-20260919, /Users/edr/JouleWise-measurement-20260919-derivation, d595aa9f42cdc3d49d0ecae5f2ef33321fd6f90f)`, plan sha256 `78edf5667807432912eec9ce381be8baed563cf7b4cf0efe217b8840d3ddda66`, t0 2026-09-19 00:00:00 PDT, notice `1a0b78109400cce8` accepted 19:33:32 before publication at 19:37:23, probe ok, both agents installed from the clone. Record: `docs/process_traces/2026-09-18-activation-d8ca3a36/21-arm-record-n1-20260919.md`. Outcome: see the harvest record of the next activation.
-=======
-## Executed — d079-epoch-25g83-derivation-n1-20260919 (2026-09-19, GO, harvested, INCONCLUSIVE)
 
-Armed 2026-09-18 19:38:28 PDT by activation d8ca3a36 (arm record
-`../process_traces/2026-09-18-activation-d8ca3a36/21-arm-record-n1-20260919.md`, H `d595aa9f`).
-Fired at 00:00:00 PDT on 2026-09-19: gate GO on every row (census EMPTY, load
+**Dated addendum 2026-09-19 03:20 PDT (harvested by activation b165c535; recorded by activation 4ca26e9c) — GO, HARVESTED, EPOCH_EQUIVALENCE INCONCLUSIVE (m = 4 < 6).** Fired at 00:00:00 PDT on 2026-09-19: gate GO on every row (census EMPTY, load
 0.32, AC, chain digest `a830b521…`); the chain opened the derivation session,
 settled 600 s, ran all twelve slots on the 600 s cadence and exited 0 at
 02:03:35; 247 censuses, all empty; results branch
@@ -465,11 +458,10 @@ fresh plan id; nothing else. Both night agents were uninstalled from the clone
 (rc 0). The clone and the night root are RETAINED (a session opened).
 RECORD: harvest and uninstall for this night are complete; the successor
 equivalence night is prepared under this handback's §Next lane.
->>>>>>> Stashed changes
 
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919`;
+- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919`;
   driver records in `night/` — `result.json` (expected verdict `GO` for
   this class when every gate row passes, `chain_exit_code` 0),
   `receipt.json` or `refusal.json` as `result.json` directs (C1 PASS with the
@@ -478,9 +470,9 @@ equivalence night is prepared under this handback's §Next lane.
   `chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log`,
   `chain.stderr.log` (the wrapper's `FAIL <reason>` lines, if any),
   `courier.sent`, `courier.json`, `courier.heartbeat`.
-- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/night.log`
-  — `night driver started` and a `night gate verdict=` line for 00:00 PDT on 2026-09-19;
-  no dead-man line is expected before completion (03:35 is after it).
+- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/night.log`
+  — `night driver started` and a `night gate verdict=` line for 05:00 PDT on 2026-09-19;
+  no dead-man line is expected before completion (08:35 is after it).
 - Chain log: `<custody root>/operator_logs/derivation-chain.log` —
   `session_open kind=derivation slots=12`, `chain_start` (its timestamp
   minus `t0` is the realized Δ), `settle_complete`, twelve `slot_start`
@@ -495,15 +487,15 @@ equivalence night is prepared under this handback's §Next lane.
   removed.
 - Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
   `launchd.night.err` must be EMPTY.
-- Results branch: `night-results/d079-epoch-25g83-derivation-n1-20260919` on
+- Results branch: `night-results/d079-epoch-25g83-derivation-n2-20260919` on
   `origin`, if the driver's push succeeded — verify, do not presume.
 
 ## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`d079-epoch-25g83-derivation-n1-20260919` /
-`/Users/edr/JouleWise-measurement-20260919-derivation` / `__H__`, resolved in the arm record)
-harvests only after the completion boundary (02:35:00 PDT on 2026-09-19) has passed and
+`d079-epoch-25g83-derivation-n2-20260919` /
+`/Users/edr/JouleWise-measurement-20260919-derivation-n2` / `__H__`, resolved in the arm record)
+harvests only after the completion boundary (07:35:00 PDT on 2026-09-19) has passed and
 `courier.sent` exists, per runbook §2: §2.0 rebuild the night's coordinates
 from the frozen triple; §2.1 read `result.json`, the receipt or refusal,
 `night.log`, the chain log and both launchd streams; preserve the custody
@@ -514,7 +506,10 @@ with `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json`, and
 the ONE action its outcome names (PASS → the dated D-102 continuation
 addendum through the normal gate, then real G2-a windows; FAIL → revision 1's
 three-night derivation with this night as night one; INCONCLUSIVE → one more
-equivalence night). A receipt refusing `night_refused_agent_present`,
+equivalence night). If this second night is also INCONCLUSIVE, issue 316
+fixes no further action and the desk reports to Ed for a written answer;
+runbook §2.5's bracketed open question covers the FAIL-after-INCONCLUSIVE
+case, and both go to Ed. A receipt refusing `night_refused_agent_present`,
 `night_refused_not_quiet` or `night_refused_hid_idle` is a correct refusal —
 the rows ran and refused — and the night is re-planned as a new plan, never
 re-armed on the same plan (REFUSAL-FAST-RETRY-01 is queued, not landed).
@@ -522,7 +517,7 @@ Physics, evidence and pre-registration refusals stay on the cold-gate path;
 email Ed for those only.
 
 After the harvest, run `scripts/install_night_agent.sh --plan
-/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/night_plan.json --uninstall`
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n2-20260919/night_plan.json --uninstall`
 FROM the clone and record its exit code. The clone and the night root are
 production custody after a night that opened a session and are RETAINED;
 only a refused night's plan root is retired (byte-exact archive to
