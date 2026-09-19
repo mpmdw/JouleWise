@@ -54,5 +54,12 @@
     "custody_root": null,
     "ledger_path": "/Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl",
     "notes": "Status: completed 2026-09-19 (armed 09-18 19:38 PDT, GO at t0 00:00, 12/12 slots finalized, harvested by activation b165c535, INCONCLUSIVE m=4; agents uninstalled; clone and night root RETAINED; ledger 126 rows, head pin 126/ffd12051 committed). ACCEPTANCE-EPOCH-25G83-01 equivalence night d079-epoch-25g83-derivation-n1-20260919 (DIAGNOSTIC_NO_PACK, t0 2026-09-19 00:00 PDT), new-plan successor of the 20260917 zero-capture load refusal under D-182. Fresh GitHub clone detached at the handback and inventory commit H. Restore the canonical 76-record ledger byte-exact and authenticate its absolute iCloud custody locators with verify_custody=True; no separate deployment custody root is attested."
+  },
+  {
+    "deployment_id": "JouleWise-measurement-20260919-derivation-n2",
+    "measurement_root": "/Users/edr/JouleWise-measurement-20260919-derivation-n2",
+    "custody_root": null,
+    "ledger_path": "/Users/edr/JouleWise-measurement-20260919-derivation-n2/runs/calibration_observation_ledger.jsonl",
+    "notes": "Status: pending-arm. ACCEPTANCE-EPOCH-25G83-01 equivalence night two d079-epoch-25g83-derivation-n2-20260919 after night one's INCONCLUSIVE m=4 under directive issue 316 / runbook \u00a72.5 (DIAGNOSTIC_NO_PACK, t0 2026-09-19 05:00 PDT); fresh GitHub clone detached at the handback and inventory commit H. Ledger restored byte-exact from the night-one clone's 126-record ledger and authenticated head-equals-pin 126/ffd12051 with verify_custody=True; no separate deployment custody root attested."
   }
 ]
