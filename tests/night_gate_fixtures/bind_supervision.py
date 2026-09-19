@@ -29,6 +29,8 @@ def worker(args):
     from joulewise import quiet_admission as qa
     fd, control_fd = int(args[0]), int(args[1])
     spec = json.loads(args[2])
+    if 'large_frame_bytes' in spec:
+        spec['value']['load_avg_diagnostic']['raw'] = 'x' * spec['large_frame_bytes']
     qa.prepare_result_descriptor(fd)
     os.set_inheritable(control_fd, False)
     control = socket.socket(fileno=control_fd)
@@ -154,8 +156,6 @@ class Bench:
                 boot_identity=BOOT_UUID, census=dict(exit_code=1, stdout='', stderr=''),
                 raw_sha256=dict(ps_before='a'*64, ps_after='b'*64, top='c'*64),
                 metrics=metrics(.02), load_avg_diagnostic={'raw':'3.7'})
-            if self.scenario == 'large_frame':
-                value['load_avg_diagnostic']['raw'] = 'x' * 200000
         elif kind == 'census':
             self.census_ticks.append(self.now)
             value = call()
@@ -170,12 +170,20 @@ class Bench:
         if self.scenario == 'startup_hang' and kind == 'static':
             mode = 'startup_hang'
         spec = dict(id=job_id, kind=kind, mode=mode, value=value, registry=self.registry)
-        task = self.driver._BindTask(job_id, lambda fd: (
-            sys.executable, '-B', str(Path(__file__).resolve()), '--worker', str(fd),
-            str(child.fileno()), json.dumps(spec)), launcher, test_pass_fds=(child.fileno(),))
-        self.tasks.append(dict(task=task, kind=kind, mode=mode, control=control, child=child,
+        if self.scenario == 'large_frame' and kind == 'sample':
+            spec['large_frame_bytes'] = 200000
+        row = dict(kind=kind, mode=mode, control=control, child=child, max_arg_bytes=0,
             buffer=b'', events=[], ack=False, eof=False, sent=0, began=self.now, max_bytes=0, max_reads=0, max_buffer=0,
-            ack_until=time.monotonic()+1, result_checked=False))
+            ack_until=None, result_checked=False)
+        def argv_for(fd):
+            argv = (sys.executable, '-B', str(Path(__file__).resolve()), '--worker', str(fd),
+                    str(child.fileno()), json.dumps(spec))
+            row['max_arg_bytes'] = max(len(os.fsencode(arg)) + 1 for arg in argv)
+            return argv
+        task = self.driver._BindTask(job_id, argv_for, launcher, test_pass_fds=(child.fileno(),))
+        row['task'] = task
+        row['ack_until'] = time.monotonic() + 1
+        self.tasks.append(row)
         return task
 
     def controls(self):
@@ -385,6 +393,7 @@ class Bench:
                 else:
                     raise AssertionError(f'direct child was not reaped: {pid}: {found}')
             tasks.append(dict(id=task.job_id, kind=row['kind'], events=row['events'],
+                max_arg_bytes=row['max_arg_bytes'],
                 ready=task.ready(), control_eof=row['eof'], max_bytes=row['max_bytes'], max_buffer=row['max_buffer'], max_reads=row['max_reads'],
                 reaped=task.reaped, pid=pid))
             row['control'].close()
@@ -451,6 +460,7 @@ def launch_pending_case(directory):
             row['control'].close()
             row['child'].close()
             tasks.append(dict(id=task.job_id, kind=row['kind'], pid=pid, reaped=task.reaped,
+                max_arg_bytes=row['max_arg_bytes'],
                 max_reads=0, max_bytes=0, max_buffer=0))
         return dict(receipt=value, tasks=tasks, now=bench.now, returned_after_expiry=elapsed,
                     census_ticks=bench.census_ticks, sample_jobs=0)
