@@ -858,7 +858,9 @@ class SummaryTests(unittest.TestCase):
                     for index, boot in enumerate(("A", "B")):
                         prefix = f"| idle | 1 / True | {boot} |"
                         if builds is not None:
-                            prefix += f" {builds[index]} |"
+                            # A missing build renders as null (delta re-audit 22 R3).
+                            build = "null" if builds[index] is None else builds[index]
+                            prefix += f" {build} |"
                         self.assertIn(prefix, table)
                         if "| Rail |" in header:
                             self.assertIn(prefix + f" cpu_w | {(1, 9)[index]} | 10 | 0 | 9.6 |", table)

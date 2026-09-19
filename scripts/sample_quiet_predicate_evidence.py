@@ -1058,7 +1058,8 @@ def summarize(directory, reference_state=None):
     def fmt(value):
         return "null" if value is None else f"{value:.6g}"
     def cell(value):
-        return str(value).replace("|", "\\|").replace("\n", " ")
+        # Missing identity values render as the JSON spelling, never Python's None.
+        return "null" if value is None else str(value).replace("|", "\\|").replace("\n", " ")
     identity_header = "| State | Repeat / census_clean | boot_id |" + (" os_build |" if has_os_build else "")
     identity_separator = "|---|---|---|" + ("---|" if has_os_build else "")
     def identity_cells(entry):
