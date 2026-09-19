@@ -1,0 +1,62 @@
+== discovery (informational; watchdog fences active spans only):
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916/night_plan.json
+== epoch checks
+Desk epoch watch (identity comparison only; no capture authorization)
+ACTIVE acceptance: d079_calibration_acceptance_v2_n17_r6
+field                  expected                                                         observed                                                         status
+os_build               25F84                                                            25G83                                                            MISMATCH
+hardware_model         Mac15,9                                                          Mac15,9                                                          match
+powermetrics_sha256    d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5 MISMATCH
+mlx_version            0.31.2                                                           0.31.2                                                           match
+mismatched fields: os_build, powermetrics_sha256
+Desk epoch watch (identity comparison only; no capture authorization)
+ACTIVE acceptance: d079_calibration_acceptance_v2_n17_r6
+field                  expected                                                         observed                                                         status
+os_build               25F84                                                            25G83                                                            MISMATCH
+hardware_model         Mac15,9                                                          Mac15,9                                                          match
+powermetrics_sha256    d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5 MISMATCH
+mlx_version            0.31.2                                                           0.31.2                                                           match
+mismatched fields: os_build, powermetrics_sha256
+pre-registered powermetrics sha256 b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5: match
+check_rc=3 prereg_rc=3
+CHECK: test "$check_rc" -eq 3; test "$prereg_rc" -eq 3
+b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb  scripts/night_chains/calibration_derivation_only.zsh
+06ac72ba5542cf176732a4360568abe0da49f50a697fe3f7725b395a334dafac  configs/calibration/preregistration_d079_epoch_25g83_rev1.md
+6bb9c403208d2eec154304ad33f29108fd025ead
+CHECK: test "$(stat -f %d "$NIGHT_ROOT")" = "$(stat -f %d "$STAGE")"
+CHECK: byte equality configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/calibration_plan.json
+stale identity fields vs /Users/edr/JouleWise-measurement-20260919-derivation/configs/calibration/calibration_acceptance_d079_v2_n17_r6.json: os_build
+IDENTITY_EPOCH_JSON=/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/identity-epoch.json sha256=b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607
+T1_BINDINGS_JSON=/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/t1-bindings.json sha256=8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98
+CHECK: t%60==0 and 0<=t-a<=129600 and a<t-600, (t,a)
+CHECK: hashlib.sha256((Path(e["MEASUREMENT_ROOT"])/D166_REGISTRATION_PATH).read_bytes()).hexdigest()==D166_REGISTRATION_SHA256
+CHECK: not target.exists() and not target.is_symlink()
+/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919/night_plan.json
+PASS generated derivation-night wrapper region matches
+emitted /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/chain.zsh sha256=a830b5212fd99b306b07497fb5ff21a6536845d9b08b53499cf6ec4b1b7563ff
+VERIFIED /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/chain.zsh sha256=a830b5212fd99b306b07497fb5ff21a6536845d9b08b53499cf6ec4b1b7563ff
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260919-derivation/.venv/bin/python3", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260919-derivation/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+{"input_digests": {"/Users/edr/JouleWise-measurement-20260919-derivation/configs/calibration/calibration_ledger_head.json": "sha256:6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902", "/Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl": "sha256:aa80684848d0ce156ed2d14df47472006175840eda17f9025eff9754af694e3f", "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/calibration_plan.json": "sha256:9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072", "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/identity-epoch.json": "sha256:b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607", "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/t1-bindings.json": "sha256:8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98", "/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919/night_plan.json": "sha256:78edf5667807432912eec9ce381be8baed563cf7b4cf0efe217b8840d3ddda66"}}
+validated pins: repo_head=d595aa9f42cdc3d49d0ecae5f2ef33321fd6f90f measurement_root=/Users/edr/JouleWise-measurement-20260919-derivation measurement_head=d595aa9f42cdc3d49d0ecae5f2ef33321fd6f90f
+{"deadman_calendar": {"Hour": 3, "Minute": 35}, "deadman_epoch_s": 1789814100.0, "install_close_epoch_s": 1789800600.0, "install_spans_today": [[1789714800.0, 1789801200.0]], "night_calendar": {"Day": 19, "Hour": 0, "Minute": 0, "Month": 9}, "t0_epoch_s": 1789801200.0}
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919:
+total 152
+drwxr-xr-x@ 9 edr  staff    288 Sep 18 19:28 .
+drwxr-xr-x@ 8 edr  staff    256 Sep 18 19:28 ..
+-rw-r--r--@ 1 edr  staff  45076 Sep 18 19:28 calibration_plan.json
+-rwxr-xr-x@ 1 edr  staff   9171 Sep 18 19:28 chain.zsh
+-rw-r--r--@ 1 edr  staff    119 Sep 18 19:28 chain.zsh.chain-source.sha256
+-rw-r--r--@ 1 edr  staff     76 Sep 18 19:28 chain.zsh.sha256
+-rw-r--r--@ 1 edr  staff    246 Sep 18 19:28 identity-epoch.json
+drwxr-xr-x@ 2 edr  staff     64 Sep 18 19:28 night
+-rw-r--r--@ 1 edr  staff    541 Sep 18 19:28 t1-bindings.json
+
+/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919:
+total 16
+drwxr-xr-x@ 5 edr  staff  160 Sep 18 19:28 .
+drwxr-xr-x@ 7 edr  staff  224 Sep 18 19:28 ..
+-rw-------@ 1 edr  staff  847 Sep 18 19:28 night_plan.json
+drwxr-xr-x@ 5 edr  staff  160 Sep 18 19:28 rendered-agents
+-rw-r--r--@ 1 edr  staff  270 Sep 18 19:28 schedule.json
+STEP2 OK

@@ -1,0 +1,329 @@
+{
+  "delivery": {
+    "courier.sent": true,
+    "message_id": "1a0b17fdd4f8043a",
+    "plan_id": "d079-epoch-25g83-derivation-n1-20260917",
+    "plan_sha256": "e875cc7bcd1e70f86934c3a1022e9c5fecca3e1633829de1c779257e9de7a426",
+    "successors_used": 0
+  },
+  "harvested_receipt": {
+    "authored_monotonic_ns": 150943461825916,
+    "conditions": [
+      {
+        "basis": null,
+        "condition_id": "C1",
+        "evidence": [],
+        "measured": {
+          "detail": "not evaluated after refusal"
+        },
+        "status": "FAIL"
+      },
+      {
+        "basis": "no_pack_by_design",
+        "condition_id": "C2",
+        "evidence": [],
+        "measured": {},
+        "status": "NOT_APPLICABLE"
+      },
+      {
+        "basis": null,
+        "condition_id": "C3",
+        "evidence": [
+          "probe:/usr/bin/pgrep -lf codex|claude|t3",
+          "probe:/usr/bin/defaults -currentHost read com.apple.screensaver idleTime",
+          "probe:/usr/bin/pmset -g batt",
+          "probe:/usr/bin/pmset -g",
+          "probe:/usr/sbin/sysctl -n vm.loadavg"
+        ],
+        "measured": {
+          "ac_power_raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=7274595)\t85%; AC attached; not charging present: true\n",
+          "agent_census_exit_code": 1,
+          "agent_census_stdout": "",
+          "displaysleep": "0",
+          "hid_idle_raw": "0\n",
+          "load_1m": 3.66,
+          "load_average_raw": "{ 3.66 3.87 4.06 }\n",
+          "pmset_g_raw": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            10\n sleep                0 (sleep prevented by powerd)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         0\n tcpkeepalive         1\n powermode            0\n womp                 1\n"
+        },
+        "status": "FAIL"
+      },
+      {
+        "basis": null,
+        "condition_id": "C4",
+        "evidence": [],
+        "measured": {
+          "detail": "not evaluated after refusal"
+        },
+        "status": "FAIL"
+      },
+      {
+        "basis": null,
+        "condition_id": "C5",
+        "evidence": [
+          "chain:/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260917/chain.zsh",
+          "chain_sha256:/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260917/chain.zsh.sha256"
+        ],
+        "measured": {
+          "authored_epoch_s": 1789677403.0,
+          "chain_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260917/chain.zsh",
+          "chain_sha256": "f36010d64507e9256ac20ee65f3b71863db541172306f7c46f077e642aaa6e76",
+          "chain_sha256_path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260917/chain.zsh.sha256",
+          "detail": "window, plan freshness, measurement HEAD, and chain identity passed",
+          "driver_checkout_head": "92c178f863ccc9a9742f080108433a5afd148b2e",
+          "expected_chain_sha256": "f36010d64507e9256ac20ee65f3b71863db541172306f7c46f077e642aaa6e76",
+          "measurement_checkout_head": "92c178f863ccc9a9742f080108433a5afd148b2e",
+          "measurement_root": "/Users/edr/JouleWise-measurement-20260917-derivation",
+          "observed_epoch_s": 1789684201.7328541,
+          "plan_measurement_head": "92c178f863ccc9a9742f080108433a5afd148b2e",
+          "plan_repo_head": "92c178f863ccc9a9742f080108433a5afd148b2e",
+          "t0_epoch_s": 1789684200.0,
+          "window_max_s": 9000,
+          "zero_capture_evidence": {
+            "capture_writer_ran": false,
+            "chain_started_absent": true,
+            "instrument_validation_empty": true,
+            "reservation_absent": true,
+            "session_id": null
+          }
+        },
+        "status": "PASS"
+      }
+    ],
+    "plan_id": "d079-epoch-25g83-derivation-n1-20260917",
+    "receipt_class": "DIAGNOSTIC_NO_PACK",
+    "refusal": {
+      "detail": "load_average predicate failed (maximum 2.0)",
+      "evidence": [
+        {
+          "argv": [
+            "/usr/bin/pgrep",
+            "-lf",
+            "codex|claude|t3"
+          ],
+          "exit_code": 1,
+          "monotonic_ns": 150943356369250,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "argv": [
+            "/usr/bin/defaults",
+            "-currentHost",
+            "read",
+            "com.apple.screensaver",
+            "idleTime"
+          ],
+          "exit_code": 0,
+          "monotonic_ns": 150943432103250,
+          "stderr": "",
+          "stdout": "0\n"
+        },
+        {
+          "argv": [
+            "/usr/bin/pmset",
+            "-g",
+            "batt"
+          ],
+          "exit_code": 0,
+          "monotonic_ns": 150943449669416,
+          "stderr": "",
+          "stdout": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=7274595)\t85%; AC attached; not charging present: true\n"
+        },
+        {
+          "argv": [
+            "/usr/bin/pmset",
+            "-g"
+          ],
+          "exit_code": 0,
+          "monotonic_ns": 150943459004500,
+          "stderr": "",
+          "stdout": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            10\n sleep                0 (sleep prevented by powerd)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         0\n tcpkeepalive         1\n powermode            0\n womp                 1\n"
+        },
+        {
+          "argv": [
+            "/usr/sbin/sysctl",
+            "-n",
+            "vm.loadavg"
+          ],
+          "exit_code": 0,
+          "monotonic_ns": 150943461741625,
+          "stderr": "",
+          "stdout": "{ 3.66 3.87 4.06 }\n"
+        }
+      ],
+      "reason": "night_refused_not_quiet"
+    },
+    "schema": "joulewise.unattended_night_receipt.v2",
+    "verdict": "REFUSED"
+  },
+  "observations": [
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811: exact retired 09-17 root naming and archive parent",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811: retired root is a real directory",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md: regular evidence file",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md: harvest records no ledger session, capture, or runs directory",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: regular evidence file",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry calibration_plan.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/calibration_plan.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/calibration_plan.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry chain.zsh",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry chain.zsh.chain-source.sha256",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh.chain-source.sha256: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh.chain-source.sha256: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry chain.zsh.sha256",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh.sha256: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh.sha256: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry identity-epoch.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/identity-epoch.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/identity-epoch.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night-probe.err",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night-probe.err: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night-probe.err: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night-probe.out",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night-probe.out: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night-probe.out: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night.log",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night.log: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night.log: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/censuses.jsonl",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/censuses.jsonl: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/censuses.jsonl: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/courier.attempts.jsonl",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.attempts.jsonl: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.attempts.jsonl: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/courier.heartbeat",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.heartbeat: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.heartbeat: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/courier.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/courier.sent",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.sent: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.sent: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/launchd.night.err",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/launchd.night.err: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/launchd.night.err: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/launchd.night.out",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/launchd.night.out: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/launchd.night.out: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/receipt.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/receipt.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/receipt.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/refusal.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/refusal.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/refusal.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night/result.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/result.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/result.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night_plan.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_plan.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_plan.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night_probe_receipt.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry night_probe_receipt.pending.json.process.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.pending.json.process.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.pending.json.process.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS: safe relative checksum entry t1-bindings.json",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/t1-bindings.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/t1-bindings.json: bytes match tracked harvest SHA256SUMS /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/result.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/refusal.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_plan.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/result.json, /Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/refusal.json, /Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_plan.json: same predecessor plan id",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/result.json, /Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/refusal.json: terminal load refusal",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/result.json: chain exit code and chain hash are explicitly null",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/chain.started: lstat confirms absent, including dangling symlinks",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/operator_logs/derivation-chain.log: lstat confirms absent, including dangling symlinks",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/runs: lstat confirms absent, including dangling symlinks",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/runs/instrument_validation: lstat confirms absent, including dangling symlinks",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.json: regular evidence file",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl: regular evidence file",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl, /Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.json: ledger bytes unchanged since predecessor probe",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl: 76 parsed rows; zero predecessor session/reservation/attempt references",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/22-check.txt: regular evidence file",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/22-check.txt: harvest ledger dry run independently records absent session",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/refusal.json: exactly one C5 measured mapping",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.sent: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.sent, /Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md: courier message id present and corroborated by harvest record",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.json: regular evidence file",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.json: courier completed delivery",
+    "/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919/arm-attempts/000001/successor-count.json: regular evidence file",
+    "/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919/arm-attempts/000001/successor-count.json: magistrate-observed predecessor successor count is explicitly integer zero",
+    "/Users/edr/code/JouleWise-wt-mag-d8ca3a36/docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/successor-count-review-n1-20260917.txt: regular evidence file",
+    "/Users/edr/code/JouleWise-wt-mag-d8ca3a36/docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/successor-count-review-n1-20260917.txt: underlying count review is present, names predecessor, and has no placeholders",
+    "/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919/arm-attempts/000001/successor-evidence.json: new evidence destination; no overwrite"
+  ],
+  "predecessor_result": {
+    "aborted_reason": "night_refused_not_quiet",
+    "artifacts": [
+      {
+        "path": "night.log",
+        "sha256": "7f67054fc78785487e173e0c1626ded5541e96f15a5f4c2b20a20c337b108564"
+      },
+      {
+        "path": "night/receipt.json",
+        "sha256": "478fb0bd7e0cd8aacc213c19c045cca3617b3ab5dbc0bdefb5f4a04652d8c634"
+      },
+      {
+        "path": "night/refusal.json",
+        "sha256": "478fb0bd7e0cd8aacc213c19c045cca3617b3ab5dbc0bdefb5f4a04652d8c634"
+      },
+      {
+        "path": "night/censuses.jsonl",
+        "sha256": "2ac654b6cbbe7326a966bb4b985192ad54f42a34cf80e01c006ae741b607d644"
+      }
+    ],
+    "calibration_code": null,
+    "calibration_refusal": null,
+    "census_count": 0,
+    "census_hits": [],
+    "chain_exit_code": null,
+    "chain_sha256": null,
+    "ended_epoch_s": 1789684201.8377159,
+    "ended_monotonic_ns": 150943462744458,
+    "evidence": {
+      "calibration_refusal": null
+    },
+    "plan_id": "d079-epoch-25g83-derivation-n1-20260917",
+    "receipt_class": "DIAGNOSTIC_NO_PACK",
+    "refusal_documents": [
+      "night/refusal.json"
+    ],
+    "schema": "joulewise.unattended_night_result.v1",
+    "started_epoch_s": 1789684201.732521,
+    "started_monotonic_ns": 150943357550166,
+    "verdict": "REFUSED"
+  },
+  "source_sha256": {
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/22-check.txt": "dd61deb726b63651cf04535ecaa4f5f842532d60d505506df1cb744324bb80ac",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-harvest-evidence/d079-epoch-25g83-derivation-n1-20260917-harvest-20260917.SHA256SUMS": "9e43d916f464c9c749d2bd52dfe9a1ab1db40dd4f14de5f502ba46ccc3cdb6f5",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md": "90bb3ee5ab2dcc7a55853bcf91b826e02921264f1962665fef20e815758f574b",
+    "/Users/edr/JouleWise-measurement-20260919-derivation/runs/calibration_observation_ledger.jsonl": "aa80684848d0ce156ed2d14df47472006175840eda17f9025eff9754af694e3f",
+    "/Users/edr/code/JouleWise-wt-mag-d8ca3a36/docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/successor-count-review-n1-20260917.txt": "1e71ecdb3a3a1faedd36c661ae51f962715c3b921f0e992680658af838b15459",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/calibration_plan.json": "9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh": "f36010d64507e9256ac20ee65f3b71863db541172306f7c46f077e642aaa6e76",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh.chain-source.sha256": "89e318b3e8e942b6cb02b90d0cb8a34ab8e7a72c711609e47a4cdd27755e10c3",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/chain.zsh.sha256": "2b6f766dcc53dbbb7a639c0b845bf22baeb776b959a87c731923c7ea01bbf284",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/identity-epoch.json": "b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night-probe.err": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night-probe.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night.log": "5723b92cd86e23661e96aeaed15e94f70de064d24e893bb66d42fa2f3d131de4",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/censuses.jsonl": "2ac654b6cbbe7326a966bb4b985192ad54f42a34cf80e01c006ae741b607d644",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.attempts.jsonl": "03b59e7409d889fea2461440529c1e2e4781fc355b5024c40a74d78027f4e473",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.heartbeat": "35be12540c451975fde341ef6a2efd46ccb57c2488f41c9b65361d50e215dc25",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.json": "b3d6f7915c6e04c8bee078576db899113b984dab134bd8691a6b89f716f14d56",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/courier.sent": "9897bc8e4d9aeedd891666fde156c8bd7c1d854707cd80de816ae731cbcf43c1",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/launchd.night.err": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/launchd.night.out": "cc6f606593a1884430b8b1dc88b65821984df7461957f05e929a73a96e112a04",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/receipt.json": "478fb0bd7e0cd8aacc213c19c045cca3617b3ab5dbc0bdefb5f4a04652d8c634",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/refusal.json": "478fb0bd7e0cd8aacc213c19c045cca3617b3ab5dbc0bdefb5f4a04652d8c634",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night/result.json": "8d9326dd4cafdb2604ea5c968aa4adba2a342c1c1a22c3c92746c1c22da71cb8",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_plan.json": "e875cc7bcd1e70f86934c3a1022e9c5fecca3e1633829de1c779257e9de7a426",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.json": "d57e2242e5bf63a8d5e95fc296b0a43320d7f694cba96924f65c90c204382558",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/night_probe_receipt.pending.json.process.json": "b0dbb98928bdf9d4aecc2d424a5915391708965328d92fbfbfbfc3c8153e4a1b",
+    "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260917-plan-root-retired-1789784811/t1-bindings.json": "8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98",
+    "/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919/arm-attempts/000001/successor-count.json": "d67fb9e3f5b79f532ed178fb9d91a1e6882f31891dbcaf9f47dba319853568eb"
+  }
+}

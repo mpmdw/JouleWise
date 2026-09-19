@@ -1,0 +1,2 @@
+{"diagnostics": [], "discovery_argv": ["/usr/bin/pgrep", "-f", "codex|claude|t3"], "foreign_pids": [3020, 3025, 33194], "own_pids": [3002, 3006, 33338, 33342, 33384], "plan_sha256": "78edf5667807432912eec9ce381be8baed563cf7b4cf0efe217b8840d3ddda66", "receipt_class": "DIAGNOSTIC_NO_PACK", "sessions": [{"descendant_pids": [3020, 3025, 33194, 33325, 33338, 33342, 33384, 33385], "exempt": false, "root_pid": 3006, "workloads": []}], "workloads": []}
+diagnostic only; existing all-agents-closed rule still applies

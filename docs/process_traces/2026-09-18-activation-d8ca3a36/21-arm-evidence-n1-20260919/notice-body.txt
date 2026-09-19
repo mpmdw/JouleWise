@@ -1,0 +1,39 @@
+To: claude.ai.copper531@passmail.net
+Subject: NIGHT NOTICE — d079-epoch-25g83-derivation-n1-20260919 (DIAGNOSTIC_NO_PACK) — attempt 1
+
+Ed,
+
+Launch needs no action from you unless you reply NO. Your NO overrides.
+Arm attempt 1; earlier abort for this new candidate: none.
+One equivalence night: 600 s settle, 12 slots at 600 s cadence, 480 s capture budgets; window 9000 s.
+No model runs or measurement pack. No member values read before the session is terminal.
+plan_id: d079-epoch-25g83-derivation-n1-20260919
+repo_head = measurement_head = handback commit: d595aa9f42cdc3d49d0ecae5f2ef33321fd6f90f
+H again: d595aa9f42cdc3d49d0ecae5f2ef33321fd6f90f
+clone: /Users/edr/JouleWise-measurement-20260919-derivation
+custody: /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919 
+runs: /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/runs
+plan sha256: 78edf5667807432912eec9ce381be8baed563cf7b4cf0efe217b8840d3ddda66
+authored_epoch_s: 1789784883.0
+install close EXCLUDED 2026-09-18T23:50:00-07:00 2026-09-19T06:50:00+00:00 epoch 1789800600.0
+REQUEST / exit BEFORE 2026-09-18T23:52:00-07:00 2026-09-19T06:52:00+00:00 epoch 1789800720.0
+TERM 2026-09-18T23:54:00-07:00 2026-09-19T06:54:00+00:00 epoch 1789800840.0
+KILL 2026-09-18T23:55:00-07:00 2026-09-19T06:55:00+00:00 epoch 1789800900.0
+t0 2026-09-19T00:00:00-07:00 2026-09-19T07:00:00+00:00 epoch 1789801200.0
+window end 2026-09-19T02:30:00-07:00 2026-09-19T09:30:00+00:00 epoch 1789810200.0
+completion / courier deadline 2026-09-19T02:35:00-07:00 2026-09-19T09:35:00+00:00 epoch 1789810500.0
+daily dead-man 2026-09-19T03:35:00-07:00 2026-09-19T10:35:00+00:00 epoch 1789814100.0
+install span 1 open 2026-09-18T00:00:00-07:00 2026-09-18T07:00:00+00:00 epoch 1789714800.0
+install span 1 close EXCLUDED 2026-09-19T00:00:00-07:00 2026-09-19T07:00:00+00:00 epoch 1789801200.0
+Notice-send open: actual acceptance of this message, retained in the arm record.
+/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-n1-20260919/night_plan.json sha256 78edf5667807432912eec9ce381be8baed563cf7b4cf0efe217b8840d3ddda66
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/calibration_plan.json sha256 9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/chain.zsh sha256 a830b5212fd99b306b07497fb5ff21a6536845d9b08b53499cf6ec4b1b7563ff
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/identity-epoch.json sha256 b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/t1-bindings.json sha256 8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98
+/Users/edr/JouleWise-measurement-20260919-derivation/scripts/night_chains/calibration_derivation_only.zsh sha256 b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb
+/Users/edr/JouleWise-measurement-20260919-derivation/configs/calibration/preregistration_d079_epoch_25g83_rev1.md sha256 06ac72ba5542cf176732a4360568abe0da49f50a697fe3f7725b395a334dafac
+Wrapper sidecar: /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919/chain.zsh.sha256
+Keep agent applications closed and the machine untouched from REQUEST through completion; longer if the night remains active.
+Reply NO on this thread or relay NO through an owner-authored directive. No reply is required.
+The magistrate checks readable NO/directive/stop channels before publication and exits before REQUEST.

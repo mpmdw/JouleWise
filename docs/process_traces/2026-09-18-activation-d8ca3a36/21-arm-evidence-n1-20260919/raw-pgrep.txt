@@ -1,0 +1,2 @@
+3020 node /opt/homebrew/bin/codex mcp-server [argv truncated]
+3025 codex [argv truncated]

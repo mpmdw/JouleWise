@@ -434,6 +434,10 @@ RECORD: harvest and uninstall complete; no measurement or successor arm
 is established by this historical block. D-182's separate positive evidence
 and ordinary fresh-plan gates apply to the proposed successor.
 
+## Executed — d079-epoch-25g83-derivation-n1-20260919 (2026-09-18, ARMED)
+
+Armed 2026-09-18 19:38:28 PDT by headless activation d8ca3a36 as the D-182 successor of the 09-17 refusal: triple `(d079-epoch-25g83-derivation-n1-20260919, /Users/edr/JouleWise-measurement-20260919-derivation, d595aa9f42cdc3d49d0ecae5f2ef33321fd6f90f)`, plan sha256 `78edf5667807432912eec9ce381be8baed563cf7b4cf0efe217b8840d3ddda66`, t0 2026-09-19 00:00:00 PDT, notice `1a0b78109400cce8` accepted 19:33:32 before publication at 19:37:23, probe ok, both agents installed from the clone. Record: `docs/process_traces/2026-09-18-activation-d8ca3a36/21-arm-record-n1-20260919.md`. Outcome: see the harvest record of the next activation.
+
 ## Where the results are
 
 - Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260919`;
