@@ -649,6 +649,10 @@ class LoadTests(unittest.TestCase):
         self.assertGreater(len(periods), 0, "worker reported no period rows for its window")
         self.assertAlmostEqual(sum(p["cpu_used_s"] for p in periods), .3, delta=.001)
         self.assertEqual(clock.monotonic(), 4.0)   # rendezvous at 1.0 plus the 3 s window
+
+    @unittest.skipUnless(sys.platform == "darwin", "real spawned worker uses native QoS; "
+                         "hosted Linux shards feed the runner via stdin, which spawn cannot re-import")
+    def test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child(self):
         # S1/S2 / probe_c: load()'s real join ladder must accept a one-second
         # post-result exit and expose escalation with a short test-only grace.
         context = harness.multiprocessing.get_context("spawn")
