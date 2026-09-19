@@ -1,3 +1,8 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: []
+
 # Evidence extraction — the accepted-clean idle reference for lane QUIET-PREDICATE-EVIDENCE-01
 
 Read-only. Cwd is a detached worktree at `bookkeeping/2026-09-18-activation-d8ca3a36` (main `422cdebb`). The evidence bundles live OUTSIDE this worktree under the canonical root and are read-only for you: `/Users/edr/code/JouleWise/<source_directory>` for each of the 17 members listed in `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json` (`derivation_corpus.members[].source_directory`, e.g. `/Users/edr/code/JouleWise/runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/` with `events.jsonl`, `instrument_evidence.json`, `manifest.json`, `power_trace.csv`, `raw/`). Never write there, never run git there, never touch any other worktree. Do not write files; report only in the envelope (under 8000 bytes; put the table first).

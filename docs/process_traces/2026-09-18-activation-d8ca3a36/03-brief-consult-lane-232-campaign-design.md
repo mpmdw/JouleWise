@@ -1,3 +1,8 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: []
+
 # Design consult — QUIET-PREDICATE-EVIDENCE-01 (kernel 232): the sampling campaign that gives the busy-core cutoff its evidence
 
 Read-only consult. You have explicit licence to disagree with the lane text, the magistrate's sketch below, and the cold judge's minimum cure; say so plainly and argue from the instrument. Cwd is a detached worktree at `bookkeeping/2026-09-18-activation-d8ca3a36` (main `422cdebb`). Never touch `/Users/edr/code/JouleWise` (canonical root). Do not write files; do not run `sudo` or `powermetrics`; do not run `[QUIET-MAC]` work.

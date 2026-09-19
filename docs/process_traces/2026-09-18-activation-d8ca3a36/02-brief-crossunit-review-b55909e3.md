@@ -1,3 +1,8 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: []
+
 # Post-merge cross-unit integration review — NIGHT-GATE-QUIET-ADMISSION-01 at main `b55909e3` (PR #358 ledger row 11, second half)
 
 Read-only. Cwd is a detached worktree at `bookkeeping/2026-09-18-activation-d8ca3a36` (main `422cdebb`, which contains `b55909e3`). Never touch `/Users/edr/code/JouleWise` (the canonical root) or any other worktree. Do not run `[QUIET-MAC]` work. Do not write files; `/tmp` is fine for test scratch. Do not commit. Report only in the envelope.
