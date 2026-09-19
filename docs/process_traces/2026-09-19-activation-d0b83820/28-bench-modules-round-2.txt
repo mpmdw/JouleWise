@@ -1,0 +1,10 @@
+test_arm_readiness_registry                Ran 6 tests in 18.606s OK 
+test_d117_decode_contrast_plan             Ran 25 tests in 30.118s OK (skipped=1) 
+test_d117_floor_qwen25_1p5b_plan           Ran 22 tests in 8.527s OK 
+test_d117_floor_qwen25_7b_plan             Ran 20 tests in 13.068s OK 
+test_d117_v3_family                        Ran 5 tests in 15.511s OK 
+test_campaign_generator_core               Ran 7 tests in 1.540s OK 
+test_d117_floor_qwen3_v5_generate          Ran 13 tests in 9.822s OK 
+test_arm_readiness_evidence_packauth       Ran 27 tests in 56.994s OK 
+test_calibration_bracketing                Ran 92 tests in 0.560s OK (skipped=1) 
+test_calibration_ledger                    Ran 95 tests in 4.735s OK (skipped=1) 

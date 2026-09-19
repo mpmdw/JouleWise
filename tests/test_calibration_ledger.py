@@ -644,6 +644,93 @@ class CalibrationLedgerTests(unittest.TestCase):
         )
         self.assertIn("calibration_ledger_baseline_missing", snapshot.refusal_reasons)
 
+    def _commit_fixture_pin(self, receipt: dict) -> None:
+        self._write_pin(head_pin_for_receipt(receipt))
+        subprocess.run(["git", "add", "head.json"], cwd=self.root, check=True)
+        subprocess.run(
+            [
+                "git", "-c", "user.name=ledger test",
+                "-c", "user.email=ledger@invalid",
+                "commit", "-qm", "pin finalized fixture head",
+            ],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+        )
+
+    def _committed_extended_chain(self) -> tuple[dict, dict, bytes]:
+        """Finalize A then B, retaining A's bytes and committing both pins."""
+        init_git_fixture(self.root, "-q")
+        custody_a = self._custody("baseline-a")
+        self._reserve("baseline-a", custody_a)
+        baseline = self._finalize("baseline-a", custody_a)
+        self._commit_fixture_pin(baseline)
+        prefix = self.ledger.read_bytes()
+        custody_b = self._custody("extension-b")
+        self._reserve("extension-b", custody_b)
+        advanced = self._finalize("extension-b", custody_b)
+        self._commit_fixture_pin(advanced)
+        return baseline, advanced, prefix
+
+    def _committed_snapshot_at(self, cutoff: dict):
+        return load_calibration_ledger_snapshot(
+            self.ledger,
+            self.pin,
+            baseline_sequence=cutoff["sequence"],
+            baseline_digest=cutoff["receipt_digest"],
+            require_committed_pin=True,
+            verify_custody=True,
+            repo_root=self.root,
+        )
+
+    def test_non_genesis_cutoff_authenticates_under_advanced_committed_pin(self) -> None:
+        baseline, advanced, _prefix = self._committed_extended_chain()
+        self.assertGreater(baseline["sequence"], 0)
+        self.assertGreater(advanced["sequence"], baseline["sequence"])
+        snapshot = self._committed_snapshot_at(baseline)
+        self.assertEqual(snapshot.refusal_reasons, ())
+        self.assertEqual(snapshot.head_sequence, advanced["sequence"])
+        self.assertEqual(snapshot.head_digest, advanced["receipt_digest"])
+        self.assertEqual(
+            set(snapshot.observation_by_attempt), {"baseline-a", "extension-b"}
+        )
+
+    def test_wrong_non_genesis_cutoff_digest_refuses_on_authenticated_chain(self) -> None:
+        baseline, _advanced, _prefix = self._committed_extended_chain()
+        self.assertEqual(self._committed_snapshot_at(baseline).refusal_reasons, ())
+        snapshot = self._committed_snapshot_at(
+            {**baseline, "receipt_digest": "f" * 64}
+        )
+        self.assertEqual(
+            snapshot.refusal_reasons, ("calibration_ledger_baseline_missing",)
+        )
+
+    def test_committed_pin_below_cutoff_refuses_even_with_matching_physical_head(
+        self,
+    ) -> None:
+        earlier, cutoff, prefix = self._committed_extended_chain()
+        self.assertEqual(self._committed_snapshot_at(cutoff).refusal_reasons, ())
+        self.assertGreater(cutoff["sequence"], earlier["sequence"])
+        self._commit_fixture_pin(earlier)
+
+        # Cutoff is still in the complete physical chain: only the explicit
+        # baseline_sequence > pinned_sequence fence supplies baseline_missing.
+        snapshot = self._committed_snapshot_at(cutoff)
+        self.assertEqual(
+            set(snapshot.refusal_reasons),
+            {"calibration_ledger_baseline_missing", "calibration_ledger_head_mismatch"},
+        )
+
+        # Roll back both physical bytes and pin consistently. Membership must
+        # still refuse, without relying on a physical-head mismatch.
+        self.ledger.write_bytes(prefix)
+        snapshot = self._committed_snapshot_at(cutoff)
+        self.assertEqual(snapshot.head_sequence, earlier["sequence"])
+        self.assertEqual(snapshot.head_digest, earlier["receipt_digest"])
+        self.assertEqual(
+            snapshot.refusal_reasons, ("calibration_ledger_baseline_missing",)
+        )
+
     def test_bracket_session_happy_path_reserves_two_slots_under_one_pin(self) -> None:
         capability = self._open_bracket_session()
         self.assertEqual(capability["sequence"], 2)

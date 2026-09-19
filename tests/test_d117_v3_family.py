@@ -14,6 +14,7 @@ from typing import Any
 
 from joulewise.arm_readiness import committed_pack_tree_sha256
 from joulewise.calibration_bracketing import acceptance_allowance_rule
+from tests.test_campaign_generator_core import generation_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,11 +101,13 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def generator_command(family: dict[str, Any], output_root: Path) -> list[str]:
+def generator_command(
+    family: dict[str, Any], output_root: Path, *, repository: Path = ROOT
+) -> list[str]:
     return [
         sys.executable,
         str(
-            ROOT
+            repository
             / "configs/campaigns"
             / family["v2"]
             / "generate_configs.py"
@@ -132,6 +135,10 @@ def seed_mint_custody(family: dict[str, Any], output_root: Path) -> None:
 class D117V3FamilyTests(unittest.TestCase):
     maxDiff = None
 
+    def generation_repository(self) -> Path:
+        """Exercise working-tree generators with their generation-time head input."""
+        return generation_repository(self, ROOT)
+
     def assert_r6_pin(self, actual: dict[str, Any]) -> None:
         self.assertEqual(
             {key: actual[key] for key in R6_ACCEPTANCE},
@@ -149,12 +156,23 @@ class D117V3FamilyTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory(prefix="d117-v2-to-v3-") as temp:
             output_root = Path(temp)
+            repository = self.generation_repository()
+            # The executed generators are the clone's copies: prove those bytes
+            # are unchanged by the run too (delta re-audit record 27 R1).
+            clone_before = {
+                family["v2"]: sha256(
+                    repository / "configs/campaigns" / family["v2"] / "generate_configs.py"
+                )
+                for family in FAMILIES
+            }
             for family in FAMILIES:
                 with self.subTest(family=family["v3"]):
-                    command = generator_command(family, output_root)
+                    command = generator_command(
+                family, output_root, repository=repository
+            )
                     generated = subprocess.run(
                         command,
-                        cwd=ROOT,
+                        cwd=repository,
                         check=False,
                         capture_output=True,
                         text=True,
@@ -171,12 +189,21 @@ class D117V3FamilyTests(unittest.TestCase):
                     seed_mint_custody(family, output_root)
                     checked = subprocess.run(
                         [*command, "--check"],
-                        cwd=ROOT,
+                        cwd=repository,
                         check=False,
                         capture_output=True,
                         text=True,
                     )
                     self.assertEqual(checked.returncode, 0, checked.stderr)
+            self.assertEqual(
+                {
+                    family["v2"]: sha256(
+                        repository / "configs/campaigns" / family["v2"] / "generate_configs.py"
+                    )
+                    for family in FAMILIES
+                },
+                clone_before,
+            )
         self.assertEqual(
             {
                 family["v2"]: sha256(
@@ -196,10 +223,13 @@ class D117V3FamilyTests(unittest.TestCase):
         family = FAMILIES[0]
         with tempfile.TemporaryDirectory(prefix="d117-v3-missing-owned-") as temp:
             output_root = Path(temp)
-            command = generator_command(family, output_root)
+            repository = self.generation_repository()
+            command = generator_command(
+                family, output_root, repository=repository
+            )
             generated = subprocess.run(
                 command,
-                cwd=ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -211,7 +241,7 @@ class D117V3FamilyTests(unittest.TestCase):
             (generated_pack / "order_manifest.json").unlink()
             checked = subprocess.run(
                 [*command, "--check"],
-                cwd=ROOT,
+                cwd=repository,
                 check=False,
                 capture_output=True,
                 text=True,

@@ -1,0 +1,2 @@
+Ruling written (10.1 KB, only untracked change): Q1 = option (a) amended to the TWO live floor v5 generators (contrast_v5 already has no byte pin), exact B1 code shape given; Q2 = code conforming to D-109 R1.4, land AFTER PR #361, remove the live-generator fixtures in the B1 lane and keep the frozen-path ones; Q3 = nine regressions enumerated; validator REFUSE on the typo sha then PASS, test module 7/7 OK.
+rc=0

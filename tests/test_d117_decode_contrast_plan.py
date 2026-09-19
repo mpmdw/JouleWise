@@ -24,6 +24,7 @@ from joulewise.identity_pins import (
 from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.run_campaign import load_order_entries
 from tests.git_fixture import init_git_fixture
+from tests.test_campaign_generator_core import generation_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -501,11 +502,15 @@ def unminted_successor_family_suffix() -> str:
 _SUCCESSOR_GENERATION_NAME = re.compile(r"_v[2-9]\d*(_extraction_spec\.json)?$")
 
 
-def link_successor_self_check_inputs(output_root: Path) -> None:
+def link_successor_self_check_inputs(
+    output_root: Path, *, repository: Path = ROOT
+) -> None:
     if not (output_root / "joulewise").exists():
-        (output_root / "joulewise").symlink_to(ROOT / "joulewise", target_is_directory=True)
-    for source_dir in (ROOT / "configs", ROOT / "configs/campaigns"):
-        target_dir = output_root / source_dir.relative_to(ROOT)
+        (output_root / "joulewise").symlink_to(
+            repository / "joulewise", target_is_directory=True
+        )
+    for source_dir in (repository / "configs", repository / "configs/campaigns"):
+        target_dir = output_root / source_dir.relative_to(repository)
         target_dir.mkdir(parents=True, exist_ok=True)
         for source in source_dir.iterdir():
             # Never import committed successor-generation artifacts as
@@ -812,6 +817,10 @@ def probe_generator_status(generator: Path, cwd: Path) -> str:
 
 class D117GammaPlanTest(unittest.TestCase):
     maxDiff = None
+
+    def generation_repository(self) -> Path:
+        """Exercise working-tree generators with their generation-time head input."""
+        return generation_repository(self, ROOT)
 
     def setUp(self) -> None:
         self.plan = read_json(PACK / "calibration_plan.json")
@@ -1284,6 +1293,7 @@ class D117GammaPlanTest(unittest.TestCase):
             )
 
     def test_dual_generation_transaction_and_generational_induction(self) -> None:
+        repository = self.generation_repository()
         from tests import test_d117_floor_qwen25_1p5b_plan as alpha_tests
         from tests import test_d117_floor_qwen25_7b_plan as beta_tests
 
@@ -1305,8 +1315,10 @@ class D117GammaPlanTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="d117-dual-generation-") as temp:
             output_root = Path(temp)
             initialize_git_tracked_checkout(output_root, all_v1_roots)
-            link_successor_self_check_inputs(output_root)
-            alpha_tests.link_successor_self_check_inputs(output_root)
+            link_successor_self_check_inputs(output_root, repository=repository)
+            alpha_tests.link_successor_self_check_inputs(
+                output_root, repository=repository
+            )
             compatibility_link = (
                 output_root
                 / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
@@ -1323,7 +1335,7 @@ class D117GammaPlanTest(unittest.TestCase):
                 generated = subprocess.run(
                     [
                         sys.executable,
-                        str(generator),
+                        str(repository / generator.relative_to(ROOT)),
                         "--output-root",
                         str(output_root),
                         "--pack-id",
@@ -1332,7 +1344,7 @@ class D117GammaPlanTest(unittest.TestCase):
                         "_v2",
                         "--no-preserve-current-frozen-bytes",
                     ],
-                    cwd=ROOT,
+                    cwd=repository,
                     check=False,
                     capture_output=True,
                     text=True,
@@ -1341,8 +1353,12 @@ class D117GammaPlanTest(unittest.TestCase):
                 v2_packs.append(v2_rel)
                 if index == 0:
                     gamma_hashes = hash_inventory(output_root, (v2_rel,))
-                    beta_tests.link_successor_self_check_inputs(output_root)
-                    alpha_tests.link_successor_self_check_inputs(output_root)
+                    beta_tests.link_successor_self_check_inputs(
+                output_root, repository=repository
+            )
+                    alpha_tests.link_successor_self_check_inputs(
+                output_root, repository=repository
+            )
                     self.assertEqual(hash_inventory(output_root, (v2_rel,)), gamma_hashes)
                 else:
                     v2_specs.append(module.extraction_spec_rel(
@@ -1855,6 +1871,7 @@ class D117GammaPlanTest(unittest.TestCase):
         silent. All three families, and every mode, must refuse before any
         write.
         """
+        repository = self.generation_repository()
 
         from tests import test_d117_floor_qwen25_1p5b_plan as alpha_tests
         from tests import test_d117_floor_qwen25_7b_plan as beta_tests
@@ -1870,8 +1887,10 @@ class D117GammaPlanTest(unittest.TestCase):
             initialize_git_tracked_checkout(
                 output_root, (*v1_roots, *V1_SPEC_RELS, ROW_REGISTRY_REL)
             )
-            link_successor_self_check_inputs(output_root)
-            alpha_tests.link_successor_self_check_inputs(output_root)
+            link_successor_self_check_inputs(output_root, repository=repository)
+            alpha_tests.link_successor_self_check_inputs(
+                output_root, repository=repository
+            )
             compatibility_link = (
                 output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
             )
@@ -1884,7 +1903,7 @@ class D117GammaPlanTest(unittest.TestCase):
                 generated = subprocess.run(
                     [
                         sys.executable,
-                        str(generator),
+                        str(repository / generator.relative_to(ROOT)),
                         "--output-root",
                         str(output_root),
                         "--pack-id",
@@ -1893,7 +1912,7 @@ class D117GammaPlanTest(unittest.TestCase):
                         "_v2",
                         "--no-preserve-current-frozen-bytes",
                     ],
-                    cwd=ROOT,
+                    cwd=repository,
                     check=False,
                     capture_output=True,
                     text=True,
@@ -1985,6 +2004,7 @@ class D117GammaPlanTest(unittest.TestCase):
         with. A phrase scan catches the class of drift a field inventory cannot
         -- prose, new keys, values that never carried a status field name.
         """
+        repository = self.generation_repository()
 
         from tests import test_d117_floor_qwen25_1p5b_plan as alpha_tests
         from tests import test_d117_floor_qwen25_7b_plan as beta_tests
@@ -2001,7 +2021,7 @@ class D117GammaPlanTest(unittest.TestCase):
                 generated = subprocess.run(
                     [
                         sys.executable,
-                        str(generator),
+                        str(repository / generator.relative_to(ROOT)),
                         "--output-root",
                         str(output_root),
                         "--pack-id",
@@ -2010,7 +2030,7 @@ class D117GammaPlanTest(unittest.TestCase):
                         "_v2",
                         "--no-preserve-current-frozen-bytes",
                     ],
-                    cwd=ROOT,
+                    cwd=repository,
                     check=False,
                     capture_output=True,
                     text=True,

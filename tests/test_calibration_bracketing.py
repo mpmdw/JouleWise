@@ -594,9 +594,10 @@ class CalibrationBracketingTests(unittest.TestCase):
             "acceptance_artifact_unissued_fixture",
         )
 
-    def test_live_issued_anchor_authenticates_and_matches_committed_head_pin(
+    def test_live_issued_anchor_artifact_and_head_pin_ordering_and_schema(
         self,
     ) -> None:
+        """Check ordering/schema only; the loader enforces digest-in-chain."""
         raw = DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes()
         artifact = load_calibration_acceptance_bound()
         pin = json.loads(DEFAULT_HEAD_PIN_PATH.read_bytes())
@@ -632,16 +633,20 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         self.assertTrue(_valid_acceptance_bound(artifact))
         self.assertTrue(artifact["issuance"]["claim_eligible"])
-        self.assertEqual(
-            {
-                key: artifact["ledger_cutoff"][key]
-                for key in ("sequence", "head_digest", "ledger_schema")
-            },
-            pin,
+        cutoff = artifact["ledger_cutoff"]
+        self.assertEqual(cutoff["ledger_schema"], pin["ledger_schema"])
+        self.assertLessEqual(cutoff["sequence"], pin["sequence"])
+        self.assertRegex(pin["head_digest"], r"\A[0-9a-f]{64}\Z")
+        if cutoff["sequence"] == pin["sequence"]:
+            self.assertEqual(cutoff["head_digest"], pin["head_digest"])
+
+        r6_path = DEFAULT_ACCEPTANCE_BOUND_PATH.parent / (
+            "calibration_acceptance_d079_v2_n17_r6.json"
         )
-        self.assertEqual(pin["sequence"], 76)
+        r6_cutoff = json.loads(r6_path.read_bytes())["ledger_cutoff"]
+        self.assertEqual(r6_cutoff["sequence"], 76)
         self.assertEqual(
-            pin["head_digest"],
+            r6_cutoff["head_digest"],
             "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
         )
 

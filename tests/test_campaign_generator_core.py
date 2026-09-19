@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+import hashlib
 import importlib.util
+import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -19,6 +23,44 @@ from scripts.check_campaign_generator_core_parity import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# Generation-time bytes from a816036f4ea278fcc746b1220896b4b6bd084855:
+# git show a816036f:configs/calibration/calibration_ledger_head.json
+GENERATION_LEDGER_HEAD_BYTES = (
+    b'{\n'
+    b'  "sequence": 76,\n'
+    b'  "head_digest": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",\n'
+    b'  "ledger_schema": "joulewise.calibration_observation_ledger.v1"\n'
+    b'}\n'
+)
+GENERATION_LEDGER_HEAD_SHA256 = (
+    "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902"
+)
+def generation_repository(case: unittest.TestCase, root: Path = ROOT) -> Path:
+    """Disposable ``git clone --shared`` of ``root`` carrying the generation-time
+    head-pin bytes and the working tree's d117 generator files, so a generator
+    is exercised as a function of its declared inputs while uncommitted
+    generator edits stay visible (counter-review record 15 F1). One home for the
+    helper the frozen-path test modules share (delta re-audit record 27 R2).
+    Removed after ``case`` finishes."""
+    temporary = tempfile.TemporaryDirectory(prefix="d117-head-fixture-", dir="/tmp")
+    case.addCleanup(temporary.cleanup)
+    repository = Path(temporary.name) / "repository"
+    subprocess.run(
+        ("git", "clone", "-q", "--shared", str(root), str(repository)),
+        check=True,
+        capture_output=True,
+    )
+    case.assertEqual(
+        hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
+        GENERATION_LEDGER_HEAD_SHA256,
+    )
+    (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
+        GENERATION_LEDGER_HEAD_BYTES
+    )
+    for source in (root / "configs/campaigns").glob("d117_*/generate_configs.py"):
+        shutil.copy2(source, repository / source.relative_to(root))
+    return repository
+
 D117_GENERATORS = tuple(
     sorted((ROOT / "configs/campaigns").glob("d117_*/generate_configs.py"))
 )
@@ -101,9 +143,34 @@ class CampaignGeneratorCoreTests(unittest.TestCase):
                         lambda source=source: source
                     )
                 configure_generator(label, generator, pin)
+                head_fixture = nullcontext()
+                # GENERATOR-HEAD-FILE-BYTE-PIN-01 is registered for the cold
+                # gate: the production byte pin on an append-advancing file
+                # remains unchanged. Exercise the generator as a function of
+                # its declared inputs, for normal and mutated source alike.
+                if label in ("ALPHA", "BETA"):
+                    fixture_digest = hashlib.sha256(
+                        GENERATION_LEDGER_HEAD_BYTES
+                    ).hexdigest()
+                    self.assertEqual(fixture_digest, GENERATION_LEDGER_HEAD_SHA256)
+                    real_sha256_file = generator.sha256_file
+                    head_path = generator.REPO_ROOT / generator.LEDGER_HEAD_REL
+
+                    def fixture_sha256_file(
+                        path, *, head_path=head_path,
+                        real_sha256_file=real_sha256_file,
+                        fixture_digest=fixture_digest,
+                    ):
+                        if path == head_path:
+                            return fixture_digest
+                        return real_sha256_file(path)
+
+                    head_fixture = mock.patch.object(
+                        generator, "sha256_file", side_effect=fixture_sha256_file
+                    )
                 output_root = temporary / label.lower()
                 calls: list[tuple[Path, tuple[Path, ...]]] = []
-                with mock.patch.object(
+                with head_fixture as head_mock, mock.patch.object(
                     core,
                     "_generation_write_boundary_observer",
                     side_effect=lambda root, outputs: calls.append(
@@ -111,6 +178,13 @@ class CampaignGeneratorCoreTests(unittest.TestCase):
                     ),
                 ):
                     generate(generator, label, output_root)
+                if head_mock is not None:
+                    # The fixture must have been consulted for the head path,
+                    # or a future edit could route around it silently
+                    # (counter-review record 15 N1).
+                    self.assertIn(
+                        mock.call(head_path), head_mock.call_args_list
+                    )
 
                 final_calls = [
                     outputs
