@@ -603,6 +603,32 @@ runpy.run_path(script, run_name="__main__")
 
 
 class LoadTests(unittest.TestCase):
+    def test_burn_profiles_advance_their_generator(self):
+        for profile in ("scalar", "memory"):
+            burn = harness.burn_profile(profile, 1)
+            self.assertNotEqual(burn(1000), burn(1), f"{profile} burn did no work")
+        burn = harness.burn_profile("scalar", 1)
+        first = burn(1)
+        self.assertEqual(first, (1664525 * 1 + 1013904223) & 0xFFFFFFFF)
+        self.assertNotEqual(burn(1), first)
+
+    def test_load_worker_runs_its_window_after_the_rendezvous(self):
+        clock = FakeClock()
+        sent = []
+        connection = SimpleNamespace(send=sent.append, recv=lambda: 1.0, close=lambda: None)
+        with patch.object(harness, "set_qos", lambda qos: None), \
+                patch.object(harness, "identity", return_value={"pid": 11}), \
+                patch.object(harness, "burn_profile", return_value=clock.burn), \
+                patch.object(harness, "Clock", return_value=clock):
+            harness.load_worker(connection, {"share": .1, "duration_s": 3, "period_s": .5,
+                "qos": "user-initiated", "profile": "scalar", "seed": 1})
+        self.assertEqual(len(sent), 2, sent)
+        self.assertNotIn("error", sent[1])
+        periods = sent[1]["periods"]
+        self.assertGreater(len(periods), 0, "worker reported no period rows for its window")
+        self.assertAlmostEqual(sum(p["cpu_used_s"] for p in periods), .3, delta=.001)
+        self.assertEqual(clock.monotonic(), 4.0)   # rendezvous at 1.0 plus the 3 s window
+
     @unittest.skipUnless(sys.platform == "darwin", "native QoS requires macOS")
     def test_real_load_tracks_point_one_core_and_guards_worker_budget(self):
         # The controller promises a measured CPU ceiling and no catch-up, never delivery.
@@ -637,7 +663,6 @@ class LoadTests(unittest.TestCase):
             self.assertLessEqual(period["cpu_used_s"],
                 period["budget_cpu_s"] + period["overshoot_bound_cpu_s"] + 1e-9,
                 f"period {period['period']} burned past its budget: {period}")
-        self.assertGreater(claimed_s, 0.0, "no CPU burned: the real burn profile did no work")
         # Kernel cross-check on the reaped child (rusage folds in at load()'s join):
         # what the worker claims can never exceed what the OS charged it, and the
         # OS-charged total is bounded by the ceiling plus the child's start-up CPU.
