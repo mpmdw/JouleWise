@@ -1,0 +1,7 @@
+# Activation 8bd030d2 — launch record (headless, watchdog attempt 52)
+
+Launched 2026-09-18 22:46:07 PDT (claude pid 16662, supervisor 16658) after activation 507514d5 exited cleanly at 22:42 (`events.jsonl` sequence 213 "clean activation exit"; `state.json` `last_exit_class` still `usage_exhausted`, the known stale label). Heartbeat written 22:46, launch email `1a0b8349b38276e9` sent 22:47, `notice.ack` written. Pending notices: none. Open directive issues: none. `standdown.request`: absent.
+
+State on launch: night `d079-epoch-25g83-derivation-n1-20260919` ARMED and untouched — t0 2026-09-19 00:00:00 PDT, courier 02:35, dead-man 03:35, clone `/Users/edr/JouleWise-measurement-20260919-derivation` at `d595aa9f`; all three LaunchAgents loaded (`com.joulewise.night`, `com.joulewise.night.deadman`, `com.joulewise.magistrate`). Load 1.42 at launch; no indexing daemons in the top CPU list. Canonical root untouched at `422cdebb` (stale by design; main is `178a2731`).
+
+Scope of this activation (exit target before 23:35 PDT, well ahead of the 23:54 resident TERM): the one un-audited item on the lane 232 harness branch, bench fix `498ad1d0` (record 04a of 507514d5). Seat 05: fresh delta re-audit, Astra high, read-only, detached worktree `JouleWise-wt-ref-delta2-8bd030d2` at `498ad1d0`, brief `05-brief-delta-reaudit-round-2-harness.md`. Everything else on the successor's list (harvest first, then PR gate: sharded replay, hosted CI, twelve-row ledger, terminal review, merge) stays with the successor.
