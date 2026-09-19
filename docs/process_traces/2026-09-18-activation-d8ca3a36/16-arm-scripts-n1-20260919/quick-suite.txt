@@ -1,0 +1,693 @@
+CHANGED configs/production_custody_inventory.json
+CHANGED docs/process/NIGHT_HANDBACK.md
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/README-sequence.md
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/arm-env.zsh
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/step0-retire.zsh
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/step1-clone.zsh
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/step2-desk.zsh
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/step3-notice.zsh
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/step4-publish-install.zsh
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/step4a-successor-evidence.py
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/step5-verify-and-exit.zsh
+CHANGED docs/process_traces/2026-09-18-activation-d8ca3a36/16-arm-scripts-n1-20260919/successor-count.template.json
+SELECT tests.test_2k_amplification: weight=0.157s < 5s
+SELECT tests.test_adapters_powermetrics: weight=4.252s < 5s
+EXCLUDE tests.test_admit_model_panel_entry: A211 canonical-checkout dependency
+SELECT tests.test_aggregate: weight=0.039s < 5s
+SELECT tests.test_analysis_claims: weight=0.435s < 5s
+SELECT tests.test_analysis_engine: weight=0.033s < 5s
+EXCLUDE tests.test_analysis_finalizer: weight=26.987s >= 5s
+EXCLUDE tests.test_analysis_inputs: weight=17.648s >= 5s
+EXCLUDE tests.test_analysis_integration: weight=86.429s >= 5s
+SELECT tests.test_analysis_manifest: weight=4.879s < 5s
+SELECT tests.test_analysis_manifest_v2: weight=0.003s < 5s
+SELECT tests.test_analysis_manifest_v3: weight=0.982s < 5s
+SELECT tests.test_analysis_multiplicity: weight=0.012s < 5s
+SELECT tests.test_analysis_ratio: weight=0.001s < 5s
+SELECT tests.test_analysis_ratio_integration: weight=0.039s < 5s
+SELECT tests.test_arm_census: unknown weight
+EXCLUDE tests.test_arm_readiness: weight=14.999s >= 5s
+EXCLUDE tests.test_arm_readiness_dry_run: weight=31.751s >= 5s
+SELECT tests.test_arm_readiness_evidence: weight=0.349s < 5s
+EXCLUDE tests.test_arm_readiness_evidence_author: weight=52.572s >= 5s
+EXCLUDE tests.test_arm_readiness_evidence_packauth: weight=34.623s >= 5s
+EXCLUDE tests.test_arm_readiness_evidence_t0: weight=71.328s >= 5s
+EXCLUDE tests.test_arm_readiness_integration: weight=31.196s >= 5s
+EXCLUDE tests.test_arm_readiness_lifecycle: weight=24.581s >= 5s
+SELECT tests.test_arm_readiness_pack_digest: weight=0.375s < 5s
+EXCLUDE tests.test_arm_readiness_registry: weight=17.321s >= 5s
+SELECT tests.test_arm_readiness_schemas: weight=0.293s < 5s
+SELECT tests.test_arm_retry: touched path; unknown weight
+EXCLUDE tests.test_audit_amplification: weight=5.542s >= 5s
+SELECT tests.test_audit_bundle_validation: weight=1.688s < 5s
+SELECT tests.test_audit_cli_examples: weight=0.111s < 5s
+SELECT tests.test_audit_clock: weight=0.001s < 5s
+SELECT tests.test_audit_powermetrics_parser: weight=0.002s < 5s
+SELECT tests.test_audit_reduce_degenerate: weight=0.278s < 5s
+SELECT tests.test_audit_report: weight=0.001s < 5s
+SELECT tests.test_audit_schema_edges: weight=0.006s < 5s
+SELECT tests.test_authentication_io: weight=1.999s < 5s
+SELECT tests.test_axi_analysis_manifest: weight=0.214s < 5s
+SELECT tests.test_axi_burst_reduce: weight=1.032s < 5s
+SELECT tests.test_axi_controller_events: weight=4.909s < 5s
+EXCLUDE tests.test_axi_mock_spec: weight=26.614s >= 5s
+SELECT tests.test_axi_output_identity: weight=0.077s < 5s
+SELECT tests.test_axi_request_validation: weight=0.101s < 5s
+SELECT tests.test_axi_sb_spike: weight=0.011s < 5s
+SELECT tests.test_axi_sc_spike: weight=0.030s < 5s
+SELECT tests.test_axi_schemas: weight=0.011s < 5s
+SELECT tests.test_benchmark_import: weight=0.116s < 5s
+EXCLUDE tests.test_bracket_binding_cli: weight=18.230s >= 5s
+EXCLUDE tests.test_bridge: weight=33.099s >= 5s
+SELECT tests.test_build_capstone: weight=0.001s < 5s
+SELECT tests.test_build_site_parsers: weight=0.001s < 5s
+SELECT tests.test_bundle: weight=3.719s < 5s
+EXCLUDE tests.test_bundle_read: weight=5.599s >= 5s
+SELECT tests.test_calibration_bracketing: weight=0.526s < 5s
+SELECT tests.test_calibration_custody_store: weight=0.438s < 5s
+SELECT tests.test_calibration_custody_worker: unknown weight
+EXCLUDE tests.test_calibration_exits: weight=1117.310s >= 5s; exclusive
+SELECT tests.test_calibration_ledger: weight=4.690s < 5s
+SELECT tests.test_calibration_ledger_custody: weight=1.080s < 5s
+SELECT tests.test_calibration_live_three_window: weight=2.795s < 5s
+EXCLUDE tests.test_calibration_writer_crash_matrix: weight=1011.414s >= 5s; exclusive; split
+SELECT tests.test_campaign_generator_core: weight=2.475s < 5s
+SELECT tests.test_capture_pipeline_era: weight=2.448s < 5s
+SELECT tests.test_capture_t0_step: weight=4.976s < 5s
+SELECT tests.test_check_gate_ledger: weight=2.061s < 5s
+SELECT tests.test_check_paper_replay_fence: weight=0.197s < 5s
+EXCLUDE tests.test_check_window_provenance: weight=18.253s >= 5s
+SELECT tests.test_claim_side_bound: weight=0.061s < 5s
+SELECT tests.test_claims_index_lint: weight=3.654s < 5s
+SELECT tests.test_claims_lint: weight=3.437s < 5s
+SELECT tests.test_claude_bridge_mcp: weight=3.527s < 5s
+SELECT tests.test_cli: weight=0.664s < 5s
+EXCLUDE tests.test_cli_run: weight=142.211s >= 5s
+SELECT tests.test_clock: weight=0.002s < 5s
+SELECT tests.test_clock_reference: weight=0.009s < 5s
+SELECT tests.test_codex_app_bridge: weight=1.120s < 5s
+SELECT tests.test_codex_bridge_observer: weight=3.991s < 5s
+SELECT tests.test_coldgate_charter_v3: weight=0.002s < 5s
+SELECT tests.test_coldgate_receipt: weight=0.016s < 5s
+EXCLUDE tests.test_collector_analysis_manifest_id: weight=176.753s >= 5s
+EXCLUDE tests.test_controller: weight=52.865s >= 5s
+SELECT tests.test_corpus_strict_validation: weight=0.335s < 5s
+EXCLUDE tests.test_custody_mode_inventory: weight=87.535s >= 5s
+SELECT tests.test_d078_reason_registry: weight=0.167s < 5s
+EXCLUDE tests.test_d117_contrast_v5_pack: weight=18.097s >= 5s
+EXCLUDE tests.test_d117_decode_contrast_plan: weight=26.622s >= 5s
+SELECT tests.test_d117_fixture_transport: weight=0.941s < 5s
+EXCLUDE tests.test_d117_floor_qwen25_1p5b_plan: weight=9.394s >= 5s
+EXCLUDE tests.test_d117_floor_qwen25_7b_plan: weight=7.466s >= 5s
+EXCLUDE tests.test_d117_floor_qwen3_v5_generate: weight=8.757s >= 5s
+SELECT tests.test_d117_gamma_d139a2_families: weight=2.277s < 5s
+EXCLUDE tests.test_d117_v3_family: weight=6.895s >= 5s
+EXCLUDE tests.test_d165_dominance_closeout: weight=15.888s >= 5s
+EXCLUDE tests.test_d165_rationale_census: weight=12.832s >= 5s
+SELECT tests.test_decisive_reference_resolution: weight=0.134s < 5s
+EXCLUDE tests.test_dependence_sensitivity: weight=7.254s >= 5s
+EXCLUDE tests.test_derive_estate_anchors: weight=7.087s >= 5s
+EXCLUDE tests.test_detection_floor: weight=8.940s >= 5s
+EXCLUDE tests.test_determinism_gate: weight=16.279s >= 5s
+SELECT tests.test_docs_freshness: docs fence
+SELECT tests.test_doctor: weight=0.009s < 5s
+SELECT tests.test_dominance_closeout: weight=2.282s < 5s
+SELECT tests.test_env_locks: weight=0.001s < 5s
+EXCLUDE tests.test_envelope_gate: weight=47.521s >= 5s
+SELECT tests.test_environment: weight=0.064s < 5s
+SELECT tests.test_environment_admission: weight=0.613s < 5s
+EXCLUDE tests.test_epoch_continuation: weight=36.737s >= 5s
+EXCLUDE tests.test_epoch_equivalence_check: weight=7.937s >= 5s
+EXCLUDE tests.test_experiment: weight=39.683s >= 5s
+SELECT tests.test_family_marker: weight=1.885s < 5s
+SELECT tests.test_fixture_orphan_census: unknown weight
+EXCLUDE tests.test_floor_extraction: A211 canonical-checkout dependency
+SELECT tests.test_floor_mint_estimator: weight=3.870s < 5s
+SELECT tests.test_floor_mint_pinsets_schema: weight=0.001s < 5s
+SELECT tests.test_gamma_unit_roster_guard: weight=0.461s < 5s
+SELECT tests.test_gate_sensibility_rounding: weight=0.020s < 5s
+EXCLUDE tests.test_gen_derivation_night: weight=10.989s >= 5s
+SELECT tests.test_gen_g2_phase_d: weight=0.056s < 5s
+SELECT tests.test_gen_state: weight=3.343s < 5s
+SELECT tests.test_generate_g2a_probe_inputs: weight=1.448s < 5s
+SELECT tests.test_generate_matrix: weight=4.060s < 5s
+EXCLUDE tests.test_gensuite: weight=16.891s >= 5s
+SELECT tests.test_git_fixture_hygiene: weight=0.019s < 5s
+EXCLUDE tests.test_git_fixture_maintenance: weight=13.579s >= 5s
+EXCLUDE tests.test_identity_pins: weight=5.906s >= 5s
+EXCLUDE tests.test_idle_admission: weight=5.407s >= 5s
+SELECT tests.test_idle_dependence: weight=0.062s < 5s
+SELECT tests.test_install_magistrate_watchdog: weight=3.718s < 5s
+EXCLUDE tests.test_install_night_agent: weight=8.561s >= 5s
+SELECT tests.test_interfaces: weight=0.207s < 5s
+EXCLUDE tests.test_issue_calibration_acceptance_generation: weight=77.553s >= 5s
+SELECT tests.test_issue_dg071_dg075_statistics: weight=0.586s < 5s
+SELECT tests.test_issue_g2a_prefill_prompt_pin: weight=0.596s < 5s
+SELECT tests.test_kv_size: weight=0.020s < 5s
+EXCLUDE tests.test_launch_window: weight=251.381s >= 5s
+SELECT tests.test_launcher_argv_regression: weight=0.004s < 5s
+SELECT tests.test_load_transition_alignment: weight=0.457s < 5s
+SELECT tests.test_magistrate_watchdog: touched path
+EXCLUDE tests.test_magistrate_watchdog_cli: weight=12.041s >= 5s
+SELECT tests.test_measurement_liveness: weight=0.459s < 5s
+SELECT tests.test_microdelta_generate_configs: weight=0.055s < 5s
+SELECT tests.test_midcampaign_cure_generation_docs: weight=0.001s < 5s
+SELECT tests.test_mint_analysis_admission: weight=1.728s < 5s
+SELECT tests.test_mint_floor_artifact: weight=1.093s < 5s
+EXCLUDE tests.test_mint_floor_artifact_generalized: weight=52.266s >= 5s
+SELECT tests.test_mint_policy_resolver_guard: weight=0.023s < 5s
+SELECT tests.test_mlx_runtime: weight=0.047s < 5s
+SELECT tests.test_mock_adapters: weight=0.125s < 5s
+SELECT tests.test_model_panel: weight=0.006s < 5s
+SELECT tests.test_modularity: weight=0.526s < 5s
+SELECT tests.test_night_agent_install: unknown weight
+SELECT tests.test_night_gate: weight=0.261s < 5s
+SELECT tests.test_night_plan_writer: weight=0.104s < 5s
+EXCLUDE tests.test_node_client: weight=7.041s >= 5s
+SELECT tests.test_node_worker: weight=1.651s < 5s
+SELECT tests.test_node_worker_subprocess: weight=2.734s < 5s
+EXCLUDE tests.test_nvidia_node_integration: weight=19.045s >= 5s
+SELECT tests.test_nvidia_smi: weight=0.069s < 5s
+EXCLUDE tests.test_p2038_production_path: weight=660.313s >= 5s
+SELECT tests.test_pack_capsule: weight=0.001s < 5s
+SELECT tests.test_package_bundle_pack: weight=3.011s < 5s
+SELECT tests.test_paper_anchor_correction_quantified: weight=0.199s < 5s
+SELECT tests.test_paper_build: weight=0.365s < 5s
+SELECT tests.test_paper_comparison_contract: weight=0.007s < 5s
+EXCLUDE tests.test_paper_comparison_placements: weight=23.185s >= 5s
+EXCLUDE tests.test_paper_custody: weight=48.086s >= 5s
+SELECT tests.test_paper_excursion_decomposition: weight=0.221s < 5s
+SELECT tests.test_paper_first_use_ledger: weight=3.513s < 5s
+SELECT tests.test_paper_rendering: weight=2.145s < 5s
+SELECT tests.test_paper_renumber_refs: weight=0.352s < 5s
+SELECT tests.test_paper_replay_fence: weight=0.297s < 5s
+SELECT tests.test_paper_reported_energy: weight=1.098s < 5s
+EXCLUDE tests.test_paper_round7_artifacts: A211 canonical-checkout dependency
+SELECT tests.test_paper_successor_migration: weight=0.689s < 5s
+SELECT tests.test_paper_terms_lint: weight=1.957s < 5s
+EXCLUDE tests.test_partial_record_enclosure: weight=16.725s >= 5s
+SELECT tests.test_phase_share: weight=0.012s < 5s
+EXCLUDE tests.test_pipeline_smoke_tail: weight=5.792s >= 5s
+EXCLUDE tests.test_powermetrics: weight=20.532s >= 5s
+EXCLUDE tests.test_powermetrics_fiducial: weight=174.094s >= 5s
+SELECT tests.test_preflight: weight=0.325s < 5s
+SELECT tests.test_preregistration_chain_digest: unknown weight
+SELECT tests.test_prewindow_check: weight=0.021s < 5s
+SELECT tests.test_publication_privacy: weight=0.094s < 5s
+SELECT tests.test_quick_suite: unknown weight
+SELECT tests.test_quiet_admission: unknown weight
+SELECT tests.test_quiet_guard: weight=1.454s < 5s
+SELECT tests.test_quiet_guard_process: weight=0.003s < 5s
+EXCLUDE tests.test_r4_acceptance_oracle: weight=5.172s >= 5s
+EXCLUDE tests.test_reason_code_partition: weight=12.421s >= 5s
+SELECT tests.test_reauthor_clean: weight=0.334s < 5s
+EXCLUDE tests.test_receipt_histsem: weight=573.613s >= 5s
+SELECT tests.test_receipt_oracle: weight=0.143s < 5s
+SELECT tests.test_receipt_provenance_analyzer: weight=0.791s < 5s
+EXCLUDE tests.test_reduce: weight=771.704s >= 5s; split
+SELECT tests.test_rehearse_t0_unattended: touched path
+SELECT tests.test_reissue_calibration_acceptance: weight=0.068s < 5s
+SELECT tests.test_render_results_fills: weight=1.062s < 5s
+SELECT tests.test_report: weight=0.596s < 5s
+EXCLUDE tests.test_results_prose_template: weight=5.492s >= 5s
+EXCLUDE tests.test_rpt001_report_slice: A211 canonical-checkout dependency
+SELECT tests.test_rpt002_related_work: weight=0.005s < 5s
+EXCLUDE tests.test_run_campaign: A211 canonical-checkout dependency
+EXCLUDE tests.test_run_night: weight=7.149s >= 5s
+SELECT tests.test_s0_blocked_enumeration: weight=3.274s < 5s
+SELECT tests.test_s0_line_audit_guard: weight=0.591s < 5s
+SELECT tests.test_salvage_dangler: weight=0.452s < 5s
+SELECT tests.test_sampler_teardown: weight=0.082s < 5s
+SELECT tests.test_scheduler_gates: weight=0.434s < 5s
+SELECT tests.test_schemas: weight=0.075s < 5s
+SELECT tests.test_sealed_bundle_compatibility: weight=1.142s < 5s
+SELECT tests.test_select_g2a_prefill_length: weight=0.014s < 5s
+SELECT tests.test_select_outcome_branches: weight=0.305s < 5s
+SELECT tests.test_shard_split: weight=0.085s < 5s
+SELECT tests.test_shard_tests: weight=1.051s < 5s
+EXCLUDE tests.test_single_count_discipline_census: weight=21.519s >= 5s
+EXCLUDE tests.test_single_count_discipline_matrix: weight=9.239s >= 5s
+SELECT tests.test_ssh_transport: weight=0.001s < 5s
+SELECT tests.test_suite: weight=0.065s < 5s
+SELECT tests.test_suite_control_parity: weight=0.006s < 5s
+SELECT tests.test_summarize_g2a_prefill_probe: weight=0.434s < 5s
+SELECT tests.test_supersession_cross_consumer: weight=0.074s < 5s
+EXCLUDE tests.test_t0_rehearsal: weight=6.519s >= 5s
+SELECT tests.test_uncertainty_evidence: weight=0.933s < 5s
+SELECT tests.test_uncertainty_p2029: weight=1.591s < 5s
+SELECT tests.test_validate_gate_packet: weight=3.300s < 5s
+EXCLUDE tests.test_validate_powermetrics_fiducial: weight=9.314s >= 5s
+EXCLUDE tests.test_validate_powermetrics_fiducial_derivation_only: weight=190.181s >= 5s
+SELECT tests.test_vllm_runtime: weight=0.045s < 5s
+EXCLUDE tests.test_whole_window: weight=6.361s >= 5s
+EXCLUDE tests.test_whole_window_selection: weight=301.633s >= 5s
+EXCLUDE tests.test_window_duration_margins: weight=16.687s >= 5s
+SELECT tests.test_window_env_allowlist: weight=0.024s < 5s
+SELECT tests.test_window_status_guard: weight=1.193s < 5s
+SELECT tests.test_workload_profile: weight=0.003s < 5s
+SELECT tests.test_workload_sizing: weight=0.002s < 5s
+SELECT tests.test_workloads: weight=0.064s < 5s
+SELECT tests.test_write_derivation_night_inputs: weight=2.520s < 5s
+START tier=touched modules=161 excluded=77 workers=2
+PASS gen_state seconds=0.142
+PASS tests.test_docs_freshness seconds=0.637
+PASS tests.test_arm_census seconds=0.379
+PASS tests.test_arm_retry seconds=0.764
+PASS tests.test_fixture_orphan_census seconds=0.633
+PASS tests.test_calibration_custody_worker seconds=2.160
+PASS tests.test_preregistration_chain_digest seconds=0.517
+PASS tests.test_quick_suite seconds=0.590
+PASS tests.test_quiet_admission seconds=0.483
+PASS tests.test_capture_t0_step seconds=26.837
+STALE WEIGHT tests.test_capture_t0_step seconds=26.837 weight=4.976 ratio=5.39
+FAIL tests.test_axi_controller_events seconds=1.460
+MODULE START tests.test_axi_controller_events
+test_campaign_prebundle_process_failure_retains_identity_receipt_and_row (test_axi_controller_events.AxiControllerEventTests.test_campaign_prebundle_process_failure_retains_identity_receipt_and_row) ... error: campaign start identity unavailable
+FAIL
+test_campaign_projects_diagnostics_to_frozen_validator_reason_enum (test_axi_controller_events.AxiControllerEventTests.test_campaign_projects_diagnostics_to_frozen_validator_reason_enum) ... ok
+test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure (test_axi_controller_events.AxiControllerEventTests.test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure) ... error: campaign start identity unavailable
+FAIL
+test_cancelled_terminal_survives_structured_runtime_failure (test_axi_controller_events.AxiControllerEventTests.test_cancelled_terminal_survives_structured_runtime_failure) ... ok
+test_dispatch_receipts_are_identity_bound_and_immutable_even_without_bundle (test_axi_controller_events.AxiControllerEventTests.test_dispatch_receipts_are_identity_bound_and_immutable_even_without_bundle) ... ok
+test_spec_off_and_on_use_the_same_v2_event_shapes (test_axi_controller_events.AxiControllerEventTests.test_spec_off_and_on_use_the_same_v2_event_shapes) ... ok
+test_spec_on_controller_emits_request_events_and_artifacts (test_axi_controller_events.AxiControllerEventTests.test_spec_on_controller_emits_request_events_and_artifacts) ... ok
+
+======================================================================
+FAIL: test_campaign_prebundle_process_failure_retains_identity_receipt_and_row (test_axi_controller_events.AxiControllerEventTests.test_campaign_prebundle_process_failure_retains_identity_receipt_and_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_axi_controller_events.py", line 309, in test_campaign_prebundle_process_failure_retains_identity_receipt_and_row
+    self.assertEqual(result, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure (test_axi_controller_events.AxiControllerEventTests.test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_axi_controller_events.py", line 360, in test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure
+    self.assertEqual(result, 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: 2 != 1
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.773s
+
+FAILED (failures=2)
+MODULE FAIL tests.test_axi_controller_events tests=7 failures=2 errors=0 skipped=0 seconds=0.773
+SHARD SUMMARY index=1/1 modules=1 tests=7 failures=2 errors=0 skipped=0 result=FAIL
+RERUN /opt/homebrew/opt/python@3.14/bin/python3.14 /Users/edr/code/JouleWise-wt-arm-prep/scripts/quick_suite.py --module tests.test_axi_controller_events
+PASS tests.test_analysis_manifest seconds=7.098
+PASS tests.test_calibration_ledger seconds=6.857
+PASS tests.test_adapters_powermetrics seconds=2.249
+PASS tests.test_generate_matrix seconds=5.762
+PASS tests.test_codex_bridge_observer seconds=9.205
+PASS tests.test_floor_mint_estimator seconds=3.120
+PASS tests.test_bundle seconds=9.490
+PASS tests.test_install_magistrate_watchdog seconds=10.335
+PASS tests.test_claims_index_lint seconds=7.042
+PASS tests.test_claude_bridge_mcp seconds=5.899
+PASS tests.test_paper_first_use_ledger seconds=2.134
+PASS tests.test_claims_lint seconds=7.894
+PASS tests.test_gen_state seconds=3.302
+PASS tests.test_validate_gate_packet seconds=7.200
+PASS tests.test_s0_blocked_enumeration seconds=1.573
+PASS tests.test_package_bundle_pack seconds=3.575
+PASS tests.test_calibration_live_three_window seconds=4.265
+PASS tests.test_node_worker_subprocess seconds=0.370
+PASS tests.test_write_derivation_night_inputs seconds=1.310
+PASS tests.test_campaign_generator_core seconds=2.202
+PASS tests.test_capture_pipeline_era seconds=3.249
+PASS tests.test_dominance_closeout seconds=2.260
+PASS tests.test_d117_gamma_d139a2_families seconds=2.803
+PASS tests.test_paper_rendering seconds=2.512
+PASS tests.test_check_gate_ledger seconds=5.290
+PASS tests.test_authentication_io seconds=1.345
+PASS tests.test_paper_terms_lint seconds=2.444
+PASS tests.test_family_marker seconds=7.248
+STALE WEIGHT tests.test_family_marker seconds=7.248 weight=1.885 ratio=3.85
+PASS tests.test_mint_analysis_admission seconds=8.869
+STALE WEIGHT tests.test_mint_analysis_admission seconds=8.869 weight=1.728 ratio=5.13
+PASS tests.test_magistrate_watchdog seconds=2.835
+PASS tests.test_audit_bundle_validation seconds=5.611
+STALE WEIGHT tests.test_audit_bundle_validation seconds=5.611 weight=1.688 ratio=3.32
+PASS tests.test_node_worker seconds=4.788
+PASS tests.test_uncertainty_p2029 seconds=5.230
+STALE WEIGHT tests.test_uncertainty_p2029 seconds=5.230 weight=1.591 ratio=3.29
+PASS tests.test_quiet_guard seconds=3.129
+PASS tests.test_generate_g2a_probe_inputs seconds=1.394
+PASS tests.test_window_status_guard seconds=4.183
+STALE WEIGHT tests.test_window_status_guard seconds=4.183 weight=1.193 ratio=3.51
+PASS tests.test_sealed_bundle_compatibility seconds=2.795
+PASS tests.test_codex_app_bridge seconds=0.195
+PASS tests.test_paper_reported_energy seconds=3.014
+PASS tests.test_mint_floor_artifact seconds=1.485
+PASS tests.test_calibration_ledger_custody seconds=50.552
+STALE WEIGHT tests.test_calibration_ledger_custody seconds=50.552 weight=1.080 ratio=46.81
+PASS tests.test_render_results_fills seconds=1.614
+PASS tests.test_shard_tests seconds=3.053
+PASS tests.test_axi_burst_reduce seconds=1.588
+PASS tests.test_analysis_manifest_v3 seconds=1.426
+PASS tests.test_rehearse_t0_unattended seconds=3.716
+STALE WEIGHT tests.test_rehearse_t0_unattended seconds=3.716 weight=0.971 ratio=3.83
+PASS tests.test_d117_fixture_transport seconds=1.054
+PASS tests.test_uncertainty_evidence seconds=0.798
+PASS tests.test_receipt_provenance_analyzer seconds=0.552
+PASS tests.test_paper_successor_migration seconds=1.127
+PASS tests.test_cli seconds=2.163
+STALE WEIGHT tests.test_cli seconds=2.163 weight=0.664 ratio=3.26
+PASS tests.test_environment_admission seconds=0.891
+PASS tests.test_issue_g2a_prefill_prompt_pin seconds=0.839
+PASS tests.test_report seconds=2.392
+STALE WEIGHT tests.test_report seconds=2.392 weight=0.596 ratio=4.01
+PASS tests.test_s0_line_audit_guard seconds=1.988
+STALE WEIGHT tests.test_s0_line_audit_guard seconds=1.988 weight=0.591 ratio=3.36
+PASS tests.test_issue_dg071_dg075_statistics seconds=2.621
+STALE WEIGHT tests.test_issue_dg071_dg075_statistics seconds=2.621 weight=0.586 ratio=4.47
+PASS tests.test_calibration_bracketing seconds=0.941
+PASS tests.test_modularity seconds=1.183
+PASS tests.test_gamma_unit_roster_guard seconds=0.940
+PASS tests.test_measurement_liveness seconds=0.325
+PASS tests.test_load_transition_alignment seconds=0.975
+PASS tests.test_salvage_dangler seconds=1.685
+STALE WEIGHT tests.test_salvage_dangler seconds=1.685 weight=0.452 ratio=3.73
+PASS tests.test_calibration_custody_store seconds=0.864
+PASS tests.test_analysis_claims seconds=1.054
+PASS tests.test_scheduler_gates seconds=2.138
+STALE WEIGHT tests.test_scheduler_gates seconds=2.138 weight=0.434 ratio=4.93
+PASS tests.test_summarize_g2a_prefill_probe seconds=1.188
+PASS tests.test_arm_readiness_pack_digest seconds=2.349
+STALE WEIGHT tests.test_arm_readiness_pack_digest seconds=2.349 weight=0.375 ratio=6.26
+PASS tests.test_paper_build seconds=0.669
+PASS tests.test_paper_renumber_refs seconds=0.873
+PASS tests.test_arm_readiness_evidence seconds=1.837
+STALE WEIGHT tests.test_arm_readiness_evidence seconds=1.837 weight=0.349 ratio=5.26
+PASS tests.test_corpus_strict_validation seconds=1.423
+STALE WEIGHT tests.test_corpus_strict_validation seconds=1.423 weight=0.335 ratio=4.25
+PASS tests.test_reauthor_clean seconds=29.826
+STALE WEIGHT tests.test_reauthor_clean seconds=29.826 weight=0.334 ratio=89.30
+PASS tests.test_preflight seconds=1.315
+STALE WEIGHT tests.test_preflight seconds=1.315 weight=0.325 ratio=4.05
+PASS tests.test_select_outcome_branches seconds=0.806
+PASS tests.test_paper_replay_fence seconds=0.855
+FAIL tests.test_arm_readiness_schemas seconds=1.034
+STALE WEIGHT tests.test_arm_readiness_schemas seconds=1.034 weight=0.293 ratio=3.53
+MODULE START tests.test_arm_readiness_schemas
+test_all_35_contract_predicates_require_named_content_and_admissible_sources (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_all_35_contract_predicates_require_named_content_and_admissible_sources) ... ok
+test_archival_v1_registry_is_sha_pinned (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_archival_v1_registry_is_sha_pinned) ... ok
+test_assurance_and_closed_refusals_are_literal (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_assurance_and_closed_refusals_are_literal) ... ok
+test_boot_session_schema_amendment_is_exact_and_canonical (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_boot_session_schema_amendment_is_exact_and_canonical) ... ok
+test_canonical_render_is_identical_to_d131_and_sidecar_authenticates_exact_bytes (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_canonical_render_is_identical_to_d131_and_sidecar_authenticates_exact_bytes) ... ok
+test_clock_probe_anchor_delta_and_skew_boundaries_gate (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_probe_anchor_delta_and_skew_boundaries_gate) ... ok
+test_clock_probe_gate_booleans_and_reference_bound_are_recomputed (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_probe_gate_booleans_and_reference_bound_are_recomputed) ... ok
+test_clock_probe_live_anchor_states_and_falsifier_boundaries_gate (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_probe_live_anchor_states_and_falsifier_boundaries_gate) ... ok
+test_clock_probe_omitted_live_anchor_defaults_to_static_replay (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_probe_omitted_live_anchor_defaults_to_static_replay) ... ok
+test_clock_probe_r1_duration_quorum_and_horizon_boundaries_gate (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_probe_r1_duration_quorum_and_horizon_boundaries_gate) ... ok
+test_clock_probe_rejects_every_non_integer_and_ordered_endpoint_reversal (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_probe_rejects_every_non_integer_and_ordered_endpoint_reversal) ... ok
+test_clock_probe_span_boundaries_and_exact_difference_gate (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_probe_span_boundaries_and_exact_difference_gate) ... ok
+test_clock_source_branches_preserve_attended_and_close_probe_hole (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_clock_source_branches_preserve_attended_and_close_probe_hole) ... ok
+test_contract_manual_observations_still_accept_operator_attestation (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_contract_manual_observations_still_accept_operator_attestation) ... ok
+test_evaluate_rows_omitted_live_anchor_defaults_to_static_replay (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_evaluate_rows_omitted_live_anchor_defaults_to_static_replay) ... ok
+test_evaluate_rows_threads_an_explicit_live_anchor_value (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_evaluate_rows_threads_an_explicit_live_anchor_value) ... ok
+test_every_nested_schema_rejects_unknown_and_missing_keys (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_every_nested_schema_rejects_unknown_and_missing_keys) ... ok
+test_every_schema_exact_keys_duplicate_utf8_number_digest_and_canonical_bytes (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_every_schema_exact_keys_duplicate_utf8_number_digest_and_canonical_bytes) ... ok
+test_four_git_oid_fields_require_exact_lowercase_hex (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_four_git_oid_fields_require_exact_lowercase_hex) ... ok
+test_freeze_v1_remains_its_own_exact_key_vocabulary (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_freeze_v1_remains_its_own_exact_key_vocabulary)
+R-9/R-11: v1 receipts keep validating and cannot carry a predecessor. ... ok
+test_freeze_v2_exact_keys_reject_supersession_and_bad_predecessors (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_freeze_v2_exact_keys_reject_supersession_and_bad_predecessors)
+R-11: v2 carries `predecessor`, never `supersedes`, exact-key. ... ok
+test_freeze_v2_receipt_id_must_be_the_predecessor_ordinal_plus_one (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_freeze_v2_receipt_id_must_be_the_predecessor_ordinal_plus_one)
+R-6: freeze-0001 may only be followed by freeze-0002. ... ok
+test_ledger_boolean_forgery_refuses_with_closed_code (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_ledger_boolean_forgery_refuses_with_closed_code) ... ok
+test_ledger_reservation_requires_binding_not_wellformedness (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_ledger_reservation_requires_binding_not_wellformedness)
+D-134 delta re-audit F1: the receipt must BIND this pack's plan SHA. ... ok
+test_numeric_fields_and_exponent_overflow_fail_closed (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_numeric_fields_and_exponent_overflow_fail_closed) ... ok
+test_original_arm_path_samples_once_and_passes_value_explicitly (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_original_arm_path_samples_once_and_passes_value_explicitly) ... ok
+test_probe_fact_none_fails_closed_while_static_replay_uses_receipt_bytes (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_probe_fact_none_fails_closed_while_static_replay_uses_receipt_bytes) ... ok
+test_r2_shared_resolver_rejects_real_doubled_pack_paths (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_r2_shared_resolver_rejects_real_doubled_pack_paths) ... ok
+test_r2_shared_resolver_uses_real_pack_relative_reference (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_r2_shared_resolver_uses_real_pack_relative_reference) ... ok
+test_r4_evidence_lifecycle_escape_sites_are_caught (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_r4_evidence_lifecycle_escape_sites_are_caught) ... ok
+test_registry_load_closes_conditional_code_paths_against_allowlist (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_registry_load_closes_conditional_code_paths_against_allowlist) ... ok
+test_registry_load_closes_resolved_refusal_code_and_type (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_registry_load_closes_resolved_refusal_code_and_type) ... ok
+test_registry_load_closure_requires_measurement_checkout_role_and_code (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_registry_load_closure_requires_measurement_checkout_role_and_code) ... ok
+test_resolved_r1_registry_coordinate_allowlist_horizons_and_vocabulary (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_resolved_r1_registry_coordinate_allowlist_horizons_and_vocabulary) ... ok
+test_single_launch_capability_refuses_frozen_bytes_asserting_live_facts (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_single_launch_capability_refuses_frozen_bytes_asserting_live_facts)
+D-134 delta re-audit F2: PACK bytes cannot establish live T-0 facts. ... ok
+test_successor_chain_refusal_is_governed_and_typed (test_arm_readiness_schemas.ArmReadinessSchemaTests.test_successor_chain_refusal_is_governed_and_typed) ... ok
+test_basis_uses_the_shared_string_or_null_wire_type (test_arm_readiness_schemas.PackNightGoSchemaTests.test_basis_uses_the_shared_string_or_null_wire_type) ... ok
+test_go_exact_keys_at_every_object (test_arm_readiness_schemas.PackNightGoSchemaTests.test_go_exact_keys_at_every_object) ... ok
+test_go_input_rereads_bytes_and_compares_the_callers_object (test_arm_readiness_schemas.PackNightGoSchemaTests.test_go_input_rereads_bytes_and_compares_the_callers_object) ... ok
+test_go_primitive_class_verdict_and_condition_mutations (test_arm_readiness_schemas.PackNightGoSchemaTests.test_go_primitive_class_verdict_and_condition_mutations) ... ok
+test_go_registration_precedes_emission_and_is_separate_from_readiness (test_arm_readiness_schemas.PackNightGoSchemaTests.test_go_registration_precedes_emission_and_is_separate_from_readiness) ... ok
+test_rehearsal_class_precedes_go_exact_keys (test_arm_readiness_schemas.PackNightGoSchemaTests.test_rehearsal_class_precedes_go_exact_keys) ... ok
+test_v3_consumption_has_23_keys_and_v2_retains_20 (test_arm_readiness_schemas.PackNightGoSchemaTests.test_v3_consumption_has_23_keys_and_v2_retains_20) ... ok
+test_backup_override_cannot_shrink_census_and_three_script_literals_stay_pinned (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_backup_override_cannot_shrink_census_and_three_script_literals_stay_pinned) ... ok
+test_every_non_null_inventory_locator_is_in_resolved_census (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_every_non_null_inventory_locator_is_in_resolved_census) ... ok
+test_frozen_derivations_resolve_every_role_without_existence_filter (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_frozen_derivations_resolve_every_role_without_existence_filter) ... ok
+test_inventory_each_entry_counts_and_invalid_or_empty_census_refuses (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_inventory_each_entry_counts_and_invalid_or_empty_census_refuses) ... ok
+test_no_census_kind_or_path_is_derived_from_running_clone (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_no_census_kind_or_path_is_derived_from_running_clone) ... ok
+test_resolution_error_is_retained_in_census (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_resolution_error_is_retained_in_census) ... ok
+test_shipped_inventory_pins_all_four_retained_deployments (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_shipped_inventory_pins_all_four_retained_deployments) ... FAIL
+
+======================================================================
+FAIL: test_shipped_inventory_pins_all_four_retained_deployments (test_arm_readiness_schemas.ProductionCustodyResolverTests.test_shipped_inventory_pins_all_four_retained_deployments)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_arm_readiness_schemas.py", line 1711, in test_shipped_inventory_pins_all_four_retained_deployments
+    self.assertEqual(7, len(inventory))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: 7 != 8
+
+----------------------------------------------------------------------
+Ran 50 tests in 0.623s
+
+FAILED (failures=1)
+MODULE FAIL tests.test_arm_readiness_schemas tests=50 failures=1 errors=0 skipped=0 seconds=0.623
+SHARD SUMMARY index=1/1 modules=1 tests=50 failures=1 errors=0 skipped=0 result=FAIL
+RERUN /opt/homebrew/opt/python@3.14/bin/python3.14 /Users/edr/code/JouleWise-wt-arm-prep/scripts/quick_suite.py --module tests.test_arm_readiness_schemas
+PASS tests.test_audit_reduce_degenerate seconds=1.247
+STALE WEIGHT tests.test_audit_reduce_degenerate seconds=1.247 weight=0.278 ratio=4.48
+PASS tests.test_night_gate seconds=0.937
+STALE WEIGHT tests.test_night_gate seconds=0.937 weight=0.261 ratio=3.59
+PASS tests.test_paper_excursion_decomposition seconds=0.591
+PASS tests.test_axi_analysis_manifest seconds=0.901
+STALE WEIGHT tests.test_axi_analysis_manifest seconds=0.901 weight=0.214 ratio=4.21
+PASS tests.test_interfaces seconds=0.398
+PASS tests.test_paper_anchor_correction_quantified seconds=0.699
+STALE WEIGHT tests.test_paper_anchor_correction_quantified seconds=0.699 weight=0.199 ratio=3.51
+PASS tests.test_check_paper_replay_fence seconds=0.913
+STALE WEIGHT tests.test_check_paper_replay_fence seconds=0.913 weight=0.197 ratio=4.64
+PASS tests.test_d078_reason_registry seconds=0.700
+STALE WEIGHT tests.test_d078_reason_registry seconds=0.700 weight=0.167 ratio=4.19
+PASS tests.test_2k_amplification seconds=0.795
+STALE WEIGHT tests.test_2k_amplification seconds=0.795 weight=0.157 ratio=5.06
+PASS tests.test_receipt_oracle seconds=0.585
+STALE WEIGHT tests.test_receipt_oracle seconds=0.585 weight=0.143 ratio=4.09
+PASS tests.test_decisive_reference_resolution seconds=0.715
+STALE WEIGHT tests.test_decisive_reference_resolution seconds=0.715 weight=0.134 ratio=5.33
+PASS tests.test_mock_adapters seconds=0.860
+STALE WEIGHT tests.test_mock_adapters seconds=0.860 weight=0.125 ratio=6.88
+PASS tests.test_benchmark_import seconds=0.363
+STALE WEIGHT tests.test_benchmark_import seconds=0.363 weight=0.116 ratio=3.13
+PASS tests.test_audit_cli_examples seconds=0.956
+STALE WEIGHT tests.test_audit_cli_examples seconds=0.956 weight=0.111 ratio=8.62
+PASS tests.test_night_plan_writer seconds=0.519
+STALE WEIGHT tests.test_night_plan_writer seconds=0.519 weight=0.104 ratio=4.99
+PASS tests.test_axi_request_validation seconds=0.733
+STALE WEIGHT tests.test_axi_request_validation seconds=0.733 weight=0.101 ratio=7.26
+PASS tests.test_publication_privacy seconds=0.371
+STALE WEIGHT tests.test_publication_privacy seconds=0.371 weight=0.094 ratio=3.95
+PASS tests.test_shard_split seconds=0.821
+STALE WEIGHT tests.test_shard_split seconds=0.821 weight=0.085 ratio=9.66
+PASS tests.test_sampler_teardown seconds=0.549
+STALE WEIGHT tests.test_sampler_teardown seconds=0.549 weight=0.082 ratio=6.69
+PASS tests.test_axi_output_identity seconds=0.667
+STALE WEIGHT tests.test_axi_output_identity seconds=0.667 weight=0.077 ratio=8.66
+PASS tests.test_schemas seconds=0.750
+STALE WEIGHT tests.test_schemas seconds=0.750 weight=0.075 ratio=10.01
+PASS tests.test_supersession_cross_consumer seconds=0.789
+STALE WEIGHT tests.test_supersession_cross_consumer seconds=0.789 weight=0.074 ratio=10.67
+PASS tests.test_nvidia_smi seconds=0.390
+STALE WEIGHT tests.test_nvidia_smi seconds=0.390 weight=0.069 ratio=5.66
+PASS tests.test_reissue_calibration_acceptance seconds=0.453
+STALE WEIGHT tests.test_reissue_calibration_acceptance seconds=0.453 weight=0.068 ratio=6.67
+PASS tests.test_suite seconds=0.262
+STALE WEIGHT tests.test_suite seconds=0.262 weight=0.065 ratio=4.03
+PASS tests.test_environment seconds=0.358
+STALE WEIGHT tests.test_environment seconds=0.358 weight=0.064 ratio=5.59
+PASS tests.test_workloads seconds=0.262
+STALE WEIGHT tests.test_workloads seconds=0.262 weight=0.064 ratio=4.10
+PASS tests.test_idle_dependence seconds=0.430
+STALE WEIGHT tests.test_idle_dependence seconds=0.430 weight=0.062 ratio=6.94
+PASS tests.test_claim_side_bound seconds=0.717
+STALE WEIGHT tests.test_claim_side_bound seconds=0.717 weight=0.061 ratio=11.76
+PASS tests.test_gen_g2_phase_d seconds=0.468
+STALE WEIGHT tests.test_gen_g2_phase_d seconds=0.468 weight=0.056 ratio=8.35
+PASS tests.test_microdelta_generate_configs seconds=0.684
+STALE WEIGHT tests.test_microdelta_generate_configs seconds=0.684 weight=0.055 ratio=12.44
+PASS tests.test_mlx_runtime seconds=0.474
+STALE WEIGHT tests.test_mlx_runtime seconds=0.474 weight=0.047 ratio=10.09
+PASS tests.test_vllm_runtime seconds=0.446
+STALE WEIGHT tests.test_vllm_runtime seconds=0.446 weight=0.045 ratio=9.91
+PASS tests.test_aggregate seconds=0.295
+STALE WEIGHT tests.test_aggregate seconds=0.295 weight=0.039 ratio=7.57
+PASS tests.test_analysis_ratio_integration seconds=0.843
+STALE WEIGHT tests.test_analysis_ratio_integration seconds=0.843 weight=0.039 ratio=21.61
+PASS tests.test_analysis_engine seconds=0.823
+STALE WEIGHT tests.test_analysis_engine seconds=0.823 weight=0.033 ratio=24.93
+PASS tests.test_axi_sc_spike seconds=0.319
+STALE WEIGHT tests.test_axi_sc_spike seconds=0.319 weight=0.030 ratio=10.62
+PASS tests.test_window_env_allowlist seconds=0.401
+STALE WEIGHT tests.test_window_env_allowlist seconds=0.401 weight=0.024 ratio=16.69
+PASS tests.test_mint_policy_resolver_guard seconds=0.206
+STALE WEIGHT tests.test_mint_policy_resolver_guard seconds=0.206 weight=0.023 ratio=8.94
+PASS tests.test_prewindow_check seconds=1.117
+STALE WEIGHT tests.test_prewindow_check seconds=1.117 weight=0.021 ratio=53.18
+PASS tests.test_gate_sensibility_rounding seconds=0.726
+STALE WEIGHT tests.test_gate_sensibility_rounding seconds=0.726 weight=0.020 ratio=36.29
+PASS tests.test_kv_size seconds=0.680
+STALE WEIGHT tests.test_kv_size seconds=0.680 weight=0.020 ratio=34.01
+PASS tests.test_git_fixture_hygiene seconds=0.208
+STALE WEIGHT tests.test_git_fixture_hygiene seconds=0.208 weight=0.019 ratio=10.94
+PASS tests.test_coldgate_receipt seconds=0.313
+STALE WEIGHT tests.test_coldgate_receipt seconds=0.313 weight=0.016 ratio=19.56
+PASS tests.test_select_g2a_prefill_length seconds=0.498
+STALE WEIGHT tests.test_select_g2a_prefill_length seconds=0.498 weight=0.014 ratio=35.57
+PASS tests.test_analysis_multiplicity seconds=0.605
+STALE WEIGHT tests.test_analysis_multiplicity seconds=0.605 weight=0.012 ratio=50.43
+PASS tests.test_phase_share seconds=0.430
+STALE WEIGHT tests.test_phase_share seconds=0.430 weight=0.012 ratio=35.82
+PASS tests.test_axi_sb_spike seconds=0.297
+STALE WEIGHT tests.test_axi_sb_spike seconds=0.297 weight=0.011 ratio=26.98
+PASS tests.test_axi_schemas seconds=0.232
+STALE WEIGHT tests.test_axi_schemas seconds=0.232 weight=0.011 ratio=21.11
+PASS tests.test_clock_reference seconds=0.390
+STALE WEIGHT tests.test_clock_reference seconds=0.390 weight=0.009 ratio=43.38
+PASS tests.test_doctor seconds=0.734
+STALE WEIGHT tests.test_doctor seconds=0.734 weight=0.009 ratio=81.60
+PASS tests.test_paper_comparison_contract seconds=0.191
+STALE WEIGHT tests.test_paper_comparison_contract seconds=0.191 weight=0.007 ratio=27.23
+PASS tests.test_audit_schema_edges seconds=0.229
+STALE WEIGHT tests.test_audit_schema_edges seconds=0.229 weight=0.006 ratio=38.20
+PASS tests.test_model_panel seconds=0.306
+STALE WEIGHT tests.test_model_panel seconds=0.306 weight=0.006 ratio=50.96
+PASS tests.test_suite_control_parity seconds=0.371
+STALE WEIGHT tests.test_suite_control_parity seconds=0.371 weight=0.006 ratio=61.76
+PASS tests.test_rpt002_related_work seconds=0.194
+STALE WEIGHT tests.test_rpt002_related_work seconds=0.194 weight=0.005 ratio=38.74
+PASS tests.test_launcher_argv_regression seconds=0.326
+STALE WEIGHT tests.test_launcher_argv_regression seconds=0.326 weight=0.004 ratio=81.44
+PASS tests.test_analysis_manifest_v2 seconds=0.315
+STALE WEIGHT tests.test_analysis_manifest_v2 seconds=0.315 weight=0.003 ratio=105.00
+PASS tests.test_quiet_guard_process seconds=0.250
+STALE WEIGHT tests.test_quiet_guard_process seconds=0.250 weight=0.003 ratio=83.38
+PASS tests.test_workload_profile seconds=0.237
+STALE WEIGHT tests.test_workload_profile seconds=0.237 weight=0.003 ratio=79.06
+PASS tests.test_audit_powermetrics_parser seconds=0.377
+STALE WEIGHT tests.test_audit_powermetrics_parser seconds=0.377 weight=0.002 ratio=188.74
+PASS tests.test_clock seconds=0.241
+STALE WEIGHT tests.test_clock seconds=0.241 weight=0.002 ratio=120.58
+PASS tests.test_coldgate_charter_v3 seconds=0.189
+STALE WEIGHT tests.test_coldgate_charter_v3 seconds=0.189 weight=0.002 ratio=94.55
+PASS tests.test_workload_sizing seconds=0.227
+STALE WEIGHT tests.test_workload_sizing seconds=0.227 weight=0.002 ratio=113.34
+PASS tests.test_analysis_ratio seconds=0.670
+STALE WEIGHT tests.test_analysis_ratio seconds=0.670 weight=0.001 ratio=669.65
+PASS tests.test_audit_clock seconds=0.228
+STALE WEIGHT tests.test_audit_clock seconds=0.228 weight=0.001 ratio=227.79
+PASS tests.test_audit_report seconds=0.265
+STALE WEIGHT tests.test_audit_report seconds=0.265 weight=0.001 ratio=265.05
+PASS tests.test_build_capstone seconds=0.263
+STALE WEIGHT tests.test_build_capstone seconds=0.263 weight=0.001 ratio=263.19
+PASS tests.test_build_site_parsers seconds=0.302
+STALE WEIGHT tests.test_build_site_parsers seconds=0.302 weight=0.001 ratio=302.32
+PASS tests.test_env_locks seconds=0.185
+STALE WEIGHT tests.test_env_locks seconds=0.185 weight=0.001 ratio=185.36
+PASS tests.test_floor_mint_pinsets_schema seconds=0.312
+STALE WEIGHT tests.test_floor_mint_pinsets_schema seconds=0.312 weight=0.001 ratio=312.35
+PASS tests.test_midcampaign_cure_generation_docs seconds=0.186
+STALE WEIGHT tests.test_midcampaign_cure_generation_docs seconds=0.186 weight=0.001 ratio=185.80
+PASS tests.test_pack_capsule seconds=0.278
+STALE WEIGHT tests.test_pack_capsule seconds=0.278 weight=0.001 ratio=277.88
+PASS tests.test_ssh_transport seconds=0.354
+STALE WEIGHT tests.test_ssh_transport seconds=0.354 weight=0.001 ratio=354.24
+FAIL tests.test_night_agent_install seconds=942.595
+MODULE START tests.test_night_agent_install
+test_decode_oserror_timeout_and_wrong_uid_are_unknown (test_night_agent_install.CapabilityTests.test_decode_oserror_timeout_and_wrong_uid_are_unknown) ... ok
+test_in_process_release_restores_exact_dispositions_and_mask (test_night_agent_install.CapabilityTests.test_in_process_release_restores_exact_dispositions_and_mask) ... ok
+test_liveness_signature_product (test_night_agent_install.CapabilityTests.test_liveness_signature_product) ... ok
+test_one_label_verified_bootout_is_supported (test_night_agent_install.CapabilityTests.test_one_label_verified_bootout_is_supported) ... ok
+test_only_poll_raises_signalled (test_night_agent_install.CapabilityTests.test_only_poll_raises_signalled) ... ok
+test_proof_is_required_bound_and_invalidated (test_night_agent_install.CapabilityTests.test_proof_is_required_bound_and_invalidated) ... ok
+test_render_cli_constructs_null_adapter_before_plan_validation (test_night_agent_install.CapabilityTests.test_render_cli_constructs_null_adapter_before_plan_validation) ... ok
+test_render_cli_empty_value_refuses_before_target_construction (test_night_agent_install.CapabilityTests.test_render_cli_empty_value_refuses_before_target_construction) ... ok
+test_restoration_requires_proof_even_with_an_existing_prior (test_night_agent_install.CapabilityTests.test_restoration_requires_proof_even_with_an_existing_prior) ... ok
+test_system_python_uninstall_exec_with_stripped_environment (test_night_agent_install.CapabilityTests.test_system_python_uninstall_exec_with_stripped_environment) ... ok
+test_target_modes_are_constructor_facts (test_night_agent_install.CapabilityTests.test_target_modes_are_constructor_facts) ... ok
+test_unsupported_destinations_refuse_without_write (test_night_agent_install.CapabilityTests.test_unsupported_destinations_refuse_without_write) ... ok
+test_exact_loaded_and_absent_wire_signatures (test_night_agent_install.FakeLaunchctlTests.test_exact_loaded_and_absent_wire_signatures) ... ok
+test_hung_queries_are_logged_and_preserve_actual_state (test_night_agent_install.FakeLaunchctlTests.test_hung_queries_are_logged_and_preserve_actual_state) ... ok
+test_mutator_product_separates_return_code_from_effect (test_night_agent_install.FakeLaunchctlTests.test_mutator_product_separates_return_code_from_effect) ... ok
+test_per_label_query_sequences_distinguish_admission_and_verification (test_night_agent_install.FakeLaunchctlTests.test_per_label_query_sequences_distinguish_admission_and_verification) ... ok
+test_query_fault_product_preserves_actual_state (test_night_agent_install.FakeLaunchctlTests.test_query_fault_product_preserves_actual_state) ... ok
+test_cleanup_refusal_reports_the_failure_it_interrupted (test_night_agent_install.LaunchdAccessProbeTests.test_cleanup_refusal_reports_the_failure_it_interrupted)
+The finally block fails closed WITHOUT discarding the diagnostic. ... FAIL
+test_failed_probe_receipt_still_boots_out_and_refuses (test_night_agent_install.LaunchdAccessProbeTests.test_failed_probe_receipt_still_boots_out_and_refuses) ... ok
+test_survivor_or_unknown_census_refuses (test_night_agent_install.LaunchdAccessProbeTests.test_survivor_or_unknown_census_refuses) ... ok
+test_temporary_launchd_job_bootstraps_boots_out_and_censuses_group (test_night_agent_install.LaunchdAccessProbeTests.test_temporary_launchd_job_bootstraps_boots_out_and_censuses_group) ... ok
+test_child_mask_after_signal_is_empty (test_night_agent_install.RecordPollTests.test_child_mask_after_signal_is_empty) ... ok
+test_cli_completion_and_parse_cells (test_night_agent_install.RecordPollTests.test_cli_completion_and_parse_cells) ... ok
+test_completed_warning_codes_stand (test_night_agent_install.RecordPollTests.test_completed_warning_codes_stand) ... ok
+test_module_contains_no_mask_call (test_night_agent_install.RecordPollTests.test_module_contains_no_mask_call) ... ok
+test_named_seam_signal_product (test_night_agent_install.RecordPollTests.test_named_seam_signal_product) ... ok
+test_pep475_call_returns_outcome_then_poll_rolls_back (test_night_agent_install.RecordPollTests.test_pep475_call_returns_outcome_then_poll_rolls_back) ... ok
+test_pre_handler_boundary_has_no_effects (test_night_agent_install.RecordPollTests.test_pre_handler_boundary_has_no_effects) ... ok
+test_two_distinct_signals_first_wins (test_night_agent_install.RecordPollTests.test_two_distinct_signals_first_wins) ... ok
+test_uninstall_seam_signal_product (test_night_agent_install.RecordPollTests.test_uninstall_seam_signal_product) ... ok
+test_package_import_requires_only_stdlib_and_package_on_system_python (test_night_agent_install.SystemPythonImportTests.test_package_import_requires_only_stdlib_and_package_on_system_python)
+Pin the package initialization required by uninstall's -m entrypoint. ... ok
+test_absent_unknown_retention_product (test_night_agent_install.TransactionTests.test_absent_unknown_retention_product) ... ok
+test_commit_crosses_two_boundaries (test_night_agent_install.TransactionTests.test_commit_crosses_two_boundaries) ... ok
+test_committed_cleanup_baseexception_preserves_arm (test_night_agent_install.TransactionTests.test_committed_cleanup_baseexception_preserves_arm) ... ok
+test_committed_closed_stdout_preserves_arm_through_shutdown (test_night_agent_install.TransactionTests.test_committed_closed_stdout_preserves_arm_through_shutdown) ... ok
+test_committed_stdout_failure_preserves_arm (test_night_agent_install.TransactionTests.test_committed_stdout_failure_preserves_arm) ... ok
+test_control_clock_advances_during_cleanup (test_night_agent_install.TransactionTests.test_control_clock_advances_during_cleanup) ... ok
+test_hung_grandchild_cannot_write_clock_into_next_cell (test_night_agent_install.TransactionTests.test_hung_grandchild_cannot_write_clock_into_next_cell) ... ok
+test_int_cells_with_inherited_sigign (test_night_agent_install.TransactionTests.test_int_cells_with_inherited_sigign) ... ok
+test_occupancy_product (test_night_agent_install.TransactionTests.test_occupancy_product) ... ok
+test_prebootstrap_unknown_retains_both_publications (test_night_agent_install.TransactionTests.test_prebootstrap_unknown_retains_both_publications) ... ok
+test_published_and_staged_admission_keep_all_timing_checks (test_night_agent_install.TransactionTests.test_published_and_staged_admission_keep_all_timing_checks) ... ok
+test_real_install_refuses_staged_plan_at_transaction_admission (test_night_agent_install.TransactionTests.test_real_install_refuses_staged_plan_at_transaction_admission) ... ok
+test_render_product (test_night_agent_install.TransactionTests.test_render_product) ... ok
+test_repeated_signals_during_restore (test_night_agent_install.TransactionTests.test_repeated_signals_during_restore) ... ok
+test_retained_prior_refuses_without_writes (test_night_agent_install.TransactionTests.test_retained_prior_refuses_without_writes) ... ok
+test_retention_product (test_night_agent_install.TransactionTests.test_retention_product) ... ok
+test_shell_dangling_option_values_refuse_without_effects (test_night_agent_install.TransactionTests.test_shell_dangling_option_values_refuse_without_effects) ... ok
+test_signals_after_bootstrap_effect_restore_both_plists (test_night_agent_install.TransactionTests.test_signals_after_bootstrap_effect_restore_both_plists) ... ok
+test_slow_admission_query_reaches_commit_refusal (test_night_agent_install.TransactionTests.test_slow_admission_query_reaches_commit_refusal) ... ok
+test_staged_render_names_future_published_plan (test_night_agent_install.TransactionTests.test_staged_render_names_future_published_plan) ... ok
+test_state_fault_product (test_night_agent_install.TransactionTests.test_state_fault_product) ... ok
+test_teardown_reentry_preserves_restored_priors (test_night_agent_install.TransactionTests.test_teardown_reentry_preserves_restored_priors) ... ok
+test_uninstall_is_rerunnable (test_night_agent_install.TransactionTests.test_uninstall_is_rerunnable) ... ok
+test_uninstall_records_repeated_signals_through_absence_and_deletion (test_night_agent_install.TransactionTests.test_uninstall_records_repeated_signals_through_absence_and_deletion) ... ok
+test_verification_unknown_is_not_loaded (test_night_agent_install.TransactionTests.test_verification_unknown_is_not_loaded) ... ok
+test_zero_exit_routes_require_commit_or_verified_uninstall (test_night_agent_install.TransactionTests.test_zero_exit_routes_require_commit_or_verified_uninstall) ... ok
+
+======================================================================
+FAIL: test_cleanup_refusal_reports_the_failure_it_interrupted (test_night_agent_install.LaunchdAccessProbeTests.test_cleanup_refusal_reports_the_failure_it_interrupted)
+The finally block fails closed WITHOUT discarding the diagnostic.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-arm-prep/tests/test_night_agent_install.py", line 1865, in test_cleanup_refusal_reports_the_failure_it_interrupted
+    self.assertIn("probe bootout absence unproven", str(caught.exception))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'probe bootout absence unproven' not found in 'probe process census survivor or unknown:  sysmon request failed with error: sysmond service not found\npgrep: Cannot get process list\n'
+
+----------------------------------------------------------------------
+Ran 57 tests in 942.401s
+
+FAILED (failures=1)
+MODULE FAIL tests.test_night_agent_install tests=57 failures=1 errors=0 skipped=0 seconds=942.401
+SHARD SUMMARY index=1/1 modules=1 tests=57 failures=1 errors=0 skipped=0 result=FAIL
+RERUN /opt/homebrew/opt/python@3.14/bin/python3.14 /Users/edr/code/JouleWise-wt-arm-prep/scripts/quick_suite.py --module tests.test_night_agent_install
+QUICK SUMMARY tier=touched modules=161 excluded=77 failures=3 seconds=945.119 result=FAIL

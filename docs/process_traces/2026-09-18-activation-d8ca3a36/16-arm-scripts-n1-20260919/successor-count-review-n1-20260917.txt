@@ -1,0 +1,17 @@
+Magistrate review of successors used by predecessor plan d079-epoch-25g83-derivation-n1-20260917
+Reviewed 2026-09-18 19:4x PDT by headless activation d8ca3a36 (Fable 5.1), for D-182 delivery.successors_used.
+
+Predecessor: d079-epoch-25g83-derivation-n1-20260917, armed 2026-09-17 13:41 PDT by activation 9853dd2b (docs/process_traces/2026-09-16-activation-9853dd2b/77-arm-record-n1-20260917.md), REFUSED at t0 15:30 PDT on load (night_refused_not_quiet), harvested by activation 8789ee70 (docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md: outcome REFUSED-NO-DATA, "re-plan as a NEW plan id, never re-arm"; both night agents uninstalled rc 0; courier sent).
+
+Observed count of successor plans armed after that refusal: 0.
+
+Sources read at the bench (2026-09-18 19:4x PDT):
+1. RUN_STATE.md on main 422cdebb: every block after the 8789ee70 harvest block (interactive 3d45161b park 18:21 09-17; interactive 45a0774c / 5c919872 gate redesign and PR #358, 09-17 19:20 → 09-18 01:2x; interactive dd14c572 un-park 09-18 18:10) states NOTHING ARMED; no plan id later than n1-20260917 appears anywhere in the file.
+2. /Users/edr/night-custody: plan roots present are d079-epoch-25g83-derivation-n1-20260916 and -20260917 only (ls, 19:4x PDT); no root for any later plan id.
+3. /Users/edr/night-plan-staging: entries -20260913, -20260915, -20260916, -20260917 only; no staged candidate authored after the 09-17 arm.
+4. launchctl list: only com.joulewise.magistrate is loaded; no com.joulewise.night or com.joulewise.night.deadman label.
+5. ~/night-archive: no *-20260918* or *-20260919* plan root, harvest or staging entry.
+6. docs/process/NIGHT_HANDBACK.md at 422cdebb: the last "Executed —" block is the 09-16 05:40 candidate (NOT ARMED); the §Purpose block still described the 09-16 plan; no successor of 09-17 was ever recorded.
+7. The Codex quota exhaustion (RUN_STATE 9853dd2b close-out, 07:55 09-17) and the machine park for the fseventsd cure (3d45161b) account for the interval: no activation was in a position to arm between the 09-17 harvest and this one.
+
+Therefore the D-182 single-successor licence for this predecessor is unused; tonight's d079-epoch-25g83-derivation-n1-20260919 would be its first and only successor.
