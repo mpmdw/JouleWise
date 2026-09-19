@@ -1,0 +1,7 @@
+test_generator_head_pin_relation         Ran 11 tests in 18.737s OK 
+test_campaign_generator_core             Ran 7 tests in 1.606s OK 
+test_d117_floor_qwen3_v5_generate        Ran 13 tests in 10.456s OK 
+test_arm_readiness_evidence_packauth     Ran 27 tests in 61.439s OK 
+test_d117_v3_family                      Ran 5 tests in 15.931s OK 
+test_gen_state                           Ran 44 tests in 1.657s OK 
+test_sample_quiet_predicate_evidence     Ran 45 tests in 6.445s OK 

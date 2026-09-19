@@ -25,3 +25,12 @@
 ## Verdict (pending the merge-head addendum)
 
 MERGE under D-072 after: PR #361 merged; main merged into the lane branch; the nine head-pin modules re-run green on the merge head; hosted CI green on the merge head; gate-ledger 12/12 on the PR body.
+
+## Addendum — the merge candidate `750a594e09c6d334631f0ea1d0052a7171066b4f` (main `b3abce08` merged into the lane branch; diff vs main = the two harness files only), 12:0x PDT
+
+- Bench (record 33): the harness module (45 OK) + the nine modules that were red on main before PR #361 + `test_gen_state`: all OK at `750a594e09c6d334631f0ea1d0052a7171066b4f`.
+- Full sharded replay on the integration tree (record 34, `34-full-replay-lane-merge-head.log.gz`): 6,474 tests, 242 modules, 241 OK, rc 1 on ONE error — `test_arm_readiness_evidence_t0.test_g4_real_ruled_census_pgrep_dialect`: `ValueError: invalid literal for int() with base 10: 'BRIDGE_ORIGIN:'` — the REAL-process census parsed `pgrep` output that included a live delegated seat whose multi-line prompt argv contains the word `powermetrics` (this activation's seats 35/37c/37x/40 were alive during the replay). Environmental, and exactly the class kernel lane TEST-PGREP-DIALECT-MULTILINE-01 already registers; the test re-run alone at `750a594e09c6d334631f0ea1d0052a7171066b4f`: OK (1 test, 1.4 s). No harness-related failure; no other module failed.
+- Hosted CI on `750a594e09c6d334631f0ea1d0052a7171066b4f`: gate-ledger PASS (12/12), quick PASS; the `test` / exclusive matrices were still running at merge time — post-merge confirmation per Ed's 09-16 CI ruling; the same code minus the merge ran green on hosted `quick` at every push.
+- PR body validated 12/12 RUN against `750a594e09c6d334631f0ea1d0052a7171066b4f` at the bench; row 12 = `750a594e09c6d334631f0ea1d0052a7171066b4f`.
+
+**Verdict: MERGE under D-072.** Post-merge cross-unit review: next activation's first slice (the harness is a new script with no production callers yet; the Stage A evidence campaign is its first consumer).
