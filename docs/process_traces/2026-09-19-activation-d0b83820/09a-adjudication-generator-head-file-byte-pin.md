@@ -1,0 +1,19 @@
+# Record 09a — adjudication of cold gate packet 09 (ruling 10 + Opus contract refuter 11): GENERATOR-HEAD-FILE-BYTE-PIN-01, kernel 244 (lead, 2026-09-19 09:3x PDT)
+
+## Seats
+
+| Seat | File | Result |
+|---|---|---|
+| Cold Fable judge (claude -p, detached worktree `wt-coldgate2-d0b83820` at `a5905f67`; validator typo-REFUSE then PASS on packet `a06be7dc…`) | `09-…/10-coldgate-fable-ruling.md` | Q1 (a) amended: exactly TWO live generators byte-pin the head file (`d117_floor_qwen3-1p7b_v5`, `…-8b_v5`; `d117_contrast_v5` has no byte pin — packet fact corrected); (b) fails burden (iii) because frozen generator source digests are custody-bound in committed `plan_tree.json`; (c) fails burden (iv). Exact code shape: delete `LEDGER_HEAD_FILE_SHA256`, drop the drift row, add `verify_ledger_head_pin()` after the loop (schema equality, `sequence >= cutoff.sequence` with bool/str guard, digest equality at equal sequence, acceptance-cutoff digest equals `LEDGER_HEAD_SHA256`), emit `issued_ledger_head = {path, head_sha256}` only. Q2: code conforming to D-109 R1.4, not an amendment; land AFTER PR #361; remove the live-generator fixtures in the B1 lane, keep the frozen-path fixtures permanently. Q3: nine regressions enumerated. |
+| Opus contract refuter, independent | `09-…/11-opus-contract-refuter.md` | Q1 (a) with the same two-file amendment; (b) REFUTED with executed evidence (the v2 → v3 successor path derives the successor's source from the v2 file's text, so a constant edit in a frozen generator changes the committed v3 pack's `generator.sha256`); (c) rejected — 2 custody-bearing hand edits per pin advance, six on 09-19 alone, inside the pre-arm window. Strongest fence at risk, stated not waved: generation-time divergence detection (a pin at a higher sequence whose digest is not a chain extension) is lost at the generator and is owned by the run-time loader (`calibration_ledger.py:2600-2613`), which the pack reaches through `--head-pin` at run time. `issued_ledger_head.file_sha256` has zero consumers; the six committed historical `plan_tree.json` files keep theirs. |
+
+## Adjudication
+
+1. **Q1: (a) as amended by both seats — adopt B1 for the two live floor v5 generators only.** Frozen generators keep their byte pin and echo/preserve mode; their successor-path test fixtures (Exhibit E pattern; seat 26's five modules) stay permanently as the proof that a frozen generator is a function of its declared inputs. Code shape: the judge's `verify_ledger_head_pin()` (its bool/str guard and four distinct refusal messages) with the refuter's key-set shape check folded in; `issued_ledger_head` shrinks to `{path, head_sha256}`; the returned pin is never written into an emitted byte. The B1 comment must state that fork/divergence detection is evaluation-owned (refuter §1).
+2. **Q2: code change conforming to the contract; not an amendment; lands AFTER #361 as its own PR** with the full gate (production change on two generators: contract + execution refuters, delta re-audit, Opus counter-review, full replay). In that PR: remove the ALPHA/BETA head fixture and its N1 assertion from `test_campaign_generator_core.py`; drop the head-bytes write (keep the clone and the working-tree copy) in `test_d117_floor_qwen3_v5_generate.generation_repository`; keep every frozen-path fixture.
+3. **Q3: the nine regressions of ruling 10** are the acceptance set; the refuter's "shape invalid" refusal is a tenth.
+4. **Dissent: none.**
+
+## Order
+
+Lane GENERATOR-HEAD-FILE-BYTE-PIN-01 (kernel 244) moves from "cold-gate question" to READY [AGENT] with this record as its contract: after #361 merges → seat (Astra xhigh, `WRITE_SCOPE`: the two live generators + `tests/test_campaign_generator_core.py` + `tests/test_d117_floor_qwen3_v5_generate.py` + a new regression module) → refuters (contract + execution) → delta re-audit → Opus counter-review → full replay → PR.
