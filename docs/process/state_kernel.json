@@ -720,6 +720,7 @@
       "priority": "p3_hardening_candidates",
       "rank": 235,
       "status": "queued",
+      "status_note": "2026-09-18 headless activation f0b608b7: record 19 confirmed the production `--request` argv is the only production payload that can hit the kernel argument limit; the test-fixture argv defect is separate (lane 238) and its fix does not touch this seam.",
       "stop_card": null
     },
     "BRACKET-EVALUATOR-PLAN-IDENTITY-01": {
@@ -1446,6 +1447,35 @@
       "rank": 187,
       "status": "queued",
       "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
+      "stop_card": null
+    },
+    "COURIER-SENT-FORMAT-PIN-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/21-arm-record-n1-20260919.md:17–30 (delivery-format refusal, deviation 3 and successor findings)",
+          "docs/process_traces/2026-09-18-activation-f0b608b7/01-harvest-0916-record.md:7–19 (re-harvest verification and inventory-format difference)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COURIER-SENT-FORMAT-PIN-01/acceptance",
+          "label": "COURIER-SENT-FORMAT-PIN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "One documented `courier.sent` format has a writer test and helper test, with a distinct regression rejecting the alternate format. One documented inventory line format is used by both harvest and retirement scripts. Existing courier and arm tests remain unchanged."
+      },
+      "authority": {
+        "label": "registration by the magistrate (headless activation f0b608b7), not a ruling",
+        "path": "docs/process_traces/2026-09-18-activation-f0b608b7/04-brief-seat-kernel-registrations.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The courier (the process that delivers a night's result email after the measurement window) writes `night/courier.sent` when delivery succeeds. The 09-16 courier wrote JSON; the 09-17 courier wrote key=value lines. The arm sequence (the steps preparing a night to run) invokes the D-182 successor-evidence helper: it proves that a refused night delivered its result before D-182's zero-capture successor, the one replacement night permitted after an eligible refusal captured no data, may be armed. That helper refused the 09-17 file until the magistrate patched the bench copy to accept both formats (arm record 21, deviation 3). Pin ONE format in the courier contract and writer, make the helper and arm scripts parse exactly it, and add a regression rejecting the alternate format with a distinct detail. Also pin the harvest lstat-inventory line format (the filesystem metadata listing used to verify the archived night before retiring its live directory): 09-16 wrote `path size mtime mode`, including directories; 09-17 wrote `size mtime.ns ./path`, files only. Here mtime is modification time, mtime.ns is its nanosecond representation, and mode records file type and permissions. The retirement script's assumption must become a contract.",
+      "id": "COURIER-SENT-FORMAT-PIN-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 241,
+      "status": "queued",
       "stop_card": null
     },
     "CUSTODY-REAPING-ATTRIBUTION-01": {
@@ -3634,6 +3664,36 @@
       "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started; hardening, not night-critical. Deliberately out of the reserve-hang lane's scope, which covers governed calibration artifacts rather than night documents. Related but distinct from NIGHT-STALL-WALLCLOCK-ABORT-01, which would add the missing wall-clock bound to the driver loop; either lane alone narrows this exposure, both together close it.",
       "stop_card": null
     },
+    "NIGHT-GATE-CROSS-SEAM-TESTS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/05-crossunit-review-astra.md:9–13 (R1–R5, counterfactuals and production call sites)",
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/15-magistrate-triage-crossunit-review-row11.md:8–14 (R1 bench confirmation and should-fix disposition)",
+          "docs/contracts/night_quiet_admission.md:285–290 (computed runway and validation claim)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-GATE-CROSS-SEAM-TESTS-01/acceptance",
+          "label": "NIGHT-GATE-CROSS-SEAM-TESTS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "One seam test per R2–R5 crosses the named seam end to end with a counterfactual that fails when the seam is broken. R1 is resolved by a recorded ruling: contract text narrowed OR shared validation added with its own regression, never by silently editing the sentence. Existing gate tests remain unchanged; lands under the twelve-row review gate."
+      },
+      "authority": {
+        "label": "registration by the magistrate (headless activation f0b608b7), not a ruling",
+        "path": "docs/process_traces/2026-09-18-activation-f0b608b7/04-brief-seat-kernel-registrations.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The post-merge cross-unit review of PR #358 (the night-gate quiet-admission rewrite on main `b55909e3`; the night gate checks whether an unattended measurement may start) found no blocker but five should-fix gaps between units that their individual gates only covered from one side. R1 is a contract/code mismatch: `docs/contracts/night_quiet_admission.md:289–290` says validation enforces the computed 7,980 s post-bind runway (the measurement time that must remain after the bind window, the bounded wait for sustained quiet beginning at t0, the planned start instant). Only the plan generator `scripts/gen_derivation_night.py` refuses a short runway; neither `joulewise/night_plan_writer.py` nor `joulewise/night_gate.py` does, so a hand-authored v4 plan (plan schema version 4) with a short runway parses and can GO (permit measurement). This is not reachable through sanctioned authoring today: no v4 plan may be authored without a cutoff affirmed by the cold gate (independent adjudication), and the generator is the only sanctioned author. R2–R5 need tests crossing generated plan → driver, real sampler output → persisted receipt, persisted refusal files → D-182 successor helpers, and a shared census fixture → both binding loop and watchdog. D-182's zero-capture successor is the desk rule licensing one replacement night after an eligible refusal captured no data; the census scans for active AI-agent processes, and the watchdog schedules the headless lead agent. The review names each counterfactual and production call site. R1 needs a ruling inside this lane: narrow the contract to authoring, or move runway derivation into shared validation; do not silently edit the sentence. The CI item provisionally called timing sensitivity moved to TEST-LARGE-FRAME-ARGV-PORTABILITY-01 after record 19 identified an argv-length defect (an oversized command-line argument).",
+      "id": "NIGHT-GATE-CROSS-SEAM-TESTS-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 239,
+      "status": "queued",
+      "stop_card": null
+    },
     "NIGHT-HANDBACK-GLOSS-01": {
       "acceptance": {
         "evidence": [
@@ -3975,7 +4035,7 @@
       "priority": "p2_next_slice",
       "rank": 230,
       "status": "queued",
-      "status_note": "2026-09-17 activation 9853dd2b: docs contradiction found at the arm; magistrate registration, not a ruling; the 09-16 root was NOT moved (the launch charge forbids moving plan directories this session did not author). Goes to the cold gate or Ed before the next harvest retires or retains a root.",
+      "status_note": "2026-09-17 activation 9853dd2b: docs contradiction found at the arm; magistrate registration, not a ruling; the 09-16 root was NOT moved (the launch charge forbids moving plan directories this session did not author). Goes to the cold gate or Ed before the next harvest retires or retains a root. 2026-09-18 headless activation f0b608b7 (record 01): the 09-16 harvest archive `~/night-archive/d079-epoch-25g83-derivation-n1-20260916-harvest-20260916/`, found empty by arm record 21, was re-harvested byte-exact from the retained live root (20/20 sums OK against the live root and the copy, `SHA256SUMS` inside the archive, inventories identical); the 09-16 root remains retained under this lane's rule and may now be retired when the lane rules, with a complete archive. The 09-17 plan root was retired 2026-09-18 19:26 (arm record 21, step 0).",
       "stop_card": null
     },
     "NIGHT-STALL-WALLCLOCK-ABORT-01": {
@@ -5660,7 +5720,49 @@
       "priority": "p1_phase_gate",
       "rank": 232,
       "status": "queued",
-      "status_note": "2026-09-18 interactive 5c919872: the merged sampler's `--observation` mode is the driver's worker entry (needs `--job-id` and `--result-fd`, writes a framed envelope); sampling for this lane goes through the flagless smoke CLI (`python3 -B -m joulewise.quiet_admission --sample-interval-s 30`, whole-round observer cost 1.15 cpu-s per 30 s round on the desktop) or a harness that supplies the pipe; quote no observer floor from the worker mode (cold-gate ruling 71 Q5).",
+      "status_note": "2026-09-18 interactive 5c919872: the merged sampler's `--observation` mode is the driver's worker entry (needs `--job-id` and `--result-fd`, writes a framed envelope); sampling for this lane goes through the flagless smoke CLI (`python3 -B -m joulewise.quiet_admission --sample-interval-s 30`, whole-round observer cost 1.15 cpu-s per 30 s round on the desktop) or a harness that supplies the pipe; quote no observer floor from the worker mode (cold-gate ruling 71 Q5). 2026-09-18 headless activation f0b608b7 (record 14 of activation d8ca3a36, decisions 1–7): the campaign is two-stage — stage A is this lane (desk harness plus the observer-only and contaminated states now; census-clean idle and synthetic-load states only from a non-agent context, since a `claude -p` magistrate and every interactive session are themselves in the census), stage B is QUIET-PREDICATE-STAGE-B-CONFIRMATION-01 (240). Corrections to this text: the slot is 480 s, not 60 s; the ≈5 J floor tolerance is a clearance bar for the claim, not a contamination budget — the derivation bounds the incremental false effect; the reference is a fresh 25G83 census-clean idle recorded with the same harness in the same session as the load states (the r6 idle numbers, 0.07–0.70 W CPU rail, median ≈ 0.10 W, are the historical consistency check only); observer cost is the whole-round figure (1.15 cpu-s per 30 s round on the desktop; 1.67–1.80 under three seats), bracketed, never subtracted; E-placed and P-placed loads reported separately, worse bound taken. The sampling harness `scripts/sample_quiet_predicate_evidence.py` (collect / load / summarize, 31 offline tests) is on branch `feat/2026-09-18-quiet-predicate-evidence-harness` at `98336969`, bench-verified live (record 20), UNMERGED.",
+      "stop_card": null
+    },
+    "QUIET-PREDICATE-STAGE-B-CONFIRMATION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/14-magistrate-adjudication-consult-06.md:3–13 (two-stage campaign and decisions 1–7)",
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/06-consult-lane-232-astra.md:25–29 (stage B shape, controls and block counts); :41–51 (placement, uncertainty, proposals and negative outcome)",
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/07-r6-idle-reference-astra.md:21–26 (powermetrics instrument, reduction boundaries and historical epoch)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QUIET-PREDICATE-STAGE-B-CONFIRMATION-01/acceptance",
+          "label": "QUIET-PREDICATE-STAGE-B-CONFIRMATION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Null-ABBA payload blocks are executed through the floor pipeline at all three load levels with B-only controls; per-slot false-effect bounds are tabulated with uncertainty; the overlap test states its outcome including the 'no cutoff qualifies' branch; a cold-gate packet proposition is delivered. Nothing is written into any plan or code before the cutoff ruling."
+      },
+      "authority": {
+        "label": "registration by the magistrate (headless activation f0b608b7), not a ruling",
+        "path": "docs/process_traces/2026-09-18-activation-f0b608b7/04-brief-seat-kernel-registrations.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Stage A supplies the candidate cutoff C* in its evidence memo before stage-B confirmation.",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "QUIET-PREDICATE-EVIDENCE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Stage A, QUIET-PREDICATE-EVIDENCE-01 (rank 232), derives a candidate busy-core cutoff (busy CPU seconds per elapsed second; 1.0 means one fully busy core) for the night gate, the check deciding whether an unattended measurement may start, from desk sampling co-recorded with `powermetrics`, the macOS power sampler used for the accepted-clean detection floors. The cold judge (independent adjudicator), item 1, requires joules per 480 s measurement slot attributable to a synthetic load THROUGH the actual floor pipeline: the reduction from raw power to a detection floor, using paired ABBA blocks (four measurements ordered A/B/B/A), warmup trimming, GPU-rail baseline (background graphics-processor power), and uncertainty-set maximisation (taking the worst result across allowed uncertainties). This reduction can hide or reveal effects that a mean power difference cannot. Stage B runs null ABBA blocks (A and B identical, so any measured difference is a false effect) at no load, candidate cutoff C*, and 10 × C*, plus B-only load controls that expose cancellation when loads affect both sides equally. Carry these as diagnostic v2 night payloads (measurement programs in a version-2 night plan, `DIAGNOSTIC_NO_PACK`, with no model runs or claim-bearing values) under NIGHT_HANDBACK, the night handoff procedure. Plan about ten blocks per condition (five is the pipeline minimum); twelve 600 s slots yield three blocks per night, so several nights are needed and derivation-night plans retain priority. Preconditions: stage A's memo names C*, and the floor pipeline holds authority for macOS build 25G83: equivalence night `d079-epoch-25g83-derivation-n1-20260919` must PASS, or the three-night derivation must replace it. If the clean range and safe range do not overlap, NO cutoff qualifies and the memo must say so. Report upper prediction bounds on incremental false effect per slot at each load level, E-placed and P-placed loads (loads on efficiency and performance cores) separately, taking the worse bounds. Carry the consult's proposed 20 % headroom below the tested safe boundary and 0.5 J-per-slot bound as proposals. Deliver a proposition the cold gate can AFFIRM or REJECT atomically (proposition 4 of packet 70, currently REFUSED). No v4 plan may be armed before that ruling.",
+      "id": "QUIET-PREDICATE-STAGE-B-CONFIRMATION-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 240,
+      "status": "blocked",
       "stop_card": null
     },
     "R7F-DX-PROSE-SCAN-01": {
@@ -7117,6 +7219,7 @@
       "priority": "p3_tooling",
       "rank": 237,
       "status": "queued",
+      "status_note": "2026-09-18 headless activation f0b608b7: the hosted `test (3.13, 5)` failure that record 15 provisionally folded into this lane is an oversized-argv defect (record 19 F1/F6), a distinct mechanism from the bytecode-cache coupling here; it is lane TEST-LARGE-FRAME-ARGV-PORTABILITY-01 (238). This lane keeps only the `journal_block` cache-location item.",
       "stop_card": null
     },
     "TEST-CANONICAL-PATH-DEPENDENCY-01": {
@@ -7149,6 +7252,37 @@
       "rank": 211,
       "status": "queued",
       "status_note": "2026-09-15 activation 08ca8197: registered at the interactive session b0ae8462's request from its record 16 flag F3; registration only; not started; not night-critical. First deliverable is the classification of the 8 literal-path files into filesystem-touching versus string-asserting, then the structural guard. Related: WORKTREE-PRUNE-01 (worktree hygiene) and the seat-side quick/touched tiers the interactive session is building.",
+      "stop_card": null
+    },
+    "TEST-LARGE-FRAME-ARGV-PORTABILITY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/19-rootcause-ci-large-frame-astra.md:20–25 (F1 cause, F4 test-only fix shape, F6 distinct-lane recommendation)",
+          "docs/process_traces/2026-09-18-activation-d8ca3a36/15-magistrate-triage-crossunit-review-row11.md:7–20 (same hosted job and assertion failed twice; provisional timing diagnosis superseded by record 19)",
+          "tests/night_gate_fixtures/bind_supervision.py:152–175 (parent-side expansion and launcher lambda)",
+          "tests/test_run_night.py:4605–4611 (existing large-frame assertions)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-LARGE-FRAME-ARGV-PORTABILITY-01/acceptance",
+          "label": "TEST-LARGE-FRAME-ARGV-PORTABILITY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The new regression fails on the unmodified fixture with the measured byte count and passes after the change; the existing assertions in `test_large_frame_is_incremental_and_still_bounded` remain byte-identical; the whole `tests.test_run_night` module is green locally; hosted CI's `test (3.13, 5)` job is green on the PR head (the only Linux execution of the counterfactual); no platform skip is introduced; lands under the twelve-row review gate."
+      },
+      "authority": {
+        "label": "registration by the magistrate (headless activation f0b608b7), not a ruling",
+        "path": "docs/process_traces/2026-09-18-activation-f0b608b7/04-brief-seat-kernel-registrations.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The real-exec fault bench (a test fixture that launches actual child processes and injects failures), `tests/night_gate_fixtures/bind_supervision.py`, drives bind-supervision regressions: tests of how the night driver supervises worker processes (short-lived child processes performing individual checks) inside the bind window, the bounded wait for sustained quiet starting at t0 (the planned measurement start instant). The night gate is the check that decides whether an unattended measurement may start. For `large_frame`, the parent builds a 200,000-character string and passes the whole worker specification as ONE argv string (one command-line argument; measured 200,884 bytes including its terminating NUL). Linux's `execve(2)` MAX_ARG_STRLEN caps one string at 131,072 bytes on the hosted runner's 4-KiB pages and refuses the launch with E2BIG (argument list too long); macOS has no such per-string cap. Thus `test_large_frame_is_incremental_and_still_bounded` passes on this Mac but failed twice identically on hosted `ubuntu-latest` job `test (3.13, 5)` on main `b55909e3` with `'REFUSED' != 'GO'`: the driver records the launch error as `night_probe_error`. Production is unaffected by this fixture defect: sample workers receive only small identifiers; the uncapped production request is the separate BIND-REQUEST-PAYLOAD-CAP-01 lane. Fix only the test: expand the large string inside the worker, record the largest argv string per launched task in the bench, and add a regression requiring every launched string to stay under 131,072 bytes, which fails against the old fixture. In flight this activation on branch `fix/2026-09-18-large-frame-argv-portability`; seat brief `docs/process_traces/2026-09-18-activation-f0b608b7/02-brief-seat-argv-fix.md`.",
+      "id": "TEST-LARGE-FRAME-ARGV-PORTABILITY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 238,
+      "status": "active",
       "stop_card": null
     },
     "TEST-PGREP-DIALECT-MULTILINE-01": {
