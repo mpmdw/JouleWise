@@ -1,0 +1,6 @@
+test_campaign_generator_core               Ran 7 tests in 2.010s OK 
+test_arm_readiness_registry                Ran 6 tests in 25.201s OK 
+test_d117_decode_contrast_plan             Ran 25 tests in 42.464s OK (skipped=1) 
+test_d117_floor_qwen25_1p5b_plan           Ran 22 tests in 11.873s OK 
+test_d117_floor_qwen25_7b_plan             Ran 20 tests in 18.315s OK 
+test_d117_v3_family                        Ran 5 tests in 21.481s OK 
