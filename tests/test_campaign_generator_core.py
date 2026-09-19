@@ -142,7 +142,7 @@ class CampaignGeneratorCoreTests(unittest.TestCase):
                     )
                 output_root = temporary / label.lower()
                 calls: list[tuple[Path, tuple[Path, ...]]] = []
-                with head_fixture, mock.patch.object(
+                with head_fixture as head_mock, mock.patch.object(
                     core,
                     "_generation_write_boundary_observer",
                     side_effect=lambda root, outputs: calls.append(
@@ -150,6 +150,13 @@ class CampaignGeneratorCoreTests(unittest.TestCase):
                     ),
                 ):
                     generate(generator, label, output_root)
+                if head_mock is not None:
+                    # The fixture must have been consulted for the head path,
+                    # or a future edit could route around it silently
+                    # (counter-review record 15 N1).
+                    self.assertIn(
+                        mock.call(head_path), head_mock.call_args_list
+                    )
 
                 final_calls = [
                     outputs

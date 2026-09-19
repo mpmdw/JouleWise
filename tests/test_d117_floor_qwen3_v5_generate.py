@@ -6,6 +6,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -287,6 +288,12 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
         (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
             GENERATION_LEDGER_HEAD_BYTES
         )
+        # The clone carries COMMITTED bytes; grade the working tree's generators
+        # (counter-review record 15 F1: an uncommitted generator edit must not
+        # be invisible to this test).
+        for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+            relative = Path("configs/campaigns") / pack_id / "generate_configs.py"
+            shutil.copy2(ROOT / relative, repository / relative)
         return repository
 
     def test_routing_constants_are_the_only_producer_routing_sources(self) -> None:
