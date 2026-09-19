@@ -1,4 +1,4 @@
-"""Offline harness checks: no root, no powermetrics, no network, no live load."""
+"""Fixture checks plus bounded no-power subprocess and low-duty load checks."""
 from dataclasses import asdict
 from datetime import datetime, timezone
 import json
@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import plistlib
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -102,6 +103,24 @@ def assert_null_reasons(test, value):
 
 
 class FrameTests(unittest.TestCase):
+    def test_absolute_anchor_endpoints_reject_known_arrival_offset(self):
+        frames, _ = harness.parse_frames(stream(document(), document(timestamp=1003, elapsed_ns=2_000_000_000)))
+        # Fixture anchor model: wall = mono + 900; native endpoint mono=101.25.
+        # First parse arrives 0.5 s AFTER that endpoint, outside the 0.01 s bound.
+        endpoint, bound = 900 + 101.25, .01
+        stamps = {"first_parse": harness.ClockStamp(endpoint + .5, 101.75, 101.75, 0, 0)}
+        model = {"status": "bounded", "first_sample_end_point_epoch_s": endpoint,
+                 "admissible_lower_epoch_s": endpoint - bound,
+                 "admissible_upper_epoch_s": endpoint + bound,
+                 "effective_clock_anchor_bound_s": bound}
+        aligned, anchor = harness.align_frames(frames, stamps, deriver=Mock(return_value=model))
+        for frame, elapsed in zip(aligned, (0, 2)):
+            self.assertAlmostEqual(frame["end_s"], endpoint + elapsed)
+            self.assertAlmostEqual(frame["start_s"], endpoint + elapsed - frame["elapsed_s"])
+            self.assertLessEqual(abs(frame["end_s"] - elapsed - endpoint), bound)
+        self.assertEqual(anchor["effective_clock_anchor_bound_s"], bound)
+        self.assertGreater(stamps["first_parse"].epoch_s, anchor["admissible_upper_epoch_s"])
+
     def test_production_argv_list_equality(self):
         adapter = object.__new__(harness.pm.PowermetricsTelemetryAdapter)
         adapter._executable = harness.pm.POWER_METRICS
@@ -178,6 +197,19 @@ class FrameTests(unittest.TestCase):
         self.assertEqual(anchor["status"], "bounded", anchor)
         self.assertEqual(len(aligned), 61)
         self.assertLess(anchor["effective_clock_anchor_bound_s"], .005)
+        # Affine wall=mono+900 model: production residual allowance gives
+        # lower=1001-.00025; the causal first-parse stamp supplies the upper.
+        lower, upper = 1001 - .00025, 1001 + 1 / 1024
+        midpoint = (lower + upper) / 2
+        self.assertAlmostEqual(anchor["admissible_lower_epoch_s"], lower)
+        self.assertAlmostEqual(anchor["admissible_upper_epoch_s"], upper)
+        self.assertAlmostEqual(aligned[0]["end_s"], midpoint)
+        self.assertAlmostEqual(aligned[-1]["end_s"], midpoint + 60)
+        # Arrival differs from the anchored endpoint by (upper-lower)/2;
+        # centering at arrival would fail to cover the admissible lower end.
+        for endpoint in (lower, upper):
+            self.assertLessEqual(abs(aligned[0]["end_s"] - endpoint),
+                                 anchor["effective_clock_anchor_bound_s"])
         self.assertAlmostEqual(aligned[-1]["end_s"] - aligned[0]["end_s"], 60)
         stamps["sampling_stopped"] = harness.ClockStamp(1061, 160, 160, 0, 0)
         aligned, broken = harness.align_frames(frames, stamps)
@@ -233,6 +265,128 @@ class IntegrationTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    def test_partial_round_retains_concurrent_census_and_marks_contamination(self):
+        from scripts import run_night
+        hit = {"exit_code": 0, "stdout": "123 claude -p\n", "stderr": "", "refusal": {"reason": "agent"}}
+        job = SimpleNamespace(job_id="census-1", reaped=True, launch_done=True,
+                              process=SimpleNamespace(pid=None), ready=lambda: True,
+                              result=lambda: hit)
+        def smoke(interval):
+            run_night._BindTask("census-1", None, None)
+            raise harness.CollectionExpired("fixture deadline")
+        with tempfile.TemporaryDirectory() as tmp, patch.object(run_night, "_BindTask", return_value=job), \
+                patch.object(run_night, "smoke_observation_round", side_effect=smoke):
+            result = harness.production_round(1, 5, Path(tmp), FakeClock())
+            row = harness.new_row("fixture", collect_args(tmp), 1, FakeClock().stamp(), FakeClock().stamp(), result)
+        self.assertEqual(row["status"], "partial")
+        self.assertIsNone(row["observation"])
+        self.assertEqual(row["censuses"][0]["result"], hit)
+        self.assertIs(row["census_clean"], False)
+        # A clean sampler at the end cannot erase the earlier concurrent hit.
+        result["observation"] = {"census": {"exit_code": 1, "stdout": "", "stderr": ""}}
+        row = harness.new_row("fixture", collect_args("unused"), 1, FakeClock().stamp(), FakeClock().stamp(), result)
+        self.assertEqual(len(row["censuses"]), 2)
+        self.assertIs(row["census_clean"], False)
+
+    def test_round_without_completed_census_is_reasoned_unknown(self):
+        result = {"status": "partial", "error": "deadline", "observation": None, "observer_cpu_s": .1}
+        row = harness.new_row("fixture", collect_args("unused"), 1, FakeClock().stamp(), FakeClock().stamp(), result)
+        self.assertIsNone(row["censuses"])
+        self.assertIsNone(row["census_clean"])
+        self.assertIn("no census completed", row["census_clean_reason"])
+        result["censuses"] = [{"source": "concurrent", "result": {"exit_code": 1, "stdout": "", "stderr": ""}}]
+        row = harness.new_row("fixture", collect_args("unused"), 1, FakeClock().stamp(), FakeClock().stamp(), result)
+        self.assertIs(row["census_clean"], True)
+        result["census_errors"] = [{"job_id": "census-2", "error": "deadline"}]
+        row = harness.new_row("fixture", collect_args("unused"), 1, FakeClock().stamp(), FakeClock().stamp(), result)
+        self.assertIsNone(row["census_clean"])
+
+    def test_smoke_temporary_journal_writes_stay_under_output(self):
+        from scripts import run_night
+        created = []
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            out = root / "out"
+            out.mkdir()
+            def smoke(interval):
+                # Same local import/factory as the production smoke round.
+                import tempfile
+                with tempfile.TemporaryDirectory(prefix="jw-observer-round-") as directory:
+                    journal = Path(directory) / "censuses.jsonl"
+                    created.append(journal)
+                    self.assertTrue(journal.is_relative_to(out))
+                    journal.write_text("{}\n")
+                return {}, 0
+            with patch.object(run_night, "smoke_observation_round", side_effect=smoke):
+                harness.production_round(1, 5, out, FakeClock())
+            self.assertTrue(created)
+            self.assertTrue(all(path.is_relative_to(out) for path in created))
+            self.assertEqual(list(root.iterdir()), [out])
+
+    def test_real_collect_no_power_reaps_all_recorded_workers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # One second is the minimum top sampling interval; use one interval.
+            command = [sys.executable, "-B", str(Path(harness.__file__).resolve()),
+                       "collect", "--no-power", "--duration-s", "1",
+                       "--sample-interval-s", "1", "--state", "integration",
+                       "--repeat", "1", "--out", tmp]
+            # Audit real parent/production journal writes, including temporary
+            # mkdirs that would otherwise disappear before filesystem checks.
+            audit = '''import os, runpy, sys
+from pathlib import Path
+script, target = sys.argv[1:3]
+root = Path(target).resolve()
+def audit(event, args):
+    path = None
+    if event == "open" and isinstance(args[0], (str, bytes)) and args[2] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT):
+        path = os.fsdecode(args[0])
+    elif event == "os.mkdir":
+        path = os.fsdecode(args[0])
+    if path is not None and path != os.devnull and not Path(path).resolve().is_relative_to(root):
+        print("OUTSIDE_OUTPUT", path, flush=True)
+        raise AssertionError("write outside --out")
+sys.addaudithook(audit)
+sys.argv = [script, *sys.argv[3:]]
+runpy.run_path(script, run_name="__main__")
+'''
+            command = [sys.executable, "-B", "-c", audit, command[2], tmp, *command[3:]]
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=20,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/tmp"})
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertNotIn("OUTSIDE_OUTPUT", completed.stdout)
+            root = Path(tmp)
+            rows = [json.loads(line) for line in (root / "rounds.jsonl").read_text().splitlines()]
+            self.assertTrue(rows)
+            for row in rows:
+                self.assertIn(row["status"], ("complete", "partial", "error"))
+                self.assertIn("error", row)
+                if row["status"] != "complete":
+                    self.assertTrue(row["error"])
+                self.assertIsNone(row["power"]["cpu_w"])
+                self.assertEqual(row["power"]["cpu_w_reason"], "power disabled")
+            session = json.loads((root / "session.json").read_text())
+            jobs = [job for round_ in session["round_workers"] for job in round_["workers"]]
+            pids = {job["pid"] for job in jobs if job["pid"] is not None}
+            self.assertTrue(pids, jobs)
+            self.assertTrue(all(job["reaped"] for job in jobs if job["pid"] is not None))
+            for pid in pids:
+                with self.assertRaises(ProcessLookupError, msg=f"worker {pid} survived"):
+                    os.kill(pid, 0)
+
+    def test_observer_cost_includes_known_reaped_child_delta(self):
+        from scripts import run_night
+        # SELF grows .2 s; reaped CHILDREN grow .7 s. Observer cost is .9 s.
+        usages = {harness.resource.RUSAGE_SELF: iter([(1, .1), (1.15, .15)]),
+                  harness.resource.RUSAGE_CHILDREN: iter([(2, .3), (2.5, .5)])}
+        def usage(kind):
+            user, system = next(usages[kind])
+            return SimpleNamespace(ru_utime=user, ru_stime=system)
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(harness.resource, "getrusage", side_effect=usage), \
+                patch.object(run_night, "smoke_observation_round", return_value=({}, 0)):
+            result = harness.production_round(1, 5, Path(tmp), FakeClock())
+        self.assertAlmostEqual(result["observer_cpu_s"], .9)
+
     def test_no_power_partial_round_schema_and_hashes(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(harness.subprocess, "Popen", side_effect=AssertionError("no subprocess")):
             args = collect_args(tmp)
@@ -443,6 +597,36 @@ class CollectionTests(unittest.TestCase):
 
 
 class LoadTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "native QoS requires macOS")
+    def test_real_load_tracks_point_one_core_and_guards_worker_budget(self):
+        # +/- .04 cores permits .12 CPU seconds of startup, timer and scheduling
+        # variation in a 3 s calibration-only window; it still rejects 1 core.
+        # Use 500 ms periods: this host can coalesce sleeps by ~150 ms, longer
+        # than a 100 ms period, and the controller deliberately never catches up.
+        # Check config BEFORE launch so the cores mutation cannot burn a core.
+        context = harness.multiprocessing.get_context("spawn")
+        def process(*args, **kwargs):
+            self.assertEqual(kwargs["args"][1]["share"], .1)
+            return context.Process(*args, **kwargs)
+        guarded = SimpleNamespace(Pipe=context.Pipe, Process=process)
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(harness.multiprocessing, "get_context", return_value=guarded):
+            args = harness.parser().parse_args(["load", "--cores", "0.1", "--duration-s", "3",
+                "--period-ms", "500", "--qos", "user-initiated", "--profile", "scalar",
+                "--seed", "1", "--log", str(Path(tmp) / "load.json")])
+            harness.load(args)
+            report = json.loads(Path(args.log).read_text())
+        self.assertIsNone(report["error"], report["error"])
+        periods = [p for worker in report["workers"] for p in worker["periods"]]
+        fraction = sum(p["cpu_used_s"] for p in periods) / args.duration_s
+        self.assertAlmostEqual(fraction, .1, delta=.04)
+        self.assertTrue(report["cleanup"])
+        for child in report["cleanup"]:
+            self.assertFalse(child["alive"])
+            self.assertEqual(child["exitcode"], 0)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(child["pid"], 0)
+
     def test_cpu_budget_overshoot_and_frozen_duty(self):
         clock = FakeClock()
         periods = harness.duty_periods(.2, 9, .1, clock.burn, clock)
@@ -485,6 +669,54 @@ class LoadTests(unittest.TestCase):
 
 
 class SummaryTests(unittest.TestCase):
+    def test_summary_never_pools_census_conditions_or_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = []
+            for clean, watts in ((True, 1), (False, 10), (None, 100)):
+                for state, extra in (("idle", 0), ("loaded", 2)):
+                    rows.append({**self.fixture_row(state, "1", watts + extra), "census_clean": clean})
+            root = Path(tmp)
+            (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+            result = harness.summarize(root, "idle")
+            self.assertIsNone(result["reference"])
+            self.assertEqual(len(result["references_by_census"]), 3)
+            self.assertEqual(len(result["groups"]), 6)
+            for group in result["groups"]:
+                self.assertEqual(group["complete_rounds"], 1)
+                if group["state"] == "loaded":
+                    self.assertEqual(group["delta_j_480"]["cpu_w"], 960)
+            # A missing matching reference must not borrow the clean reference.
+            rows = [r for r in rows if r["state"] != "idle" or r["census_clean"] is True]
+            (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+            result = harness.summarize(root, "idle")
+            for group in result["groups"]:
+                if group["census_clean"] is not True:
+                    self.assertIsNone(group["delta_j_480"]["cpu_w"])
+
+    def test_empty_directory_cli_writes_reasoned_null_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(harness.main(["summarize", "--in", tmp, "--reference-state", "idle"]), 0)
+            summary = json.loads((Path(tmp) / "summary.json").read_text())
+            self.assertEqual(summary["status"], "no_rounds")
+            self.assertTrue(summary["reason"])
+            self.assertEqual(summary["evidence_status"], "PROVISIONAL")
+            self.assertIsNone(summary["reference"])
+            self.assertEqual(summary["groups"], [])
+            assert_null_reasons(self, summary)
+
+    def test_summary_preserves_exact_session_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            harness.collect(collect_args(tmp), clock=FakeClock(), round_runner=fake_round,
+                            metadata_reader=lambda: {})
+            session = json.loads((Path(tmp) / "session.json").read_text())
+            result = harness.summarize(tmp, "idle")
+            persisted = json.loads((Path(tmp) / "summary.json").read_text())
+            for key in ("evidence_status", "alignment_model", "network_time_provenance",
+                        "network_time_provenance_reason"):
+                self.assertEqual(result[key], session[key])
+                self.assertEqual(persisted[key], session[key])
+                self.assertEqual(persisted["session_provenance"][0][key], session[key])
+
     def fixture_row(self, state, repeat, watts, coverage=10, busy=.2, setting=.2, status="complete"):
         return {"schema": harness.SCHEMA, "state": state, "repeat": repeat, "session": "fixture",
                 "status": status, "load_setting": setting, "observer_cpu_s": .5,
