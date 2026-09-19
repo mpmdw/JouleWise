@@ -1,0 +1,11 @@
+test_sample_quiet_predicate_evidence       Ran 45 tests in 6.496s OK 
+test_arm_readiness_evidence_packauth       Ran 27 tests in 54.405s OK 
+test_arm_readiness_registry                Ran 6 tests in 19.388s OK 
+test_calibration_bracketing                Ran 92 tests in 0.329s OK (skipped=1) 
+test_campaign_generator_core               Ran 7 tests in 1.637s OK 
+test_d117_decode_contrast_plan             Ran 25 tests in 32.593s OK (skipped=1) 
+test_d117_floor_qwen25_1p5b_plan           Ran 22 tests in 9.611s OK 
+test_d117_floor_qwen25_7b_plan             Ran 20 tests in 15.137s OK 
+test_d117_floor_qwen3_v5_generate          Ran 13 tests in 10.113s OK 
+test_d117_v3_family                        Ran 5 tests in 16.432s OK 
+test_gen_state                             Ran 44 tests in 1.721s OK 
