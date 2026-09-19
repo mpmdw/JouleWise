@@ -31,6 +31,9 @@ job_id and unchanged result), census_errors, and census_clean. Clean is true
 only when all available concurrent/sampler censuses report absence; a hit is
 false and missing/failed evidence is null with a reason. Summary groups and
 reference comparisons keep true, false and unknown census conditions separate.
+Rows also retain every hard-probe worker response (including failed AC and
+thermal probes) and copy the validated session OS build. These are recorded
+evidence, not admission decisions; missing evidence remains explicitly unknown.
 """
 
 from __future__ import annotations
@@ -72,10 +75,11 @@ ALIGNMENT_MODEL = "affine wall clock; production rate-aware bound; PROVISIONAL"
 RAILS = ("cpu_w", "gpu_w", "ane_w", "rail_sum_w", "combined_w", "dram_w")
 ROUND_KEYS = (
     "schema", "session", "state", "repeat", "round", "status", "error",
-    "epoch_s", "boot_id", "load_setting", "round_wall_start_s",
+    "epoch_s", "boot_id", "os_build", "os_build_valid", "load_setting", "round_wall_start_s",
     "round_wall_end_s", "round_mono_start_s", "round_mono_end_s",
     "observation", "observer_cpu_s", "power", "clusters", "cpus",
     "alignment", "raw", "censuses", "census_clean", "census_errors",
+    "hard_probes", "hard_probe_errors",
 )
 
 
@@ -100,6 +104,14 @@ def write_json(path, value):
 def number(value):
     return (float(value) if type(value) in (float, int)
             and math.isfinite(value) else None)
+
+
+def os_build_identity(value):
+    """Validate a recorded build label without guessing it from another field."""
+    if (not isinstance(value, str) or not value or value != value.strip()
+            or any(character.isspace() or not character.isprintable() for character in value)):
+        return None, "OS build missing or malformed in session metadata"
+    return value, None
 
 
 class Clock:
@@ -361,6 +373,7 @@ def production_round(interval_s, deadline, raw_dir, clock):
     start_cpu = cpu_total()
     observation = error = None
     censuses, census_errors = [], []
+    hard_probes, hard_probe_errors = [], []
     status = "complete"
 
     def task(*args, **kwargs):
@@ -414,6 +427,19 @@ def production_round(interval_s, deadline, raw_dir, clock):
                         census_errors.append({"job_id": job.job_id, "error": str(exc)})
                 else:
                     census_errors.append({"job_id": job.job_id, "error": "census did not complete during round"})
+            elif job.job_id.startswith("smoke-hard-"):
+                # The smoke loop intentionally ignores these values because
+                # it measures observer overhead, not admission. Its cached
+                # worker responses are still the per-round AC/thermal evidence.
+                # Retain raw exit codes/stdout/stderr even when a probe failed.
+                if job.ready():
+                    try:
+                        hard_probes.append({"job_id": job.job_id, "result": job.result()})
+                    except Exception as exc:
+                        hard_probe_errors.append({"job_id": job.job_id, "error": str(exc)})
+                else:
+                    hard_probe_errors.append({"job_id": job.job_id,
+                                              "error": "hard probes did not complete during round"})
         # _BindTask owns process-group cancellation and nonblocking reap. Keep
         # this outside the duration-limited support and include its CPU cost.
         def cleaned(job):
@@ -442,6 +468,7 @@ def production_round(interval_s, deadline, raw_dir, clock):
             "observer_cpu_s_reason": "worker cleanup incomplete" if residue else "SELF + reaped CHILDREN; no subtraction",
             "end_stamp": asdict(support_end), "workers": jobs, "argv": argv_records,
             "censuses": censuses, "census_errors": census_errors,
+            "hard_probes": hard_probes, "hard_probe_errors": hard_probe_errors,
             "cleanup_incomplete": residue}
 
 
@@ -577,6 +604,10 @@ def new_row(session, args, index, start, end, result):
     clean, reason = census_condition(censuses, errors)
     row.update(censuses=censuses or None, census_errors=errors,
                census_clean=clean, census_clean_reason=reason)
+    row["hard_probes"] = result.get("hard_probes") or None
+    row["hard_probe_errors"] = result.get("hard_probe_errors") or []
+    if row["hard_probes"] is None:
+        row["hard_probes_reason"] = "no hard-probe worker completed during round"
     if not censuses:
         row["censuses_reason"] = "no census completed during round"
     row["error_reason"] = "no round error" if row["error"] is None else "round failed or incomplete"
@@ -656,6 +687,10 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                 row["status"] = "partial"
                 row["error"] = row["error"] or "round exceeded collection duration"
             row["boot_id"] = metadata.get("boot_id")
+            row["os_build"], build_error = os_build_identity(session.get("os_build"))
+            row["os_build_valid"] = build_error is None
+            if build_error is not None:
+                row["os_build_reason"] = build_error
             session["round_workers"].append({"round": index, "workers": result.get("workers", []),
                                              "argv": result.get("argv", []),
                                              "identities": [json.loads(p.read_text()) for p in sorted(round_dir.glob("*-identity.json"))]})
@@ -958,6 +993,7 @@ def aggregate(rows):
     result = {"rounds": len(rows), "complete_rounds": len(complete),
               "partial_rounds": sum(r["status"] == "partial" for r in rows),
               "error_rounds": sum(r["status"] == "error" for r in rows),
+              "os_build_unavailable_rounds": sum(os_build_identity(r.get("os_build"))[0] is None for r in rows),
               "quantiles": {}, "power": {}, "coverage_s": {}, "alignment_bound_w": {}}
     for key in ("busy_cores", "host_busy_cores", "observer_cpu_s"):
         result["quantiles"][key] = quantiles(
@@ -986,7 +1022,28 @@ def aggregate(rows):
 def summarize(directory, reference_state=None):
     directory = Path(directory)
     paths = sorted(directory.rglob("rounds.jsonl"))
-    rows = [json.loads(line) for p in paths for line in p.read_text().splitlines() if line.strip()]
+    rows = []
+    for path in paths:
+        session_path = path.parent / "session.json"
+        session = json.loads(session_path.read_text()) if session_path.exists() else None
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            # Older rows may lack the build; preserve that unknown rather than
+            # retroactively filling it from the session. A supplied identity
+            # must agree with its own session, never with a neighbouring file.
+            build, build_error = os_build_identity(row.get("os_build"))
+            if "os_build" in row and session is not None:
+                expected, _ = os_build_identity(session.get("os_build"))
+                if row.get("session") != session.get("session") or build != expected:
+                    raise ValueError(f"row/session OS build identity mismatch: {path}")
+            if "os_build" in row:
+                row["os_build"] = build
+                row["os_build_valid"] = build_error is None
+                if build_error is not None:
+                    row["os_build_reason"] = build_error
+            rows.append(row)
     if any(r.get("schema") != SCHEMA for r in rows):
         raise ValueError("unsupported evidence schema")
     # Older v1 rows lack whole-round coverage: never infer clean from only

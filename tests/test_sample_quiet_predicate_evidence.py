@@ -281,6 +281,79 @@ class IntegrationTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    def test_hard_probe_results_survive_complete_and_interrupted_rounds(self):
+        from joulewise import night_gate
+        from scripts import run_night
+        # An AC loss, a restricted CPU and a probe error must survive even
+        # though smoke_observation_round discards the hard worker's return.
+        probes = [
+            {"argv": list(night_gate.PMSET_BATT_ARGV), "exit_code": 0,
+             "stdout": "Now drawing from 'Battery Power'\n", "stderr": ""},
+            {"argv": list(night_gate.THERMAL_ARGV), "exit_code": 0,
+             "stdout": "CPU_Speed_Limit = 80\n", "stderr": ""},
+            {"argv": list(night_gate.THERMAL_ARGV), "exit_code": 1,
+             "stdout": "", "stderr": "fixture probe failure"},
+        ]
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted), tempfile.TemporaryDirectory() as tmp:
+                jobs = [SimpleNamespace(job_id=f"smoke-hard-{index}", reaped=True,
+                    launch_done=True, process=SimpleNamespace(pid=None),
+                    ready=lambda: True, result=lambda probe=probe: [probe])
+                    for index, probe in enumerate(probes, 1)]
+                def smoke(interval):
+                    for job in jobs:
+                        run_night._BindTask(job.job_id, None, None)
+                    if interrupted:
+                        raise harness.CollectionExpired("fixture deadline")
+                    return {}, 0
+                with patch.object(run_night, "_BindTask", side_effect=jobs), \
+                        patch.object(run_night, "smoke_observation_round", side_effect=smoke):
+                    result = harness.production_round(1, 5, Path(tmp), FakeClock())
+                row = harness.new_row("fixture", collect_args(tmp), 1,
+                    FakeClock().stamp(), FakeClock().stamp(), result)
+                self.assertEqual(row["status"], "partial" if interrupted else "complete")
+                self.assertEqual(row["hard_probes"], [
+                    {"job_id": job.job_id, "result": [probe]} for job, probe in zip(jobs, probes)])
+                self.assertEqual(row["hard_probe_errors"], [])
+
+    def test_missing_and_failed_hard_workers_are_retained_as_errors(self):
+        from scripts import run_night
+        jobs = [SimpleNamespace(job_id=f"smoke-hard-{i}", reaped=True, launch_done=True,
+                process=SimpleNamespace(pid=None), ready=lambda ready=ready: ready,
+                result=Mock(side_effect=RuntimeError("fixture transport failure")))
+                for i, ready in enumerate((True, False), 1)]
+        def smoke(interval):
+            for job in jobs:
+                run_night._BindTask(job.job_id, None, None)
+            raise harness.CollectionExpired("fixture deadline")
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(run_night, "_BindTask", side_effect=jobs), \
+                patch.object(run_night, "smoke_observation_round", side_effect=smoke):
+            result = harness.production_round(1, 5, Path(tmp), FakeClock())
+        self.assertEqual(result["hard_probes"], [])
+        self.assertEqual(result["hard_probe_errors"], [
+            {"job_id": "smoke-hard-1", "error": "fixture transport failure"},
+            {"job_id": "smoke-hard-2", "error": "hard probes did not complete during round"}])
+        jobs[1].result.assert_not_called()
+
+    def test_collected_os_build_is_validated_persisted_and_used_by_summary(self):
+        for build in ("25G83", None, "", "25G83\n", ["25G83"]):
+            with self.subTest(build=build), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(harness.subprocess, "Popen", side_effect=AssertionError("no subprocess")):
+                session, rows = harness.collect(collect_args(tmp), clock=FakeClock(),
+                    round_runner=fake_round, metadata_reader=lambda: {"boot_id": "fixture", "os_build": build})
+                valid = build == "25G83"
+                self.assertEqual(session["os_build"], build)  # Raw metadata preserved.
+                persisted = [json.loads(line) for line in (Path(tmp) / "rounds.jsonl").read_text().splitlines()]
+                for row in persisted:
+                    self.assertEqual(row["os_build"], build if valid else None)
+                    self.assertIs(row["os_build_valid"], valid)
+                    if not valid:
+                        self.assertIn("missing or malformed", row["os_build_reason"])
+                summary = harness.summarize(tmp, "idle")
+                self.assertEqual(summary["groups"][0]["os_build"], build if valid else None)
+                self.assertEqual(summary["groups"][0]["os_build_unavailable_rounds"], 0 if valid else len(rows))
+
     def test_partial_round_retains_concurrent_census_and_marks_contamination(self):
         from scripts import run_night
         hit = {"exit_code": 0, "stdout": "123 claude -p\n", "stderr": "", "refusal": {"reason": "agent"}}
@@ -835,6 +908,21 @@ print(json.dumps(rows))
 
 
 class SummaryTests(unittest.TestCase):
+    def test_row_os_build_cannot_be_substituted_or_joined_to_another_session(self):
+        for field, replacement in (("os_build", "25G80"), ("session", "other-session")):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                harness.collect(collect_args(tmp), clock=FakeClock(), round_runner=fake_round,
+                    metadata_reader=lambda: {"boot_id": "fixture", "os_build": "25G83"})
+                path = Path(tmp) / "rounds.jsonl"
+                rows = [json.loads(line) for line in path.read_text().splitlines()]
+                rows[0][field] = replacement
+                path.write_text("\n".join(json.dumps(row) for row in rows))
+                before = path.read_bytes()
+                with self.assertRaisesRegex(ValueError, "row/session OS build identity mismatch"):
+                    harness.summarize(tmp, "idle")
+                self.assertEqual(path.read_bytes(), before)
+                self.assertFalse((Path(tmp) / "summary.json").exists())
+
     def test_summary_markdown_distinguishes_boots_and_optional_builds(self):
         for builds in (None, ("25G80", "25G83"), (None, "25G83")):
             with self.subTest(builds=builds), tempfile.TemporaryDirectory() as tmp:
