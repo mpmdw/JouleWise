@@ -1,0 +1,132 @@
+"""Offline fixture: render and verify an evidence plan; never collect/install."""
+import contextlib
+from dataclasses import replace
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from joulewise import night_gate
+from joulewise import quiet_predicate_campaign as campaign
+from scripts import gen_evidence_night as generator
+from tests.test_night_gate import make_plan
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class EvidenceFixture:
+    def __init__(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="qpe-fixture-", dir="/tmp")
+        self.root = Path(self.temp.name)
+        self.repo = self.root / "measurement"
+        self.repo.mkdir()
+        for directory in ("joulewise", "scripts"):
+            shutil.copytree(ROOT / directory, self.repo / directory,
+                            ignore=shutil.ignore_patterns("__pycache__"))
+        for name in campaign.MANIFEST_PATHS:
+            target = self.repo / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / name, target)
+        (self.repo / ".venv/bin").mkdir(parents=True)
+        (self.repo / ".venv/bin/python").symlink_to(sys.executable)
+        def git(*argv):
+            return subprocess.check_output(["git", "-C", str(self.repo), *argv], stderr=subprocess.DEVNULL, text=True).strip()
+        git("init", "-q")
+        git("add", *campaign.MANIFEST_PATHS)
+        git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
+        self.head = git("rev-parse", "HEAD")
+        self.custody = self.root / "custody"
+        self.custody.mkdir()
+        self.plan_path = self.custody / "plan.json"
+        self.plan = replace(make_plan(), plan_id="qpe-fixture", repo_head=self.head,
+            measurement_root=str(self.repo), measurement_head=self.head,
+            custody_root=str(self.custody), chain_path=str(self.custody / "chain.zsh"),
+            chain_sha256_path=str(self.custody / "chain.zsh.sha256"), window_max_s=9000,
+            registration_path=campaign.PROTOCOL_PATH)
+        self.write_plan()
+
+    def write_plan(self):
+        from joulewise.night_plan_writer import night_plan_json_bytes
+        self.plan_path.write_bytes(night_plan_json_bytes(self.plan))
+
+    def close(self):
+        self.temp.cleanup()
+
+
+class EvidenceGeneratorTests(unittest.TestCase):
+    def setUp(self):
+        self.fixture = EvidenceFixture()
+        self.addCleanup(self.fixture.close)
+        self.f = self.fixture
+
+    def test_render_only_seals_tracked_inputs_and_both_chain_sidecars(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(generator.main(["--plan", str(self.f.plan_path), "--render-only"]), 0)
+        wrapper = Path(self.f.plan.chain_path)
+        manifest = json.loads(wrapper.with_name("evidence_manifest.json").read_text())
+        self.assertEqual(manifest, campaign.manifest_for(self.f.plan))
+        self.assertEqual(set(manifest["files"]), set(campaign.MANIFEST_PATHS))
+        self.assertEqual(wrapper.read_text().count("export NIGHT_PAYLOAD_KIND="), 1)
+        self.assertNotIn("CALIBRATION_LEDGER", wrapper.read_text())
+        self.assertEqual(Path(self.f.plan.chain_sha256_path).read_text().split()[0], hashlib.sha256(wrapper.read_bytes()).hexdigest())
+        if Path("/bin/zsh").is_file():
+            subprocess.run(["/bin/zsh", "-n", str(wrapper)], check=True)
+        self.assertFalse((self.f.custody / "night").exists())
+
+    def test_wrong_class_v4_and_frozen_window_refuse(self):
+        from tests.test_quiet_admission import POLICY
+        for change in ({"receipt_class": "REHEARSAL_STUB"}, {"window_max_s": 9001},
+                       {"quiet_admission": dict(POLICY), "window_max_s": 9600}):
+            with self.subTest(change=change):
+                self.f.plan = replace(self.f.plan, **change)
+                self.f.write_plan()
+                with self.assertRaises((ValueError, generator.GenerationRefusal)):
+                    generator.generate(self.f.plan_path)
+                self.f.plan = replace(self.f.plan, receipt_class="DIAGNOSTIC_NO_PACK", window_max_s=9000, quiet_admission=None)
+
+    def test_calibration_chain_and_override_options_refuse(self):
+        for template in ("scripts/night_chains/calibration_derivation_only.zsh", "custom.zsh"):
+            with self.assertRaisesRegex(generator.GenerationRefusal, "calibration/derivation"):
+                generator.generate(self.f.plan_path, chain_template=template)
+        for option in ("--settle-s", "--envelopes", "--duration-s", "--sample-interval-s"):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                generator.main(["--plan", str(self.f.plan_path), "--render-only", option, "1"])
+            self.assertEqual(caught.exception.code, 2)
+        Path(self.f.plan.chain_path).write_text("export CALIBRATION_LEDGER='/some/path'\n")
+        with self.assertRaisesRegex(generator.GenerationRefusal, "calibration/derivation"):
+            generator.generate(self.f.plan_path)
+
+    def test_dirty_tracked_input_unruled_protocol_census_and_sidecar_refuse(self):
+        source = self.f.repo / campaign.HARNESS_PATHS[0]
+        data = source.read_bytes()
+        source.write_bytes(data + b"\n# changed\n")
+        with self.assertRaisesRegex(ValueError, "measurement_head"):
+            generator.generate(self.f.plan_path)
+        source.write_bytes(data)
+        with patch.object(night_gate, "QPE01_PILOT_REGISTRATION_SHA256", "0" * 64):
+            with self.assertRaisesRegex(ValueError, "ruled"):
+                generator.generate(self.f.plan_path)
+        self.f.plan = replace(self.f.plan, plan_id="unsafe-claude-night")
+        self.f.write_plan()
+        with self.assertRaisesRegex(generator.GenerationRefusal, "census substring"):
+            generator.generate(self.f.plan_path)
+        self.f.plan = replace(self.f.plan, plan_id="qpe", chain_sha256_path="/tmp/wrong.sha256")
+        self.f.write_plan()
+        with self.assertRaisesRegex(generator.GenerationRefusal, "sidecar"):
+            generator.generate(self.f.plan_path)
+
+    def test_no_overwrite_of_authored_evidence(self):
+        generator.generate(self.f.plan_path)
+        with self.assertRaisesRegex(generator.GenerationRefusal, "exists"):
+            generator.generate(self.f.plan_path)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -632,7 +632,7 @@ runpy.run_path(script, run_name="__main__")
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(harness.subprocess, "Popen", return_value=process) as launch, \
                 patch.object(harness.threading, "Timer", side_effect=make_timer), \
-                patch.object(harness.os, "kill") as kill, \
+                patch.object(harness.os, "killpg") as kill, \
                 patch.object(harness, "identity", return_value={"pid": 123, "start_identity": "fixture"}), \
                 patch.object(harness, "command_text", return_value=(None, "fixture process list unavailable")):
             path = Path(tmp) / "power.plist"
@@ -1094,3 +1094,63 @@ class SummaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NativeInteriorAndLoadJoinTests(unittest.TestCase):
+    def test_interior_uses_native_support_not_scaled_whole_envelope_mean(self):
+        frames = aligned_fixture()
+        anchor = {'status':'bounded','effective_clock_anchor_bound_s':0}
+        value = harness.reduce_interior(frames, anchor, 1001, 2)
+        self.assertTrue(value['complete_support'])
+        self.assertAlmostEqual(value['power']['energy_j']['rail_sum_w'], 9.2)
+        self.assertNotAlmostEqual(value['power']['energy_j']['rail_sum_w'], (2.6+9.2)/3*2)
+        partial = harness.reduce_interior(frames, anchor, 1001, 3)
+        self.assertFalse(partial['complete_support'])
+        self.assertEqual(partial['status'], 'partial')
+        self.assertAlmostEqual(partial['power']['energy_j']['rail_sum_w'], 9.2)
+        frames[1]['power']['ane_w'] = frames[1]['power']['rail_sum_w'] = None
+        self.assertFalse(harness.reduce_interior(frames, anchor, 1001, 2)['complete_support'])
+        self.assertFalse(harness.reduce_interior(frames, {'status':'unresolved'}, 1001, 2)['complete_support'])
+
+    def fixture(self):
+        row = {'boot_id':'boot','alignment':{'ps_start':10.,'ps_end':20.}}
+        identity = {'pid':42,'start_identity':'identity-A'}
+        report = {'boot_id':'boot','error':None,'cleanup':[{'pid':42,'alive':False,'exitcode':0}],'workers':[{'identity':identity,'periods':[
+            {'start_mono_s':5.,'end_mono_s':15.,'cpu_used_s':2.},
+            {'start_mono_s':15.,'end_mono_s':25.,'cpu_used_s':4.}]}]}
+        before = {(42,'identity-A'):{'cumulative_cpu_seconds':1.}}
+        after = {(42,'identity-A'):{'cumulative_cpu_seconds':4.}}
+        return row, report, before, after
+
+    def test_load_join_matches_worker_identity_and_exact_monotonic_overlap(self):
+        value = harness.join_load_log(*self.fixture())
+        self.assertEqual(value['status'], 'joined')
+        self.assertAlmostEqual(value['delivered_busy_cores'], .3)
+        self.assertAlmostEqual(value['sampled_busy_cores'], .3)
+
+    def test_reused_pid_wrong_boot_and_partial_load_support_do_not_join(self):
+        row, report, before, after = self.fixture()
+        wrong = {(42,'identity-B'):{'cumulative_cpu_seconds':4.}}
+        self.assertEqual(harness.join_load_log(row,report,before,wrong)['status'], 'unresolved')
+        report['boot_id']='another-boot'
+        self.assertEqual(harness.join_load_log(row,report,before,after)['status'], 'unresolved')
+        report['boot_id']='boot'
+        report['workers'][0]['periods'].pop()
+        value = harness.join_load_log(row,report,before,after)
+        self.assertEqual(value['status'], 'unresolved')
+        self.assertEqual(value['workers'][0]['support_s'], 5)
+
+    def test_overlapping_load_periods_refuse_double_counting(self):
+        row, report, before, after = self.fixture()
+        report['workers'][0]['periods'][1]['start_mono_s']=14.
+        with self.assertRaisesRegex(ValueError,'overlapping'):
+            harness.join_load_log(row,report,before,after)
+
+    def test_calibrating_periods_and_failed_cleanup_do_not_qualify_as_delivered_support(self):
+        row, report, before, after = self.fixture()
+        report['workers'][0]['periods'][0]['calibrating'] = True
+        result = harness.join_load_log(row,report,before,after)
+        self.assertEqual(result['status'], 'unresolved')
+        self.assertEqual(result['workers'][0]['calibration_overlap_s'], 5)
+        report['cleanup'] = [{'alive':True,'exitcode':None}]
+        self.assertEqual(harness.join_load_log(row,report,before,after)['reason'], 'load cleanup incomplete or escalated')

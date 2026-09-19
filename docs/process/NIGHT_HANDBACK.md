@@ -85,7 +85,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_refused_bind_expired` | Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182. |
 | `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182. |
 | `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182. |
-| `night_refused_registration` | Required registration did not validate. |
+| `night_refused_registration` | The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source. |
 | `night_window_expired` | Measurement window expired. |
 | `night_plan_stale` | Plan age or pinned head failed; not a stale notice. |
 | `night_plan_malformed` | Plan structure or fields failed their contract. |
@@ -122,6 +122,8 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `plan_t0_ambiguous_local_time` | t0's local minute occurs twice; choose an unambiguous minute. |
 | `retained prior plist: <path>; re-run --uninstall` | A saved previous job file remains; follow the existing human-resolution/uninstall path. |
 | `unsupported plist destination: <path>` | The job-file destination is not a regular file; resolve it under the existing path. |
+| `probe receipt kind does not match payload kind` | The receipt describes a different payload; use the matching verify-only probe. |
+| `probe payload kind ambiguous` | The pinned chain repeats the payload-kind export, names an unknown kind, or exports both an evidence kind and a calibration ledger. |
 | `--render-only directory must differ from launch_dir` | Use a separate directory for rendered job files. |
 
 **Other explicit refusals — cold-gate path.**
@@ -130,6 +132,8 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 |---|---|
 | `HOLD_CENSUS` | A supervisor census hold alone does not establish the narrowly evidenced idle arm cause. |
 | `slot_refused` | A measurement slot refused; cure the finding before any further night. |
+
+The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling.
 
 Unknown or mixed causes and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path; receipt refusals remain ineligible for same-plan retries. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.
 
@@ -562,9 +566,16 @@ scripts/install_night_agent.sh --plan "$PLAN" --python "$PY"
 
 The non-authorizing **receipt**, `<plan_dir>/night_probe_receipt.json`, is a
 record of successful access, never permission to capture. It binds the plan,
-measurement checkout commit, ledger head (the latest ledger record's digest),
-code fingerprints, wrapper and ledger bytes, and both interpreters' paths,
-versions and binary SHA-256 fingerprints. Install recomputes those bindings
+measurement checkout commit, code fingerprints, wrapper, and both interpreters' paths,
+versions and binary SHA-256 fingerprints. A calibration payload also binds the
+ledger head (the latest ledger record's digest) and ledger bytes. An evidence
+payload instead binds the sealed manifest, harness and registration digests,
+and the tracked chain-source digest at the measurement commit. Its distinct
+receipt, `joulewise.night_evidence_probe_receipt.v1`, verifies files and imports
+only: it never starts `collect`, `load` or power sampling and carries no ledger
+custody fields. The single literal `NIGHT_PAYLOAD_KIND=quiet_predicate_evidence`
+in the pinned wrapper selects that receipt; absence retains the calibration
+probe. Install recomputes those bindings
 and requires success less than six hours old. A missing, stale, failed, or
 mismatched receipt refuses installation with exit 2 and the field name.
 `--probe-timeout-s 600` bounds the temporary job; `--probe-max-age-s 21600`

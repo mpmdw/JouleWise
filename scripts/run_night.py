@@ -589,6 +589,7 @@ def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
     environment.pop("JOULEWISE_NIGHT_CUSTODY_BUDGET_S", None)
     environment.pop("NIGHT_VERIFY_ONLY", None)
     environment.pop("NIGHT_RESERVATION_ARGV_ONLY", None)
+    environment.pop("EVIDENCE_PROCESS_JOURNAL", None)
     return environment
 
 
@@ -982,6 +983,12 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
         night_dir / "courier.attempts.jsonl",
         night_dir / "courier.heartbeat",
         night_dir / "courier.sent",
+        night_dir / "evidence_busy_cores.jsonl",
+        night_dir / "evidence_processes.jsonl",
+        night_dir / "evidence_envelopes.jsonl",
+        night_dir / "evidence_cleanup.json",
+        night_dir / "evidence_outcome.json",
+        *sorted((night_dir / "evidence").rglob("*")),
     ]
     return [
         {"path": str(path.relative_to(custody_root)), "sha256": _sha256_path(path)}
@@ -1022,7 +1029,12 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
         destination.mkdir(parents=True, exist_ok=True)
         for artifact in _artifact_list(custody_root, night_dir):
             source = custody_root / artifact["path"]
-            shutil.copy2(source, destination / source.name)
+            # Preserve repeated envelope basenames; flattening loses all but
+            # the final rounds/session/raw-power file.
+            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / "evidence") else Path(source.name)
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
         subprocess.run(
             ["git", "-C", str(clone), "add", str(destination.relative_to(clone))],
             capture_output=True,
@@ -1223,6 +1235,29 @@ def _acquire_courier_lock(night_dir: Path) -> int | None:
     return None
 
 
+def _evidence_cleanup_error(plan, night_dir):
+    """No courier agent while an evidence collector/recorder/sampler survives."""
+    if not (night_dir / "chain.started").exists():
+        return None
+    try:
+        if night_gate.probe_payload_kind(Path(plan.chain_path).read_text()) != "quiet_predicate_evidence":
+            return None
+        from joulewise.quiet_predicate_campaign import cleanup_groups, process_groups
+        journal = night_dir / "evidence_processes.jsonl"
+        cleanup = cleanup_groups(journal, budget_s=30)
+        _write_json(night_dir / "evidence_cleanup.json", cleanup)
+        if not cleanup["cleanup_proven"] or process_groups(journal):
+            return "evidence collector/recorder/sampler residue; courier suppressed"
+        path = night_dir / "evidence_outcome.json"
+        outcome = json.loads(path.read_text()) if path.exists() else None
+        if not isinstance(outcome, dict) or outcome.get("outcome") not in {"complete", "refused"}:
+            _write_json(path, {"outcome": "refused", "error": "chain ended without evidence outcome",
+                               "cleanup_proven": True})
+        return None
+    except (OSError, ValueError, KeyError) as exc:
+        return f"evidence outcome/cleanup unproven; courier suppressed: {exc}"
+
+
 def run_courier(
     custody_root: Path,
     plan: NightPlan,
@@ -1235,6 +1270,9 @@ def run_courier(
 
     night_dir = custody_root / "night"
     night_dir.mkdir(parents=True, exist_ok=True)
+    error = _evidence_cleanup_error(plan, night_dir)
+    if error:
+        return {"attempted": 0, "sent": False, "heartbeat_seen": False, "last_error": error}
     heartbeat = night_dir / "courier.heartbeat"
     sent = night_dir / "courier.sent"
     attempts_path = night_dir / "courier.attempts.jsonl"
@@ -2069,6 +2107,9 @@ class _BindLauncher:
                     task.process.__init__(argv, start_new_session=True, close_fds=True, cwd=str(REPO_ROOT),
                         pass_fds=(task.writer,) + task.test_pass_fds, stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if os.environ.get("EVIDENCE_PROCESS_JOURNAL"):
+                        from joulewise.quiet_predicate_campaign import journal_process
+                        journal_process("sampler_or_probe", task.process.pid)
             except Exception as error:
                 task.launch_error = f'{type(error).__name__}: {error}'
             finally:
@@ -3248,15 +3289,57 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
             record["phase"] = state["phase"]
         if output.is_file():
             record.update(json.loads(output.read_text()))
+        is_evidence = record["schema"] == "joulewise.night_evidence_probe_receipt.v1"
+        if is_evidence:
+            for field in ("custody_budget_s", "custody_elapsed_s", "observations", "ledger_head_sha256", "code_digests"):
+                record.pop(field, None)
         record.update(identity, started_epoch_s=started, finished_epoch_s=time.time(), cleanup_proven=gone)
         if timed_out:
-            record.update(outcome="timeout", refusal_code="calibration_ledger_custody_timeout",
-                          custody_elapsed_s=time.monotonic() - (deadline - timeout_s))
+            if is_evidence:
+                record.update(outcome="timeout", refusal_code="evidence_probe_timeout")
+            else:
+                record.update(outcome="timeout", refusal_code="calibration_ledger_custody_timeout",
+                              custody_elapsed_s=time.monotonic() - (deadline - timeout_s))
         elif not gone:
             record.update(outcome="refused", refusal_code="probe_process_survived")
         elif not output.is_file():
             record.update(outcome="refused", refusal_code="probe_worker_failed", detail=stderr.decode(errors="replace"))
         _atomic_probe_json(receipt_path, record)
+    return 0 if record["outcome"] == "ok" else 2
+
+
+def _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase):
+    import tempfile
+    from joulewise.night_agent_install import evidence_probe_bindings
+    from joulewise.quiet_predicate_campaign import RECEIPT_SCHEMA
+    record = dict(schema=RECEIPT_SCHEMA, plan_id=plan.plan_id, measurement_head=plan.measurement_head,
+                  verify_only=True, collect_started=False, load_started=False, outcome="refused",
+                  refusal_code=None, started_epoch_s=time.time(), finished_epoch_s=None,
+                  launchd_label=os.environ.get("JOULEWISE_LAUNCHD_LABEL"))
+    phase("evidence-bindings", record)
+    try:
+        record.update(evidence_probe_bindings(plan, plan_path, sys.executable))
+        phase("evidence-chain", record)
+        with tempfile.TemporaryDirectory(prefix="evidence-probe-", dir=receipt_path.parent) as directory:
+            env = _chain_environment(plan, Path(directory))
+            env["NIGHT_VERIFY_ONLY"] = "1"
+            result = subprocess.run(["/bin/zsh", plan.chain_path], env=env,
+                stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                timeout=max(.001, deadline - time.monotonic()))
+            lines = [line for line in result.stdout.splitlines() if line.startswith("VERIFY_ONLY_OK")]
+            record["verify_stdout"] = lines
+            if result.returncode != 0 or lines != ["VERIFY_ONLY_OK manifest=" + record["manifest_sha256"]]:
+                raise ValueError("expected one matching VERIFY_ONLY_OK manifest line: " + result.stderr)
+            # Re-derive after the read-only chain; a changed input never passes.
+            if any(record[k] != v for k, v in evidence_probe_bindings(plan, plan_path, sys.executable).items()):
+                raise ValueError("evidence bindings changed during verify-only probe")
+            record["outcome"] = "ok"
+    except subprocess.TimeoutExpired:
+        record.update(outcome="timeout", refusal_code="evidence_probe_timeout")
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        record["refusal_code"] = str(exc)
+    record["finished_epoch_s"] = time.time()
+    _atomic_probe_json(receipt_path, record)
     return 0 if record["outcome"] == "ok" else 2
 
 
@@ -3270,6 +3353,13 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
     phase("plan")
     started = time.time()
     plan = _load_plan(plan_path)
+    try:
+        payload_kind = night_gate.probe_payload_kind(Path(plan.chain_path).read_text())
+    except ValueError as exc:
+        _atomic_probe_json(receipt_path, {"outcome": "refused", "refusal_code": str(exc)})
+        return 2
+    if payload_kind == "quiet_predicate_evidence":
+        return _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase)
     phase("bindings", {"plan_id": plan.plan_id, "measurement_head": plan.measurement_head})
     bindings = probe_bindings(plan, plan_path, sys.executable)
     record = dict(bindings, schema="joulewise.night_probe_receipt.v1",

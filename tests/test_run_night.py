@@ -310,7 +310,7 @@ class NightDriverTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.registration = self.root / "registration.json"
-        self.registration.write_text('{"registered":true}\n', encoding="utf-8")
+        self.registration.write_text((REPO_ROOT / night_gate.D166_REGISTRATION_PATH).read_text(), encoding="utf-8")
         self.t0_epoch_s = datetime(2026, 9, 2, 1, 0).timestamp()
         self.source = ProbeSource(self.t0_epoch_s + 1)
         self.plan_path = self.root / "plan.json"
@@ -3605,7 +3605,7 @@ class WindowDeadlineTests(unittest.TestCase):
         self.chain = self.root / "chain.zsh"
         self.sidecar = self.root / "chain.zsh.sha256"
         self.registration = self.root / "registration.json"
-        self.registration.write_text('{"registered":true}\n', encoding="utf-8")
+        self.registration.write_text((REPO_ROOT / night_gate.D166_REGISTRATION_PATH).read_text(), encoding="utf-8")
         self.plan_path = self.root / "plan.json"
         self.courier = self.root / "claude"
         self.courier.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
@@ -4683,3 +4683,146 @@ class BindSupervisionProcessTests(unittest.TestCase):
         self.assertGreaterEqual(result['now'], 60)
         self.assertEqual(result['sample_jobs'], 1)
         self.assertIsNone(result['receipt']['go_epoch_s'])
+
+
+class EvidenceProbeTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_gen_evidence_night import EvidenceFixture
+        from scripts import gen_evidence_night, run_night
+        self.driver = run_night
+        self.f = EvidenceFixture()
+        self.addCleanup(self.f.close)
+        gen_evidence_night.generate(self.f.plan_path)
+
+    @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for shell probe fixture')
+    def test_worker_verify_only_round_trip_never_starts_collection(self):
+        from joulewise import night_agent_install as installer
+        from types import SimpleNamespace
+        receipt = self.f.custody / 'night_probe_receipt.json'
+        progress = self.f.custody / 'progress.json'
+        with mock.patch.dict(os.environ, {'JOULEWISE_LAUNCHD_LABEL': installer.probe_label(self.f.plan.plan_id)}):
+            code = self.driver._probe_worker(self.f.plan_path, receipt, progress, time.monotonic() + 30)
+        self.assertEqual(code, 0, receipt.read_text())
+        value = json.loads(receipt.read_text())
+        self.assertEqual(value['schema'], 'joulewise.night_evidence_probe_receipt.v1')
+        self.assertTrue(value['verify_only'])
+        self.assertIs(value['collect_started'], False)
+        self.assertIs(value['load_started'], False)
+        self.assertFalse(set(value) & {'custody_budget_s', 'custody_elapsed_s', 'observations'})
+        self.assertFalse(list(self.f.root.rglob('rounds.jsonl')))
+        self.assertFalse(list(self.f.root.rglob('evidence_processes.jsonl')))
+        # Worker cleanup is supervisor-owned. Supply its proven fixture result.
+        value['cleanup_proven'] = True
+        receipt.write_text(json.dumps(value))
+        prepared = SimpleNamespace(plan=self.f.plan, plan_path=self.f.plan_path, python=sys.executable)
+        self.assertEqual(installer.validate_probe_receipt(prepared), value)
+
+    def test_worker_rejects_ambiguous_payload_before_bindings_or_chain(self):
+        path = Path(self.f.plan.chain_path)
+        original = path.read_text()
+        for extra in ('export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n', 'export CALIBRATION_LEDGER=/tmp/ledger\n'):
+            path.write_text(original + extra)
+            receipt = self.f.custody / 'refused.json'
+            with mock.patch('joulewise.night_agent_install.probe_bindings') as calibration, mock.patch.object(self.driver.subprocess, 'Popen') as launch:
+                rc = self.driver._probe_worker(self.f.plan_path, receipt, self.f.custody / 'progress.json', time.monotonic()+10)
+            self.assertEqual(rc, 2)
+            self.assertEqual(json.loads(receipt.read_text())['refusal_code'], 'probe payload kind ambiguous')
+            calibration.assert_not_called()
+            launch.assert_not_called()
+
+    @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for shell probe fixture')
+    def test_supervisor_preserves_typed_evidence_receipt_without_custody_fields(self):
+        from joulewise import night_agent_install as installer
+        receipt = self.f.custody / 'night_probe_receipt.json'
+        with mock.patch.dict(os.environ, {'JOULEWISE_LAUNCHD_LABEL': installer.probe_label(self.f.plan.plan_id)}), \
+                mock.patch.object(self.driver, '_stop_probe_group', return_value=True):
+            # Fixture-only census seam: the real worker and verify-only chain
+            # finish and are reaped by communicate; no host census is claimed.
+            self.assertEqual(self.driver.probe_night(self.f.plan_path, receipt, timeout_s=30), 0)
+        value = json.loads(receipt.read_text())
+        self.assertEqual(value['schema'], 'joulewise.night_evidence_probe_receipt.v1')
+        self.assertFalse(set(value) & {'custody_budget_s','custody_elapsed_s','observations'})
+        self.assertEqual(installer.validate_probe_receipt(types.SimpleNamespace(
+            plan=self.f.plan, plan_path=self.f.plan_path, python=sys.executable)), value)
+
+    def test_missing_or_duplicate_verify_marker_refuses(self):
+        from joulewise import night_agent_install as installer
+        bindings = installer.evidence_probe_bindings(self.f.plan, self.f.plan_path, sys.executable)
+        marker = 'VERIFY_ONLY_OK manifest=' + bindings['manifest_sha256']
+        for output in ('', marker + '\n' + marker + '\n', 'VERIFY_ONLY_OK manifest=wrong\n'):
+            receipt = self.f.custody / 'refused.json'
+            with mock.patch.object(installer, 'evidence_probe_bindings', return_value=bindings), mock.patch.object(self.driver.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, output, '')):
+                rc = self.driver._evidence_probe_worker(self.f.plan, self.f.plan_path, receipt, time.monotonic()+10, lambda *args: None)
+            self.assertEqual(rc, 2)
+            self.assertIn('expected one matching', json.loads(receipt.read_text())['refusal_code'])
+
+    def test_artifact_inventory_includes_each_envelope_and_raw_power(self):
+        night = self.f.custody / 'night'
+        for index in (1, 2):
+            out = night / 'evidence' / f'envelope-{index:02d}'
+            (out / 'raw').mkdir(parents=True)
+            for name in ('rounds.jsonl', 'session.json', 'summary.json', 'summary.md', 'raw/power.plist'):
+                (out / name).write_text(str(index))
+        (night / 'evidence_busy_cores.jsonl').write_text('{}\n')
+        paths = [x['path'] for x in self.driver._artifact_list(self.f.custody, night)]
+        self.assertEqual(len(paths), 11)
+        self.assertIn('night/evidence/envelope-02/raw/power.plist', paths)
+
+    def test_cleanup_residue_suppresses_courier_before_launch(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.f.custody / 'night'
+        night.mkdir()
+        (night / 'chain.started').write_text('{}')
+        (night / 'evidence_processes.jsonl').write_text('{"kind":"collector","pgid":99999999}\n')
+        with mock.patch.object(campaign, 'cleanup_groups', return_value={'cleanup_proven':False,'residue':[99999999]}), mock.patch.object(self.driver.subprocess, 'Popen') as launch:
+            outcome = self.driver.run_courier(self.f.custody, self.f.plan, Path('/tmp/no-courier'))
+        self.assertFalse(outcome['sent'])
+        self.assertIn('residue', outcome['last_error'])
+        launch.assert_not_called()
+
+
+@unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for calibration probe fixture')
+class CalibrationProbeByteCompatibilityTests(unittest.TestCase):
+    def test_calibration_worker_receipt_bytes_match_part1(self):
+        import ast
+        from scripts import run_night as driver
+        from joulewise import night_agent_install as installer
+        fixture = NightProbeTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        baseline = types.ModuleType('stagea_part1_probe_baseline')
+        # Compile only the unchanged calibration worker from the pinned base;
+        # all other dependencies are the same fixture and current pure helpers.
+        raw = subprocess.check_output(['git','show','3e4acc59:scripts/run_night.py'],cwd=REPO_ROOT,text=True)
+        node = next(n for n in ast.parse(raw).body if isinstance(n,ast.FunctionDef) and n.name=='_probe_worker')
+        namespace = dict(driver.__dict__)
+        exec(compile(ast.Module(body=[node],type_ignores=[]),'<part1-probe>','exec'),namespace)
+        # A frozen wall clock yields a literal byte comparison; no changing
+        # PID/temp path is a field in the worker's calibration receipt.
+        receipts=[]
+        for worker in (namespace['_probe_worker'],driver._probe_worker):
+            target=fixture.root/('base.json' if not receipts else 'current.json')
+            with mock.patch.object(driver.time,'time',return_value=1800000000.), mock.patch.dict(os.environ,{'JOULEWISE_LAUNCHD_LABEL':installer.probe_label(fixture.plan.plan_id)}):
+                self.assertEqual(worker(fixture.plan_path,target,fixture.root/'progress.json',time.monotonic()+20),0)
+            receipts.append(target.read_bytes())
+        self.assertEqual(receipts[0],receipts[1])
+
+
+class EvidenceProbeFailureTests(unittest.TestCase):
+    # Reuse fixture setup, but expose only the additional producer branches.
+    setUp = EvidenceProbeTests.setUp
+    def test_chain_failure_timeout_and_mutation_cannot_produce_success(self):
+        from joulewise import night_agent_install as installer
+        bindings = installer.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)
+        marker = 'VERIFY_ONLY_OK manifest='+bindings['manifest_sha256']+'\n'
+        receipt = self.f.custody/'failure.json'
+        for result in (subprocess.CompletedProcess([],2,marker,'chain failed'),
+                       subprocess.TimeoutExpired(['fixture'],1)):
+            with mock.patch.object(installer,'evidence_probe_bindings',return_value=bindings), \
+                    mock.patch.object(self.driver.subprocess,'run',side_effect=result if isinstance(result,Exception) else None,return_value=result):
+                self.assertEqual(self.driver._evidence_probe_worker(self.f.plan,self.f.plan_path,receipt,time.monotonic()+2,lambda *args:None),2)
+            self.assertNotEqual(json.loads(receipt.read_text())['outcome'],'ok')
+        with mock.patch.object(installer,'evidence_probe_bindings',side_effect=[bindings,{**bindings,'plan_sha256':'0'*64}]), \
+                mock.patch.object(self.driver.subprocess,'run',return_value=subprocess.CompletedProcess([],0,marker,'')):
+            self.assertEqual(self.driver._evidence_probe_worker(self.f.plan,self.f.plan_path,receipt,time.monotonic()+2,lambda *args:None),2)
+        self.assertIn('changed during',json.loads(receipt.read_text())['refusal_code'])
