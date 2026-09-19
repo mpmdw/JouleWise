@@ -339,6 +339,9 @@ class CollectionTests(unittest.TestCase):
             self.assertTrue(all(path.is_relative_to(out) for path in created))
             self.assertEqual(list(root.iterdir()), [out])
 
+    @unittest.skipUnless(sys.platform == "darwin", "real collect subprocess runs the macOS census and "
+                         "power-policy probes (pmset, sysctl); on Linux every round errors and, since fix "
+                         "round 4, an all-error session exits 1 by design")
     def test_real_collect_no_power_reaps_all_recorded_workers(self):
         with tempfile.TemporaryDirectory() as tmp:
             # One second is the minimum top sampling interval; use one interval.
