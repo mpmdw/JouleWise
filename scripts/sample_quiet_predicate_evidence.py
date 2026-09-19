@@ -25,6 +25,12 @@ linear fallback is silently substituted. Like the adapter, endpoints advance
 by elapsed_ns after record zero (powermetrics.py:1775-1785, 2009-2025).
 The bound is conditional on the anchor's affine clock model; network-time
 provenance is unknown here, so these artifacts are PROVISIONAL desk evidence.
+
+Schema joulewise.quiet_predicate_evidence.v1 adds per-round censuses (source,
+job_id and unchanged result), census_errors, and census_clean. Clean is true
+only when all available concurrent/sampler censuses report absence; a hit is
+false and missing/failed evidence is null with a reason. Summary groups and
+reference comparisons keep true, false and unknown census conditions separate.
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ import resource
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from types import SimpleNamespace
@@ -61,13 +68,14 @@ from joulewise.uncertainty_evidence import (
 )
 
 SCHEMA = "joulewise.quiet_predicate_evidence.v1"
+ALIGNMENT_MODEL = "affine wall clock; production rate-aware bound; PROVISIONAL"
 RAILS = ("cpu_w", "gpu_w", "ane_w", "rail_sum_w", "combined_w", "dram_w")
 ROUND_KEYS = (
     "schema", "session", "state", "repeat", "round", "status", "error",
     "epoch_s", "boot_id", "load_setting", "round_wall_start_s",
     "round_wall_end_s", "round_mono_start_s", "round_mono_end_s",
     "observation", "observer_cpu_s", "power", "clusters", "cpus",
-    "alignment", "raw",
+    "alignment", "raw", "censuses", "census_clean", "census_errors",
 )
 
 
@@ -344,8 +352,15 @@ def production_round(interval_s, deadline, raw_dir, clock):
     from scripts import run_night
     tasks, argv_records = [], []
     old_task, old_argv = run_night._BindTask, run_night._bind_argv
+    temporary_directory = tempfile.TemporaryDirectory
+
+    def round_directory(*args, **kwargs):
+        # The production smoke imports tempfile locally. Confine its journals
+        # without changing production code or process-wide TMPDIR selection.
+        return temporary_directory(*args, **{**kwargs, "dir": raw_dir})
     start_cpu = cpu_total()
     observation = error = None
+    censuses, census_errors = [], []
     status = "complete"
 
     def task(*args, **kwargs):
@@ -372,7 +387,8 @@ def production_round(interval_s, deadline, raw_dir, clock):
             raise CollectionExpired("collection duration reached during round")
 
     try:
-        with replaced(run_night, _BindTask=task, _bind_argv=argv,
+        with replaced(tempfile, TemporaryDirectory=round_directory), \
+                replaced(run_night, _BindTask=task, _bind_argv=argv,
                       time=SimpleNamespace(monotonic=clock.monotonic, sleep=sleep)):
             observation, _cost = run_night.smoke_observation_round(interval_s)
     except CollectionExpired as exc:
@@ -388,6 +404,16 @@ def production_round(interval_s, deadline, raw_dir, clock):
                         observation = job.result()
                     except Exception:
                         pass  # The round error and raw transport remain available.
+        for job in tasks:
+            if job.job_id.startswith("census-"):
+                if job.ready():
+                    try:
+                        censuses.append({"source": "concurrent", "job_id": job.job_id,
+                                         "result": job.result()})
+                    except Exception as exc:
+                        census_errors.append({"job_id": job.job_id, "error": str(exc)})
+                else:
+                    census_errors.append({"job_id": job.job_id, "error": "census did not complete during round"})
         # _BindTask owns process-group cancellation and nonblocking reap. Keep
         # this outside the duration-limited support and include its CPU cost.
         def cleaned(job):
@@ -415,6 +441,7 @@ def production_round(interval_s, deadline, raw_dir, clock):
             "observer_cpu_s": cost if not residue else None,
             "observer_cpu_s_reason": "worker cleanup incomplete" if residue else "SELF + reaped CHILDREN; no subtraction",
             "end_stamp": asdict(support_end), "workers": jobs, "argv": argv_records,
+            "censuses": censuses, "census_errors": census_errors,
             "cleanup_incomplete": residue}
 
 
@@ -534,6 +561,18 @@ class PowerRecorder:
         return aligned, anchor
 
 
+def census_condition(censuses, errors=()):
+    results = [c.get("result", {}) for c in censuses or []]
+    if any(c.get("exit_code") == 0 and c.get("stdout", "").strip() for c in results):
+        return False, "agent detected by round census"
+    if not results:
+        return None, "no census completed during round"
+    if errors or any(c.get("exit_code") != 1 or c.get("stdout") != "" or c.get("refusal")
+                     for c in results):
+        return None, "round census incomplete, failed or malformed"
+    return True, "all completed round censuses report absence"
+
+
 def new_row(session, args, index, start, end, result):
     row = dict.fromkeys(ROUND_KEYS)
     row.update(schema=SCHEMA, session=session, state=args.state, repeat=args.repeat,
@@ -545,6 +584,16 @@ def new_row(session, args, index, start, end, result):
                power={**dict.fromkeys(RAILS), "coverage_s": 0.0}, clusters=None, cpus=None,
                alignment=dict.fromkeys(("anchor_lo", "anchor_hi", "ps_start", "ps_end", "top_start", "top_end", "error_bound_j")),
                raw={"paths": [], "sha256": {}})
+    censuses = list(result.get("censuses") or [])
+    sample_census = (result["observation"] or {}).get("census")
+    if sample_census is not None:
+        censuses.append({"source": "sampler", "result": sample_census})
+    errors = result.get("census_errors") or []
+    clean, reason = census_condition(censuses, errors)
+    row.update(censuses=censuses or None, census_errors=errors,
+               census_clean=clean, census_clean_reason=reason)
+    if not censuses:
+        row["censuses_reason"] = "no census completed during round"
     row["error_reason"] = "no round error" if row["error"] is None else "round failed or incomplete"
     if result.get("observer_cpu_s_reason"):
         row["observer_cpu_s_reason"] = result["observer_cpu_s_reason"]
@@ -581,6 +630,7 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                "power_interval_ms": args.power_interval_ms, "power_enabled": args.power,
                "powermetrics_needs_root": True, "sudo_policy_probed": False,
                "evidence_status": "PROVISIONAL", "network_time_provenance": None,
+               "alignment_model": ALIGNMENT_MODEL,
                "network_time_provenance_reason": "not established by this desk harness",
                "observer_definition": "SELF + reaped CHILDREN over production smoke incl. raw/stamp hooks; recorder CPU excluded",
                "round_workers": [], "power": None, "error": None}
@@ -682,7 +732,7 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
             align.update(frame_span_mismatch=True, error_bound_j_reason=why)
             row["power"] = reasons(row["power"], why)
         align.update(method=anchor.get("method"), anchor_status=anchor["status"],
-                     model="affine wall clock; production rate-aware bound; PROVISIONAL",
+                     model=ALIGNMENT_MODEL,
                      bound_method="sum of per-frame overlap perturbation bounds on the interval-average power signal; gaps unbounded")
         if align["error_bound_j"] is not None:
             align.pop("error_bound_j_reason", None)
@@ -938,31 +988,62 @@ def summarize(directory, reference_state=None):
     directory = Path(directory)
     paths = sorted(directory.rglob("rounds.jsonl"))
     rows = [json.loads(line) for p in paths for line in p.read_text().splitlines() if line.strip()]
-    if not rows:
-        raise ValueError("no rounds.jsonl rows found")
     if any(r.get("schema") != SCHEMA for r in rows):
         raise ValueError("unsupported evidence schema")
+    # Older v1 rows lack whole-round coverage: never infer clean from only
+    # their sampler census. They remain in the explicitly unknown group.
+    def condition(row):
+        return row.get("census_clean") if type(row.get("census_clean")) is bool else None
     reference_rows = [r for r in rows if r["state"] == reference_state]
-    if reference_state is not None and not reference_rows:
+    if rows and reference_state is not None and not reference_rows:
         raise ValueError("reference state is absent")
-    reference = aggregate(reference_rows) if reference_rows else None
+    reference_conditions = {condition(r) for r in reference_rows}
+    reference = ({"census_clean": next(iter(reference_conditions)), **aggregate(reference_rows)}
+                 if len(reference_conditions) == 1 else None)
+    references = {clean: aggregate([r for r in reference_rows if condition(r) is clean])
+                  for clean in reference_conditions}
     groups = []
-    for state, repeat in sorted({(r["state"], str(r["repeat"])) for r in rows}):
-        subset = [r for r in rows if (r["state"], str(r["repeat"])) == (state, repeat)]
+    keys = {(r["state"], str(r["repeat"]), condition(r)) for r in rows}
+    for state, repeat, clean in sorted(keys, key=lambda k: (k[0], k[1], str(k[2]))):
+        subset = [r for r in rows if (r["state"], str(r["repeat"]), condition(r)) == (state, repeat, clean)]
+        group_reference = references.get(clean)
         entry = {"state": state, "repeat": repeat, "sessions": sorted({r["session"] for r in subset}),
+                 "census_clean": clean, "census_clean_reason": "whole-round census condition unavailable" if clean is None else "derived from round censuses",
                  **aggregate(subset), "delta_j_480": {}, "delta_alignment_bound_j_480": {}}
         for rail in RAILS:
             value = entry["power"][rail]
-            ref = reference["power"][rail] if reference else None
+            ref = group_reference["power"][rail] if group_reference else None
             bound = entry["alignment_bound_w"][rail]
-            ref_bound = reference["alignment_bound_w"][rail] if reference else None
+            ref_bound = group_reference["alignment_bound_w"][rail] if group_reference else None
             entry["delta_j_480"][rail] = 480 * (value - ref) if value is not None and ref is not None else None
             entry["delta_alignment_bound_j_480"][rail] = (480 * (bound + ref_bound)
                 if bound is not None and ref_bound is not None else None)
         groups.append(reasons(entry, "reference or finite alignment evidence unavailable"))
+    provenance = []
+    for path in sorted(directory.rglob("session.json")):
+        session = json.loads(path.read_text())
+        provenance.append({"source": str(path.relative_to(directory)),
+                           **{key: session[key] for key in (
+                               "evidence_status", "alignment_model", "network_time_provenance",
+                               "network_time_provenance_reason") if key in session}})
+    def common_provenance(key, default):
+        values = [p.get(key, default) for p in provenance]
+        return (values[0] if all(v == values[0] for v in values) else None) if values else default
     summary = reasons({"schema": SCHEMA, "reference_state": reference_state, "reference": reference,
+                       "reference_reason": "reference absent or spans census conditions; see references_by_census",
+                       "references_by_census": [{"census_clean": clean, **references[clean]}
+                                                for clean in sorted(references, key=str)],
+                       "status": "complete" if rows else "no_rounds",
+                       "reason": "descriptive summary" if rows else "no rounds.jsonl rows found",
+                       "evidence_status": "PROVISIONAL",
+                       "alignment_model": common_provenance("alignment_model", ALIGNMENT_MODEL),
+                       "alignment_model_reason": "models differ across sessions; see session_provenance",
+                       "network_time_provenance": common_provenance("network_time_provenance", None),
+                       "network_time_provenance_reason": common_provenance("network_time_provenance_reason",
+                           "unavailable or differs across sessions; see session_provenance"),
+                       "session_provenance": provenance,
                        "groups": groups, "sources": [str(p.relative_to(directory)) for p in paths],
-                       "aggregation": "complete rounds only; duration-weighted rail coverage; reference pooled across repeats; bounds add without independence assumptions"})
+                       "aggregation": "complete rounds only; duration-weighted rail coverage; reference pooled across repeats within the same census_clean condition only; bounds add without independence assumptions"})
     write_json(directory / "summary.json", summary)
     def fmt(value):
         return "null" if value is None else f"{value:.6g}"
@@ -971,19 +1052,19 @@ def summarize(directory, reference_state=None):
     lines = ["# Quiet predicate evidence (descriptive)", "",
              "Complete rounds only. Reference: " + cell(reference_state or "not supplied") + ".",
              "Alignment bounds are systematic sums; no statistical uncertainty is inferred.", "",
-             "| State | Repeat | Metric | min | p10 | p50 | p90 | max |", "|---|---|---|---:|---:|---:|---:|---:|"]
+             "| State | Repeat / census_clean | Metric | min | p10 | p50 | p90 | max |", "|---|---|---|---:|---:|---:|---:|---:|"]
     for entry in groups:
         for metric, q in entry["quantiles"].items():
-            lines.append(f"| {cell(entry['state'])} | {cell(entry['repeat'])} | {metric} | " +
+            lines.append(f"| {cell(entry['state'])} | {cell(entry['repeat'])} / {entry['census_clean']} | {metric} | " +
                          " | ".join(fmt(q[k]) for k in ("min", "p10", "p50", "p90", "max")) + " |")
-    lines += ["", "| State | Repeat | Rail | Mean W | Coverage s | ΔJ / 480 s | Alignment bound J |", "|---|---|---|---:|---:|---:|---:|"]
+    lines += ["", "| State | Repeat / census_clean | Rail | Mean W | Coverage s | ΔJ / 480 s | Alignment bound J |", "|---|---|---|---:|---:|---:|---:|"]
     for entry in groups:
         for rail in RAILS:
-            lines.append(f"| {cell(entry['state'])} | {cell(entry['repeat'])} | {rail} | " + " | ".join(fmt(v) for v in (
+            lines.append(f"| {cell(entry['state'])} | {cell(entry['repeat'])} / {entry['census_clean']} | {rail} | " + " | ".join(fmt(v) for v in (
                 entry["power"][rail], entry["coverage_s"][rail], entry["delta_j_480"][rail], entry["delta_alignment_bound_j_480"][rail])) + " |")
-    lines += ["", "| State | Repeat | Complete | Partial | Error | Load disagreements / compared |", "|---|---|---:|---:|---:|---:|"]
+    lines += ["", "| State | Repeat / census_clean | Complete | Partial | Error | Load disagreements / compared |", "|---|---|---:|---:|---:|---:|"]
     for e in groups:
-        lines.append(f"| {cell(e['state'])} | {cell(e['repeat'])} | {e['complete_rounds']} | {e['partial_rounds']} | {e['error_rounds']} | {e['load_disagreement_rounds']} / {e['load_compared_rounds']} |")
+        lines.append(f"| {cell(e['state'])} | {cell(e['repeat'])} / {e['census_clean']} | {e['complete_rounds']} | {e['partial_rounds']} | {e['error_rounds']} | {e['load_disagreement_rounds']} / {e['load_compared_rounds']} |")
     lines += ["", "Load comparison uses total busy cores versus injected increment; no observer or idle subtraction.",
               "Partial rounds and unavailable bounds remain in the JSON evidence. PROVISIONAL; no cutoff or verdict.", ""]
     (directory / "summary.md").write_text("\n".join(lines))
