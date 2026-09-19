@@ -4616,6 +4616,7 @@ class BindSupervisionProcessTests(unittest.TestCase):
         for task in result['tasks']:
             with self.subTest(job_id=task['id'], kind=task['kind']):
                 self.assertLess(task['max_arg_bytes'], 131072)
+                self.assertGreater(task['max_arg_bytes'], 0)  # the recording must have run
 
     def test_journal_failure_and_saturation_are_terminal(self):
         for mode, detail in (('journal_error', 'write failure'), ('journal_saturation', 'queue saturated')):

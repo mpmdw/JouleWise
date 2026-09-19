@@ -174,7 +174,7 @@ class Bench:
             spec['large_frame_bytes'] = 200000
         row = dict(kind=kind, mode=mode, control=control, child=child, max_arg_bytes=0,
             buffer=b'', events=[], ack=False, eof=False, sent=0, began=self.now, max_bytes=0, max_reads=0, max_buffer=0,
-            ack_until=time.monotonic()+1, result_checked=False)
+            ack_until=None, result_checked=False)
         def argv_for(fd):
             argv = (sys.executable, '-B', str(Path(__file__).resolve()), '--worker', str(fd),
                     str(child.fileno()), json.dumps(spec))
@@ -182,6 +182,7 @@ class Bench:
             return argv
         task = self.driver._BindTask(job_id, argv_for, launcher, test_pass_fds=(child.fileno(),))
         row['task'] = task
+        row['ack_until'] = time.monotonic() + 1
         self.tasks.append(row)
         return task
 
