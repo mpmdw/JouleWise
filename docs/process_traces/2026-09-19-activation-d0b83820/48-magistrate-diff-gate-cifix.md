@@ -24,3 +24,7 @@ The real-spawn ladder block moves verbatim into its own test `test_load_join_lad
 ## Verdict
 
 MERGE-READY subject to refuter 47 (execution + contract, detached worktree) and hosted CI green on the PR head.
+
+## Addendum — refuter 47 (Astra high, execution + contract, detached worktree)
+
+CLEAN on the change: the diff is exactly the four added lines (removing them reproduces the base byte-for-byte); under a stdin runner with the platform forced to Linux all three darwin tests skip and nothing fails; on the native platform via stdin only the two spawn-based methods fail (the QoS readback test passes — its `python -c` subprocess is not multiprocessing); `-m unittest`: 45 OK (the live-collection integration test excluded in its run); mutants `cleanup-silent` (killed by the moved ladder test) and `window-skip` (killed by the fake-clock rendezvous test) both die. R4: the guard costs hosted Linux the ladder and N3 pipe-cleanup coverage; the honest improvement is a file-based (importable) CI shard runner so spawn can re-import `__main__` — QUEUE DATA (lane candidate CI-SHARD-RUNNER-FILE-BASED-01), not this four-line fix-forward.
