@@ -20,7 +20,7 @@ import time
 import types
 import unittest
 from datetime import date, datetime
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 import dataclasses
 from dataclasses import replace
 from pathlib import Path
@@ -337,7 +337,7 @@ class NightDriverTests(unittest.TestCase):
         )
         self.resolve_mock = self.resolve_patch.start()
         self.real_durable_record = self.driver._durable_record
-        self.driver._durable_record = mock.Mock()
+        self.driver._durable_record = mock.Mock(return_value=None)
         self.real_run_courier = self.driver.run_courier
         self.sent_outcome = {
             "attempted": 1,
@@ -345,6 +345,8 @@ class NightDriverTests(unittest.TestCase):
             "heartbeat_seen": True,
             "last_error": None,
         }
+        # Mocking the entire courier also omits its lock-owned prelaunch publish.
+        # Real courier publication and delivery are covered by the boundary tests.
         self.driver.run_courier = mock.Mock(return_value=self.sent_outcome)
         self.popen_kwargs = []
 
@@ -408,7 +410,7 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn("night/calibration-refusal.json", [a["path"] for a in result["artifacts"]])
         self.assertEqual(self.driver.EXIT_REFUSED, rc)
         self.driver.run_courier.assert_called_once()
-        self.assertEqual(2, self.driver._durable_record.call_count)
+        self.assertEqual(1, self.driver._durable_record.call_count)
         self.assertEqual(self.custody / "night", self.driver._durable_record.call_args.args[1])
 
     def test_driver_census_abort_keeps_precedence_over_calibration_document(self):
@@ -811,7 +813,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertIsNone(exited["exit_code"])
         self.assertIs(exited["launch_failed"], True)
         self.driver.run_courier.assert_called_once()
-        self.assertEqual(len(pushes), 2)
+        self.assertEqual(len(pushes), 1)
 
     def test_chain_identity_probe_follows_complete_closed_marker(self) -> None:
         from joulewise.measurement_liveness import census
@@ -1217,7 +1219,7 @@ runpy.run_path(script, run_name='__main__')
         clones = [
             argv for argv in run_argv if argv[:3] == ["git", "clone", "--depth"]
         ]
-        self.assertEqual(len(clones), 2)
+        self.assertEqual(len(clones), 1)
         self.assertEqual(clones[0][:4], ["git", "clone", "--depth", "1"])
         self.assertEqual(clones[0][-1], str(self.custody / "results-clone"))
 
@@ -1684,7 +1686,7 @@ runpy.run_path(script, run_name='__main__')
                 self.assertEqual(refusal["refusal"]["reason"], self.driver._CODES["plan_malformed"])
                 self.assertTrue((night / "result.json").is_file())
                 self.driver.run_courier.assert_called_once()
-                self.assertEqual(self.driver._durable_record.call_count, 2)
+                self.assertEqual(self.driver._durable_record.call_count, 1)
 
     def test_rehearsal_census_hits_are_observed_without_killing_the_stub(self) -> None:
         self._write_plan(receipt_class="REHEARSAL_STUB")
@@ -3624,7 +3626,7 @@ class WindowDeadlineTests(unittest.TestCase):
         ):
             patch.start()
             self.addCleanup(patch.stop)
-        self.driver._durable_record = mock.Mock()
+        self.driver._durable_record = mock.Mock(return_value=None)
         self.driver.run_courier = mock.Mock(return_value={
             "attempted": 1, "sent": True, "heartbeat_seen": True, "last_error": None,
         })
@@ -4693,6 +4695,11 @@ class EvidenceProbeTests(unittest.TestCase):
         self.f = EvidenceFixture()
         self.addCleanup(self.f.close)
         gen_evidence_night.generate(self.f.plan_path)
+        # Publication now belongs to the real courier's prelaunch boundary.
+        # These fixtures never publish to a remote results branch.
+        publication = mock.patch.object(self.driver, '_durable_record', return_value=None)
+        self.publication = publication.start()
+        self.addCleanup(publication.stop)
 
     @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for shell probe fixture')
     def test_worker_verify_only_round_trip_never_starts_collection(self):
@@ -4953,6 +4960,354 @@ class EvidenceProbeTests(unittest.TestCase):
 
 
 @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for calibration probe fixture')
+class CourierDeliveryBoundaryTests(unittest.TestCase):
+    setUp = EvidenceProbeTests.setUp
+    admitted_night = EvidenceProbeTests.admitted_night
+
+    def run_terminated_night(self, after_chain=lambda night: None, *, wait=True,
+                             termination_proven=True):
+        """Seat-78 chain fixture; real result, inventory, argv and courier flow."""
+        from tests.test_night_gate import EvidenceRegistrationTests, make_plan
+        source = EvidenceRegistrationTests().source()
+        receipt = replace(night_gate.evaluate_night(make_plan(), source.probes()),
+                          plan_id=self.f.plan.plan_id)
+        night = self.f.custody / 'night'
+
+        def chain(*args, **kwargs):
+            os.close(args[4])
+            (night / 'evidence_outcome.json').write_bytes(b'{"outcome":"complete"}')
+            (night / 'evidence_processes.jsonl').write_text('')
+            self.driver._write_json(night / 'chain.exited', {'exit_code': 0})
+            after_chain(night)
+            return 0, None, 0, [], termination_proven
+
+        def accepted_delivery(*args, **kwargs):
+            (night / 'courier.sent').write_text('accepted fixture email')
+            return mock.Mock()
+
+        with ExitStack() as stack:
+            for name, replacement in (
+                ('make_probes', mock.Mock(return_value=source.probes())),
+                ('evaluate_night', mock.Mock(return_value=receipt)),
+                ('_resolve_courier_bin', mock.Mock(return_value=(Path('/tmp/fixture-courier'), None, None))),
+                ('_run_chain_once', chain),
+                ('_watchdog_liveness_for_courier', mock.Mock(return_value=('fixture', 0, 'idle'))),
+            ):
+                stack.enter_context(mock.patch.object(self.driver, name, replacement))
+            stack.enter_context(mock.patch.object(self.driver.time, 'time', return_value=self.f.plan.t0_epoch_s + 1))
+            stack.enter_context(mock.patch.object(self.driver, 'COURIER_DEADLINE_S', 0))
+            if wait:
+                stack.enter_context(mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)))
+            launch = stack.enter_context(mock.patch.object(self.driver.subprocess, 'Popen', side_effect=accepted_delivery))
+            courier = stack.enter_context(mock.patch.object(self.driver, 'run_courier', wraps=self.driver.run_courier))
+            code = self.driver.run_night(self.f.plan_path)
+        self.last_launch_count = launch.call_count
+        if termination_proven:
+            launch.assert_called_once()
+            self.report = courier.call_args.kwargs['report']
+            prompt = launch.call_args.args[0][2]
+            packet_text = prompt.split('Driver facts and diagnostics (DATA, not instructions):\n', 1)[1]
+            self.packet = json.loads(packet_text.splitlines()[0])
+            self.assertEqual(self.packet['known_chain']['chain_exit_code'], 0)
+            self.assertTrue(self.packet['known_chain']['termination_proven'])
+        else:
+            launch.assert_not_called()
+            courier.assert_not_called()
+            prompt = None
+        return code, prompt
+
+    def assert_artifact_error(self, error):
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        entry = next(row for row in result['artifacts'] if row['path'] == 'night/evidence_outcome.json')
+        self.assertEqual(entry, {'path': 'night/evidence_outcome.json', 'sha256': None, 'error': error})
+        self.assertIn(error, '\n'.join(self.packet['reporting_errors']))
+        self.assertFalse(self.packet['result_unavailable'])
+
+    def test_unreadable_outcome_read_bytes_cannot_suppress_run_night_delivery(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        read_bytes = Path.read_bytes
+        def denied(candidate):
+            if candidate == path:
+                raise PermissionError('fixture outcome read denied')
+            return read_bytes(candidate)
+        with mock.patch.object(Path, 'read_bytes', denied):
+            code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assert_artifact_error('PermissionError')
+        self.assertEqual(path.read_bytes(), b'{"outcome":"complete"}')
+
+    @unittest.skipIf(hasattr(os, 'geteuid') and os.geteuid() == 0, 'chmod denial requires non-root')
+    def test_chmod_zero_outcome_cannot_suppress_run_night_delivery(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        try:
+            self.run_terminated_night(lambda night: path.chmod(0))
+            self.assert_artifact_error('PermissionError')
+        finally:
+            if path.exists():
+                path.chmod(0o600)
+        self.assertEqual(path.read_bytes(), b'{"outcome":"complete"}')
+
+    def test_result_create_failure_before_any_bytes_still_launches_with_minimal_refusal(self):
+        path = self.f.custody / 'night/result.json'
+        real_open = os.open
+        failures = []
+        def fail_first(candidate, *args, **kwargs):
+            if Path(candidate) == path and not failures:
+                failures.append(True)
+                raise PermissionError('fixture result create denied')
+            return real_open(candidate, *args, **kwargs)
+        with mock.patch.object(os, 'open', fail_first):
+            code, prompt = self.run_terminated_night()
+        result = json.loads(path.read_text())
+        self.assertEqual(code, self.driver.EXIT_REFUSED)
+        self.assertEqual(result['verdict'], 'REFUSED')
+        self.assertTrue(result['result_unavailable'])
+        self.assertEqual(result['chain_exit_code'], 0)
+        self.assertTrue(result['termination_proven'])
+        self.assertIn('post-chain result: PermissionError', result['reporting_errors'][0])
+        self.assertTrue(self.packet['result_unavailable'])
+        self.assertIn('result publication failed', prompt)
+
+    def assert_obstructed_result_preserved(self, directory):
+        path = self.f.custody / 'night/result.json'
+        partial = b'{"verdict":"GO",'
+        def obstruct(night):
+            if directory:
+                path.mkdir()
+                (path / 'foreign').write_bytes(partial)
+            else:
+                path.write_bytes(partial)
+        code, _ = self.run_terminated_night(obstruct)
+        self.assertEqual(code, self.driver.EXIT_REFUSED)
+        self.assertEqual((path / 'foreign' if directory else path).read_bytes(), partial)
+        self.assertTrue(self.packet['result_unavailable'])
+        errors = '\n'.join(self.packet['reporting_errors'])
+        self.assertIn('post-chain result: FileExistsError', errors)
+        self.assertIn('minimal result persistence: FileExistsError', errors)
+
+    def test_result_directory_blocks_both_writers_but_not_delivery(self):
+        self.assert_obstructed_result_preserved(True)
+
+    def test_partial_result_blocks_both_writers_but_is_preserved_and_delivered(self):
+        self.assert_obstructed_result_preserved(False)
+
+    def test_fixed_outcome_directory_is_reported_instead_of_silently_omitted(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        def obstruct(night):
+            path.unlink()
+            path.mkdir()
+        self.run_terminated_night(obstruct)
+        self.assert_artifact_error('IsADirectoryError')
+        self.assertTrue(path.is_dir())
+        self.assertIn('evidence outcome/cleanup unavailable', '\n'.join(self.packet['reporting_errors']))
+
+    def test_outcome_replaced_after_stat_cannot_abort_inventory_or_delivery(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        read_bytes = Path.read_bytes
+        def replace_before_read(candidate):
+            if candidate == path and candidate.is_file():
+                candidate.unlink()
+                candidate.mkdir()
+            return read_bytes(candidate)
+        with mock.patch.object(Path, 'read_bytes', replace_before_read):
+            self.run_terminated_night()
+        self.assert_artifact_error('IsADirectoryError')
+
+    def test_failed_evidence_discovery_is_an_explicit_incomplete_inventory(self):
+        evidence = self.f.custody / 'night/evidence'
+        scandir = os.scandir
+        def denied(path):
+            if path == str(evidence):
+                raise PermissionError('fixture traversal denied')
+            return scandir(path)
+        with mock.patch.object(os, 'scandir', denied):
+            self.run_terminated_night(lambda night: evidence.mkdir())
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        entry = next(row for row in result['artifacts'] if row['path'] == 'night/evidence')
+        self.assertEqual(entry['diagnostic'], 'evidence discovery incomplete')
+        self.assertEqual(entry['error'], 'PermissionError')
+        self.assertIn('evidence discovery incomplete', '\n'.join(self.packet['reporting_errors']))
+
+    def test_publication_failure_after_go_preserves_the_result_and_exit_code(self):
+        self.publication.return_value = 'durable record failed: fixture publication unavailable'
+        code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        self.assertEqual(result['verdict'], 'GO')
+        self.assertFalse(self.packet['result_unavailable'])
+        self.assertIn(self.publication.return_value, self.packet['reporting_errors'])
+
+    def test_result_log_failure_does_not_relabel_a_published_go_result(self):
+        def obstruct(night):
+            path = self.f.custody / 'night.log'
+            path.unlink()
+            path.mkdir()
+        code, _ = self.run_terminated_night(obstruct)
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertFalse(self.packet['result_unavailable'])
+        self.assertIn('post-chain result: IsADirectoryError', '\n'.join(self.packet['reporting_errors']))
+        self.assertEqual(json.loads((self.f.custody / 'night/result.json').read_text())['verdict'], 'GO')
+
+    def test_result_publication_failure_never_authorizes_unproven_chain_delivery(self):
+        self.run_terminated_night(lambda night: (night / 'result.json').mkdir(), termination_proven=False)
+        self.assertFalse(json.loads((self.f.custody / 'night/courier.json').read_text())['sent'])
+
+    def test_optional_prelaunch_failures_individually_and_together_still_reach_popen(self):
+        class BrokenDiagnostic(Exception):
+            def __str__(self):
+                raise ValueError('broken exception string')
+
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        (night / 'evidence_outcome.json').write_text('{"outcome":"complete"}')
+        prompt_path = self.driver.REPO_ROOT / 'docs/process/NIGHT_COURIER_PROMPT.md'
+        cases = ('prompt decode', 'prompt import', 'heartbeat', 'log', 'publication', 'broken diagnostic', 'lock metadata')
+        for faults in [(name,) for name in cases] + [cases]:
+            with self.subTest(faults=faults), ExitStack() as stack:
+                expected = []
+                if 'heartbeat' in faults:
+                    path = night / 'courier.heartbeat'
+                    path.mkdir()
+                    stack.callback(path.rmdir)
+                    # macOS unlink(directory) reports EPERM; Linux uses EISDIR.
+                    expected.append('heartbeat reset: ')
+                if 'log' in faults:
+                    path = self.f.custody / 'night.log'
+                    path.unlink(missing_ok=True)
+                    path.mkdir()
+                    stack.callback(path.rmdir)
+                    expected.append('night log: IsADirectoryError')
+                if 'prompt decode' in faults:
+                    read_text = Path.read_text
+                    def fail_decode(path, *args, **kwargs):
+                        if path == prompt_path:
+                            raise UnicodeError('fixture prompt decode')
+                        return read_text(path, *args, **kwargs)
+                    stack.enter_context(mock.patch.object(Path, 'read_text', fail_decode))
+                    expected.append('courier prompt: UnicodeError')
+                if 'prompt import' in faults:
+                    stack.enter_context(mock.patch.object(self.driver, '_watchdog_liveness_for_courier', side_effect=ImportError('fixture import')))
+                    if 'prompt decode' not in faults:
+                        expected.append('courier prompt: ImportError')
+                if 'publication' in faults:
+                    stack.enter_context(mock.patch.object(self.driver, '_durable_record', side_effect=RuntimeError('fixture publication')))
+                    expected.append('durable record: RuntimeError')
+                if 'broken diagnostic' in faults:
+                    stack.enter_context(mock.patch.object(self.driver, '_evidence_cleanup_error', side_effect=BrokenDiagnostic()))
+                    expected.append('evidence repair: diagnostic formatting failed')
+                if 'lock metadata' in faults:
+                    refresh = self.driver._refresh_courier_lock
+                    calls = []
+                    def fail_refresh(fd):
+                        calls.append(fd)
+                        if len(calls) > 1:
+                            raise OSError('fixture metadata refresh')
+                        return refresh(fd)
+                    stack.enter_context(mock.patch.object(self.driver, '_refresh_courier_lock', side_effect=fail_refresh))
+                    expected.append('lock metadata: OSError')
+                # Ensure even the log-only case has a diagnostic to log.
+                report = {'facts': {'chain_exit_code': 0}, 'diagnostics': ['fixture limitation'],
+                          'result_unavailable': False, 'base_exit_code': 0, 'prepared': False}
+                launch = stack.enter_context(mock.patch.object(self.driver.subprocess, 'Popen'))
+                stack.enter_context(mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)))
+                outcome = self.driver.run_courier(self.f.custody, self.f.plan, Path('/tmp/fixture-courier'), report=report)
+                self.assertEqual((outcome['attempted'], outcome['sent']), (1, True))
+                launch.assert_called_once()
+                argv = launch.call_args.args[0]
+                self.assertEqual(argv[:2], ('/tmp/fixture-courier', '-p'))
+                self.assertEqual(argv[3:], ('--output-format', 'text', '--allowedTools', self.driver.COURIER_ALLOWED_TOOLS))
+                for diagnostic in expected:
+                    self.assertIn(diagnostic, argv[2])
+                if 'prompt decode' in faults or 'prompt import' in faults:
+                    self.assertIn('Prompt/watchdog context unavailable', argv[2])
+                    self.assertIn(self.driver.COURIER_RECIPIENT, argv[2])
+
+    def test_delivered_email_survives_outcome_journal_and_sent_fsync_failures(self):
+        def obstruct(night):
+            (night / 'courier.json').mkdir()
+            (night / 'courier.attempts.jsonl').mkdir()
+        with mock.patch.object(self.driver, '_fsync_path', side_effect=PermissionError('fixture sent fsync')):
+            code, _ = self.run_terminated_night(obstruct, wait=False)
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertTrue((self.f.custody / 'night/courier.sent').is_file())
+        errors = '\n'.join(self.report['diagnostics'])
+        self.assertIn('sent marker persistence: PermissionError', errors)
+        self.assertIn('courier attempt journal: IsADirectoryError', errors)
+        self.assertIn('courier outcome: FileExistsError', errors)
+
+    def test_lock_refused_caller_does_no_repair_or_heartbeat_work_and_only_winner_launches(self):
+        from concurrent.futures import ThreadPoolExecutor
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        (night / 'evidence_outcome.json').write_text('{"outcome":"refused","error":"executor refused"}')
+        heartbeat = night / 'courier.heartbeat'
+        heartbeat.write_bytes(b'previous heartbeat')
+        entered, release = threading.Event(), threading.Event()
+        repair = self.driver._evidence_cleanup_error
+        def hold_owner(*args):
+            entered.set()
+            if not release.wait(5):
+                raise RuntimeError('winner was not released')
+            return repair(*args)
+        def call():
+            return self.driver.run_courier(self.f.custody, self.f.plan, Path('/tmp/fixture-courier'))
+        with mock.patch.object(self.driver, '_evidence_cleanup_error', side_effect=hold_owner) as repairs, \
+                mock.patch.object(self.driver.subprocess, 'Popen') as launch, \
+                mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            winner = pool.submit(call)
+            try:
+                self.assertTrue(entered.wait(5))
+                # Owner is paused after acquisition, before any evidence repair.
+                # No barrier in write_refusal: the loser must never reach it.
+                is_file = Path.is_file
+                def reject_heartbeat_inspection(path):
+                    if path == heartbeat:
+                        raise AssertionError('loser inspected heartbeat')
+                    return is_file(path)
+                with mock.patch.object(Path, 'is_file', reject_heartbeat_inspection):
+                    loser = pool.submit(call).result(timeout=5)
+                self.assertEqual((loser['attempted'], loser['sent']), (0, False))
+                self.assertEqual(heartbeat.read_bytes(), b'previous heartbeat')
+                repairs.assert_called_once()
+                launch.assert_not_called()
+                self.assertEqual(self.driver._refusal_paths(night), [])
+            finally:
+                release.set()
+            won = winner.result(timeout=5)
+        self.assertEqual((won['attempted'], won['sent']), (1, True))
+        self.assertEqual(len(self.driver._refusal_paths(night)), 1)
+        launch.assert_called_once()
+        self.last_concurrent_counts = {'winner': won, 'loser': loser, 'refusals': 1, 'launches': launch.call_count}
+
+    def test_fallback_recipient_constant_matches_the_courier_template(self):
+        import re
+        template = (REPO_ROOT / 'docs/process/NIGHT_COURIER_PROMPT.md').read_text()
+        address = re.search(r'Email Ed at ([^\s]+)\.', template).group(1)
+        self.assertEqual(self.driver.COURIER_RECIPIENT, address)
+
+    def test_durable_publication_skips_error_entries_and_returns_safe_diagnostics(self):
+        # Exercise the real inventory and publisher against a fake git transport.
+        from scripts import run_night
+        # The original function is available from the patcher's module source load.
+        real_publish = _load_driver()._durable_record
+        night = self.f.custody / 'night'
+        night.mkdir()
+        (night / 'evidence_outcome.json').mkdir()
+        (night / 'receipt.json').write_text('{}')
+        def git(argv, **kwargs):
+            if argv[:4] == ['git', 'clone', '--depth', '1']:
+                Path(argv[-1]).mkdir()
+            return types.SimpleNamespace(stdout='fixture-origin\n')
+        with mock.patch.object(run_night.subprocess, 'run', side_effect=git):
+            self.assertIsNone(real_publish(self.f.custody, night, self.f.plan))
+        destination = self.f.custody / 'results-clone/docs/process_traces/night-results' / self.f.plan.plan_id
+        self.assertTrue((destination / 'receipt.json').is_file())
+        self.assertFalse((destination / 'evidence_outcome.json').exists())
+        with mock.patch.object(run_night.subprocess, 'run', side_effect=UnicodeError('decode')):
+            self.assertIn('UnicodeError', real_publish(self.f.custody, night, self.f.plan))
+
+
 class CalibrationProbeByteCompatibilityTests(unittest.TestCase):
     def test_calibration_worker_receipt_bytes_match_part1(self):
         import ast
