@@ -1,0 +1,8 @@
+test_night_gate                          Ran 72 tests in 0.507s OK 
+test_gen_evidence_night                  Ran 7 tests in 1.767s OK 
+test_quiet_predicate_campaign            Ran 22 tests in 0.559s OK 
+test_sample_quiet_predicate_evidence     Ran 57 tests in 9.732s OK 
+test_run_night                           Ran 197 tests in 107.043s OK 
+test_arm_retry                           FAIL: test_both_document_blocks_are_exact (tests.test_arm_retry.ArmRetryTests.test_both_document_blocks_are_exact) Ran 31 tests in 0.053s FAILED (failures=1) 
+test_git_fixture_maintenance             FAIL: test_every_test_module_routes_git_initialization_through_shared_helper (tests.test_git_fixture_maintenance.GitFixtureMaintenanceTests.test_every_test_module_routes_git_initialization_through_shared_helper) Ran 5 tests in 6.887s FAILED (failures=1) 
+test_gen_state                           Ran 44 tests in 1.523s OK 
