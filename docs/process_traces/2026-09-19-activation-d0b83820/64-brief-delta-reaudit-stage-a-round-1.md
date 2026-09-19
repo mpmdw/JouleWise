@@ -3,7 +3,7 @@ BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: []
 
-# Delta re-audit round 1 (read-only) — STAGE-A-EVIDENCE-EXECUTOR-01, fix round 1 `087bf3af..__HEAD__` (Opus 61 B1/B2/S1–S4, 56c R1/R2, 56x R1/R2, 62 N1 — as ruled in 61a and its two addenda)
+# Delta re-audit round 1 (read-only) — STAGE-A-EVIDENCE-EXECUTOR-01, fix rounds 1 + 2 `087bf3af..__HEAD__` (round 1: Opus 61 B1/B2/S1–S4, 56c R1/R2, 56x R1/R2, 62 N1 as ruled in 61a; round 2: record 60's two full-replay findings per brief 65)
 
 Cwd is a detached read-only worktree at `__HEAD__` (`git log -1`). Never touch /Users/edr/code/JouleWise (canonical root) or any other worktree; write nothing but /tmp scratch; no sudo, no powermetrics, no live `collect`, no LaunchAgent install (render-only and the verify-only probe path are allowed). Interpreter /Users/edr/code/JouleWise/.venv/bin/python (read-only use). Fix rounds introduce defects (proven three times on this repo): audit the FINAL text. Do not end your turn before every item has an answer.
 
@@ -15,6 +15,7 @@ E3. Frozen protocol: every sizing/protocol constant (δ, multiplier, floor, 24-p
 E4. Interior anchored to the SCHEDULED start (56x R2): the refuter's fake-clock reproduction now yields +60; a 12 s actual-start drift → excluded by `start_drift`.
 E5. Cleanup by process absence (S2): a recorded group the test cannot signal → proven by absence after the bounded wait; EPERM logged, not fatal. Observer floor (56c R2): 0.1 core of observer cost → "no cutoff qualifies". Recorder journal (S3): an excursion inside envelope 5 → reported on envelope 5 only, retention unchanged.
 E6. Run the seven-module set (`test_night_gate`, `test_gen_evidence_night`, `test_quiet_predicate_campaign`, `test_sample_quiet_predicate_evidence`, `test_run_night`, `test_night_agent_install`, `test_gen_state`) and the quick tier; paste tails (a blocked `/bin/ps` in your sandbox is environmental — say so).
+E8. Record 60's two full-replay findings (fix round 2, brief 65): `tests.test_arm_retry.test_both_document_blocks_are_exact` passes and the `night_refused_registration` row is SOURCED from `joulewise/arm_retry.py` and rendered (no hand edit inside the generated block; the non-generated handback amendments intact); `tests.test_git_fixture_maintenance` passes (no direct git init in `tests/test_gen_evidence_night.py`).
 E7. Same-signature statements: "the courier can be suppressed", "one failed envelope ends the pilot", "a frozen parameter is changeable in code", "busy_cores influences retention" — none found, or the surviving site.
 
 Report: claude-codex-report/v1 envelope for --genre review; verdict = {counts, findings}; JSON header under 8000 bytes; counterfactual + call site per finding.
