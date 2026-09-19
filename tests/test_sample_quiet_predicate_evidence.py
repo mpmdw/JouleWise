@@ -650,14 +650,17 @@ class LoadTests(unittest.TestCase):
         self.assertAlmostEqual(sum(p["cpu_used_s"] for p in periods), .3, delta=.001)
         self.assertEqual(clock.monotonic(), 4.0)   # rendezvous at 1.0 plus the 3 s window
         # S1/S2 / probe_c: load()'s real join ladder must accept a one-second
-        # post-result exit and expose escalation of a child still sleeping at 5 s.
+        # post-result exit and expose escalation with a short test-only grace.
         context = harness.multiprocessing.get_context("spawn")
         def process(*, target, args):
             return context.Process(target=delayed_exit_load_worker, args=args)
         guarded = SimpleNamespace(Pipe=context.Pipe, Process=process)
+        real_load = harness.load
         for delay, expected_exit in ((1, 0), (60, 1)):
             with self.subTest(exit_delay=delay), tempfile.TemporaryDirectory() as tmp, \
-                    patch.object(harness.multiprocessing, "get_context", return_value=guarded):
+                    patch.object(harness.multiprocessing, "get_context", return_value=guarded), \
+                    patch.object(harness, "load", side_effect=lambda args: real_load(
+                        args, **({"join_grace_s": 0.2} if delay == 60 else {}))):
                 log = Path(tmp) / "load.json"
                 self.assertEqual(harness.main(["load", "--cores", ".1", "--duration-s", "1",
                     "--qos", "user-initiated", "--profile", "scalar",
@@ -832,6 +835,34 @@ print(json.dumps(rows))
 
 
 class SummaryTests(unittest.TestCase):
+    def test_summary_markdown_distinguishes_boots_and_optional_builds(self):
+        for builds in (None, ("25G80", "25G83"), (None, "25G83")):
+            with self.subTest(builds=builds), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                rows = [{**self.fixture_row("idle", "1", watts), "boot_id": boot,
+                         "census_clean": True}
+                        for boot, watts in (("A", 1), ("B", 9))]
+                if builds is not None:
+                    for row, build in zip(rows, builds):
+                        if build is not None:
+                            row["os_build"] = build
+                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+                harness.summarize(root, "idle")
+                markdown = (root / "summary.md").read_text()
+                tables = markdown.split("| State | ")[1:]
+                self.assertEqual(len(tables), 3)
+                for table in tables:
+                    header = table.splitlines()[0]
+                    self.assertIn("| boot_id |", header)
+                    self.assertEqual("| os_build |" in header, builds is not None)
+                    for index, boot in enumerate(("A", "B")):
+                        prefix = f"| idle | 1 / True | {boot} |"
+                        if builds is not None:
+                            prefix += f" {builds[index]} |"
+                        self.assertIn(prefix, table)
+                        if "| Rail |" in header:
+                            self.assertIn(prefix + f" cpu_w | {(1, 9)[index]} | 10 | 0 | 9.6 |", table)
+
     def test_summary_never_pools_census_conditions_or_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             rows = []

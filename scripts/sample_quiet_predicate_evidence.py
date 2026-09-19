@@ -865,7 +865,7 @@ def load_worker(connection, config):
         connection.close()
 
 
-def load(args):
+def load(args, *, join_grace_s: float = 5.0):
     log = Path(args.log)
     if log.exists():
         raise ValueError("load log exists; refusing to overwrite evidence")
@@ -922,7 +922,7 @@ def load(args):
         report["error"] = f"{type(exc).__name__}: {exc}"
     finally:
         for process in children:
-            process.join(timeout=5)
+            process.join(timeout=join_grace_s)
             if process.is_alive():
                 process.terminate()
                 process.join(timeout=1)
@@ -1059,22 +1059,27 @@ def summarize(directory, reference_state=None):
         return "null" if value is None else f"{value:.6g}"
     def cell(value):
         return str(value).replace("|", "\\|").replace("\n", " ")
+    identity_header = "| State | Repeat / census_clean | boot_id |" + (" os_build |" if has_os_build else "")
+    identity_separator = "|---|---|---|" + ("---|" if has_os_build else "")
+    def identity_cells(entry):
+        return (f"| {cell(entry['state'])} | {cell(entry['repeat'])} / {entry['census_clean']} | {cell(entry['boot_id'])} |" +
+                (f" {cell(entry['os_build'])} |" if has_os_build else ""))
     lines = ["# Quiet predicate evidence (descriptive)", "",
              "Complete rounds only. Reference: " + cell(reference_state or "not supplied") + ".",
              "Alignment bounds are systematic sums; no statistical uncertainty is inferred.", "",
-             "| State | Repeat / census_clean | Metric | min | p10 | p50 | p90 | max |", "|---|---|---|---:|---:|---:|---:|---:|"]
+             identity_header + " Metric | min | p10 | p50 | p90 | max |", identity_separator + "---|---:|---:|---:|---:|---:|"]
     for entry in groups:
         for metric, q in entry["quantiles"].items():
-            lines.append(f"| {cell(entry['state'])} | {cell(entry['repeat'])} / {entry['census_clean']} | {metric} | " +
+            lines.append(identity_cells(entry) + f" {metric} | " +
                          " | ".join(fmt(q[k]) for k in ("min", "p10", "p50", "p90", "max")) + " |")
-    lines += ["", "| State | Repeat / census_clean | Rail | Mean W | Coverage s | ΔJ / 480 s | Alignment bound J |", "|---|---|---|---:|---:|---:|---:|"]
+    lines += ["", identity_header + " Rail | Mean W | Coverage s | ΔJ / 480 s | Alignment bound J |", identity_separator + "---|---:|---:|---:|---:|"]
     for entry in groups:
         for rail in RAILS:
-            lines.append(f"| {cell(entry['state'])} | {cell(entry['repeat'])} / {entry['census_clean']} | {rail} | " + " | ".join(fmt(v) for v in (
+            lines.append(identity_cells(entry) + f" {rail} | " + " | ".join(fmt(v) for v in (
                 entry["power"][rail], entry["coverage_s"][rail], entry["delta_j_480"][rail], entry["delta_alignment_bound_j_480"][rail])) + " |")
-    lines += ["", "| State | Repeat / census_clean | Complete | Partial | Error | Load disagreements / compared |", "|---|---|---:|---:|---:|---:|"]
+    lines += ["", identity_header + " Complete | Partial | Error | Load disagreements / compared |", identity_separator + "---:|---:|---:|---:|"]
     for e in groups:
-        lines.append(f"| {cell(e['state'])} | {cell(e['repeat'])} / {e['census_clean']} | {e['complete_rounds']} | {e['partial_rounds']} | {e['error_rounds']} | {e['load_disagreement_rounds']} / {e['load_compared_rounds']} |")
+        lines.append(identity_cells(e) + f" {e['complete_rounds']} | {e['partial_rounds']} | {e['error_rounds']} | {e['load_disagreement_rounds']} / {e['load_compared_rounds']} |")
     lines += ["", "Load comparison uses total busy cores versus injected increment; no observer or idle subtraction.",
               "Partial rounds and unavailable bounds remain in the JSON evidence. PROVISIONAL; no cutoff or verdict.", ""]
     (directory / "summary.md").write_text("\n".join(lines))
