@@ -1,0 +1,2 @@
+Ruling written (11,905 bytes, under 12 KB) at `docs/process_traces/2026-09-18-activation-e82f29ac/01-coldgate-packet-d5-t1-real-load-regression/10-coldgate-fable-ruling.md`: Q1 rules option (c), drop the delivery minimum and add a kernel rusage cross-check with no schema change; Q2 states the residual; Q3 specifies two fake-clock regressions plus a `clock` mutation; both counterexamples reproduced by executed probe; no process outlived 2 s, tree untouched except the ruling.
+rc=0
