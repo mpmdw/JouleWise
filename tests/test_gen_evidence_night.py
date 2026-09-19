@@ -16,6 +16,7 @@ from unittest.mock import patch
 from joulewise import night_gate
 from joulewise import quiet_predicate_campaign as campaign
 from scripts import gen_evidence_night as generator
+from tests.git_fixture import init_git_fixture
 from tests.test_night_gate import make_plan
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +39,7 @@ class EvidenceFixture:
         (self.repo / ".venv/bin/python").symlink_to(sys.executable)
         def git(*argv):
             return subprocess.check_output(["git", "-C", str(self.repo), *argv], stderr=subprocess.DEVNULL, text=True).strip()
-        git("init", "-q")
+        init_git_fixture(self.repo, "-q")
         git("add", *campaign.MANIFEST_PATHS)
         git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
         self.head = git("rev-parse", "HEAD")
