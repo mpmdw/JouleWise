@@ -2,10 +2,10 @@ SESSION_MODE: delegated
 BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: ["scripts/sample_quiet_predicate_evidence.py","tests/test_sample_quiet_predicate_evidence.py"]
-BASE_HEAD: __BASE_HEAD__
-BASELINE_MANIFEST: __BASELINE_MANIFEST__
-BASELINE_DIGEST: __BASELINE_DIGEST__
-LEASE_ID: __LEASE_ID__
+BASE_HEAD: 9ca5e06cd25d7840141fb52ef48ce577e770b8b9
+BASELINE_MANIFEST: .codex-bridge/baselines/harness-232-d8ca3a36.json
+BASELINE_DIGEST: sha256:1f4819f6b01d18cdfda97af9173775eeb0798ffb90c887ef4b17881bbe6e5922
+LEASE_ID: lease-82432bdccb6a49c986c8780ae17d5d5e
 
 # Seat brief — lane QUIET-PREDICATE-EVIDENCE-01 (kernel 232) sampling harness: `scripts/sample_quiet_predicate_evidence.py`
 
