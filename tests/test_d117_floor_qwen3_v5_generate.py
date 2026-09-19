@@ -18,10 +18,6 @@ from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
 from scripts import issue_g2a_prefill_prompt_pin as issuer
 from scripts import select_g2a_prefill_length as selector
-from tests.test_campaign_generator_core import (
-    GENERATION_LEDGER_HEAD_BYTES,
-    GENERATION_LEDGER_HEAD_SHA256,
-)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -274,19 +270,12 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
     maxDiff = None
 
     def generation_repository(self, root: Path) -> Path:
-        """Give in-process and subprocess generation the same historical input."""
+        """Exercise working-tree generators with the real committed head pin."""
         repository = root / "repository"
         subprocess.run(
             ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
             check=True,
             capture_output=True,
-        )
-        self.assertEqual(
-            hashlib.sha256(GENERATION_LEDGER_HEAD_BYTES).hexdigest(),
-            GENERATION_LEDGER_HEAD_SHA256,
-        )
-        (repository / "configs/calibration/calibration_ledger_head.json").write_bytes(
-            GENERATION_LEDGER_HEAD_BYTES
         )
         # The clone carries COMMITTED bytes; grade the working tree's generators
         # (counter-review record 15 F1: an uncommitted generator edit must not

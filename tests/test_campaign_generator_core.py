@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 import hashlib
 import importlib.util
 import subprocess
@@ -143,34 +142,9 @@ class CampaignGeneratorCoreTests(unittest.TestCase):
                         lambda source=source: source
                     )
                 configure_generator(label, generator, pin)
-                head_fixture = nullcontext()
-                # GENERATOR-HEAD-FILE-BYTE-PIN-01 is registered for the cold
-                # gate: the production byte pin on an append-advancing file
-                # remains unchanged. Exercise the generator as a function of
-                # its declared inputs, for normal and mutated source alike.
-                if label in ("ALPHA", "BETA"):
-                    fixture_digest = hashlib.sha256(
-                        GENERATION_LEDGER_HEAD_BYTES
-                    ).hexdigest()
-                    self.assertEqual(fixture_digest, GENERATION_LEDGER_HEAD_SHA256)
-                    real_sha256_file = generator.sha256_file
-                    head_path = generator.REPO_ROOT / generator.LEDGER_HEAD_REL
-
-                    def fixture_sha256_file(
-                        path, *, head_path=head_path,
-                        real_sha256_file=real_sha256_file,
-                        fixture_digest=fixture_digest,
-                    ):
-                        if path == head_path:
-                            return fixture_digest
-                        return real_sha256_file(path)
-
-                    head_fixture = mock.patch.object(
-                        generator, "sha256_file", side_effect=fixture_sha256_file
-                    )
                 output_root = temporary / label.lower()
                 calls: list[tuple[Path, tuple[Path, ...]]] = []
-                with head_fixture as head_mock, mock.patch.object(
+                with mock.patch.object(
                     core,
                     "_generation_write_boundary_observer",
                     side_effect=lambda root, outputs: calls.append(
@@ -178,13 +152,6 @@ class CampaignGeneratorCoreTests(unittest.TestCase):
                     ),
                 ):
                     generate(generator, label, output_root)
-                if head_mock is not None:
-                    # The fixture must have been consulted for the head path,
-                    # or a future edit could route around it silently
-                    # (counter-review record 15 N1).
-                    self.assertIn(
-                        mock.call(head_path), head_mock.call_args_list
-                    )
 
                 final_calls = [
                     outputs
