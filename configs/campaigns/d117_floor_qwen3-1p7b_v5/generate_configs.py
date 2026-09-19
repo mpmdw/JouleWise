@@ -208,9 +208,6 @@ SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256 = (
     "18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3"
 )
 SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r6"
-LEDGER_HEAD_FILE_SHA256 = (
-    "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902"
-)
 LEDGER_HEAD_SHA256 = (
     "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7"
 )
@@ -2477,6 +2474,49 @@ def generate(
         return _generate(output_root)
 
 
+def verify_ledger_head_pin() -> dict[str, Any]:
+    """D-109 R1.4: the head pin must be at or ahead of the acceptance cutoff."""
+    # The committed head pin advances after every measurement night by design
+    # under the D-109 append protocol. This check binds the pack to its
+    # acceptance's cutoff and refuses rollback. Detection of a forked pin at a
+    # higher sequence is evaluation-owned by the run-time loader in
+    # joulewise/calibration_ledger.py, reached through --head-pin at run time,
+    # and is not attempted here.
+    pin_rel = LEDGER_HEAD_REL
+    try:
+        pin = json.loads((REPO_ROOT / pin_rel).read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        # Name the file, as every other pinned-input refusal does
+        # (counter-review record 38 F1).
+        raise ValueError(f"ledger head pin is not valid JSON: {pin_rel.as_posix()}") from exc
+    cutoff = json.loads(
+        (REPO_ROOT / acceptance_pin()["rel"]).read_text(encoding="utf-8")
+    )["ledger_cutoff"]
+    if (
+        not isinstance(pin, dict)
+        or set(pin) != {"sequence", "head_digest", "ledger_schema"}
+        or isinstance(pin.get("sequence"), bool)
+        or not isinstance(pin.get("sequence"), int)
+    ):
+        raise ValueError(f"ledger head pin shape invalid: {pin_rel.as_posix()}")
+    if cutoff["head_digest"] != LEDGER_HEAD_SHA256:
+        raise ValueError(
+            f"acceptance ledger cutoff drifted: {acceptance_pin()['rel'].as_posix()}"
+        )
+    if pin.get("ledger_schema") != cutoff["ledger_schema"]:
+        raise ValueError(f"ledger head pin schema mismatch: {pin_rel.as_posix()}")
+    sequence = pin["sequence"]
+    if sequence < cutoff["sequence"]:
+        raise ValueError(
+            f"ledger head pin behind the acceptance cutoff: {pin_rel.as_posix()}"
+        )
+    if sequence == cutoff["sequence"] and pin.get("head_digest") != cutoff["head_digest"]:
+        raise ValueError(
+            f"ledger head pin diverged from the acceptance cutoff: {pin_rel.as_posix()}"
+        )
+    return pin
+
+
 def _generate(output_root: Path) -> tuple[int, str, str]:
     outputs = validate_generation_output_inventory(active_generation())
     validate_generation_write_boundary(output_root, outputs)
@@ -2504,11 +2544,11 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
     for path, expected in (
         (POLICY_REL, POLICY_SHA256),
         (acceptance_pin()["rel"], acceptance_pin()["artifact_sha256"]),
-        (LEDGER_HEAD_REL, LEDGER_HEAD_FILE_SHA256),
         (NEG8_SETTLED_REL, NEG8_SETTLED_SHA256),
     ):
         if sha256_file(REPO_ROOT / path) != expected:
             raise ValueError(f"pinned input drifted: {path.as_posix()}")
+    verify_ledger_head_pin()
 
     write_bytes(output_root, PACK_REL / "generate_configs.py", source_raw)
     write_bytes(output_root, PACK_REL / "README.md", readme_bytes())
@@ -2885,7 +2925,6 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
             },
             "issued_ledger_head": {
                 "path": LEDGER_HEAD_REL.as_posix(),
-                "file_sha256": LEDGER_HEAD_FILE_SHA256,
                 "head_sha256": LEDGER_HEAD_SHA256,
             },
             "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection",
