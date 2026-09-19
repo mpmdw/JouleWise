@@ -1255,7 +1255,10 @@ def _evidence_cleanup_error(plan, night_dir):
         cleanup = cleanup_record(night_dir)
         path = night_dir / "evidence_outcome.json"
         outcome = json.loads(path.read_text()) if path.exists() else None
-        if not isinstance(outcome, dict):
+        # Fresh-eyes 71 S2: a garbled outcome ({} or an unknown state) is no
+        # outcome; the refusal document must exist for the courier to report.
+        if not (isinstance(outcome, dict) and outcome.get("outcome") in {"complete", "partial", "refused"}):
+            path.unlink(missing_ok=True)  # _write_json is create-only; a garbled file is replaced.
             _write_json(path, {"outcome": "refused", "error": "chain ended without evidence outcome",
                                "cleanup_proven": cleanup["cleanup_proven"]})
             if not _refusal_paths(night_dir):
@@ -1265,8 +1268,9 @@ def _evidence_cleanup_error(plan, night_dir):
         return None
     except FileNotFoundError:
         return None  # Rehearsal and earlier admission refusals have no evidence identity.
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        return f"evidence outcome/cleanup unavailable: {exc}"
+    except Exception as exc:  # noqa: BLE001 — fresh-eyes 71 S1: this function only
+        # returns a diagnostic for the courier; no exception may suppress delivery.
+        return f"evidence outcome/cleanup unavailable: {type(exc).__name__}: {exc}"
 
 
 def run_courier(

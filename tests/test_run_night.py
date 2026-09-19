@@ -4826,6 +4826,32 @@ class EvidenceProbeTests(unittest.TestCase):
         self.deliver()
         self.assertTrue(json.loads((night / 'evidence_cleanup.json').read_text())['cleanup_proven'])
 
+    def test_cleanup_import_error_never_suppresses_the_courier(self):
+        # Fresh-eyes record 71 S1: an ImportError inside _evidence_cleanup_error
+        # (three deferred imports) must become a diagnostic, never a lost delivery.
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        (night / 'evidence_outcome.json').write_text(json.dumps({'outcome': 'complete'}))
+        with mock.patch.object(campaign, 'cleanup_record', side_effect=ImportError('simulated')):
+            argv = self.deliver()
+        self.assertTrue(argv)
+        self.assertIn('evidence outcome/cleanup unavailable: ImportError', (self.f.custody / 'night.log').read_text())
+
+    def test_garbled_evidence_outcome_gets_a_refusal_document(self):
+        # Fresh-eyes record 71 S2: {} or an unknown outcome state is no outcome.
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        campaign.cleanup_record(night)
+        for garbled in ({}, {'outcome': 'weird'}):
+            (night / 'evidence_outcome.json').write_text(json.dumps(garbled))
+            for stale in (night / 'refusal.json',):
+                stale.unlink(missing_ok=True)
+            self.deliver()
+            self.assertEqual(json.loads((night / 'evidence_outcome.json').read_text())['outcome'], 'refused')
+            self.assertTrue((night / 'refusal.json').exists(), garbled)
+
     def test_evidence_identity_dispatches_cleanup_without_reading_wrapper(self):
         from joulewise import quiet_predicate_campaign as campaign
         night = self.admitted_night()
