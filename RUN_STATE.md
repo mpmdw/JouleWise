@@ -5353,7 +5353,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-20). Latest report: [T38p — 2026-09-20: evidence-night prepare command merged (PR #372); pilot night one aborted/harvested; census cure merged](docs/process_traces/2026-09-20-activation-21752427/26-diff-gate-evidence-night-prepare.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-20). Latest report: [T38q — 2026-09-20: evidence-night lifecycle façade merged (PR #374); prepare (PR #372) + py311 fix-forward (PR #373); pilot night one aborted/harvested; census cure merged](docs/process_traces/2026-09-20-activation-21752427/33-diff-gate-evidence-night-lifecycle.md).
 
 ### [ED-EXTERNAL]
 

@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38p — 2026-09-20: evidence-night prepare command merged (PR #372); pilot night one aborted/harvested; census cure merged",
-    "path": "docs/process_traces/2026-09-20-activation-21752427/26-diff-gate-evidence-night-prepare.md"
+    "label": "T38q — 2026-09-20: evidence-night lifecycle façade merged (PR #374); prepare (PR #372) + py311 fix-forward (PR #373); pilot night one aborted/harvested; census cure merged",
+    "path": "docs/process_traces/2026-09-20-activation-21752427/33-diff-gate-evidence-night-lifecycle.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2702,7 +2702,7 @@
       "priority": "p1_phase_gate",
       "rank": 256,
       "status": "active",
-      "status_note": "2026-09-20 activation 21752427 — slice A (PR 1) MERGED as PR #372 (`2b6cb947`): `python -m joulewise.evidence_night prepare` (clone + locked venv at H, plan sealed by the clone's own code, real generator/installer render-only, resumable on sealed bytes, stops at the notice boundary; contract `docs/contracts/evidence_night_entry.md`). Remaining = slice B: lifecycle façade (render/probe/install/uninstall/verify), pre-arm checks (discovery, census, canonical ancestry/supervisor per NIGHT_HANDBACK §Census, courier-on-PATH), notice acceptance/veto + publication + install orchestration with a narrow transport adapter (after the F3 lifecycle decision in consult 18), handbook/runbook checklist replacing record 17's script set, watchdog census provenance. Evidence: records 18/19/22/22a/23/24/25/25a/26/27/28.",
+      "status_note": "2026-09-20 activation 21752427 — slice A (PR 1) MERGED as PR #372 (`2b6cb947`): `python -m joulewise.evidence_night prepare` (clone + locked venv at H, plan sealed by the clone's own code, real generator/installer render-only, resumable on sealed bytes, stops at the notice boundary; contract `docs/contracts/evidence_night_entry.md`). Remaining = slice B: lifecycle façade (render/probe/install/uninstall/verify), pre-arm checks (discovery, census, canonical ancestry/supervisor per NIGHT_HANDBACK §Census, courier-on-PATH), notice acceptance/veto + publication + install orchestration with a narrow transport adapter (after the F3 lifecycle decision in consult 18), handbook/runbook checklist replacing record 17's script set, watchdog census provenance. Evidence: records 18/19/22/22a/23/24/25/25a/26/27/28. 2026-09-20 13:05 PDT — slice B1 MERGED as PR #374 (`e216ca00`): `check` (pre-arm checks executed inside the clone: canonical ancestry + census fix + clean tree, resident supervisor by the reflog walk, courier on PATH, retained-root discovery, night agents already loaded → refuse, bracketed census + ancestry classification, arm_retry routing), `publish-install` (armable fresh check + new notice id → atomic publication → real installer --launchd-probe → verify; recovery never uninstalls foreign jobs; atomic journals), `verify` (ruling 30a), `uninstall`; attempt records under `<staging>/lifecycle/`, root records refuse. Remaining = slice B2: notice transport + reading/veto (Gmail adapter, directive issues, STOP files), courier execution, full `retry_allowed` clearance, step-5 night-directory baseline, `ARG_MAX`-safe JSON via stdin, handbook/runbook checklist replacing record 17's script set; and the first LIVE use of prepare/check/publish-install at the bench, watched step by step. Records 30/30a/32–38.",
       "stop_card": null
     },
     "FIXTURE-FAKE-VLLM-LEAK-01": {
