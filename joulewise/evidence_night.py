@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -13,6 +14,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 
 KIND = "quiet_predicate_evidence"
 REMOTE = "https://github.com/mpmdw/JouleWise"
@@ -20,7 +22,7 @@ SCHEMA = "joulewise.evidence_prepare.v1"
 STEPS = ("clone", "venv", "plan", "wrapper", "render", "complete")
 
 
-class Refused(ValueError):
+class Refused(Exception):
     """A preparation cannot safely advance."""
 
 
@@ -104,9 +106,8 @@ def build_venv(root):
 
 
 def interpreter(root):
-    code = ("import hashlib,json,sys; from pathlib import Path; "
-            "print(json.dumps(dict(path=sys.executable,version='.'.join(map(str,sys.version_info[:3])),"
-            "sha256=hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest())))")
+    code = ("import json,sys; from joulewise.night_agent_install import interpreter_identity; "
+            "print(json.dumps(interpreter_identity(sys.executable)))")
     return json.loads(run([root / ".venv/bin/python", "-B", "-c", code], cwd=root))
 
 
@@ -122,7 +123,7 @@ def checkout_ok(root, head):
 
 def locations(roots, stages, epoch, head):
     local = datetime.fromtimestamp(epoch)
-    plan_id = "qpe01-pilot-n1-" + local.strftime("%Y%m%d")
+    plan_id = "qpe01-pilot-n1-" + local.strftime("%Y%m%d-%H%M")
     stamp = f"{local:%Y%m%d-%H%M}-{epoch}-{head}"
     return dict(plan_id=plan_id,
                 measurement_root=str(roots / f"JouleWise-measurement-{stamp}-qpe01-pilot-n1"),
@@ -154,13 +155,85 @@ def checkpoint(path, state, step=None, files=()):
     os.replace(temporary, path)
 
 
+@contextmanager
+def staging_lock(stages, name):
+    directory = safe_path(stages / ".locks")
+    directory.mkdir(parents=True, exist_ok=True)
+    with safe_path(directory / (name + ".lock")).open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise Refused("concurrent preparation") from exc
+        yield
+
+
+def prior_records(stages, roots):
+    records = []
+    for directory in sorted(stages.glob("qpe01-pilot-n1-*")):
+        safe_path(directory)
+        if not directory.is_dir():
+            continue
+        # Also distinguish an in-progress first checkpoint from an orphan.
+        with staging_lock(stages, directory.name):
+            try:
+                record = read_state(directory / "prepare.json")
+            except (OSError, ValueError) as exc:
+                raise Refused(f"unidentified prior preparation output: {directory}") from exc
+        records.append(record)
+    referenced = {r.get("custody_root") for r in records}
+    for directory in sorted((roots / "night-custody").glob("qpe01-pilot-n1-*")):
+        safe_path(directory)
+        if (directory.is_dir() and not (directory / "night_plan.json").is_file()
+                and str(directory) not in referenced):
+            raise Refused(f"unidentified prior preparation output: {directory}")
+    return records
+
+
+def sealed_candidate(root, plan):
+    code = """import hashlib,json,subprocess,sys
+from pathlib import Path
+from joulewise import night_gate
+from joulewise.quiet_predicate_campaign import CHAIN_PATH, manifest_for, tracked_bytes, verify_manifest
+check='plan'
+try:
+    p=night_gate.NightPlan.from_mapping(json.loads(Path(sys.argv[1]).read_text()))
+    check='wrapper sidecar'
+    wrapper=Path(p.chain_path); raw=wrapper.read_bytes(); text=raw.decode()
+    if not (Path(p.chain_sha256_path).read_text().split()==[hashlib.sha256(raw).hexdigest(),wrapper.name]): raise ValueError(check)
+    check='manifest'
+    if not (json.loads((Path(p.custody_root)/'evidence_manifest.json').read_text())==manifest_for(p)): raise ValueError(check)
+    verify_manifest(p,text)
+    check='chain source'
+    source=hashlib.sha256(tracked_bytes(p.measurement_root,p.measurement_head,CHAIN_PATH)).hexdigest()
+    if not (night_gate.chain_literal(text,'EVIDENCE_CHAIN_SOURCE_SHA256')==source): raise ValueError(check)
+    check='registration'
+    registration=Path(p.registration_path)
+    if not registration.is_absolute(): registration=Path(p.measurement_root)/registration
+    raw=registration.read_bytes(); sha=hashlib.sha256(raw).hexdigest()
+    if not (sha in night_gate.RULED_REGISTRATIONS and night_gate.RULED_REGISTRATIONS[sha]['binds_chain']): raise ValueError(check)
+    if not (json.loads(raw)['chain_source_sha256']==source): raise ValueError(check)
+    check='published plan path'
+    if not (night_gate.chain_literal(text,'EVIDENCE_PLAN_PATH')==str(Path(p.custody_root)/'night_plan.json')): raise ValueError(check)
+    check='zsh -n'
+    if not (subprocess.run(['/bin/zsh','-n',str(wrapper)],capture_output=True).returncode==0): raise ValueError(check)
+except (OSError,ValueError,KeyError,AssertionError,subprocess.SubprocessError):
+    print(json.dumps({'failed':check})); sys.exit(0)
+print(json.dumps({'registration_path':str(registration),'registration_sha256':sha,
+                  'chain_source_path':str(Path(p.measurement_root)/CHAIN_PATH),'chain_source_sha256':source}))
+"""
+    result = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan], cwd=root))
+    if "failed" in result:
+        raise Refused("sealed candidate failed " + result["failed"])
+    return result
+
+
 def notice(state):
     s = state["schedule"]
     lines = ["DRAFT — NOT SENT; prerequisites and veto observations are not yet recorded.",
              "To: claude2.glaring610@passmail.net",
-             f'Subject: NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt 1',
+             f'Subject: NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt {state["attempt"]}',
              "", "Ed,", "Launch needs no action from you unless you reply NO. Your NO overrides.",
-             "Arm attempt 1; earlier abort for this new candidate: none.",
+             f'Arm attempt {state["attempt"]}; prior candidates for this date: {", ".join(state["prior_candidates"]) or "none"}.',
              "This first idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
              "After 600 seconds settling, twelve 600-second idle envelopes use 480-second interiors after 60-second offsets.",
              "Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a busy-cores journal.",
@@ -176,8 +249,13 @@ def notice(state):
     for name, epoch in s["boundaries"].items():
         lines.append(f"{name}: {datetime.fromtimestamp(epoch).astimezone().isoformat()} "
                      f"{datetime.fromtimestamp(epoch, timezone.utc).isoformat()} epoch {epoch}")
+    for name in ("registration", "chain_source"):
+        lines.append(f'{state["bindings"][name + "_path"]} sha256 {state["bindings"][name + "_sha256"]}')
     for index, (start, end) in enumerate(s["install_spans_today"], 1):
-        lines.append(f"install span {index}: open epoch {start}; close EXCLUDED epoch {end}")
+        for boundary, epoch in (("open", start), ("close EXCLUDED", end)):
+            lines.append(f"install span {index} {boundary}: "
+                         f"{datetime.fromtimestamp(epoch).astimezone().isoformat()} "
+                         f"{datetime.fromtimestamp(epoch, timezone.utc).isoformat()} epoch {epoch}")
     lines.extend(f"{path} sha256 {sha}" for path, sha in state["digests"].items())
     lines += ["No-objection opens only on mail service acceptance of the exact notice. Publication follows acceptance with no additional minimum waiting interval.",
               "Every observed NO stops publication, including older threads. Reply NO on the thread or through an owner-authored directive; no reply is required.",
@@ -199,15 +277,12 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
         if any(os.path.lexists(p / ".git") for p in (parent, *parent.parents)):
             raise Refused(f"fenced checkout: preparation locations must be outside worktrees: {parent}")
     # Look for an owned candidate before resolving defaults again.
-    candidates = []
-    if stages.exists():
-        for path in stages.glob("qpe01-pilot-n1-*/prepare.json"):
-            record = read_state(path)
-            if (record.get("kind") == kind and record.get("remote") == remote
-                    and record.get("roots_under") == str(roots)
-                    and (explicit_t0 is None or record.get("t0") == explicit_t0)
-                    and (explicit_head is None or record.get("head") == explicit_head)):
-                candidates.append(record)
+    records = prior_records(stages, roots)
+    candidates = [record for record in records
+                  if (record.get("kind") == kind and record.get("remote") == remote
+                      and record.get("roots_under") == str(roots)
+                      and (explicit_t0 is None or record.get("t0") == explicit_t0)
+                      and (explicit_head is None or record.get("head") == explicit_head))]
     if len(candidates) > 1:
         raise Refused("ambiguous prior preparations; supply explicit t0 and H")
     if candidates:
@@ -229,27 +304,40 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
     if any(a == b or a in b.parents or b in a.parents
            for a, b in ((root, stage), (root, custody), (stage, custody))):
         raise Refused("overlapping preparation paths")
-    if candidates:
-        if any(state.get(k) != v for k, v in paths.items()):
-            raise Refused("prior-preparation ownership/path mismatch")
-    else:
-        for path in (root, stage, custody):
-            absent(path)
-        stage.mkdir(parents=True)
-        state.update(paths, plan_path=str(stage / "night_plan.json"))
-        checkpoint(stage / "prepare.json", state)
+    if epoch - now < 2400:
+        print("WARNING: runway below the 40-minute planning default", file=sys.stderr)
+    # Early resource guard uses the running checkout; H's authoring check binds.
+    from joulewise.night_gate import PLAN_MAX_AGE_S
+    if epoch - now > PLAN_MAX_AGE_S:
+        raise Refused("t0 is beyond the plan's maximum age at authoring")
+    for parent in (stages, custody.parent):
+        parent.mkdir(parents=True, exist_ok=True)
+    if stages.stat().st_dev != custody.parent.stat().st_dev:
+        raise Refused("staging and custody are not on one filesystem (atomic publication)")
     state_path = stage / "prepare.json"
-    safe_path(stage / ".prepare.lock")
-    with (stage / ".prepare.lock").open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise Refused("concurrent preparation") from exc
+    with staging_lock(stages, stage.name):
+        if candidates:
+            if any(state.get(k) != v for k, v in paths.items()):
+                raise Refused("prior-preparation ownership/path mismatch")
+        elif state_path.is_file():
+            # A competing preparation finished between selection and this lock.
+            state = read_state(state_path)
+            if any(state.get(k) != v for k, v in paths.items()):
+                raise Refused("prior-preparation ownership/path mismatch")
+        else:
+            for path in (root, stage, custody):
+                absent(path)
+            stage.mkdir()
+            prefix = "qpe01-pilot-n1-" + datetime.fromtimestamp(epoch).strftime("%Y%m%d")
+            prior = sorted(r["plan_id"] for r in records if r.get("plan_id", "").startswith(prefix))
+            state.update(paths, plan_path=str(stage / "night_plan.json"),
+                         attempt=1 + len(prior), prior_candidates=prior)
+            checkpoint(state_path, state)
         state = read_state(state_path)
         done = [item["step"] for item in state["steps"]]
         if done != list(STEPS[:len(done)]) or len(done) > len(STEPS):
             raise Refused("unknown prior-preparation step ledger")
-        expected_stage = {"prepare.json", ".prepare.lock"}
+        expected_stage = {"prepare.json"}
         if "plan" in done:
             expected_stage.add("night_plan.json")
         if "render" in done:
@@ -288,8 +376,10 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
         if "clone" not in done:
             absent(root)
             root.parent.mkdir(parents=True, exist_ok=True)
+            run(["python3.13", "--version"])
             run(["git", "clone", "-q", "--no-hardlinks", remote, root])
             run(["git", "-C", root, "checkout", "-q", "--detach", resolved_head])
+            run(["git", "-C", root, "fetch", "-q", "origin", "main"])
             run(["git", "-C", root, "merge-base", "--is-ancestor", resolved_head, "refs/remotes/origin/main"])
             checkout_ok(root, resolved_head)
             checkpoint(state_path, state, "clone")
@@ -311,25 +401,35 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             # Author with H's code, never the caller checkout's imports.
             code = """import json,sys,time
 from pathlib import Path
-from joulewise.night_gate import NightPlan
+from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S
 from joulewise.night_plan_writer import write_night_plan
 from joulewise.quiet_predicate_campaign import PROTOCOL_PATH
 s=json.loads(sys.argv[1]); c=s['custody_root']
+authored_epoch_s=int(time.time())
+if s['t0']-authored_epoch_s > PLAN_MAX_AGE_S:
+    print(json.dumps({'refused':"t0 is beyond the plan's maximum age at authoring"}))
+    sys.exit(0)
 p=NightPlan.from_mapping(dict(schema='joulewise.night_plan.v2',schema_version=2,
 plan_id=s['plan_id'],receipt_class='DIAGNOSTIC_NO_PACK',t0_epoch_s=s['t0'],
-window_max_s=9000,authored_epoch_s=int(time.time()),repo_head=s['head'],
+window_max_s=9000,authored_epoch_s=authored_epoch_s,repo_head=s['head'],
 measurement_root=s['measurement_root'],measurement_head=s['head'],
 chain_path=c+'/chain.zsh',chain_sha256_path=c+'/chain.zsh.sha256',
 custody_root=c,registration_path=PROTOCOL_PATH))
 write_night_plan(s['plan_path'],p)
+print(json.dumps({}))
 """
-            run([python, "-B", "-c", code, json.dumps(state)], cwd=root)
+            result = json.loads(run([python, "-B", "-c", code, json.dumps(state)], cwd=root))
+            if "refused" in result:
+                raise Refused(result["refused"])
             checkpoint(state_path, state, "plan", [plan])
         if "wrapper" not in done:
             absent(custody)
             run([python, "-B", "scripts/gen_evidence_night.py", "--plan", plan, "--render-only"], cwd=root)
+            state["bindings"] = sealed_candidate(root, plan)
             checkpoint(state_path, state, "wrapper", [custody / name for name in
                        ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", "evidence_manifest.json")])
+        else:
+            sealed_candidate(root, plan)
         # Read validation uses the pinned executor even on a completed resume.
         run([python, "-B", "-c", """import json,sys,time
 from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S
@@ -385,9 +485,13 @@ def main(argv=None):
         args.pop("command")
         print(json.dumps(prepare(**args), indent=2, sort_keys=True))
         return 0
-    except (OSError, ValueError, KeyError, TypeError, OverflowError, subprocess.SubprocessError) as exc:
+    except Refused as exc:
         print("REFUSED: " + " ".join(str(exc).splitlines()), file=sys.stderr)
         return 2
+    except Exception as exc:
+        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

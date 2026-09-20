@@ -16,7 +16,18 @@ unambiguous local minutes. `next` selects the first unambiguous local minute
 at least 40 minutes away; 40 minutes is a planning default, never an extra
 publication gate. The unchanged installer retains its schedule/age refusals.
 
-Plan IDs retain `qpe01-pilot-n1-YYYYMMDD` for handbook/courier compatibility.
+Plan age has two preparation checks (ruling 25a). Before creating any clone
+directory, the running entry checkout's `joulewise.night_gate.PLAN_MAX_AGE_S`
+rejects `t0 - now > PLAN_MAX_AGE_S`. At authoring inside the clone, H's
+`night_gate.PLAN_MAX_AGE_S` rejects `t0 - authored_epoch_s > PLAN_MAX_AGE_S`
+before writing the plan, using the exact authoring timestamp stored in it.
+**The clone-side authoring check binds.** Both checks refuse with
+`REFUSED: t0 is beyond the plan's maximum age at authoring`. The constant is
+currently 129600 seconds; completed resumes retain the existing sealed-plan
+age check without reauthoring.
+
+Plan IDs are `qpe01-pilot-n1-YYYYMMDD-HHMM` (local t0), giving same-day
+candidates distinct courier results branches and probe labels.
 A preparation stamp includes local date/time, epoch and full H. Measurement
 roots are `/Users/edr/JouleWise-measurement-<stamp>-qpe01-pilot-n1`, staging
 is `/Users/edr/night-plan-staging/<plan_id>-<stamp>/`, and custody is
@@ -24,15 +35,19 @@ is `/Users/edr/night-plan-staging/<plan_id>-<stamp>/`, and custody is
 `/Users/edr` for both measurement and custody; `--staging-under` replaces the
 staging parent. These two overrides support isolated offline fixtures.
 Symlink components, overlapping roots and locations inside Git worktrees are
-refused, preserving canonical and other-checkout fences.
+refused, preserving canonical and other-checkout fences. Staging and custody
+parents must have equal `st_dev` for atomic publication; parents are created
+before comparing, before cloning.
 
 Preparation checkpoints selection before cloning, then:
 
-1. Clone the remote without hardlinks, detach at H and verify main ancestry.
+1. Run `python3.13 --version`, clone the remote without hardlinks, detach at H,
+   run `git -C R fetch -q origin main`, then verify main ancestry.
 2. Build Python 3.13's `.venv`, install `.[mac]` and the three bench extras
    under `env/mac-measurement-lock.txt`, and compare the complete sorted
    non-comment lock with `pip freeze --exclude-editable`. Record interpreter
-   path, version and binary SHA-256. An internal builder callable is the test
+   path, version and binary SHA-256 using the clone’s
+   `night_agent_install.interpreter_identity` via its interpreter. An internal builder callable is the test
    seam together with an injected lock verifier; there is no CLI switch that
    skips the lock. Offline composition uses an interpreter symlink and does
    not establish that a real locked venv was installed.
@@ -42,19 +57,33 @@ Preparation checkpoints selection before cloning, then:
 4. Run the clone's real generator with `--render-only`. Per ruling 22a,
    it creates the custody root, wrapper, both sidecars and manifest. The
    boundary is **custody root exists without night_plan.json**. The plan
-   remains in staging; prepare never publishes it.
+   remains in staging; prepare never publishes it. Before checkpointing the
+   wrapper and on every sealed resume, run checks with `P -B -c` in the clone:
+   wrapper SHA equals sidecar; manifest equals `manifest_for(plan)` and its
+   wrapper binding; source literal equals tracked chain bytes at H; the ruled
+   registration binds that source; plan-path literal names the published
+   custody plan; `/bin/zsh -n` succeeds. H’s code judges H’s artifacts.
 5. Run the clone's real shell installer with the clone venv interpreter and
    `--render-only <staging>/render/`; obtain the driver's `schedule(plan)`.
 6. Freeze `prepare.json`, including the triple, paths, all sealed digests,
    interpreter identity, timestamped step ledger, schedule and notice draft.
-   Print that JSON and stop. The draft makes no acceptance/clearance claim.
+   Print that JSON and stop. The draft includes registration and source digests,
+   local/UTC/epoch install-span boundaries, and attempt N derived as one plus
+   the number of other records sharing the date prefix. It lists prior
+   candidates; it does not infer earlier aborts or acceptance/clearance.
 
 `prepare.json` identifies owned work, and is atomically checkpointed after
-completed steps. A staging lock serializes competing callers. Before resolving
+completed steps. A nonblocking flock at
+`<staging_under>/.locks/<plan_id>-<stamp>.lock` precedes the first candidate
+staging write; contention refuses as `concurrent preparation`. Before resolving
 `next` or omitted H again, find a single matching prior preparation (same
 remote/location inputs and matching explicit selection inputs). Multiple
-matches refuse. Completed reruns verify and print the saved record without
-rewriting it, the plan, render outputs or custody artifacts. This preserves
+matches refuse. Staging candidate directories without readable `prepare.json`
+and unpublished custody roots not referenced by any record refuse as
+`unidentified prior preparation output: <path>` before resolving defaults.
+Completed reruns verify and print the saved record only until the exclusive
+install close; after that close, reuse refuses without altering the record.
+Verification never rewrites the plan, render outputs or custody artifacts. This preserves
 `authored_epoch_s`, digests and mtimes. Every checkpointed output is verified
 before any next step. HEAD, clean status, exact lock and interpreter identity
 are checked again. No reauthoring or regeneration repairs drift.
@@ -69,8 +98,14 @@ not an authenticated defense against deliberate alteration of the state file.
 Refusals exit 2 with one `REFUSED:` line: invalid/unresolved kind, malformed H,
 H unavailable from remote main, invalid/non-minute/ambiguous/past t0, foreign
 root or staging, symlink/path collisions, unknown prior ownership, concurrent
-preparation, lock mismatch, dirty or moved checkout, and sealed-byte drift.
-Executor refusals propagate as a preparation refusal. Existing artifacts are
+preparation, lock mismatch, dirty or moved checkout, sealed-byte drift,
+`exclusive install close has passed`, `sealed plan stale or future-authored`,
+`unknown prior-preparation step ledger`, cross-filesystem publication,
+unidentified prior output, and `sealed candidate failed <check>`.
+Executor refusals propagate as a preparation refusal. Unexpected exceptions
+exit 1 with `ERROR: <type>: <message>` and a traceback on stderr. A runway
+below 2400 seconds prints `WARNING: runway below the 40-minute planning default`
+and continues; this warning is not a refusal. Existing artifacts are
 never overwritten to recover. There is no mail, launchctl, probe, chain,
 collector, power sampler, install or automatic publication operation here.
 

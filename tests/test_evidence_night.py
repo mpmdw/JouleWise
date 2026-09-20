@@ -1,6 +1,7 @@
 """Offline prepare composition and refusal boundaries; no live arm evidence."""
 import contextlib
-from datetime import datetime
+import fcntl
+from datetime import datetime, timezone
 import io
 import json
 import os
@@ -11,6 +12,21 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
+
+# The generator refuses any path carrying a census substring ("codex", "claude",
+# "t3"); a random tempfile suffix can contain "t3" (seen once: case-qa4uqbt3),
+# so every fixture directory is re-drawn until its name is census-clean.
+_CENSUS_SUBSTRINGS = ("codex", "claude", "t3")
+
+
+def _census_clean_tempdir(**kwargs):
+    for _ in range(64):
+        candidate = tempfile.TemporaryDirectory(**kwargs)
+        if not any(s in candidate.name.lower() for s in _CENSUS_SUBSTRINGS):
+            return candidate
+        candidate.cleanup()
+    raise RuntimeError("could not draw a census-clean temporary directory name")
+
 
 from joulewise import evidence_night as entry
 
@@ -65,7 +81,7 @@ class ArgumentsTests(unittest.TestCase):
                           roots_under=ROOT, staging_under=ROOT / "staging")
 
     def test_real_lock_verifier_and_builder_recipe(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with _census_clean_tempdir() as tmp:
             root = Path(tmp).resolve()
             (root / "env").mkdir()
             (root / "env/mac-measurement-lock.txt").write_text("# lock\na==1\nb==2\n")
@@ -77,7 +93,7 @@ class ArgumentsTests(unittest.TestCase):
             with patch.object(entry, "run", return_value="" ) as run, patch.object(entry, "verify_lock") as verify:
                 entry.build_venv(root)
             self.assertEqual(run.call_args_list[0].args[0], ["python3.13", "-m", "venv", ".venv"])
-            self.assertIn(".[mac]", run.call_args_list[1].args[0])
+            self.assertEqual(run.call_args_list[1].args[0][-4:], ["-c", "env/mac-measurement-lock.txt", "-e", ".[mac]"])
             self.assertEqual(run.call_args_list[2].args[0][-3:], ["charset-normalizer", "requests", "urllib3"])
             verify.assert_called_once_with(root)
 
@@ -86,10 +102,10 @@ class ArgumentsTests(unittest.TestCase):
 class PrepareTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix="night-entry-", dir="/tmp")
+        cls.temp = _census_clean_tempdir(prefix="night-entry-", dir="/tmp")
         while any(token in cls.temp.name.lower() for token in ("codex", "claude", "t3")):
             cls.temp.cleanup()
-            cls.temp = tempfile.TemporaryDirectory(prefix="night-entry-", dir="/tmp")
+            cls.temp = _census_clean_tempdir(prefix="night-entry-", dir="/tmp")
         cls.base = Path(cls.temp.name).resolve()
         cls.remote = cls.base / "remote.git"
         subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(ROOT), str(cls.remote)], check=True)
@@ -106,7 +122,7 @@ class PrepareTests(unittest.TestCase):
         cls.temp.cleanup()
 
     def setUp(self):
-        self.tempdir = tempfile.TemporaryDirectory(prefix="case-", dir=self.base)
+        self.tempdir = _census_clean_tempdir(prefix="case-", dir=self.base)
         self.addCleanup(self.tempdir.cleanup)
         self.base_dir = Path(self.tempdir.name)
         self.env = patch.dict(os.environ, {"PATH": str(self.bin) + os.pathsep + os.environ.get("PATH", "")})
@@ -160,6 +176,179 @@ class PrepareTests(unittest.TestCase):
         with self.assertRaisesRegex(entry.Refused, "published, invoked"):
             entry.prepare(**self.kw)
 
+    def test_cross_device_refused_before_clone(self):
+        original = Path.stat
+        custody_parent = Path(self.kw["roots_under"]) / "night-custody"
+        def different_device(path, *args, **kwargs):
+            result = original(path, *args, **kwargs)
+            if path == custody_parent:
+                values = list(result); values[2] += 1
+                return os.stat_result(values)
+            return result
+        calls = []
+        original_run = entry.run
+        def spy(argv, **kwargs):
+            calls.append(argv)
+            return original_run(argv, **kwargs)
+        with patch.object(Path, "stat", different_device), patch.object(entry, "run", side_effect=spy):
+            with self.assertRaisesRegex(entry.Refused, "staging and custody are not on one filesystem"):
+                entry.prepare(**self.kw)
+        self.assertFalse(any("clone" in argv for argv in calls))
+
+    def test_t0_beyond_max_age_refused_before_clone(self):
+        self.kw["t0"] = str(self.t0 + 130020)
+        now = int(self.kw["t0"]) - 130000
+        calls = []
+        original = entry.run
+        def spy(argv, **kwargs):
+            calls.append(argv)
+            return original(argv, **kwargs)
+        with patch.object(entry.time, "time", return_value=now), patch.object(entry, "run", side_effect=spy):
+            with self.assertRaisesRegex(entry.Refused, "^t0 is beyond the plan's maximum age at authoring$"):
+                entry.prepare(**self.kw)
+        self.assertFalse(any("clone" in argv for argv in calls))
+        self.assertFalse(list(Path(self.kw["roots_under"]).glob("JouleWise-measurement-*")))
+
+    def test_clone_authoring_max_age_binds_before_plan_write(self):
+        original = entry.run
+        authoring_calls = []
+        def tighter_clone_limit(argv, **kwargs):
+            if "-c" in argv and "write_night_plan" in str(argv[argv.index("-c") + 1]):
+                authoring_calls.append((list(argv), kwargs))
+                argv = list(argv)
+                index = argv.index("-c") + 1
+                argv[index] = ("from joulewise import night_gate; night_gate.PLAN_MAX_AGE_S=1\n"
+                               + argv[index])
+            return original(argv, **kwargs)
+        with patch.object(entry, "run", side_effect=tighter_clone_limit):
+            with self.assertRaisesRegex(entry.Refused, "^t0 is beyond the plan's maximum age at authoring$"):
+                entry.prepare(**self.kw)
+        self.assertEqual(len(authoring_calls), 1)
+        argv, kwargs = authoring_calls[0]
+        root = Path(kwargs["cwd"])
+        self.assertEqual(argv[:3], [root / ".venv/bin/python", "-B", "-c"])
+        record = json.loads(next(Path(self.kw["staging_under"]).glob("*/prepare.json")).read_text())
+        self.assertEqual([s["step"] for s in record["steps"]], ["clone", "venv"])
+        self.assertFalse(Path(record["plan_path"]).exists())
+        self.assertFalse(Path(record["custody_root"]).exists())
+
+    def test_orphan_next_refused_before_resolution(self):
+        self.kw.update(t0="next", head=None)
+        first = entry.prepare(**self.kw)
+        (Path(first["staging"]) / "prepare.json").unlink()
+        with patch.object(entry, "run") as run:
+            with self.assertRaisesRegex(entry.Refused, "unidentified prior preparation output: " + first["staging"]):
+                entry.prepare(**self.kw)
+        run.assert_not_called()
+
+    def test_orphan_custody_refused(self):
+        orphan = Path(self.kw["roots_under"]) / "night-custody/qpe01-pilot-n1-orphan"
+        orphan.mkdir(parents=True)
+        with self.assertRaisesRegex(entry.Refused, "unidentified prior preparation output: " + str(orphan)):
+            entry.prepare(**self.kw)
+
+    def corrupt_candidate(self, state, mode):
+        custody = Path(state["custody_root"])
+        wrapper = custody / "chain.zsh"
+        if mode == "manifest":
+            path = custody / "evidence_manifest.json"
+            value = json.loads(path.read_text()); value["plan_id"] = "flipped"
+            path.write_text(json.dumps(value))
+        else:
+            raw = wrapper.read_text()
+            if mode == "zsh -n":
+                raw += ")\n"
+            else:
+                raw = raw.replace(str(custody / "night_plan.json"), state["plan_path"])
+            wrapper.write_text(raw)
+            (custody / "chain.zsh.sha256").write_text(entry.digest(wrapper) + "  chain.zsh\n")
+
+    def test_sealed_candidate_checks_before_checkpoint(self):
+        original = entry.run
+        for mode in ("zsh -n", "manifest", "published plan path"):
+            with self.subTest(check=mode):
+                self.kw["t0"] = str(int(self.kw["t0"]) + 60)
+                def corrupt(argv, **kwargs):
+                    result = original(argv, **kwargs)
+                    if "scripts/gen_evidence_night.py" in argv:
+                        plan = Path(argv[argv.index("--plan") + 1])
+                        state = json.loads((plan.parent / "prepare.json").read_text())
+                        self.corrupt_candidate(state, mode)
+                    return result
+                with patch.object(entry, "run", side_effect=corrupt):
+                    with self.assertRaisesRegex(entry.Refused, "sealed candidate failed " + mode):
+                        entry.prepare(**self.kw)
+
+    def test_sealed_candidate_checks_on_resume(self):
+        state = entry.prepare(**self.kw)
+        for mode in ("zsh -n", "manifest", "published plan path"):
+            with self.subTest(check=mode):
+                originals = {p: Path(p).read_bytes() for p in state["digests"]}
+                self.corrupt_candidate(state, mode)
+                record = dict(state, digests={p: entry.digest(p) for p in state["digests"]})
+                state_path = Path(state["staging"]) / "prepare.json"
+                state_path.write_text(json.dumps(record))
+                with self.assertRaisesRegex(entry.Refused, "sealed candidate failed " + mode):
+                    entry.prepare(**self.kw)
+                for path, raw in originals.items():
+                    Path(path).write_bytes(raw)
+                state_path.write_text(json.dumps(state))
+
+    def test_lock_precedes_first_staging_write(self):
+        paths = entry.locations(Path(self.kw["roots_under"]), Path(self.kw["staging_under"]), self.t0, self.head)
+        stage = Path(paths["staging"])
+        locks = stage.parent / ".locks"; locks.mkdir(parents=True)
+        with (locks / (stage.name + ".lock")).open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(entry.Refused, "concurrent preparation"):
+                entry.prepare(**self.kw)
+            self.assertFalse(stage.exists())
+
+    def test_notice_bindings_and_spans(self):
+        from joulewise.quiet_predicate_campaign import CHAIN_PATH, PROTOCOL_PATH
+        state = entry.prepare(**self.kw); draft = state["notice_draft"]
+        root = Path(state["measurement_root"])
+        for relative in (CHAIN_PATH, PROTOCOL_PATH):
+            self.assertIn(str(root / relative), draft)
+            self.assertIn(entry.digest(root / relative), draft)
+        for index, (start, end) in enumerate(state["schedule"]["install_spans_today"], 1):
+            for boundary, epoch in (("open", start), ("close EXCLUDED", end)):
+                self.assertIn(f"install span {index} {boundary}: "
+                              f"{datetime.fromtimestamp(epoch).astimezone().isoformat()} "
+                              f"{datetime.fromtimestamp(epoch, timezone.utc).isoformat()} epoch {epoch}", draft)
+        self.assertIn("attempt 1; prior candidates for this date: none", draft)
+        self.assertNotIn("earlier abort", draft)
+
+    def test_preclone_recipe_and_runway_warning(self):
+        self.kw["t0"] = str((int(time.time()) // 60 + 30) * 60)
+        calls = []; original = entry.run; errors = io.StringIO()
+        def spy(argv, **kwargs):
+            calls.append(list(map(str, argv)))
+            return original(argv, **kwargs)
+        with patch.object(entry, "run", side_effect=spy), contextlib.redirect_stderr(errors):
+            entry.prepare(**self.kw)
+        self.assertIn("WARNING: runway below the 40-minute planning default", errors.getvalue())
+        version = calls.index(["python3.13", "--version"])
+        clone = next(i for i, c in enumerate(calls) if "clone" in c)
+        fetch = next(i for i, c in enumerate(calls) if "fetch" in c)
+        ancestry = next(i for i, c in enumerate(calls) if "merge-base" in c)
+        self.assertLess(version, clone); self.assertLess(fetch, ancestry)
+        self.assertTrue(any("interpreter_identity" in " ".join(c) for c in calls))
+
+    def test_unexpected_builder_is_error_exit_one(self):
+        original = entry.prepare
+        def broken(root):
+            raise RuntimeError("unexpected builder defect")
+        self.kw["builder"] = broken
+        errors = io.StringIO()
+        with patch.object(entry, "prepare", side_effect=lambda **kwargs: original(**self.kw)):
+            with contextlib.redirect_stderr(errors):
+                result = entry.main(["prepare", "--kind", entry.KIND, "--t0", "next"])
+        self.assertEqual(result, 1)
+        self.assertIn("ERROR: RuntimeError: unexpected builder defect", errors.getvalue())
+        self.assertIn("Traceback (most recent call last)", errors.getvalue())
+
+
     def test_default_selection_is_pinned_across_resume(self):
         self.kw.update(t0="next", head=None)
         first = entry.prepare(**self.kw)
@@ -174,7 +363,16 @@ class PrepareTests(unittest.TestCase):
         first = entry.prepare(**self.kw)
         self.kw["t0"] = str(self.t0 + 60)
         second = entry.prepare(**self.kw)
-        self.assertEqual(first["plan_id"], second["plan_id"])
+        from joulewise.night_agent_install import probe_label
+        from joulewise.night_gate import NightPlan
+        self.assertNotEqual(first["plan_id"], second["plan_id"])
+        self.assertNotEqual("night-results/" + first["plan_id"], "night-results/" + second["plan_id"])
+        self.assertNotEqual(probe_label(first["plan_id"]), probe_label(second["plan_id"]))
+        for state in (first, second):
+            self.assertEqual(state["plan_id"], "qpe01-pilot-n1-" + datetime.fromtimestamp(state["t0"]).strftime("%Y%m%d-%H%M"))
+            NightPlan.from_mapping(json.loads(Path(state["plan_path"]).read_text()))
+        self.assertIn("attempt 2", second["notice_draft"])
+        self.assertIn(first["plan_id"], second["notice_draft"])
         for key in ("staging", "measurement_root", "custody_root"):
             self.assertNotEqual(first[key], second[key])
         self.kw.update(t0="next", head=None)
@@ -239,7 +437,7 @@ class PrepareTests(unittest.TestCase):
         paths = entry.locations(Path(self.kw["roots_under"]), Path(self.kw["staging_under"]), self.t0, self.head)
         stage = Path(paths["staging"])
         stage.mkdir(parents=True)
-        with self.assertRaisesRegex(entry.Refused, "existing foreign"):
+        with self.assertRaisesRegex(entry.Refused, "unidentified prior preparation output"):
             entry.prepare(**self.kw)
         stage.rmdir()
         stage.symlink_to(self.base_dir, target_is_directory=True)
