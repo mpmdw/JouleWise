@@ -108,7 +108,7 @@ REQUIRED_RESERVATION_ECHO = frozenset((
 COURIER_ALLOWED_TOOLS = (
     "Read,Glob,Grep,Bash,Edit,Write,mcp__claude_ai_Gmail__send_message"
 )
-COURIER_RECIPIENT = "claude.ai.copper531@passmail.net"
+COURIER_RECIPIENT = "claude2.glaring610@passmail.net"
 
 EXIT_GO = 0
 EXIT_REFUSED = 3

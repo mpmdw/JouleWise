@@ -1,0 +1,16 @@
+{
+  "authored_epoch_s": 1789876843.0,
+  "chain_path": "/Users/edr/night-custody/qpe01-pilot-n1-20260919/chain.zsh",
+  "chain_sha256_path": "/Users/edr/night-custody/qpe01-pilot-n1-20260919/chain.zsh.sha256",
+  "custody_root": "/Users/edr/night-custody/qpe01-pilot-n1-20260919",
+  "measurement_head": "4f2aa185e1dc362b8e299353ce357c873c2f97a0",
+  "measurement_root": "/Users/edr/JouleWise-measurement-20260919-qpe01-pilot-n1",
+  "plan_id": "qpe01-pilot-n1-20260919",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "registration_path": "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json",
+  "repo_head": "4f2aa185e1dc362b8e299353ce357c873c2f97a0",
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "t0_epoch_s": 1789881000.0,
+  "window_max_s": 9000
+}

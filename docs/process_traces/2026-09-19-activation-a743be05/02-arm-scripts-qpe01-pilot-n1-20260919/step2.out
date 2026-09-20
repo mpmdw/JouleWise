@@ -1,0 +1,44 @@
+CHECK: minute aligned; t0 >= authoring + 40 min, within 36 h
+/Users/edr/night-plan-staging/qpe01-pilot-n1-20260919/night_plan.json
+/Users/edr/night-custody/qpe01-pilot-n1-20260919/chain.zsh
+24224c0b05e351a406b0f503e9254872ec2f7a2abb2a63c6217a21401b7a2f2a  /Users/edr/night-custody/qpe01-pilot-n1-20260919/chain.zsh
+24224c0b05e351a406b0f503e9254872ec2f7a2abb2a63c6217a21401b7a2f2a  chain.zsh
+568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea  quiet_predicate_evidence.zsh
+{
+  "files": {
+    "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json": "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6",
+    "joulewise/night_agent_install.py": "0f02f92c79cf9885424690c53d6025c5dc62b65c88761e09f6caa72576c6b607",
+    "joulewise/night_gate.py": "c3a7bb09a03cd5a71d84ff67ad31cc2d0f7bf3adffcfa81c3c5913de6d453c9e",
+    "joulewise/quiet_admission.py": "79e12d2b6ce8fec739c23ded36ee7127fc1b22b4b7dcf7468253eaebb632db22",
+    "joulewise/quiet_predicate_campaign.py": "c81fc9e29f033ed5d74a4edee43d1fedc1a309474da89f3338c79c7f395f6096",
+    "scripts/night_chains/quiet_predicate_evidence.zsh": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
+    "scripts/run_night.py": "0465841d7b807a2ec805818f02ceabef2991c1e3d06a1128c9390fd4af50caa5",
+    "scripts/sample_quiet_predicate_evidence.py": "21f76403cbcdd050a9e9a08f84ed399aa2834d8ddba387233a4d318aec3e48f3"
+  },
+  "measurement_head": "4f2aa185e1dc362b8e299353ce357c873c2f97a0",
+  "plan_id": "qpe01-pilot-n1-20260919",
+  "schema": "joulewise.night_evidence_manifest.v1"
+}
+PASS: v2 plan, no v4 schema
+PASS: no quiet_admission
+PASS: no pack fields
+PASS: plan heads equal H
+PASS: plan id and roots equal environment
+PASS: t0 equals selected epoch
+PASS: DIAGNOSTIC_NO_PACK, frozen 9000 s window
+PASS: repo-relative pilot registration
+PASS: wrapper paths match custody root
+PASS: single evidence payload literal
+PASS: wrapper SHA-256 equals sidecar
+PASS: sealed manifest equals manifest_for(plan)
+PASS: wrapper source SHA-256 equals tracked chain at H
+PASS: registration SHA-256 belongs to chain-bound RULED_REGISTRATIONS
+PASS: registration binds source SHA-256
+PASS: plan age valid; t0 at least 40 min after authoring
+PASS: before exclusive install close
+PASS: same-device atomic publication
+PASS: derived boundaries equal driver schedule
+candidate checks PASS
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260919-qpe01-pilot-n1/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260919-qpe01-pilot-n1/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+CalledProcessError: Command '['/bin/zsh', '/Users/edr/night-custody/qpe01-pilot-n1-20260919/chain.zsh']' returned non-zero exit status 2.

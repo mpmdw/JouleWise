@@ -364,6 +364,70 @@ class InstallNightAgentTests(unittest.TestCase):
         inputs = next(record["input_digests"] for record in records if "input_digests" in record)
         self.assertEqual("sha256:" + hashlib.sha256(extra.read_bytes()).hexdigest(), inputs[str(extra)])
 
+    def test_calibration_render_input_digest_output_bytes_unchanged(self):
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        paths = (plan.resolve(), *(self.measurement_root / name for name in
+                  ("ledger.jsonl", "head.json", "frozen-plan.json", "identity.json", "t1.json")))
+        expected = json.dumps({"input_digests": {
+            str(path): "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in paths}}, sort_keys=True) + "\n"
+        result = self._run(plan)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [line for line in result.stdout.splitlines(keepends=True) if '"input_digests"' in line]
+        self.assertEqual(lines, [expected])
+
+    def test_unknown_payload_declaration_refuses_render_inspection(self):
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        parsed = json.loads(plan.read_text())
+        wrapper = Path(parsed["chain_path"])
+        wrapper.write_text("export NIGHT_PAYLOAD_KIND=unknown\n" + wrapper.read_text())
+        Path(parsed["chain_sha256_path"]).write_text(hashlib.sha256(wrapper.read_bytes()).hexdigest() + "\n")
+        result = self._run(plan)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("ambiguous night payload declaration:", result.stderr)
+        self.assertNotIn('"input_digests"', result.stdout)
+
+    def test_calibration_render_executes_chain_exactly_once_in_argv_mode(self):
+        import contextlib
+        import io
+        import signal
+        from joulewise import night_agent_install as installer
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        chain = json.loads(plan.read_text())["chain_path"]
+        run = subprocess.run
+        calls = []
+        def recorded(argv, *args, **kwargs):
+            if chain in list(map(str, argv)):
+                calls.append((list(argv), kwargs["env"].copy()))
+            return run(argv, *args, **kwargs)
+        saved = {number: signal.getsignal(number) for number in installer.SIGNALS}
+        try:
+            with mock.patch.dict(os.environ, self.environment), \
+                    mock.patch.object(subprocess, "run", side_effect=recorded), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                rc = installer.main(["--plan", str(plan), "--python", sys.executable,
+                                     "--render-only", str(self.rendered)])
+        finally:
+            for number, handler in saved.items():
+                signal.signal(number, handler)
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], ["/bin/zsh", chain])
+        self.assertEqual(calls[0][1]["NIGHT_RESERVATION_ARGV_ONLY"], "1")
+
+    def test_legacy_inspection_subprocess_failure_is_typed_refusal(self):
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        wrapper = Path(json.loads(plan.read_text())["chain_path"])
+        wrapper.write_text("#!/bin/zsh\nexit 42\n")
+        result = self._run(plan)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("reservation inspection failed:", result.stderr)
+        self.assertNotIn('"input_digests"', result.stdout)
+
     def test_render_only_includes_probe_plist_with_pinned_topology(self):
         plan = self._write_plan()
         result = self._run(plan)

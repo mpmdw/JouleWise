@@ -269,13 +269,14 @@ class RegistrationSeamTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 source = FakeProbeSource()
-                source.text[path] = (root / path).read_text(encoding="utf-8")
+                registration_path = str(Path(make_plan().measurement_root) / path)
+                source.text[registration_path] = (root / path).read_text(encoding="utf-8")
                 receipt = night_gate.evaluate_night(
                     make_plan(registration_path=path), source.probes()
                 )
                 c1 = next(row for row in receipt.conditions if row.condition_id == "C1")
                 self.assertEqual(c1.status, expected_status)
-                self.assertIn(path, source.read_calls)
+                self.assertIn(registration_path, source.read_calls)
                 if expected_status == "FAIL":
                     self.assertEqual(receipt.refusal.reason, "night_refused_registration")
                 else:
@@ -1309,6 +1310,31 @@ class EvidenceRegistrationTests(unittest.TestCase):
         source.results[argv] = result(argv, stdout=chain)
         source.text[str(Path(plan.measurement_root) / night_gate.EVIDENCE_CHAIN_PATH)] = chain
         return source
+
+    def test_evidence_registration_is_relative_to_measurement_root_from_tmp(self):
+        import os
+        import subprocess
+        from dataclasses import replace
+        from tests.test_gen_evidence_night import EvidenceFixture
+        from scripts import gen_evidence_night
+        fixture = EvidenceFixture()
+        self.addCleanup(fixture.close)
+        gen_evidence_night.generate(fixture.plan_path)
+        source = FakeProbeSource(checkout_head=fixture.head, measurement_head=fixture.head)
+        def run(argv):
+            if argv[0] == "/usr/bin/git":
+                completed = subprocess.run(argv, capture_output=True, text=True)
+                return result(argv, exit_code=completed.returncode,
+                              stdout=completed.stdout, stderr=completed.stderr)
+            return source.run(argv)
+        probes = replace(source.probes(), run=run, read_text=lambda path: Path(path).read_text())
+        previous = os.getcwd()
+        try:
+            os.chdir("/tmp")
+            receipt = night_gate.evaluate_night(fixture.plan, probes)
+        finally:
+            os.chdir(previous)
+        self.assertEqual(receipt.verdict, "GO", receipt.refusal)
 
     def test_protocol_digest_and_source_are_the_ruled_files(self):
         source = self.source()
