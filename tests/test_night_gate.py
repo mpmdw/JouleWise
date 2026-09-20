@@ -16,7 +16,7 @@ from joulewise.night_plan_writer import night_plan_mapping
 HEAD = "a" * 40
 BOOT_UUID = "12345678-1234-5678-9234-567812345678"
 CHAIN_TEXT = "#!/bin/zsh\necho night\n"
-REGISTRATION_TEXT = '{"registered":true}\n'
+REGISTRATION_TEXT = (Path(__file__).resolve().parents[1] / night_gate.D166_REGISTRATION_PATH).read_text()
 RETIRED_V1 = Path(__file__).resolve().parent / "fixtures" / "night_plan_v1_retired.json"
 
 
@@ -1213,7 +1213,13 @@ class QuietGatePhaseTests(unittest.TestCase):
                                                hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
                             receipt = engine.evaluate_night(make_plan(receipt_class), source.probes())
                         receipts.append(receipt.to_json_bytes())
-                    self.assertEqual(receipts[0], receipts[1])
+                    # Record 46a R2: admission C1 gains only the ruled metadata.
+                    current = json.loads(receipts[1])
+                    for row in current["conditions"]:
+                        if row["condition_id"] == "C1":
+                            row["measured"].pop("registration_label", None)
+                            row["measured"].pop("registration_ruling", None)
+                    self.assertEqual(json.loads(receipts[0]), current)
                     value = json.loads(receipts[0])
                     self.assertEqual(baseline.validate_receipt(value), night_gate.validate_receipt(value))
                     self.assertEqual(set(value), baseline._RECEIPT_KEYS)
@@ -1255,3 +1261,111 @@ class QuietGatePhaseTests(unittest.TestCase):
         mapping.update(schema=night_gate.QUIET_PLAN_SCHEMA, schema_version=4)
         with self.assertRaises(night_gate.PlanError):
             night_gate.NightPlan.from_mapping(mapping)
+
+
+class EvidenceRegistrationTests(unittest.TestCase):
+    def test_ruled_registration_serialization_requires_dated_ruling_amendment(self):
+        # 2026-09-19: record 61a S1/S4 + 56x R2 re-pin the frozen pilot.
+        # 2026-09-19 (re-audit 64 R1): each entry now names its tracked records.
+        # Any membership/metadata amendment needs its cold-gate ruling and a
+        # dated update here.
+        serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
+        self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
+                         '81c6a189845394a089641d9582e7c278890b9f5afb39b4250addfdfdafb5e5e1')
+
+    def test_every_ruled_registration_names_tracked_records_that_exist(self):
+        # Ruling 61a S4: prose authority is not enough; each entry's records
+        # must be tracked files, and a decision-log anchor must be a heading.
+        root = Path(__file__).resolve().parents[1]
+        for sha, entry in night_gate.RULED_REGISTRATIONS.items():
+            with self.subTest(registration=entry['label']):
+                self.assertEqual(set(entry), {'label', 'ruling', 'binds_chain', 'records'})
+                self.assertTrue(entry['records'], 'an entry without records is prose-only authority')
+                for ref in entry['records']:
+                    path, _, anchor = ref.partition('#')
+                    self.assertFalse(Path(path).is_absolute(), ref)
+                    self.assertTrue((root / path).is_file(), ref)
+                    if anchor:
+                        headings = [line for line in (root / path).read_text().splitlines()
+                                    if line.startswith('## ' + anchor + ':')]
+                        self.assertTrue(headings, ref)
+
+    def test_unavailable_chain_source_is_probe_error_not_digest_mismatch(self):
+        source = self.source()
+        argv = next(argv for argv in source.results if len(argv) > 4 and argv[0] == '/usr/bin/git' and argv[3] == 'show')
+        source.results[argv] = result(argv, exit_code=1, stderr='fixture unavailable')
+        receipt = night_gate.evaluate_night(make_plan(), source.probes())
+        self.assertEqual(receipt.refusal.reason, 'night_probe_error')
+
+    def source(self, registration=None, wrapper_extra=""):
+        root = Path(__file__).resolve().parents[1]
+        chain = (root / night_gate.EVIDENCE_CHAIN_PATH).read_text()
+        sha = hashlib.sha256(chain.encode()).hexdigest()
+        wrapper = "export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\nexport EVIDENCE_CHAIN_SOURCE_SHA256='" + sha + "'\n" + wrapper_extra
+        source = FakeProbeSource(chain_text=wrapper, registration_text=registration or
+            (root / night_gate.QPE01_PILOT_REGISTRATION_PATH).read_text())
+        plan = make_plan()
+        argv = ("/usr/bin/git", "-C", plan.measurement_root, "show", f"{plan.measurement_head}:{night_gate.EVIDENCE_CHAIN_PATH}")
+        source.results[argv] = result(argv, stdout=chain)
+        source.text[str(Path(plan.measurement_root) / night_gate.EVIDENCE_CHAIN_PATH)] = chain
+        return source
+
+    def test_protocol_digest_and_source_are_the_ruled_files(self):
+        source = self.source()
+        self.assertEqual(hashlib.sha256(source.text['/custody/registration.json'].encode()).hexdigest(), night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+        self.assertIn(night_gate.QPE01_PILOT_REGISTRATION_SHA256, night_gate.RULED_REGISTRATIONS)
+        receipt = night_gate.evaluate_night(make_plan(), source.probes())
+        self.assertEqual(receipt.verdict, "GO")
+        c1 = next(row for row in receipt.conditions if row.condition_id == "C1").measured
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5").measured
+        self.assertEqual(c1['registration_bound_chain_source_sha256'], c5['chain_source_sha256'])
+        self.assertEqual(c1['registration_ruling'], 'cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b')
+        self.assertNotIn('D-166', c1['detail'])
+
+    def test_chain_measurement_not_advisory_sidecar_is_binding(self):
+        source = self.source()
+        source.text[str(Path(make_plan().measurement_root) / night_gate.EVIDENCE_CHAIN_PATH)] += '# altered\n'
+        receipt = night_gate.evaluate_night(make_plan(), source.probes())
+        self.assertEqual(receipt.refusal.reason, 'night_chain_digest_mismatch')
+        self.assertNotIn('/custody/registration.json', source.read_calls)
+
+    def test_evidence_cannot_borrow_d166_and_calibration_cannot_borrow_pilot(self):
+        source = self.source(registration=REGISTRATION_TEXT)
+        receipt = night_gate.evaluate_night(make_plan(), source.probes())
+        self.assertEqual(receipt.refusal.reason, 'night_refused_registration')
+        source = FakeProbeSource(registration_text=self.source().text['/custody/registration.json'])
+        receipt = night_gate.evaluate_night(make_plan(), source.probes())
+        self.assertEqual(receipt.refusal.reason, 'night_refused_registration')
+
+    def test_missing_malformed_or_wrong_chain_binding_refuses(self):
+        for registration in ('{}', '[]', '{bad', '{"chain_source_sha256":"' + '0'*64 + '"}'):
+            source = self.source(registration=registration)
+            sha = hashlib.sha256(registration.encode()).hexdigest()
+            entry = night_gate.RULED_REGISTRATIONS[night_gate.QPE01_PILOT_REGISTRATION_SHA256]
+            with mock.patch.dict(night_gate.RULED_REGISTRATIONS, {sha: entry}):
+                receipt = night_gate.evaluate_night(make_plan(), source.probes())
+            self.assertEqual(receipt.refusal.reason, 'night_refused_registration')
+
+    def test_payload_ambiguity_and_unknown_literal_refuse(self):
+        for extra in ('export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n', "export CALIBRATION_LEDGER='/tmp/ledger'\n"):
+            source = self.source(wrapper_extra=extra)
+            receipt = night_gate.evaluate_night(make_plan(), source.probes())
+            self.assertEqual(receipt.refusal.reason, 'night_chain_digest_mismatch')
+            self.assertIn('probe payload kind ambiguous', receipt.refusal.detail)
+        with self.assertRaisesRegex(ValueError, 'probe payload kind ambiguous'):
+            night_gate.probe_payload_kind('export NIGHT_PAYLOAD_KIND=unknown\n')
+
+    def test_cold_gate_document_clauses_and_evidence_probe_amendment_are_present(self):
+        root = Path(__file__).resolve().parents[1]
+        handback = ' '.join((root/'docs/process/NIGHT_HANDBACK.md').read_text().split())
+        runbook = ' '.join((root/'docs/phase_2/derivation_night_runbook.md').read_text().split())
+        courier = ' '.join((root/'docs/process/NIGHT_COURIER_PROMPT.md').read_text().split())
+        for clause in ('The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling and the tracked records that hold it (`records`; a test asserts each exists).',
+                       '`probe receipt kind does not match payload kind`', '`probe payload kind ambiguous`',
+                       'sealed manifest, harness and registration digests',
+                       '`joulewise.night_evidence_probe_receipt.v1`'):
+            self.assertIn(clause, handback)
+        self.assertIn('| Evidence verify-only probe receipt |', runbook)
+        self.assertIn('It never starts `collect`, `load` or power sampling.', runbook)
+        self.assertIn('You have no scientific decision authority', courier)
+        self.assertIn('night/evidence_busy_cores.jsonl', courier)

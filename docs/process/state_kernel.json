@@ -1166,6 +1166,35 @@
       "status": "queued",
       "stop_card": null
     },
+    "CI-SHARD-RUNNER-FILE-BASED-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/57-brief-kernel-registration-2.md (file-based hosted test-runner registration and pull request #363 workaround)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CI-SHARD-RUNNER-FILE-BASED-01/acceptance",
+          "label": "CI-SHARD-RUNNER-FILE-BASED-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Extract the inline test runner into a file or importable module, preserve test-shard selection and process exit behavior, and validate on hosted Linux that spawned workers can import their main script and the load-worker join and pipe-cleanup tests execute successfully."
+      },
+      "authority": {
+        "label": "2026-09-19 afternoon registration by the project lead",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/57-brief-kernel-registration-2.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Replace the hosted continuous-integration shard runner, the program that selects and runs one subset of automated tests, with a file-based or importable runner. It currently feeds its test script to Python on standard input. A test that starts a worker using multiprocessing's spawn method, which launches a fresh interpreter and re-imports the main script, therefore fails on Linux with `FileNotFoundError: '<stdin>'` because the script is not a file. Pull request #363 temporarily restricted two macOS bench tests to `darwin`, Python's platform name for macOS. A file-based runner would let hosted Linux exercise the load worker's join ladder, the sequence of waits and termination attempts used to reap the worker, and its pipe cleanup, closing the interprocess communication channels.",
+      "id": "CI-SHARD-RUNNER-FILE-BASED-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 249,
+      "status": "queued",
+      "status_note": "2026-09-19 afternoon — READY [AGENT]. Pull request #363 guards two bench tests as macOS-only; the file-based runner is the follow-up needed for hosted Linux coverage.",
+      "stop_card": null
+    },
     "CLAIM-NONISSUANCE-RECEIPT-01": {
       "acceptance": {
         "evidence": [
@@ -1478,6 +1507,66 @@
       "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
       "stop_card": null
     },
+    "COURIER-DIAGNOSTIC-PERSISTENCE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/83-fresh-eyes-round-4-astra.md (R1–R3 with executed counterfactuals)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/83a-ruling-diagnostic-preservation-deferred.md (deferral and the accepted guarantee)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COURIER-DIAGNOSTIC-PERSISTENCE-01/acceptance",
+          "label": "COURIER-DIAGNOSTIC-PERSISTENCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A consult record names the sink and its ordering; a regression per review-83 counterfactual (in-courier post-prompt failure, publisher logging failure after a successful push, unwritable night log) shows the diagnostic on the sink; delivery counts and verdicts unchanged; full replay green."
+      },
+      "authority": {
+        "label": "2026-09-19 evening registration by the project lead (ruling 83a)",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/83a-ruling-diagnostic-preservation-deferred.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Give the night driver's courier path one durable reporting sink that is written last, after every other operation, on a surface that does not depend on the night log, so that a diagnostic produced after the courier prompt was issued (a failed sent-marker sync, a failed attempt-journal write, a failed lock release, a failed second results-branch push, or a failed night-log append) always survives somewhere the morning harvest reads. Fresh-eyes review 83 of the evidence executor branch showed three such losses at the final head; none changes delivery or the measurement verdict, which is why they were deferred rather than patched a third time. Consult once on the sink's shape before implementing.",
+      "id": "COURIER-DIAGNOSTIC-PERSISTENCE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 252,
+      "status": "queued",
+      "status_note": "2026-09-19 evening — QUEUED [AGENT], consult first. Deferred from the Stage A executor PR by ruling 83a (class not shrinking round over round).",
+      "stop_card": null
+    },
+    "COURIER-LOCK-OWNERSHIP-FLOCK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/79-consult-pre-courier-boundary-astra.md (R3 reproduction, Q3 design, Q5 residuals)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/79a-ruling-pre-courier-boundary.md (deferral)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COURIER-LOCK-OWNERSHIP-FLOCK-01/acceptance",
+          "label": "COURIER-LOCK-OWNERSHIP-FLOCK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Cold-gate packet ruled; the lock is a persistent flock-held inode never unlinked; the dead-man probes with the same lock; regression: a first caller paused after lock creation and before metadata cannot be displaced by a second caller (the consult-79 counterexample is dead); the dead-man reporting block crosses the shared guard; handback and runbook prose updated for the takeover semantics; full replay green."
+      },
+      "authority": {
+        "label": "2026-09-19 afternoon registration by the project lead (ruling 79a)",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/79a-ruling-pre-courier-boundary.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Replace the night courier's lock, the file that marks which process may send the night's report email, with an operating-system advisory lock (`flock`) held on one persistent file that is never deleted. The current lock is created empty and then filled with the owner's process id and time; in the interval between those two steps a second caller reads an empty file, judges the lock stale, deletes it, creates its own, and both callers send. The dead-man process (the backstop that reports when the courier never did) must use the same lock probe, so a corrupt, empty or old lock file is no longer permission to take over; a hung owner becomes an explicit recovery case. The dead-man's own reporting block also gets the shared best-effort guard the courier gained in fix round 4 of the evidence executor, and the two remaining prerequisites named by consult 79 Q5 (chain-exit persistence before the boundary; process creation itself) are stated as the accepted limits. Contract-bearing: it changes the stale-lock takeover semantics the handback and runbook describe, so a cold-gate packet precedes implementation.",
+      "id": "COURIER-LOCK-OWNERSHIP-FLOCK-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 250,
+      "status": "queued",
+      "status_note": "2026-09-19 afternoon — QUEUED [AGENT], cold gate first. Pre-existing on main (consult 79 R3, executed); deferred out of the Stage A executor branch by ruling 79a because it changes takeover semantics.",
+      "stop_card": null
+    },
     "COURIER-SENT-FORMAT-PIN-01": {
       "acceptance": {
         "evidence": [
@@ -1505,6 +1594,36 @@
       "priority": "p3_hardening_candidates",
       "rank": 241,
       "status": "queued",
+      "stop_card": null
+    },
+    "COURIER-UNWRITABLE-CUSTODY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/76a-ruling-outcome-repair.md (R1 acceptance)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/76-consult-outcome-repair-astra.md (R1)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COURIER-UNWRITABLE-CUSTODY-01/acceptance",
+          "label": "COURIER-UNWRITABLE-CUSTODY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A test or executed probe shows what reaches Ed when the custody directory is unwritable at courier time (watchdog census, dead-man, or nothing); if nothing, a bounded change makes one of them report it."
+      },
+      "authority": {
+        "label": "2026-09-19 afternoon registration by the project lead (ruling 79a)",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/79a-ruling-pre-courier-boundary.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Decide and implement how a night whose custody directory cannot be written at all is reported. The courier's evidence repair cannot help there: it needs to create the courier lock before anything else, so no courier launches and the silence falls to the watchdog's census and the dead-man. Ruling 76a accepted this as a caller-level storage prerequisite rather than a defect of the outcome repair; this lane records what the watchdog and dead-man actually do in that case and closes any gap with a bounded change.",
+      "id": "COURIER-UNWRITABLE-CUSTODY-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 251,
+      "status": "queued",
+      "status_note": "2026-09-19 afternoon — QUEUED [AGENT] (queue data from ruling 76a; consult 76 R1).",
       "stop_card": null
     },
     "CUSTODY-REAPING-ATTRIBUTION-01": {
@@ -2573,6 +2692,36 @@
       "status_note": "2026-09-15 activation d6888966: registered from activation decae362 record 00 Follow-up and the d6888966 State found census; not started; not night-critical. Sibling of REPLAY-FIXTURE-LEAK-01, kept separate because it covers a different fixture and file. Separate ed_external note: culling the existing orphan processes is Ed's call; no orphan cull is authorized by this agent lane.",
       "stop_card": null
     },
+    "FIXTURE-TMPNAME-CENSUS-SUBSTRING-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/81-delta-reaudit-round-4-astra.md (flag F3)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/83-fresh-eyes-round-4-astra.md (flag E3)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-TMPNAME-CENSUS-SUBSTRING-01/acceptance",
+          "label": "FIXTURE-TMPNAME-CENSUS-SUBSTRING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A regression constructs the offending name deterministically and shows the fixture no longer refuses it (or the census no longer matches a random substring); the flake class is named in the test."
+      },
+      "authority": {
+        "label": "2026-09-19 evening registration by the project lead (ruling 83a)",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/83a-ruling-diagnostic-preservation-deferred.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Stop test fixtures from tripping the machine census by accident. The census refuses process or path names that contain agent-harness markers such as `t3`; a random temporary directory name (for example `/tmp/qpe-fixture-reft3nq6`) can contain that substring by chance, and the evidence-night generator then refuses the fixture, failing an unrelated test once in a while (observed twice on 2026-09-19 by two independent review seats and once at the lead's bench). Make fixture temp names use an alphabet or prefix that cannot match a census marker, or anchor the census marker so a random substring cannot match.",
+      "id": "FIXTURE-TMPNAME-CENSUS-SUBSTRING-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 253,
+      "status": "queued",
+      "status_note": "2026-09-19 evening — QUEUED [AGENT]. Fixture flake, not a driver defect; three sightings in one afternoon.",
+      "stop_card": null
+    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -2951,35 +3100,6 @@
       "rank": 133,
       "status": "queued",
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five. The audit's argument for sequence: the unowned floor-producer finding from the companion audit becomes a small task instead of a risky one only if this lands first, because under the current design owning it means hand-copying about 2900 lines twice. Ordered last of the five on cost, but it gates the cheapness of the others.",
-      "stop_card": null
-    },
-    "GENERATOR-HEAD-FILE-BYTE-PIN-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-19-activation-d0b83820/07-opus-contract-refuter.md (Part B)",
-          "docs/process_traces/2026-09-19-activation-d0b83820/07a-adjudication-head-pin-drift.md (adopted ledger relation and pending generator question)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/GENERATOR-HEAD-FILE-BYTE-PIN-01/acceptance",
-          "label": "GENERATOR-HEAD-FILE-BYTE-PIN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A cold gate records whether the live generators may replace the exact head-file byte pin with the ledger relation: the committed head is at or ahead of the acceptance cutoff on the same authenticated chain. Preserve the separate acceptance-cutoff binding. This entry registers the question; removing the mechanism requires the ruling first."
-      },
-      "authority": {
-        "label": "2026-09-19 registration by the project lead; records work and pending questions, not a ruling",
-        "path": "docs/process_traces/2026-09-19-activation-d0b83820/24-brief-kernel-registration.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Submit the live campaign generators in `configs/campaigns/d117_floor_qwen3-1p7b_v5`, `configs/campaigns/d117_floor_qwen3-8b_v5`, and `configs/campaigns/d117_contrast_v5` for a cold-gate decision (independent adjudication from a fresh session) about the ledger-head file byte pin, a digest fixing the exact contents of `configs/calibration/calibration_ledger_head.json`. That committed file identifies the latest calibration-ledger entry and legitimately advances after each measurement night; including its old bytes in the drift-refusal set (inputs whose change prevents regeneration) makes regeneration refuse after every night. The acceptance binding already exists separately: `LEDGER_HEAD_SHA256` is the digest at the accepted calibration's ledger cutoff. The emitted `issued_ledger_head.file_sha256`, the recorded digest of the head file itself, has no consumer. May the byte pin be replaced by the semantic relation that the committed head is at or ahead of the acceptance cutoff? Rule 11 requires independent adjudication before dropping a mechanism.",
-      "id": "GENERATOR-HEAD-FILE-BYTE-PIN-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 244,
-      "status": "queued",
       "stop_card": null
     },
     "ICLOUD-CUSTODY-LOCATOR-01": {
@@ -5836,7 +5956,7 @@
       "priority": "p1_phase_gate",
       "rank": 232,
       "status": "queued",
-      "status_note": "2026-09-18 interactive 5c919872: the merged sampler's `--observation` mode is the driver's worker entry (needs `--job-id` and `--result-fd`, writes a framed envelope); sampling for this lane goes through the flagless smoke CLI (`python3 -B -m joulewise.quiet_admission --sample-interval-s 30`, whole-round observer cost 1.15 cpu-s per 30 s round on the desktop) or a harness that supplies the pipe; quote no observer floor from the worker mode (cold-gate ruling 71 Q5). 2026-09-18 headless activation f0b608b7 (record 14 of activation d8ca3a36, decisions 1–7): the campaign is two-stage — stage A is this lane (desk harness plus the observer-only and contaminated states now; census-clean idle and synthetic-load states only from a non-agent context, since a `claude -p` magistrate and every interactive session are themselves in the census), stage B is QUIET-PREDICATE-STAGE-B-CONFIRMATION-01 (240). Corrections to this text: the slot is 480 s, not 60 s; the ≈5 J floor tolerance is a clearance bar for the claim, not a contamination budget — the derivation bounds the incremental false effect; the reference is a fresh 25G83 census-clean idle recorded with the same harness in the same session as the load states (the r6 idle numbers, 0.07–0.70 W CPU rail, median ≈ 0.10 W, are the historical consistency check only); observer cost is the whole-round figure (1.15 cpu-s per 30 s round on the desktop; 1.67–1.80 under three seats), bracketed, never subtracted; E-placed and P-placed loads reported separately, worse bound taken. The sampling harness `scripts/sample_quiet_predicate_evidence.py` (collect / load / summarize, 31 offline tests) is on branch `feat/2026-09-18-quiet-predicate-evidence-harness` at `98336969`, bench-verified live (record 20), UNMERGED. 2026-09-19 — Stage A, the sampling-harness implementation, has pull request #360 open from `feat/2026-09-18-quiet-predicate-evidence-harness` after five fix rounds and two cold gates (independent adjudications); records are under `docs/process_traces/2026-09-19-activation-d0b83820/`. After merge, the Stage A evidence campaign measures joules per 480 s slot under synthetic load on a quiet machine with no agent session.",
+      "status_note": "2026-09-18 interactive 5c919872: the merged sampler's `--observation` mode is the driver's worker entry (needs `--job-id` and `--result-fd`, writes a framed envelope); sampling for this lane goes through the flagless smoke CLI (`python3 -B -m joulewise.quiet_admission --sample-interval-s 30`, whole-round observer cost 1.15 cpu-s per 30 s round on the desktop) or a harness that supplies the pipe; quote no observer floor from the worker mode (cold-gate ruling 71 Q5). 2026-09-18 headless activation f0b608b7 (record 14 of activation d8ca3a36, decisions 1–7): the campaign is two-stage — stage A is this lane (desk harness plus the observer-only and contaminated states now; census-clean idle and synthetic-load states only from a non-agent context, since a `claude -p` magistrate and every interactive session are themselves in the census), stage B is QUIET-PREDICATE-STAGE-B-CONFIRMATION-01 (240). Corrections to this text: the slot is 480 s, not 60 s; the ≈5 J floor tolerance is a clearance bar for the claim, not a contamination budget — the derivation bounds the incremental false effect; the reference is a fresh 25G83 census-clean idle recorded with the same harness in the same session as the load states (the r6 idle numbers, 0.07–0.70 W CPU rail, median ≈ 0.10 W, are the historical consistency check only); observer cost is the whole-round figure (1.15 cpu-s per 30 s round on the desktop; 1.67–1.80 under three seats), bracketed, never subtracted; E-placed and P-placed loads reported separately, worse bound taken. The sampling harness `scripts/sample_quiet_predicate_evidence.py` (collect / load / summarize, 31 offline tests) is on branch `feat/2026-09-18-quiet-predicate-evidence-harness` at `98336969`, bench-verified live (record 20), UNMERGED. 2026-09-19 — Stage A, the sampling-harness implementation, has pull request #360 open from `feat/2026-09-18-quiet-predicate-evidence-harness` after five fix rounds and two cold gates (independent adjudications); records are under `docs/process_traces/2026-09-19-activation-d0b83820/`. After merge, the Stage A evidence campaign measures joules per 480 s slot under synthetic load on a quiet machine with no agent session. 2026-09-19 afternoon — The sampling harness merged in pull request #360, main `0c529f99`. The unattended evidence executor task (`STAGE-A-EVIDENCE-EXECUTOR-01`) now carries the campaign. Part 1 of its implementation branch adds the operating-system build identifier and per-round AC-power (external power-source) and thermal-probe results to every harness row.",
       "stop_card": null
     },
     "QUIET-PREDICATE-STAGE-B-CONFIRMATION-01": {
@@ -6799,6 +6919,36 @@
       "status": "partial",
       "stop_card": null
     },
+    "STAGE-A-EVIDENCE-EXECUTOR-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/ (independent adjudication packet for the unattended evidence executor)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/10a-adjudication-stage-a-executor.md (project lead's synthesis of the executor rulings)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/STAGE-A-EVIDENCE-EXECUTOR-01/acceptance",
+          "label": "STAGE-A-EVIDENCE-EXECUTOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The executor implements the adjudicated registration table, chain-source binding, typed evidence probe and single-export dispatch, authoring tool, and both contract amendments without changing the version-2 diagnostic-plan schema. The frozen pilot uses twelve 600 s envelopes with 480 s interiors, δ = 1 J, and block-two sizing from the upper 90% confidence bound on paired spread; it preserves the pre-registered \"no cutoff qualifies\" branch. Complete contract and execution refutation reviews, re-audit the resulting changes, obtain an independent counter-review, replay the full tests, and submit a pull request before pilot night one under the night handoff contract. Quiet-machine collection remains lead-controlled with no agent session active."
+      },
+      "authority": {
+        "label": "2026-09-19 afternoon registration by the project lead",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/57-brief-kernel-registration-2.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Build an unattended executor for Stage A, the initial evidence campaign that will derive the night gate's quiet-admission cutoff: the maximum busy-core level at which an unattended measurement may start. Busy cores are busy processor seconds per elapsed second; 1.0 means one fully busy core. No ruling has activated this threshold. The cold gate, an independent adjudication, ruled a separate evidence payload (the program run overnight) under the unchanged version-2 diagnostic plan. Implement a ruled-registration table in the night gate, keyed by a digest (a cryptographic content hash) and bound to the chain-source digest, the hash of the tracked execution-script template. Add a typed evidence probe receipt, a structured record of verification without measurement, dispatched by one `NIGHT_PAYLOAD_KIND` environment-variable export; amend `docs/process/NIGHT_HANDBACK.md`, the night handoff contract, and the runbook's verify-only probe row. Add the authoring tool `scripts/gen_evidence_night.py` and freeze the idle-only pilot protocol before collection: twelve 600 s envelopes (scheduled measurement intervals), each with a 480 s interior used for analysis; delta (δ), the target energy difference, is 1 joule (J). Size block two, the follow-up measurement block, from the upper confidence bound on the paired spread, the variability of paired energy differences. Pre-register the branch that concludes \"no cutoff qualifies\".",
+      "id": "STAGE-A-EVIDENCE-EXECUTOR-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 248,
+      "status": "active",
+      "status_note": "2026-09-19 afternoon — ACTIVE [AGENT] for implementation on `feat/2026-09-19-stage-a-evidence-executor`: parts 1–2 landed on that branch; part 3 implements the sizing statistic. Next: contract and execution refutation reviews, re-audit of the changes, independent counter-review, full test replay, pull request, then pilot night one under `docs/process/NIGHT_HANDBACK.md`, the night handoff contract. The pilot requires a quiet machine with no agent session.",
+      "stop_card": null
+    },
     "SUPERSESSION-CHAINED-RECOVERY-01": {
       "acceptance": {
         "evidence": [
@@ -7534,6 +7684,7 @@
       "priority": "p3_tooling",
       "rank": 247,
       "status": "queued",
+      "status_note": "2026-09-19 afternoon — Observed again in every delegated session during this activation: the generated paper artifact is untracked and ignored by Git, and the session wrapper flags it as an unowned dirty path, an output outside the session's authorized write scope.",
       "stop_card": null
     },
     "THREAT-MODEL-PRUNE-01": {

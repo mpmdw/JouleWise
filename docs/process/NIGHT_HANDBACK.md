@@ -85,7 +85,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_refused_bind_expired` | Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182. |
 | `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182. |
 | `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182. |
-| `night_refused_registration` | Required registration did not validate. |
+| `night_refused_registration` | The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source. |
 | `night_window_expired` | Measurement window expired. |
 | `night_plan_stale` | Plan age or pinned head failed; not a stale notice. |
 | `night_plan_malformed` | Plan structure or fields failed their contract. |
@@ -142,6 +142,28 @@ Every actual attempt sends a newly accepted notice and repeats the existing noti
 `prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.
 
 <!-- END ARM-RETRY-POLICY v1 -->
+
+The ruled-registration table in `night_gate.py` is amended only by cold-gate ruling; each entry names its ruling and the tracked records that hold it (`records`; a test asserts each exists). Its serialized form is pinned by
+`test_ruled_registration_serialization_requires_dated_ruling_amendment`; any
+amendment requires a dated test comment with the ruling (2026-09-19, record 61a).
+
+For the QPE evidence pilot, isolated `collect_error` and `cleanup_unproven`
+envelopes are excluded while the frozen cadence continues. Two consecutive
+cleanup failures or a chain refusal/crash abort with a typed refusal document.
+A pre-execute refusal has no process journal and nothing to clean. The executor
+or courier writes one idempotent cleanup record, proved by process absence,
+and the courier reads it and reports success, partial evidence or refusal.
+Dispatch uses the admitted receipt's payload identity, never a fresh wrapper
+read. This delivery rule includes unproven evidence cleanup (61a addendum 2).
+The registered interior starts 60 seconds after the scheduled envelope start;
+actual-start drift is recorded and excluded as `start_drift` above 10 seconds.
+
+**Evidence payload probe diagnostics.**
+
+| Exact cause | Meaning |
+|---|---|
+| `probe receipt kind does not match payload kind` | The receipt describes a different payload; use the matching verify-only probe. |
+| `probe payload kind ambiguous` | The pinned chain repeats the payload-kind export, names an unknown kind, or exports both an evidence kind and a calibration ledger. |
 
 A retry-class abort recorded by a prior activation authorises a successor's ordinary fresh-plan arm of the same class without a new cold gate; the predecessor's published plan directory, if any, stays untouched under the existing human-resolution path.
 
@@ -562,9 +584,16 @@ scripts/install_night_agent.sh --plan "$PLAN" --python "$PY"
 
 The non-authorizing **receipt**, `<plan_dir>/night_probe_receipt.json`, is a
 record of successful access, never permission to capture. It binds the plan,
-measurement checkout commit, ledger head (the latest ledger record's digest),
-code fingerprints, wrapper and ledger bytes, and both interpreters' paths,
-versions and binary SHA-256 fingerprints. Install recomputes those bindings
+measurement checkout commit, code fingerprints, wrapper, and both interpreters' paths,
+versions and binary SHA-256 fingerprints. A calibration payload also binds the
+ledger head (the latest ledger record's digest) and ledger bytes. An evidence
+payload instead binds the sealed manifest, harness and registration digests,
+and the tracked chain-source digest at the measurement commit. Its distinct
+receipt, `joulewise.night_evidence_probe_receipt.v1`, verifies files and imports
+only: it never starts `collect`, `load` or power sampling and carries no ledger
+custody fields. The single literal `NIGHT_PAYLOAD_KIND=quiet_predicate_evidence`
+in the pinned wrapper selects that receipt; absence retains the calibration
+probe. Install recomputes those bindings
 and requires success less than six hours old. A missing, stale, failed, or
 mismatched receipt refuses installation with exit 2 and the field name.
 `--probe-timeout-s 600` bounds the temporary job; `--probe-max-age-s 21600`

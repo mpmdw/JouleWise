@@ -111,6 +111,13 @@ class ArmRetryTests(unittest.TestCase):
         observed = {line.split("`", 2)[1] for line in table.splitlines() if line.startswith("| `")}
         self.assertEqual(observed, INSTALLER)
 
+    def test_rendered_registration_refusal_preserves_ruled_digest_and_chain_binding(self):
+        self.assertIn(
+            "| `night_refused_registration` | The registration digest is not in the ruled table, "
+            "or its bound chain-source digest differs from the measured source. |",
+            arm_retry.render_policy().splitlines(),
+        )
+
     def test_both_document_blocks_are_exact(self):
         begin = b"<!-- BEGIN ARM-RETRY-POLICY v1 -->"
         end = b"<!-- END ARM-RETRY-POLICY v1 -->\n"

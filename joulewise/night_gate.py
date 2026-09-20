@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -42,6 +43,48 @@ D166_REGISTRATION_SHA256 = (
 D166_REGISTRATION_PATH = (
     "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
 )
+QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json"
+QPE01_PILOT_REGISTRATION_SHA256 = "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
+EVIDENCE_CHAIN_PATH = "scripts/night_chains/quiet_predicate_evidence.zsh"
+# Amended only by cold-gate ruling; each entry names its authority ("ruling",
+# surfaced in the receipt) and the tracked records that hold it ("records":
+# repo-relative paths, optionally "#<heading id>" inside a decision log;
+# tests/test_night_gate.py asserts each exists — ruling 61a S4).
+RULED_REGISTRATIONS = {
+    D166_REGISTRATION_SHA256: {"label": "D-166 dominance criterion", "ruling": "D-165/D-166", "binds_chain": False,
+        "records": ("docs/decision_log.md#D-165", "docs/decision_log.md#D-166")},
+    QPE01_PILOT_REGISTRATION_SHA256: {"label": "QPE-01 idle-variance pilot protocol v1",
+        "ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b", "binds_chain": True,
+        "records": ("docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/10-coldgate-fable-ruling.md",
+                    "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md")},
+}
+
+
+def chain_literal(text, name):
+    """One shell literal, never expansion or execution of a wrapper."""
+    import shlex
+    matches = re.findall(r"^export " + re.escape(name) + r"=(.*)$", text, re.MULTILINE)
+    if len(matches) != 1:
+        raise ValueError(name + " must be one literal export in the pinned chain")
+    words = shlex.split(matches[0])
+    if len(words) != 1 or any(c in words[0] for c in "$`\n\r"):
+        raise ValueError(name + " is not a literal")
+    return words[0]
+
+
+def probe_payload_kind(text):
+    """The shared worker/installer discriminant; absence preserves calibration."""
+    declarations = re.findall(r"^\s*export\s+NIGHT_PAYLOAD_KIND\b.*$", text, re.MULTILINE)
+    if not declarations:
+        return "calibration"
+    try:
+        if (len(declarations) != 1 or
+                re.search(r"^\s*export\s+CALIBRATION_LEDGER\b", text, re.MULTILINE) or
+                chain_literal(text, "NIGHT_PAYLOAD_KIND") != "quiet_predicate_evidence"):
+            raise ValueError("ambiguous")
+    except ValueError as exc:
+        raise ValueError("probe payload kind ambiguous") from exc
+    return "quiet_predicate_evidence"
 AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "codex|claude|t3")
 
 PMSET_BATT_ARGV = ("/usr/bin/pmset", "-g", "batt")
@@ -1138,6 +1181,26 @@ def _check_chain_identity(plan, probes, rows, evidence):
                     tuple(evidence),
                 ),
             )
+        # R1 (record 46a): authenticate the tracked SOURCE, not its advisory
+        # sidecar. Calibration wrappers retain their historical path unchanged.
+        try:
+            kind = probe_payload_kind(chain_text)
+            if kind == "quiet_predicate_evidence":
+                source = _run(probes, ("/usr/bin/git", "-C", plan.measurement_root,
+                                      "show", f"{plan.measurement_head}:{EVIDENCE_CHAIN_PATH}"))
+                if source.exit_code != 0:
+                    raise ProbeError("tracked evidence chain source unavailable")
+                measured = hashlib.sha256(source.stdout.encode("utf-8")).hexdigest()
+                actual = probes.read_text(str(Path(plan.measurement_root) / EVIDENCE_CHAIN_PATH))
+                if (chain_literal(chain_text, "EVIDENCE_CHAIN_SOURCE_SHA256") != measured or
+                        hashlib.sha256(actual.encode("utf-8")).hexdigest() != measured):
+                    raise ValueError("evidence chain source differs from measurement_head or pinned wrapper")
+                rows["C5"].measured.update(payload_kind=kind, chain_source_sha256=measured)
+                rows["C5"].evidence.append(f"chain_source:{plan.measurement_head}:{EVIDENCE_CHAIN_PATH}")
+        except ValueError as exc:
+            return _finish(plan, probes, rows, Refusal("night_chain_digest_mismatch", str(exc), tuple(evidence)))
+        except (ProbeError, OSError, subprocess.SubprocessError) as exc:
+            return _probe_refusal(plan, probes, rows, evidence, exc)
     rows["C5"].status = "PASS"
     rows["C5"].measured["detail"] = (
         "window, plan freshness, and measurement HEAD passed; chain identity not evaluated "
@@ -1346,20 +1409,39 @@ def _check_registration(plan, probes, rows, evidence):
             "registration_path": plan.registration_path,
             "registration_sha256": registration_sha256,
         }
-        if registration_sha256 != D166_REGISTRATION_SHA256:
+        ruled = RULED_REGISTRATIONS.get(registration_sha256)
+        defect = None
+        bound = None
+        if ruled is None:
+            defect = f"registration sha256 {registration_sha256} is not a ruled registration"
+        elif ruled["binds_chain"]:
+            try:
+                bound = json.loads(registration_text)["chain_source_sha256"]
+                measured = rows["C5"].measured.get("chain_source_sha256")
+                if not isinstance(bound, str) or _SHA256_RE.fullmatch(bound) is None or bound != measured:
+                    raise ValueError(f"registration binds chain source {bound}; measured source is {measured}")
+            except (ValueError, KeyError, TypeError) as exc:
+                defect = str(exc)
+        elif rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
+            defect = "evidence payload requires its chain-bound ruled registration"
+        if defect is not None:
             return _finish(
                 plan,
                 probes,
                 rows,
                 Refusal(
                     "night_refused_registration",
-                    f"registration sha256 {registration_sha256} does not match D-166 registration",
+                    defect,
                     tuple(evidence),
                 ),
                 authored_monotonic_ns=clock_monotonic_ns,
             )
         rows["C1"].status = "PASS"
-        rows["C1"].measured["detail"] = "D-166 registration hash passed"
+        rows["C1"].measured.update(registration_label=ruled["label"], registration_ruling=ruled["ruling"])
+        if ruled["binds_chain"]:
+            rows["C1"].measured["registration_bound_chain_source_sha256"] = bound
+        rows["C1"].measured["detail"] = ("D-166 registration hash passed"
+            if registration_sha256 == D166_REGISTRATION_SHA256 else f"registration hash passed: {ruled['label']}")
 
 
 

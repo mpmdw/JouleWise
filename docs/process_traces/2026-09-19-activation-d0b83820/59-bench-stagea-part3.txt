@@ -1,0 +1,3 @@
+test_quiet_predicate_campaign        Ran 13 tests in 0.246s OK 
+test_night_gate                      Ran 70 tests in 0.407s OK 
+test_gen_evidence_night              Ran 5 tests in 1.027s OK 

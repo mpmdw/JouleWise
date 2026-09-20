@@ -792,11 +792,20 @@ def probe_label(plan_id):
 
 def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_path=None):
     import math
+    from joulewise.night_gate import probe_payload_kind
+    try:
+        kind = probe_payload_kind(Path(prepared.plan.chain_path).read_text())
+    except (OSError, ValueError) as exc:
+        raise Refused(2, str(exc))
+    if kind == "quiet_predicate_evidence":
+        return validate_evidence_probe_receipt(prepared, max_age_s, receipt_path)
     path = receipt_path or prepared.plan_path.parent / "night_probe_receipt.json"
     try:
         receipt = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
         raise Refused(2, "probe receipt missing or invalid: {}: {}".format(path, exc))
+    if isinstance(receipt, dict) and receipt.get("schema") == "joulewise.night_evidence_probe_receipt.v1":
+        raise Refused(2, "probe receipt kind does not match payload kind")
     if not isinstance(receipt, dict) or receipt.get("schema") != "joulewise.night_probe_receipt.v1":
         raise Refused(2, "probe receipt schema mismatch")
     if receipt.get("outcome") != "ok":
@@ -874,6 +883,75 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
         if receipt.get(field) != value:
             raise Refused(2, "probe receipt {} mismatch".format(field))
     return receipt
+
+
+def evidence_probe_bindings(plan, plan_path, python):
+    from joulewise import night_gate
+    from joulewise.quiet_predicate_campaign import verify_manifest, CHAIN_PATH, HARNESS_PATHS, PROTOCOL_PATH
+    chain = Path(plan.chain_path)
+    sha = _digest(chain)
+    tokens = Path(plan.chain_sha256_path).read_text().split()
+    if not tokens or tokens[0] != sha or len(tokens) > 2 or (len(tokens) == 2 and tokens[1] != chain.name):
+        raise ValueError("chain_sha256 mismatch")
+    manifest_path, manifest, manifest_sha = verify_manifest(plan, chain.read_text())
+    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(Path(plan_path).absolute()):
+        raise ValueError("evidence plan path mismatch")
+    registration_sha = manifest["files"][PROTOCOL_PATH]
+    ruled = night_gate.RULED_REGISTRATIONS.get(registration_sha)
+    if ruled is None or not ruled["binds_chain"]:
+        raise ValueError("registration is not a chain-bound ruled registration")
+    root = Path(plan.measurement_root)
+    return {"plan_id": plan.plan_id, "plan_sha256": _digest(plan_path),
+            "measurement_head": plan.measurement_head, "chain_sha256": sha,
+            "chain_source_sha256": manifest["files"][CHAIN_PATH], "manifest_sha256": manifest_sha,
+            "manifest_digests": manifest["files"],
+            "harness_digests": {name: manifest["files"][name] for name in HARNESS_PATHS},
+            "registration_sha256": registration_sha, "registration_label": ruled["label"],
+            "input_digests": {str(Path(plan_path).absolute()): "sha256:" + _digest(plan_path),
+                              str(manifest_path): "sha256:" + manifest_sha},
+            "driver_python": interpreter_identity(python),
+            "chain_python": interpreter_identity(root / ".venv/bin/python"),
+            "powermetrics_path": "/usr/bin/powermetrics"}
+
+
+def validate_evidence_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_path=None):
+    """Second receipt kind; no calibration custody arithmetic is applicable."""
+    import math
+    from joulewise.quiet_predicate_campaign import RECEIPT_SCHEMA
+    path = receipt_path or prepared.plan_path.parent / "night_probe_receipt.json"
+    try:
+        receipt = json.loads(path.read_text())
+        if not isinstance(receipt, dict) or receipt.get("schema") != RECEIPT_SCHEMA:
+            raise ValueError("probe receipt kind does not match payload kind")
+        if any(key in receipt for key in ("custody_budget_s", "custody_elapsed_s", "observations")):
+            raise ValueError("evidence probe receipt contains calibration custody fields")
+        if receipt.get("outcome") != "ok" or receipt.get("refusal_code") is not None:
+            raise ValueError("probe receipt outcome is not ok")
+        now = time.time()
+        if now - path.stat().st_mtime >= max_age_s:
+            raise ValueError("probe receipt mtime stale")
+        finished, started = receipt.get("finished_epoch_s"), receipt.get("started_epoch_s")
+        if (type(finished) not in (int, float) or not math.isfinite(finished) or
+                not -60 <= now - finished < max_age_s):
+            raise ValueError("probe receipt finished_epoch_s stale or invalid")
+        if (type(started) not in (int, float) or not math.isfinite(started) or not 0 <= started <= finished):
+            raise ValueError("probe receipt started_epoch_s invalid")
+        if receipt.get("launchd_label") != probe_label(prepared.plan.plan_id):
+            raise ValueError("probe receipt launchd_label mismatch")
+        for field, expected in (("verify_only", True), ("collect_started", False), ("load_started", False)):
+            if receipt.get(field) is not expected:
+                raise ValueError("probe receipt " + field + " mismatch")
+        if receipt.get("cleanup_proven") is not True:
+            raise ValueError("probe receipt cleanup unproven")
+        bindings = evidence_probe_bindings(prepared.plan, prepared.plan_path, prepared.python)
+        for field, expected in bindings.items():
+            if receipt.get(field) != expected:
+                raise ValueError("probe receipt " + field + " mismatch")
+        if receipt.get("verify_stdout") != ["VERIFY_ONLY_OK manifest=" + bindings["manifest_sha256"]]:
+            raise ValueError("expected one matching VERIFY_ONLY_OK manifest line")
+        return receipt
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        raise Refused(2, str(exc))
 
 
 def render_probe(prepared, timeout_s=600):

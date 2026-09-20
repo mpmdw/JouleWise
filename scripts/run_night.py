@@ -108,6 +108,7 @@ REQUIRED_RESERVATION_ECHO = frozenset((
 COURIER_ALLOWED_TOOLS = (
     "Read,Glob,Grep,Bash,Edit,Write,mcp__claude_ai_Gmail__send_message"
 )
+COURIER_RECIPIENT = "claude.ai.copper531@passmail.net"
 
 EXIT_GO = 0
 EXIT_REFUSED = 3
@@ -589,6 +590,7 @@ def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
     environment.pop("JOULEWISE_NIGHT_CUSTODY_BUDGET_S", None)
     environment.pop("NIGHT_VERIFY_ONLY", None)
     environment.pop("NIGHT_RESERVATION_ARGV_ONLY", None)
+    environment.pop("EVIDENCE_PROCESS_JOURNAL", None)
     return environment
 
 
@@ -957,7 +959,21 @@ def _run_chain_once(
         return exit_code, None, census_count, census_hits, True
 
 
-def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
+def _artifact_entry(custody_root: Path, path: Path) -> dict[str, Any] | None:
+    relative = str(path.relative_to(custody_root))
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        return {"path": relative, "sha256": None, "error": type(exc).__name__}
+    try:
+        return {"path": relative, "sha256": _sha256_path(path)}
+    except Exception as exc:
+        return {"path": relative, "sha256": None, "error": type(exc).__name__}
+
+
+def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
     paths = [
         custody_root / "night.log",
         night_dir / "receipt.json",
@@ -982,17 +998,48 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
         night_dir / "courier.attempts.jsonl",
         night_dir / "courier.heartbeat",
         night_dir / "courier.sent",
+        night_dir / "evidence_busy_cores.jsonl",
+        night_dir / "evidence_processes.jsonl",
+        night_dir / "evidence_envelopes.jsonl",
+        night_dir / "evidence_cleanup.json",
+        night_dir / "evidence_outcome.json",
     ]
-    return [
-        {"path": str(path.relative_to(custody_root)), "sha256": _sha256_path(path)}
-        for path in paths
-        if path.is_file()
-    ]
+    artifacts = [entry for path in paths
+                 if (entry := _artifact_entry(custody_root, path)) is not None]
+    evidence = night_dir / "evidence"
+
+    def discovery_failed(error):
+        raise error
+
+    try:
+        # Unlike rglob, walk's onerror makes inaccessible subtrees explicit.
+        # Ordinary container directories are traversal nodes, not artifacts.
+        try:
+            evidence.stat()
+        except FileNotFoundError:
+            return artifacts
+        for directory, dirs, files in os.walk(evidence, onerror=discovery_failed):
+            dirs.sort()
+            for name in sorted(files):
+                entry = _artifact_entry(custody_root, Path(directory) / name)
+                if entry is not None:
+                    artifacts.append(entry)
+    except Exception as exc:
+        artifacts.append({"path": str(evidence.relative_to(custody_root)),
+                          "sha256": None, "error": type(exc).__name__,
+                          "diagnostic": "evidence discovery incomplete"})
+    return artifacts
 
 
-def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> None:
-    """Best-effort results-branch publish; failure is logged but never fatal."""
+def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str | None:
+    """Best-effort results-branch publish; return any failure diagnostic.
 
+    An artefact the inventory could not read is omitted from the branch and
+    NAMED in the returned diagnostic (re-audit 81 R1): the immutable result
+    keeps the hash it saw, so the omission must reach the prompt and the log.
+    """
+
+    omitted: list[str] = []
     try:
         origin = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"],
@@ -1021,8 +1068,16 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
         destination = clone / "docs" / "process_traces" / "night-results" / plan.plan_id
         destination.mkdir(parents=True, exist_ok=True)
         for artifact in _artifact_list(custody_root, night_dir):
+            if "error" in artifact:
+                omitted.append(f"{artifact['path']} ({artifact['error']})")
+                continue
             source = custody_root / artifact["path"]
-            shutil.copy2(source, destination / source.name)
+            # Preserve repeated envelope basenames; flattening loses all but
+            # the final rounds/session/raw-power file.
+            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / "evidence") else Path(source.name)
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
         subprocess.run(
             ["git", "-C", str(clone), "add", str(destination.relative_to(clone))],
             capture_output=True,
@@ -1045,8 +1100,14 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
             check=True,
         )
         _append_log(custody_root, f"durable record pushed branch={branch}")
-    except (OSError, subprocess.SubprocessError) as error:
-        _append_log(custody_root, f"durable record failed: {error}")
+    except Exception as error:
+        try:
+            return f"durable record failed: {type(error).__name__}: {error}"
+        except Exception:
+            return "durable record failed; diagnostic formatting failed"
+    if omitted:
+        return "durable record omitted unreadable artefacts: " + ", ".join(omitted)
+    return None
 
 
 def _resolve_courier_bin(
@@ -1126,6 +1187,11 @@ def _courier_argv(
         "You must include these watchdog fields in the email body. An age greater "
         "than 900 seconds, or an unavailable age, means the watchdog is dead.\n"
     )
+    cleanup_path = custody_root / "night/evidence_cleanup.json"
+    if cleanup_path.exists():
+        prompt += (f"\nEvidence cleanup record: {cleanup_path}. Read this existing record and "
+                   "night/evidence_outcome.json; report success, partial evidence or refusal, "
+                   "including unproven cleanup and all refusal documents. Never recreate the record.\n")
     return (
         str(courier_bin),
         "-p",
@@ -1142,9 +1208,13 @@ def _wait_for_courier(
     sent: Path,
     *,
     stop_epoch_s: float | None = None,
+    report: dict[str, Any] | None = None,
 ) -> tuple[bool, bool]:
+    if report is None:
+        report = {"diagnostics": []}
+    optional = lambda label, op: _courier_optional(report, label, op)
     deadline = time.monotonic() + COURIER_DEADLINE_S
-    heartbeat_seen = heartbeat.is_file()
+    heartbeat_seen = bool(optional("heartbeat inspection", heartbeat.is_file))
     while True:
         monotonic_now = time.monotonic()
         epoch_now = time.time() if stop_epoch_s is not None else None
@@ -1154,9 +1224,9 @@ def _wait_for_courier(
             and epoch_now >= stop_epoch_s
         ):
             break
-        heartbeat_seen = heartbeat_seen or heartbeat.is_file()
+        heartbeat_seen = heartbeat_seen or bool(optional("heartbeat inspection", heartbeat.is_file))
         if sent.is_file():
-            _fsync_path(sent)
+            optional("sent marker persistence", lambda: _fsync_path(sent))
             return heartbeat_seen, True
         deadline_remaining = deadline - time.monotonic()
         stop_remaining = (
@@ -1168,9 +1238,9 @@ def _wait_for_courier(
         if sleep_s <= 0:
             break
         time.sleep(sleep_s)
-    heartbeat_seen = heartbeat_seen or heartbeat.is_file()
+    heartbeat_seen = heartbeat_seen or bool(optional("heartbeat inspection", heartbeat.is_file))
     if sent.is_file():
-        _fsync_path(sent)
+        optional("sent marker persistence", lambda: _fsync_path(sent))
         return heartbeat_seen, True
     return heartbeat_seen, False
 
@@ -1223,6 +1293,134 @@ def _acquire_courier_lock(night_dir: Path) -> int | None:
     return None
 
 
+def _evidence_cleanup_error(plan, night_dir):
+    """Best-effort evidence repair; never suppress delivery via Exception.
+
+    Consult record 76 (escalation 74a): for ANY content of evidence_outcome.json
+    the courier launches, an invalid outcome is replaced by a refused one, and a
+    refusal document exists; valid outcomes are never rewritten. Storage that
+    cannot be written at all is the caller's prerequisite (ruling 76a).
+    """
+    try:
+        def parse_outcome(raw):
+            try:
+                return json.loads(raw)
+            except Exception:  # noqa: BLE001 — any decode failure is "no outcome"
+                return None
+
+        if not (night_dir / "chain.started").exists():
+            return None
+        receipt = json.loads((night_dir / "receipt.json").read_bytes())
+        if receipt.get("plan_id") != plan.plan_id or night_gate.validate_receipt(receipt):
+            return None
+        c5 = next((row for row in receipt["conditions"]
+                   if row["condition_id"] == "C5"), {})
+        if (c5.get("status") != "PASS"
+                or c5.get("measured", {}).get("payload_kind") != "quiet_predicate_evidence"):
+            return None
+
+        from joulewise.quiet_predicate_campaign import cleanup_record, write_refusal
+        cleanup = cleanup_record(night_dir)
+        cleanup_proven = cleanup["cleanup_proven"] is True
+        path = night_dir / "evidence_outcome.json"
+        try:
+            raw = path.read_bytes()
+        except FileNotFoundError:
+            raw = b""
+        outcome = parse_outcome(raw)
+        state = outcome.get("outcome") if isinstance(outcome, dict) else None
+        detail = "chain ended without evidence outcome"
+        if not (isinstance(state, str) and state in {"complete", "partial", "refused"}):
+            path.unlink(missing_ok=True)  # _write_json is create-only
+            _write_json(path, {"outcome": "refused", "error": detail,
+                               "cleanup_proven": cleanup_proven})
+            state = "refused"
+        elif state == "refused":
+            recorded_error = outcome.get("error")
+            if isinstance(recorded_error, str) and recorded_error:
+                detail = recorded_error
+        if state == "refused" and not _refusal_paths(night_dir):
+            write_refusal(night_dir, plan, detail)
+        if not cleanup_proven:
+            return "evidence collector/recorder/sampler cleanup unproven; report the cleanup record"
+        return None
+    except Exception as exc:  # noqa: BLE001 — this function only returns a diagnostic
+        try:
+            return f"evidence outcome/cleanup unavailable: {type(exc).__name__}: {exc}"
+        except Exception:  # noqa: BLE001
+            return "evidence outcome/cleanup unavailable; diagnostic formatting failed"
+
+
+def _courier_optional(report, label, operation):
+    try:
+        return operation()
+    except Exception as exc:
+        try:
+            detail = f"{label}: {type(exc).__name__}: {exc}"
+        except Exception:
+            detail = label + ": diagnostic formatting failed"
+        report["diagnostics"].append(detail)
+        return None
+
+
+def _courier_prelaunch(custody_root, plan, courier_bin, lock_descriptor, report):
+    """Return argv; guard every file/import-dependent preparation operation."""
+    night = custody_root / "night"
+    optional = lambda label, op: _courier_optional(report, label, op)
+    if not report["prepared"]:
+        report["prepared"] = True
+        error = optional("evidence repair", lambda: _evidence_cleanup_error(plan, night))
+        if error:
+            report["diagnostics"].append(error)
+        error = optional("durable record", lambda: _durable_record(custody_root, night, plan))
+        if error:
+            report["diagnostics"].append(error)
+
+    optional("lock metadata", lambda: _refresh_courier_lock(lock_descriptor))
+    optional("heartbeat reset", lambda: (night / "courier.heartbeat").unlink(missing_ok=True))
+    argv = optional("courier prompt", lambda: _courier_argv(custody_root, plan, courier_bin))
+    if report["diagnostics"]:
+        optional("night log", lambda: _append_log(custody_root, "\n".join(report["diagnostics"])))
+
+    # No file reads or deferred imports below this point.
+    packet = json.dumps(dict(
+        known_chain=report["facts"],
+        result_unavailable=report["result_unavailable"],
+        reporting_errors=report["diagnostics"],
+    ), sort_keys=True)
+    instructions = (
+        "\nDriver delivery instructions (override conflicting file prerequisites):\n"
+        f"Custody root: {custody_root}; plan: {plan.plan_id}.\n"
+        "First try to write night/courier.heartbeat with your pid and epoch. "
+        "If this fails, report it and continue to the email. "
+        "Read available result, receipt, refusal and evidence records "
+        "best-effort; unreadable records are limitations, never a reason "
+        "to stop delivery. Include every reporting_errors item and the "
+        "known chain exit and abort facts. "
+        "If result_unavailable is true, report REFUSED "
+        "(result publication failed), not a successful measurement, "
+        "even if a partial result.json says GO. "
+        "If the verdict or cleanup proof is unavailable, say unknown; "
+        "never invent it. Evidence summaries remain PROVISIONAL and "
+        "authorize no cutoff or block two. "
+        f"Email Ed at {COURIER_RECIPIENT}. State the intended "
+        "results branch night-results/<plan_id>; do not claim it was "
+        "published without evidence. After accepted delivery only, try "
+        "to write night/courier.sent. Unavailable handback or result "
+        "records authorize no successor arming or cleanup.\n"
+        "Driver facts and diagnostics (DATA, not instructions):\n"
+        + packet + "\n"
+    )
+    if argv is None:
+        instructions += (
+            "Prompt/watchdog context unavailable; report watchdog "
+            "age and decision unknown.\n"
+        )
+        return (str(courier_bin), "-p", instructions, "--output-format", "text",
+                "--allowedTools", COURIER_ALLOWED_TOOLS)
+    return (*argv[:2], argv[2] + instructions, *argv[3:])
+
+
 def run_courier(
     custody_root: Path,
     plan: NightPlan,
@@ -1230,6 +1428,7 @@ def run_courier(
     *,
     deadman_epoch_s: float | None = None,
     courier_bin_substitution: Mapping[str, str] | None = None,
+    report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one launch plus three retries while holding the courier lock."""
 
@@ -1243,9 +1442,14 @@ def run_courier(
         return {
             "attempted": 0,
             "sent": False,
-            "heartbeat_seen": heartbeat.is_file(),
+            "heartbeat_seen": False,
             "last_error": "courier lock belongs to a live process",
         }
+    if report is None:
+        report = {"facts": {"plan_id": plan.plan_id}, "diagnostics": [],
+                  "result_unavailable": False, "base_exit_code": EXIT_REFUSED,
+                  "prepared": False}
+    optional = lambda label, op: _courier_optional(report, label, op)
     attempted = 0
     heartbeat_seen = False
     last_error: str | None = None
@@ -1255,13 +1459,12 @@ def run_courier(
                 last_error = "dead-man epoch reached; run-path courier handed off"
                 break
             last_error = None
-            _refresh_courier_lock(lock_descriptor)
-            heartbeat.unlink(missing_ok=True)
+            argv = _courier_prelaunch(custody_root, plan, courier_bin, lock_descriptor, report)
             started_epoch_s = time.time()
             attempted += 1
             try:
                 process = subprocess.Popen(
-                    _courier_argv(custody_root, plan, courier_bin),
+                    argv,
                     cwd=REPO_ROOT,
                     start_new_session=True,
                 )
@@ -1275,6 +1478,7 @@ def run_courier(
                     heartbeat,
                     sent,
                     stop_epoch_s=deadman_epoch_s,
+                    report=report,
                 )
                 heartbeat_seen = heartbeat_seen or saw_heartbeat
                 if not was_sent:
@@ -1301,12 +1505,15 @@ def run_courier(
                 attempt_record["courier_bin_substitution"] = dict(
                     courier_bin_substitution
                 )
-            with attempts_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(attempt_record, sort_keys=True) + "\n")
-            _append_log(
+            def record_attempt():
+                with attempts_path.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(attempt_record, sort_keys=True) + "\n")
+
+            optional("courier attempt journal", record_attempt)
+            optional("courier attempt log", lambda: _append_log(
                 custody_root,
                 f"courier attempt={attempt + 1} heartbeat={saw_heartbeat} sent={was_sent}",
-            )
+            ))
             if was_sent:
                 return {
                     "attempted": attempted,
@@ -1319,7 +1526,7 @@ def run_courier(
                 if deadman_epoch_s is not None and time.time() + delay >= deadman_epoch_s:
                     last_error = "retry would cross dead-man epoch; run-path courier handed off"
                     break
-                _refresh_courier_lock(lock_descriptor)
+                optional("lock metadata", lambda: _refresh_courier_lock(lock_descriptor))
                 time.sleep(delay)
         return {
             "attempted": attempted,
@@ -1328,8 +1535,8 @@ def run_courier(
             "last_error": last_error,
         }
     finally:
-        os.close(lock_descriptor)
-        (night_dir / "courier.lock").unlink(missing_ok=True)
+        optional("courier lock close", lambda: os.close(lock_descriptor))
+        optional("courier lock removal", lambda: (night_dir / "courier.lock").unlink(missing_ok=True))
 
 
 def _write_result(
@@ -1345,33 +1552,32 @@ def _write_result(
     census_count: int,
     census_hits: list[dict[str, Any]] | None = None,
     calibration_refusal: dict[str, Any] | None = None,
-) -> None:
-    _write_json(
-        night_dir / "result.json",
-        {
-            "schema": RESULT_SCHEMA,
-            "plan_id": plan.plan_id,
-            "receipt_class": plan.receipt_class,
-            "verdict": verdict,
-            "chain_exit_code": chain_exit_code,
-            "aborted_reason": aborted_reason,
-            "started_epoch_s": started_epoch_s,
-            "ended_epoch_s": time.time(),
-            "started_monotonic_ns": started_monotonic_ns,
-            "ended_monotonic_ns": time.monotonic_ns(),
-            "chain_sha256": chain_sha256,
-            "census_count": census_count,
-            "census_hits": [] if census_hits is None else census_hits,
-            "calibration_refusal": calibration_refusal,
-            "evidence": {"calibration_refusal": calibration_refusal},
-            "calibration_code": (calibration_refusal["detail"]
-                                 if calibration_refusal and calibration_refusal["detail"] != "document_invalid"
-                                 else None),
-            "refusal_documents": [str(path.relative_to(custody_root))
-                                  for path in _refusal_paths(night_dir)],
-            "artifacts": _artifact_list(custody_root, night_dir),
-        },
-    )
+) -> dict[str, Any]:
+    document = {
+        "schema": RESULT_SCHEMA,
+        "plan_id": plan.plan_id,
+        "receipt_class": plan.receipt_class,
+        "verdict": verdict,
+        "chain_exit_code": chain_exit_code,
+        "aborted_reason": aborted_reason,
+        "started_epoch_s": started_epoch_s,
+        "ended_epoch_s": time.time(),
+        "started_monotonic_ns": started_monotonic_ns,
+        "ended_monotonic_ns": time.monotonic_ns(),
+        "chain_sha256": chain_sha256,
+        "census_count": census_count,
+        "census_hits": [] if census_hits is None else census_hits,
+        "calibration_refusal": calibration_refusal,
+        "evidence": {"calibration_refusal": calibration_refusal},
+        "calibration_code": (calibration_refusal["detail"]
+                             if calibration_refusal and calibration_refusal["detail"] != "document_invalid"
+                             else None),
+        "refusal_documents": [str(path.relative_to(custody_root))
+                              for path in _refusal_paths(night_dir)],
+        "artifacts": _artifact_list(custody_root, night_dir),
+    }
+    _write_json(night_dir / "result.json", document)
+    return document
 
 
 def _load_plan(path: Path) -> NightPlan:
@@ -1575,8 +1781,13 @@ def _finish_reporting(
     deadman_epoch_s: float | None = None,
     allow_courier: bool = True,
     courier_bin_substitution: Mapping[str, str] | None = None,
+    report: dict[str, Any] | None = None,
 ) -> int:
-    _durable_record(custody_root, night_dir, plan)
+    if report is None:
+        report = {"facts": {"plan_id": plan.plan_id}, "diagnostics": [],
+                  "result_unavailable": False, "base_exit_code": base_exit_code,
+                  "prepared": False}
+    optional = lambda label, op: _courier_optional(report, label, op)
     if allow_courier and courier_bin is not None:
         outcome = run_courier(
             custody_root,
@@ -1584,17 +1795,29 @@ def _finish_reporting(
             courier_bin,
             deadman_epoch_s=deadman_epoch_s,
             courier_bin_substitution=courier_bin_substitution,
+            report=report,
         )
     else:
+        # The unproven-termination/no-courier path retains its reporting flow.
+        _durable_record(custody_root, night_dir, plan)
         outcome = {
             "attempted": 0,
             "sent": False,
             "heartbeat_seen": (night_dir / "courier.heartbeat").is_file(),
             "last_error": courier_error or "courier suppressed by safety refusal",
         }
-    _write_courier_outcome(night_dir, outcome)
-    _durable_record(custody_root, night_dir, plan)
-    return base_exit_code if outcome["sent"] else EXIT_COURIER_FAILED
+        _write_courier_outcome(night_dir, outcome)
+        _durable_record(custody_root, night_dir, plan)
+        return EXIT_COURIER_FAILED
+    issued = len(report["diagnostics"])  # everything before this reached the prompt
+    optional("courier outcome", lambda: _write_courier_outcome(night_dir, outcome))
+    error = optional("durable record after courier", lambda: _durable_record(custody_root, night_dir, plan))
+    if error:
+        report["diagnostics"].append(error)
+    late = report["diagnostics"][issued:]
+    if late:  # re-audit 81 R2: a post-delivery failure must survive somewhere durable
+        optional("night log after courier", lambda: _append_log(custody_root, "\n".join(late)))
+    return report["base_exit_code"] if outcome["sent"] else EXIT_COURIER_FAILED
 
 
 def _write_standard_refusal_result(
@@ -2069,6 +2292,9 @@ class _BindLauncher:
                     task.process.__init__(argv, start_new_session=True, close_fds=True, cwd=str(REPO_ROOT),
                         pass_fds=(task.writer,) + task.test_pass_fds, stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if os.environ.get("EVIDENCE_PROCESS_JOURNAL"):
+                        from joulewise.quiet_predicate_campaign import journal_process
+                        journal_process("sampler_or_probe", task.process.pid)
             except Exception as error:
                 task.launch_error = f'{type(error).__name__}: {error}'
             finally:
@@ -2955,60 +3181,92 @@ def run_night(
         )
     )
 
-    calibration_refusal = _calibration_refusal(
-        night_dir, plan, chain_exit_code if abort is None else None)
-    if calibration_refusal is not None and abort is None:
-        _write_driver_refusal(night_dir / "refusal.json", plan,
-                              calibration_refusal["reason"], calibration_refusal["detail"],
-                              calibration_refusal["evidence"])
+    report = {
+        "facts": {"plan_id": plan.plan_id, "receipt_class": plan.receipt_class,
+                  "chain_exit_code": chain_exit_code, "abort": abort,
+                  "termination_proven": termination_proven,
+                  "census_count": census_count, "census_hits": census_hits,
+                  "chain_sha256": chain_sha256,
+                  "started_epoch_s": started_epoch_s,
+                  "started_monotonic_ns": started_monotonic_ns},
+        "diagnostics": [], "result_unavailable": True,
+        "base_exit_code": EXIT_REFUSED, "prepared": False,
+    }
+    optional = lambda label, op: _courier_optional(report, label, op)
 
-    if abort is not None:
-        abort_reason = str(abort["reason"])
-        # The wall-clock stop writes its own document when it fires, because a
-        # main loop blocked on the custody volume may never reach this line.
-        # When it did fire, `document` names the record already on disk and
-        # this path must not allocate a second copy of the same cause.
-        if "document" not in abort:
-            _write_driver_refusal(
-                night_dir / "refusal.json",
-                plan,
-                abort_reason,
-                str(abort["detail"]),
-                abort["evidence"],
+    def prepare_result():
+        calibration_refusal = _calibration_refusal(
+            night_dir, plan, chain_exit_code if abort is None else None)
+        if calibration_refusal is not None and abort is None:
+            _write_driver_refusal(night_dir / "refusal.json", plan,
+                                  calibration_refusal["reason"], calibration_refusal["detail"],
+                                  calibration_refusal["evidence"])
+
+        if abort is not None:
+            abort_reason = str(abort["reason"])
+            # The wall-clock stop writes its own document when it fires, because a
+            # main loop blocked on the custody volume may never reach this line.
+            # When it did fire, `document` names the record already on disk and
+            # this path must not allocate a second copy of the same cause.
+            if "document" not in abort:
+                _write_driver_refusal(
+                    night_dir / "refusal.json",
+                    plan,
+                    abort_reason,
+                    str(abort["detail"]),
+                    abort["evidence"],
+                )
+            refused = (
+                abort_reason == _CODES["chain_launch_failed"] or not termination_proven
             )
-        refused = (
-            abort_reason == _CODES["chain_launch_failed"] or not termination_proven
+            verdict = "REFUSED" if refused else "ABORTED"
+            base_exit_code = EXIT_REFUSED if refused else EXIT_ABORTED
+            aborted_reason = abort_reason
+        elif calibration_refusal is not None:
+            verdict = "REFUSED"
+            base_exit_code = EXIT_REFUSED
+            aborted_reason = calibration_refusal["reason"]
+        elif rehearsal_effective:
+            verdict = "REHEARSAL_ONLY"
+            base_exit_code = EXIT_REFUSED
+            aborted_reason = None
+        else:
+            verdict = "GO"
+            base_exit_code = EXIT_GO if chain_exit_code == 0 else EXIT_CHAIN_FAILED
+            aborted_reason = None
+        report["facts"].update(verdict=verdict, aborted_reason=aborted_reason,
+                               calibration_refusal=calibration_refusal)
+        report["base_exit_code"] = base_exit_code
+        result = _write_result(
+            custody_root,
+            night_dir,
+            plan,
+            verdict,
+            chain_exit_code,
+            aborted_reason,
+            started_epoch_s,
+            started_monotonic_ns,
+            chain_sha256,
+            census_count,
+            census_hits,
+            calibration_refusal,
         )
-        verdict = "REFUSED" if refused else "ABORTED"
-        base_exit_code = EXIT_REFUSED if refused else EXIT_ABORTED
-        aborted_reason = abort_reason
-    elif calibration_refusal is not None:
-        verdict = "REFUSED"
-        base_exit_code = EXIT_REFUSED
-        aborted_reason = calibration_refusal["reason"]
-    elif rehearsal_effective:
-        verdict = "REHEARSAL_ONLY"
-        base_exit_code = EXIT_REFUSED
-        aborted_reason = None
-    else:
-        verdict = "GO"
-        base_exit_code = EXIT_GO if chain_exit_code == 0 else EXIT_CHAIN_FAILED
-        aborted_reason = None
-    _write_result(
-        custody_root,
-        night_dir,
-        plan,
-        verdict,
-        chain_exit_code,
-        aborted_reason,
-        started_epoch_s,
-        started_monotonic_ns,
-        chain_sha256,
-        census_count,
-        census_hits,
-        calibration_refusal,
-    )
-    _append_log(custody_root, f"night result verdict={verdict}")
+        report["result_unavailable"] = False
+        for artifact in result["artifacts"]:
+            if "error" in artifact:
+                report["diagnostics"].append(
+                    f"artifact {artifact['path']}: {artifact['error']}"
+                    + (f" ({artifact['diagnostic']})" if "diagnostic" in artifact else ""))
+        _append_log(custody_root, f"night result verdict={verdict}")
+
+    optional("post-chain result", prepare_result)
+    if report["result_unavailable"]:
+        report["base_exit_code"] = EXIT_REFUSED
+        fallback = dict(report["facts"], schema=RESULT_SCHEMA, verdict="REFUSED",
+                        result_unavailable=True, reporting_errors=list(report["diagnostics"]))
+        # Preserve any existing partial/foreign object; inline facts still travel.
+        optional("minimal result persistence", lambda: _write_json(night_dir / "result.json", fallback))
+    base_exit_code = report["base_exit_code"]
     if not termination_proven:
         return _finish_reporting(
             custody_root,
@@ -3018,6 +3276,7 @@ def run_night(
             resolved_courier,
             courier_error="chain termination was not proven",
             allow_courier=False,
+            report=report,
             courier_bin_substitution=courier_substitution,
         )
     return _finish_reporting(
@@ -3027,6 +3286,7 @@ def run_night(
         base_exit_code,
         resolved_courier,
         deadman_epoch_s=deadman_epoch_s,
+        report=report,
         courier_bin_substitution=courier_substitution,
     )
 
@@ -3248,15 +3508,57 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
             record["phase"] = state["phase"]
         if output.is_file():
             record.update(json.loads(output.read_text()))
+        is_evidence = record["schema"] == "joulewise.night_evidence_probe_receipt.v1"
+        if is_evidence:
+            for field in ("custody_budget_s", "custody_elapsed_s", "observations", "ledger_head_sha256", "code_digests"):
+                record.pop(field, None)
         record.update(identity, started_epoch_s=started, finished_epoch_s=time.time(), cleanup_proven=gone)
         if timed_out:
-            record.update(outcome="timeout", refusal_code="calibration_ledger_custody_timeout",
-                          custody_elapsed_s=time.monotonic() - (deadline - timeout_s))
+            if is_evidence:
+                record.update(outcome="timeout", refusal_code="evidence_probe_timeout")
+            else:
+                record.update(outcome="timeout", refusal_code="calibration_ledger_custody_timeout",
+                              custody_elapsed_s=time.monotonic() - (deadline - timeout_s))
         elif not gone:
             record.update(outcome="refused", refusal_code="probe_process_survived")
         elif not output.is_file():
             record.update(outcome="refused", refusal_code="probe_worker_failed", detail=stderr.decode(errors="replace"))
         _atomic_probe_json(receipt_path, record)
+    return 0 if record["outcome"] == "ok" else 2
+
+
+def _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase):
+    import tempfile
+    from joulewise.night_agent_install import evidence_probe_bindings
+    from joulewise.quiet_predicate_campaign import RECEIPT_SCHEMA
+    record = dict(schema=RECEIPT_SCHEMA, plan_id=plan.plan_id, measurement_head=plan.measurement_head,
+                  verify_only=True, collect_started=False, load_started=False, outcome="refused",
+                  refusal_code=None, started_epoch_s=time.time(), finished_epoch_s=None,
+                  launchd_label=os.environ.get("JOULEWISE_LAUNCHD_LABEL"))
+    phase("evidence-bindings", record)
+    try:
+        record.update(evidence_probe_bindings(plan, plan_path, sys.executable))
+        phase("evidence-chain", record)
+        with tempfile.TemporaryDirectory(prefix="evidence-probe-", dir=receipt_path.parent) as directory:
+            env = _chain_environment(plan, Path(directory))
+            env["NIGHT_VERIFY_ONLY"] = "1"
+            result = subprocess.run(["/bin/zsh", plan.chain_path], env=env,
+                stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                timeout=max(.001, deadline - time.monotonic()))
+            lines = [line for line in result.stdout.splitlines() if line.startswith("VERIFY_ONLY_OK")]
+            record["verify_stdout"] = lines
+            if result.returncode != 0 or lines != ["VERIFY_ONLY_OK manifest=" + record["manifest_sha256"]]:
+                raise ValueError("expected one matching VERIFY_ONLY_OK manifest line: " + result.stderr)
+            # Re-derive after the read-only chain; a changed input never passes.
+            if any(record[k] != v for k, v in evidence_probe_bindings(plan, plan_path, sys.executable).items()):
+                raise ValueError("evidence bindings changed during verify-only probe")
+            record["outcome"] = "ok"
+    except subprocess.TimeoutExpired:
+        record.update(outcome="timeout", refusal_code="evidence_probe_timeout")
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        record["refusal_code"] = str(exc)
+    record["finished_epoch_s"] = time.time()
+    _atomic_probe_json(receipt_path, record)
     return 0 if record["outcome"] == "ok" else 2
 
 
@@ -3270,6 +3572,16 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
     phase("plan")
     started = time.time()
     plan = _load_plan(plan_path)
+    try:
+        payload_kind = night_gate.probe_payload_kind(Path(plan.chain_path).read_text())
+    except ValueError as exc:
+        _atomic_probe_json(receipt_path, {"outcome": "refused", "refusal_code": str(exc)})
+        return 2
+    if payload_kind == "quiet_predicate_evidence":
+        phase("evidence-dispatch", {"schema": "joulewise.night_evidence_probe_receipt.v1",
+              "plan_id": plan.plan_id, "measurement_head": plan.measurement_head,
+              "verify_only": True, "collect_started": False, "load_started": False})
+        return _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase)
     phase("bindings", {"plan_id": plan.plan_id, "measurement_head": plan.measurement_head})
     bindings = probe_bindings(plan, plan_path, sys.executable)
     record = dict(bindings, schema="joulewise.night_probe_receipt.v1",

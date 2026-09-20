@@ -32,7 +32,7 @@ COLD_GATE_CODES = {
     "night_refused_bind_expired": "Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182.",
     "night_refused_hid_idle": "Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182.",
     "night_refused_boot_clock": "Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182.",
-    "night_refused_registration": "Required registration did not validate.",
+    "night_refused_registration": "The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source.",
     "night_window_expired": "Measurement window expired.",
     "night_plan_stale": "Plan age or pinned head failed; not a stale notice.",
     "night_plan_malformed": "Plan structure or fields failed their contract.",

@@ -1879,3 +1879,98 @@ class LaunchdAccessProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EvidenceProbeReceiptTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_gen_evidence_night import EvidenceFixture
+        from scripts import gen_evidence_night
+        from joulewise import night_agent_install
+        from types import SimpleNamespace
+        self.engine = night_agent_install
+        self.f = EvidenceFixture()
+        self.addCleanup(self.f.close)
+        gen_evidence_night.generate(self.f.plan_path)
+        self.prepared = SimpleNamespace(plan=self.f.plan, plan_path=self.f.plan_path, python=sys.executable)
+        bindings = self.engine.evidence_probe_bindings(self.f.plan, self.f.plan_path, sys.executable)
+        self.receipt = dict(bindings, schema='joulewise.night_evidence_probe_receipt.v1', outcome='ok', refusal_code=None,
+            started_epoch_s=time.time()-1, finished_epoch_s=time.time(), verify_only=True, collect_started=False,
+            load_started=False, cleanup_proven=True, launchd_label=self.engine.probe_label(self.f.plan.plan_id),
+            verify_stdout=['VERIFY_ONLY_OK manifest='+bindings['manifest_sha256']])
+        self.path = self.f.custody / 'night_probe_receipt.json'
+
+    def validate(self, value=None):
+        self.path.write_text(json.dumps(self.receipt if value is None else value))
+        return self.engine.validate_probe_receipt(self.prepared)
+
+    def test_all_bound_fields_are_rederived_and_custody_keys_forbidden(self):
+        self.assertEqual(self.validate(), self.receipt)
+        for key in ('plan_sha256', 'measurement_head', 'chain_sha256', 'chain_source_sha256', 'manifest_sha256',
+                    'manifest_digests', 'harness_digests', 'registration_sha256', 'registration_label',
+                    'driver_python', 'chain_python', 'powermetrics_path', 'input_digests', 'launchd_label', 'verify_stdout'):
+            with self.subTest(key=key):
+                with self.assertRaises(self.engine.Refused):
+                    self.validate({**self.receipt, key: 'forged'})
+        for key in ('custody_budget_s', 'custody_elapsed_s', 'observations'):
+            with self.assertRaisesRegex(self.engine.Refused, 'custody fields'):
+                self.validate({**self.receipt, key: 0})
+        for change in ({'outcome':'refused'}, {'refusal_code':'error'}, {'verify_only':1}, {'collect_started':True},
+                       {'load_started':True}, {'cleanup_proven':False}, {'finished_epoch_s':time.time()-21601},
+                       {'finished_epoch_s':time.time()+61}, {'finished_epoch_s':True}, {'started_epoch_s':-1}):
+            with self.assertRaises(self.engine.Refused):
+                self.validate({**self.receipt, **change})
+
+    def test_mtime_staleness_and_kind_mismatch_refuse(self):
+        self.validate()
+        os.utime(self.path, (time.time()-21601, time.time()-21601))
+        with self.assertRaisesRegex(self.engine.Refused, 'mtime stale'):
+            self.engine.validate_probe_receipt(self.prepared)
+        with self.assertRaisesRegex(self.engine.Refused, 'kind does not match'):
+            self.validate({**self.receipt, 'schema':'joulewise.night_probe_receipt.v1'})
+        Path(self.f.plan.chain_path).write_text('# calibration\n')
+        with self.assertRaisesRegex(self.engine.Refused, 'kind does not match'):
+            self.validate()
+
+    def test_dispatch_ambiguity_and_changed_tracked_file_refuse(self):
+        chain = Path(self.f.plan.chain_path)
+        original = chain.read_text()
+        for extra in ('export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n', 'export CALIBRATION_LEDGER=/tmp/x\n'):
+            chain.write_text(original+extra)
+            with self.assertRaisesRegex(self.engine.Refused, 'probe payload kind ambiguous'):
+                self.validate()
+        chain.write_text(original)
+        target = self.f.repo / 'scripts/sample_quiet_predicate_evidence.py'
+        target.write_text(target.read_text()+'\n# modified\n')
+        with self.assertRaisesRegex(self.engine.Refused, 'measurement_head'):
+            self.validate()
+
+    def test_wrapper_manifest_registration_and_sidecar_authentication_refuse_tampering(self):
+        from unittest import mock
+        from joulewise import night_gate
+        chain = Path(self.f.plan.chain_path)
+        original = chain.read_bytes()
+        sidecar = Path(self.f.plan.chain_sha256_path)
+        original_sidecar = sidecar.read_bytes()
+        manifest = chain.with_name('evidence_manifest.json')
+        manifest_bytes = manifest.read_bytes()
+        for field, replacement in (('EVIDENCE_CHAIN_SOURCE_SHA256','0'*64), ('EVIDENCE_MANIFEST_SHA256','0'*64),
+                                   ('EVIDENCE_PLAN_PATH','/tmp/substituted-plan.json')):
+            with self.subTest(field=field):
+                lines=original.decode().splitlines()
+                lines=[f"export {field}='{replacement}'" if line.startswith('export '+field+'=') else line for line in lines]
+                chain.write_text('\n'.join(lines)+'\n')
+                sidecar.write_text(self.engine._digest(chain)+'  '+chain.name+'\n')
+                with self.assertRaises(ValueError):
+                    self.engine.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)
+        chain.write_bytes(original)
+        sidecar.write_text('0'*64+'\n')
+        with self.assertRaisesRegex(ValueError,'chain_sha256'):
+            self.engine.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)
+        sidecar.write_bytes(original_sidecar)
+        manifest.write_bytes(manifest_bytes+b' ')
+        with self.assertRaisesRegex(ValueError,'manifest_sha256'):
+            self.engine.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)
+        manifest.write_bytes(manifest_bytes)
+        with mock.patch.dict(night_gate.RULED_REGISTRATIONS, {}, clear=True):
+            with self.assertRaisesRegex(ValueError,'ruled registration'):
+                self.engine.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)

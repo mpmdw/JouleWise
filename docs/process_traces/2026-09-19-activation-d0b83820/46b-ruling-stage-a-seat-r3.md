@@ -1,0 +1,11 @@
+# Record 46b — lead answer to seat 46's NEEDS_RULING R3 (block-two sizing: the upper confidence bound on the paired spread), 2026-09-19 13:3x PDT
+
+**Question (seat 46 part 2):** which upper-90 % confidence construction, dependence assumption and effective degrees of freedom apply to the eleven OVERLAPPING adjacent differences of twelve envelopes (and to retained patterns after exclusions)?
+
+**Ruled: disjoint adjacent pairs for the sizing statistic; overlapping differences reported as a diagnostic only.** Reason: adjacent differences of one series share envelopes, so their SD has no clean degrees of freedom; the cold judge's own df = 5 arithmetic (ruling 10 Q2, refuter 11) presumed six independent pairs. Protocol v1 therefore fixes, before the pilot runs:
+
+- Pairs `(e1,e2), (e3,e4), …, (e11,e12)` → up to n = 6 differences `Δ_k = J(e_{2k}) − J(e_{2k−1})` over the 480 s interiors; a pair is retained only if BOTH envelopes are retained (an excluded envelope drops exactly its pair; pairs are never re-formed across a gap — no bridging, as the seat already implements); minimum retained pairs 4 (else INCONCLUSIVE, no top-up; consistent with "minimum retained 8 envelopes").
+- `s_pair` = sample SD of the retained Δ_k (df = n − 1); `s_upper` = the one-sided upper 90 % confidence bound on σ from the chi-square construction: `s_upper = s_pair · sqrt((n−1) / χ²_{0.10, n−1})` (n = 6 → factor `sqrt(5/1.610) = 1.762`; n = 4 → `sqrt(3/0.584) = 2.266`). Normality is an assumption of this construction and is stated as such in the memo; the pilot's eleven overlapping differences and the twelve single-envelope values are reported beside it as diagnostics (spread, drift, any pair with |Δ| > 3·s_pair named).
+- Block-two sizing (unchanged from 10a otherwise): `n_pairs = max(3, ⌈8 · s_upper² / δ²⌉)`, δ = 1 J; stop branch if `n_pairs > 24`.
+
+This is a protocol-file detail fixed before capture (pre-registration discipline), not a process rule; Ed's methodology authority is preserved because the protocol file and its digest are in the PR he can veto, and the "no cutoff qualifies" branch stays pre-registered. Implement in `joulewise/quiet_predicate_campaign.py` (the sizing function and the pairing), the protocol JSON/README, and the campaign tests; nothing else changes.

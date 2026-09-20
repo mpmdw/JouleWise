@@ -281,6 +281,79 @@ class IntegrationTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    def test_hard_probe_results_survive_complete_and_interrupted_rounds(self):
+        from joulewise import night_gate
+        from scripts import run_night
+        # An AC loss, a restricted CPU and a probe error must survive even
+        # though smoke_observation_round discards the hard worker's return.
+        probes = [
+            {"argv": list(night_gate.PMSET_BATT_ARGV), "exit_code": 0,
+             "stdout": "Now drawing from 'Battery Power'\n", "stderr": ""},
+            {"argv": list(night_gate.THERMAL_ARGV), "exit_code": 0,
+             "stdout": "CPU_Speed_Limit = 80\n", "stderr": ""},
+            {"argv": list(night_gate.THERMAL_ARGV), "exit_code": 1,
+             "stdout": "", "stderr": "fixture probe failure"},
+        ]
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted), tempfile.TemporaryDirectory() as tmp:
+                jobs = [SimpleNamespace(job_id=f"smoke-hard-{index}", reaped=True,
+                    launch_done=True, process=SimpleNamespace(pid=None),
+                    ready=lambda: True, result=lambda probe=probe: [probe])
+                    for index, probe in enumerate(probes, 1)]
+                def smoke(interval):
+                    for job in jobs:
+                        run_night._BindTask(job.job_id, None, None)
+                    if interrupted:
+                        raise harness.CollectionExpired("fixture deadline")
+                    return {}, 0
+                with patch.object(run_night, "_BindTask", side_effect=jobs), \
+                        patch.object(run_night, "smoke_observation_round", side_effect=smoke):
+                    result = harness.production_round(1, 5, Path(tmp), FakeClock())
+                row = harness.new_row("fixture", collect_args(tmp), 1,
+                    FakeClock().stamp(), FakeClock().stamp(), result)
+                self.assertEqual(row["status"], "partial" if interrupted else "complete")
+                self.assertEqual(row["hard_probes"], [
+                    {"job_id": job.job_id, "result": [probe]} for job, probe in zip(jobs, probes)])
+                self.assertEqual(row["hard_probe_errors"], [])
+
+    def test_missing_and_failed_hard_workers_are_retained_as_errors(self):
+        from scripts import run_night
+        jobs = [SimpleNamespace(job_id=f"smoke-hard-{i}", reaped=True, launch_done=True,
+                process=SimpleNamespace(pid=None), ready=lambda ready=ready: ready,
+                result=Mock(side_effect=RuntimeError("fixture transport failure")))
+                for i, ready in enumerate((True, False), 1)]
+        def smoke(interval):
+            for job in jobs:
+                run_night._BindTask(job.job_id, None, None)
+            raise harness.CollectionExpired("fixture deadline")
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(run_night, "_BindTask", side_effect=jobs), \
+                patch.object(run_night, "smoke_observation_round", side_effect=smoke):
+            result = harness.production_round(1, 5, Path(tmp), FakeClock())
+        self.assertEqual(result["hard_probes"], [])
+        self.assertEqual(result["hard_probe_errors"], [
+            {"job_id": "smoke-hard-1", "error": "fixture transport failure"},
+            {"job_id": "smoke-hard-2", "error": "hard probes did not complete during round"}])
+        jobs[1].result.assert_not_called()
+
+    def test_collected_os_build_is_validated_persisted_and_used_by_summary(self):
+        for build in ("25G83", None, "", "25G83\n", ["25G83"]):
+            with self.subTest(build=build), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(harness.subprocess, "Popen", side_effect=AssertionError("no subprocess")):
+                session, rows = harness.collect(collect_args(tmp), clock=FakeClock(),
+                    round_runner=fake_round, metadata_reader=lambda: {"boot_id": "fixture", "os_build": build})
+                valid = build == "25G83"
+                self.assertEqual(session["os_build"], build)  # Raw metadata preserved.
+                persisted = [json.loads(line) for line in (Path(tmp) / "rounds.jsonl").read_text().splitlines()]
+                for row in persisted:
+                    self.assertEqual(row["os_build"], build if valid else None)
+                    self.assertIs(row["os_build_valid"], valid)
+                    if not valid:
+                        self.assertIn("missing or malformed", row["os_build_reason"])
+                summary = harness.summarize(tmp, "idle")
+                self.assertEqual(summary["groups"][0]["os_build"], build if valid else None)
+                self.assertEqual(summary["groups"][0]["os_build_unavailable_rounds"], 0 if valid else len(rows))
+
     def test_partial_round_retains_concurrent_census_and_marks_contamination(self):
         from scripts import run_night
         hit = {"exit_code": 0, "stdout": "123 claude -p\n", "stderr": "", "refusal": {"reason": "agent"}}
@@ -498,6 +571,40 @@ runpy.run_path(script, run_name="__main__")
             self.assertTrue(all(r["power"]["cpu_w"] == 2 for r in rows))
             self.assertTrue(all(r["alignment"]["error_bound_j"] > 0 for r in rows))
 
+    def test_scheduled_interior_does_not_move_with_two_second_collector_start_drift(self):
+        clock = FakeClock()
+        clock.now = 2
+        recorder = Mock()
+        recorder.metadata = {'cleanup': {'returncode':0}}
+        frames = [{**aligned_fixture()[0], 'start_s':1000., 'end_s':1600., 'elapsed_s':600}]
+        recorder.finish.return_value = (frames, {'status':'bounded', 'effective_clock_anchor_bound_s':0,
+            'admissible_lower_epoch_s':1000, 'admissible_upper_epoch_s':1000})
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            args = collect_args(tmp, power=True)
+            args.duration_s, args.interior_offset_s, args.interior_s = 600, 60, 480
+            args.envelope_start_mono_s = 0
+            with patch.object(harness, 'reduce_interior', wraps=harness.reduce_interior) as reduce:
+                session, _ = harness.collect(args, clock=clock, recorder_factory=Mock(return_value=recorder),
+                                             round_runner=fake_round, metadata_reader=lambda: {})
+            self.assertEqual(reduce.call_args.args[2:], (1060, 480))
+            self.assertEqual(session['start_drift_s'], 2)
+            self.assertEqual(session['deadline_mono_s'], 600)
+            self.assertTrue(session['interior']['complete_support'])
+
+    def test_power_supervised_stop_eperm_is_logged_and_finish_still_reaps(self):
+        recorder = harness.PowerRecorder(Path('/tmp/absent-fixture-power.plist'), 100, FakeClock(), 5)
+        recorder.process = Mock(pid=123)
+        recorder.process.wait.return_value = 0
+        with patch.object(harness.os, 'kill', side_effect=PermissionError('foreign supervisor')), \
+                patch.object(harness.threading, 'Timer'), \
+                patch.object(harness, 'parse_frames', return_value=([], None)), \
+                patch.object(harness, 'align_frames', return_value=([], {'status':'unresolved'})):
+            recorder.request_stop()
+            recorder.force_stop()
+            recorder.finish()
+        recorder.process.wait.assert_called_once()
+        self.assertEqual(len(recorder.metadata['signal_errors']), 2)
+
     def test_smoke_supervision_deadline_and_module_restoration(self):
         from scripts import run_night
         clock = FakeClock()
@@ -652,6 +759,25 @@ class LoadTests(unittest.TestCase):
         self.assertGreater(len(periods), 0, "worker reported no period rows for its window")
         self.assertAlmostEqual(sum(p["cpu_used_s"] for p in periods), .3, delta=.001)
         self.assertEqual(clock.monotonic(), 4.0)   # rendezvous at 1.0 plus the 3 s window
+        # N3: load() Process.start() failure must close both real Pipe ends.
+        parent, child = harness.multiprocessing.get_context("spawn").Pipe()
+        failed = Mock()
+        failed.start.side_effect = OSError("fixture start failed")
+        guarded = SimpleNamespace(Pipe=lambda: (parent, child), Process=lambda **kwargs: failed)
+        try:
+            with tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(harness.multiprocessing, "get_context", return_value=guarded):
+                args = harness.parser().parse_args(["load", "--cores", ".1", "--duration-s", "1",
+                    "--qos", "user-initiated", "--profile", "scalar", "--seed", "1",
+                    "--log", str(Path(tmp) / "load.json")])
+                report = harness.load(args)
+                self.assertIn("fixture start failed", report["error"])
+                self.assertTrue(parent.closed)
+                self.assertTrue(child.closed)
+                failed.join.assert_not_called()
+        finally:
+            parent.close()
+            child.close()
 
     @unittest.skipUnless(sys.platform == "darwin", "real spawned worker uses native QoS; "
                          "hosted Linux shards feed the runner via stdin, which spawn cannot re-import")
@@ -682,25 +808,6 @@ class LoadTests(unittest.TestCase):
                 else:
                     self.assertIsNone(report["error"])
                     self.assertEqual(child["exitcode"], 0)
-        # N3: load() Process.start() failure must close both real Pipe ends.
-        parent, child = context.Pipe()
-        failed = Mock()
-        failed.start.side_effect = OSError("fixture start failed")
-        guarded = SimpleNamespace(Pipe=lambda: (parent, child), Process=lambda **kwargs: failed)
-        try:
-            with tempfile.TemporaryDirectory() as tmp, \
-                    patch.object(harness.multiprocessing, "get_context", return_value=guarded):
-                args = harness.parser().parse_args(["load", "--cores", ".1", "--duration-s", "1",
-                    "--qos", "user-initiated", "--profile", "scalar", "--seed", "1",
-                    "--log", str(Path(tmp) / "load.json")])
-                report = harness.load(args)
-                self.assertIn("fixture start failed", report["error"])
-                self.assertTrue(parent.closed)
-                self.assertTrue(child.closed)
-                failed.join.assert_not_called()
-        finally:
-            parent.close()
-            child.close()
 
     @unittest.skipUnless(sys.platform == "darwin", "native QoS requires macOS")
     def test_native_qos_classes_read_back_in_subprocess(self):
@@ -842,6 +949,21 @@ print(json.dumps(rows))
 
 
 class SummaryTests(unittest.TestCase):
+    def test_row_os_build_cannot_be_substituted_or_joined_to_another_session(self):
+        for field, replacement in (("os_build", "25G80"), ("session", "other-session")):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                harness.collect(collect_args(tmp), clock=FakeClock(), round_runner=fake_round,
+                    metadata_reader=lambda: {"boot_id": "fixture", "os_build": "25G83"})
+                path = Path(tmp) / "rounds.jsonl"
+                rows = [json.loads(line) for line in path.read_text().splitlines()]
+                rows[0][field] = replacement
+                path.write_text("\n".join(json.dumps(row) for row in rows))
+                before = path.read_bytes()
+                with self.assertRaisesRegex(ValueError, "row/session OS build identity mismatch"):
+                    harness.summarize(tmp, "idle")
+                self.assertEqual(path.read_bytes(), before)
+                self.assertFalse((Path(tmp) / "summary.json").exists())
+
     def test_summary_markdown_distinguishes_boots_and_optional_builds(self):
         for builds in (None, ("25G80", "25G83"), (None, "25G83")):
             with self.subTest(builds=builds), tempfile.TemporaryDirectory() as tmp:
@@ -1013,3 +1135,63 @@ class SummaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NativeInteriorAndLoadJoinTests(unittest.TestCase):
+    def test_interior_uses_native_support_not_scaled_whole_envelope_mean(self):
+        frames = aligned_fixture()
+        anchor = {'status':'bounded','effective_clock_anchor_bound_s':0}
+        value = harness.reduce_interior(frames, anchor, 1001, 2)
+        self.assertTrue(value['complete_support'])
+        self.assertAlmostEqual(value['power']['energy_j']['rail_sum_w'], 9.2)
+        self.assertNotAlmostEqual(value['power']['energy_j']['rail_sum_w'], (2.6+9.2)/3*2)
+        partial = harness.reduce_interior(frames, anchor, 1001, 3)
+        self.assertFalse(partial['complete_support'])
+        self.assertEqual(partial['status'], 'partial')
+        self.assertAlmostEqual(partial['power']['energy_j']['rail_sum_w'], 9.2)
+        frames[1]['power']['ane_w'] = frames[1]['power']['rail_sum_w'] = None
+        self.assertFalse(harness.reduce_interior(frames, anchor, 1001, 2)['complete_support'])
+        self.assertFalse(harness.reduce_interior(frames, {'status':'unresolved'}, 1001, 2)['complete_support'])
+
+    def fixture(self):
+        row = {'boot_id':'boot','alignment':{'ps_start':10.,'ps_end':20.}}
+        identity = {'pid':42,'start_identity':'identity-A'}
+        report = {'boot_id':'boot','error':None,'cleanup':[{'pid':42,'alive':False,'exitcode':0}],'workers':[{'identity':identity,'periods':[
+            {'start_mono_s':5.,'end_mono_s':15.,'cpu_used_s':2.},
+            {'start_mono_s':15.,'end_mono_s':25.,'cpu_used_s':4.}]}]}
+        before = {(42,'identity-A'):{'cumulative_cpu_seconds':1.}}
+        after = {(42,'identity-A'):{'cumulative_cpu_seconds':4.}}
+        return row, report, before, after
+
+    def test_load_join_matches_worker_identity_and_exact_monotonic_overlap(self):
+        value = harness.join_load_log(*self.fixture())
+        self.assertEqual(value['status'], 'joined')
+        self.assertAlmostEqual(value['delivered_busy_cores'], .3)
+        self.assertAlmostEqual(value['sampled_busy_cores'], .3)
+
+    def test_reused_pid_wrong_boot_and_partial_load_support_do_not_join(self):
+        row, report, before, after = self.fixture()
+        wrong = {(42,'identity-B'):{'cumulative_cpu_seconds':4.}}
+        self.assertEqual(harness.join_load_log(row,report,before,wrong)['status'], 'unresolved')
+        report['boot_id']='another-boot'
+        self.assertEqual(harness.join_load_log(row,report,before,after)['status'], 'unresolved')
+        report['boot_id']='boot'
+        report['workers'][0]['periods'].pop()
+        value = harness.join_load_log(row,report,before,after)
+        self.assertEqual(value['status'], 'unresolved')
+        self.assertEqual(value['workers'][0]['support_s'], 5)
+
+    def test_overlapping_load_periods_refuse_double_counting(self):
+        row, report, before, after = self.fixture()
+        report['workers'][0]['periods'][1]['start_mono_s']=14.
+        with self.assertRaisesRegex(ValueError,'overlapping'):
+            harness.join_load_log(row,report,before,after)
+
+    def test_calibrating_periods_and_failed_cleanup_do_not_qualify_as_delivered_support(self):
+        row, report, before, after = self.fixture()
+        report['workers'][0]['periods'][0]['calibrating'] = True
+        result = harness.join_load_log(row,report,before,after)
+        self.assertEqual(result['status'], 'unresolved')
+        self.assertEqual(result['workers'][0]['calibration_overlap_s'], 5)
+        report['cleanup'] = [{'alive':True,'exitcode':None}]
+        self.assertEqual(harness.join_load_log(row,report,before,after)['reason'], 'load cleanup incomplete or escalated')

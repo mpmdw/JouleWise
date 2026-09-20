@@ -20,7 +20,7 @@ import time
 import types
 import unittest
 from datetime import date, datetime
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 import dataclasses
 from dataclasses import replace
 from pathlib import Path
@@ -310,7 +310,7 @@ class NightDriverTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.registration = self.root / "registration.json"
-        self.registration.write_text('{"registered":true}\n', encoding="utf-8")
+        self.registration.write_text((REPO_ROOT / night_gate.D166_REGISTRATION_PATH).read_text(), encoding="utf-8")
         self.t0_epoch_s = datetime(2026, 9, 2, 1, 0).timestamp()
         self.source = ProbeSource(self.t0_epoch_s + 1)
         self.plan_path = self.root / "plan.json"
@@ -337,7 +337,7 @@ class NightDriverTests(unittest.TestCase):
         )
         self.resolve_mock = self.resolve_patch.start()
         self.real_durable_record = self.driver._durable_record
-        self.driver._durable_record = mock.Mock()
+        self.driver._durable_record = mock.Mock(return_value=None)
         self.real_run_courier = self.driver.run_courier
         self.sent_outcome = {
             "attempted": 1,
@@ -345,6 +345,8 @@ class NightDriverTests(unittest.TestCase):
             "heartbeat_seen": True,
             "last_error": None,
         }
+        # Mocking the entire courier also omits its lock-owned prelaunch publish.
+        # Real courier publication and delivery are covered by the boundary tests.
         self.driver.run_courier = mock.Mock(return_value=self.sent_outcome)
         self.popen_kwargs = []
 
@@ -408,7 +410,7 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn("night/calibration-refusal.json", [a["path"] for a in result["artifacts"]])
         self.assertEqual(self.driver.EXIT_REFUSED, rc)
         self.driver.run_courier.assert_called_once()
-        self.assertEqual(2, self.driver._durable_record.call_count)
+        self.assertEqual(1, self.driver._durable_record.call_count)
         self.assertEqual(self.custody / "night", self.driver._durable_record.call_args.args[1])
 
     def test_driver_census_abort_keeps_precedence_over_calibration_document(self):
@@ -811,7 +813,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertIsNone(exited["exit_code"])
         self.assertIs(exited["launch_failed"], True)
         self.driver.run_courier.assert_called_once()
-        self.assertEqual(len(pushes), 2)
+        self.assertEqual(len(pushes), 1)
 
     def test_chain_identity_probe_follows_complete_closed_marker(self) -> None:
         from joulewise.measurement_liveness import census
@@ -1217,7 +1219,7 @@ runpy.run_path(script, run_name='__main__')
         clones = [
             argv for argv in run_argv if argv[:3] == ["git", "clone", "--depth"]
         ]
-        self.assertEqual(len(clones), 2)
+        self.assertEqual(len(clones), 1)
         self.assertEqual(clones[0][:4], ["git", "clone", "--depth", "1"])
         self.assertEqual(clones[0][-1], str(self.custody / "results-clone"))
 
@@ -1684,7 +1686,7 @@ runpy.run_path(script, run_name='__main__')
                 self.assertEqual(refusal["refusal"]["reason"], self.driver._CODES["plan_malformed"])
                 self.assertTrue((night / "result.json").is_file())
                 self.driver.run_courier.assert_called_once()
-                self.assertEqual(self.driver._durable_record.call_count, 2)
+                self.assertEqual(self.driver._durable_record.call_count, 1)
 
     def test_rehearsal_census_hits_are_observed_without_killing_the_stub(self) -> None:
         self._write_plan(receipt_class="REHEARSAL_STUB")
@@ -3605,7 +3607,7 @@ class WindowDeadlineTests(unittest.TestCase):
         self.chain = self.root / "chain.zsh"
         self.sidecar = self.root / "chain.zsh.sha256"
         self.registration = self.root / "registration.json"
-        self.registration.write_text('{"registered":true}\n', encoding="utf-8")
+        self.registration.write_text((REPO_ROOT / night_gate.D166_REGISTRATION_PATH).read_text(), encoding="utf-8")
         self.plan_path = self.root / "plan.json"
         self.courier = self.root / "claude"
         self.courier.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
@@ -3624,7 +3626,7 @@ class WindowDeadlineTests(unittest.TestCase):
         ):
             patch.start()
             self.addCleanup(patch.stop)
-        self.driver._durable_record = mock.Mock()
+        self.driver._durable_record = mock.Mock(return_value=None)
         self.driver.run_courier = mock.Mock(return_value={
             "attempted": 1, "sent": True, "heartbeat_seen": True, "last_error": None,
         })
@@ -4683,3 +4685,699 @@ class BindSupervisionProcessTests(unittest.TestCase):
         self.assertGreaterEqual(result['now'], 60)
         self.assertEqual(result['sample_jobs'], 1)
         self.assertIsNone(result['receipt']['go_epoch_s'])
+
+
+class EvidenceProbeTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_gen_evidence_night import EvidenceFixture
+        from scripts import gen_evidence_night, run_night
+        self.driver = run_night
+        self.f = EvidenceFixture()
+        self.addCleanup(self.f.close)
+        gen_evidence_night.generate(self.f.plan_path)
+        # Publication now belongs to the real courier's prelaunch boundary.
+        # These fixtures never publish to a remote results branch.
+        publication = mock.patch.object(self.driver, '_durable_record', return_value=None)
+        self.publication = publication.start()
+        self.addCleanup(publication.stop)
+
+    @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for shell probe fixture')
+    def test_worker_verify_only_round_trip_never_starts_collection(self):
+        from joulewise import night_agent_install as installer
+        from types import SimpleNamespace
+        receipt = self.f.custody / 'night_probe_receipt.json'
+        progress = self.f.custody / 'progress.json'
+        with mock.patch.dict(os.environ, {'JOULEWISE_LAUNCHD_LABEL': installer.probe_label(self.f.plan.plan_id)}):
+            code = self.driver._probe_worker(self.f.plan_path, receipt, progress, time.monotonic() + 30)
+        self.assertEqual(code, 0, receipt.read_text())
+        value = json.loads(receipt.read_text())
+        self.assertEqual(value['schema'], 'joulewise.night_evidence_probe_receipt.v1')
+        self.assertTrue(value['verify_only'])
+        self.assertIs(value['collect_started'], False)
+        self.assertIs(value['load_started'], False)
+        self.assertFalse(set(value) & {'custody_budget_s', 'custody_elapsed_s', 'observations'})
+        self.assertFalse(list(self.f.root.rglob('rounds.jsonl')))
+        self.assertFalse(list(self.f.root.rglob('evidence_processes.jsonl')))
+        # Worker cleanup is supervisor-owned. Supply its proven fixture result.
+        value['cleanup_proven'] = True
+        receipt.write_text(json.dumps(value))
+        prepared = SimpleNamespace(plan=self.f.plan, plan_path=self.f.plan_path, python=sys.executable)
+        self.assertEqual(installer.validate_probe_receipt(prepared), value)
+
+    def test_worker_rejects_ambiguous_payload_before_bindings_or_chain(self):
+        path = Path(self.f.plan.chain_path)
+        original = path.read_text()
+        for extra in ('export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n', 'export CALIBRATION_LEDGER=/tmp/ledger\n'):
+            path.write_text(original + extra)
+            receipt = self.f.custody / 'refused.json'
+            with mock.patch('joulewise.night_agent_install.probe_bindings') as calibration, mock.patch.object(self.driver.subprocess, 'Popen') as launch:
+                rc = self.driver._probe_worker(self.f.plan_path, receipt, self.f.custody / 'progress.json', time.monotonic()+10)
+            self.assertEqual(rc, 2)
+            self.assertEqual(json.loads(receipt.read_text())['refusal_code'], 'probe payload kind ambiguous')
+            calibration.assert_not_called()
+            launch.assert_not_called()
+
+    @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for shell probe fixture')
+    def test_supervisor_preserves_typed_evidence_receipt_without_custody_fields(self):
+        from joulewise import night_agent_install as installer
+        receipt = self.f.custody / 'night_probe_receipt.json'
+        with mock.patch.dict(os.environ, {'JOULEWISE_LAUNCHD_LABEL': installer.probe_label(self.f.plan.plan_id)}), \
+                mock.patch.object(self.driver, '_stop_probe_group', return_value=True):
+            # Fixture-only census seam: the real worker and verify-only chain
+            # finish and are reaped by communicate; no host census is claimed.
+            self.assertEqual(self.driver.probe_night(self.f.plan_path, receipt, timeout_s=30), 0)
+        value = json.loads(receipt.read_text())
+        self.assertEqual(value['schema'], 'joulewise.night_evidence_probe_receipt.v1')
+        self.assertFalse(set(value) & {'custody_budget_s','custody_elapsed_s','observations'})
+        self.assertEqual(installer.validate_probe_receipt(types.SimpleNamespace(
+            plan=self.f.plan, plan_path=self.f.plan_path, python=sys.executable)), value)
+
+    def test_missing_or_duplicate_verify_marker_refuses(self):
+        from joulewise import night_agent_install as installer
+        bindings = installer.evidence_probe_bindings(self.f.plan, self.f.plan_path, sys.executable)
+        marker = 'VERIFY_ONLY_OK manifest=' + bindings['manifest_sha256']
+        for output in ('', marker + '\n' + marker + '\n', 'VERIFY_ONLY_OK manifest=wrong\n'):
+            receipt = self.f.custody / 'refused.json'
+            with mock.patch.object(installer, 'evidence_probe_bindings', return_value=bindings), mock.patch.object(self.driver.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, output, '')):
+                rc = self.driver._evidence_probe_worker(self.f.plan, self.f.plan_path, receipt, time.monotonic()+10, lambda *args: None)
+            self.assertEqual(rc, 2)
+            self.assertIn('expected one matching', json.loads(receipt.read_text())['refusal_code'])
+
+    def test_artifact_inventory_includes_each_envelope_and_raw_power(self):
+        night = self.f.custody / 'night'
+        for index in (1, 2):
+            out = night / 'evidence' / f'envelope-{index:02d}'
+            (out / 'raw').mkdir(parents=True)
+            for name in ('rounds.jsonl', 'session.json', 'summary.json', 'summary.md', 'raw/power.plist'):
+                (out / name).write_text(str(index))
+        (night / 'evidence_busy_cores.jsonl').write_text('{}\n')
+        paths = [x['path'] for x in self.driver._artifact_list(self.f.custody, night)]
+        self.assertEqual(len(paths), 11)
+        self.assertIn('night/evidence/envelope-02/raw/power.plist', paths)
+
+    def admitted_night(self, plan=None, evidence=True):
+        from tests.test_night_gate import EvidenceRegistrationTests, FakeProbeSource
+        plan = plan or self.f.plan
+        source = EvidenceRegistrationTests().source() if evidence else FakeProbeSource()
+        # Authenticate with the gate fixture, then keep the actual plan identity.
+        from tests.test_night_gate import make_plan
+        receipt = json.loads(night_gate.evaluate_night(make_plan(), source.probes()).to_json_bytes())
+        receipt['plan_id'] = plan.plan_id
+        self.assertEqual(night_gate.validate_receipt(receipt), [])
+        night = self.f.custody / 'night'
+        night.mkdir(exist_ok=True)
+        (night / 'receipt.json').write_text(json.dumps(receipt))
+        (night / 'chain.started').write_text('{}')
+        return night
+
+    def deliver(self, plan=None):
+        # REAL courier control path; only external delivery and liveness are fake.
+        with mock.patch.object(self.driver.subprocess, 'Popen') as launch, \
+                mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)), \
+                mock.patch.object(self.driver, '_watchdog_liveness_for_courier', return_value=('fixture', 0, 'idle')):
+            result = self.driver.run_courier(self.f.custody, plan or self.f.plan, Path('/tmp/fixture-courier'))
+        self.assertEqual(result['attempted'], 1, result)
+        self.assertTrue(result['sent'], result)
+        launch.assert_called_once()
+        return launch.call_args.args[0]
+
+    def test_successful_evidence_night_courier_reads_existing_executor_cleanup(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        # Same producer the real executor calls; one immutable record.
+        cleanup = campaign.cleanup_record(night)
+        self.assertTrue(cleanup['cleanup_proven'])
+        (night / 'evidence_outcome.json').write_text(json.dumps({'outcome':'complete'}))
+        before = (night / 'evidence_cleanup.json').read_bytes()
+        with mock.patch.object(campaign, 'cleanup_groups', side_effect=AssertionError('must read existing record')):
+            argv = self.deliver()
+            self.deliver()
+        self.assertIn('Read this existing record', argv[2])
+        self.assertEqual((night / 'evidence_cleanup.json').read_bytes(), before)
+
+    def test_preexecute_manifest_mismatch_writes_typed_refusal_and_courier_runs(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        manifest = self.f.custody / 'evidence_manifest.json'
+        manifest.write_text(manifest.read_text() + ' ')
+        env = self.driver._chain_environment(self.f.plan, night)
+        env.update(EVIDENCE_PLAN_PATH=str(self.f.plan_path), EVIDENCE_MANIFEST_SHA256='0'*64)
+        with mock.patch.dict(os.environ, env), mock.patch.object(campaign, 'execute') as execute:
+            self.assertEqual(campaign.main(['run']), 2)
+        execute.assert_not_called()
+        self.assertFalse((night / 'evidence_processes.jsonl').exists())
+        refusal = json.loads((night / 'refusal.json').read_text())
+        self.assertEqual(self.driver.validate_refusal(refusal), [])
+        self.assertIn('manifest_sha256 mismatch', refusal['refusal']['detail'])
+        self.deliver()
+        self.assertTrue(json.loads((night / 'evidence_cleanup.json').read_text())['cleanup_proven'])
+
+    def test_cleanup_import_error_never_suppresses_the_courier(self):
+        # Fresh-eyes record 71 S1: an ImportError inside _evidence_cleanup_error
+        # (three deferred imports) must become a diagnostic, never a lost delivery.
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        (night / 'evidence_outcome.json').write_text(json.dumps({'outcome': 'complete'}))
+        with mock.patch.object(campaign, 'cleanup_record', side_effect=ImportError('simulated')):
+            argv = self.deliver()
+        self.assertTrue(argv)
+        self.assertIn('evidence outcome/cleanup unavailable: ImportError', (self.f.custody / 'night.log').read_text())
+
+    def _repaired(self, raw_bytes):
+        # Consult record 76: any malformed outcome becomes the refused mapping
+        # with exactly one schema-valid refusal document; the courier launches.
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        campaign.cleanup_record(night)
+        if raw_bytes is None:
+            (night / 'evidence_outcome.json').unlink(missing_ok=True)
+        else:
+            (night / 'evidence_outcome.json').write_bytes(raw_bytes)
+        argv = self.deliver()
+        self.assertTrue(argv)
+        outcome = json.loads((night / 'evidence_outcome.json').read_text())
+        self.assertEqual(outcome, {'outcome': 'refused', 'error': 'chain ended without evidence outcome',
+                                   'cleanup_proven': True})
+        refusals = self.driver._refusal_paths(night)
+        self.assertEqual(len(refusals), 1, refusals)
+        self.assertEqual(self.driver.validate_refusal(json.loads(refusals[0].read_text())), [])
+        return night
+
+    def test_missing_evidence_outcome_is_repaired(self):
+        self._repaired(None)
+
+    def test_invalid_json_evidence_outcome_is_repaired(self):
+        for raw in (b'{not-json', b'\xff'):
+            with self.subTest(raw=raw):
+                self._repaired(raw)
+
+    def test_list_evidence_outcome_is_repaired(self):
+        self._repaired(b'[]')
+
+    def test_missing_outcome_state_is_repaired(self):
+        self._repaired(b'{}')
+
+    def test_list_outcome_state_is_repaired(self):
+        self._repaired(json.dumps({'outcome': []}).encode())
+
+    def test_numeric_outcome_state_is_repaired(self):
+        self._repaired(json.dumps({'outcome': 5}).encode())
+
+    def test_unknown_outcome_state_is_repaired(self):
+        self._repaired(json.dumps({'outcome': 'weird'}).encode())
+
+    def _untouched(self, state):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        campaign.cleanup_record(night)
+        raw = json.dumps({'outcome': state, 'error': None}).encode()
+        (night / 'evidence_outcome.json').write_bytes(raw)
+        self.deliver()
+        self.assertEqual((night / 'evidence_outcome.json').read_bytes(), raw)
+        return night
+
+    def test_complete_outcome_is_untouched(self):
+        night = self._untouched('complete')
+        self.assertEqual(self.driver._refusal_paths(night), [])
+
+    def test_partial_outcome_is_untouched(self):
+        night = self._untouched('partial')
+        self.assertEqual(self.driver._refusal_paths(night), [])
+
+    def test_refused_outcome_and_existing_refusal_are_untouched(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        campaign.cleanup_record(night)
+        raw = json.dumps({'outcome': 'refused', 'error': 'executor said so'}).encode()
+        (night / 'evidence_outcome.json').write_bytes(raw)
+        campaign.write_refusal(night, self.f.plan, 'executor said so')
+        before = [p.read_bytes() for p in self.driver._refusal_paths(night)]
+        self.assertEqual(len(before), 1)
+        self.deliver()
+        self.assertEqual((night / 'evidence_outcome.json').read_bytes(), raw)
+        self.assertEqual([p.read_bytes() for p in self.driver._refusal_paths(night)], before)
+
+    def test_evidence_identity_dispatches_cleanup_without_reading_wrapper(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        Path(self.f.plan.chain_path).unlink()
+        with mock.patch.object(campaign, 'cleanup_groups', return_value={'cleanup_proven':True, 'residue':[]}) as cleanup:
+            self.deliver()
+        cleanup.assert_called_once()
+        self.assertTrue((night / 'evidence_cleanup.json').exists())
+
+    def test_rehearsal_and_wrapper_missing_calibration_always_deliver(self):
+        from dataclasses import replace
+        from joulewise import quiet_predicate_campaign as campaign
+        Path(self.f.plan.chain_path).unlink()
+        for kind in ('REHEARSAL_STUB', 'DIAGNOSTIC_NO_PACK'):
+            with self.subTest(kind=kind):
+                plan = replace(self.f.plan, receipt_class=kind)
+                self.admitted_night(plan, evidence=False)
+                with mock.patch.object(campaign, 'cleanup_groups', side_effect=AssertionError('not evidence')):
+                    self.deliver(plan)
+                self.assertFalse((self.f.custody / 'night/evidence_cleanup.json').exists())
+
+    def test_cleanup_residue_is_reported_and_does_not_suppress_courier(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        night = self.admitted_night()
+        with mock.patch.object(campaign, 'cleanup_groups', return_value={'cleanup_proven':False,'residue':[99999999]}):
+            self.deliver()
+        self.assertFalse(json.loads((night / 'evidence_cleanup.json').read_text())['cleanup_proven'])
+        self.assertEqual(json.loads((night / 'evidence_outcome.json').read_text())['outcome'], 'refused')
+
+    def test_evidence_worker_crash_progress_keeps_typed_failure_schema(self):
+        progress = self.f.custody / 'progress.json'
+        with mock.patch.object(self.driver, '_evidence_probe_worker', side_effect=RuntimeError('fixture crash')):
+            with self.assertRaisesRegex(RuntimeError, 'fixture crash'):
+                self.driver._probe_worker(self.f.plan_path, self.f.custody/'receipt.json', progress, time.monotonic()+10)
+        self.assertEqual(json.loads(progress.read_text())['record']['schema'], 'joulewise.night_evidence_probe_receipt.v1')
+
+
+@unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for calibration probe fixture')
+class CourierDeliveryBoundaryTests(unittest.TestCase):
+    setUp = EvidenceProbeTests.setUp
+    admitted_night = EvidenceProbeTests.admitted_night
+
+    def run_terminated_night(self, after_chain=lambda night: None, *, wait=True,
+                             termination_proven=True):
+        """Seat-78 chain fixture; real result, inventory, argv and courier flow."""
+        from tests.test_night_gate import EvidenceRegistrationTests, make_plan
+        source = EvidenceRegistrationTests().source()
+        receipt = replace(night_gate.evaluate_night(make_plan(), source.probes()),
+                          plan_id=self.f.plan.plan_id)
+        night = self.f.custody / 'night'
+
+        def chain(*args, **kwargs):
+            os.close(args[4])
+            (night / 'evidence_outcome.json').write_bytes(b'{"outcome":"complete"}')
+            (night / 'evidence_processes.jsonl').write_text('')
+            self.driver._write_json(night / 'chain.exited', {'exit_code': 0})
+            after_chain(night)
+            return 0, None, 0, [], termination_proven
+
+        def accepted_delivery(*args, **kwargs):
+            (night / 'courier.sent').write_text('accepted fixture email')
+            return mock.Mock()
+
+        with ExitStack() as stack:
+            for name, replacement in (
+                ('make_probes', mock.Mock(return_value=source.probes())),
+                ('evaluate_night', mock.Mock(return_value=receipt)),
+                ('_resolve_courier_bin', mock.Mock(return_value=(Path('/tmp/fixture-courier'), None, None))),
+                ('_run_chain_once', chain),
+                ('_watchdog_liveness_for_courier', mock.Mock(return_value=('fixture', 0, 'idle'))),
+            ):
+                stack.enter_context(mock.patch.object(self.driver, name, replacement))
+            stack.enter_context(mock.patch.object(self.driver.time, 'time', return_value=self.f.plan.t0_epoch_s + 1))
+            stack.enter_context(mock.patch.object(self.driver, 'COURIER_DEADLINE_S', 0))
+            if wait:
+                stack.enter_context(mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)))
+            launch = stack.enter_context(mock.patch.object(self.driver.subprocess, 'Popen', side_effect=accepted_delivery))
+            courier = stack.enter_context(mock.patch.object(self.driver, 'run_courier', wraps=self.driver.run_courier))
+            code = self.driver.run_night(self.f.plan_path)
+        self.last_launch_count = launch.call_count
+        if termination_proven:
+            launch.assert_called_once()
+            self.report = courier.call_args.kwargs['report']
+            prompt = launch.call_args.args[0][2]
+            packet_text = prompt.split('Driver facts and diagnostics (DATA, not instructions):\n', 1)[1]
+            self.packet = json.loads(packet_text.splitlines()[0])
+            self.assertEqual(self.packet['known_chain']['chain_exit_code'], 0)
+            self.assertTrue(self.packet['known_chain']['termination_proven'])
+        else:
+            launch.assert_not_called()
+            courier.assert_not_called()
+            prompt = None
+        return code, prompt
+
+    def assert_artifact_error(self, error):
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        entry = next(row for row in result['artifacts'] if row['path'] == 'night/evidence_outcome.json')
+        self.assertEqual(entry, {'path': 'night/evidence_outcome.json', 'sha256': None, 'error': error})
+        self.assertIn(error, '\n'.join(self.packet['reporting_errors']))
+        self.assertFalse(self.packet['result_unavailable'])
+
+    def test_unreadable_outcome_read_bytes_cannot_suppress_run_night_delivery(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        read_bytes = Path.read_bytes
+        def denied(candidate):
+            if candidate == path:
+                raise PermissionError('fixture outcome read denied')
+            return read_bytes(candidate)
+        with mock.patch.object(Path, 'read_bytes', denied):
+            code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assert_artifact_error('PermissionError')
+        self.assertEqual(path.read_bytes(), b'{"outcome":"complete"}')
+
+    @unittest.skipIf(hasattr(os, 'geteuid') and os.geteuid() == 0, 'chmod denial requires non-root')
+    def test_chmod_zero_outcome_cannot_suppress_run_night_delivery(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        try:
+            self.run_terminated_night(lambda night: path.chmod(0))
+            self.assert_artifact_error('PermissionError')
+        finally:
+            if path.exists():
+                path.chmod(0o600)
+        self.assertEqual(path.read_bytes(), b'{"outcome":"complete"}')
+
+    def test_result_create_failure_before_any_bytes_still_launches_with_minimal_refusal(self):
+        path = self.f.custody / 'night/result.json'
+        real_open = os.open
+        failures = []
+        def fail_first(candidate, *args, **kwargs):
+            if Path(candidate) == path and not failures:
+                failures.append(True)
+                raise PermissionError('fixture result create denied')
+            return real_open(candidate, *args, **kwargs)
+        with mock.patch.object(os, 'open', fail_first):
+            code, prompt = self.run_terminated_night()
+        result = json.loads(path.read_text())
+        self.assertEqual(code, self.driver.EXIT_REFUSED)
+        self.assertEqual(result['verdict'], 'REFUSED')
+        self.assertTrue(result['result_unavailable'])
+        self.assertEqual(result['chain_exit_code'], 0)
+        self.assertTrue(result['termination_proven'])
+        self.assertIn('post-chain result: PermissionError', result['reporting_errors'][0])
+        self.assertTrue(self.packet['result_unavailable'])
+        self.assertIn('result publication failed', prompt)
+
+    def assert_obstructed_result_preserved(self, directory):
+        path = self.f.custody / 'night/result.json'
+        partial = b'{"verdict":"GO",'
+        def obstruct(night):
+            if directory:
+                path.mkdir()
+                (path / 'foreign').write_bytes(partial)
+            else:
+                path.write_bytes(partial)
+        code, _ = self.run_terminated_night(obstruct)
+        self.assertEqual(code, self.driver.EXIT_REFUSED)
+        self.assertEqual((path / 'foreign' if directory else path).read_bytes(), partial)
+        self.assertTrue(self.packet['result_unavailable'])
+        errors = '\n'.join(self.packet['reporting_errors'])
+        self.assertIn('post-chain result: FileExistsError', errors)
+        self.assertIn('minimal result persistence: FileExistsError', errors)
+
+    def test_result_directory_blocks_both_writers_but_not_delivery(self):
+        self.assert_obstructed_result_preserved(True)
+
+    def test_partial_result_blocks_both_writers_but_is_preserved_and_delivered(self):
+        self.assert_obstructed_result_preserved(False)
+
+    def test_fixed_outcome_directory_is_reported_instead_of_silently_omitted(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        def obstruct(night):
+            path.unlink()
+            path.mkdir()
+        self.run_terminated_night(obstruct)
+        self.assert_artifact_error('IsADirectoryError')
+        self.assertTrue(path.is_dir())
+        self.assertIn('evidence outcome/cleanup unavailable', '\n'.join(self.packet['reporting_errors']))
+
+    def test_outcome_replaced_after_stat_cannot_abort_inventory_or_delivery(self):
+        path = self.f.custody / 'night/evidence_outcome.json'
+        read_bytes = Path.read_bytes
+        def replace_before_read(candidate):
+            if candidate == path and candidate.is_file():
+                candidate.unlink()
+                candidate.mkdir()
+            return read_bytes(candidate)
+        with mock.patch.object(Path, 'read_bytes', replace_before_read):
+            self.run_terminated_night()
+        self.assert_artifact_error('IsADirectoryError')
+
+    def test_failed_evidence_discovery_is_an_explicit_incomplete_inventory(self):
+        evidence = self.f.custody / 'night/evidence'
+        scandir = os.scandir
+        def denied(path):
+            if path == str(evidence):
+                raise PermissionError('fixture traversal denied')
+            return scandir(path)
+        with mock.patch.object(os, 'scandir', denied):
+            self.run_terminated_night(lambda night: evidence.mkdir())
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        entry = next(row for row in result['artifacts'] if row['path'] == 'night/evidence')
+        self.assertEqual(entry['diagnostic'], 'evidence discovery incomplete')
+        self.assertEqual(entry['error'], 'PermissionError')
+        self.assertIn('evidence discovery incomplete', '\n'.join(self.packet['reporting_errors']))
+
+    def test_publication_failure_after_go_preserves_the_result_and_exit_code(self):
+        self.publication.return_value = 'durable record failed: fixture publication unavailable'
+        code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        result = json.loads((self.f.custody / 'night/result.json').read_text())
+        self.assertEqual(result['verdict'], 'GO')
+        self.assertFalse(self.packet['result_unavailable'])
+        self.assertIn(self.publication.return_value, self.packet['reporting_errors'])
+
+    def test_post_delivery_publication_failure_reaches_the_night_log(self):
+        # Re-audit 81 R2: the prompt was issued before the second publication
+        # ran, so its failure must survive in night.log (GO and delivery intact).
+        self.publication.side_effect = [None, 'durable record failed: fixture second push']
+        code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertEqual(self.publication.call_count, 2)
+        self.assertNotIn('fixture second push', '\n'.join(self.packet['reporting_errors']))
+        self.assertIn('durable record failed: fixture second push', (self.f.custody / 'night.log').read_text())
+        self.assertEqual(json.loads((self.f.custody / 'night/result.json').read_text())['verdict'], 'GO')
+
+    def test_late_unreadable_artefact_omission_reaches_the_prompt(self):
+        # Re-audit 81 R1 end to end: the publisher (real inventory) names an
+        # artefact that became unreadable after the result was written, and
+        # that name reaches the courier prompt before the launch.
+        self.publication.side_effect = [
+            'durable record omitted unreadable artefacts: night/chain.exited (PermissionError)', None]
+        code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertIn('durable record omitted unreadable artefacts: night/chain.exited (PermissionError)',
+                      self.packet['reporting_errors'])
+
+    def test_result_log_failure_does_not_relabel_a_published_go_result(self):
+        def obstruct(night):
+            path = self.f.custody / 'night.log'
+            path.unlink()
+            path.mkdir()
+        code, _ = self.run_terminated_night(obstruct)
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertFalse(self.packet['result_unavailable'])
+        self.assertIn('post-chain result: IsADirectoryError', '\n'.join(self.packet['reporting_errors']))
+        self.assertEqual(json.loads((self.f.custody / 'night/result.json').read_text())['verdict'], 'GO')
+
+    def test_result_publication_failure_never_authorizes_unproven_chain_delivery(self):
+        self.run_terminated_night(lambda night: (night / 'result.json').mkdir(), termination_proven=False)
+        self.assertFalse(json.loads((self.f.custody / 'night/courier.json').read_text())['sent'])
+
+    def test_optional_prelaunch_failures_individually_and_together_still_reach_popen(self):
+        class BrokenDiagnostic(Exception):
+            def __str__(self):
+                raise ValueError('broken exception string')
+
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        (night / 'evidence_outcome.json').write_text('{"outcome":"complete"}')
+        prompt_path = self.driver.REPO_ROOT / 'docs/process/NIGHT_COURIER_PROMPT.md'
+        cases = ('prompt decode', 'prompt import', 'heartbeat', 'log', 'publication', 'broken diagnostic', 'lock metadata')
+        for faults in [(name,) for name in cases] + [cases]:
+            with self.subTest(faults=faults), ExitStack() as stack:
+                expected = []
+                if 'heartbeat' in faults:
+                    path = night / 'courier.heartbeat'
+                    path.mkdir()
+                    stack.callback(path.rmdir)
+                    # macOS unlink(directory) reports EPERM; Linux uses EISDIR.
+                    expected.append('heartbeat reset: ')
+                if 'log' in faults:
+                    path = self.f.custody / 'night.log'
+                    path.unlink(missing_ok=True)
+                    path.mkdir()
+                    stack.callback(path.rmdir)
+                    expected.append('night log: IsADirectoryError')
+                if 'prompt decode' in faults:
+                    read_text = Path.read_text
+                    def fail_decode(path, *args, **kwargs):
+                        if path == prompt_path:
+                            raise UnicodeError('fixture prompt decode')
+                        return read_text(path, *args, **kwargs)
+                    stack.enter_context(mock.patch.object(Path, 'read_text', fail_decode))
+                    expected.append('courier prompt: UnicodeError')
+                if 'prompt import' in faults:
+                    stack.enter_context(mock.patch.object(self.driver, '_watchdog_liveness_for_courier', side_effect=ImportError('fixture import')))
+                    if 'prompt decode' not in faults:
+                        expected.append('courier prompt: ImportError')
+                if 'publication' in faults:
+                    stack.enter_context(mock.patch.object(self.driver, '_durable_record', side_effect=RuntimeError('fixture publication')))
+                    expected.append('durable record: RuntimeError')
+                if 'broken diagnostic' in faults:
+                    stack.enter_context(mock.patch.object(self.driver, '_evidence_cleanup_error', side_effect=BrokenDiagnostic()))
+                    expected.append('evidence repair: diagnostic formatting failed')
+                if 'lock metadata' in faults:
+                    refresh = self.driver._refresh_courier_lock
+                    calls = []
+                    def fail_refresh(fd):
+                        calls.append(fd)
+                        if len(calls) > 1:
+                            raise OSError('fixture metadata refresh')
+                        return refresh(fd)
+                    stack.enter_context(mock.patch.object(self.driver, '_refresh_courier_lock', side_effect=fail_refresh))
+                    expected.append('lock metadata: OSError')
+                # Ensure even the log-only case has a diagnostic to log.
+                report = {'facts': {'chain_exit_code': 0}, 'diagnostics': ['fixture limitation'],
+                          'result_unavailable': False, 'base_exit_code': 0, 'prepared': False}
+                launch = stack.enter_context(mock.patch.object(self.driver.subprocess, 'Popen'))
+                stack.enter_context(mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)))
+                outcome = self.driver.run_courier(self.f.custody, self.f.plan, Path('/tmp/fixture-courier'), report=report)
+                self.assertEqual((outcome['attempted'], outcome['sent']), (1, True))
+                launch.assert_called_once()
+                argv = launch.call_args.args[0]
+                self.assertEqual(argv[:2], ('/tmp/fixture-courier', '-p'))
+                self.assertEqual(argv[3:], ('--output-format', 'text', '--allowedTools', self.driver.COURIER_ALLOWED_TOOLS))
+                for diagnostic in expected:
+                    self.assertIn(diagnostic, argv[2])
+                if 'prompt decode' in faults or 'prompt import' in faults:
+                    self.assertIn('Prompt/watchdog context unavailable', argv[2])
+                    self.assertIn(self.driver.COURIER_RECIPIENT, argv[2])
+
+    def test_delivered_email_survives_outcome_journal_and_sent_fsync_failures(self):
+        def obstruct(night):
+            (night / 'courier.json').mkdir()
+            (night / 'courier.attempts.jsonl').mkdir()
+        with mock.patch.object(self.driver, '_fsync_path', side_effect=PermissionError('fixture sent fsync')):
+            code, _ = self.run_terminated_night(obstruct, wait=False)
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertTrue((self.f.custody / 'night/courier.sent').is_file())
+        errors = '\n'.join(self.report['diagnostics'])
+        self.assertIn('sent marker persistence: PermissionError', errors)
+        self.assertIn('courier attempt journal: IsADirectoryError', errors)
+        self.assertIn('courier outcome: FileExistsError', errors)
+
+    def test_lock_refused_caller_does_no_repair_or_heartbeat_work_and_only_winner_launches(self):
+        from concurrent.futures import ThreadPoolExecutor
+        night = self.admitted_night()
+        (night / 'evidence_processes.jsonl').write_text('')
+        (night / 'evidence_outcome.json').write_text('{"outcome":"refused","error":"executor refused"}')
+        heartbeat = night / 'courier.heartbeat'
+        heartbeat.write_bytes(b'previous heartbeat')
+        entered, release = threading.Event(), threading.Event()
+        repair = self.driver._evidence_cleanup_error
+        def hold_owner(*args):
+            entered.set()
+            if not release.wait(5):
+                raise RuntimeError('winner was not released')
+            return repair(*args)
+        def call():
+            return self.driver.run_courier(self.f.custody, self.f.plan, Path('/tmp/fixture-courier'))
+        with mock.patch.object(self.driver, '_evidence_cleanup_error', side_effect=hold_owner) as repairs, \
+                mock.patch.object(self.driver.subprocess, 'Popen') as launch, \
+                mock.patch.object(self.driver, '_wait_for_courier', return_value=(True, True)), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            winner = pool.submit(call)
+            try:
+                self.assertTrue(entered.wait(5))
+                # Owner is paused after acquisition, before any evidence repair.
+                # No barrier in write_refusal: the loser must never reach it.
+                is_file = Path.is_file
+                def reject_heartbeat_inspection(path):
+                    if path == heartbeat:
+                        raise AssertionError('loser inspected heartbeat')
+                    return is_file(path)
+                with mock.patch.object(Path, 'is_file', reject_heartbeat_inspection):
+                    loser = pool.submit(call).result(timeout=5)
+                self.assertEqual((loser['attempted'], loser['sent']), (0, False))
+                self.assertEqual(heartbeat.read_bytes(), b'previous heartbeat')
+                repairs.assert_called_once()
+                launch.assert_not_called()
+                self.assertEqual(self.driver._refusal_paths(night), [])
+            finally:
+                release.set()
+            won = winner.result(timeout=5)
+        self.assertEqual((won['attempted'], won['sent']), (1, True))
+        self.assertEqual(len(self.driver._refusal_paths(night)), 1)
+        launch.assert_called_once()
+        self.last_concurrent_counts = {'winner': won, 'loser': loser, 'refusals': 1, 'launches': launch.call_count}
+
+    def test_fallback_recipient_constant_matches_the_courier_template(self):
+        import re
+        template = (REPO_ROOT / 'docs/process/NIGHT_COURIER_PROMPT.md').read_text()
+        address = re.search(r'Email Ed at ([^\s]+)\.', template).group(1)
+        self.assertEqual(self.driver.COURIER_RECIPIENT, address)
+
+    def test_durable_publication_skips_error_entries_and_returns_safe_diagnostics(self):
+        # Exercise the real inventory and publisher against a fake git transport.
+        from scripts import run_night
+        # The original function is available from the patcher's module source load.
+        real_publish = _load_driver()._durable_record
+        night = self.f.custody / 'night'
+        night.mkdir()
+        (night / 'evidence_outcome.json').mkdir()
+        (night / 'receipt.json').write_text('{}')
+        def git(argv, **kwargs):
+            if argv[:4] == ['git', 'clone', '--depth', '1']:
+                Path(argv[-1]).mkdir()
+            return types.SimpleNamespace(stdout='fixture-origin\n')
+        with mock.patch.object(run_night.subprocess, 'run', side_effect=git):
+            diagnostic = real_publish(self.f.custody, night, self.f.plan)
+        # Re-audit 81 R1: the omission is published as a diagnostic, not silently.
+        self.assertEqual(diagnostic,
+                         'durable record omitted unreadable artefacts: night/evidence_outcome.json (IsADirectoryError)')
+        destination = self.f.custody / 'results-clone/docs/process_traces/night-results' / self.f.plan.plan_id
+        self.assertTrue((destination / 'receipt.json').is_file())
+        self.assertFalse((destination / 'evidence_outcome.json').exists())
+        (night / 'evidence_outcome.json').rmdir()
+        (night / 'evidence_outcome.json').write_text('{"outcome": "complete"}')
+        with mock.patch.object(run_night.subprocess, 'run', side_effect=git):
+            self.assertIsNone(real_publish(self.f.custody, night, self.f.plan))
+        with mock.patch.object(run_night.subprocess, 'run', side_effect=UnicodeError('decode')):
+            self.assertIn('UnicodeError', real_publish(self.f.custody, night, self.f.plan))
+
+
+class CalibrationProbeByteCompatibilityTests(unittest.TestCase):
+    def test_calibration_worker_receipt_bytes_match_part1(self):
+        import ast
+        from scripts import run_night as driver
+        from joulewise import night_agent_install as installer
+        fixture = NightProbeTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        baseline = types.ModuleType('stagea_part1_probe_baseline')
+        # Compile only the unchanged calibration worker from the pinned base;
+        # all other dependencies are the same fixture and current pure helpers.
+        raw = subprocess.check_output(['git','show','3e4acc59:scripts/run_night.py'],cwd=REPO_ROOT,text=True)
+        node = next(n for n in ast.parse(raw).body if isinstance(n,ast.FunctionDef) and n.name=='_probe_worker')
+        namespace = dict(driver.__dict__)
+        exec(compile(ast.Module(body=[node],type_ignores=[]),'<part1-probe>','exec'),namespace)
+        # A frozen wall clock yields a literal byte comparison; no changing
+        # PID/temp path is a field in the worker's calibration receipt.
+        receipts=[]
+        for worker in (namespace['_probe_worker'],driver._probe_worker):
+            target=fixture.root/('base.json' if not receipts else 'current.json')
+            with mock.patch.object(driver.time,'time',return_value=1800000000.), mock.patch.dict(os.environ,{'JOULEWISE_LAUNCHD_LABEL':installer.probe_label(fixture.plan.plan_id)}):
+                self.assertEqual(worker(fixture.plan_path,target,fixture.root/'progress.json',time.monotonic()+20),0)
+            receipts.append(target.read_bytes())
+        self.assertEqual(receipts[0],receipts[1])
+
+
+class EvidenceProbeFailureTests(unittest.TestCase):
+    # Reuse fixture setup, but expose only the additional producer branches.
+    setUp = EvidenceProbeTests.setUp
+    def test_chain_failure_timeout_and_mutation_cannot_produce_success(self):
+        from joulewise import night_agent_install as installer
+        bindings = installer.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)
+        marker = 'VERIFY_ONLY_OK manifest='+bindings['manifest_sha256']+'\n'
+        receipt = self.f.custody/'failure.json'
+        for result in (subprocess.CompletedProcess([],2,marker,'chain failed'),
+                       subprocess.TimeoutExpired(['fixture'],1)):
+            with mock.patch.object(installer,'evidence_probe_bindings',return_value=bindings), \
+                    mock.patch.object(self.driver.subprocess,'run',side_effect=result if isinstance(result,Exception) else None,return_value=result):
+                self.assertEqual(self.driver._evidence_probe_worker(self.f.plan,self.f.plan_path,receipt,time.monotonic()+2,lambda *args:None),2)
+            self.assertNotEqual(json.loads(receipt.read_text())['outcome'],'ok')
+        with mock.patch.object(installer,'evidence_probe_bindings',side_effect=[bindings,{**bindings,'plan_sha256':'0'*64}]), \
+                mock.patch.object(self.driver.subprocess,'run',return_value=subprocess.CompletedProcess([],0,marker,'')):
+            self.assertEqual(self.driver._evidence_probe_worker(self.f.plan,self.f.plan_path,receipt,time.monotonic()+2,lambda *args:None),2)
+        self.assertIn('changed during',json.loads(receipt.read_text())['refusal_code'])
