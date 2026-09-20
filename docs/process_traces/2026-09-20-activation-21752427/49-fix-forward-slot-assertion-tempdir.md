@@ -21,8 +21,8 @@ Recommendation: fold the `:610` two-line change into this commit and merge.
 
 Disposition: folded as the second commit (sibling reproduced failing under the d03 TMPDIR before the change; module 114 OK after). The safe list is the sweep the lead's §5 lesson asked for — done by the review; no further lane needed.
 
-## §4 Terminal review (row 12) and hosted result (row 11)
-(appended before merge)
+## §4 Terminal review (row 12) and hosted result (row 11), 16:38 PDT
+Candidate `f3c0432f` (records-only merge of main onto `96c9ffa8`): PR #376 checks 15/15 PASS — build: pass; calibration-exits-exclusive (3.13): pass; calibration-writer-crash-matrix-exclusive (3.13, 1): pass; calibration-writer-crash-matrix-exclusive (3.13, 2): pass; changes: pass; fences: pass; gate-ledger: pass; installed-wheel: pass; quick: pass; test (3.13, 1): pass; test (3.13, 2): pass; test (3.13, 3): pass; test (3.13, 4): pass; test (3.13, 5): pass; test (3.13, 6): pass. Terminal review: two assertions in one test module, counterfactual proven both ways at the bench, one Opus review with an executed sweep — verdict MERGE. Post-merge matrix watched (run id appended below).
 
 ## §5 Lesson (for the codex-delegation field notes)
 Two post-merge reds today came from random temporary names colliding with asserted substrings ("t3" via the generator's census guard; "d03" via a slot-id assertion). Assertions must target the specific argument, and fixtures that feed name-sensitive guards must draw census-clean names (`_census_clean_tempdir`). A sweep of `assertNotIn("<short literal>", str(...))` across tests/ is a cheap successor nit lane.
