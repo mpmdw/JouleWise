@@ -89,6 +89,12 @@ class InstallNightAgentTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _write_plan(self, **changes: object) -> Path:
+        legacy_chain = self.root / "legacy-missing-chain.zsh"
+        self.assertFalse(
+            legacy_chain.exists(),
+            "Legacy fixture chain must be absent (2026-09-20 CI: "
+            f"night wrapper is not valid UTF-8): {legacy_chain}",
+        )
         custody = self.root / ("custody" if self.plan_counter == 0 else f"custody-{self.plan_counter}")
         self.plan_counter += 1
         plan = NightPlan(
@@ -100,7 +106,7 @@ class InstallNightAgentTests(unittest.TestCase):
             repo_head=self.repo_head,
             measurement_root=str(self.measurement_root),
             measurement_head=self.measurement_head,
-            chain_path="/bin/true",
+            chain_path=str(legacy_chain),
             chain_sha256_path="/tmp/install-night-agent-test.sha256",
             custody_root=str(custody),
             registration_path=None,
