@@ -95,9 +95,13 @@ class ArgumentsTests(unittest.TestCase):
                     entry.verify_lock(root)
             with patch.object(entry, "run", return_value="" ) as run, patch.object(entry, "verify_lock") as verify:
                 entry.build_venv(root)
-            self.assertEqual(run.call_args_list[0].args[0], ["python3.13", "-m", "venv", ".venv"])
-            self.assertEqual(run.call_args_list[1].args[0][-4:], ["-c", "env/mac-measurement-lock.txt", "-e", ".[mac]"])
-            self.assertEqual(run.call_args_list[2].args[0][-3:], ["charset-normalizer", "requests", "urllib3"])
+            # The bench step-1 probe lives in the builder (fix-forward after
+            # PR #372: hosted 3.11 shards have no python3.13), so it is the
+            # builder's first call, ahead of venv creation and the two installs.
+            self.assertEqual(run.call_args_list[0].args[0], ["python3.13", "--version"])
+            self.assertEqual(run.call_args_list[1].args[0], ["python3.13", "-m", "venv", ".venv"])
+            self.assertEqual(run.call_args_list[2].args[0][-4:], ["-c", "env/mac-measurement-lock.txt", "-e", ".[mac]"])
+            self.assertEqual(run.call_args_list[3].args[0][-3:], ["charset-normalizer", "requests", "urllib3"])
             verify.assert_called_once_with(root)
 
 
@@ -319,7 +323,7 @@ class PrepareTests(unittest.TestCase):
         self.assertIn("attempt 1; prior candidates for this date: none", draft)
         self.assertNotIn("earlier abort", draft)
 
-    def test_preclone_recipe_and_runway_warning(self):
+    def test_prepare_path_needs_no_python313_and_warns_on_short_runway(self):
         self.kw["t0"] = str((int(time.time()) // 60 + 30) * 60)
         calls = []; original = entry.run; errors = io.StringIO()
         def spy(argv, **kwargs):
@@ -328,11 +332,12 @@ class PrepareTests(unittest.TestCase):
         with patch.object(entry, "run", side_effect=spy), contextlib.redirect_stderr(errors):
             entry.prepare(**self.kw)
         self.assertIn("WARNING: runway below the 40-minute planning default", errors.getvalue())
-        version = calls.index(["python3.13", "--version"])
-        clone = next(i for i, c in enumerate(calls) if "clone" in c)
+        # No python3.13 probe on the prepare path itself: with an injected
+        # builder the host needs no python3.13 (hosted 3.11 shards have none).
+        self.assertNotIn(["python3.13", "--version"], calls)
         fetch = next(i for i, c in enumerate(calls) if "fetch" in c)
         ancestry = next(i for i, c in enumerate(calls) if "merge-base" in c)
-        self.assertLess(version, clone); self.assertLess(fetch, ancestry)
+        self.assertLess(fetch, ancestry)
         self.assertTrue(any("interpreter_identity" in " ".join(c) for c in calls))
 
     def test_unexpected_builder_is_error_exit_one(self):

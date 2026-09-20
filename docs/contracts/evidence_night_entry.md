@@ -41,9 +41,12 @@ before comparing, before cloning.
 
 Preparation checkpoints selection before cloning, then:
 
-1. Run `python3.13 --version`, clone the remote without hardlinks, detach at H,
+1. Clone the remote without hardlinks, detach at H,
    run `git -C R fetch -q origin main`, then verify main ancestry.
-2. Build Python 3.13's `.venv`, install `.[mac]` and the three bench extras
+2. Probe `python3.13 --version` (inside the venv builder, so an injected
+   offline builder needs no python3.13; a missing interpreter therefore
+   surfaces after the clone, with the clone checkpoint recorded and
+   resumable), then build Python 3.13's `.venv`, install `.[mac]` and the three bench extras
    under `env/mac-measurement-lock.txt`, and compare the complete sorted
    non-comment lock with `pip freeze --exclude-editable`. Record interpreter
    path, version and binary SHA-256 using the clone’s
