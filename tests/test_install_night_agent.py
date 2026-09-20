@@ -364,6 +364,33 @@ class InstallNightAgentTests(unittest.TestCase):
         inputs = next(record["input_digests"] for record in records if "input_digests" in record)
         self.assertEqual("sha256:" + hashlib.sha256(extra.read_bytes()).hexdigest(), inputs[str(extra)])
 
+    def test_calibration_render_input_digest_output_bytes_unchanged(self):
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        paths = (plan.resolve(), *(self.measurement_root / name for name in
+                  ("ledger.jsonl", "head.json", "frozen-plan.json", "identity.json", "t1.json")))
+        expected = json.dumps({"input_digests": {
+            str(path): "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in paths}}, sort_keys=True) + "\n"
+        result = self._run(plan)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [line for line in result.stdout.splitlines(keepends=True) if '"input_digests"' in line]
+        self.assertEqual(lines, [expected])
+
+    def test_unknown_payload_keeps_legacy_render_inspection(self):
+        plan = self._write_plan()
+        self._prepare_receipt(plan)
+        parsed = json.loads(plan.read_text())
+        wrapper = Path(parsed["chain_path"])
+        wrapper.write_text("export NIGHT_PAYLOAD_KIND=unknown\n" + wrapper.read_text())
+        Path(parsed["chain_sha256_path"]).write_text(hashlib.sha256(wrapper.read_bytes()).hexdigest() + "\n")
+        result = self._run(plan)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        records = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
+        record = next(record for record in records if "input_digests" in record)
+        self.assertEqual(set(record), {"input_digests"})
+        self.assertIn(str(self.measurement_root / "ledger.jsonl"), record["input_digests"])
+
     def test_render_only_includes_probe_plist_with_pinned_topology(self):
         plan = self._write_plan()
         result = self._run(plan)

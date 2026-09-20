@@ -7,9 +7,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -56,6 +58,29 @@ class EvidenceFixture:
     def write_plan(self):
         from joulewise.night_plan_writer import night_plan_json_bytes
         self.plan_path.write_bytes(night_plan_json_bytes(self.plan))
+
+    @contextlib.contextmanager
+    def installer_environment(self):
+        from joulewise import night_agent_install as installer
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        courier = bin_dir / "claude"
+        courier.write_text("#!/bin/sh\nexit 99\n")  # Render must never invoke it.
+        courier.chmod(0o755)
+        saved = {number: signal.getsignal(number) for number in installer.SIGNALS}
+        try:
+            with patch.dict(os.environ, {"PATH": str(bin_dir) + os.pathsep + os.environ.get("PATH", "")}):
+                yield
+        finally:
+            for number, handler in saved.items():
+                signal.signal(number, handler)
+
+    def prepare_installer(self):
+        head = subprocess.check_output(["/usr/bin/git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
+        now = time.time()
+        self.plan = replace(self.plan, repo_head=head, authored_epoch_s=now,
+                            t0_epoch_s=(int(now) // 60 + 24 * 60) * 60)
+        self.write_plan()
 
     def close(self):
         self.temp.cleanup()
@@ -154,6 +179,36 @@ class EvidenceGeneratorTests(unittest.TestCase):
             path.unlink()
         generator.generate(self.f.plan_path)
         self.assertEqual({path: path.read_bytes() for path in artifacts}, staged_bytes)
+
+    def test_staged_installer_render_publication_probe_bindings_and_published_render(self):
+        from joulewise import night_agent_install as installer
+        import plistlib
+        self.f.prepare_installer()
+        staged = self.f.root / "staged.json"
+        os.replace(self.f.plan_path, staged)
+        generator.generate(staged)
+        self.assertEqual(json.loads(staged.read_text())["schema"], "joulewise.night_plan.v2")
+        self.assertFalse(self.f.plan_path.exists())
+        with self.f.installer_environment():
+            for phase, plan_path in (("staged", staged), ("published", self.f.plan_path)):
+                if phase == "published":
+                    os.replace(staged, self.f.plan_path)
+                    bindings = installer.evidence_probe_bindings(self.f.plan, self.f.plan_path, sys.executable)
+                    self.assertEqual(bindings["plan_sha256"], hashlib.sha256(plan_path.read_bytes()).hexdigest())
+                rendered = self.f.root / phase
+                output, errors = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    result = installer.main(["--plan", str(plan_path), "--python", sys.executable,
+                                             "--render-only", str(rendered)])
+                self.assertEqual(result, 0, errors.getvalue())
+                self.assertIn('"payload_kind": "quiet_predicate_evidence"', output.getvalue())
+                plists = list(rendered.glob("*.plist"))
+                self.assertEqual(len(plists), 3)
+                for path in plists:
+                    argv = plistlib.loads(path.read_bytes())["ProgramArguments"]
+                    expected = plan_path if "night-probe." in path.name else self.f.plan_path
+                    self.assertEqual(argv[argv.index("--plan") + 1], str(expected.resolve()))
+        self.assertEqual(list((self.f.custody / "night").iterdir()), [])
 
     def test_protocol_reread_mutation_refuses_before_execute(self):
         generator.generate(self.f.plan_path)

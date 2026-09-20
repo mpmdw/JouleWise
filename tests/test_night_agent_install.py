@@ -1878,6 +1878,81 @@ class LaunchdAccessProbeTests(unittest.TestCase):
                     self.engine.probe_process_census(self.label, self.fixture.plan_path, {"chain_pgid": 12345})
 
 
+class EvidenceRenderOnlyTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_gen_evidence_night import EvidenceFixture
+        from scripts import gen_evidence_night
+        from joulewise import night_agent_install
+        self.engine = night_agent_install
+        self.f = EvidenceFixture()
+        self.addCleanup(self.f.close)
+        self.f.prepare_installer()
+        self.staged = self.f.root / "staged.json"
+        os.replace(self.f.plan_path, self.staged)
+        gen_evidence_night.generate(self.staged)
+
+    def render(self, plan_path):
+        import io
+        from unittest.mock import patch
+        calls = []
+        run = subprocess.run
+        def recorded(argv, *args, **kwargs):
+            calls.append(list(map(str, argv)))
+            self.assertNotIn(self.f.plan.chain_path, calls[-1], "render-only executed the evidence chain")
+            return run(argv, *args, **kwargs)
+        output, errors = io.StringIO(), io.StringIO()
+        with self.f.installer_environment(), patch.object(subprocess, "run", side_effect=recorded), \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            result = self.engine.main(["--plan", str(plan_path), "--python", sys.executable,
+                                       "--render-only", str(self.f.root / "rendered")])
+        self.assertTrue(calls)
+        self.assertFalse(any(self.f.plan.chain_path in argv for argv in calls),
+                         "render-only executed the evidence chain")
+        return result, output.getvalue(), errors.getvalue()
+
+    def test_staged_and_published_render_hash_same_bytes_without_chain_execution(self):
+        chain = Path(self.f.plan.chain_path)
+        manifest = chain.with_name("evidence_manifest.json")
+        expected = {str(path): "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in (self.staged.resolve(), chain, manifest)}
+        self.assertFalse(self.f.plan_path.exists())
+        result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 0, errors)
+        records = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+        self.assertIn({"payload_kind": "quiet_predicate_evidence", "input_digests": expected}, records)
+        os.replace(self.staged, self.f.plan_path)
+        expected[str(self.f.plan_path.resolve())] = expected.pop(str(self.staged.resolve()))
+        result, output, errors = self.render(self.f.plan_path)
+        self.assertEqual(result, 0, errors)
+        records = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+        self.assertIn({"payload_kind": "quiet_predicate_evidence", "input_digests": expected}, records)
+
+    def test_wrong_chain_sidecar_refuses_render(self):
+        Path(self.f.plan.chain_sha256_path).write_text("0" * 64 + "\n")
+        result, output, errors = self.render(self.staged)
+        self.assertNotEqual(result, 0)
+        self.assertIn("chain_sha256 mismatch", errors)
+        self.assertNotIn('"input_digests"', output)
+        self.assertFalse((self.f.root / "rendered").exists())
+
+    def test_wrong_manifest_digest_refuses_render(self):
+        Path(self.f.plan.chain_path).with_name("evidence_manifest.json").write_text("{}\n")
+        result, output, errors = self.render(self.staged)
+        self.assertNotEqual(result, 0)
+        self.assertIn("manifest_sha256 mismatch", errors)
+        self.assertNotIn('"input_digests"', output)
+
+    def test_registration_without_chain_binding_refuses_render(self):
+        from unittest.mock import patch
+        from joulewise import night_gate
+        with patch.dict(night_gate.RULED_REGISTRATIONS,
+                        {night_gate.QPE01_PILOT_REGISTRATION_SHA256: {"binds_chain": False}}):
+            result, output, errors = self.render(self.staged)
+        self.assertNotEqual(result, 0)
+        self.assertIn("registration is not a chain-bound ruled registration", errors)
+        self.assertNotIn('"input_digests"', output)
+
+
 class EvidencePlanPublicationTests(unittest.TestCase):
     def setUp(self):
         from tests.test_gen_evidence_night import EvidenceFixture

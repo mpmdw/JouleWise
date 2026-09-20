@@ -1138,11 +1138,40 @@ def validate_install(args, repo):
         if supplied is not None and supplied != schedule["night_calendar"][field.capitalize()]:
             raise Refused(2, "--{} must match the plan calendar".format(field))
     if args.render_only is not None:
-        source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
-        if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
-            print(json.dumps({"input_digests": reservation_input_digests(plan, args.plan)}, sort_keys=True))
+        from joulewise import night_gate
+        chain = Path(plan.chain_path)
+        try:
+            chain_text = chain.read_text()
+        except (OSError, UnicodeError):
+            # Legacy render fixtures may name a binary or unavailable chain.
+            chain_text = ""
+        try:
+            payload_kind = night_gate.probe_payload_kind(chain_text)
+        except ValueError:
+            # Unrecognized payloads retain the legacy render-only inspection.
+            payload_kind = None
+        if payload_kind == "quiet_predicate_evidence":
+            from joulewise.quiet_predicate_campaign import verify_manifest, PROTOCOL_PATH
+            sha = _digest(chain)
+            tokens = Path(plan.chain_sha256_path).read_text().split()
+            if not tokens or tokens[0] != sha or len(tokens) > 2 or (len(tokens) == 2 and tokens[1] != chain.name):
+                raise ValueError("chain_sha256 mismatch")
+            manifest_path, manifest, manifest_sha = verify_manifest(plan, chain_text)
+            ruled = night_gate.RULED_REGISTRATIONS.get(manifest["files"][PROTOCOL_PATH])
+            if ruled is None or not ruled["binds_chain"]:
+                raise ValueError("registration is not a chain-bound ruled registration")
+            # Hash the supplied plan bytes without executing the wrapper, whose
+            # EVIDENCE_PLAN_PATH deliberately names the future published plan.
+            print(json.dumps({"payload_kind": "quiet_predicate_evidence", "input_digests": {
+                str(args.plan): "sha256:" + _digest(args.plan),
+                str(chain): "sha256:" + sha,
+                str(manifest_path): "sha256:" + manifest_sha}}, sort_keys=True))
         else:
-            print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
+            source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
+            if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
+                print(json.dumps({"input_digests": reservation_input_digests(plan, args.plan)}, sort_keys=True))
+            else:
+                print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
     if args.render_only is None and not getattr(args, "launchd_probe", False):
         validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
     return prepared
