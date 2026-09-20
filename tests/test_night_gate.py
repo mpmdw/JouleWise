@@ -294,7 +294,7 @@ class NightGateTests(unittest.TestCase):
         ):
             return night_gate.evaluate_night(plan, source.probes())
 
-    def test_production_argv_constant_is_the_self_excluding_census_pattern(self) -> None:
+    def test_production_argv_constants_are_pinned(self) -> None:
         self.assertEqual(
             ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
             night_gate.AGENT_CENSUS_ARGV,

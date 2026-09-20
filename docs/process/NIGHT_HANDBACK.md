@@ -247,15 +247,21 @@ the lead confirms the discovery set at the bench (87a F4).
 Every census producer that can run while the chain runs must carry the
 2026-09-20 self-match fix (`[c]odex|[c]laude|[t]3`): the driver and chain (from
 the clone at the plan's `measurement_head`), the t0 author, and the WATCHDOG
-PROCESS — `com.joulewise.magistrate` binds `AGENT_CENSUS_ARGV` at import, so
-the running watchdog must be RELAUNCHED from a checkout at or after the fix
-before any arm; a stale watchdog's bare-word pgrep is visible to the new
-driver census and reproduces the 09-20 abort (the reverse is not true).
-Verify in `events.jsonl` that the watchdog's census rows carry the bracketed
-argv before arming. Per-night arm scripts re-authored from the trace templates
-must use the bracketed pattern, single-quoted in zsh (unquoted brackets glob).
+PROCESS — `com.joulewise.magistrate` keeps running the `night_gate` module it
+imported at launch, so the running watchdog must be RELAUNCHED from a checkout
+at or after the fix before any arm; a stale watchdog's bare-word pgrep is
+visible to the new driver census and reproduces the 09-20 abort (the reverse
+is not true). The watchdog's census events record no argv, so verify the
+PROCESS instead, before arming: the checkout it runs from contains the fix
+(`git -C /Users/edr/code/JouleWise merge-base --is-ancestor <fix commit> HEAD`
+for a watchdog launched from the canonical root) AND its start time
+(`ps -o lstart= -p "$(pgrep -f magistrate_watchdog.py)"`) is later than the
+moment that checkout reached the fix (the relaunch record names both).
+Per-night arm scripts re-authored from the trace templates must use the
+bracketed pattern, single-quoted in zsh (unquoted brackets glob).
 `scripts/prewindow_check.sh` is a bench tool run before an arm, never inside
-acquisition. The next plan needs fresh artefacts (manifest/wrapper/digest/plan/
+acquisition: its `grep -E "codex|claude|t3|…"` child's argv would match the
+new pattern. The next plan needs fresh artefacts (manifest/wrapper/digest/plan/
 probe receipt) because `quiet_predicate_campaign.MANIFEST_PATHS` hashes
 `night_gate.py`; no ruled registration hash changes.
 

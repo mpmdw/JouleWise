@@ -156,7 +156,7 @@ class AgentCensusConcurrencyTests(unittest.TestCase):
         old_argv = (*AGENT_CENSUS_ARGV[:2], "|".join(("codex", "claude", "t3")))
         control_hits = self._overlap_hits(old_argv)
         if not control_hits:
-            self.skipTest("INCONCLUSIVE: 2 x 1,000 old-pattern probes had zero peer hits; scheduler did not expose overlap")
+            self.skipTest("INCONCLUSIVE: 2 x 300 old-pattern probes had zero peer hits; scheduler did not expose overlap")
         self.assertGreaterEqual(len(control_hits), 1)
 
     def test_stopped_peer_is_excluded_after_exec(self):
