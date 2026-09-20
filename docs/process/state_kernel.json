@@ -2661,6 +2661,55 @@
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
+    "EVIDENCE-INSTALLER-SPLIT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
+          "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
+          "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
+          "Ed #368 item 2; ruling 04a addendum: tonight arms on payload-kind dispatch, separate entry point follows."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/EVIDENCE-INSTALLER-SPLIT-01/acceptance",
+          "label": "EVIDENCE-INSTALLER-SPLIT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "An evidence plan installs/probes/uninstalls through the new entry point with its refusal list enumerated in a contract doc; the composed arm-sequence test runs against it; calibration path untouched."
+      },
+      "authority": {
+        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "INSTALLER-RENDER-ONLY-EVIDENCE-01 merged on main",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "INSTALLER-RENDER-ONLY-EVIDENCE-01"
+        }
+      ],
+      "fallback": {
+        "action": "use payload-kind dispatch inside the existing installer for tonight’s arm",
+        "condition": "the separate evidence entry point has not landed",
+        "pointer": {
+          "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+          "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+        }
+      },
+      "fences": [],
+      "flags": [],
+      "goal": "The evidence (quiet-predicate / instrument) night path gets a minimal separate entry point that keeps ONLY the physics, evidence and pre-registration refusals (D-161: operator-only adversary); custody-budget arithmetic, ledger pins, receipt-budget checks and the other calibration custody machinery do not apply to it; the calibration installer stops growing executor-specific branches.",
+      "id": "EVIDENCE-INSTALLER-SPLIT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 256,
+      "status": "blocked",
+      "status_note": "2026-09-19 activation a743be05 — BLOCKED [AGENT] on INSTALLER-RENDER-ONLY-EVIDENCE-01 merged, per ruling 09a; Ed #368 item 2.",
+      "stop_card": null
+    },
     "FIXTURE-FAKE-VLLM-LEAK-01": {
       "acceptance": {
         "evidence": [
@@ -3224,6 +3273,98 @@
       "rank": 215,
       "status": "queued",
       "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from its post-merge review; registration only; not started. The INSTALL-WINDOWS-MULTI-01 status flip is that session's post-merge batch unless it hands it here.",
+      "stop_card": null
+    },
+    "INSTALLER-RENDER-ONLY-EVIDENCE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
+          "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
+          "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
+          "Consult 04 + Opus contract lens: bench-verified failure at H2 4f2aa185, CalledProcessError … chain.zsh … exit status 2",
+          "Round 1 c72a7ae7 on fix/2026-09-19-installer-render-only-evidence"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/INSTALLER-RENDER-ONLY-EVIDENCE-01/acceptance",
+          "label": "INSTALLER-RENDER-ONLY-EVIDENCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "PR merged on main with tests/test_evidence_arm_sequence.py green in hosted CI."
+      },
+      "authority": {
+        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+            "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+          },
+          "rule": "No launchctl in tests."
+        }
+      ],
+      "flags": [],
+      "goal": "`install_night_agent --render-only` dispatches on the wrapper’s payload kind; evidence plans are statically authenticated (sidecar, sealed manifest, chain-bound registration, sealed published-path literal) and their digests printed without executing the chain; ambiguous payload declarations refuse (exit 2); the calibration branch is byte-identical. `night_gate._check_registration` joins a relative registration_path to the measurement root. The composed arm-sequence test `tests/test_evidence_arm_sequence.py` (author at staging → real generator → real installer render-only → publish → real probe bindings → run_night.probe_night → validate_install with the produced plists) runs in the ordinary suite.",
+      "id": "INSTALLER-RENDER-ONLY-EVIDENCE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 254,
+      "status": "active",
+      "status_note": "2026-09-19 activation a743be05 — ACTIVE [AGENT]. Round 1 c72a7ae7 on fix/2026-09-19-installer-render-only-evidence. No fallback; blocks every evidence-night arm.",
+      "stop_card": null
+    },
+    "INSTRUMENT-CADENCE-25G83-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
+          "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
+          "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
+          "docs/process_traces/2026-09-19-activation-a743be05/06-consult-instrument-cadence-astra.md (completed design/offline analysis, cadence observations and 15-run matrix)",
+          "docs/process_traces/2026-09-19-activation-a743be05/06-consult-artifacts/ (preserved matrix recipe)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/INSTRUMENT-CADENCE-25G83-01/acceptance",
+          "label": "INSTRUMENT-CADENCE-25G83-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Attribution record with executed matrix; cold-gate ruling on the re-sized screens; derivation nights resume only after."
+      },
+      "authority": {
+        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "pilot evidence night one harvested, including its raw cadence covariates",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PILOT-NIGHT-ONE-HARVEST"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+            "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+          },
+          "rule": "Controlled runs require an agent-free [QUIET-MAC] window; [AGENT] work is limited to design and offline analysis."
+        }
+      ],
+      "flags": [],
+      "goal": "Attribute the doubled powermetrics sample cadence on macOS 25G83 (raw per-frame elapsed_ns median ≈245–252 ms, min ≈110 ms, p95 ≈274 ms at the 100 ms setting; r6/25F84 median ≈120 ms; no frame loss) to binary / OS scheduler / sampler set / adapter via the 15-run agent-free matrix specified by consult 06 (docs/process_traces/2026-09-19-activation-a743be05/06-consult-instrument-cadence-astra.md; recipe preserved at docs/process_traces/2026-09-19-activation-a743be05/06-consult-artifacts/), then restore ≈100 ms cadence or re-characterise deliberately (2 s pulses option). Every acceptance tolerance is re-sized to the instrument (~1 J / ~5 J; sensible-gates ruling 09-10; Ed #368 item 3), with the level/bracket screens re-derived prospectively from a fixed corpus via a cold-gate packet Ed sees. The pilot evidence night’s raw cadence covariates are the first datum.",
+      "id": "INSTRUMENT-CADENCE-25G83-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 257,
+      "status": "blocked",
+      "status_note": "2026-09-19 activation a743be05 — BLOCKED on the pilot-night-one harvest, per ruling 09a. [QUIET-MAC] for controlled runs; [AGENT] for design and offline analysis (consult 06 already done). No fallback — the FAIL stands; equivalence is not re-litigated.",
       "stop_card": null
     },
     "INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01": {
@@ -6281,6 +6422,45 @@
       "status_note": "2026-09-08: READY; 99co registers the D-165 allowlist line-keying follow-up. FLAG: dictated evidence 99fa concerns GO refusal-code registry validity, not row-pin drift; retain that citation in the T38c report without treating it as proof.",
       "stop_card": null
     },
+    "REHEARSAL-MOCK-FREE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
+          "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
+          "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
+          "The H2 dry-check passed while step 2 refused at the live arm (activation a743be05 record 03)."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REHEARSAL-MOCK-FREE-01/acceptance",
+          "label": "REHEARSAL-MOCK-FREE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The pilot-night bench dry-check (docs/process_traces/2026-09-19-activation-a743be05/02-arm-scripts-qpe01-pilot-n1-20260919/dry-check.py) calls the same code path as tests/test_evidence_arm_sequence.py and passes at the arm head; the runbook’s arm procedure names the rule."
+      },
+      "authority": {
+        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+      },
+      "dependencies": [],
+      "fallback": {
+        "action": "refuse the arm until the dry-check executes the real installer and night driver and consumes their actual plists",
+        "condition": "the arm dry-check is non-compliant",
+        "pointer": {
+          "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+          "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+        }
+      },
+      "fences": [],
+      "flags": [],
+      "goal": "Every arm dry-check executes the real installer render-only path and the real night driver (preflight, schedule, run_night.probe_night) on a fixture and consumes the plists they actually produce; a dry-check that manufactures plists or mocks the installer is non-compliant.",
+      "id": "REHEARSAL-MOCK-FREE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 255,
+      "status": "active",
+      "status_note": "2026-09-19 activation a743be05 — ACTIVE [AGENT] (Ed #368 item 1). Arm refused until compliant.",
+      "stop_card": null
+    },
     "REISSUE-V3-GENERATION-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -7011,6 +7191,38 @@
       "rank": 101,
       "status": "queued",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware. 2026-09-01 status: divergence exhibited (trace 78) and the reader alignment landed on PR #260 (feat/2026-09-01-supersession-exhibit); terra delta re-audit found the regressions were helper-only, cured by fix round r7 (commit bc1489c3: production-seam tests driving _whole_window_campaign_membership, _validate_row_uncached, load_analysis_inputs -> analyze_claims -> validate_claim_verdicts; mutations m1/m2/m3/m5 killed at the seams); luna delta re-audit of r7 in flight; retained corpus rebaselined at 40 campaign logs, all clean.",
+      "stop_card": null
+    },
+    "SUPERVISOR-RECEIPT-PAYLOAD-INIT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
+          "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
+          "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
+          "Consult 04 P3; ruling 04a R8: supervisor receipt initialised as calibration, diagnostic only."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SUPERVISOR-RECEIPT-PAYLOAD-INIT-01/acceptance",
+          "label": "SUPERVISOR-RECEIPT-PAYLOAD-INIT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A regression with an evidence plan timing out before dispatch yields a receipt without calibration fields and a payload-neutral refusal code."
+      },
+      "authority": {
+        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
+        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "`scripts/run_night.py` initialises the probe supervisor receipt as calibration (≈3476); a timeout before payload dispatch retains calibration fields and the code calibration_ledger_custody_timeout for an evidence night. Represent “payload kind undetermined” until dispatch.",
+      "id": "SUPERVISOR-RECEIPT-PAYLOAD-INIT-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 258,
+      "status": "queued",
+      "status_note": "2026-09-19 activation a743be05 — READY [AGENT]; priority p3_tooling per ruling 09a. No fallback (diagnostic only; install still refuses correctly).",
       "stop_card": null
     },
     "T0-CLOCK-ROW-RENAME-01": {

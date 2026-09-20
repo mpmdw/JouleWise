@@ -1127,8 +1127,16 @@ def validate_install(args, repo):
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
                         courier_path, schedule, run_night.install_spans_for_day,
                         getattr(args, "probe_timeout_s", 600))
-    records = [name for name in ("receipt.json", "result.json", "refusal.json", "chain.started",
-               "chain.exited", "courier.json", "courier.sent") if os.path.lexists(prepared.custody_night / name)]
+    # Every refusal document the driver would report from its existence alone
+    # (run_night._refusal_paths: refusal.json, refusal-N.json,
+    # calibration-refusal.json and its .*.json siblings) refuses admission like
+    # any other night record (refuter 10 F1; fresh eyes 17 F2).
+    records = [name for name in ("receipt.json", "result.json", "chain.started",
+               "chain.exited", "courier.json", "courier.sent")
+               if os.path.lexists(prepared.custody_night / name)]
+    if prepared.custody_night.is_dir():
+        records += [path.name for path in run_night._refusal_paths(prepared.custody_night)]
+    records = sorted(set(records))
     if records:
         raise Refused(3, "refusing install: existing night records: " + " ".join(records))
     # All read-only refusals precede admission and mkdir.
@@ -1138,11 +1146,57 @@ def validate_install(args, repo):
         if supplied is not None and supplied != schedule["night_calendar"][field.capitalize()]:
             raise Refused(2, "--{} must match the plan calendar".format(field))
     if args.render_only is not None:
-        source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
-        if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
-            print(json.dumps({"input_digests": reservation_input_digests(plan, args.plan)}, sort_keys=True))
+        from joulewise import night_gate
+        chain = Path(plan.chain_path)
+        try:
+            chain_bytes = chain.read_bytes()
+        except OSError:
+            # Legacy render fixtures may name an unavailable chain.
+            chain_bytes = b""
+        try:
+            chain_text = chain_bytes.decode("utf-8")
+        except UnicodeError as exc:
+            # An unreadable chain (legacy fixtures name a missing stub) keeps the
+            # legacy branch above; a chain that exists but is not UTF-8 is
+            # corrupt and must never fall through to a branch that executes it
+            # (Opus 12 #1; fresh eyes 17 F1: never key this on marker bytes).
+            raise Refused(2, "night wrapper is not valid UTF-8: " + str(exc))
+        try:
+            payload_kind = night_gate.probe_payload_kind(chain_text)
+        except ValueError as exc:
+            raise Refused(2, "ambiguous night payload declaration: " + str(exc))
+        if payload_kind == "quiet_predicate_evidence":
+            from joulewise.quiet_predicate_campaign import verify_manifest, PROTOCOL_PATH
+            sha = _digest(chain)
+            try:
+                tokens = Path(plan.chain_sha256_path).read_text().split()
+            except OSError as exc:
+                raise Refused(2, "chain_sha256 sidecar unreadable: " + str(exc))
+            if not tokens or tokens[0] != sha or len(tokens) > 2 or (len(tokens) == 2 and tokens[1] != chain.name):
+                raise Refused(2, "chain_sha256 mismatch")
+            try:
+                manifest_path, manifest, manifest_sha = verify_manifest(plan, chain_text)
+            except (OSError, ValueError) as exc:
+                raise Refused(2, "evidence manifest verification failed: " + str(exc))
+            if night_gate.chain_literal(chain_text, "EVIDENCE_PLAN_PATH") != str(Path(plan.custody_root) / "night_plan.json"):
+                raise Refused(2, "evidence plan path mismatch")
+            ruled = night_gate.RULED_REGISTRATIONS.get(manifest["files"][PROTOCOL_PATH])
+            if ruled is None or not ruled["binds_chain"]:
+                raise Refused(2, "registration is not a chain-bound ruled registration")
+            # Printed digests are advisory: nothing consumes them. The launchd
+            # probe executes the chain verify-only before any install.
+            print(json.dumps({"payload_kind": "quiet_predicate_evidence", "chain_sha256": sha, "input_digests": {
+                str(Path(args.plan).absolute()): "sha256:" + _digest(args.plan),
+                str(manifest_path): "sha256:" + manifest_sha}}, sort_keys=True))
         else:
-            print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
+            source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
+            if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
+                try:
+                    print(json.dumps({"input_digests": reservation_input_digests(plan, args.plan)}, sort_keys=True))
+                except subprocess.SubprocessError as exc:
+                    raise Refused(2, "reservation inspection failed: " + str(exc))
+            else:
+                print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
     if args.render_only is None and not getattr(args, "launchd_probe", False):
         validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
     return prepared
