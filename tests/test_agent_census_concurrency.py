@@ -2,6 +2,11 @@
 
 These are process-list checks, not quiet-machine measurements. Assert owned
 PIDs only: an interactive agent may legitimately be present at the bench.
+
+Bench-only: the marker processes are named claude/codex/t3 and are visible to
+a live watchdog census (a HOLD_CENSUS event, harmless outside a plan span);
+never run this module inside an armed plan span. 300 synchronized rounds per
+pattern keep the old-pattern control decisive (bench 2026-09-20: 300/300 hits).
 """
 
 from __future__ import annotations
@@ -116,12 +121,12 @@ class AgentCensusConcurrencyTests(unittest.TestCase):
             for _ in range(2):
                 reader, writer = context.Pipe(duplex=False)
                 worker = context.Process(target=_overlap_worker,
-                                         args=(argv, barrier, writer, 1000))
+                                         args=(argv, barrier, writer, 300))
                 readers.append(reader)
                 workers.append(worker)
                 worker.start()
                 writer.close()
-            for _ in range(1000):
+            for _ in range(300):
                 for index, reader in enumerate(readers):
                     self.assertTrue(reader.poll(30), "synchronized pgrep worker stalled")
                     pid, returncode, stdout, stderr = reader.recv()

@@ -944,7 +944,7 @@ runpy.run_path(script, run_name='__main__')
                 return self.source.run(argv)
             processes = [peer]
             if foreign_after_go and census_calls:
-                processes.append("42 /usr/bin/claude -p")
+                processes.append("42 /usr/bin/claude -p inspect /usr/bin/pgrep")
             hits = [line for line in processes if re.search(argv[-1], line)]
             census_calls.append(argv)
             return _probe(argv, exit_code=0 if hits else 1,
@@ -978,7 +978,7 @@ runpy.run_path(script, run_name='__main__')
         chain.assert_called_once()
         kill_group.assert_any_call(4242, self.driver.signal.SIGTERM)
         self.assertEqual("night_aborted_agent_present", result["aborted_reason"])
-        self.assertEqual("42 /usr/bin/claude -p\n", result["census_hits"][0]["stdout"])
+        self.assertEqual("42 /usr/bin/claude -p inspect /usr/bin/pgrep\n", result["census_hits"][0]["stdout"])
 
     def test_idle_agent_appearing_after_go_still_aborts_real_chain(self) -> None:
         self.source.census_responses = [

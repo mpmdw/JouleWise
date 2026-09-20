@@ -294,7 +294,7 @@ class NightGateTests(unittest.TestCase):
         ):
             return night_gate.evaluate_night(plan, source.probes())
 
-    def test_production_argv_constants_match_the_t0_author_literals(self) -> None:
+    def test_production_argv_constant_is_the_self_excluding_census_pattern(self) -> None:
         self.assertEqual(
             ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
             night_gate.AGENT_CENSUS_ARGV,
@@ -369,7 +369,10 @@ class NightGateTests(unittest.TestCase):
         observed, refusal = census([peer])
         self.assertIsNone(refusal)
         self.assertEqual("", observed.stdout)
-        for command in ("/usr/bin/claude -p", "node codex mcp-server", "t3 code"):
+        for command in ("/usr/bin/claude -p", "node codex mcp-server", "t3 code",
+                        # Refuter 10 F1: a foreign agent whose argv also names pgrep
+                        # must stay visible; a pgrep-line post-filter would hide it.
+                        "/usr/bin/claude -p inspect /usr/bin/pgrep"):
             with self.subTest(command=command):
                 observed, refusal = census([peer, "42 " + command])
                 self.assertEqual("night_refused_agent_present", refusal.reason)

@@ -244,10 +244,20 @@ The arm-time census classifies every `[c]odex|[c]laude|[t]3` match by ancestry
 and aborts on any foreign process; every owned helper closes before
 REQUEST (ruling 87a F6). Retained production roots remain discoverable;
 the lead confirms the discovery set at the bench (87a F4).
-All concurrently active census producers (driver, chain, watchdog checkout,
-and t0 author) must run at or after the 2026-09-20 census self-match fix, and
-the next plan needs fresh artefacts (manifest/wrapper/digest/plan/probe receipt)
-because `quiet_predicate_campaign.MANIFEST_PATHS` hashes `night_gate.py`.
+Every census producer that can run while the chain runs must carry the
+2026-09-20 self-match fix (`[c]odex|[c]laude|[t]3`): the driver and chain (from
+the clone at the plan's `measurement_head`), the t0 author, and the WATCHDOG
+PROCESS — `com.joulewise.magistrate` binds `AGENT_CENSUS_ARGV` at import, so
+the running watchdog must be RELAUNCHED from a checkout at or after the fix
+before any arm; a stale watchdog's bare-word pgrep is visible to the new
+driver census and reproduces the 09-20 abort (the reverse is not true).
+Verify in `events.jsonl` that the watchdog's census rows carry the bracketed
+argv before arming. Per-night arm scripts re-authored from the trace templates
+must use the bracketed pattern, single-quoted in zsh (unquoted brackets glob).
+`scripts/prewindow_check.sh` is a bench tool run before an arm, never inside
+acquisition. The next plan needs fresh artefacts (manifest/wrapper/digest/plan/
+probe receipt) because `quiet_predicate_campaign.MANIFEST_PATHS` hashes
+`night_gate.py`; no ruled registration hash changes.
 
 **Timeline.** The plan's relative boundaries are: install strictly before
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at
