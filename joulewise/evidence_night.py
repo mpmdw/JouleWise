@@ -747,7 +747,23 @@ def require_no_night_agents(evidence):
     return evidence
 
 
+def refuse_root_attempt_records(candidate):
+    """Fail closed on bench-style attempt records at the candidate root.
+
+    The bench §1.4a procedure journals under ``$STAGE/arm-attempts/NNNNNN/``;
+    the lifecycle's ONE home is ``<staging>/lifecycle/``. Records at the root
+    would otherwise be silently ignored by check/publish-install (fresh eyes,
+    round 2), so their presence refuses here as it does for ``prepare``.
+    """
+    candidate = Path(candidate)
+    for name in ("attempts.json", "arm-attempts"):
+        if os.path.lexists(candidate / name):
+            raise Refused(f"attempt records at the candidate root: {candidate / name}; "
+                          "the lifecycle home is <staging>/lifecycle/")
+
+
 def retry_inventory(state, stage):
+    refuse_root_attempt_records(stage)
     lifecycle = stage / "lifecycle"
     paths = sorted(set(lifecycle.glob("attempts.json")) | set(lifecycle.glob("arm-attempts/*/attempts.json")))
     records = []
@@ -901,6 +917,7 @@ def notice_unused(state, notice_id):
     candidates = set(stage.parent.glob(prefix + "*")) | {stage}
     for candidate in sorted(candidates):
         safe_path(candidate)
+        refuse_root_attempt_records(candidate)
         base = candidate / "lifecycle"
         paths = set(base.glob("arm-attempts/*/install.json")) | set(base.glob("arm-attempts/*/attempts.json"))
         paths.update(base.glob("attempts.json"))

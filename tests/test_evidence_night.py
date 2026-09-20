@@ -773,13 +773,19 @@ class LifecycleTests(unittest.TestCase):
                                  [dict(path=str(path), cause="night_probe_error", route="cold_gate")])
             path.unlink()
 
-    def test_retry_ignores_root_attempt_records(self):
+    def test_retry_refuses_root_attempt_records(self):
+        # Bench-style journals at the candidate root are neither read nor
+        # ignored: check fails closed and names the lifecycle home.
         for relative in ("attempts.json", "arm-attempts/000001/attempts.json",
                          "arm-attempts/000001/install.json"):
             path = self.stage / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("malformed root record must not be read")
-        self.assertEqual(self.checked()["checks"]["retry"]["inventory"], [])
+        with self.assertRaisesRegex(entry.Refused, "attempt records at the candidate root"):
+            entry.retry_inventory(self.state, self.stage)
+        # check wraps the sub-check into its own refusal; the cause is in check.json.
+        report = self.checked(fail="pre-arm checks failed: retry")
+        self.assertIn("attempt records at the candidate root", json.dumps(report["checks"]["retry"]))
 
     def test_notice_reuse_reads_only_lifecycle_records(self):
         for relative in ("attempts.json", "arm-attempts/000001/attempts.json",
@@ -789,6 +795,12 @@ class LifecycleTests(unittest.TestCase):
                 root_path.parent.mkdir(parents=True, exist_ok=True)
                 entry.saved_json(root_path, [{"notice_accepted": "same-id"}])
                 with self.subTest(relative=relative, candidate=candidate):
+                    # A root-level record refuses (fail closed) rather than being ignored.
+                    with self.assertRaisesRegex(entry.Refused, "attempt records at the candidate root"):
+                        entry.notice_unused(self.state, "same-id")
+                    root_path.unlink()
+                    if root_path.parent != candidate:
+                        import shutil as _sh; _sh.rmtree(candidate / "arm-attempts", ignore_errors=True)
                     entry.notice_unused(self.state, "same-id")
                     lifecycle_path = candidate / "lifecycle" / relative
                     lifecycle_path.parent.mkdir(parents=True, exist_ok=True)
@@ -796,7 +808,6 @@ class LifecycleTests(unittest.TestCase):
                     with self.assertRaisesRegex(entry.Refused, "notice id already used by attempt"):
                         entry.notice_unused(self.state, "same-id")
                     lifecycle_path.unlink()
-                root_path.unlink()
 
     def publish(self, **kwargs):
         return entry.publish_install(candidate=self.stage, notice_accepted="message verbatim ",

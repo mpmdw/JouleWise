@@ -230,8 +230,10 @@ with the clone's code. It then writes verdicts and evidence for:
 Lifecycle artifacts are under `<staging>/lifecycle/`: `check.json`,
 `install.json`, `uninstall.json`, `attempts.json`, and `arm-attempts/`.
 Retry inventory and prior-notice discovery read attempt records only from this
-directory. Candidate-root `attempts.json` and `arm-attempts/` are not read;
-their presence makes `prepare` refuse with
+directory. Candidate-root `attempts.json` and `arm-attempts/` (the bench
+§1.4a journal location) are never read: `check`, `publish-install` and the
+notice-reuse check refuse "attempt records at the candidate root" (fail
+closed, naming the lifecycle home), and their presence makes `prepare` refuse with
 `unknown or uncheckpointed staging output`. `prepare` owns and ignores
 this mutable directory; it is not sealed, so `prepare → check → prepare`
 continues to verify and print the preparation record. Besides the shared lock,
