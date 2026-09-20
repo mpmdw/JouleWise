@@ -1,0 +1,19 @@
+# Record 26 — magistrate diff gate, replay and terminal review: EVIDENCE-NIGHT-ENTRY-01 slice A (`feat/2026-09-20-evidence-night-entry`, heads `bd17126b` → `8e3b8852`)
+
+## §1 Diff gate (rows 7 and 8), 08:02 PDT 09-20 — every production hunk read
+Slice A (`bd17126b`, seat 22 attempt 2 after ruling 22a): NEW module `joulewise/evidence_night.py` (394 lines), tests, contract. No existing production file changed. Round 1 (`8e3b8852`, seat 25 attempts 1+2 after ruling 25a, +374/−52): closures C1–C9 for refuter 23 (execution) and Opus 24 (contract).
+Design-level answers:
+- **Does `prepare` honour the executors and the process rules?** Yes: it runs the clone's own `write_night_plan`, `gen_evidence_night.py --render-only`, `install_night_agent.sh --render-only` and `run_night.schedule`, under the clone's venv python (`P -B -c …`), so H's code judges H's artefacts; it never sends mail, publishes, installs or runs the chain (argv inventory in record 23: only git, the clone python, pip, the installer render-only). Ruling 22a's boundary (custody root with chain artefacts, no `night_plan.json`) is implemented and documented.
+- **Round 1 closures as dictated:** C1 `plan_id` date+minute (`locations`); C2 `st_dev` equality of staging and custody parents before any clone; C3 `sealed_candidate()` executed in the clone after the wrapper step and on every resume — sidecar, `manifest_for`, `verify_manifest`, chain-source literal vs `tracked_bytes` at H, `RULED_REGISTRATIONS[sha]['binds_chain']` and the registration's own `chain_source_sha256`, `EVIDENCE_PLAN_PATH` == `<custody>/night_plan.json`, `/bin/zsh -n`; C4 pre-clone check with the running `PLAN_MAX_AGE_S`, binding check inside the clone's authoring code (ruling 25a); C5 `prior_records()` refuses any staging dir without a readable record and any custody root without `night_plan.json` not referenced by a record — before default resolution; C6 `staging_lock()` under `<staging_under>/.locks/` before the first staging write, with a post-lock re-read for the selection race; C7 `Refused(Exception)` → 2, anything else → `ERROR:` + traceback → 1; C8 notice draft with registration/chain-source bindings, local/UTC/epoch span triples, attempt = 1 + prior same-date records, "prior candidates for this date"; C9 `interpreter_identity` reused from the clone, `python3.13 --version` and `git fetch origin main` before ancestry, runway WARNING. Bench hardening by the lead: fixture temp names re-drawn until census-clean (`_census_clean_tempdir`), after a random `…t3` suffix tripped the generator's guard in the seat's full run.
+- **Overbuild / prune:** nothing to prune; the module stays single-file and stops at the notice boundary; slice B (façade, pre-arm checks, notice/publish orchestration) remains deferred by design.
+- **Residual noted for slice B:** the never-invokes spy sees in-process `subprocess.run` only (record 24 R6); the real venv build is exercised only by the recipe test (offline); a crashed `prepare.tmp` wedges a staging dir for lead inspection (documented).
+Verdict of the diff gate: MERGE-able pending the delta re-audit (record 27) and replay (§2).
+
+## §2 Replay (row 9)
+(appended: full sharded replay at `8e3b8852` in the branch worktree, `replay-26/full-replay-8e3b8852.log`)
+
+## §3 Fix contract / same-signature (rows 3 and 5)
+Fix contract = brief 25 (dictated closures with counterfactual tests; ruling 25a for C4). Seat 25 proved each closure's test fails against the `bd17126b` module loaded in memory (15 failures + 1 error) and passes on the working tree (13 tests OK). Same-signature: the class "the entry point silently diverges from the bench procedure" (refuter 23) — every named divergence (F1 upper age bound, F3 st_dev, F4 zsh -n, F6 version/fetch) is closed by a check that executes the bench assertion; the delta re-audit rules on survivors.
+
+## §4 Terminal review (row 12)
+(pending)
