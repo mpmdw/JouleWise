@@ -240,48 +240,74 @@ notice timing come from the supplied authorities.
 
 ## Dry-check
 
-Replay from this detached worktree:
+Ed's rule (issue #368): "Every arm dry-check executes the real installer
+render-only path and the real night driver on a fixture, and consumes the
+plists they actually produce. A dry-check that passes while the arm fails is
+worse than none."
+
+Replay from this worktree:
 
 ```zsh
-TZ=America/Los_Angeles PYTHONDONTWRITEBYTECODE=1 /Users/edr/code/JouleWise/.venv/bin/python -B docs/process_traces/2026-09-19-activation-d0b83820/87-arm-scripts-qpe01-pilot/dry-check.py
+TZ=America/Los_Angeles PYTHONDONTWRITEBYTECODE=1 /Users/edr/code/JouleWise/.venv/bin/python -B docs/process_traces/2026-09-19-activation-a743be05/02-arm-scripts-qpe01-pilot-n1-20260919/dry-check.py
 ```
 
-This runs `zsh -n` on every shell script, parses all Python heredocs and helpers,
-then exercises the actual authoring, notice and publication heredocs and the
-assertion-only helper against a fresh `/tmp/qpe01-arm-fixture-*` tree. Tracked
-source/manifest reads use this worktree at H; no clone is made. The fixture
-publication intentionally bypasses the shell's refusal guard only to reproduce
-the integration defect in /tmp. Synthetic receipt bindings and installed-plist
-reads are explicitly mocked. Step 5's actual assertions are exercised with
-matching and corrupted fixture plists. No live custody/staging write, launchctl,
-probe, chain, collector, load, power, email or network operation is exercised.
-The template contains no `--dry` mode. Broad/full repository suites and live
-checks were not run: this is scoped operator-tooling preparation with explicit
-no-clone/no-probe/no-install constraints; the focused fixture checks cover the
-changed assertions. Full-suite and live verification remain lead-owned.
+All fixture writes stay under `/tmp/qpe01-arm-fixture-*` and are removed on
+exit. The check makes a local, shallow Git clone of this worktree's committed
+HEAD (no network), with a fixture `.venv/bin/python` symlink to the supplied
+interpreter. **For the fixture only**, H is this worktree's HEAD, and the plan's
+repo/measurement heads must match that checkout. The separate literal H in
+`arm-env.zsh` must be an ancestor of this worktree's existing `origin/main`;
+the check asserts that separately without fetching or changing the live arm
+pin. Date/epoch substitutions happen only in a temporary environment copy,
+whether the source environment is filled or still contains placeholders.
 
-Observed output (exit 0 means fixture assertions passed, **not arm-ready**):
+The dry-check executes:
 
-```text
-PASS zsh -n arm-env.zsh
-PASS zsh -n step0-precheck.zsh
-PASS zsh -n step1-clone.zsh
-PASS zsh -n step2-author.zsh
-PASS zsh -n step3-notice.zsh
-PASS zsh -n step4-publish-install.zsh
-PASS zsh -n step5-verify-and-exit.zsh
-PASS Python syntax: 8 shell heredocs and 2 helper scripts
-PASS filled environment: local date, minute alignment, all seven boundaries
-PASS unfilled environment refuses with exit 3
-PASS actual authoring heredoc, generator, manifest, source-at-H and registration checks
-PASS generated wrapper zsh -n (wrapper never executed)
-PASS second render refuses existing chain
-CONFIRMED BLOCKER: staged wrapper fails publication-safe guard, exit 3
-PASS wrapper byte drift refuses
-PASS actual notice heredocs: evidence body, byte binding, unaccepted template
-PASS publication heredoc refuses unaccepted notice, owner NO and changed saved bytes
-CONFIRMED BLOCKER: fixture publication preserves bytes but probe binding refuses evidence plan path mismatch
-PASS synthetic receipt validator: schema, verify-only, no collect/load, cleanup, <6 h freshness
-PASS actual step5 assertions on synthetic plists; wrong schedule/argv/root/RunAtLoad refuse
-DRY CHECK COMPLETE: fixture checks passed; staging/publication incompatibility remains BLOCKING
-```
+- `zsh -n` for all bench scripts and Python syntax checks for their heredocs
+  and helpers; the actual authoring, notice and atomic-publication heredocs;
+  manifest, tracked-source, registration and publication-safe assertions;
+  existing refusal cases for altered wrappers, repeat generation and notices.
+- The fixture's real `scripts/install_night_agent.sh --plan STAGED --python PY
+  --render-only RENDER_DIR` before publication, then the same command with
+  the published plan after `os.replace`, using a fresh directory for each render.
+  Both must exit 0 and print evidence
+  `payload_kind` JSON. Each must produce the night, dead-man and probe plists;
+  night/dead-man bytes must match between renders. The plan, wrapper, manifest
+  and both hash sidecars must retain their sealed bytes.
+- Real `run_night.py preflight --plan` and `schedule --plan`, then
+  `run_night.probe_night` through a real supervisor process and the actual
+  verify-only chain. It checks supervisor/chain process identities,
+  verify-only/no-collect/no-load flags and `validate_probe_receipt`, then
+  mutates the real receipt to retain schema, flag, cleanup and freshness
+  refusal coverage.
+- Step 5's unchanged Python assertions against the actual rendered plists
+  copied to a fake LaunchAgents directory. Wrong schedule, argv, working root
+  and RunAtLoad cases mutate these real plists; none is manufactured.
+
+The supervisor uses the same sole census stub as
+`tests/test_evidence_arm_sequence.py`: `_probe_group_absent` returns true.
+The real supervisor still performs process-group termination/reaping and
+computes `cleanup_proven`; this is not live host-census proof. A fixture
+`claude` executable that exits 99 satisfies installer discovery, matching
+`EvidenceFixture`; render-only must not execute the courier. Step 5 substitutes
+only `Path.home()` and the response to `launchctl list`; all other subprocess
+calls remain real. No actual launchctl, installation in the user's LaunchAgents,
+powermetrics, collection, load, email, network or live custody operation occurs.
+The bench shell scripts themselves are not run wholesale.
+
+Success ends with `DRY CHECK COMPLETE` and exit 0. This validates the fixture
+composition at the worktree HEAD; it does not certify that the different live
+arm H works or that the machine is arm-ready. Existing bench blockers above
+remain lead-owned. The negative control ran the revised check against a disposable local checkout
+at `0959e613`. It failed on the first real installer call before publication,
+probing or step 5: the installer printed `CalledProcessError` for the chain's
+exit status 2 and itself returned 1. This reproduces the pre-fix render-only
+failure without changing the source installer. An initial attempt to patch
+only the fixture installer was refused earlier because that tracked file is
+included in the sealed manifest; using the historical checkout preserves
+manifest integrity.
+
+Verification is scoped to this operator tooling: the full dry-check, dispatch
+regression and composed arm-sequence test cover the changed path. No production
+code changes; the full repository suite and live/hardware gates remain with
+the lead.
