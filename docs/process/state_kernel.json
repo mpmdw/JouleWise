@@ -2713,7 +2713,7 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Stop test fixtures from tripping the machine census by accident. The census refuses process or path names that contain agent-harness markers such as ; a random temporary directory name (for example ) can contain that substring by chance, and the evidence-night generator then refuses the fixture, failing an unrelated test once in a while (observed twice on 2026-09-19 by two independent review seats and once at the lead's bench). Make fixture temp names use an alphabet or prefix that cannot match a census marker, or anchor the census marker so a random substring cannot match.",
+      "goal": "Stop test fixtures from tripping the machine census by accident. The census refuses process or path names that contain agent-harness markers such as `t3`; a random temporary directory name (for example `/tmp/qpe-fixture-reft3nq6`) can contain that substring by chance, and the evidence-night generator then refuses the fixture, failing an unrelated test once in a while (observed twice on 2026-09-19 by two independent review seats and once at the lead's bench). Make fixture temp names use an alphabet or prefix that cannot match a census marker, or anchor the census marker so a random substring cannot match.",
       "id": "FIXTURE-TMPNAME-CENSUS-SUBSTRING-01",
       "lane": "agent",
       "priority": "p3_tooling",
