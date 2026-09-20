@@ -1,8 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
 # Lead fills ONLY these two values before use; NIGHT_DATE is t0's local date.
-export NIGHT_DATE='__YYYYMMDD__'
-export T0_EPOCH_S='__T0_EPOCH_S__'
+export NIGHT_DATE='20260919'
+export T0_EPOCH_S='1789881000'
 export H='4f2aa185e1dc362b8e299353ce357c873c2f97a0'
 export TZ=America/Los_Angeles PYTHONDONTWRITEBYTECODE=1
 unset PYTHONPATH
