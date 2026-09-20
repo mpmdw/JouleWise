@@ -5345,7 +5345,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-19). Latest report: [T38d — 2026-09-09: rehearsal harvest, stub-chain finding and post-completion cleanup](docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-20). Latest report: [T38m — 2026-09-20: pilot night one ABORTED on a census self-match; harvested; uninstalled](docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md).
 
 ### [ED-EXTERNAL]
 
@@ -5357,12 +5357,12 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
+- CONTINUE — A0 `CENSUS-SELF-MATCH-01`: agent census must not match its own concurrent pgrep. At 00:50:03 PDT 2026-09-20, the driver’s 30 s census (pgrep -lf with codex, claude and t3 alternatives) matched the chain’s per-round census pgrep (pid 79146), aborting pilot night one with night_aborted_agent_present, chain exit 2 and 0/12 envelopes; no foreign agent appears in any record. Cover joulewise/night_gate.py:88 (AGENT_CENSUS_ARGV), joulewise/quiet_admission.py:268, joulewise/arm_readiness_evidence_t0.py:1728, joulewise/arm_census.py:27, joulewise/night_agent_install.py:983 and the watchdog census. Account for roughly 15 tests pinning the literal, joulewise/arm_readiness.py:10149 receipt comparison, and quiet_admission.py in quiet_predicate_campaign.HARNESS_PATHS.
 - CONTINUE — A88 `NIGHT-REHEARSAL-01`: After the watchdog install handoff, run one fresh REHEARSAL_STUB night through the installed LaunchAgent and night-driver courier before any real plan, then send the stage-1 email before the first diagnostic plan is armed.
 - CONTINUE — A139 `PAPER-CUSTODY-SEAM-01`: Finish the shared paper-custody read seam that wraps the existing authentication session, derives all bindings from a clean-Git supply map, replays validators, and returns only family-specific frozen verified objects.
 - CONTINUE — A149 `DECISION-LOG-RATIFY`: Install the ruling-43 addenda for D-078, D-083, D-165, D-166, and D-161 plus the new D-174 submission scope freeze in the decision log.
 - CONTINUE — A153 `D166-PROMPT0-01`: Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.
-- CONTINUE — A254 `INSTALLER-RENDER-ONLY-EVIDENCE-01`: `install_night_agent --render-only` dispatches on the wrapper’s payload kind; evidence plans are statically authenticated (sidecar, sealed manifest, chain-bound registration, sealed published-path literal) and their digests printed without executing the chain; ambiguous payload declarations refuse (exit 2); the calibration branch is byte-identical. `night_gate._check_registration` joins a relative registration_path to the measurement root. The composed arm-sequence test `tests/test_evidence_arm_sequence.py` (author at staging → real generator → real installer render-only → publish → real probe bindings → run_night.probe_night → validate_install with the produced plists) runs in the ordinary suite.
-- CONTINUE — A255 `REHEARSAL-MOCK-FREE-01`: Every arm dry-check executes the real installer render-only path and the real night driver (preflight, schedule, run_night.probe_night) on a fixture and consumes the plists they actually produce; a dry-check that manufactures plists or mocks the installer is non-compliant.
+- CONTINUE — A259 `CI-LEGACY-FIXTURE-LINUX-01`: legacy render fixture names /bin/true (ELF on Linux). Hosted CI at 2f4fc128 is red on test (3.11, 3): 12/65 tests.test_install_night_agent failures, “night wrapper is not valid UTF-8 … byte 0xf0 in position 24” at joulewise/night_agent_install.py:1163. tests/test_install_night_agent.py:103 sets chain_path="/bin/true": absent on macOS but an ELF binary on Ubuntu. Use a never-created path under the fixture’s temporary root, with a loud absence guard.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38d — 2026-09-09: rehearsal harvest, stub-chain finding and post-completion cleanup",
-    "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
+    "label": "T38m — 2026-09-20: pilot night one ABORTED on a census self-match; harvested; uninstalled",
+    "path": "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1027,6 +1027,37 @@
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five (its section 3.3 is the finding, section 5 item 3 the prescription). The audit names joulewise/authentication_io.py as the natural home; that is a suggestion, not a ruling.",
       "stop_card": null
     },
+    "CENSUS-SELF-MATCH-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md (§§2–3: executed abort evidence; §6: critical path and successor-plan ruling)",
+          "docs/process_traces/2026-09-20-activation-21752427/03-consult-census-self-match-design.md (design consult brief; report pending at registration)",
+          "Concurrent-pgrep regression fails at f2427b24 and passes after; every census site covered; real foreign claude, codex and t3 processes still refuse; PR carries the twelve-row ledger."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CENSUS-SELF-MATCH-01/acceptance",
+          "label": "CENSUS-SELF-MATCH-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Concurrent census invocations cannot mistake one another for a foreign agent; every census site is covered and a real foreign claude/codex/t3 process still refuses. A concurrent-pgrep regression FAILS at f2427b24 and PASSES after the cure; PR merges with the twelve-row ledger before a new successor pilot is authored."
+      },
+      "authority": {
+        "label": "Record 01 §6: census cure is the critical path to a new successor pilot",
+        "path": "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "agent census must not match its own concurrent pgrep. At 00:50:03 PDT 2026-09-20, the driver’s 30 s census (pgrep -lf with codex, claude and t3 alternatives) matched the chain’s per-round census pgrep (pid 79146), aborting pilot night one with night_aborted_agent_present, chain exit 2 and 0/12 envelopes; no foreign agent appears in any record. Cover joulewise/night_gate.py:88 (AGENT_CENSUS_ARGV), joulewise/quiet_admission.py:268, joulewise/arm_readiness_evidence_t0.py:1728, joulewise/arm_census.py:27, joulewise/night_agent_install.py:983 and the watchdog census. Account for roughly 15 tests pinning the literal, joulewise/arm_readiness.py:10149 receipt comparison, and quiet_admission.py in quiet_predicate_campaign.HARNESS_PATHS.",
+      "id": "CENSUS-SELF-MATCH-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 0,
+      "status": "active",
+      "status_note": "2026-09-20 activation 21752427 — ACTIVE [AGENT], top of the active set at rank 0; critical path to every future night. Design consult record 03 is a brief; its report was pending at registration. No cure option is selected by this registration.",
+      "stop_card": null
+    },
     "CGV-HARDEN-01": {
       "acceptance": {
         "evidence": [
@@ -1164,6 +1195,36 @@
       "priority": "p3_tooling",
       "rank": 245,
       "status": "queued",
+      "stop_card": null
+    },
+    "CI-LEGACY-FIXTURE-LINUX-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-20-activation-21752427/02-brief-seat-legacy-fixture-linux.md (Linux failure signature, tests-only cure and verification)",
+          "Regression reproduces the non-UTF-8 binary condition before the cure; fixture absence guard and full green hosted matrix after."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CI-LEGACY-FIXTURE-LINUX-01/acceptance",
+          "label": "CI-LEGACY-FIXTURE-LINUX-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every legacy fixture uses a chain path absent on every platform, with a loud guard naming the CI signature if it exists; the full hosted matrix is green."
+      },
+      "authority": {
+        "label": "Record 02: legacy fixture Linux fix-forward brief",
+        "path": "docs/process_traces/2026-09-20-activation-21752427/02-brief-seat-legacy-fixture-linux.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "legacy render fixture names /bin/true (ELF on Linux). Hosted CI at 2f4fc128 is red on test (3.11, 3): 12/65 tests.test_install_night_agent failures, “night wrapper is not valid UTF-8 … byte 0xf0 in position 24” at joulewise/night_agent_install.py:1163. tests/test_install_night_agent.py:103 sets chain_path=\"/bin/true\": absent on macOS but an ELF binary on Ubuntu. Use a never-created path under the fixture’s temporary root, with a loud absence guard.",
+      "id": "CI-LEGACY-FIXTURE-LINUX-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 259,
+      "status": "active",
+      "status_note": "2026-09-20 activation 21752427 — ACTIVE [AGENT], p3_tooling; independent of the census cure. Production installer changes require a separate ruling (record 02).",
       "stop_card": null
     },
     "CI-SHARD-RUNNER-FILE-BASED-01": {
@@ -2680,17 +2741,7 @@
         "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
         "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
       },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "INSTALLER-RENDER-ONLY-EVIDENCE-01 merged on main",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "INSTALLER-RENDER-ONLY-EVIDENCE-01"
-        }
-      ],
+      "dependencies": [],
       "fallback": {
         "action": "use payload-kind dispatch inside the existing installer for tonight’s arm",
         "condition": "the separate evidence entry point has not landed",
@@ -2706,8 +2757,8 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 256,
-      "status": "blocked",
-      "status_note": "2026-09-19 activation a743be05 — BLOCKED [AGENT] on INSTALLER-RENDER-ONLY-EVIDENCE-01 merged, per ruling 09a; Ed #368 item 2.",
+      "status": "queued",
+      "status_note": "2026-09-20 activation 21752427 — READY [AGENT]. INSTALLER-RENDER-ONLY-EVIDENCE-01 and REHEARSAL-MOCK-FREE-01 retired by removal after PR #369 (merge 2f4fc128, 2026-09-19 about 23:00 PDT); the real installer + driver bench rehearsal (seat 11) and the live pilot arm passed every step first time. Ed directive #368 closed. Evidence: docs/process_traces/2026-09-19-activation-a743be05/03-arm-record-qpe01-pilot-n1-20260919.md (§ARMED); RUN_STATE.md block ARMED 23:16:55. The merged installer dependency is cleared; Ed #368 item 2 remains this lane’s authority.",
       "stop_card": null
     },
     "FIXTURE-FAKE-VLLM-LEAK-01": {
@@ -3275,47 +3326,6 @@
       "status_note": "2026-09-16 activation 08ca8197: registered at the interactive session b0ae8462's request from its post-merge review; registration only; not started. The INSTALL-WINDOWS-MULTI-01 status flip is that session's post-merge batch unless it hands it here.",
       "stop_card": null
     },
-    "INSTALLER-RENDER-ONLY-EVIDENCE-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
-          "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
-          "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
-          "Consult 04 + Opus contract lens: bench-verified failure at H2 4f2aa185, CalledProcessError … chain.zsh … exit status 2",
-          "Round 1 c72a7ae7 on fix/2026-09-19-installer-render-only-evidence"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/INSTALLER-RENDER-ONLY-EVIDENCE-01/acceptance",
-          "label": "INSTALLER-RENDER-ONLY-EVIDENCE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "PR merged on main with tests/test_evidence_arm_sequence.py green in hosted CI."
-      },
-      "authority": {
-        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
-        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
-            "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
-          },
-          "rule": "No launchctl in tests."
-        }
-      ],
-      "flags": [],
-      "goal": "`install_night_agent --render-only` dispatches on the wrapper’s payload kind; evidence plans are statically authenticated (sidecar, sealed manifest, chain-bound registration, sealed published-path literal) and their digests printed without executing the chain; ambiguous payload declarations refuse (exit 2); the calibration branch is byte-identical. `night_gate._check_registration` joins a relative registration_path to the measurement root. The composed arm-sequence test `tests/test_evidence_arm_sequence.py` (author at staging → real generator → real installer render-only → publish → real probe bindings → run_night.probe_night → validate_install with the produced plists) runs in the ordinary suite.",
-      "id": "INSTALLER-RENDER-ONLY-EVIDENCE-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 254,
-      "status": "active",
-      "status_note": "2026-09-19 activation a743be05 — ACTIVE [AGENT]. Round 1 c72a7ae7 on fix/2026-09-19-installer-render-only-evidence. No fallback; blocks every evidence-night arm.",
-      "stop_card": null
-    },
     "INSTRUMENT-CADENCE-25G83-01": {
       "acceptance": {
         "evidence": [
@@ -3323,7 +3333,8 @@
           "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
           "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
           "docs/process_traces/2026-09-19-activation-a743be05/06-consult-instrument-cadence-astra.md (completed design/offline analysis, cadence observations and 15-run matrix)",
-          "docs/process_traces/2026-09-19-activation-a743be05/06-consult-artifacts/ (preserved matrix recipe)"
+          "docs/process_traces/2026-09-19-activation-a743be05/06-consult-artifacts/ (preserved matrix recipe)",
+          "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md (§6: successor pilot after the census cure; the aborted first harvest supplies no idle-variance data)"
         ],
         "pointer": {
           "json_pointer": "/tasks/INSTRUMENT-CADENCE-25G83-01/acceptance",
@@ -3340,11 +3351,11 @@
         {
           "evidence": null,
           "kind": "event",
-          "required": "pilot evidence night one harvested, including its raw cadence covariates",
+          "required": "successor pilot night, authored only after CENSUS-SELF-MATCH-01 merges, harvested with usable idle-variance data and raw cadence covariates; record 01 §6",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "PILOT-NIGHT-ONE-HARVEST"
+          "target": "PILOT-SUCCESSOR-NIGHT-HARVEST"
         }
       ],
       "fallback": null,
@@ -3364,7 +3375,7 @@
       "priority": "p1_phase_gate",
       "rank": 257,
       "status": "blocked",
-      "status_note": "2026-09-19 activation a743be05 — BLOCKED on the pilot-night-one harvest, per ruling 09a. [QUIET-MAC] for controlled runs; [AGENT] for design and offline analysis (consult 06 already done). No fallback — the FAIL stands; equivalence is not re-litigated.",
+      "status_note": "2026-09-20 activation 21752427 — BLOCKED on successor-pilot data after CENSUS-SELF-MATCH-01 merges. Pilot night one was harvested but ABORTED on a census self-match with 0/12 envelopes, so the idle-variance data does not exist. docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md §6 requires a NEW successor plan after the cure; no same-plan retry. [QUIET-MAC] for controlled runs; [AGENT] for design and offline analysis (consult 06 already done). No fallback — the FAIL stands; equivalence is not re-litigated.",
       "stop_card": null
     },
     "INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01": {
@@ -6422,45 +6433,6 @@
       "status_note": "2026-09-08: READY; 99co registers the D-165 allowlist line-keying follow-up. FLAG: dictated evidence 99fa concerns GO refusal-code registry validity, not row-pin drift; retain that citation in the T38c report without treating it as proof.",
       "stop_card": null
     },
-    "REHEARSAL-MOCK-FREE-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
-          "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
-          "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
-          "The H2 dry-check passed while step 2 refused at the live arm (activation a743be05 record 03)."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/REHEARSAL-MOCK-FREE-01/acceptance",
-          "label": "REHEARSAL-MOCK-FREE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The pilot-night bench dry-check (docs/process_traces/2026-09-19-activation-a743be05/02-arm-scripts-qpe01-pilot-n1-20260919/dry-check.py) calls the same code path as tests/test_evidence_arm_sequence.py and passes at the arm head; the runbook’s arm procedure names the rule."
-      },
-      "authority": {
-        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
-        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
-      },
-      "dependencies": [],
-      "fallback": {
-        "action": "refuse the arm until the dry-check executes the real installer and night driver and consumes their actual plists",
-        "condition": "the arm dry-check is non-compliant",
-        "pointer": {
-          "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
-          "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
-        }
-      },
-      "fences": [],
-      "flags": [],
-      "goal": "Every arm dry-check executes the real installer render-only path and the real night driver (preflight, schedule, run_night.probe_night) on a fixture and consumes the plists they actually produce; a dry-check that manufactures plists or mocks the installer is non-compliant.",
-      "id": "REHEARSAL-MOCK-FREE-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 255,
-      "status": "active",
-      "status_note": "2026-09-19 activation a743be05 — ACTIVE [AGENT] (Ed #368 item 1). Arm refused until compliant.",
-      "stop_card": null
-    },
     "REISSUE-V3-GENERATION-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -9500,5 +9472,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-19"
+  "updated": "2026-09-20"
 }
