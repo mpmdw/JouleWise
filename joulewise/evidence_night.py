@@ -104,6 +104,10 @@ def verify_lock(root):
 def build_venv(root):
     """The bench step-1 recipe; injected only by offline Python callers."""
     absent(root / ".venv")
+    # The bench step-1 probe; it lives in the builder so that offline tests,
+    # which inject a builder, need no python3.13 on the host (the hosted 3.11
+    # shards have none: post-merge run 35522762217 after PR #372).
+    run(["python3.13", "--version"])
     run(["python3.13", "-m", "venv", ".venv"], cwd=root)
     python = root / ".venv/bin/python"
     prefix = [python, "-B", "-m", "pip", "install", "-q", "-c", "env/mac-measurement-lock.txt"]
@@ -398,7 +402,6 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
         if "clone" not in done:
             absent(root)
             root.parent.mkdir(parents=True, exist_ok=True)
-            run(["python3.13", "--version"])
             run(["git", "clone", "-q", "--no-hardlinks", remote, root])
             run(["git", "-C", root, "checkout", "-q", "--detach", resolved_head])
             run(["git", "-C", root, "fetch", "-q", "origin", "main"])

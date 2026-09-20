@@ -1,0 +1,28 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: ["joulewise/evidence_night.py", "tests/test_evidence_night.py", "docs/contracts/evidence_night_entry.md"]
+
+# EVIDENCE-NIGHT-ENTRY-01 slice B1 — fix round 1 (dictated closures for refuter 32 F1–F3 and Opus 34 findings 1–9)
+
+Cwd is `/Users/edr/code/JouleWise-wt-lifecycle-21752427` on branch `feat/2026-09-20-evidence-night-lifecycle` at `b678b1dc`. Same rules as brief 30 (no canonical/other worktrees; only WRITE_SCOPE; no real launchctl — the fake seam; no mail/network/sudo; no commits). Interpreter `/Users/edr/code/JouleWise/.venv/bin/python`. Do not end your turn before the report. Each closure is dictated; each must have a test that FAILS at `b678b1dc` and PASSES after (prove it by loading the `b678b1dc` module in memory as seat 25 did, or a /tmp copy). Stop with NEEDS_RULING rather than improvise.
+
+## Closures
+B1 (refuter 32 F1 — BLOCKER: recovery destroys pre-existing jobs): (i) `check` gains the bench step-0 gate: refuse when ANY `com.joulewise.night*` label is loaded (installer's typed liveness for both labels, UNKNOWN → refuse) or any night plist / retained plist sidecar exists under `~/Library/LaunchAgents` (paths from `night_agent_install`'s constants — read them); cause `REFUSED: night agents already loaded or plists present: …`. (ii) `publish-install` repeats that gate immediately before publication. (iii) Recovery NEVER uninstalls what it did not install: record the pre-publication liveness of both labels in the attempt record; if the installer refused with `night_agent_already_loaded` (or any refusal BEFORE it bootstrapped anything — read the installer's transaction/rollback semantics in `night_agent_install.py` to know which exit classes leave nothing installed), recovery does NOT call `--uninstall`; it only unpublishes on matching bytes and names the retained state. Tests: two foreign plists/loaded labels → `check` refuses; forced past `check` (test seam) → install rc `night_agent_already_loaded` → recovery leaves both foreign jobs and plists untouched, unpublishes on matching bytes, journal says `foreign_jobs_preserved`.
+B2 (refuter 32 F2): `uninstall` reads and validates `uninstall.json` (and any journal it will append to) BEFORE invoking the installer; corrupt → `REFUSED: malformed uninstall journal` with no mutation; write the new record atomically (see B5).
+B3 (refuter 32 F3): a raw census hit (`pgrep` rc 0 with lines) must be RESOLVED: every raw pid must appear in the classified observation (owned/foreign/workload/unknown); a raw pid absent from the classification → re-observe once, then refuse `REFUSED: unresolved raw census hit pid N`. Test: raw `456 /bin/claude foreign-session` + observation lacking 456 → refuse.
+B4 (Opus 1): lifecycle artefacts live under `<staging>/lifecycle/` (`check.json`, `install.json`, `uninstall.json`, `arm-attempts/`), and `prepare` treats that directory as owned-and-ignored (it is not a sealed artefact); test: `prepare` → `check` → `prepare` again verifies and prints the record.
+B5 (Opus 3): every lifecycle JSON write is atomic (tmp + fsync + `os.replace`, reuse `checkpoint`'s helper); the attempt record is written BEFORE `os.replace` of the plan (phase `publishing`) and updated after each phase.
+B6 (Opus 2 — census evaluated with the caller's imports): derive `AGENT_CENSUS_ARGV` and run the ancestry classification (`arm_census`) INSIDE the clone's python (`P -B -c …`, JSON out), never the caller's imports — as `sealed_candidate` does; test: a fixture clone whose `joulewise/night_gate.py` carries the OLD literal `codex|claude|t3` → `check` reports that argv and (because H lacks the census fix) refuses; a clone with the fixed literal reports the bracketed argv.
+B7 (Opus 4): refuse a notice id already present in any prior attempt record of this candidate or of any candidate with the same date prefix under `<staging_under>` (`REFUSED: notice id already used by attempt …`).
+B8 (Opus 5): `verify` and `publish-install` records carry `launchctl_bin`; when it is not the literal `launchctl`, the record carries `fake_launchctl: true` and `check.json`/`install.json` cannot be marked armable/installed for a real arm (document: a fake-launchctl run is a rehearsal).
+B9 (Opus 6): `sealed_state` runs before any stat of sealed paths; a missing sealed path → `Refused` (exit 2), never `FileNotFoundError` (exit 1); test: publish-install after a successful publication → `REFUSED`.
+B10 (Opus 7): one lock domain — the lifecycle takes `prepare`'s lock file under `<staging_under>/.locks/`.
+B11 (Opus 8/9 nits): `install.json` records `cause` from the installer's refusal class when parseable; `check.json` freshness also bounded by age (refuse if older than 60 minutes); `CENSUS_FIX` and the supervisor predicate cite records 19/21 in a comment and in the contract, with the consequence "every arm needs a supervisor started after the canonical fast-forward".
+B12 (refuter 32 crosswalk gaps): retained-plan discovery requires each `night_plan.json` to be a regular non-symlink file (as step 0 did); document the step-5 night-directory baseline (filename/size/mtime) as deferred to B2 or add it if cheap.
+
+## Verification (paste tails)
+`tests.test_evidence_night tests.test_evidence_arm_sequence tests.test_install_night_agent tests.test_arm_census tests.test_arm_retry` → OK; the counterfactual table (closure → test → fails at b678b1dc → passes); `git diff --stat`.
+
+## Report
+claude-codex-report/v1 envelope for --genre implementation; `pathspec`; the closure table; JSON header under 800 bytes; total under 8 KB.
