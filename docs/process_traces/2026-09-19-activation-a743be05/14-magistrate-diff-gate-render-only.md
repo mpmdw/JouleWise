@@ -1,4 +1,4 @@
-# Record 14 — magistrate diff gate (ledger rows 7/8), INSTALLER-RENDER-ONLY-EVIDENCE-01, head `a997d301` (`git diff 0959e613..a997d301`: 8 files, +527 −9), 22:08 PDT 2026-09-19
+# Record 14 — magistrate diff gate (ledger rows 7/8), INSTALLER-RENDER-ONLY-EVIDENCE-01, head `a997d301` (`git diff 0959e613..a997d301`: 8 files, +527 −9), 22:02 PDT 2026-09-19
 
 Read every production hunk and the new test module in full; the test diffs of the four existing modules skimmed by hunk headers and the night_gate regression read in full.
 
