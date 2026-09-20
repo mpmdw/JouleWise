@@ -31,6 +31,9 @@ job_id and unchanged result), census_errors, and census_clean. Clean is true
 only when all available concurrent/sampler censuses report absence; a hit is
 false and missing/failed evidence is null with a reason. Summary groups and
 reference comparisons keep true, false and unknown census conditions separate.
+Rows also retain every hard-probe worker response (including failed AC and
+thermal probes) and copy the validated session OS build. These are recorded
+evidence, not admission decisions; missing evidence remains explicitly unknown.
 """
 
 from __future__ import annotations
@@ -72,10 +75,11 @@ ALIGNMENT_MODEL = "affine wall clock; production rate-aware bound; PROVISIONAL"
 RAILS = ("cpu_w", "gpu_w", "ane_w", "rail_sum_w", "combined_w", "dram_w")
 ROUND_KEYS = (
     "schema", "session", "state", "repeat", "round", "status", "error",
-    "epoch_s", "boot_id", "load_setting", "round_wall_start_s",
+    "epoch_s", "boot_id", "os_build", "os_build_valid", "load_setting", "round_wall_start_s",
     "round_wall_end_s", "round_mono_start_s", "round_mono_end_s",
     "observation", "observer_cpu_s", "power", "clusters", "cpus",
     "alignment", "raw", "censuses", "census_clean", "census_errors",
+    "hard_probes", "hard_probe_errors",
 )
 
 
@@ -100,6 +104,14 @@ def write_json(path, value):
 def number(value):
     return (float(value) if type(value) in (float, int)
             and math.isfinite(value) else None)
+
+
+def os_build_identity(value):
+    """Validate a recorded build label without guessing it from another field."""
+    if (not isinstance(value, str) or not value or value != value.strip()
+            or any(character.isspace() or not character.isprintable() for character in value)):
+        return None, "OS build missing or malformed in session metadata"
+    return value, None
 
 
 class Clock:
@@ -135,7 +147,9 @@ def command_text(argv):
 
 def identity(pid):
     result = command_text(["/bin/ps", "-p", str(pid), "-o", "lstart="])
-    return reasons({"pid": pid, "start_identity": result if isinstance(result, str) and result else None},
+    # ps pads single-digit days; parse_ps uses the same five tokens joined by
+    # one space. Preserve identity across the two renderings, never across PID reuse.
+    return reasons({"pid": pid, "start_identity": " ".join(result.split()) if isinstance(result, str) and result else None},
                    "ps lstart unavailable" if isinstance(result, str) else result[1])
 
 
@@ -279,6 +293,89 @@ def integrate(frames, start, end, uncertainty_s=0.0):
     }
 
 
+def reduce_interior(frames, anchor, start, duration):
+    """Integrate native interval supports; never rescale a whole-round mean."""
+    result = {"start_epoch_s": start, "end_epoch_s": start + duration,
+              "duration_s": duration, "complete_support": False, "status": "partial",
+              "native_samples": 0, "power": None, "reason": "clock anchor unresolved"}
+    if anchor.get("status") != "bounded":
+        return reasons(result)
+    values = integrate(frames, start, start + duration, anchor["effective_clock_anchor_bound_s"])
+    complete = (not values["span_mismatch"] and all(
+        abs(values["power"]["rail_coverage_s"][rail] - duration) <= 1e-6
+        for rail in ("rail_sum_w", "combined_w")))
+    result.update(values, complete_support=complete, status="complete" if complete else "partial",
+                  native_samples=sum(overlap(start, start + duration, f["start_s"], f["end_s"]) > 0 for f in frames),
+                  reason="complete native support" if complete else "incomplete interior support")
+    return reasons(result)
+
+
+def join_load_log(row, report, before, after):
+    """Join full raw ps counters by PID+lstart and the sampler's monotonic support.
+
+    Requested share and top-ten attribution cannot substitute for this join.
+    Period CPU is integrated only over its native support; gaps stay unknown.
+    """
+    start, end = (row.get("alignment", {}).get(k) for k in ("ps_start", "ps_end"))
+    result = {"status": "unresolved", "workers": [], "reason": "load identity/support unavailable"}
+    if (report.get("boot_id") != row.get("boot_id") or not row.get("boot_id") or
+            report.get("error") or number(start) is None or number(end) is None or end <= start):
+        return result
+    cleanup = report.get("cleanup") or []
+    if (not cleanup or any(c.get("alive") is not False or c.get("exitcode") != 0 for c in cleanup) or
+            {c.get("pid") for c in cleanup} != {w.get("identity", {}).get("pid") for w in report.get("workers", [])}):
+        result["reason"] = "load cleanup incomplete or escalated"
+        return result
+    span = end - start
+    seen = set()
+    for worker in report.get("workers", []):
+        ident = worker.get("identity", {})
+        start_identity = ident.get("start_identity")
+        key = (ident.get("pid"), " ".join(start_identity.split()) if isinstance(start_identity, str) else None)
+        item = {"identity": ident, "status": "unresolved", "reason": "identity missing from both ps endpoints"}
+        if key in seen:
+            raise ValueError("duplicate load worker identity")
+        seen.add(key)
+        first, last = before.get(key), after.get(key)
+        periods = worker.get("periods", [])
+        if first and last and key[1]:
+            support, cpu, calibration, overrun = 0.0, 0.0, 0.0, 0.0
+            first_cpu = last_cpu = 0.0
+            previous = None
+            for period in periods:
+                lo, hi, used = (number(period.get(k)) for k in ("start_mono_s", "end_mono_s", "cpu_used_s"))
+                if lo is None or hi is None or used is None or hi <= lo or used < 0 or (previous is not None and lo < previous - 1e-6):
+                    raise ValueError("invalid or overlapping load period support")
+                previous = hi
+                covered = overlap(start, end, lo, hi)
+                if period.get("calibrating"):
+                    calibration += covered
+                    continue
+                support += covered
+                cpu += used * covered / (hi - lo)
+                first_cpu += used * overlap(start, start + span / 3, lo, hi) / (hi - lo)
+                last_cpu += used * overlap(end - span / 3, end, lo, hi) / (hi - lo)
+                if number(period.get("overrun_cpu_s")) is not None:
+                    overrun += period["overrun_cpu_s"] * covered / (hi - lo)
+            delta = last["cumulative_cpu_seconds"] - first["cumulative_cpu_seconds"]
+            item.update(support_s=support, sampled_cpu_s=delta, delivered_cpu_s=cpu,
+                        calibration_overlap_s=calibration, overrun_cpu_s=overrun,
+                        first_last_delta_cores=(last_cpu - first_cpu) / (span / 3),
+                        worker_stationarity=worker.get("stationarity"),
+                        delivered_busy_cores=cpu / span, sampled_busy_cores=delta / span,
+                        support_model="interval-average CPU delivery over native load periods")
+            if abs(support - span) <= 1e-6 and delta >= 0:
+                item.update(status="joined", reason="worker identity and monotonic support matched")
+            else:
+                item["reason"] = "incomplete load support or regressed process counter"
+        result["workers"].append(item)
+    if result["workers"] and all(w["status"] == "joined" for w in result["workers"]):
+        result.update(status="joined", reason="all load workers matched",
+                      delivered_busy_cores=sum(w["delivered_busy_cores"] for w in result["workers"]),
+                      sampled_busy_cores=sum(w["sampled_busy_cores"] for w in result["workers"]))
+    return result
+
+
 @contextmanager
 def replaced(module, **attributes):
     old = {key: getattr(module, key) for key in attributes}
@@ -361,6 +458,7 @@ def production_round(interval_s, deadline, raw_dir, clock):
     start_cpu = cpu_total()
     observation = error = None
     censuses, census_errors = [], []
+    hard_probes, hard_probe_errors = [], []
     status = "complete"
 
     def task(*args, **kwargs):
@@ -414,6 +512,19 @@ def production_round(interval_s, deadline, raw_dir, clock):
                         census_errors.append({"job_id": job.job_id, "error": str(exc)})
                 else:
                     census_errors.append({"job_id": job.job_id, "error": "census did not complete during round"})
+            elif job.job_id.startswith("smoke-hard-"):
+                # The smoke loop intentionally ignores these values because
+                # it measures observer overhead, not admission. Its cached
+                # worker responses are still the per-round AC/thermal evidence.
+                # Retain raw exit codes/stdout/stderr even when a probe failed.
+                if job.ready():
+                    try:
+                        hard_probes.append({"job_id": job.job_id, "result": job.result()})
+                    except Exception as exc:
+                        hard_probe_errors.append({"job_id": job.job_id, "error": str(exc)})
+                else:
+                    hard_probe_errors.append({"job_id": job.job_id,
+                                              "error": "hard probes did not complete during round"})
         # _BindTask owns process-group cancellation and nonblocking reap. Keep
         # this outside the duration-limited support and include its CPU cost.
         def cleaned(job):
@@ -442,6 +553,7 @@ def production_round(interval_s, deadline, raw_dir, clock):
             "observer_cpu_s_reason": "worker cleanup incomplete" if residue else "SELF + reaped CHILDREN; no subtraction",
             "end_stamp": asdict(support_end), "workers": jobs, "argv": argv_records,
             "censuses": censuses, "census_errors": census_errors,
+            "hard_probes": hard_probes, "hard_probe_errors": hard_probe_errors,
             "cleanup_incomplete": residue}
 
 
@@ -462,7 +574,10 @@ class PowerRecorder:
         stderr = self.path.with_suffix(".stderr")
         with stderr.open("wb") as stream:
             self.process = subprocess.Popen(self.argv, stdin=subprocess.DEVNULL,
-                                            stdout=subprocess.DEVNULL, stderr=stream)
+                                            stdout=subprocess.DEVNULL, stderr=stream,
+                                            start_new_session=True)
+        from joulewise.quiet_predicate_campaign import journal_process
+        journal_process("power", self.process.pid)
         self.timer = threading.Timer(max(0, self.deadline - self.clock.monotonic()), self.request_stop)
         self.timer.daemon = True
         self.timer.start()
@@ -498,11 +613,15 @@ class PowerRecorder:
                     # Do not poll/wait here: reaping the recorder while the
                     # final observer bracket is open would charge the entire
                     # recorder's CPU to that one round's RUSAGE_CHILDREN.
+                    # Signal the supervised sudo process, which forwards TERM
+                    # using its launch privilege; do not signal the root group.
                     try:
                         os.kill(self.process.pid, signal.SIGTERM)
                         self.metadata["term_sent"] = True
                     except ProcessLookupError:
                         pass
+                    except PermissionError as exc:
+                        self.metadata.setdefault("signal_errors", []).append(str(exc))
                     self.kill_timer = threading.Timer(5, self.force_stop)
                     self.kill_timer.daemon = True
                     self.kill_timer.start()
@@ -517,6 +636,8 @@ class PowerRecorder:
                     self.metadata["kill_sent"] = True
                 except ProcessLookupError:
                     pass
+                except PermissionError as exc:
+                    self.metadata.setdefault("signal_errors", []).append(str(exc))
 
     def finish(self):
         self.request_stop()
@@ -577,6 +698,10 @@ def new_row(session, args, index, start, end, result):
     clean, reason = census_condition(censuses, errors)
     row.update(censuses=censuses or None, census_errors=errors,
                census_clean=clean, census_clean_reason=reason)
+    row["hard_probes"] = result.get("hard_probes") or None
+    row["hard_probe_errors"] = result.get("hard_probe_errors") or []
+    if row["hard_probes"] is None:
+        row["hard_probes_reason"] = "no hard-probe worker completed during round"
     if not censuses:
         row["censuses_reason"] = "no census completed during round"
     row["error_reason"] = "no round error" if row["error"] is None else "round failed or incomplete"
@@ -604,7 +729,15 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
         def metadata_reader():
             boot = command_text(quiet_admission.BOOT_ARGV)
             build = command_text(["/usr/bin/sw_vers", "-buildVersion"])
-            return reasons({"boot_id": boot if isinstance(boot, str) else None,
+            version = command_text(["/usr/bin/sw_vers"])
+            executable = Path(pm.POWER_METRICS)
+            try:
+                power_identity = {"path": str(executable), "sha256": hashlib.sha256(executable.read_bytes()).hexdigest()}
+            except OSError as exc:
+                power_identity = {"path": str(executable), "sha256": None, "sha256_reason": str(exc)}
+            return reasons({"sw_vers": version if isinstance(version, str) else None,
+                            "powermetrics_identity": power_identity,
+                            "boot_id": boot if isinstance(boot, str) else None,
                             "os_build": build if isinstance(build, str) else None,
                             "collector": identity(os.getpid()), "argv": sys.argv,
                             "metadata_errors": [v[1] for v in (boot, build) if isinstance(v, tuple)]})
@@ -619,8 +752,12 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                "network_time_provenance_reason": "not established by this desk harness",
                "observer_definition": "SELF + reaped CHILDREN over production smoke incl. raw/stamp hooks; recorder CPU excluded",
                "round_workers": [], "power": None, "error": None, "error_rounds": 0}
+    envelope_cpu_start = cpu_total()
     start = clock.stamp()
-    deadline = start.monotonic_before_s + args.duration_s
+    scheduled = getattr(args, "envelope_start_mono_s", None)
+    deadline = (start.monotonic_before_s if scheduled is None else scheduled) + args.duration_s
+    session["scheduled_mono_s"] = scheduled
+    session["start_drift_s"] = start.monotonic_before_s - scheduled if scheduled is not None else None
     session["start_stamp"] = asdict(start)
     session["deadline_mono_s"] = deadline
     write_json(out / "session.json", session)
@@ -656,6 +793,10 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                 row["status"] = "partial"
                 row["error"] = row["error"] or "round exceeded collection duration"
             row["boot_id"] = metadata.get("boot_id")
+            row["os_build"], build_error = os_build_identity(session.get("os_build"))
+            row["os_build_valid"] = build_error is None
+            if build_error is not None:
+                row["os_build_reason"] = build_error
             session["round_workers"].append({"round": index, "workers": result.get("workers", []),
                                              "argv": result.get("argv", []),
                                              "identities": [json.loads(p.read_text()) for p in sorted(round_dir.glob("*-identity.json"))]})
@@ -699,9 +840,19 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
             elif cleanup and cleanup["returncode"] not in (0, -signal.SIGTERM, 128 + signal.SIGTERM):
                 session["error"] = (session["error"] or "") + f"; powermetrics exit {cleanup['returncode']}"
         session["end_stamp"] = asdict(clock.stamp())
+        session["whole_envelope_observer_cpu_s"] = cpu_total() - envelope_cpu_start
+        session["whole_envelope_observer_definition"] = "SELF + all reaped CHILDREN, including power recorder; never subtracted"
     session["error_rounds"] = sum(row["status"] == "error" for row in rows)
     if session["error_rounds"] and not any(row["status"] == "complete" for row in rows):
         session["error"] = session["error"] or "no round completed successfully"
+    if getattr(args, "interior_s", None) is not None:
+        interior_anchor = dict(anchor)
+        if anchor.get("status") == "bounded":
+            interior_anchor["effective_clock_anchor_bound_s"] += start.monotonic_after_s - start.monotonic_before_s
+        # Use the wall/monotonic mapping in the actual start bracket to map
+        # the frozen scheduled start, preserving the bracket uncertainty.
+        interior_epoch = start.epoch_s - (session["start_drift_s"] or 0) + args.interior_offset_s
+        session["interior"] = reduce_interior(frames, interior_anchor, interior_epoch, args.interior_s)
     for row in rows:
         align = row["alignment"]
         why = str(anchor.get("detail", anchor.get("reason", "clock anchor unresolved")))
@@ -879,6 +1030,8 @@ def load(args, *, join_grace_s: float = 5.0):
               "qos": args.qos, "profile": args.profile, "seed": args.seed,
               "implementation": "OS processes with native thread CPU clocks; independent GILs",
               "calibration_s": 5, "workers": [], "error": None}
+    boot = command_text(quiet_admission.BOOT_ARGV)
+    report["boot_id"] = boot if isinstance(boot, str) else None
     try:
         for index in range(count):
             parent, child = context.Pipe()
@@ -958,6 +1111,7 @@ def aggregate(rows):
     result = {"rounds": len(rows), "complete_rounds": len(complete),
               "partial_rounds": sum(r["status"] == "partial" for r in rows),
               "error_rounds": sum(r["status"] == "error" for r in rows),
+              "os_build_unavailable_rounds": sum(os_build_identity(r.get("os_build"))[0] is None for r in rows),
               "quantiles": {}, "power": {}, "coverage_s": {}, "alignment_bound_w": {}}
     for key in ("busy_cores", "host_busy_cores", "observer_cpu_s"):
         result["quantiles"][key] = quantiles(
@@ -983,10 +1137,43 @@ def aggregate(rows):
     return reasons(result, "no covered evidence or finite alignment bound")
 
 
-def summarize(directory, reference_state=None):
+def summarize(directory, reference_state=None, load_logs=()):
     directory = Path(directory)
     paths = sorted(directory.rglob("rounds.jsonl"))
-    rows = [json.loads(line) for p in paths for line in p.read_text().splitlines() if line.strip()]
+    rows = []
+    reports = [(Path(path), json.loads(Path(path).read_text())) for path in load_logs]
+    for path in paths:
+        session_path = path.parent / "session.json"
+        session = json.loads(session_path.read_text()) if session_path.exists() else None
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            # Older rows may lack the build; preserve that unknown rather than
+            # retroactively filling it from the session. A supplied identity
+            # must agree with its own session, never with a neighbouring file.
+            build, build_error = os_build_identity(row.get("os_build"))
+            if "os_build" in row and session is not None:
+                expected, _ = os_build_identity(session.get("os_build"))
+                if row.get("session") != session.get("session") or build != expected:
+                    raise ValueError(f"row/session OS build identity mismatch: {path}")
+            if "os_build" in row:
+                row["os_build"] = build
+                row["os_build_valid"] = build_error is None
+                if build_error is not None:
+                    row["os_build_reason"] = build_error
+            joins = []
+            if reports:
+                raw = path.parent / "raw" / f"round-{row['round']:04d}"
+                try:
+                    before = quiet_admission.parse_ps((raw / "ps_before.txt").read_text())
+                    after = quiet_admission.parse_ps((raw / "ps_after.txt").read_text())
+                except (OSError, ValueError):
+                    before, after = {}, {}
+                joins = [{"load_log": str(source), "load_log_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                          **join_load_log(row, report, before, after)} for source, report in reports]
+            row["load_joins"] = joins
+            rows.append(row)
     if any(r.get("schema") != SCHEMA for r in rows):
         raise ValueError("unsupported evidence schema")
     # Older v1 rows lack whole-round coverage: never infer clean from only
@@ -1049,6 +1236,8 @@ def summarize(directory, reference_state=None):
                        "network_time_provenance_reason": common_provenance("network_time_provenance_reason",
                            "unavailable or differs across sessions; see session_provenance"),
                        "session_provenance": provenance,
+                       "load_joins": [{"session": r["session"], "round": r["round"], "joins": r["load_joins"]}
+                                      for r in rows if r["load_joins"]],
                        "groups": groups, "sources": [str(p.relative_to(directory)) for p in paths],
                        "aggregation": "complete rounds only; duration-weighted rail coverage; reference pooled across repeats within the same census_clean condition, boot_id and OS build only; bounds add without independence assumptions"})
     for field in ("reference", "alignment_model"):
@@ -1118,6 +1307,9 @@ def parser():
     collection.add_argument("--power-interval-ms", type=int, default=100)
     collection.add_argument("--out", required=True)
     collection.add_argument("--load-cores", type=nonnegative, help="known injected increment; omitted means unknown")
+    collection.add_argument("--interior-offset-s", type=nonnegative, default=60)
+    collection.add_argument("--interior-s", type=positive)
+    collection.add_argument("--envelope-start-mono-s", type=nonnegative, help=argparse.SUPPRESS)
     collection.add_argument("--power", action=argparse.BooleanOptionalAction, default=True)
     workload = commands.add_parser("load", help="native OS processes, preallocated profiles, thread CPU clocks")
     workload.add_argument("--cores", required=True, type=nonnegative)
@@ -1130,6 +1322,7 @@ def parser():
     summary = commands.add_parser("summarize", help="offline descriptive JSON and Markdown")
     summary.add_argument("--in", dest="input", required=True)
     summary.add_argument("--reference-state")
+    summary.add_argument("--load-log", action="append", default=[])
     worker = commands.add_parser("_sample", help=argparse.SUPPRESS)
     worker.add_argument("--sample-interval-s", type=float, required=True)
     worker.add_argument("--observer-pid", type=int, required=True)
@@ -1142,6 +1335,8 @@ def parser():
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "_exec":
+        from joulewise.quiet_predicate_campaign import journal_process
+        journal_process("sampler_or_probe", os.getpgrp())
         write_json(Path(argv[1]), {**identity(os.getpid()), "argv": argv[2:],
                                   "stamp": asdict(Clock().stamp())})
         os.execv(argv[2], argv[2:])
@@ -1153,11 +1348,19 @@ def main(argv=None):
             quiet_admission.top_argv(args.sample_interval_s)
             if args.power_interval_ms <= 0:
                 raise ValueError("power interval must be positive")
-            session, _ = collect(args)
+            if args.interior_s is not None and args.interior_offset_s + args.interior_s > args.duration_s:
+                raise ValueError("interior must fit inside collection duration")
+            def terminate(_number, _frame):
+                raise KeyboardInterrupt("collector termination requested")
+            previous = signal.signal(signal.SIGTERM, terminate)
+            try:
+                session, _ = collect(args)
+            finally:
+                signal.signal(signal.SIGTERM, previous)
             return int(session["error"] is not None)
         if args.command == "load":
             return int(load(args)["error"] is not None)
-        summarize(args.input, args.reference_state)
+        summarize(args.input, args.reference_state, args.load_log)
         return 0
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -43,6 +43,19 @@ plainly and say that no further night may be armed until a person clears
 them. Report the verdict, the reason, both timestamps, and whether
 termination was proven.
 
+For a quiet-predicate evidence payload, read `night/evidence_outcome.json`,
+`night/evidence_cleanup.json`, `night/evidence_envelopes.jsonl`,
+`night/evidence/summary.json` and `night/evidence/summary.md` under
+`{custody_root}` when present. Describe the attempted and retained envelopes,
+each named exclusion, incomplete support, recorded spread, busy-core
+covariates, and whether collector, recorder and sampler cleanup was proven.
+The envelope directories preserve `rounds.jsonl`, `session.json` and native
+power files; `night/evidence_busy_cores.jsonl` is the separate recorder journal.
+Missing files or an unset confidence bound are limitations to report plainly.
+These summaries are PROVISIONAL descriptions. You have no scientific decision
+authority: do not select a cutoff, invent a confidence method, authorize block
+two, reinterpret exclusions, or turn a successful probe into capture authority.
+
 Email Ed at claude.ai.copper531@passmail.net. Use plain words. State the
 verdict, the chain exit code, any refusal reason and detail, and the results
 branch name `night-results/<plan_id>` (updated 2026-09-15,
