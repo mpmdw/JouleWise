@@ -21,10 +21,11 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
-    # 2026-09-19 activation a743be05: register INSTALLER-RENDER-ONLY-EVIDENCE-01: 215 + 1 = 216.
-    "INSTALLER-RENDER-ONLY-EVIDENCE-01",
-    # 2026-09-19 activation a743be05: register REHEARSAL-MOCK-FREE-01: 216 + 1 = 217.
-    "REHEARSAL-MOCK-FREE-01",
+    # 2026-09-20 activation 21752427: retire INSTALLER-RENDER-ONLY-EVIDENCE-01 and
+    # REHEARSAL-MOCK-FREE-01 (PR #369): 220 - 2 = 218; register CENSUS-SELF-MATCH-01
+    # (pilot night one aborted on a census self-match) and CI-LEGACY-FIXTURE-LINUX-01: 218 + 2 = 220.
+    "CENSUS-SELF-MATCH-01",
+    "CI-LEGACY-FIXTURE-LINUX-01",
     # 2026-09-19 activation a743be05: register EVIDENCE-INSTALLER-SPLIT-01: 217 + 1 = 218.
     "EVIDENCE-INSTALLER-SPLIT-01",
     # 2026-09-19 activation a743be05: register INSTRUMENT-CADENCE-25G83-01: 218 + 1 = 219.
