@@ -323,7 +323,7 @@ class PrepareTests(unittest.TestCase):
         self.assertIn("attempt 1; prior candidates for this date: none", draft)
         self.assertNotIn("earlier abort", draft)
 
-    def test_preclone_recipe_and_runway_warning(self):
+    def test_prepare_path_needs_no_python313_and_warns_on_short_runway(self):
         self.kw["t0"] = str((int(time.time()) // 60 + 30) * 60)
         calls = []; original = entry.run; errors = io.StringIO()
         def spy(argv, **kwargs):
