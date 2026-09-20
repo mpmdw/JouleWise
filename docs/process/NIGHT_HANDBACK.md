@@ -264,9 +264,12 @@ the supervisor as "not running" once it is reparented, so it is not the
 source — and `null`, or a pid that `ps -o pid=,lstart=,command= -p "$pid"`
 cannot find or whose command line does not name `magistrate_watchdog.py`
 (pid reuse), means no resident supervisor and nothing stale; a live pid
-must show a start later than the move, and any resident supervisor alive
-at arm time blocks the arm (the magistrate session exits before REQUEST
-and the supervisor ends with it; re-check after it has).
+whose start is later than the move imported the fixed module and is fine
+(it ends with its magistrate session before REQUEST — the arming
+magistrate's own supervisor is always alive at arm time); a live supervisor
+that predates the move blocks the arm (re-check after it has ended). "The
+move" is the canonical checkout's last HEAD change:
+`git -C /Users/edr/code/JouleWise reflog -1 --date=unix`.
 Per-night arm scripts re-authored from the trace templates must use the
 bracketed pattern, single-quoted in zsh (unquoted brackets glob).
 `scripts/prewindow_check.sh` is a bench tool run before an arm, never inside

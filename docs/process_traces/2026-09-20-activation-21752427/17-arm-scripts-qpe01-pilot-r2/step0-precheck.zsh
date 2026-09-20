@@ -49,8 +49,23 @@ if [[ -n "$resident_pid" ]]; then
     if [[ "$command_line" == *magistrate_watchdog.py* ]]; then
       started="$weekday $month $day $start_clock $year"
       print -r -- "$resident_ps"
-      print -u2 -- "REFUSED: a resident supervisor is alive (pid $resident_pid, started $started); it must end before arming"
-      exit 3
+      # The arming magistrate's own supervisor is always alive here; it is
+      # harmless iff it started AFTER the canonical checkout's last HEAD move
+      # (it then imported the fixed module) — consult 18 F3, record 19.
+      start_epoch="$(date -j -f '%a %b %d %T %Y' "$started" +%s)" || {
+        print -u2 -- 'REFUSED: cannot parse the resident supervisor start time'; exit 3
+      }
+      move_ref="$(git -C /Users/edr/code/JouleWise reflog -1 --date=unix --format=%gd)" || {
+        print -u2 -- 'REFUSED: cannot read the canonical checkout reflog'; exit 3
+      }
+      move_epoch="${${move_ref#*@\{}%\}}"
+      [[ "$move_epoch" == <-> ]] || { print -u2 -- "REFUSED: unparseable reflog stamp $move_ref"; exit 3; }
+      if (( start_epoch > move_epoch )); then
+        print -- "OK: resident supervisor pid $resident_pid started $started, after the canonical checkout's last move ($move_epoch); it imported the current module"
+      else
+        print -u2 -- "REFUSED: a resident supervisor predates the canonical checkout's last move (pid $resident_pid, started $started, move $move_epoch); it must end before arming"
+        exit 3
+      fi
     fi
   fi
 fi
