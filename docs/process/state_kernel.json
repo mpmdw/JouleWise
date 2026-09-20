@@ -2661,6 +2661,36 @@
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
+    "EVIDENCE-PLAN-PATH-BINDING-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/87-arm-scripts-qpe01-pilot-astra.md (fixture reproduction of the refusal)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/87a-ruling-evidence-plan-path-binding.md (the ruled fix)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/EVIDENCE-PLAN-PATH-BINDING-01/acceptance",
+          "label": "EVIDENCE-PLAN-PATH-BINDING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The evidence wrapper's plan-path export is derived from the plan's custody root (the published night_plan.json), the installer refuses an evidence install from any other plan path, the fixture places its plan at the published name, and regressions cover staged-then-published acceptance, staged-path refusal and byte-equal wrappers from either copy; the arm-script dry-check no longer reports the blocker; merged through the normal gate."
+      },
+      "authority": {
+        "label": "2026-09-19 evening registration by the project lead (ruling 87a)",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/87a-ruling-evidence-plan-path-binding.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make the unattended evidence night armable under the runbook's arm order. The night plan is authored at a staging path, emailed, and only then moved into its custody root, so the watchdog cannot discover it before the owner had the chance to object. The evidence wrapper generator wrote the STAGING path into the wrapper as the plan location, while the installer's verify-only probe compares that literal with the PUBLISHED path, so every evidence night would refuse installation with `evidence plan path mismatch`. Seat 87 found this on a fixture while preparing pilot night one. Fix: the wrapper binds the path derived from the plan's own content (`<custody_root>/night_plan.json`), the probe compares against the same derivation and refuses an install from any other path, and the tests move the fixture plan to the published name.",
+      "id": "EVIDENCE-PLAN-PATH-BINDING-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 254,
+      "status": "queued",
+      "status_note": "2026-09-19 evening — IN PROGRESS [AGENT]: seat 88 on fix/2026-09-19-evidence-plan-path-binding; blocks the pilot-night arm.",
+      "stop_card": null
+    },
     "FIXTURE-FAKE-VLLM-LEAK-01": {
       "acceptance": {
         "evidence": [
@@ -6917,36 +6947,6 @@
       "priority": "p1_phase_gate",
       "rank": 233,
       "status": "partial",
-      "stop_card": null
-    },
-    "STAGE-A-EVIDENCE-EXECUTOR-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/ (independent adjudication packet for the unattended evidence executor)",
-          "docs/process_traces/2026-09-19-activation-d0b83820/10a-adjudication-stage-a-executor.md (project lead's synthesis of the executor rulings)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/STAGE-A-EVIDENCE-EXECUTOR-01/acceptance",
-          "label": "STAGE-A-EVIDENCE-EXECUTOR-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The executor implements the adjudicated registration table, chain-source binding, typed evidence probe and single-export dispatch, authoring tool, and both contract amendments without changing the version-2 diagnostic-plan schema. The frozen pilot uses twelve 600 s envelopes with 480 s interiors, δ = 1 J, and block-two sizing from the upper 90% confidence bound on paired spread; it preserves the pre-registered \"no cutoff qualifies\" branch. Complete contract and execution refutation reviews, re-audit the resulting changes, obtain an independent counter-review, replay the full tests, and submit a pull request before pilot night one under the night handoff contract. Quiet-machine collection remains lead-controlled with no agent session active."
-      },
-      "authority": {
-        "label": "2026-09-19 afternoon registration by the project lead",
-        "path": "docs/process_traces/2026-09-19-activation-d0b83820/57-brief-kernel-registration-2.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Build an unattended executor for Stage A, the initial evidence campaign that will derive the night gate's quiet-admission cutoff: the maximum busy-core level at which an unattended measurement may start. Busy cores are busy processor seconds per elapsed second; 1.0 means one fully busy core. No ruling has activated this threshold. The cold gate, an independent adjudication, ruled a separate evidence payload (the program run overnight) under the unchanged version-2 diagnostic plan. Implement a ruled-registration table in the night gate, keyed by a digest (a cryptographic content hash) and bound to the chain-source digest, the hash of the tracked execution-script template. Add a typed evidence probe receipt, a structured record of verification without measurement, dispatched by one `NIGHT_PAYLOAD_KIND` environment-variable export; amend `docs/process/NIGHT_HANDBACK.md`, the night handoff contract, and the runbook's verify-only probe row. Add the authoring tool `scripts/gen_evidence_night.py` and freeze the idle-only pilot protocol before collection: twelve 600 s envelopes (scheduled measurement intervals), each with a 480 s interior used for analysis; delta (δ), the target energy difference, is 1 joule (J). Size block two, the follow-up measurement block, from the upper confidence bound on the paired spread, the variability of paired energy differences. Pre-register the branch that concludes \"no cutoff qualifies\".",
-      "id": "STAGE-A-EVIDENCE-EXECUTOR-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 248,
-      "status": "active",
-      "status_note": "2026-09-19 afternoon — ACTIVE [AGENT] for implementation on `feat/2026-09-19-stage-a-evidence-executor`: parts 1–2 landed on that branch; part 3 implements the sizing statistic. Next: contract and execution refutation reviews, re-audit of the changes, independent counter-review, full test replay, pull request, then pilot night one under `docs/process/NIGHT_HANDBACK.md`, the night handoff contract. The pilot requires a quiet machine with no agent session.",
       "stop_card": null
     },
     "SUPERSESSION-CHAINED-RECOVERY-01": {
