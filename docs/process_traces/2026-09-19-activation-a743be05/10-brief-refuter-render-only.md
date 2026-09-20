@@ -3,9 +3,9 @@ BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: []
 
-# REFUTER (execution lens, read-only) — INSTALLER-RENDER-ONLY-EVIDENCE-01 at head `__HEAD__` on `fix/2026-09-19-installer-render-only-evidence`
+# REFUTER (execution lens, read-only) — INSTALLER-RENDER-ONLY-EVIDENCE-01 at head `a997d30178fb2cb3239f83d779403660859c1146` on `fix/2026-09-19-installer-render-only-evidence`
 
-Cwd is a detached read-only worktree at `__HEAD__`. Never touch /Users/edr/code/JouleWise (canonical root) or any other worktree. Interpreter /Users/edr/code/JouleWise/.venv/bin/python. Write only under /tmp. No launchctl, sudo, powermetrics, network. Do not end your turn before the report.
+Cwd is a detached read-only worktree at `a997d30178fb2cb3239f83d779403660859c1146`. Never touch /Users/edr/code/JouleWise (canonical root) or any other worktree. Interpreter /Users/edr/code/JouleWise/.venv/bin/python. Write only under /tmp. No launchctl, sudo, powermetrics, network. Do not end your turn before the report.
 
 Your job is to BREAK the change, by execution, not by reading. Contract: ruling 04a `/Users/edr/code/JouleWise-wt-mag-a743be05/docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md` (R1–R5 + the addendum: Ed's directive #368 item 1, no mocked rehearsals). Diff under review: `git diff 0959e613..HEAD` (production: `joulewise/night_agent_install.py`, `joulewise/night_gate.py`; tests: `tests/test_night_agent_install.py`, `tests/test_gen_evidence_night.py`, `tests/test_install_night_agent.py`, `tests/test_night_gate.py`, `tests/test_evidence_arm_sequence.py`).
 
