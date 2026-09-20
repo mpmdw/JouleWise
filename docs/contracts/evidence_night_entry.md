@@ -156,6 +156,14 @@ recorded observation time; it is not notice/veto clearance or quiet-machine
 validation. The lead must review workloads, stop/directive channels and all
 readable NO relays, then leave with every owned helper before REQUEST.
 
+All four lifecycle commands expose the installer's `--launchctl-bin`
+seam. `check`, `publish-install` and `verify` record `launchctl_bin`; any value
+other than literal `launchctl` records `fake_launchctl: true`. A fake-launchctl
+run is a **rehearsal, never armable**: check sets `armable: false`,
+`rehearsal_ready: true` only when its checks pass; publication requires that
+matching fake executable and records `outcome: rehearsal_installed`,
+`installed: false`. Such records cannot authorize a real arm.
+
 Each successful subcommand prints one JSON object and exits 0. A known
 refusal prints one `REFUSED:` line and exits 2; an unexpected defect prints
 `ERROR:` plus its traceback and exits 1. Installer refusals retain their
@@ -203,17 +211,28 @@ with the clone's code. It then writes verdicts and evidence for:
    Every raw PID must resolve to owned, foreign, workload or unknown evidence.
    An absent raw PID triggers one re-observation, then
    `REFUSED: unresolved raw census hit pid N`; unknown evidence also refuses.
+   A raw row without a parseable PID refuses as
+   `REFUSED: unresolved raw census row: …`.
    Any FOREIGN PID, observed workload or unresolved observation diagnostic
    refuses. Real-class `publication_blocked == False` is not clearance.
    Owned ancestry PIDs are listed with the departure instruction.
-6. Existing `attempts.json`, `arm-attempts/*/attempts.json` and B1 install
-   journals are inventoried through `arm_retry.classify_abort`. Unknown or
+6. Existing `<staging>/lifecycle/attempts.json`,
+   `<staging>/lifecycle/arm-attempts/*/attempts.json` and B1 install journals
+   are inventoried through `arm_retry.classify_abort` inside the clone's
+   `P -B -c` interpreter, with JSON in/out and cwd set to the clone. Unknown or
    cold-gate causes refuse. A bare installer nonzero is **not** relabeled
    `arm_transport`. This is refusal routing, not a call to `retry_allowed`:
    fresh notice and veto evidence for that function belongs to B2/the bench.
+   A non-list attempt inventory refuses as `malformed attempt inventory: …`;
+   notice-reuse discovery refuses unreadable or malformed attempt records as
+   `malformed attempt journal: …`.
 
 Lifecycle artifacts are under `<staging>/lifecycle/`: `check.json`,
-`install.json`, `uninstall.json`, and `arm-attempts/`. `prepare` owns and ignores
+`install.json`, `uninstall.json`, `attempts.json`, and `arm-attempts/`.
+Retry inventory and prior-notice discovery read attempt records only from this
+directory. Candidate-root `attempts.json` and `arm-attempts/` are not read;
+their presence makes `prepare` refuse with
+`unknown or uncheckpointed staging output`. `prepare` owns and ignores
 this mutable directory; it is not sealed, so `prepare → check → prepare`
 continues to verify and print the preparation record. Besides the shared lock,
 `check` writes only its lifecycle verdict, including a failing verdict. Every
@@ -270,7 +289,9 @@ refusals, successful rollback and probe-only failures do **not** invoke
 pre-publication state. Only confirmed successful installation (rc 0) followed
 by a failure permits the clone's `--uninstall`, whose exit must be 0.
 Unknown/interrupted install ownership or failed rollback retains state for the
-lead without destructive cleanup. Only when published bytes still equal the
+lead without destructive cleanup, refusing as
+`installer ownership/rollback unknown; jobs and plists preserved`.
+Only when published bytes still equal the
 saved bytes and the original staged path is absent may `os.replace` restore
 them to staging. Changed/missing bytes, conflicting staged output or failed
 cleanup retain state and name paths in the refusal. Probe evidence remains.
@@ -298,13 +319,7 @@ age, HEAD or lock validity, preserving the installer's malformed/retired-plan
 cleanup path. Nonzero returns refuse immediately after recording; no plan is
 unpublished or evidence removed even after successful explicit uninstall.
 
-All four lifecycle commands expose the installer's `--launchctl-bin`
-seam. `check`, `publish-install` and `verify` record `launchctl_bin`; any value
-other than literal `launchctl` records `fake_launchctl: true`. A fake-launchctl
-run is a **rehearsal**: check sets `armable: false`, `rehearsal_ready: true` only
-when its checks pass; publication requires that matching fake executable and
-records `outcome: rehearsal_installed`, `installed: false`. Such records cannot
-authorize a real arm. Offline tests use `FakeLaunchctl`, a fixture HOME and
+Offline tests use `FakeLaunchctl`, a fixture HOME and
 synthetic receipt; the composed test also injects the probe process census because sandboxed
 sysmon may be unavailable. No test evidence is live launchd/hardware evidence.
 Notice transport, notice reading/veto integration, automated retry clearance,

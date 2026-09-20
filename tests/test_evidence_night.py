@@ -39,6 +39,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ArgumentsTests(unittest.TestCase):
+    def test_lifecycle_contract_refusals_and_rehearsal_boundary(self):
+        contract = (ROOT / "docs/contracts/evidence_night_entry.md").read_text()
+        for refusal in ("unresolved raw census row", "malformed attempt journal",
+                        "malformed attempt inventory", "installer ownership/rollback unknown"):
+            self.assertIn(refusal, contract)
+        definition = contract.split("`armable` means", 1)[1].split("Each successful subcommand", 1)[0]
+        self.assertIn("rehearsal", definition)
+        self.assertIn("`armable: false`", definition)
+
     def test_t0_and_head_matrix(self):
         now = 1800000001
         self.assertEqual(entry.parse_t0("next", now), 1800002460)
@@ -199,6 +208,23 @@ class PrepareTests(unittest.TestCase):
                 lock_verifier=lambda root: None)
         self.assertEqual(entry.prepare(**self.kw), state)
         self.assertTrue((Path(state["staging"]) / "lifecycle/check.json").is_file())
+
+    def test_prepare_refuses_root_attempt_output(self):
+        state = entry.prepare(**self.kw)
+        stage = Path(state["staging"])
+        for name in ("attempts.json", "arm-attempts"):
+            path = stage / name
+            if name == "attempts.json":
+                path.write_text("[]")
+            else:
+                path.mkdir()
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    entry.Refused, "^unknown or uncheckpointed staging output$"):
+                entry.prepare(**self.kw)
+            if path.is_dir():
+                path.rmdir()
+            else:
+                path.unlink()
 
     def test_cross_device_refused_before_clone(self):
         original = Path.stat
@@ -499,8 +525,13 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
         (self.canonical / "joulewise").mkdir()
         (self.canonical / "joulewise/__init__.py").write_text("")
-        for name in ("night_gate.py", "arm_census.py", "quiet_guard_process.py", "night_agent_install.py"):
+        for name in ("night_gate.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
+        clone_route = {"test_retry_uses_clone_retry_route": "retry",
+                       "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
+        if clone_route:
+            retry = self.canonical / "joulewise/arm_retry.py"
+            retry.write_text(retry.read_text() + f"\ndef classify_abort(cause):\n    return {clone_route!r}\n")
         if self._testMethodName == "test_b6_clone_old_census_literal_is_reported":
             gate = self.canonical / "joulewise/night_gate.py"
             gate.write_text(gate.read_text().replace("[c]odex|[c]laude|[t]3", "codex|claude|t3"))
@@ -698,10 +729,74 @@ class LifecycleTests(unittest.TestCase):
         self.checked("supervisor")
 
     def test_retry_routes_exact_causes_and_unknown_stops(self):
+        (self.stage / "lifecycle").mkdir()
         for cause, passing in (("arm_transport", True), ("night_probe_error", False), ("invented", False)):
-            entry.saved_json(self.stage / "attempts.json", [{"cause": cause}])
+            entry.saved_json(self.stage / "lifecycle/attempts.json", [{"cause": cause}])
             record = self.checked(None if passing else "retry")
             self.assertEqual(record["checks"]["retry"]["inventory"][0]["route"], "retry" if passing else "cold_gate")
+
+    def assert_clone_retry_route(self, cause, route):
+        from joulewise.arm_retry import classify_abort
+        self.assertNotEqual(classify_abort(cause), route)
+        path = self.stage / "lifecycle/arm-attempts/000001/install.json"
+        path.parent.mkdir(parents=True)
+        entry.saved_json(path, {"cause": cause})
+        original = entry.run
+        executions = []
+        def spy(argv, **kwargs):
+            if "-c" in argv and "classify_abort" in str(argv[argv.index("-c") + 1]):
+                executions.append((argv, kwargs))
+            return original(argv, **kwargs)
+        with patch.object(entry, "run", side_effect=spy):
+            record = self.checked(None if route == "retry" else "retry")
+        self.assertEqual(record["armable"], route == "retry")
+        self.assertEqual(record["checks"]["retry"]["inventory"],
+                         [dict(path=str(path), cause=cause, route=route)])
+        self.assertTrue(executions)
+        self.assertTrue(all(argv[:3] == [self.root / ".venv/bin/python", "-B", "-c"] and
+                            kw["cwd"] == self.root for argv, kw in executions))
+
+    def test_retry_uses_clone_retry_route(self):
+        self.assert_clone_retry_route("night_probe_error", "retry")
+
+    def test_retry_uses_clone_cold_gate_route(self):
+        self.assert_clone_retry_route("arm_transport", "cold_gate")
+
+    def test_retry_reads_lifecycle_attempt_inventories(self):
+        for relative in ("attempts.json", "arm-attempts/000001/attempts.json"):
+            path = self.stage / "lifecycle" / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            entry.saved_json(path, [{"cause": "night_probe_error"}])
+            with self.subTest(relative=relative):
+                record = self.checked("retry")
+                self.assertEqual(record["checks"]["retry"]["inventory"],
+                                 [dict(path=str(path), cause="night_probe_error", route="cold_gate")])
+            path.unlink()
+
+    def test_retry_ignores_root_attempt_records(self):
+        for relative in ("attempts.json", "arm-attempts/000001/attempts.json",
+                         "arm-attempts/000001/install.json"):
+            path = self.stage / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("malformed root record must not be read")
+        self.assertEqual(self.checked()["checks"]["retry"]["inventory"], [])
+
+    def test_notice_reuse_reads_only_lifecycle_records(self):
+        for relative in ("attempts.json", "arm-attempts/000001/attempts.json",
+                         "arm-attempts/000001/install.json"):
+            for candidate in (self.stage, self.stage.with_name(self.stage.name + "-other")):
+                root_path = candidate / relative
+                root_path.parent.mkdir(parents=True, exist_ok=True)
+                entry.saved_json(root_path, [{"notice_accepted": "same-id"}])
+                with self.subTest(relative=relative, candidate=candidate):
+                    entry.notice_unused(self.state, "same-id")
+                    lifecycle_path = candidate / "lifecycle" / relative
+                    lifecycle_path.parent.mkdir(parents=True, exist_ok=True)
+                    entry.saved_json(lifecycle_path, [{"notice_accepted": "same-id"}])
+                    with self.assertRaisesRegex(entry.Refused, "notice id already used by attempt"):
+                        entry.notice_unused(self.state, "same-id")
+                    lifecycle_path.unlink()
+                root_path.unlink()
 
     def publish(self, **kwargs):
         return entry.publish_install(candidate=self.stage, notice_accepted="message verbatim ",

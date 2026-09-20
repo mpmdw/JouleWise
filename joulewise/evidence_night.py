@@ -747,21 +747,28 @@ def require_no_night_agents(evidence):
     return evidence
 
 
-def retry_inventory(stage):
-    from joulewise.arm_retry import classify_abort
-    paths = sorted(set(stage.glob("attempts.json")) | set(stage.glob("arm-attempts/*/attempts.json")))
+def retry_inventory(state, stage):
+    lifecycle = stage / "lifecycle"
+    paths = sorted(set(lifecycle.glob("attempts.json")) | set(lifecycle.glob("arm-attempts/*/attempts.json")))
     records = []
     for path in paths:
         attempts = json.loads(safe_path(path).read_text())
         if not isinstance(attempts, list):
             raise Refused("malformed attempt inventory: " + str(path))
-        records.extend(dict(path=str(path), cause=a.get("cause"), route=classify_abort(a.get("cause")))
-                       for a in attempts)
+        records.extend(dict(path=str(path), cause=a.get("cause")) for a in attempts)
     # Our journal cannot establish a named retry cause from a bare nonzero rc.
-    for path in sorted((stage / "lifecycle").glob("arm-attempts/*/install.json")):
+    for path in sorted(lifecycle.glob("arm-attempts/*/install.json")):
         prior = json.loads(safe_path(path).read_text())
         cause = prior.get("cause")
-        records.append(dict(path=str(path), cause=cause, route=classify_abort(cause)))
+        records.append(dict(path=str(path), cause=cause))
+    # The clone at H owns retry policy, just as it owns census classification.
+    code = """import json,sys
+from joulewise.arm_retry import classify_abort
+records=json.loads(sys.argv[1])
+print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record in records]))
+"""
+    root = Path(state["measurement_root"])
+    records = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, json.dumps(records)], cwd=root))
     return dict(verdict="fail" if any(r["route"] != "retry" for r in records) else "pass",
                 consulted="joulewise.arm_retry.classify_abort", inventory=records,
                 limitation="Routing only; retry_allowed requires fresh notice/veto evidence (slice B2).")
@@ -803,7 +810,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("retained_roots", lambda: retained_roots(state))
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
-            inspect("retry", lambda: retry_inventory(Path(candidate)))
+            inspect("retry", lambda: retry_inventory(state, Path(candidate)))
         passed = all(c["verdict"] == "pass" for c in checks.values())
         record["armable"] = passed and not record["fake_launchctl"]
         record["rehearsal_ready"] = passed and record["fake_launchctl"]
@@ -894,19 +901,19 @@ def notice_unused(state, notice_id):
     candidates = set(stage.parent.glob(prefix + "*")) | {stage}
     for candidate in sorted(candidates):
         safe_path(candidate)
-        for base in (candidate, candidate / "lifecycle"):
-            paths = set(base.glob("arm-attempts/*/install.json")) | set(base.glob("arm-attempts/*/attempts.json"))
-            paths.update(base.glob("attempts.json"))
-            for path in sorted(paths):
-                try:
-                    value = json.loads(safe_path(path).read_text())
-                    records = value if isinstance(value, list) else [value]
-                    if any(not isinstance(r, dict) for r in records):
-                        raise ValueError("invalid attempt")
-                except (OSError, ValueError, TypeError) as exc:
-                    raise Refused("malformed attempt journal: " + str(path)) from exc
-                if any(r.get("notice_accepted") == notice_id for r in records):
-                    raise Refused("notice id already used by attempt " + str(path))
+        base = candidate / "lifecycle"
+        paths = set(base.glob("arm-attempts/*/install.json")) | set(base.glob("arm-attempts/*/attempts.json"))
+        paths.update(base.glob("attempts.json"))
+        for path in sorted(paths):
+            try:
+                value = json.loads(safe_path(path).read_text())
+                records = value if isinstance(value, list) else [value]
+                if any(not isinstance(r, dict) for r in records):
+                    raise ValueError("invalid attempt")
+            except (OSError, ValueError, TypeError) as exc:
+                raise Refused("malformed attempt journal: " + str(path)) from exc
+            if any(r.get("notice_accepted") == notice_id for r in records):
+                raise Refused("notice id already used by attempt " + str(path))
 
 
 def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl",
