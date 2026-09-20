@@ -155,9 +155,13 @@ class PrepareTests(unittest.TestCase):
 
     def test_real_composition_idempotence_and_never_invokes(self):
         calls = []
+        transported = []
         original = subprocess.run
         def spy(argv, **kwargs):
             calls.append(list(map(str, argv)))
+            if "-c" in argv and "write_night_plan" in argv[argv.index("-c") + 1]:
+                self.assertEqual(len(argv), 4)
+                transported.append(json.loads(kwargs["input"]))
             self.assertFalse(any(Path(str(arg)).name in ("launchctl", "mail", "sendmail", "claude", "chain.zsh", "powermetrics") for arg in argv))
             return original(argv, **kwargs)
         with patch.object(subprocess, "run", side_effect=spy):
@@ -168,6 +172,8 @@ class PrepareTests(unittest.TestCase):
             authored = json.loads(Path(first["plan_path"]).read_text())["authored_epoch_s"]
             second = entry.prepare(**self.kw)
         self.assertEqual(first, second)
+        self.assertEqual(len(transported), 1)
+        self.assertEqual(transported[0]["head"], first["head"])
         self.assertEqual(before, {p: (entry.digest(p), p.stat().st_mtime_ns) for p in files})
         self.assertEqual(authored, json.loads(Path(first["plan_path"]).read_text())["authored_epoch_s"])
         self.assertFalse((Path(first["custody_root"]) / "night_plan.json").exists())
@@ -809,7 +815,14 @@ class LifecycleTests(unittest.TestCase):
                         entry.notice_unused(self.state, "same-id")
                     lifecycle_path.unlink()
 
+    def vetoed(self, **kwargs):
+        return entry.veto(candidate=self.stage, magistrate=self.base / "magistrate",
+                          runner=kwargs.pop("runner", lambda argv: subprocess.CompletedProcess(argv, 0, "[]", "")),
+                          **kwargs)
+
     def publish(self, **kwargs):
+        # B1 recovery tests supply B2's independent clear-veto prerequisite.
+        self.vetoed()
         return entry.publish_install(candidate=self.stage, notice_accepted="message verbatim ",
                                      lock_verifier=lambda root: None, **kwargs)
 
@@ -1210,6 +1223,209 @@ class LifecycleTests(unittest.TestCase):
             entry.check(**self.kw)
         self.assertTrue((root / "night_plan.json").is_dir())
 
+    def test_notice_refusal_matrix_preserves_preparation(self):
+        original = (self.stage / "prepare.json").read_bytes()
+        call = lambda: entry.notice(candidate=self.stage, lock_verifier=lambda root: None)
+        with self.assertRaisesRegex(entry.Refused, "check.json is required"):
+            call()
+        for change, reason in (({"armable": False}, "not armable"),
+                               ({"prepare_sha256": "wrong"}, "bind prepare"),
+                               ({"launchctl_bin": "/fake"}, "launchctl"),
+                               ({"finished_epoch_s": time.time() - 3601}, "older"),
+                               ({"finished_epoch_s": time.time() + 100}, "future")):
+            with self.subTest(change=change):
+                record = self.checked()
+                entry.saved_json(self.journal("check.json"), dict(record, **change))
+                with self.assertRaisesRegex(entry.Refused, reason):
+                    call()
+        self.checked()
+        os.utime(self.plan, ns=(time.time_ns(), time.time_ns()))
+        with self.assertRaisesRegex(entry.Refused, "newer"):
+            call()
+        self.checked()
+        self.plan.write_bytes(self.plan.read_bytes() + b" ")
+        with self.assertRaisesRegex(entry.Refused, "sealed-byte drift"):
+            call()
+        self.assertEqual((self.stage / "prepare.json").read_bytes(), original)
+        self.assertFalse(self.journal("notice-draft.txt").exists())
+
+    def test_notice_refreshes_draft_and_prints_plain_text(self):
+        plan = json.loads(self.plan.read_text())
+        plan["authored_epoch_s"] = int(time.time())
+        entry.saved_json(self.plan, plan)
+        self.state["digests"][str(self.plan)] = entry.digest(self.plan)
+        self.state.update(attempt=2, prior_candidates=["prior"], notice_draft="obsolete draft")
+        entry.saved_json(self.stage / "prepare.json", self.state)
+        self.checked()
+        before = (self.stage / "prepare.json").read_bytes()
+        bindings = dict(registration_path="registration", registration_sha256="a" * 64,
+                        chain_source_path="source", chain_source_sha256="b" * 64)
+        schedule = dict(self.schedule, install_spans_today=[(self.t0 - 3600, self.t0 - 1800)])
+        original = entry.notice
+        with patch.object(entry, "sealed_candidate", return_value=bindings), \
+                patch.object(entry, "clone_schedule", return_value=schedule), \
+                patch.object(entry, "notice", side_effect=lambda **kw: original(**kw, lock_verifier=lambda root: None)), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(entry.main(["notice", "--candidate", str(self.stage)]), 0)
+        draft = output.getvalue()
+        self.assertEqual(draft, self.journal("notice-draft.txt").read_text())
+        for text in (self.state["plan_id"], self.head, "attempt 2", "prior", "a" * 64,
+                     "b" * 64, "REQUEST / exit BEFORE", "install span 1 close EXCLUDED",
+                     "To: claude2.glaring610@passmail.net", entry.digest(self.plan)):
+            self.assertIn(text, draft)
+        self.assertNotIn("obsolete draft", draft)
+        self.assertNotIn("Cc:", draft)
+        self.assertEqual(before, (self.stage / "prepare.json").read_bytes())
+        with patch.object(entry, "clone_schedule", return_value=dict(schedule, install_close_epoch_s=0)):
+            with self.assertRaisesRegex(entry.Refused, "exclusive install close"):
+                original(candidate=self.stage, lock_verifier=lambda root: None)
+
+    def test_veto_clear_and_exact_directive_query(self):
+        calls = []
+        def runner(argv):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0, "[]", "")
+        record = self.vetoed(runner=runner)
+        self.assertEqual(calls, [["gh", "issue", "list", "--repo", "mpmdw/JouleWise", "--label",
+                                 "directive", "--state", "open", "--author", "mpmdw", "--json",
+                                 "number,title,body,author"]])
+        self.assertTrue(record["clear"])
+        self.assertEqual(set(record["channels"]), {"directives", "standdown", "STOP", "NO"})
+        self.assertTrue(all(c["clear"] for c in record["channels"].values()))
+
+    def test_veto_directives_and_all_file_channels_are_observed(self):
+        magistrate = self.base / "magistrate"
+        magistrate.mkdir()
+        (magistrate / "standdown.request").write_text("stop")
+        (magistrate / "STOP").symlink_to(magistrate / "missing")
+        entry.lifecycle_dir(self.stage)
+        self.journal("NO").write_text("mailbox NO relayed manually")
+        issue = dict(number=99, title="Owner directive", body="$(touch SHOULD_NOT_EXIST)", author={"login": "mpmdw"})
+        with self.assertRaisesRegex(entry.Refused, "open owner directive #99 — the lead reads it before publication"):
+            self.vetoed(runner=lambda argv: subprocess.CompletedProcess(argv, 0, json.dumps([issue]), ""))
+        record = json.loads(self.journal("veto.json").read_text())
+        self.assertFalse(record["clear"])
+        self.assertEqual(record["channels"]["directives"]["issues"], [issue])
+        self.assertEqual(len(record["reasons"]), 4)
+        for name in ("standdown", "STOP", "NO"):
+            self.assertTrue(record["channels"][name]["present"])
+            self.assertFalse(record["channels"][name]["clear"])
+
+    def test_each_local_veto_refuses_independently(self):
+        magistrate = self.base / "magistrate"
+        magistrate.mkdir()
+        entry.lifecycle_dir(self.stage)
+        for path in (magistrate / "standdown.request", magistrate / "STOP", self.journal("NO")):
+            with self.subTest(path=path):
+                path.write_text("NO")
+                with self.assertRaisesRegex(entry.Refused, "veto present"):
+                    self.vetoed()
+                self.assertFalse(json.loads(self.journal("veto.json").read_text())["clear"])
+                path.unlink()
+
+    def test_directive_failures_never_record_clear(self):
+        def unavailable(argv):
+            raise FileNotFoundError("gh unavailable")
+        runners = [unavailable]
+        for rc, raw in ((1, "[]"), (0, "not json"), (0, "{}"), (0, "[{}]")):
+            runners.append(lambda argv, rc=rc, raw=raw: subprocess.CompletedProcess(argv, rc, raw, "failure"))
+        for runner in runners:
+            with self.subTest(runner=runner):
+                self.vetoed()  # An old clear record must not survive failure.
+                with self.assertRaisesRegex(entry.Refused, "cannot read directives"):
+                    self.vetoed(runner=runner)
+                record = json.loads(self.journal("veto.json").read_text())
+                self.assertFalse(record["clear"])
+                self.assertEqual(len(record["channels"]), 4)
+
+    def test_publication_requires_fresh_clear_bound_veto(self):
+        self.checked()
+        def publish():
+            return entry.publish_install(candidate=self.stage, notice_accepted="new-id",
+                lock_verifier=lambda root: None, runner=lambda *a, **kw: self.fail("installer reached"))
+        with self.assertRaisesRegex(entry.Refused, "veto.json is required"):
+            publish()
+        for change, reason in (({"clear": False}, "not clear"),
+                               ({"clear": 1}, "not clear"),
+                               ({"prepare_sha256": "wrong"}, "bind prepare"),
+                               ({"finished_epoch_s": time.time() - 3601}, "older"),
+                               ({"finished_epoch_s": time.time() + 100}, "future")):
+            with self.subTest(change=change):
+                record = self.vetoed()
+                entry.saved_json(self.journal("veto.json"), dict(record, **change))
+                with self.assertRaisesRegex(entry.Refused, reason):
+                    publish()
+        for stamp, reason in ((time.time() - 3601, "older"), (time.time() + 100, "future"),
+                              (self.plan.stat().st_mtime - 1, "newer")):
+            self.vetoed()
+            os.utime(self.journal("veto.json"), (stamp, stamp))
+            with self.assertRaisesRegex(entry.Refused, reason):
+                publish()
+        self.journal("veto.json").write_text("broken")
+        with self.assertRaisesRegex(entry.Refused, "malformed.*veto.json"):
+            publish()
+        self.assertTrue(self.plan.exists())
+        self.assertFalse(self.journal("arm-attempts").exists())
+
+    def test_baseline_reports_added_removed_and_metadata_changes(self):
+        entry.lifecycle_dir(self.stage)
+        nested = self.custody / "night"
+        nested.mkdir()
+        changed = nested / "changed"
+        removed = nested / "removed"
+        changed.write_text("before")
+        removed.write_text("gone")
+        before = entry.custody_inventory(self.state)
+        path = self.journal("baseline.json")
+        entry.saved_json(path, dict(schema="joulewise.evidence_baseline.v1",
+                                  custody_root=str(self.custody), files=before))
+        raw = path.read_bytes()
+        changed.write_text("after with new size")
+        removed.unlink()
+        (nested / "added").write_text("new")
+        drift = entry.baseline_drift(self.state)
+        self.assertTrue(drift["drift"])
+        self.assertEqual(drift["added"], ["night/added"])
+        self.assertEqual(drift["removed"], ["night/removed"])
+        self.assertEqual(list(drift["changed"]), ["night/changed"])
+        self.assertEqual(drift["changed"]["night/changed"]["before"], before["night/changed"])
+        self.assertEqual(path.read_bytes(), raw)
+
+    def test_census_and_retry_json_travel_on_stdin(self):
+        from dataclasses import replace
+        original = entry.run
+        seen = []
+        def spy(argv, **kwargs):
+            if "-c" in argv and any(token in argv[argv.index("-c") + 1]
+                                    for token in ("classify_arm_census", "classify_abort")):
+                self.assertEqual(len(argv), 4)
+                self.assertEqual(kwargs["cwd"], self.root)
+                seen.append(json.loads(kwargs["input"]))
+            return original(argv, **kwargs)
+        with patch.object(entry, "run", side_effect=spy):
+            self.checked()
+            # Exceeds macOS's argv budget: data must reach the actual clone
+            # interpreter, rather than only satisfying a mocked call shape.
+            large = replace(self.fixture, diagnostics=("x" * 300000,))
+            result = entry.clone_census(self.state, 90, large)
+            self.assertEqual(result["observation"]["diagnostics"], list(large.diagnostics))
+        self.assertTrue(any(isinstance(value, dict) and value.get("observation") for value in seen))
+        self.assertIn([], seen)
+
+    def test_veto_cli_refusal_and_json_output(self):
+        original = entry.veto
+        def operation(**kwargs):
+            return original(**kwargs, magistrate=self.base / "magistrate",
+                            runner=lambda argv: subprocess.CompletedProcess(argv, 0, "[]", ""))
+        with patch.object(entry, "veto", side_effect=operation):
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(entry.main(["veto", "--candidate", str(self.stage)]), 0)
+            self.assertTrue(json.loads(output.getvalue())["clear"])
+            self.journal("NO").write_text("mailbox veto")
+            with contextlib.redirect_stderr(io.StringIO()) as errors:
+                self.assertEqual(entry.main(["veto", "--candidate", str(self.stage)]), 2)
+            self.assertTrue(errors.getvalue().startswith("REFUSED: veto present:"))
+
 
 @unittest.skipUnless(Path('/bin/zsh').is_file(), 'real installer requires zsh')
 class LifecycleCompositionTests(unittest.TestCase):
@@ -1284,6 +1500,11 @@ os.execv(sys.executable,[sys.executable,*args])
             self.assertTrue(checked["rehearsal_ready"])
             self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))
             self.assertFalse(any("--launchctl-bin" in c for c in calls))
+            draft = entry.notice(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
+            self.assertEqual(draft, (stage / "lifecycle/notice-draft.txt").read_text())
+            self.assertIn(state["plan_id"], draft)
+            entry.veto(candidate=stage, magistrate=base / "magistrate",
+                       runner=lambda argv: subprocess.CompletedProcess(argv, 0, "[]", ""))
             published = custody / "night_plan.json"
             raw = (stage / "night_plan.json").read_bytes()
             inode = (stage / "night_plan.json").stat().st_ino
@@ -1317,6 +1538,17 @@ os.execv(sys.executable,[sys.executable,*args])
             self.assertEqual(installed["verification"]["request_epoch_s"], state["schedule"]["boundaries"]["REQUEST / exit BEFORE"])
             self.assertTrue(all(fake.loaded(label) for label in LABELS))
             verified = entry.verify(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
+            self.assertFalse(verified["baseline"]["drift"])
+            baseline_path = stage / "lifecycle/baseline.json"
+            baseline_raw = baseline_path.read_bytes()
+            baseline = json.loads(baseline_raw)
+            self.assertEqual(baseline["files"], entry.custody_inventory(state))
+            (custody / "night").mkdir(exist_ok=True)
+            (custody / "night/new.json").write_text("{}")
+            drift = entry.verify(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
+            self.assertEqual(drift["baseline"]["added"], ["night/new.json"])
+            self.assertTrue(drift["baseline"]["drift"])
+            self.assertEqual(baseline_path.read_bytes(), baseline_raw)
             self.assertTrue(verified["fake_launchctl"])
             self.assertEqual(verified["launchctl_bin"], str(fake.executable))
             self.assertEqual([j["calendar"] for j in verified["jobs"]],

@@ -130,8 +130,9 @@ plan age/schedule/records and job-state checks; receipt identity/freshness and
 cleanup/consent checks; full `arm_retry` refusal routing. This slice delegates
 render validation to unchanged executors. Slice B1 below supplies pre-arm
 discovery, census, canonical ancestry/supervisor checks, publication,
-probe/install/verification and uninstall recovery. Readable NO/directives/STOP
-and notice acceptance remain bench obligations. No exact-four-root gate,
+probe/install/verification and uninstall recovery. B2 below supplies the notice
+draft and mechanical veto checks; Gmail transport and mailbox reading remain
+magistrate obligations. No exact-four-root gate,
 calendar restriction, attempt cap,
 notice delay, calibration ledger or epoch input is introduced.
 
@@ -164,7 +165,8 @@ run is a **rehearsal, never armable**: check sets `armable: false`,
 matching fake executable and records `outcome: rehearsal_installed`,
 `installed: false`. Such records cannot authorize a real arm.
 
-Each successful subcommand prints one JSON object and exits 0. A known
+Each successful subcommand except `notice` prints one JSON object and exits 0;
+`notice` prints the draft text. A known
 refusal prints one `REFUSED:` line and exits 2; an unexpected defect prints
 `ERROR:` plus its traceback and exits 1. Installer refusals retain their
 captured return codes and output in the attempt journal. A nonblocking flock
@@ -256,8 +258,8 @@ requires a nonblank notice acceptance ID. A notice ID present in a prior
 attempt of this candidate or any same-date-prefix candidate under
 `<staging_under>` refuses with `notice id already used by attempt …`.
 **The ID is recorded verbatim and is not verified.** B1 sends no mail and
-reads no notice thread or network
-directive. The caller retains responsibility for the handbook observations;
+reads no notice thread. B2's separate `veto` command observes network
+directives. The caller retains responsibility for the handbook observations;
 passing an ID must not be represented as proof that they occurred. A saved
 check is a snapshot, so the lead repeats `check` at the publication boundary.
 
@@ -324,8 +326,80 @@ unpublished or evidence removed even after successful explicit uninstall.
 Offline tests use `FakeLaunchctl`, a fixture HOME and
 synthetic receipt; the composed test also injects the probe process census because sandboxed
 sysmon may be unavailable. No test evidence is live launchd/hardware evidence.
-Notice transport, notice reading/veto integration, automated retry clearance,
-courier execution and the handbook/runbook replacement remain deferred to B2
-or the lead's existing bench procedure. The step-5 night-directory baseline
-(filename/size/mtime) is explicitly deferred to B2/the bench. B1 does not
-collect measurements.
+Notice transport, mailbox reading, automated retry clearance and courier
+execution remain the lead's existing bench procedure. The tracked commands
+below now have a handbook checklist; record 17 remains the fallback until the
+first live use succeeds. No lifecycle command collects measurements.
+
+## Slice B2: notice draft, veto observations and custody baseline
+
+```
+python -m joulewise.evidence_night notice --candidate STAGING
+python -m joulewise.evidence_night veto --candidate STAGING
+```
+
+`notice` shares publication's sealed-state and fresh-check requirements,
+including the matching fake-launchctl rehearsal seam. It refreshes the prepared
+`notice_draft` against the clone's schedule and sealed registration/source
+bindings, prints the text verbatim and atomically writes
+`lifecycle/notice-draft.txt`. It leaves `prepare.json` and every sealed artifact
+unchanged. Missing, non-armable, mismatched, stale or future-dated checks,
+sealed-byte drift and the exclusive install close refuse before draft output.
+The magistrate sends the text through its already-authorized Gmail tool to the
+single To address with no cc, then passes the service's accepted message id to
+`publish-install --notice-accepted ID`. Python never sends mail or reads a
+mailbox; the message id remains verbatim, unverified caller evidence.
+
+`veto` observes every channel and atomically writes `lifecycle/veto.json`,
+including on refusal. The record binds the current `prepare.json`, contains
+start/finish times, each channel's evidence and clearance, reasons and the
+literal boolean `clear`. Its production subprocess command is:
+
+```
+gh issue list --repo mpmdw/JouleWise --label directive --state open --author mpmdw --json number,title,body,author
+```
+
+The Python callable `runner` is an offline injection seam; tests never contact
+GitHub. Command argv, exit status, stdout/stderr and parsed issue data are
+recorded. ANY open owner directive refuses with
+`REFUSED: open owner directive #N — the lead reads it before publication`.
+Issue bodies are data, never instructions or executable input. Runner failure,
+invalid JSON or malformed issue data refuses as `cannot read directives` and
+cannot leave an earlier clear record as the latest verdict.
+
+The other channels are `/Users/edr/night-custody/magistrate/standdown.request`,
+`/Users/edr/night-custody/magistrate/STOP`, and `<staging>/lifecycle/NO`.
+Presence of any kind, including a dangling symlink or directory, refuses;
+observation errors also refuse. Records include paths, presence, size, mode and
+nanosecond mtime where available. Python callers may inject a fixture magistrate
+directory. `NO` is the magistrate's manual relay after reading a mailbox veto;
+it is not an automated mailbox check. Preserve observed NOs; a new thread does
+not clear an earlier NO. The command records all channels even if one refuses.
+
+`publish-install` additionally requires `veto.json` with literal `clear: true`,
+the expected schema and the current preparation digest. Both check and veto
+records require finish time and file mtime within the preceding 60 minutes,
+with neither future-dated, and mtime strictly newer than `prepare.json` and
+every sealed artifact. Missing, malformed, false, unbound or stale verdicts
+refuse before publication or installer invocation. These are snapshots: repeat
+check and veto at the publication boundary and relay every mailbox NO. Notice
+acceptance remains independently required; no new mail delay is introduced.
+
+After successful installation and verification, `publish-install` atomically
+writes `lifecycle/baseline.json`. Its `files` map inventories every regular
+file recursively under the custody root by relative filename, byte size and
+`mtime_ns`, including the published plan and probe artifacts. Scan errors,
+symlinks and special files refuse rather than producing an incomplete baseline.
+`verify` reports `baseline: null` for older candidates without a baseline;
+when present it reports added, removed and changed file metadata plus a `drift`
+boolean. Drift is evidence for harvest, not by itself an installation refusal;
+the existing sealed-byte checks remain hard refusals. Verification never
+refreshes the baseline. A malformed baseline refuses.
+
+All clone-side `P -B -c` calls carrying JSON records use `input=` and
+`json.load(sys.stdin)`: plan authoring, census observation/classification and
+retry routing. Their argv ends with the code string. Path/scalar arguments to
+sealed checks, schedule, job discovery and verification are unchanged; all
+these operations still execute with cwd set to the clone and JSON output.
+The fake-launchctl composition and both interpreter test runs remain fixture
+evidence only; first live use is lead-owned and PROVISIONAL.
