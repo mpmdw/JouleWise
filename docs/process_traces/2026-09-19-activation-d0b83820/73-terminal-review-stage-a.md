@@ -24,3 +24,6 @@ Lanes 250 COURIER-LOCK-OWNERSHIP-FLOCK-01 (cold gate first; pre-existing on main
 
 ## 5. Hosted CI and merge shape
 Records-only merge of `bookkeeping/2026-09-19-activation-d0b83820` into the branch = the exact candidate (no code delta vs `87c38078`); PR body ledger validated with `scripts/check_gate_ledger.py`; merge under D-072 on hosted gate-ledger + quick green (matrix post-merge per Ed's 2026-09-16 ruling; the darwin-only guards keep the spawn-based tests off the stdin runner).
+
+## Addendum 18:10 PDT — replay 70c filled in
+Record 70c at `87c38078`: 6,582 tests / 245 module runs, 244 PASS; the lone census error re-run alone with no seat alive → 76 OK. Section 4's condition is met. **Verdict stands: MERGE** on the records-only candidate.
