@@ -3,7 +3,7 @@ set -euo pipefail
 # Lead fills ONLY these two values before use; NIGHT_DATE is t0's local date.
 export NIGHT_DATE='__YYYYMMDD__'
 export T0_EPOCH_S='__T0_EPOCH_S__'
-export H='a9e48ae900a608b3254a732fb8e7463d66bdef1e'
+export H='4f2aa185e1dc362b8e299353ce357c873c2f97a0'
 export TZ=America/Los_Angeles PYTHONDONTWRITEBYTECODE=1
 unset PYTHONPATH
 [[ ${#NIGHT_DATE} -eq 8 && "$NIGHT_DATE" == <-> && "$T0_EPOCH_S" == <-> ]] || {

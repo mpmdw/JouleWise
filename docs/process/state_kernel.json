@@ -2661,36 +2661,6 @@
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
-    "EVIDENCE-PLAN-PATH-BINDING-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-19-activation-d0b83820/87-arm-scripts-qpe01-pilot-astra.md (fixture reproduction of the refusal)",
-          "docs/process_traces/2026-09-19-activation-d0b83820/87a-ruling-evidence-plan-path-binding.md (the ruled fix)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/EVIDENCE-PLAN-PATH-BINDING-01/acceptance",
-          "label": "EVIDENCE-PLAN-PATH-BINDING-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The evidence wrapper's plan-path export is derived from the plan's custody root (the published night_plan.json), the installer refuses an evidence install from any other plan path, the fixture places its plan at the published name, and regressions cover staged-then-published acceptance, staged-path refusal and byte-equal wrappers from either copy; the arm-script dry-check no longer reports the blocker; merged through the normal gate."
-      },
-      "authority": {
-        "label": "2026-09-19 evening registration by the project lead (ruling 87a)",
-        "path": "docs/process_traces/2026-09-19-activation-d0b83820/87a-ruling-evidence-plan-path-binding.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Make the unattended evidence night armable under the runbook's arm order. The night plan is authored at a staging path, emailed, and only then moved into its custody root, so the watchdog cannot discover it before the owner had the chance to object. The evidence wrapper generator wrote the STAGING path into the wrapper as the plan location, while the installer's verify-only probe compares that literal with the PUBLISHED path, so every evidence night would refuse installation with `evidence plan path mismatch`. Seat 87 found this on a fixture while preparing pilot night one. Fix: the wrapper binds the path derived from the plan's own content (`<custody_root>/night_plan.json`), the probe compares against the same derivation and refuses an install from any other path, and the tests move the fixture plan to the published name.",
-      "id": "EVIDENCE-PLAN-PATH-BINDING-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 254,
-      "status": "queued",
-      "status_note": "2026-09-19 evening — IN PROGRESS [AGENT]: seat 88 on fix/2026-09-19-evidence-plan-path-binding; blocks the pilot-night arm.",
-      "stop_card": null
-    },
     "FIXTURE-FAKE-VLLM-LEAK-01": {
       "acceptance": {
         "evidence": [
