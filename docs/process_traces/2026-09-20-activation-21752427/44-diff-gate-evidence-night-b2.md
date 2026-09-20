@@ -1,0 +1,29 @@
+# Record 44 — magistrate diff gate, replay and terminal review: EVIDENCE-NIGHT-ENTRY-01 slice B2 (`feat/2026-09-20-evidence-night-b2`, heads `798bced1` → `67a147c4`), 2026-09-20 14:20 PDT
+
+## §1 Diff gate (rows 7 and 8) — the production delta read by function and refusal (line citations from the refuters; the lead reads every hunk they name)
+Slice B2 (`798bced1`, seat 40, Astra high; ruling 40a on the sandbox timeout): `notice`, `veto`, veto-gated `publish-install`, the custody baseline with drift reporting in `verify`, clone-side JSON on stdin, the handbook paragraph "Arm procedure via the tracked commands" (protected regions byte-identical — md5s verified at the bench). Round 1 (`67a147c4`, seat 43, Astra xhigh; +403/−114): D1 publication RE-OBSERVES every veto channel through the same `observe_veto` path and records `veto-at-publication.json` per attempt; D2 non-owner directives recorded, never vetoing; D3 the magistrate root must be an existing non-symlink directory; D4 `production` provenance on veto evidence, required for a real `launchctl` arm; D5 `notice.txt` = the sendable body with a check-bound provenance line, headers on stdout; D6 publication requires a notice newer than every sealed artefact and `check.json`; D7 attempt-scoped baselines; D8 nits.
+Design-level reading:
+- **Transport stays with the magistrate** (consult 18): the module never sends mail or reads a mailbox (refuter 41/Opus 42 grep-verified); `lifecycle/NO` is the documented manual relay; the directive channel is read-only `gh issue list` with the owner filter, bodies stored as data.
+- **Fail-closed everywhere the bench was:** unreadable channels refuse; a missing magistrate root refuses (D3 closed the one fail-open); the re-observation at publication restores the bench's "stop files twice" and adds "directives twice".
+- **Rehearsal containment now covers both seams** (launchctl and veto): a fixture-magistrate/injected-runner veto cannot authorize a real arm.
+- **Overbuild / prune:** none — no scheduler, no mail client, no second installer.
+Verdict of the diff gate: MERGE-able pending the delta re-audit (record 45) and replay (§2).
+
+## §2 Replay (row 9) — full sharded replay at `67a147c4` (round 1) in the B2 worktree, untouched during the run (14:18–15:23 PDT; the delta auditor ran in a /tmp copy)
+```
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/time -p …/.venv/bin/python -B scripts/shard_tests.py --workers 4 --split
+SHARD SUMMARY index=1/4 modules=61 tests=1815 failures=0 errors=0 skipped=76 result=PASS
+SHARD SUMMARY index=2/4 modules=62 tests=1658 failures=0 errors=0 skipped=5 result=PASS
+SHARD SUMMARY index=3/4 modules=62 tests=1712 failures=0 errors=0 skipped=20 result=PASS
+SHARD SUMMARY index=4/4 modules=63 tests=1516 failures=0 errors=0 skipped=2 result=PASS
+WORKERS SUMMARY shards=4 modules=248 tests=6701 failures=0 errors=0 skipped=103 failed_shards=none result=PASS
+```
+Log: `/tmp/magistrate-21752427/replay-44/full-replay-67a147c4.log`. Round 2 (`97b357ad`) changes only the module, its tests, the contract and the handbook paragraph; its module was re-run alone at the bench under 3.13 (92 OK) and by the auditor under 3.11 (92 OK); the related modules (`test_evidence_arm_sequence`, `test_arm_retry`, `test_night_gate`) 108 OK in the seat and the auditor.
+## §3 Fix contract (row 3) and same-signature (row 5)
+Fix contracts = brief 43 (eight dictated closures D1–D8 from refuter 41 + Opus 42; the seat's counterfactual table: every closure's test FAIL→PASS against the `798bced1` module in memory) and brief 46 (E1–E4 from fresh eyes 45; six tests FAIL→PASS against `67a147c4`). Same-signature: "the entry point silently diverges from the bench procedure" — closed in both directions at record 47 (docs state what the code repeats at the boundary and what the lead still owns); "an evidence-affecting side effect without a refusal path" — closed at 45/47 (re-observation before publication; fail-closed timeout; missing magistrate root refuses; rehearsal containment on both seams); "stale-module evidence" — unchanged from B1 (all lenses run in the clone).
+
+## §4 Terminal review (row 12), 15:12 PDT 09-20
+Final code head `97b357ad` = `798bced1` (B2) + `67a147c4` (round 1) + `97b357ad` (round 2). Gauntlet: brief 40 → seat 40 (Astra high; NEEDS_RULING → ruling 40a) → lead bench (432 OK on the related modules; the sandbox's watchdog artefact) + diff read (44 §1) → refuter 41 (Astra xhigh, execution: BLOCKER — publication trusted a stale veto record; F2) + Opus 42 (contract: five should-fix incl. the fail-open magistrate root) → brief 43 → seat 43 (Astra xhigh) → fresh eyes 45 (PASS; three should-fix, three mutants killed) → brief 46 → seat 46 → fresh eyes 47 (PASS; classes closed) → replay §2. Verdict: MERGE the records-only candidate (merge of main onto `97b357ad`). Carried: the first LIVE use of the whole sequence (`prepare` → `check` → `notice` → `veto` → `publish-install` → `verify`) is bench-owned and watched step by step (no fixture can prove `outcome: installed` with a real launchctl); the mailbox NO remains a manual relay (`lifecycle/NO`); courier execution unchanged (the night driver's courier); the runbook (`docs/phase_2/derivation_night_runbook.md`) still describes the script-set procedure — a successor doc lane, not this PR.
+
+## §5 Hosted checks on the PR head (row 11)
+(filled before merge)
