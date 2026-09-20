@@ -27,7 +27,12 @@ ROOT = Path(__file__).resolve().parents[1]
 class EvidenceFixture:
     def __init__(self):
         self.temp = tempfile.TemporaryDirectory(prefix="qpe-fixture-", dir="/tmp")
-        self.root = Path(self.temp.name)
+        # Random temporary names can accidentally contain the agent census
+        # substring "t3"; choose a safe fixture root without weakening the gate.
+        while any(token in self.temp.name.lower() for token in ("codex", "claude", "t3")):
+            self.temp.cleanup()
+            self.temp = tempfile.TemporaryDirectory(prefix="qpe-fixture-", dir="/tmp")
+        self.root = Path(self.temp.name).resolve()
         self.repo = self.root / "measurement"
         self.repo.mkdir()
         for directory in ("joulewise", "scripts"):

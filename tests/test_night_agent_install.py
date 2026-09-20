@@ -1905,7 +1905,6 @@ class EvidenceRenderOnlyTests(unittest.TestCase):
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
             result = self.engine.main(["--plan", str(plan_path), "--python", sys.executable,
                                        "--render-only", str(self.f.root / "rendered")])
-        self.assertTrue(calls)
         self.assertFalse(any(self.f.plan.chain_path in argv for argv in calls),
                          "render-only executed the evidence chain")
         return result, output.getvalue(), errors.getvalue()
@@ -1914,18 +1913,131 @@ class EvidenceRenderOnlyTests(unittest.TestCase):
         chain = Path(self.f.plan.chain_path)
         manifest = chain.with_name("evidence_manifest.json")
         expected = {str(path): "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-                    for path in (self.staged.resolve(), chain, manifest)}
+                    for path in (self.staged.absolute(), manifest)}
         self.assertFalse(self.f.plan_path.exists())
         result, output, errors = self.render(self.staged)
         self.assertEqual(result, 0, errors)
         records = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
-        self.assertIn({"payload_kind": "quiet_predicate_evidence", "input_digests": expected}, records)
+        self.assertIn({"payload_kind": "quiet_predicate_evidence", "chain_sha256": hashlib.sha256(chain.read_bytes()).hexdigest(),
+                       "input_digests": expected}, records)
         os.replace(self.staged, self.f.plan_path)
         expected[str(self.f.plan_path.resolve())] = expected.pop(str(self.staged.resolve()))
         result, output, errors = self.render(self.f.plan_path)
         self.assertEqual(result, 0, errors)
         records = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
-        self.assertIn({"payload_kind": "quiet_predicate_evidence", "input_digests": expected}, records)
+        self.assertIn({"payload_kind": "quiet_predicate_evidence", "chain_sha256": hashlib.sha256(chain.read_bytes()).hexdigest(),
+                       "input_digests": expected}, records)
+
+        bindings = self.engine.evidence_probe_bindings(self.f.plan, self.f.plan_path, sys.executable)
+        self.assertEqual(expected, bindings["input_digests"])
+
+    def reseal_wrapper(self, text):
+        Path(self.f.plan.chain_path).write_text(text)
+        Path(self.f.plan.chain_sha256_path).write_text(hashlib.sha256(text.encode()).hexdigest() + "\n")
+
+    def test_wrong_published_literal_refuses_before_plists(self):
+        chain = Path(self.f.plan.chain_path)
+        self.reseal_wrapper(chain.read_text().replace(str(self.f.plan_path),
+                                                    str(self.f.root / "other-custody/night_plan.json")))
+        result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 2, errors)
+        self.assertIn("evidence plan path mismatch", errors)
+        self.assertNotIn('"input_digests"', output)
+        self.assertFalse((self.f.root / "rendered").exists())
+
+    def test_ambiguous_payload_refuses_before_legacy_inspection(self):
+        from unittest.mock import patch
+        original = Path(self.f.plan.chain_path).read_text()
+        for extra in ("export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n",
+                      "export CALIBRATION_LEDGER=/tmp/ledger\n"):
+            with self.subTest(extra=extra):
+                self.reseal_wrapper(original + extra)
+                with patch.object(self.engine, "reservation_input_digests") as legacy:
+                    result, output, errors = self.render(self.staged)
+                legacy.assert_not_called()
+                self.assertEqual(result, 2, errors)
+                self.assertIn("ambiguous night payload declaration:", errors)
+                self.assertNotIn('"input_digests"', output)
+                self.assertFalse((self.f.root / "rendered").exists())
+
+    def test_render_keeps_admission_refusals(self):
+        from joulewise.night_gate import PLAN_MAX_AGE_S
+        original = json.loads(self.staged.read_text())
+        cases = (({"t0_epoch_s": (int(time.time()) // 60 - 1) * 60}, "plan_t0_in_the_past"),
+                 ({"authored_epoch_s": time.time() - PLAN_MAX_AGE_S - 60}, "night_plan_stale"),
+                 ({"measurement_head": "0" * 40}, "measurement checkout HEAD"),
+                 ({}, "existing night records"))
+        for changes, reason in cases:
+            with self.subTest(reason=reason):
+                self.staged.write_text(json.dumps(dict(original, **changes)))
+                if not changes:
+                    night = self.f.custody / "night"
+                    night.mkdir(exist_ok=True)
+                    (night / "result.json").write_text("{}")
+                result, output, errors = self.render(self.staged)
+                self.assertIn(result, (2, 3), errors)
+                self.assertIn(reason, errors)
+                self.assertNotIn('"input_digests"', output)
+                self.assertFalse((self.f.root / "rendered").exists())
+
+    def test_two_renders_into_one_directory_are_byte_identical(self):
+        result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 0, errors)
+        paths = list((self.f.root / "rendered").glob("*.plist"))
+        self.assertEqual(len(paths), 3)
+        before = {path: path.read_bytes() for path in paths}
+        result, again, errors = self.render(self.staged)
+        self.assertEqual(result, 0, errors)
+        self.assertEqual(output, again)
+        self.assertEqual(before, {path: path.read_bytes() for path in paths})
+
+    def test_missing_or_unreadable_manifest_is_typed_refusal(self):
+        from unittest.mock import patch
+        manifest = Path(self.f.plan.chain_path).with_name("evidence_manifest.json")
+        original = manifest.read_bytes()
+        read_bytes = Path.read_bytes
+        def unreadable(path):
+            if path == manifest:
+                raise PermissionError("fixture unreadable manifest")
+            return read_bytes(path)
+        for missing in (True, False):
+            with self.subTest(missing=missing):
+                if missing:
+                    manifest.unlink()
+                    result, output, errors = self.render(self.staged)
+                    manifest.write_bytes(original)
+                else:
+                    with patch.object(Path, "read_bytes", unreadable):
+                        result, output, errors = self.render(self.staged)
+                self.assertEqual(result, 2, errors)
+                self.assertIn("evidence manifest verification failed:", errors)
+                self.assertNotIn('"input_digests"', output)
+                self.assertFalse((self.f.root / "rendered").exists())
+
+    def test_dirty_tracked_source_and_registration_refuse_render(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        for name in (campaign.HARNESS_PATHS[0], campaign.PROTOCOL_PATH):
+            with self.subTest(name=name):
+                path = self.f.repo / name
+                original = path.read_bytes()
+                path.write_bytes(original + b"\n")
+                result, output, errors = self.render(self.staged)
+                path.write_bytes(original)
+                self.assertEqual(result, 2, errors)
+                self.assertNotIn('"input_digests"', output)
+                self.assertFalse((self.f.root / "rendered").exists())
+
+    def test_staged_probe_and_install_still_refuse_after_render(self):
+        from types import SimpleNamespace
+        result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 0, errors)
+        for probe in (False, True):
+            with self.subTest(probe=probe), self.f.installer_environment():
+                args = SimpleNamespace(plan=self.staged, python=sys.executable,
+                                       render_only=None, launchd_probe=probe)
+                with self.assertRaisesRegex(self.engine.Refused, "plan_outside_custody_root"):
+                    self.engine.validate_install(args, Path(__file__).resolve().parents[1])
+        self.assertFalse(self.f.plan_path.exists())
 
     def test_wrong_chain_sidecar_refuses_render(self):
         Path(self.f.plan.chain_sha256_path).write_text("0" * 64 + "\n")

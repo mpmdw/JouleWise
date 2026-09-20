@@ -1396,7 +1396,10 @@ def _check_registration(plan, probes, rows, evidence):
     clock_monotonic_ns = rows["C4"].measured.get("clock_monotonic_ns")
     if plan.receipt_class in {"DIAGNOSTIC_NO_PACK", "REHEARSAL_STUB"}:
         try:
-            registration_text = probes.read_text(plan.registration_path)
+            registration_path = Path(plan.registration_path)
+            if not registration_path.is_absolute():
+                registration_path = Path(plan.measurement_root) / registration_path
+            registration_text = probes.read_text(str(registration_path))
             if not isinstance(registration_text, str):
                 raise ProbeError("registration probe must return text")
             registration_sha256 = hashlib.sha256(
