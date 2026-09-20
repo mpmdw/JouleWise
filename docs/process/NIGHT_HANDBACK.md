@@ -256,12 +256,14 @@ pgrep is visible to the new driver census and reproduces the 09-20 abort
 (the reverse is not true). Its census rows carry no argv, so check the
 processes before arming: (a) `git -C /Users/edr/code/JouleWise merge-base
 --is-ancestor <fix commit> HEAD` must exit 0 (the canonical reflog,
-`git reflog --date=iso`, dates the move), else no arm; (b) read
+`git -C /Users/edr/code/JouleWise reflog --date=iso`, dates the move), else
+no arm; (b) read
 `resident_session.supervisor_pid` from
 `/Users/edr/night-custody/magistrate/state.json` — `launchctl print` shows
 the supervisor as "not running" once it is reparented, so it is not the
 source — and `null`, or a pid that `ps -o pid=,lstart=,command= -p "$pid"`
-cannot find, means no resident supervisor and nothing stale; a live pid
+cannot find or whose command line does not name `magistrate_watchdog.py`
+(pid reuse), means no resident supervisor and nothing stale; a live pid
 must show a start later than the move, and any resident supervisor alive
 at arm time blocks the arm (the magistrate session exits before REQUEST
 and the supervisor ends with it; re-check after it has).
