@@ -41,3 +41,6 @@ Verdict: MERGE the records-only candidate (merge of main onto `d5f35ca1`); the h
 
 ## §6 Hosted checks on the PR head (row 11), 04:57 PDT 09-20
 PR #370 head `69ca92a4` (records-only merge of main `d7503550` onto `d5f35ca1`): 15/15 checks pass — build: pass; calibration-exits-exclusive (3.13): pass; calibration-writer-crash-matrix-exclusive (3.13, 1): pass; calibration-writer-crash-matrix-exclusive (3.13, 2): pass; changes: pass; fences: pass; gate-ledger: pass; installed-wheel: pass; quick: pass; test (3.13, 1): pass; test (3.13, 2): pass; test (3.13, 3): pass; test (3.13, 4): pass; test (3.13, 5): pass; test (3.13, 6): pass. The PR matrix runs the 3.13 Linux shards; the 3.11 shard that carried the original failure runs in the post-merge matrix on main and is watched after the merge (fix-forward if red, Ed's 09-16 ruling).
+
+## §7 Post-merge matrix on main `d8e6761f` (row 11, second half), 05:23 PDT 09-20
+Run 35509175943: conclusion SUCCESS — every job green, including the `test (3.11, 3)` shard that carried the original failure at `2f4fc128`. CI-LEGACY-FIXTURE-LINUX-01 is delivered; kernel retirement follows with the census lane's.
