@@ -1,8 +1,9 @@
-"""Prepare a sealed evidence candidate; stop before notice and publication."""
+"""Prepare and operate evidence candidates through the existing night executors."""
 from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from dataclasses import asdict
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -11,6 +12,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -20,6 +22,11 @@ KIND = "quiet_predicate_evidence"
 REMOTE = "https://github.com/mpmdw/JouleWise"
 SCHEMA = "joulewise.evidence_prepare.v1"
 STEPS = ("clone", "venv", "plan", "wrapper", "render", "complete")
+# Activation records 19/21: every arm needs a supervisor started after the
+# canonical fast-forward; H must include the bracketed census cure.
+CENSUS_FIX = "980f8d6452fb6923644bdac1e243ce0a344c881f"
+CANONICAL = "/Users/edr/code/JouleWise"
+SUPERVISOR_STATE = "/Users/edr/night-custody/magistrate/state.json"
 
 
 class Refused(Exception):
@@ -121,7 +128,7 @@ def checkout_ok(root, head):
         raise Refused("clone HEAD differs from H")
     if run(["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"]) != "HEAD":
         raise Refused("clone is not detached")
-    if run(["git", "-C", root, "status", "--porcelain=v1", "--untracked-files=all"]):
+    if run(["git", "-C", root, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all"]):
         raise Refused("dirty clone")
 
 
@@ -149,14 +156,26 @@ def checkpoint(path, state, step=None, files=()):
         state["digests"][str(file)] = digest(file)
     if step:
         state["steps"].append(dict(step=step, completed_epoch_s=time.time()))
+    saved_json(path, state)
+
+
+def saved_json(path, value):
+    """Publish a complete fsynced JSON record with the checkpoint protocol."""
+    atomic_bytes(path, (json.dumps(value, indent=2, sort_keys=True) + "\n").encode())
+
+
+def atomic_bytes(path, raw):
+    path = safe_path(path)
     temporary = path.with_suffix(".tmp")
     absent(temporary)
-    with temporary.open("x") as stream:
-        json.dump(state, stream, indent=2, sort_keys=True)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, path)
+    try:
+        with temporary.open("xb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 @contextmanager
@@ -342,6 +361,9 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
         if done != list(STEPS[:len(done)]) or len(done) > len(STEPS):
             raise Refused("unknown prior-preparation step ledger")
         expected_stage = {"prepare.json"}
+        lifecycle = safe_path(stage / "lifecycle")
+        if lifecycle.is_dir():
+            expected_stage.add("lifecycle")  # Mutable journals are not sealed artifacts.
         if "plan" in done:
             expected_stage.add("night_plan.json")
         if "render" in done:
@@ -468,6 +490,615 @@ print(json.dumps(s))
         return state
 
 
+def candidate_state(candidate):
+    stage = safe_path(candidate)
+    state = read_state(stage / "prepare.json")
+    expected = locations(safe_path(state["roots_under"]), stage.parent,
+                         state["t0"], parse_head(state["head"]))
+    if (any(state.get(k) != v for k, v in expected.items())
+            or state.get("plan_path") != str(stage / "night_plan.json")
+            or state.get("kind") != KIND
+            or [s["step"] for s in state["steps"]] != list(STEPS)):
+        raise Refused("candidate is not a completed, owned preparation")
+    return state
+
+
+@contextmanager
+def candidate_lock(candidate):
+    stage = safe_path(candidate)
+    with staging_lock(stage.parent, stage.name):
+        yield
+
+
+def lifecycle_dir(candidate):
+    path = safe_path(Path(candidate) / "lifecycle")
+    path.mkdir(exist_ok=True)
+    return path
+
+
+def sealed_state(state, *, published=False, lock_verifier=verify_lock):
+    root = safe_path(state["measurement_root"])
+    stage, custody = safe_path(state["staging"]), safe_path(state["custody_root"])
+    plan = custody / "night_plan.json" if published else stage / "night_plan.json"
+    required = {str(stage / "night_plan.json"), str(root / "env/mac-measurement-lock.txt")}
+    required.update(str(custody / name) for name in
+                    ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", "evidence_manifest.json"))
+    if not required.issubset(state["digests"]):
+        raise Refused("missing sealed digests")
+    render = stage / "render"
+    actual = {str(p) for p in render.rglob("*") if p.is_file() or p.is_symlink()}
+    expected = {p for p in state["digests"] if Path(p).is_relative_to(render)}
+    if not actual or actual != expected:
+        raise Refused("unknown or missing render output")
+    for path, sha in state["digests"].items():
+        physical = plan if path == state["plan_path"] else safe_path(path)
+        safe_path(physical)
+        if not physical.is_file() or digest(physical) != sha:
+            raise Refused(f"sealed-byte drift: {physical}")
+    checkout_ok(root, state["head"])
+    lock_verifier(root)
+    if interpreter(root) != state["interpreter"]:
+        raise Refused("interpreter identity drift")
+    sealed_candidate(root, plan)
+    value = json.loads(plan.read_text())
+    if any(value.get(k) != v for k, v in dict(
+            plan_id=state["plan_id"], repo_head=state["head"], measurement_head=state["head"],
+            measurement_root=str(root), custody_root=str(custody), t0_epoch_s=state["t0"]).items()):
+        raise Refused("sealed plan differs from preparation identity")
+    return plan
+
+
+def clone_schedule(state, plan):
+    code = """import json,sys,time
+from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S
+from scripts.run_night import schedule, COURIER_DEADLINE_S
+from scripts.magistrate_watchdog import PLAN_LEAD_S, TERM_LEAD_S, KILL_LEAD_S
+p=NightPlan.from_mapping(json.load(open(sys.argv[1])))
+if not 0 <= time.time()-p.authored_epoch_s <= PLAN_MAX_AGE_S:
+    raise ValueError('sealed plan stale or future-authored')
+s=schedule(p); t=p.t0_epoch_s
+s['boundaries']={'install close EXCLUDED':s['install_close_epoch_s'],
+'REQUEST / exit BEFORE':t-PLAN_LEAD_S, 'TERM':t-TERM_LEAD_S, 'KILL':t-KILL_LEAD_S,
+'t0':t, 'window end':t+p.window_max_s,
+'completion / courier deadline':t+p.window_max_s+COURIER_DEADLINE_S,
+'daily dead-man':s['deadman_epoch_s']}
+print(json.dumps(s))
+"""
+    root = Path(state["measurement_root"])
+    return json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan], cwd=root))
+
+
+def probe_command(argv, *, cwd=None):
+    return subprocess.run(list(map(str, argv)), cwd=cwd, capture_output=True, text=True,
+                          check=False, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+
+
+def observation_record(result):
+    return dict(exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr)
+
+
+def contains_head(canonical, head, commit, runner):
+    result = runner(["git", "-C", canonical, "merge-base", "--is-ancestor", head, commit])
+    if result.returncode not in (0, 1):
+        raise Refused("cannot determine canonical ancestry: " + result.stderr.strip())
+    return result.returncode == 0
+
+
+def canonical_check(state, canonical, runner):
+    if not contains_head(Path(state["measurement_root"]), CENSUS_FIX, state["head"], runner):
+        raise Refused("candidate H does not contain the census fix " + CENSUS_FIX)
+    if not contains_head(canonical, state["head"], "HEAD", runner):
+        raise Refused("canonical checkout does not contain candidate H")
+    result = runner(["git", "-C", canonical, "--no-optional-locks", "status", "--porcelain", "-uno"])
+    if result.returncode or result.stdout.strip():
+        raise Refused("canonical checkout is dirty or unreadable: " + result.stdout + result.stderr)
+    return dict(path=str(canonical), required_head=state["head"], census_fix=CENSUS_FIX,
+                status=observation_record(result))
+
+
+def supervisor_check(state, canonical, state_path, runner):
+    # Records 19/21: every arm needs a supervisor started after the canonical
+    # fast-forward; use the oldest continuously H-containing reflog entry.
+    resident = json.loads(safe_path(state_path).read_text())["resident_session"]
+    evidence = dict(state_path=str(state_path), resident_session=resident)
+    if resident is None:
+        return evidence
+    pid = resident["supervisor_pid"]
+    if type(pid) is not int or pid <= 0:
+        raise Refused("resident supervisor PID must be a positive integer")
+    result = runner(["ps", "-o", "pid=,lstart=,command=", "-p", str(pid)])
+    evidence["process"] = observation_record(result)
+    if result.returncode == 1 and not result.stdout.strip():
+        return dict(evidence, resident="absent")
+    if result.returncode != 0 or not result.stdout.strip():
+        raise Refused("cannot inspect resident supervisor process")
+    fields = result.stdout.split(maxsplit=6)
+    if len(fields) != 7 or fields[0] != str(pid):
+        raise Refused("unparseable resident supervisor observation")
+    if "magistrate_watchdog.py" not in fields[6]:
+        return dict(evidence, resident="PID reused")
+    started = datetime.strptime(" ".join(fields[1:6]), "%a %b %d %H:%M:%S %Y").timestamp()
+    if not contains_head(canonical, state["head"], "HEAD", runner):
+        raise Refused("canonical checkout does not contain H for supervisor freshness")
+    reflog = runner(["git", "-C", canonical, "reflog", "--date=unix", "--format=%gd %H"])
+    if reflog.returncode:
+        raise Refused("cannot read canonical reflog")
+    arrival = None
+    walked = []
+    for line in reflog.stdout.splitlines():
+        ref, sha = line.split()
+        if not contains_head(canonical, state["head"], sha, runner):
+            break
+        match = re.fullmatch(r"HEAD@\{([0-9]+)\}", ref)
+        if not match:
+            raise Refused("unparseable canonical reflog stamp")
+        arrival = int(match[1])
+        walked.append(dict(ref=ref, head=sha))
+    if arrival is None:
+        raise Refused("no reflog entry continuously contains H")
+    if started <= arrival:
+        raise Refused(f"stale resident supervisor pid {pid}: started {started}, H arrived {arrival}")
+    return dict(evidence, started_epoch_s=started, head_arrived_epoch_s=arrival,
+                continuous_reflog=walked)
+
+
+def retained_roots(state):
+    inventory = []
+    for plan in sorted((safe_path(state["roots_under"]) / "night-custody").glob("*/night_plan.json")):
+        safe_path(plan)
+        if not plan.is_file():
+            raise Refused("retained plan is not a regular non-symlink file: " + str(plan))
+        markers = [p for p in (plan.parent / "night/courier.sent", plan.parent / "night/result.json")
+                   if safe_path(p).is_file()]
+        inventory.append(dict(plan=str(plan), classification="retained" if markers else "UNKNOWN",
+                              evidence=[str(p) for p in markers]))
+    return dict(inventory=inventory, verdict="fail" if any(
+        row["classification"] == "UNKNOWN" for row in inventory) else "pass")
+
+
+def clone_census(state, caller_pid, observation=None, *, argv_only=False):
+    # Fixture observations cross as data; all imports/classification belong to H.
+    code = """import json,sys
+from dataclasses import asdict
+from types import SimpleNamespace
+from joulewise import arm_census, night_gate
+from joulewise.quiet_guard_process import KernelProcessTable, KernelProcessRecord, DarwinProcessRecord
+request=json.loads(sys.argv[1]); result={'argv':list(night_gate.AGENT_CENSUS_ARGV)}
+if not request['argv_only']:
+    data=request['observation']; pid=request['caller_pid']
+    if data is None: observation=arm_census.observe_arm_census(caller_pid=pid)
+    else:
+        observation=arm_census.Observation(
+            KernelProcessTable(tuple(KernelProcessRecord(**r) for r in data['inventory']['rows'])),
+            tuple(DarwinProcessRecord(**dict(r,argv=tuple(r['argv']))) for r in data['records']),
+            tuple(data['hit_pids']),tuple(data['diagnostics']))
+    verdict=arm_census.classify_arm_census(SimpleNamespace(receipt_class='DIAGNOSTIC_NO_PACK'),observation,caller_pid=pid)
+    result.update(observation=asdict(observation),classification=asdict(verdict))
+print(json.dumps(result))
+"""
+    root = Path(state["measurement_root"])
+    request = dict(argv_only=argv_only, caller_pid=caller_pid,
+                   observation=asdict(observation) if observation is not None else None)
+    return json.loads(run([root / ".venv/bin/python", "-B", "-c", code, json.dumps(request)], cwd=root))
+
+
+def census_check(state, runner, observer, caller_pid):
+    argv = clone_census(state, caller_pid, argv_only=True)["argv"]
+    raw = runner(argv)
+    raw_pids = set()
+    if raw.returncode == 0:
+        for line in raw.stdout.splitlines():
+            match = re.match(r"^\s*([0-9]+)(?:\s|$)", line)
+            if not match:
+                raise Refused("unresolved raw census row: " + line)
+            raw_pids.add(int(match[1]))
+    observations = []
+    for _ in range(2):
+        result = clone_census(state, caller_pid, observer(caller_pid=caller_pid) if observer else None)
+        observations.append(result)
+        verdict, observed = result["classification"], result["observation"]
+        resolved = set(verdict["own_pids"]) | set(verdict["foreign_pids"])
+        resolved.update(pid for pid, _ in verdict["workloads"])
+        unknown = set(observed["hit_pids"]) - {r["pid"] for r in observed["records"]}
+        unresolved = raw_pids - resolved - unknown
+        if not unresolved:
+            break
+    reason = f"unresolved raw census hit pid {min(unresolved)}" if unresolved else None
+    if unknown and not reason:
+        reason = "unknown census hit pid " + str(min(unknown))
+    return dict(verdict="pass" if raw.returncode in (0, 1) and not (
+                    verdict["foreign_pids"] or verdict["diagnostics"] or verdict["workloads"] or reason) else "fail",
+                reason=reason, argv=argv, raw=observation_record(raw), observations=observations,
+                classification=verdict, observation=observed, owned_helpers=verdict["own_pids"],
+                instruction="Magistrate, all owned agents, MCP children and helpers must be gone before REQUEST.")
+
+
+def night_agents(state, launchctl_bin):
+    code = """import json,os,subprocess,sys
+from pathlib import Path
+from joulewise.night_agent_install import Target, LaunchctlAdapter, LABELS
+directory=Path.home()/'Library/LaunchAgents'
+target=Target.for_mode(directory)
+listing=subprocess.run([sys.argv[1],'list'],capture_output=True,text=True)
+labels=set(LABELS)
+labels.update(line.split()[-1] for line in listing.stdout.splitlines()
+              if line.split() and line.split()[-1].startswith(LABELS[0]))
+adapter=LaunchctlAdapter(Target.for_mode(directory,labels=tuple(sorted(labels))),sys.argv[1])
+jobs=[]
+for label in sorted(labels):
+    live=adapter.print(label)
+    jobs.append(dict(label=label,liveness=live.kind.name,exit_code=live.rc,stdout=live.stdout,stderr=live.stderr))
+paths={target.path(label) for label in LABELS}|{target.sidecar(label) for label in LABELS}
+paths.update(directory.glob(LABELS[0]+'*.plist*'))
+print(json.dumps(dict(jobs=jobs,plists=[str(p) for p in sorted(paths) if os.path.lexists(p)],
+                     listing=dict(exit_code=listing.returncode,stdout=listing.stdout,stderr=listing.stderr))))
+"""
+    root = Path(state["measurement_root"])
+    return json.loads(run([root / ".venv/bin/python", "-B", "-c", code, launchctl_bin], cwd=root))
+
+
+def require_no_night_agents(evidence):
+    conflicts = [j["label"] + "=" + j["liveness"] for j in evidence["jobs"] if j["liveness"] != "ABSENT"]
+    conflicts.extend(evidence["plists"])
+    if evidence["listing"]["exit_code"]:
+        conflicts.append("night label discovery UNKNOWN")
+    if conflicts:
+        raise Refused("night agents already loaded or plists present: " + ", ".join(conflicts))
+    return evidence
+
+
+def refuse_root_attempt_records(candidate):
+    """Fail closed on bench-style attempt records at the candidate root.
+
+    The bench §1.4a procedure journals under ``$STAGE/arm-attempts/NNNNNN/``;
+    the lifecycle's ONE home is ``<staging>/lifecycle/``. Records at the root
+    would otherwise be silently ignored by check/publish-install (fresh eyes,
+    round 2), so their presence refuses here as it does for ``prepare``.
+    """
+    candidate = Path(candidate)
+    for name in ("attempts.json", "arm-attempts"):
+        if os.path.lexists(candidate / name):
+            raise Refused(f"attempt records at the candidate root: {candidate / name}; "
+                          "the lifecycle home is <staging>/lifecycle/")
+
+
+def retry_inventory(state, stage):
+    refuse_root_attempt_records(stage)
+    lifecycle = stage / "lifecycle"
+    paths = sorted(set(lifecycle.glob("attempts.json")) | set(lifecycle.glob("arm-attempts/*/attempts.json")))
+    records = []
+    for path in paths:
+        attempts = json.loads(safe_path(path).read_text())
+        if not isinstance(attempts, list):
+            raise Refused("malformed attempt inventory: " + str(path))
+        records.extend(dict(path=str(path), cause=a.get("cause")) for a in attempts)
+    # Our journal cannot establish a named retry cause from a bare nonzero rc.
+    for path in sorted(lifecycle.glob("arm-attempts/*/install.json")):
+        prior = json.loads(safe_path(path).read_text())
+        cause = prior.get("cause")
+        records.append(dict(path=str(path), cause=cause))
+    # The clone at H owns retry policy, just as it owns census classification.
+    code = """import json,sys
+from joulewise.arm_retry import classify_abort
+records=json.loads(sys.argv[1])
+print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record in records]))
+"""
+    root = Path(state["measurement_root"])
+    records = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, json.dumps(records)], cwd=root))
+    return dict(verdict="fail" if any(r["route"] != "retry" for r in records) else "pass",
+                consulted="joulewise.arm_retry.classify_abort", inventory=records,
+                limitation="Routing only; retry_allowed requires fresh notice/veto evidence (slice B2).")
+
+
+def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
+          runner=probe_command, census_observer=None, caller_pid=None, lock_verifier=verify_lock,
+          launchctl_bin="launchctl"):
+    with candidate_lock(candidate):
+        state = candidate_state(candidate)
+        record = dict(schema="joulewise.evidence_check.v1", started_epoch_s=time.time(),
+                      prepare_sha256=digest(Path(candidate) / "prepare.json"), checks={}, armable=False,
+                      launchctl_bin=str(launchctl_bin), fake_launchctl=str(launchctl_bin) != "launchctl")
+        checks = record["checks"]
+
+        def inspect(name, operation):
+            try:
+                evidence = operation()
+                checks[name] = dict(verdict="pass")
+                checks[name].update(evidence)
+            except (Refused, OSError, ValueError, KeyError, TypeError) as exc:
+                checks[name] = dict(verdict="fail", reason=str(exc))
+            return checks[name]["verdict"] == "pass"
+
+        def seal():
+            plan = sealed_state(state, lock_verifier=lock_verifier)
+            s = clone_schedule(state, plan)
+            if time.time() >= s["install_close_epoch_s"]:
+                raise Refused("exclusive install close has passed")
+            return dict(digests=state["digests"], schedule=s)
+
+        if inspect("sealed", seal):
+            inspect("night_agents", lambda: require_no_night_agents(night_agents(state, launchctl_bin)))
+            inspect("canonical", lambda: canonical_check(state, safe_path(canonical), runner))
+            inspect("supervisor", lambda: supervisor_check(state, safe_path(canonical), supervisor_state, runner))
+            courier = shutil.which("claude")
+            checks["courier"] = dict(verdict="pass" if courier else "fail", path=courier,
+                                      reason="courier on PATH" if courier else "courier unavailable")
+            inspect("retained_roots", lambda: retained_roots(state))
+            inspect("census", lambda: census_check(state, runner, census_observer,
+                                                   os.getpid() if caller_pid is None else caller_pid))
+            inspect("retry", lambda: retry_inventory(state, Path(candidate)))
+        passed = all(c["verdict"] == "pass" for c in checks.values())
+        record["armable"] = passed and not record["fake_launchctl"]
+        record["rehearsal_ready"] = passed and record["fake_launchctl"]
+        record["finished_epoch_s"] = time.time()
+        path = lifecycle_dir(candidate) / "check.json"
+        saved_json(path, record)
+        if not passed:
+            for name in ("night_agents", "census"):
+                reason = checks.get(name, {}).get("reason")
+                if reason:
+                    raise Refused(reason)
+            raise Refused("pre-arm checks failed: " + ", ".join(k for k, v in checks.items() if v["verdict"] != "pass")
+                          + "; see " + str(path))
+        return record
+
+
+def installer_call(state, flag=None, *, launchctl_bin="launchctl", runner=probe_command):
+    root = Path(state["measurement_root"])
+    argv = [root / "scripts/install_night_agent.sh", "--plan", Path(state["custody_root"]) / "night_plan.json"]
+    if flag == "--uninstall":
+        argv.append(flag)  # The shell intentionally uses system Python for cleanup.
+    else:
+        argv += ["--python", root / ".venv/bin/python"]
+        if flag:
+            argv.append(flag)
+    argv += ["--launchctl-bin", launchctl_bin]
+    started = time.time()
+    result = runner(argv, cwd=root)
+    return dict(argv=list(map(str, argv)), started_epoch_s=started, finished_epoch_s=time.time(),
+                **observation_record(result))
+
+
+def verify_state(state, *, launchctl_bin="launchctl", lock_verifier=verify_lock):
+    plan = sealed_state(state, published=True, lock_verifier=lock_verifier)
+    s = clone_schedule(state, plan)
+    root = Path(state["measurement_root"])
+    # Ruling 30a: typed liveness plus installed plist fields and exact rendered
+    # bytes retain step-5 evidence without parsing launchctl calendar text.
+    code = """import hashlib,json,sys,plistlib
+from pathlib import Path
+from joulewise.night_agent_install import Target, LaunchctlAdapter, Kind, LABELS
+from joulewise.night_gate import NightPlan
+from scripts.run_night import schedule
+p=NightPlan.from_mapping(json.load(open(sys.argv[1]))); expected=schedule(p)
+target=Target.for_mode(Path.home()/'Library/LaunchAgents')
+adapter=LaunchctlAdapter(target,sys.argv[2]); results=[]
+for label,key in zip(LABELS,('night_calendar','deadman_calendar')):
+    live=adapter.print(label)
+    if live.kind is not Kind.LOADED: raise ValueError(label+' is '+live.kind.name+': '+live.stderr)
+    path=target.path(label)
+    if path.is_symlink(): raise ValueError('symlink plist: '+str(path))
+    installed_bytes=path.read_bytes()
+    render_path=Path(sys.argv[3])/(label+'.plist')
+    rendered_bytes=render_path.read_bytes()
+    installed=plistlib.loads(installed_bytes)
+    rendered=plistlib.loads(rendered_bytes)
+    if installed['Label'] != label: raise ValueError('plist Label differs: '+label)
+    if installed['StartCalendarInterval'] != expected[key]: raise ValueError('calendar differs: '+label)
+    if installed['ProgramArguments'] != rendered['ProgramArguments']: raise ValueError('arguments differ: '+label)
+    if str(Path(sys.argv[1])) not in installed['ProgramArguments']: raise ValueError('plan path differs: '+label)
+    if installed['ProgramArguments'][0] != sys.argv[4]: raise ValueError('interpreter differs: '+label)
+    if installed['WorkingDirectory'] != p.measurement_root: raise ValueError('working directory differs: '+label)
+    if installed['RunAtLoad'] is not False: raise ValueError('RunAtLoad differs: '+label)
+    if installed_bytes != rendered_bytes: raise ValueError('installed plist bytes differ from render: '+label)
+    results.append(dict(label=label,plist=str(path),calendar=installed['StartCalendarInterval'],
+                        liveness=live.kind.name,rendered_plist=str(render_path),
+                        plist_sha256=hashlib.sha256(installed_bytes).hexdigest(),
+                        render_sha256=hashlib.sha256(rendered_bytes).hexdigest(),
+                        exit_code=live.rc,stdout=live.stdout,stderr=live.stderr))
+print(json.dumps(results))
+"""
+    jobs = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan,
+                           launchctl_bin, Path(state["staging"]) / "render", root / ".venv/bin/python"], cwd=root))
+    return dict(schema="joulewise.evidence_verify.v1", verified_epoch_s=time.time(), jobs=jobs,
+                launchctl_bin=str(launchctl_bin), fake_launchctl=str(launchctl_bin) != "launchctl",
+                schedule=s, request_epoch_s=s["boundaries"]["REQUEST / exit BEFORE"],
+                instruction="Exit every owned agent and helper strictly before REQUEST; this command does not terminate them.")
+
+
+def verify(*, candidate, launchctl_bin="launchctl", lock_verifier=verify_lock):
+    with candidate_lock(candidate):
+        return verify_state(candidate_state(candidate), launchctl_bin=launchctl_bin, lock_verifier=lock_verifier)
+
+
+def notice_unused(state, notice_id):
+    stage = Path(state["staging"])
+    prefix = "qpe01-pilot-n1-" + datetime.fromtimestamp(state["t0"]).strftime("%Y%m%d")
+    candidates = set(stage.parent.glob(prefix + "*")) | {stage}
+    for candidate in sorted(candidates):
+        safe_path(candidate)
+        refuse_root_attempt_records(candidate)
+        base = candidate / "lifecycle"
+        paths = set(base.glob("arm-attempts/*/install.json")) | set(base.glob("arm-attempts/*/attempts.json"))
+        paths.update(base.glob("attempts.json"))
+        for path in sorted(paths):
+            try:
+                value = json.loads(safe_path(path).read_text())
+                records = value if isinstance(value, list) else [value]
+                if any(not isinstance(r, dict) for r in records):
+                    raise ValueError("invalid attempt")
+            except (OSError, ValueError, TypeError) as exc:
+                raise Refused("malformed attempt journal: " + str(path)) from exc
+            if any(r.get("notice_accepted") == notice_id for r in records):
+                raise Refused("notice id already used by attempt " + str(path))
+
+
+def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl",
+                    runner=probe_command, lock_verifier=verify_lock):
+    with candidate_lock(candidate):
+        state = candidate_state(candidate)
+        stage = Path(state["staging"])
+        plan = sealed_state(state, lock_verifier=lock_verifier)
+        lifecycle = lifecycle_dir(stage)
+        check_path = safe_path(lifecycle / "check.json")
+        if not check_path.is_file():
+            raise Refused("check.json is required before publication")
+        checked = json.loads(check_path.read_text())
+        fake = str(launchctl_bin) != "launchctl"
+        ready = checked.get("rehearsal_ready") is True if fake else checked.get("armable") is True
+        if (checked.get("schema") != "joulewise.evidence_check.v1" or not ready
+                or checked.get("launchctl_bin") != str(launchctl_bin)
+                or checked.get("fake_launchctl") is not fake
+                or checked.get("prepare_sha256") != digest(stage / "prepare.json")):
+            raise Refused("check.json is not armable or does not bind prepare.json")
+        age = time.time() - checked.get("finished_epoch_s", 0)
+        if not math.isfinite(age) or not 0 <= age <= 3600 or time.time() - check_path.stat().st_mtime > 3600:
+            raise Refused("check.json is older than 60 minutes or future-dated")
+        sealed = [stage / "prepare.json", *(Path(p) for p in state["digests"])]
+        if any(check_path.stat().st_mtime_ns <= p.stat().st_mtime_ns for p in sealed):
+            raise Refused("check.json is not newer than every sealed artefact")
+        if not isinstance(notice_accepted, str) or not notice_accepted.strip():
+            raise Refused("notice acceptance message id is required")
+        notice_unused(state, notice_accepted)
+        s = clone_schedule(state, plan)
+        if time.time() >= s["install_close_epoch_s"]:
+            raise Refused("exclusive install close has passed")
+        target = safe_path(Path(state["custody_root"]) / "night_plan.json")
+        absent(target)
+        if plan.stat().st_dev != target.parent.stat().st_dev:
+            raise Refused("staging and custody are not on one filesystem (atomic publication)")
+        # No prior evidence is overwritten; install.json at staging is the
+        # current view of the immutable per-attempt terminal journal.
+        attempts = safe_path(lifecycle / "arm-attempts")
+        attempts.mkdir(exist_ok=True)
+        ordinals = [int(p.name) for p in attempts.iterdir() if p.name.isdecimal()]
+        attempt = attempts / f"{max(ordinals, default=0) + 1:06d}"
+        attempt.mkdir()
+        raw = plan.read_bytes()
+        atomic_bytes(attempt / "plan.json", raw)
+        record = dict(schema="joulewise.evidence_install.v1", started_epoch_s=time.time(),
+                      plan_sha256=hashlib.sha256(raw).hexdigest(), published_plan=str(target),
+                      notice_accepted=notice_accepted, notice_verified=False, commands=[],
+                      attempt_path=str(attempt), outcome="not_published",
+                      phase="prepared", launchctl_bin=str(launchctl_bin), fake_launchctl=fake,
+                      plist_paths=[str(Path.home() / "Library/LaunchAgents" / (label + ".plist"))
+                                   for label in ("com.joulewise.night", "com.joulewise.night.deadman")],
+                      probe_receipt_sha256=None)
+
+        def save():
+            saved_json(attempt / "install.json", record)
+            saved_json(lifecycle / "install.json", record)
+
+        def invoke(flag):
+            record["phase"] = "probing" if flag else "installing"
+            save()
+            observed = installer_call(state, flag, launchctl_bin=launchctl_bin, runner=runner)
+            record["commands"].append(observed)
+            if observed["exit_code"]:
+                for line in observed["stderr"].splitlines():
+                    match = re.match(r"^([a-z][a-z0-9_]+):", line)
+                    if match:
+                        record["cause"] = match[1]
+                        break
+            record["phase"] = "probe_finished" if flag else "install_finished"
+            save()
+            if observed["exit_code"]:
+                raise Refused(f"installer {flag or 'install'} failed ({observed['exit_code']}): {observed['stderr']}")
+
+        save()
+        published = False
+        publication_started = False
+        try:
+            absent(target)
+            record["pre_publication"] = night_agents(state, launchctl_bin)
+            save()
+            require_no_night_agents(record["pre_publication"])
+            record["phase"] = "publishing"
+            save()  # Durable intent precedes the rename, including lost acknowledgement.
+            publication_started = True
+            os.replace(plan, target)
+            published = True
+            record.update(published_epoch_s=time.time(), outcome="published", phase="published")
+            save()
+            if target.read_bytes() != raw:
+                raise Refused("published plan bytes differ from staged snapshot")
+            invoke("--launchd-probe")
+            # The real install validates freshness, identity and cleanup again.
+            receipt = safe_path(target.parent / "night_probe_receipt.json")
+            record["probe_receipt_sha256"] = digest(receipt)
+            invoke(None)
+            record["phase"] = "verifying"
+            save()
+            record["verification"] = verify_state(state, launchctl_bin=launchctl_bin, lock_verifier=lock_verifier)
+            record.update(outcome="rehearsal_installed" if fake else "installed", phase="complete",
+                          installed=not fake, finished_epoch_s=time.time())
+            save()
+            return record
+        except BaseException as exc:
+            record["failure"] = f"{type(exc).__name__}: {exc}"
+            # A signal/exception can arrive after replace has moved the file
+            # but before the next Python assignment acknowledges publication.
+            published = published or (publication_started and not os.path.lexists(plan))
+            if published:
+                try:
+                    # Transaction rc 2/3 means refused/rolled back; teardown
+                    # retention overrides these with rc 1/4. A probe never
+                    # installs the night pair. Only rc 0 transfers ownership.
+                    installs = [c for c in record["commands"] if "--launchd-probe" not in c["argv"]]
+                    installed = installs and installs[-1]["exit_code"] == 0
+                    uncertain = (record["phase"] == "installing" or
+                                 (installs and installs[-1]["exit_code"] not in (0, 2, 3)))
+                    record["phase"] = "recovering"
+                    save()
+                    if installed:
+                        cleanup = installer_call(state, "--uninstall", launchctl_bin=launchctl_bin, runner=runner)
+                        record["commands"].append(cleanup)
+                        save()
+                        if cleanup["exit_code"] != 0:
+                            raise Refused(f"uninstall failed ({cleanup['exit_code']})")
+                    elif uncertain:
+                        raise Refused("installer ownership/rollback unknown; jobs and plists preserved")
+                    else:
+                        record["recovery"] = "foreign_jobs_preserved"
+                        record["retained_state"] = record["pre_publication"]
+                    safe_path(target)
+                    if not target.is_file() or target.read_bytes() != raw:
+                        raise Refused("published plan bytes changed or missing")
+                    absent(plan)
+                    os.replace(target, plan)
+                    record.update(outcome="restored_unpublished", phase="complete")
+                except BaseException as recovery:
+                    record.update(outcome="retained", recovery_failure=f"{type(recovery).__name__}: {recovery}")
+                    record["finished_epoch_s"] = time.time()
+                    save()
+                    raise Refused(f"{exc}; recovery stopped: {recovery}; retained state: {target}, {attempt}") from exc
+            record["finished_epoch_s"] = time.time()
+            save()
+            raise
+
+
+def uninstall(*, candidate, launchctl_bin="launchctl", runner=probe_command):
+    with candidate_lock(candidate):
+        state = candidate_state(candidate)
+        # Cleanup deliberately does not validate plan bytes, age, lock or HEAD;
+        # the existing uninstall accepts malformed/retired published plans.
+        path = safe_path(Path(candidate) / "lifecycle/uninstall.json")
+        try:
+            history = json.loads(path.read_text()) if os.path.lexists(path) else []
+            if not isinstance(history, list) or any(not isinstance(r, dict) or
+                    type(r.get("exit_code")) is not int or not isinstance(r.get("argv"), list) for r in history):
+                raise ValueError("invalid records")
+        except (OSError, ValueError, TypeError) as exc:
+            raise Refused("malformed uninstall journal") from exc
+        lifecycle_dir(candidate)
+        record = installer_call(state, "--uninstall", launchctl_bin=launchctl_bin, runner=runner)
+        history.append(record)
+        saved_json(path, history)
+        if record["exit_code"] != 0:
+            raise Refused(f"uninstall failed ({record['exit_code']}); retained state: {state['custody_root']}")
+        return record
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         raise Refused(message)
@@ -483,10 +1114,18 @@ def main(argv=None):
     prep.add_argument("--remote", default=REMOTE)
     prep.add_argument("--roots-under", default="/Users/edr")
     prep.add_argument("--staging-under", default="/Users/edr/night-plan-staging")
+    for command in ("check", "publish-install", "verify", "uninstall"):
+        action = sub.add_parser(command)
+        action.add_argument("--candidate", required=True)
+        action.add_argument("--launchctl-bin", default="launchctl")
+        if command == "publish-install":
+            action.add_argument("--notice-accepted")
     try:
         args = vars(parser.parse_args(argv))
-        args.pop("command")
-        print(json.dumps(prepare(**args), indent=2, sort_keys=True))
+        command = args.pop("command")
+        operation = {"prepare": prepare, "check": check, "publish-install": publish_install,
+                     "verify": verify, "uninstall": uninstall}[command]
+        print(json.dumps(operation(**args), indent=2, sort_keys=True))
         return 0
     except Refused as exc:
         print("REFUSED: " + " ".join(str(exc).splitlines()), file=sys.stderr)

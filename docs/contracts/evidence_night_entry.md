@@ -1,4 +1,4 @@
-# Evidence night entry: prepare (PR 1, slice A)
+# Evidence night entry: preparation and lifecycle (slices A and B1)
 
 `python -m joulewise.evidence_night prepare --kind quiet_predicate_evidence
 --t0 <epoch|next> [--head H] [--remote URL] [--roots-under DIR]
@@ -120,7 +120,7 @@ Executor refusals propagate as a preparation refusal. Unexpected exceptions
 exit 1 with `ERROR: <type>: <message>` and a traceback on stderr. A runway
 below 2400 seconds prints `WARNING: runway below the 40-minute planning default`
 and continues; this warning is not a refusal. Existing artifacts are
-never overwritten to recover. There is no mail, launchctl, probe, chain,
+never overwritten to recover. `prepare` has no mail, launchctl, probe, chain,
 collector, power sampler, install or automatic publication operation here.
 
 The adopted KEEP inventory remains binding at its owning lifecycle phase:
@@ -128,12 +128,204 @@ root ownership/retention and fences; raw bracketed census and workload review;
 locked environment, pinned source/manifest and ruled registration; v2/no-pack,
 plan age/schedule/records and job-state checks; receipt identity/freshness and
 cleanup/consent checks; full `arm_retry` refusal routing. This slice delegates
-render validation to unchanged executors. Pre-arm discovery, census, canonical
-ancestry/supervisor checks, readable NO/directives/STOP, notice acceptance,
-publication, launchd probe/install/verification and uninstall recovery remain
-bench obligations. No exact-four-root gate, calendar restriction, attempt cap,
+render validation to unchanged executors. Slice B1 below supplies pre-arm
+discovery, census, canonical ancestry/supervisor checks, publication,
+probe/install/verification and uninstall recovery. Readable NO/directives/STOP
+and notice acceptance remain bench obligations. No exact-four-root gate,
+calendar restriction, attempt cap,
 notice delay, calibration ledger or epoch input is introduced.
 
-Slice B owns the lifecycle façade, handbook/runbook replacement and pre-arm
-checks. Fixture preparation proves composition only; evidence stays PROVISIONAL
-until the owning live gates pass.
+Fixture preparation and lifecycle tests prove composition only; evidence stays
+PROVISIONAL until the owning live gates pass.
+
+## Slice B1: checks and the installer façade
+
+```
+python -m joulewise.evidence_night check --candidate STAGING
+python -m joulewise.evidence_night publish-install --candidate STAGING --notice-accepted MESSAGE_ID
+python -m joulewise.evidence_night verify --candidate STAGING
+python -m joulewise.evidence_night uninstall --candidate STAGING
+```
+
+Authority: consult 18; records 19 §1, **21** (superseding the latest-HEAD-move
+predicate), 26 §4, 27 and 28; `NIGHT_HANDBACK` Census and ARM-RETRY-POLICY;
+record 17 steps 0, 4, 5 and `evidence-checks.py`. The installer, census,
+retry policy and driver remain unchanged. B1 is a mechanical façade for the
+lead's bench procedure. `armable` means the implemented checks passed at the
+recorded observation time; it is not notice/veto clearance or quiet-machine
+validation. The lead must review workloads, stop/directive channels and all
+readable NO relays, then leave with every owned helper before REQUEST.
+
+All four lifecycle commands expose the installer's `--launchctl-bin`
+seam. `check`, `publish-install` and `verify` record `launchctl_bin`; any value
+other than literal `launchctl` records `fake_launchctl: true`. A fake-launchctl
+run is a **rehearsal, never armable**: check sets `armable: false`,
+`rehearsal_ready: true` only when its checks pass; publication requires that
+matching fake executable and records `outcome: rehearsal_installed`,
+`installed: false`. Such records cannot authorize a real arm.
+
+Each successful subcommand prints one JSON object and exits 0. A known
+refusal prints one `REFUSED:` line and exits 2; an unexpected defect prints
+`ERROR:` plus its traceback and exits 1. Installer refusals retain their
+captured return codes and output in the attempt journal. A nonblocking flock
+on `<staging_under>/.locks/<candidate-name>.lock` serializes both preparation
+and lifecycle operations for a candidate (one lock domain).
+No command fast-forwards or repairs a checkout.
+
+`check` first verifies all sealed digests, render inventory, detached clean H,
+locked environment, interpreter identity and the clone's wrapper/manifest/
+registration checks. It checks plan identity, age and exclusive install close
+with the clone's code. It then writes verdicts and evidence for:
+
+0. Refuse ANY loaded `com.joulewise.night*` label, using label discovery and
+   the clone installer's typed liveness for both fixed labels and discovered
+   labels; UNKNOWN refuses. Any night plist or retained `.plist.prior` sidecar
+   under `~/Library/LaunchAgents` refuses, including symlinks. Paths come from
+   the installer's `LABELS` and `Target` methods. Cause:
+   `REFUSED: night agents already loaded or plists present: …`.
+1. Candidate H contains `980f8d6452fb6923644bdac1e243ce0a344c881f`.
+   The canonical checkout contains **candidate H** and has empty
+   `git --no-optional-locks status --porcelain -uno`. Untracked canonical
+   files do not fail that check; tracked modifications and observation errors do.
+2. `/Users/edr/night-custody/magistrate/state.json` supplies
+   `resident_session.supervisor_pid`. Null, an absent PID, or a reused PID
+   whose command no longer names `magistrate_watchdog.py` is clear.
+   Records 19/21 govern `CENSUS_FIX` and this predicate: **every arm needs a
+   supervisor started after the canonical fast-forward**. A live
+   supervisor must have started strictly after the oldest reflog entry from
+   which HEAD continuously contains H. Walk newest to oldest and stop at the
+   first non-containing entry; a rewind/re-add starts a new interval. Missing,
+   unparseable or unreadable evidence refuses. A start equal to arrival refuses.
+3. `shutil.which("claude")` finds the courier executable required by the
+   unchanged installer. This checks availability; it never invokes the courier.
+4. Every `<roots_under>/night-custody/*/night_plan.json` is inventoried and
+   must be a regular non-symlink file; directories and special files refuse.
+   An existing regular `night/courier.sent` or `night/result.json` classifies
+   its root as retained. Otherwise it is UNKNOWN and refuses. Discovery
+   never removes a root, and has no fixed root count. Retention classification
+   does not certify process liveness or completed delivery.
+5. The exact raw bracketed `night_gate.AGENT_CENSUS_ARGV` result is retained
+   alongside `arm_census.observe_arm_census` and `classify_arm_census` evidence.
+   The argv derivation and ancestry classification execute inside the clone's
+   `P -B -c` interpreter, with JSON out; test observers inject data only.
+   Every raw PID must resolve to owned, foreign, workload or unknown evidence.
+   An absent raw PID triggers one re-observation, then
+   `REFUSED: unresolved raw census hit pid N`; unknown evidence also refuses.
+   A raw row without a parseable PID refuses as
+   `REFUSED: unresolved raw census row: …`.
+   Any FOREIGN PID, observed workload or unresolved observation diagnostic
+   refuses. Real-class `publication_blocked == False` is not clearance.
+   Owned ancestry PIDs are listed with the departure instruction.
+6. Existing `<staging>/lifecycle/attempts.json`,
+   `<staging>/lifecycle/arm-attempts/*/attempts.json` and B1 install journals
+   are inventoried through `arm_retry.classify_abort` inside the clone's
+   `P -B -c` interpreter, with JSON in/out and cwd set to the clone. Unknown or
+   cold-gate causes refuse. A bare installer nonzero is **not** relabeled
+   `arm_transport`. This is refusal routing, not a call to `retry_allowed`:
+   fresh notice and veto evidence for that function belongs to B2/the bench.
+   A non-list attempt inventory refuses as `malformed attempt inventory: …`;
+   notice-reuse discovery refuses unreadable or malformed attempt records as
+   `malformed attempt journal: …`.
+
+Lifecycle artifacts are under `<staging>/lifecycle/`: `check.json`,
+`install.json`, `uninstall.json`, `attempts.json`, and `arm-attempts/`.
+Retry inventory and prior-notice discovery read attempt records only from this
+directory. Candidate-root `attempts.json` and `arm-attempts/` (the bench
+§1.4a journal location) are never read: `check`, `publish-install` and the
+notice-reuse check refuse "attempt records at the candidate root" (fail
+closed, naming the lifecycle home), and their presence makes `prepare` refuse with
+`unknown or uncheckpointed staging output`. `prepare` owns and ignores
+this mutable directory; it is not sealed, so `prepare → check → prepare`
+continues to verify and print the preparation record. Besides the shared lock,
+`check` writes only its lifecycle verdict, including a failing verdict. Every
+lifecycle JSON write uses a fsynced temporary file plus `os.replace`, sharing
+preparation's checkpoint helper.
+Sealed-byte failure stops host probes. It preserves `prepare.json` and all
+sealed bytes/mtimes. Python callers may inject a canonical fixture repository,
+supervisor state path, subprocess probe runner, census observer/caller PID and
+lock verifier. These are offline test seams, not CLI clearance overrides.
+
+`publish-install` requires `check.json` bound to the current `prepare.json`,
+literal `armable: true`, matching literal `launchctl`, and an mtime strictly
+newer than `prepare.json` and every sealed artifact. Both the recorded finish
+time and file age must be at most 60 minutes (future finish times refuse).
+Sealed state is checked before freshness stats: a missing staged plan after
+publication is a known refusal (exit 2), never an uncaught missing-file error.
+It rechecks sealed state and the time boundary. It
+requires a nonblank notice acceptance ID. A notice ID present in a prior
+attempt of this candidate or any same-date-prefix candidate under
+`<staging_under>` refuses with `notice id already used by attempt …`.
+**The ID is recorded verbatim and is not verified.** B1 sends no mail and
+reads no notice thread or network
+directive. The caller retains responsibility for the handbook observations;
+passing an ID must not be represented as proof that they occurred. A saved
+check is a snapshot, so the lead repeats `check` at the publication boundary.
+
+The staged plan and custody root must be on one filesystem. A published
+`night_plan.json`, including a dangling symlink, refuses. Publication uses
+`os.replace(staged_plan, custody/night_plan.json)`, then checks byte equality.
+From the clone, the façade calls `scripts/install_night_agent.sh --plan
+PUBLISHED --python CLONE/.venv/bin/python --launchd-probe`, then the same
+command without `--launchd-probe` to install, then verifies. Probe and install
+are separate executor operations. The unchanged installer validates the
+evidence receipt's identity, cleanup and freshness (less than six hours),
+including `probe_label(plan_id)`, before admission. B1 records its SHA-256.
+
+Each publication attempt gets an exclusively created
+`lifecycle/arm-attempts/NNNNNN/` directory, exact `plan.json` snapshot and
+`install.json` journal. `lifecycle/install.json` is the latest view; prior terminal journals
+are preserved. Records contain notice ID/verification status, timestamps,
+command argv/return codes/output, plist paths, probe receipt digest,
+verification and recovery outcome. The record includes pre-publication typed
+liveness for both labels, repeats step 0 immediately before publication, and
+durably records phase `publishing` before the plan rename. Phase transitions
+and parseable installer refusal `cause` are persisted atomically. There is no
+automatic retry loop or inference of a retry-eligible cause; interrupted/failed
+records go to the lead.
+
+Recovery never uninstalls jobs it did not install. The unchanged installer
+transaction's rc 2/3 means refused or rolled back: retained teardown overrides
+these with rc 1/4. In particular `night_agent_already_loaded`, pre-bootstrap
+refusals, successful rollback and probe-only failures do **not** invoke
+`--uninstall`; the journal says `foreign_jobs_preserved` and names the retained
+pre-publication state. Only confirmed successful installation (rc 0) followed
+by a failure permits the clone's `--uninstall`, whose exit must be 0.
+Unknown/interrupted install ownership or failed rollback retains state for the
+lead without destructive cleanup, refusing as
+`installer ownership/rollback unknown; jobs and plists preserved`.
+Only when published bytes still equal the
+saved bytes and the original staged path is absent may `os.replace` restore
+them to staging. Changed/missing bytes, conflicting staged output or failed
+cleanup retain state and name paths in the refusal. Probe evidence remains.
+An exception before publication never runs uninstall. Hard process death
+can leave a nonterminal journal; recovery is lead-controlled, never presumed.
+
+`verify` checks the published sealed candidate (ruling 30a). It executes the clone's
+`LaunchctlAdapter.print` for both labels and requires typed LOADED results;
+ABSENT and UNKNOWN refuse. As in step 5, **calendar comparisons use the
+installed plist files**, not a parser for launchctl's human-readable dump.
+Calendars must equal `run_night.schedule(plan)`; labels, rendered argv,
+published plan path, clone interpreter, working directory and `RunAtLoad=False`
+must match. Installed plist bytes must also equal the sealed render bytes;
+equivalent parsed fields alone are insufficient. The JSON includes typed
+liveness, raw print evidence, installed/rendered plist paths and SHA-256s,
+fresh derived schedule/boundaries and REQUEST time. It does not terminate
+the lead/helpers.
+
+`uninstall` delegates to the clone's shell installer and records each return
+code in `lifecycle/uninstall.json`. Existing append history is read and
+validated before invoking the installer; malformed JSON or record shape yields
+`REFUSED: malformed uninstall journal` without mutation. The updated history
+is published atomically. It deliberately does not require current plan bytes,
+age, HEAD or lock validity, preserving the installer's malformed/retired-plan
+cleanup path. Nonzero returns refuse immediately after recording; no plan is
+unpublished or evidence removed even after successful explicit uninstall.
+
+Offline tests use `FakeLaunchctl`, a fixture HOME and
+synthetic receipt; the composed test also injects the probe process census because sandboxed
+sysmon may be unavailable. No test evidence is live launchd/hardware evidence.
+Notice transport, notice reading/veto integration, automated retry clearance,
+courier execution and the handbook/runbook replacement remain deferred to B2
+or the lead's existing bench procedure. The step-5 night-directory baseline
+(filename/size/mtime) is explicitly deferred to B2/the bench. B1 does not
+collect measurements.
