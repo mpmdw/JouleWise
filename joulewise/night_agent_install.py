@@ -894,7 +894,10 @@ def evidence_probe_bindings(plan, plan_path, python):
     if not tokens or tokens[0] != sha or len(tokens) > 2 or (len(tokens) == 2 and tokens[1] != chain.name):
         raise ValueError("chain_sha256 mismatch")
     manifest_path, manifest, manifest_sha = verify_manifest(plan, chain.read_text())
-    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(Path(plan_path).absolute()):
+    published_plan_path = Path(plan.custody_root) / "night_plan.json"
+    if Path(plan_path).absolute() != published_plan_path:
+        raise ValueError("evidence plan not at its published path")
+    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(published_plan_path):
         raise ValueError("evidence plan path mismatch")
     registration_sha = manifest["files"][PROTOCOL_PATH]
     ruled = night_gate.RULED_REGISTRATIONS.get(registration_sha)

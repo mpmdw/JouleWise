@@ -45,7 +45,7 @@ class EvidenceFixture:
         self.head = git("rev-parse", "HEAD")
         self.custody = self.root / "custody"
         self.custody.mkdir()
-        self.plan_path = self.custody / "plan.json"
+        self.plan_path = self.custody / "night_plan.json"
         self.plan = replace(make_plan(), plan_id="qpe-fixture", repo_head=self.head,
             measurement_root=str(self.repo), measurement_head=self.head,
             custody_root=str(self.custody), chain_path=str(self.custody / "chain.zsh"),
@@ -127,6 +127,24 @@ class EvidenceGeneratorTests(unittest.TestCase):
         generator.generate(self.f.plan_path)
         with self.assertRaisesRegex(generator.GenerationRefusal, "exists"):
             generator.generate(self.f.plan_path)
+
+    def test_staged_and_published_plan_render_identical_bytes(self):
+        staged = self.f.root / "staging" / "night_plan.json"
+        staged.parent.mkdir()
+        os.replace(self.f.plan_path, staged)
+        wrapper = generator.generate(staged)
+        artifacts = (wrapper, Path(self.f.plan.chain_sha256_path),
+                     wrapper.with_name("evidence_manifest.json"),
+                     Path(str(wrapper) + ".chain-source.sha256"))
+        staged_bytes = {path: path.read_bytes() for path in artifacts}
+        self.assertEqual(night_gate.chain_literal(wrapper.read_text(), "EVIDENCE_PLAN_PATH"),
+                         str(self.f.plan_path))
+        self.assertFalse(self.f.plan_path.exists())
+        os.replace(staged, self.f.plan_path)
+        for path in artifacts:
+            path.unlink()
+        generator.generate(self.f.plan_path)
+        self.assertEqual({path: path.read_bytes() for path in artifacts}, staged_bytes)
 
     def test_protocol_reread_mutation_refuses_before_execute(self):
         generator.generate(self.f.plan_path)

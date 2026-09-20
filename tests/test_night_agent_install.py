@@ -10,6 +10,7 @@ D10 must-die amendment (lt-31 F1): delete the retained-prior refusal.
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import signal
@@ -1879,6 +1880,35 @@ class LaunchdAccessProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EvidencePlanPublicationTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_gen_evidence_night import EvidenceFixture
+        from scripts import gen_evidence_night
+        from joulewise import night_agent_install
+        self.engine = night_agent_install
+        self.f = EvidenceFixture()
+        self.addCleanup(self.f.close)
+        self.staged = self.f.root / "staging" / "night_plan.json"
+        self.staged.parent.mkdir()
+        os.replace(self.f.plan_path, self.staged)
+        gen_evidence_night.generate(self.staged)
+
+    def test_staged_render_then_atomic_publication_passes_bindings(self):
+        raw = self.staged.read_bytes()
+        os.replace(self.staged, self.f.plan_path)
+        self.assertFalse(self.staged.exists())
+        self.assertEqual(self.f.plan_path.read_bytes(), raw)
+        bindings = self.engine.evidence_probe_bindings(self.f.plan, self.f.plan_path, sys.executable)
+        self.assertEqual(bindings["plan_sha256"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(bindings["input_digests"][str(self.f.plan_path)],
+                         "sha256:" + hashlib.sha256(raw).hexdigest())
+
+    def test_staged_plan_refused_before_publication(self):
+        self.assertFalse(self.f.plan_path.exists())
+        with self.assertRaisesRegex(ValueError, "^evidence plan not at its published path$"):
+            self.engine.evidence_probe_bindings(self.f.plan, self.staged, sys.executable)
 
 
 class EvidenceProbeReceiptTests(unittest.TestCase):
