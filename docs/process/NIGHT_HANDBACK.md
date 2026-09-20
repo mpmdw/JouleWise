@@ -247,16 +247,24 @@ the lead confirms the discovery set at the bench (87a F4).
 Every census producer that can run while the chain runs must carry the
 2026-09-20 self-match fix (`[c]odex|[c]laude|[t]3`): the driver and chain (from
 the clone at the plan's `measurement_head`), the t0 author, and the WATCHDOG
-PROCESS — `com.joulewise.magistrate` keeps running the `night_gate` module it
-imported at launch, so the running watchdog must be RELAUNCHED from a checkout
-at or after the fix before any arm; a stale watchdog's bare-word pgrep is
-visible to the new driver census and reproduces the 09-20 abort (the reverse
-is not true). The watchdog's census events record no argv, so verify the
-PROCESS instead, before arming: the checkout it runs from contains the fix
-(`git -C /Users/edr/code/JouleWise merge-base --is-ancestor <fix commit> HEAD`
-for a watchdog launched from the canonical root) AND its start time
-(`ps -o lstart= -p "$(pgrep -f magistrate_watchdog.py)"`) is later than the
-moment that checkout reached the fix (the relaunch record names both).
+PROCESS. `com.joulewise.magistrate` is a launchd job with `StartInterval`
+300: each tick is a short-lived process that re-imports `night_gate` from
+the canonical checkout, so an ordinary tick is never stale. Only a tick
+that spawned or adopted a magistrate session and stayed alive as the
+resident supervisor keeps the module it imported; its stale bare-word
+pgrep is visible to the new driver census and reproduces the 09-20 abort
+(the reverse is not true). Its census rows carry no argv, so check the
+processes before arming: (a) `git -C /Users/edr/code/JouleWise merge-base
+--is-ancestor <fix commit> HEAD` must exit 0 (the canonical reflog,
+`git reflog --date=iso`, dates the move), else no arm; (b) read
+`resident_session.supervisor_pid` from
+`/Users/edr/night-custody/magistrate/state.json` — `launchctl print` shows
+the supervisor as "not running" once it is reparented, so it is not the
+source — and `null`, or a pid that `ps -o pid=,lstart=,command= -p "$pid"`
+cannot find, means no resident supervisor and nothing stale; a live pid
+must show a start later than the move, and any resident supervisor alive
+at arm time blocks the arm (the magistrate session exits before REQUEST
+and the supervisor ends with it; re-check after it has).
 Per-night arm scripts re-authored from the trace templates must use the
 bracketed pattern, single-quoted in zsh (unquoted brackets glob).
 `scripts/prewindow_check.sh` is a bench tool run before an arm, never inside
