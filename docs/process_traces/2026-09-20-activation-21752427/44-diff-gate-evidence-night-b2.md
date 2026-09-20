@@ -10,5 +10,11 @@ Design-level reading:
 Verdict of the diff gate: MERGE-able pending the delta re-audit (record 45) and replay (§2).
 
 ## §2 Replay (row 9) — (pending: full sharded replay at `67a147c4`, `replay-44/full-replay-67a147c4.log`)
-## §3 Fix contract / same-signature — (pending)
-## §4 Terminal review — (pending)
+## §3 Fix contract (row 3) and same-signature (row 5)
+Fix contracts = brief 43 (eight dictated closures D1–D8 from refuter 41 + Opus 42; the seat's counterfactual table: every closure's test FAIL→PASS against the `798bced1` module in memory) and brief 46 (E1–E4 from fresh eyes 45; six tests FAIL→PASS against `67a147c4`). Same-signature: "the entry point silently diverges from the bench procedure" — closed in both directions at record 47 (docs state what the code repeats at the boundary and what the lead still owns); "an evidence-affecting side effect without a refusal path" — closed at 45/47 (re-observation before publication; fail-closed timeout; missing magistrate root refuses; rehearsal containment on both seams); "stale-module evidence" — unchanged from B1 (all lenses run in the clone).
+
+## §4 Terminal review (row 12), 15:12 PDT 09-20
+Final code head `97b357ad` = `798bced1` (B2) + `67a147c4` (round 1) + `97b357ad` (round 2). Gauntlet: brief 40 → seat 40 (Astra high; NEEDS_RULING → ruling 40a) → lead bench (432 OK on the related modules; the sandbox's watchdog artefact) + diff read (44 §1) → refuter 41 (Astra xhigh, execution: BLOCKER — publication trusted a stale veto record; F2) + Opus 42 (contract: five should-fix incl. the fail-open magistrate root) → brief 43 → seat 43 (Astra xhigh) → fresh eyes 45 (PASS; three should-fix, three mutants killed) → brief 46 → seat 46 → fresh eyes 47 (PASS; classes closed) → replay §2. Verdict: MERGE the records-only candidate (merge of main onto `97b357ad`). Carried: the first LIVE use of the whole sequence (`prepare` → `check` → `notice` → `veto` → `publish-install` → `verify`) is bench-owned and watched step by step (no fixture can prove `outcome: installed` with a real launchctl); the mailbox NO remains a manual relay (`lifecycle/NO`); courier execution unchanged (the night driver's courier); the runbook (`docs/phase_2/derivation_night_runbook.md`) still describes the script-set procedure — a successor doc lane, not this PR.
+
+## §5 Hosted checks on the PR head (row 11)
+(filled before merge)
