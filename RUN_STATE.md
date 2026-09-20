@@ -5349,7 +5349,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-20). Latest report: [T38o — 2026-09-20: evidence-night entry point designed (consult 18); pre-arm supervisor clause corrected](docs/process_traces/2026-09-20-activation-21752427/19-ruling-supervisor-clause-and-entry-point-design.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-20). Latest report: [T38p — 2026-09-20: evidence-night prepare command merged (PR #372); pilot night one aborted/harvested; census cure merged](docs/process_traces/2026-09-20-activation-21752427/26-diff-gate-evidence-night-prepare.md).
 
 ### [ED-EXTERNAL]
 
@@ -5365,6 +5365,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 - CONTINUE — A139 `PAPER-CUSTODY-SEAM-01`: Finish the shared paper-custody read seam that wraps the existing authentication session, derives all bindings from a clean-Git supply map, replays validators, and returns only family-specific frozen verified objects.
 - CONTINUE — A149 `DECISION-LOG-RATIFY`: Install the ruling-43 addenda for D-078, D-083, D-165, D-166, and D-161 plus the new D-174 submission scope freeze in the decision log.
 - CONTINUE — A153 `D166-PROMPT0-01`: Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.
+- CONTINUE — A256 `EVIDENCE-NIGHT-ENTRY-01`: PR 1: deliver tracked python -m joulewise.evidence_night prepare --kind quiet_predicate_evidence --t0 next [--head H] that clones and builds the locked venv at H, authors the v2 plan and renders the wrapper at staging, runs the real installer render-only FROM the clone, resumes idempotently on sealed bytes, and STOPS at the notice boundary. Add a thin evidence lifecycle façade (render/probe/install/uninstall/verify) delegating to existing installer machinery, not a second installer; tests/test_evidence_night.py, extended tests/test_evidence_arm_sequence.py, docs/contracts/evidence_night_entry.md and the handbook/runbook checklist replace per-night script copies. PR 2 later, after lifecycle decision F3: notice → wait → veto → publish → install orchestration through a narrow transport adapter, plus census argv and producer identity provenance in the watchdog’s census events, separately reviewed.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
