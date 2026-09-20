@@ -1,0 +1,42 @@
+To: claude2.glaring610@passmail.net
+Subject: NIGHT NOTICE — qpe01-pilot-n1-20260920 (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt 1
+
+Ed,
+
+Launch needs no action from you unless you reply NO. Your NO overrides.
+Arm attempt 1; earlier abort for this new candidate: none.
+This is the first idle-variance evidence night: it measures how much the Mac's idle energy varies, to size a later experiment. It does not set or activate a new quietness cutoff.
+After 600 seconds to settle, the fixed program records twelve 600-second idle envelopes. Each uses a 480-second interior measured from its scheduled start, after a 60-second offset.
+Apple's powermetrics sampler records power every 100 ms. The program also records process-census, AC-power and thermal observations, timing and cleanup evidence, and a busy-cores journal (busy processor seconds per elapsed second). Busy cores are a descriptive covariate only.
+The programmed span is 7,800 seconds inside a 9,000-second acquisition window. There is no top-up or automatic repeat. Partial observations and refusals are kept.
+No model, load generator, calibration-ledger session or measurement pack runs. The existing scheduler supervises the program and the courier emails the result after it ends.
+Git during the night: the program runs exactly one read-only git show in the measurement clone to verify that its chain bytes match the pinned commit before capture; it makes no commit, push, checkout or fetch (ruling 87a F2).
+After completed delivery, the next lead reads the envelopes and sizes block two, or records 'no cutoff qualifies'. The evidence remains PROVISIONAL.
+plan_id: qpe01-pilot-n1-20260920
+repo_head = measurement_head = reviewed executor commit: cd10ce9d12f291070a0be77bc8c7768aa5e58ace
+H again: cd10ce9d12f291070a0be77bc8c7768aa5e58ace
+clone: /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1
+custody: /Users/edr/night-custody/qpe01-pilot-n1-20260920 
+runs: /Users/edr/night-custody/qpe01-pilot-n1-20260920/runs
+plan sha256: 463d25f07860a86f2a0255a327ab3385490b718932b42c8feb234c252972920e
+authored_epoch_s: 1789884874.0
+install close EXCLUDED 2026-09-20T00:30:00-07:00 2026-09-20T07:30:00+00:00 epoch 1789889400.0
+REQUEST / exit BEFORE 2026-09-20T00:32:00-07:00 2026-09-20T07:32:00+00:00 epoch 1789889520.0
+TERM 2026-09-20T00:34:00-07:00 2026-09-20T07:34:00+00:00 epoch 1789889640.0
+KILL 2026-09-20T00:35:00-07:00 2026-09-20T07:35:00+00:00 epoch 1789889700.0
+t0 2026-09-20T00:40:00-07:00 2026-09-20T07:40:00+00:00 epoch 1789890000.0
+window end 2026-09-20T03:10:00-07:00 2026-09-20T10:10:00+00:00 epoch 1789899000.0
+completion / courier deadline 2026-09-20T03:15:00-07:00 2026-09-20T10:15:00+00:00 epoch 1789899300.0
+daily dead-man 2026-09-20T04:15:00-07:00 2026-09-20T11:15:00+00:00 epoch 1789902900.0
+install span 1 open 2026-09-19T00:00:00-07:00 2026-09-19T07:00:00+00:00 epoch 1789801200.0
+install span 1 close EXCLUDED 2026-09-20T00:00:00-07:00 2026-09-20T07:00:00+00:00 epoch 1789887600.0
+No-objection window opens when the mail service accepts this exact notice, recorded in the arm record. Publication follows acceptance with no additional minimum waiting interval. The exclusive install close is printed above; every observed NO stops publication, including a NO on an older thread.
+/Users/edr/night-plan-staging/qpe01-pilot-n1-20260920/night_plan.json sha256 463d25f07860a86f2a0255a327ab3385490b718932b42c8feb234c252972920e
+/Users/edr/night-custody/qpe01-pilot-n1-20260920/chain.zsh sha256 570dba7ec7492e933f680db09e56aaad89a8efa50de761fa092a7cafe18b7705
+/Users/edr/night-custody/qpe01-pilot-n1-20260920/evidence_manifest.json sha256 099d497dacdbe82827cc0578f76c7144f214934062d7e0908848fdc148e59d53
+/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/night_chains/quiet_predicate_evidence.zsh sha256 568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea
+/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json sha256 f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6
+Wrapper sidecar: /Users/edr/night-custody/qpe01-pilot-n1-20260920/chain.zsh.sha256
+Keep agent applications closed and the machine untouched from REQUEST through completion; longer if the night remains active.
+Reply NO on this thread or relay NO through an owner-authored directive. No reply is required.
+The magistrate checks readable NO/directive/stop channels before publication and exits before REQUEST.

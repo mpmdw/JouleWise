@@ -1,0 +1,226 @@
+gui/501/com.joulewise.night = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python
+	arguments = {
+		/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python
+		/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/run_night.py
+		run
+		--plan
+		/Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.278
+	}
+
+	working directory = /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1
+
+	stdout path = /Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.night.out
+	stderr path = /Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.night.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.0wjjIwnQda/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night
+	}
+
+	domain = gui/501 [100026]
+	asid = 100026
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.268435475 => {
+			keepalive = 0
+			service = com.joulewise.night
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 40
+				"Hour" => 0
+				"Day" => 20
+				"Month" => 9
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+gui/501/com.joulewise.night.deadman = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.deadman.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python
+	arguments = {
+		/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python
+		/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/run_night.py
+		dead-man
+		--plan
+		/Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.278
+	}
+
+	working directory = /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1
+
+	stdout path = /Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.deadman.out
+	stderr path = /Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.deadman.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.0wjjIwnQda/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night.deadman
+	}
+
+	domain = gui/501 [100026]
+	asid = 100026
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.deadman.268435476 => {
+			keepalive = 0
+			service = com.joulewise.night.deadman
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 15
+				"Hour" => 4
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night"
+  "ProgramArguments" => [
+    0 => "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python"
+    1 => "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/run_night.py"
+    2 => "run"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.278"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.night.err"
+  "StandardOutPath" => "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.night.out"
+  "StartCalendarInterval" => {
+    "Day" => 20
+    "Hour" => 0
+    "Minute" => 40
+    "Month" => 9
+  }
+  "WorkingDirectory" => "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1"
+}
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night.deadman"
+  "ProgramArguments" => [
+    0 => "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python"
+    1 => "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/run_night.py"
+    2 => "dead-man"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.278"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.deadman.err"
+  "StandardOutPath" => "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/launchd.deadman.out"
+  "StartCalendarInterval" => {
+    "Hour" => 4
+    "Minute" => 15
+  }
+  "WorkingDirectory" => "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1"
+}
+{"deadman_calendar": {"Hour": 4, "Minute": 15}, "deadman_epoch_s": 1789902900.0, "install_close_epoch_s": 1789889400.0, "install_spans_today": [[1789801200.0, 1789887600.0]], "night_calendar": {"Day": 20, "Hour": 0, "Minute": 40, "Month": 9}, "t0_epoch_s": 1789890000.0}
+CHECK: byte equality /Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json /Users/edr/night-plan-staging/qpe01-pilot-n1-20260920/arm-attempts/000001/plan.json
+CHECK: {'com.joulewise.night', 'com.joulewise.night.deadman'} <= labels
+CHECK: com.joulewise.night plist Label matches loaded label
+CHECK: plist['StartCalendarInterval'] == expected[key], (label, plist['StartCalendarInterval'])
+CHECK: os.environ['PLAN'] in plist['ProgramArguments'], plist['ProgramArguments']
+CHECK: plist['ProgramArguments'] == rendered['ProgramArguments'], (label, plist['ProgramArguments'])
+CHECK: plist['ProgramArguments'][0] == os.environ['PY']
+CHECK: plist['WorkingDirectory'] == os.environ['MEASUREMENT_ROOT']
+CHECK: com.joulewise.night.deadman plist Label matches loaded label
+CHECK: plist['StartCalendarInterval'] == expected[key], (label, plist['StartCalendarInterval'])
+CHECK: os.environ['PLAN'] in plist['ProgramArguments'], plist['ProgramArguments']
+CHECK: plist['ProgramArguments'] == rendered['ProgramArguments'], (label, plist['ProgramArguments'])
+CHECK: plist['ProgramArguments'][0] == os.environ['PY']
+CHECK: plist['WorkingDirectory'] == os.environ['MEASUREMENT_ROOT']
+installed calendars match plan
+post-install night/ baseline: []
+463d25f07860a86f2a0255a327ab3385490b718932b42c8feb234c252972920e  /Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json
+570dba7ec7492e933f680db09e56aaad89a8efa50de761fa092a7cafe18b7705  /Users/edr/night-custody/qpe01-pilot-n1-20260920/chain.zsh
+ea020313aab64d47bd7330e0738d14d9e88b0b4f114499e2048ca5b7b8fcf739  /Users/edr/night-custody/qpe01-pilot-n1-20260920/night_probe_receipt.json
+ARMED 2026-09-19T23:16:55-0700
+chain.zsh: OK
+EXIT RULE: magistrate, all owned agents, MCP children and helpers must exit strictly BEFORE epoch 1789889520 (2026-09-20 00:32:00 PDT).
+Keep the machine untouched and agent apps closed through courier completion; longer if still active. Announcing exit does not terminate a process.

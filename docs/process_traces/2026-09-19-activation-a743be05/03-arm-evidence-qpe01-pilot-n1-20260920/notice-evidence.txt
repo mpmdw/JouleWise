@@ -1,0 +1,9 @@
+notice accepted by Gmail: message_id=1a0bd751e0893cbb thread_id=1a0bd751e0893cbb internalDate=1789884964 (2026-09-20T06:16:04Z = 23:16:04 PDT 09-19)
+recipient: claude2.glaring610@passmail.net only (directive #367); no cc
+body: notice-body.txt verbatim + one appended channel note (single address; PR #369 merged 2f4fc128; handback landed cd10ce9d = H; replays green; post-merge hosted matrix at 2f4fc128 in progress; new t0 00:40:00 PDT 09-20; exit before 00:32)
+plan sha256: 463d25f07860a86f2a0255a327ab3385490b718932b42c8feb234c252972920e  H: cd10ce9d12f291070a0be77bc8c7768aa5e58ace
+NO channels at fill (23:16:20 PDT, epoch 1789884980): Gmail search from:claude2.glaring610@passmail.net newer_than:2d -> one message only (the (c) authorization 10:57 PDT, thread 1a0ba221b52d3e38); no NO on any thread; standdown.request absent; STOP absent; open owner directives [] (#367 closed 21:40, #368 closed 23:15)
+watchdog: state ACTIVE activation a743be05 (state.json); heartbeat written 20:38
+power/load: AC attached 80 %; load {5.31 3.37 3.23} at 23:15 (lead's own replays just ended; no seat alive); no thermal warning observed
+census (step 3, two 30 s apart): foreign_pids [97440, 97445] = this activation's own idle codex mcp-server helper (descendants of root pid 97427), workloads []; no seat/Workflow/foreign session (no other bin/claude process)
+hosted CI: main cd10ce9d run completed success; main 2f4fc128 (PR #369 merge) matrix in progress at fill; local full sharded replay at 7ea54846 6,605 tests green; five modules at 0c6626f7 228 OK; quick tier PASS

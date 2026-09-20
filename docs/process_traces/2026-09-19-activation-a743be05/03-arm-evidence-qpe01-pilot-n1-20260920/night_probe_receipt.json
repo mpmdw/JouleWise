@@ -1,0 +1,55 @@
+{
+  "chain_pgid": 76713,
+  "chain_python": {
+    "path": "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python",
+    "sha256": "d483cfdc272ddd1bfd8f6f595b65cdc2f00b8e503f0deab65b20e8faeb986132",
+    "version": "3.13.1"
+  },
+  "chain_sha256": "570dba7ec7492e933f680db09e56aaad89a8efa50de761fa092a7cafe18b7705",
+  "chain_source_sha256": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
+  "cleanup_proven": true,
+  "collect_started": false,
+  "driver_pid": 76712,
+  "driver_python": {
+    "path": "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python",
+    "sha256": "d483cfdc272ddd1bfd8f6f595b65cdc2f00b8e503f0deab65b20e8faeb986132",
+    "version": "3.13.1"
+  },
+  "finished_epoch_s": 1789885007.13436,
+  "harness_digests": {
+    "joulewise/quiet_admission.py": "79e12d2b6ce8fec739c23ded36ee7127fc1b22b4b7dcf7468253eaebb632db22",
+    "scripts/sample_quiet_predicate_evidence.py": "21f76403cbcdd050a9e9a08f84ed399aa2834d8ddba387233a4d318aec3e48f3"
+  },
+  "input_digests": {
+    "/Users/edr/night-custody/qpe01-pilot-n1-20260920/evidence_manifest.json": "sha256:099d497dacdbe82827cc0578f76c7144f214934062d7e0908848fdc148e59d53",
+    "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json": "sha256:463d25f07860a86f2a0255a327ab3385490b718932b42c8feb234c252972920e"
+  },
+  "launchd_label": "com.joulewise.night-probe.qpe01-pilot-n1-20260920",
+  "load_started": false,
+  "manifest_digests": {
+    "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json": "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6",
+    "joulewise/night_agent_install.py": "794194ef712ee5bbdc973caf0ece66e96c605dd7cd8a5236bdbad0978cb771cb",
+    "joulewise/night_gate.py": "2ef062e72440771753d53f50a75569ee4a7057b3b97fb723c0b8d3d097e213f3",
+    "joulewise/quiet_admission.py": "79e12d2b6ce8fec739c23ded36ee7127fc1b22b4b7dcf7468253eaebb632db22",
+    "joulewise/quiet_predicate_campaign.py": "c81fc9e29f033ed5d74a4edee43d1fedc1a309474da89f3338c79c7f395f6096",
+    "scripts/night_chains/quiet_predicate_evidence.zsh": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
+    "scripts/run_night.py": "e79887fe428115bd0d1bc49b38765646b092129c27a07057f160e7926046a446",
+    "scripts/sample_quiet_predicate_evidence.py": "21f76403cbcdd050a9e9a08f84ed399aa2834d8ddba387233a4d318aec3e48f3"
+  },
+  "manifest_sha256": "099d497dacdbe82827cc0578f76c7144f214934062d7e0908848fdc148e59d53",
+  "measurement_head": "cd10ce9d12f291070a0be77bc8c7768aa5e58ace",
+  "outcome": "ok",
+  "phase": "evidence-chain",
+  "plan_id": "qpe01-pilot-n1-20260920",
+  "plan_sha256": "463d25f07860a86f2a0255a327ab3385490b718932b42c8feb234c252972920e",
+  "powermetrics_path": "/usr/bin/powermetrics",
+  "refusal_code": null,
+  "registration_label": "QPE-01 idle-variance pilot protocol v1",
+  "registration_sha256": "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6",
+  "schema": "joulewise.night_evidence_probe_receipt.v1",
+  "started_epoch_s": 1789885006.5127301,
+  "verify_only": true,
+  "verify_stdout": [
+    "VERIFY_ONLY_OK manifest=099d497dacdbe82827cc0578f76c7144f214934062d7e0908848fdc148e59d53"
+  ]
+}

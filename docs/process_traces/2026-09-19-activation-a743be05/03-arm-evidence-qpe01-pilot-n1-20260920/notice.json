@@ -1,0 +1,16 @@
+{
+  "accepted": true,
+  "attempt": 1,
+  "blocking_causes": [],
+  "latest_abort_epoch_s": null,
+  "latest_no_epoch_s": null,
+  "measurement_head": "cd10ce9d12f291070a0be77bc8c7768aa5e58ace",
+  "message_id": "1a0bd751e0893cbb",
+  "thread_id": "1a0bd751e0893cbb",
+  "plan_id": "qpe01-pilot-n1-20260920",
+  "plan_sha256": "463d25f07860a86f2a0255a327ab3385490b718932b42c8feb234c252972920e",
+  "prerequisites_clear": true,
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "sent_epoch_s": 1789884964,
+  "veto_clear": true
+}
