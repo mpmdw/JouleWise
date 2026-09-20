@@ -5305,7 +5305,9 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
     def test_fallback_recipient_constant_matches_the_courier_template(self):
         import re
         template = (REPO_ROOT / 'docs/process/NIGHT_COURIER_PROMPT.md').read_text()
-        address = re.search(r'Email Ed at ([^\s]+)\.', template).group(1)
+        # The prompt may follow the address with a comma or a period; match
+        # the address itself, not up to the last dot on the line.
+        address = re.search(r'Email Ed at ([\w.+-]+@[\w-]+(?:\.[\w-]+)+)', template).group(1)
         self.assertEqual(self.driver.COURIER_RECIPIENT, address)
 
     def test_durable_publication_skips_error_entries_and_returns_safe_diagnostics(self):
