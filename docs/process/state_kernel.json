@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38m — 2026-09-20: pilot night one ABORTED on a census self-match; harvested; uninstalled",
-    "path": "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md"
+    "label": "T38n — 2026-09-20: census self-match cure merged (PR #371); pilot night one aborted, harvested, uninstalled",
+    "path": "docs/process_traces/2026-09-20-activation-21752427/12-diff-gate-census-self-match.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1027,37 +1027,6 @@
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five (its section 3.3 is the finding, section 5 item 3 the prescription). The audit names joulewise/authentication_io.py as the natural home; that is a suggestion, not a ruling.",
       "stop_card": null
     },
-    "CENSUS-SELF-MATCH-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md (§§2–3: executed abort evidence; §6: critical path and successor-plan ruling)",
-          "docs/process_traces/2026-09-20-activation-21752427/03-consult-census-self-match-design.md (design consult brief; report pending at registration)",
-          "Concurrent-pgrep regression fails at f2427b24 and passes after; every census site covered; real foreign claude, codex and t3 processes still refuse; PR carries the twelve-row ledger."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CENSUS-SELF-MATCH-01/acceptance",
-          "label": "CENSUS-SELF-MATCH-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Concurrent census invocations cannot mistake one another for a foreign agent; every census site is covered and a real foreign claude/codex/t3 process still refuses. A concurrent-pgrep regression FAILS at f2427b24 and PASSES after the cure; PR merges with the twelve-row ledger before a new successor pilot is authored."
-      },
-      "authority": {
-        "label": "Record 01 §6: census cure is the critical path to a new successor pilot",
-        "path": "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "agent census must not match its own concurrent pgrep. At 00:50:03 PDT 2026-09-20, the driver’s 30 s census (pgrep -lf with codex, claude and t3 alternatives) matched the chain’s per-round census pgrep (pid 79146), aborting pilot night one with night_aborted_agent_present, chain exit 2 and 0/12 envelopes; no foreign agent appears in any record. Cover joulewise/night_gate.py:88 (AGENT_CENSUS_ARGV), joulewise/quiet_admission.py:268, joulewise/arm_readiness_evidence_t0.py:1728, joulewise/arm_census.py:27, joulewise/night_agent_install.py:983 and the watchdog census. Account for roughly 15 tests pinning the literal, joulewise/arm_readiness.py:10149 receipt comparison, and quiet_admission.py in quiet_predicate_campaign.HARNESS_PATHS.",
-      "id": "CENSUS-SELF-MATCH-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 0,
-      "status": "active",
-      "status_note": "2026-09-20 activation 21752427 — ACTIVE [AGENT], top of the active set at rank 0; critical path to every future night. Design consult record 03 is a brief; its report was pending at registration. No cure option is selected by this registration.",
-      "stop_card": null
-    },
     "CGV-HARDEN-01": {
       "acceptance": {
         "evidence": [
@@ -1195,36 +1164,6 @@
       "priority": "p3_tooling",
       "rank": 245,
       "status": "queued",
-      "stop_card": null
-    },
-    "CI-LEGACY-FIXTURE-LINUX-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-20-activation-21752427/02-brief-seat-legacy-fixture-linux.md (Linux failure signature, tests-only cure and verification)",
-          "Regression reproduces the non-UTF-8 binary condition before the cure; fixture absence guard and full green hosted matrix after."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CI-LEGACY-FIXTURE-LINUX-01/acceptance",
-          "label": "CI-LEGACY-FIXTURE-LINUX-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Every legacy fixture uses a chain path absent on every platform, with a loud guard naming the CI signature if it exists; the full hosted matrix is green."
-      },
-      "authority": {
-        "label": "Record 02: legacy fixture Linux fix-forward brief",
-        "path": "docs/process_traces/2026-09-20-activation-21752427/02-brief-seat-legacy-fixture-linux.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "legacy render fixture names /bin/true (ELF on Linux). Hosted CI at 2f4fc128 is red on test (3.11, 3): 12/65 tests.test_install_night_agent failures, “night wrapper is not valid UTF-8 … byte 0xf0 in position 24” at joulewise/night_agent_install.py:1163. tests/test_install_night_agent.py:103 sets chain_path=\"/bin/true\": absent on macOS but an ELF binary on Ubuntu. Use a never-created path under the fixture’s temporary root, with a loud absence guard.",
-      "id": "CI-LEGACY-FIXTURE-LINUX-01",
-      "lane": "agent",
-      "priority": "p3_tooling",
-      "rank": 259,
-      "status": "active",
-      "status_note": "2026-09-20 activation 21752427 — ACTIVE [AGENT], p3_tooling; independent of the census cure. Production installer changes require a separate ruling (record 02).",
       "stop_card": null
     },
     "CI-SHARD-RUNNER-FILE-BASED-01": {
@@ -3334,7 +3273,15 @@
           "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
           "docs/process_traces/2026-09-19-activation-a743be05/06-consult-instrument-cadence-astra.md (completed design/offline analysis, cadence observations and 15-run matrix)",
           "docs/process_traces/2026-09-19-activation-a743be05/06-consult-artifacts/ (preserved matrix recipe)",
-          "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md (§6: successor pilot after the census cure; the aborted first harvest supplies no idle-variance data)"
+          "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md (§6: successor pilot after the census cure; the aborted first harvest supplies no idle-variance data)",
+          "docs/process_traces/2026-09-20-activation-21752427/03-consult-census-self-match-astra.md (census cure design consult)",
+          "docs/process_traces/2026-09-20-activation-21752427/05-seat-census-self-match-astra.md (implementation)",
+          "docs/process_traces/2026-09-20-activation-21752427/10-refuter-census-execution-astra.md (execution refuter; F2 remains WATCHDOG-COURIER-PATH-HOLD-01)",
+          "docs/process_traces/2026-09-20-activation-21752427/11-opus-contract-refuter-census-self-match.md (contract refuter)",
+          "docs/process_traces/2026-09-20-activation-21752427/12-diff-gate-census-self-match.md (§§4–5: 6,614-test replay with environmental error disposition and terminal review; §5: next-arm operational precondition)",
+          "docs/process_traces/2026-09-20-activation-21752427/13-fresh-eyes-delta-census-round1.md (round 1 review)",
+          "docs/process_traces/2026-09-20-activation-21752427/14-fresh-eyes-round2-consult-round3-census.md (rollout checks: canonical checkout and resident supervisor)",
+          "docs/process_traces/2026-09-20-activation-21752427/15-fresh-eyes-round4-census.md (round 4 review)"
         ],
         "pointer": {
           "json_pointer": "/tasks/INSTRUMENT-CADENCE-25G83-01/acceptance",
@@ -3351,7 +3298,7 @@
         {
           "evidence": null,
           "kind": "event",
-          "required": "successor pilot night, authored only after CENSUS-SELF-MATCH-01 merges, harvested with usable idle-variance data and raw cadence covariates; record 01 §6",
+          "required": "successor pilot night, armable once the operational precondition in RUN_STATE.md’s 05:10 PDT 2026-09-20 block is met (canonical checkout /Users/edr/code/JouleWise contains merge 980f8d64; no stale resident supervisor), harvested with usable idle-variance data and raw cadence covariates; record 12 §5 and record 14",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
@@ -3375,7 +3322,7 @@
       "priority": "p1_phase_gate",
       "rank": 257,
       "status": "blocked",
-      "status_note": "2026-09-20 activation 21752427 — BLOCKED on successor-pilot data after CENSUS-SELF-MATCH-01 merges. Pilot night one was harvested but ABORTED on a census self-match with 0/12 envelopes, so the idle-variance data does not exist. docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md §6 requires a NEW successor plan after the cure; no same-plan retry. [QUIET-MAC] for controlled runs; [AGENT] for design and offline analysis (consult 06 already done). No fallback — the FAIL stands; equivalence is not re-litigated.",
+      "status_note": "2026-09-20 activation 21752427 — BLOCKED on successor-pilot data. CENSUS-SELF-MATCH-01 retired by removal after PR #371 (merge 980f8d64, 2026-09-20 05:46 PDT); closure evidence: records 03/05/10/11/12/13/14/15 in docs/process_traces/2026-09-20-activation-21752427/. Pilot night one was harvested but ABORTED on a census self-match with 0/12 envelopes, so the idle-variance data does not exist. Record 01 §6 requires a NEW successor plan; no same-plan retry. The successor is armable once RUN_STATE.md’s 05:10 block operational precondition is met: canonical checkout /Users/edr/code/JouleWise contains merge 980f8d64 and no stale resident supervisor remains (record 12 §5; record 14). [QUIET-MAC] for controlled runs; [AGENT] for design and offline analysis (consult 06 already done). No fallback — the FAIL stands; equivalence is not re-litigated.",
       "stop_card": null
     },
     "INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01": {
@@ -7712,6 +7659,38 @@
       "status_note": "2026-09-15 activation 08ca8197: registered at the interactive session b0ae8462's request from its record 16 flag F3; registration only; not started; not night-critical. First deliverable is the classification of the 8 literal-path files into filesystem-touching versus string-asserting, then the structural guard. Related: WORKTREE-PRUNE-01 (worktree hygiene) and the seat-side quick/touched tiers the interactive session is building.",
       "stop_card": null
     },
+    "TEST-FIXTURE-HOST-PATHS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-20-activation-21752427/02-brief-seat-legacy-fixture-linux.md (delivered legacy fixture fix brief)",
+          "docs/process_traces/2026-09-20-activation-21752427/06-refuter-legacy-fixture-astra.md (item 4: watchdog CLI binary substitution; three tests pass)",
+          "docs/process_traces/2026-09-20-activation-21752427/07-opus-counter-review-legacy-fixture.md (finding 1: fixed sidecar path currently inert; executed trace)",
+          "docs/process_traces/2026-09-20-activation-21752427/08-diff-gate-legacy-fixture.md (legacy fixture closure)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-FIXTURE-HOST-PATHS-01/acceptance",
+          "label": "TEST-FIXTURE-HOST-PATHS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every plan fixture path lives under the test’s temporary root, including the watchdog CLI chain path and the installer sidecar path; focused fixture tests pass without depending on host-file existence or contents."
+      },
+      "authority": {
+        "label": "Records 06 item 4 and 07 finding 1: remaining host-path fixture follow-ups",
+        "path": "docs/process_traces/2026-09-20-activation-21752427/06-refuter-legacy-fixture-astra.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Move remaining host-file paths in plan fixtures under each test’s temporary root: tests/test_magistrate_watchdog_cli.py:198 chain_path=\"/bin/true\" is latent because the module never reaches the installer’s UTF-8 reader (refuter 06 item 4 substituted a binary and three tests still passed); tests/test_install_night_agent.py:110 chain_sha256_path=\"/tmp/install-night-agent-test.sha256\" is inert today per Opus 07 finding 1’s executed trace.",
+      "id": "TEST-FIXTURE-HOST-PATHS-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 261,
+      "status": "queued",
+      "status_note": "2026-09-20 activation 21752427 — queued [AGENT], p3_tooling. CI-LEGACY-FIXTURE-LINUX-01 retired by removal after PR #370 (merge d8e6761f, 2026-09-20 05:00 PDT); post-merge matrix run 35509175943 SUCCESS, including test (3.11, 3). Closure evidence: records 02/06/07/08 in docs/process_traces/2026-09-20-activation-21752427/. These remaining host-path fixtures are follow-ups, latent/inert today as executed in records 06/07.",
+      "stop_card": null
+    },
     "TEST-PGREP-DIALECT-MULTILINE-01": {
       "acceptance": {
         "evidence": [
@@ -9017,6 +8996,36 @@
       "rank": 201,
       "status": "queued",
       "status_note": "2026-09-15 activation d6888966: registered by the magistrate from the record 19 PR #339 bench replay finding; not a ruling; not started. Sibling lanes REPLAY-FIXTURE-LEAK-01 and FIXTURE-FAKE-VLLM-LEAK-01 cover stale fixture residue and remain separate rows. Production parent-directory discovery semantics stay unchanged.",
+      "stop_card": null
+    },
+    "WATCHDOG-COURIER-PATH-HOLD-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-20-activation-21752427/10-refuter-census-execution-astra.md (F2: executed production_census and decide probe; independent producer)",
+          "docs/process_traces/2026-09-20-activation-21752427/01-qpe01-pilot-n1-20260920-harvest-record.md (§1: HOLD_CENSUS on driver pid 79018 at 00:43:45 PDT)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WATCHDOG-COURIER-PATH-HOLD-01/acceptance",
+          "label": "WATCHDOG-COURIER-PATH-HOLD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The authorized driver’s courier configuration no longer triggers a false HOLD_CENSUS or notice from the independent watchdog inside the plan span. Use a census-safe path or indirection without an agent name; preserve raw census output and refusal of real foreign agents."
+      },
+      "authority": {
+        "label": "Record 10 F2: independent watchdog courier-path false hold; record 01 §1: observed hold",
+        "path": "docs/process_traces/2026-09-20-activation-21752427/10-refuter-census-execution-astra.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The night driver’s own argv carries --courier-bin /Users/edr/.local/share/claude/versions/…, which the census regex matches from an INDEPENDENT producer: the watchdog’s production_census inside the plan span. At 00:43:45 PDT 2026-09-20, driver pid 79018 caused HOLD_CENSUS (production census non-empty inside plan span). This is never fatal to the night, but produces a false hold/notice every night. Use census-safe courier configuration (a path or indirection that does not contain an agent name), not output filtering.",
+      "id": "WATCHDOG-COURIER-PATH-HOLD-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 260,
+      "status": "queued",
+      "status_note": "2026-09-20 activation 21752427 — queued [AGENT], p3_tooling. Registered from refuter 10 F2 and record 01 §1; separate from the concurrent-pgrep cure delivered by PR #371 (980f8d64). Census-safe courier configuration is the cure direction; no output filtering.",
       "stop_card": null
     },
     "WATCHDOG-EARLY-REFUSAL-RELEASE-01": {
