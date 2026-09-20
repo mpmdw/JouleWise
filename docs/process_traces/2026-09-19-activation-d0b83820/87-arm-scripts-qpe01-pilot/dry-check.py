@@ -74,7 +74,7 @@ def main():
         root.mkdir(); attempt.mkdir(parents=True)
         e=dict(MEASUREMENT_ROOT=str(REPO),NIGHT_ROOT=str(root),STAGE=str(stage),
                STAGED_PLAN=str(stage/'night_plan.json'),PLAN=str(root/'night_plan.json'),
-               PLAN_ID='qpe01-pilot-n1-fixture',H='a9e48ae900a608b3254a732fb8e7463d66bdef1e',
+               PLAN_ID='qpe01-pilot-n1-fixture',H=re.search(r"^export H='([0-9a-f]{40})'",(HERE/'arm-env.zsh').read_text(),re.M).group(1),
                T0_EPOCH_S=str(t0),INSTALL_CLOSE_EPOCH_S=str(t0-600),DEADMAN_EPOCH_S=str(t0+12900),
                ARM_ATTEMPT='1',ATTEMPT_DIR=str(attempt),PY=sys.executable)
         with patch.dict(os.environ,e):
@@ -90,10 +90,13 @@ def main():
             print('PASS generated wrapper zsh -n (wrapper never executed)')
             must_refuse(lambda: generate(staged),GenerationRefusal,'chain already exists')
             print('PASS second render refuses existing chain')
-            must_refuse(lambda: checks.candidate(staged,True),ValueError,'publication-safe EVIDENCE_PLAN_PATH')
+            # PR #365 (EVIDENCE-PLAN-PATH-BINDING-01): the wrapper now seals the
+            # PUBLISHED plan path, so the publication-safe guard must accept.
+            with contextlib.redirect_stdout(io.StringIO()):
+                checks.candidate(staged,True)
             guard=subprocess.run([sys.executable,'-B',str(HERE/'evidence-checks.py'),'candidate','--plan',str(staged),'--publication-safe'],capture_output=True,text=True)
-            assert guard.returncode==3 and 'publication-safe EVIDENCE_PLAN_PATH' in guard.stderr
-            print('CONFIRMED BLOCKER: staged wrapper fails publication-safe guard, exit 3')
+            assert guard.returncode==0, guard.stderr
+            print('PASS publication-safe guard accepts the staged wrapper (binds the published plan path)')
             wrapper=Path(p.chain_path); saved=wrapper.read_bytes(); wrapper.write_bytes(saved+b'# drift\n')
             must_refuse(lambda: checks.candidate(staged),ValueError,'wrapper SHA-256 equals sidecar')
             wrapper.write_bytes(saved)
@@ -120,13 +123,21 @@ def main():
             must_refuse(lambda: execute(publication),SystemExit,'3')
             (attempt/'plan.json').write_bytes(raw)
             print('PASS publication heredoc refuses unaccepted notice, owner NO and changed saved bytes')
-            # Exercise os.replace in the fixture solely to reproduce the pinned integration defect.
+            # os.replace in the fixture: after PR #365 the wrapper literal IS the
+            # published path, so the real probe bindings accept the published plan.
             execute(publication)
             published=Path(e['PLAN'])
             assert published.read_bytes()==raw and not staged.exists()
-            assert not Path(chain_literal(wrapper.read_text(),'EVIDENCE_PLAN_PATH')).exists()
-            must_refuse(lambda: evidence_probe_bindings(p,published,sys.executable),ValueError,'evidence plan path mismatch')
-            print('CONFIRMED BLOCKER: fixture publication preserves bytes but probe binding refuses evidence plan path mismatch')
+            assert Path(chain_literal(wrapper.read_text(),'EVIDENCE_PLAN_PATH'))==published and published.exists()
+            if (REPO/'.venv/bin/python').exists():
+                bindings=evidence_probe_bindings(p,published,sys.executable)
+                assert bindings['plan_sha256']==hashlib.sha256(raw).hexdigest()
+                must_refuse(lambda: evidence_probe_bindings(p,staged,sys.executable),ValueError,'evidence plan not at its published path')
+                print('PASS fixture publication preserves bytes; real probe bindings accept the published plan and refuse the staged path')
+            else:
+                # A development worktree has no measurement venv; the real clone does,
+                # and step 4's verify-only probe exercises the real bindings there.
+                print('PASS fixture publication preserves bytes; wrapper literal == published plan (real bindings need the clone venv: exercised at step 4)')
             # Receipt validation with synthetic bindings only; no launchd probe or chain execution.
             now=time.time(); bindings={'manifest_sha256':'f'*64}
             receipt=dict(schema='joulewise.night_evidence_probe_receipt.v1',outcome='ok',refusal_code=None,
@@ -163,7 +174,7 @@ def main():
                     (launch_dir/'com.joulewise.night.plist').write_bytes(plistlib.dumps(value))
                     must_refuse(lambda: execute(blocks('step5-verify-and-exit.zsh')[0]),AssertionError,'')
             print('PASS actual step5 assertions on synthetic plists; wrong schedule/argv/root/RunAtLoad refuse')
-    print('DRY CHECK COMPLETE: fixture checks passed; staging/publication incompatibility remains BLOCKING')
+    print('DRY CHECK COMPLETE: fixture checks passed; staging/publication binding holds')
 
 
 if __name__=='__main__':
