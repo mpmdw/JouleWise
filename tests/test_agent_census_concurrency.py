@@ -113,7 +113,12 @@ class AgentCensusConcurrencyTests(unittest.TestCase):
         return _pids(result.stdout)
 
     def _overlap_hits(self, argv):
-        context = multiprocessing.get_context("spawn")
+        # "spawn" re-imports __main__ from its file; the hosted shard runner feeds
+        # the test program on stdin (main path "<stdin>"), which killed both
+        # workers at startup on Linux CI (PR #371, 2026-09-20). The workers only
+        # exec pgrep, so a forked child is safe wherever fork exists.
+        methods = multiprocessing.get_all_start_methods()
+        context = multiprocessing.get_context("fork" if "fork" in methods else "spawn")
         barrier = context.Barrier(2)
         readers, workers = [], []
         records = [[], []]
