@@ -5137,6 +5137,28 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
         self.assertFalse(self.packet['result_unavailable'])
         self.assertIn(self.publication.return_value, self.packet['reporting_errors'])
 
+    def test_post_delivery_publication_failure_reaches_the_night_log(self):
+        # Re-audit 81 R2: the prompt was issued before the second publication
+        # ran, so its failure must survive in night.log (GO and delivery intact).
+        self.publication.side_effect = [None, 'durable record failed: fixture second push']
+        code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertEqual(self.publication.call_count, 2)
+        self.assertNotIn('fixture second push', '\n'.join(self.packet['reporting_errors']))
+        self.assertIn('durable record failed: fixture second push', (self.f.custody / 'night.log').read_text())
+        self.assertEqual(json.loads((self.f.custody / 'night/result.json').read_text())['verdict'], 'GO')
+
+    def test_late_unreadable_artefact_omission_reaches_the_prompt(self):
+        # Re-audit 81 R1 end to end: the publisher (real inventory) names an
+        # artefact that became unreadable after the result was written, and
+        # that name reaches the courier prompt before the launch.
+        self.publication.side_effect = [
+            'durable record omitted unreadable artefacts: night/chain.exited (PermissionError)', None]
+        code, _ = self.run_terminated_night()
+        self.assertEqual(code, self.driver.EXIT_GO)
+        self.assertIn('durable record omitted unreadable artefacts: night/chain.exited (PermissionError)',
+                      self.packet['reporting_errors'])
+
     def test_result_log_failure_does_not_relabel_a_published_go_result(self):
         def obstruct(night):
             path = self.f.custody / 'night.log'
@@ -5300,10 +5322,17 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
                 Path(argv[-1]).mkdir()
             return types.SimpleNamespace(stdout='fixture-origin\n')
         with mock.patch.object(run_night.subprocess, 'run', side_effect=git):
-            self.assertIsNone(real_publish(self.f.custody, night, self.f.plan))
+            diagnostic = real_publish(self.f.custody, night, self.f.plan)
+        # Re-audit 81 R1: the omission is published as a diagnostic, not silently.
+        self.assertEqual(diagnostic,
+                         'durable record omitted unreadable artefacts: night/evidence_outcome.json (IsADirectoryError)')
         destination = self.f.custody / 'results-clone/docs/process_traces/night-results' / self.f.plan.plan_id
         self.assertTrue((destination / 'receipt.json').is_file())
         self.assertFalse((destination / 'evidence_outcome.json').exists())
+        (night / 'evidence_outcome.json').rmdir()
+        (night / 'evidence_outcome.json').write_text('{"outcome": "complete"}')
+        with mock.patch.object(run_night.subprocess, 'run', side_effect=git):
+            self.assertIsNone(real_publish(self.f.custody, night, self.f.plan))
         with mock.patch.object(run_night.subprocess, 'run', side_effect=UnicodeError('decode')):
             self.assertIn('UnicodeError', real_publish(self.f.custody, night, self.f.plan))
 

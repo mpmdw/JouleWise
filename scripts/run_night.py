@@ -1032,8 +1032,14 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
 
 
 def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str | None:
-    """Best-effort results-branch publish; return any failure diagnostic."""
+    """Best-effort results-branch publish; return any failure diagnostic.
 
+    An artefact the inventory could not read is omitted from the branch and
+    NAMED in the returned diagnostic (re-audit 81 R1): the immutable result
+    keeps the hash it saw, so the omission must reach the prompt and the log.
+    """
+
+    omitted: list[str] = []
     try:
         origin = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "remote", "get-url", "origin"],
@@ -1063,6 +1069,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         destination.mkdir(parents=True, exist_ok=True)
         for artifact in _artifact_list(custody_root, night_dir):
             if "error" in artifact:
+                omitted.append(f"{artifact['path']} ({artifact['error']})")
                 continue
             source = custody_root / artifact["path"]
             # Preserve repeated envelope basenames; flattening loses all but
@@ -1098,6 +1105,8 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
             return f"durable record failed: {type(error).__name__}: {error}"
         except Exception:
             return "durable record failed; diagnostic formatting failed"
+    if omitted:
+        return "durable record omitted unreadable artefacts: " + ", ".join(omitted)
     return None
 
 
@@ -1800,10 +1809,14 @@ def _finish_reporting(
         _write_courier_outcome(night_dir, outcome)
         _durable_record(custody_root, night_dir, plan)
         return EXIT_COURIER_FAILED
+    issued = len(report["diagnostics"])  # everything before this reached the prompt
     optional("courier outcome", lambda: _write_courier_outcome(night_dir, outcome))
     error = optional("durable record after courier", lambda: _durable_record(custody_root, night_dir, plan))
     if error:
         report["diagnostics"].append(error)
+    late = report["diagnostics"][issued:]
+    if late:  # re-audit 81 R2: a post-delivery failure must survive somewhere durable
+        optional("night log after courier", lambda: _append_log(custody_root, "\n".join(late)))
     return report["base_exit_code"] if outcome["sent"] else EXIT_COURIER_FAILED
 
 
