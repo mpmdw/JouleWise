@@ -36,8 +36,21 @@ Full sharded replay (row 9): record 09 (`replay-09/full-replay-7472a7c7.log`), r
 ## §3 Fix contract (row 3) and same-signature statement (row 5)
 Fix contract = brief 05 (dictated closure shape from consult 03: one constant, no filtering, t0 author centralised, regressions that fail at the old constant, native tests with an old-pattern control). Seat 05 implemented it in one round; no fix round so far. Same-signature statement: the class "two owned censuses match each other" is closed for every producer that imports the constant; the residual, legitimately-forbidden matches (courier binary path, agent shell snapshots) are real agents during acquisition and are not false positives (refuter 10 Q8 rules on any remaining owned-process false positive).
 
-## §4 Replay tail (row 9)
-(pending)
+## §4 Replay tail (row 9) — full sharded replay at `7472a7c7` in the branch worktree, untouched during the run (04:15–05:01 PDT)
+```
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/time -p …/.venv/bin/python -B scripts/shard_tests.py --workers 4 --split
+SHARD SUMMARY index=1/4 modules=61 tests=1373 failures=0 errors=0 skipped=3 result=PASS
+SHARD SUMMARY index=2/4 modules=61 tests=1857 failures=0 errors=1 skipped=12 result=FAIL
+SHARD SUMMARY index=3/4 modules=62 tests=1836 failures=0 errors=0 skipped=6 result=PASS
+SHARD SUMMARY index=4/4 modules=63 tests=1548 failures=0 errors=0 skipped=82 result=PASS
+WORKERS SUMMARY shards=4 modules=247 tests=6614 failures=0 errors=1 skipped=103 failed_shards=2 result=FAIL
+real 2761.28
+```
+The one error: `tests.test_arm_readiness_evidence_t0.ArmReadinessEvidenceT0Tests.test_g4_real_ruled_census_pgrep_dialect` (pattern `powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)`) — `ValueError: invalid literal for int() … 'SESSION_MODE:'` at `tests/test_arm_readiness_evidence_t0.py:2750`: the test parses every real `pgrep -lf` output line as `<pid> <command>`, and a concurrently running Codex seat (refuter 10, launched by this activation with the whole brief as one process argument) had a MULTI-LINE command line containing the word "watch"; its continuation lines have no pid. Environmental pollution by the lead's own seat launches, not the cure: re-run alone after the seats exited → `Ran 1 test in 1.469s OK`. (Finding for the successor: launch seats so the brief is not a process argument, or never run real-pgrep replays while a seat with a multi-line argv is alive.) Full log: `/tmp/magistrate-21752427/replay-09/full-replay-7472a7c7.log` (9,953 lines). The production delta between `7472a7c7` and the final head `0b3d69b8` is empty (rounds 1–3 touched tests and the handbook only); the touched test modules were re-run alone at `80e715ba` (78 + 228 OK) and `70637c31` (78 OK), and the native module at `0b3d69b8` by the auditor (3 OK).
 
-## §5 Terminal review (row 12)
-(pending)
+## §5 Terminal review (row 12), 05:05 PDT 09-20
+Final code head `0b3d69b8` = `7472a7c7` (cure) + `80e715ba` (round 1: pgrep-naming foreign-agent control that kills the post-filter mutant; handbook; native rounds 300; test name) + `70637c31` (round 2: performable pre-arm check; nits) + `81824ea7` (round 3, consult-derived: watchdog mechanism corrected — a 300 s launchd interval job whose ticks re-import from the canonical checkout; only a resident supervisor is stale; pid from `state.json`) + `0b3d69b8` (the auditor's two precision nits applied verbatim). Gauntlet: consult 03 (Astra xhigh) → seat 05 (Astra xhigh) → bench native proof → refuter 10 (Astra xhigh, execution: no blocker; mutant table; F1 coverage gap → closed in round 1; F2 pre-existing watchdog false hold on the driver's `--courier-bin` path → separate lane) + Opus 11 (contract: FIX-FIRST on the rollout note → rounds 1–3) → fresh eyes 13 (round 1: mutant killed) → fresh eyes 14 §1 (round 2: FIX-NEEDED, same signature → consult) → consult + bench → round 3 → fresh eyes 14 §5 PASS, same-signature class CLOSED → replay §4.
+Verdict: MERGE the records-only candidate (merge of main onto `0b3d69b8`). Residuals carried, not blockers: (i) OPERATIONAL PRECONDITION for the next arm — the canonical checkout `/Users/edr/code/JouleWise` (fenced for this activation; the watchdog ticks import from it) must contain the merged fix, and no resident supervisor older than that move may be alive at arm time — Ed's action or an unfenced activation, verified per the handbook's check (a)/(b); (ii) refuter 10 F2 (driver's courier path matches the census from an independent producer → false `HOLD_CENSUS`, never fatal) → successor lane; (iii) Opus 11 R6 (`arm_readiness.py:10149` on a pre-fix `TRANSACTION_PACK` GO census) → nit for that lane; (iv) arm scripts re-authored with the bracketed pattern single-quoted; (v) `envelopes_attempted: 0` bookkeeping after a first-envelope interruption (seat 05 residual) → nit.
+
+## §6 Hosted checks on the PR head (row 11)
+(filled before merge)
