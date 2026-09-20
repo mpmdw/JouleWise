@@ -10,6 +10,22 @@ Design-level reading:
 - **Open to the refuters:** fidelity to step 0/4/5 line by line; the freshness rule's basis (mtime vs digest); the literal fix SHA as a constant; the live (a)/(b) verdicts on this machine; recovery under a crash between publication and the installer call.
 Verdict of the diff gate: MERGE-able pending refuter 32 (execution) and the Opus contract lens (record 34), then the fix round and delta audits, then the replay.
 
-## §2 Replay (row 9) — (pending)
-## §3 Fix contract / same-signature — (pending)
-## §4 Terminal review — (pending)
+## §2 Replay (row 9) — full sharded replay at `0481bb0b` (round 1 + main) in the lifecycle worktree, untouched during the run (11:17–12:27 PDT; three audits ran their own tests in /tmp copies concurrently)
+```
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/time -p …/.venv/bin/python -B scripts/shard_tests.py --workers 4 --split
+SHARD SUMMARY index=1/4 modules=61 tests=1815 failures=0 errors=0 skipped=76 result=PASS
+SHARD SUMMARY index=2/4 modules=62 tests=1658 failures=0 errors=0 skipped=5 result=PASS
+SHARD SUMMARY index=3/4 modules=62 tests=1712 failures=0 errors=0 skipped=20 result=PASS
+SHARD SUMMARY index=4/4 modules=63 tests=1491 failures=0 errors=0 skipped=2 result=PASS
+WORKERS SUMMARY shards=4 modules=248 tests=6676 failures=0 errors=0 skipped=103 failed_shards=none result=PASS
+```
+Log: `/tmp/magistrate-21752427/replay-36/full-replay-0481bb0b.log`. Rounds 2 and 3 (`069f1e77`, `789542c6`) change only `joulewise/evidence_night.py`, its tests and the contract; their module was re-run alone at the bench under 3.13 (69 OK) and 3.11 (69 OK), and the modules the seats had seen fail under sandbox load (`test_run_night`, `test_sample_quiet_predicate_evidence`, `test_night_agent_install`, `test_axi_controller_events`) were re-run alone at the bench on the final tree (tail in the commit chain of 12:30 PDT).
+
+## §3 Fix contract (row 3) and same-signature (row 5)
+Fix contracts = brief 35 (twelve dictated closures from refuter 32 + Opus 34; counterfactual table: 17 tests FAIL→PASS against the `b678b1dc` module in memory) and brief 37 (three closures from fresh eyes 36); round 3 = the auditor's fail-closed prescription applied at the bench (record 38 §2). Same-signature: "the entry point silently diverges from the bench procedure" — closed at 38 §3 (bench step 0 gate in `check` and before publication; step-5 baseline declared deferred; root attempt records refuse); "an evidence-affecting side effect without a refusal path" — closed at 36 (atomic journals; recovery never uninstalls what it did not install; unpublish only on matching bytes); "stale-module evidence" — closed at 38 §1 (census, ancestry, installer and retry routing all execute in the clone).
+
+## §4 Terminal review (row 12), 12:30 PDT 09-20
+Final code head `789542c6` = `b678b1dc` (B1) + `472d12c5` (round 1, twelve closures) + `0481bb0b` (main merged: the py311 probe fix) + `069f1e77` (round 2) + `789542c6` (round 3, bench). Gauntlet: brief 30 → seat 30 (Astra xhigh; attempt 1 NEEDS_RULING → ruling 30a → attempt 2) → lead bench + diff read (33 §1) → refuter 32 (Astra xhigh, execution: BLOCKER F1 recovery destroys pre-existing jobs; F2/F3) + Opus 34 (contract: six should-fix) → brief 35 → seat 35 → fresh eyes 36 (PASS; F1 residual stale-module) → brief 37 → seat 37 → fresh eyes 38 §1 (PASS; one should-fix) → bench round 3 → fresh eyes 38 §3 (PASS, classes closed) → replay §2. Verdict: MERGE the records-only candidate (merge of main onto `789542c6`). Carried to slice B2: notice transport and reading/veto, courier execution, full `retry_allowed` clearance, the step-5 night-directory baseline, `ARG_MAX`-safe JSON via stdin, the runbook/handbook checklist replacing record 17's script set. A FIRST LIVE USE of `check`/`publish-install` must be watched step by step at the bench (fixtures prove composition only).
+
+## §5 Hosted checks on the PR head (row 11)
+(filled before merge)
