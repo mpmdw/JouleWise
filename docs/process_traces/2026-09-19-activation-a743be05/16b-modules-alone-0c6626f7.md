@@ -1,0 +1,5 @@
+# Record 16b — five touched modules alone at the FINAL HEAD `0c6626f7` (wt-bench2-renderonly, untouched during the run; 22:41–22:53 PDT 2026-09-19)
+
+`python -B -m unittest tests.test_night_agent_install tests.test_evidence_arm_sequence tests.test_install_night_agent tests.test_gen_evidence_night tests.test_night_gate` → `Ran 228 tests in 737.205s` / `OK` (log `16b-modules-alone-0c6626f7.log.gz`). Record 16 is the same five modules at `bbce496f` (228 OK). The full sharded replay (record 15) ran at `7ea54846`; the production delta between `7ea54846` and `0c6626f7` is confined to `joulewise/night_agent_install.py` (render-only branch + admission records list) and `docs/phase_2/derivation_night_runbook.md`, whose tests live in exactly these modules.
+
+**Addendum 22:55 PDT — quick tier at the final head** (`scripts/quick_suite.py --tier quick --workers 4` in wt-bench2-renderonly): `QUICK SUMMARY tier=quick modules=153 excluded=90 failures=0 seconds=112.990 result=PASS` (log `16c-quick-tier-0c6626f7.log.gz`).

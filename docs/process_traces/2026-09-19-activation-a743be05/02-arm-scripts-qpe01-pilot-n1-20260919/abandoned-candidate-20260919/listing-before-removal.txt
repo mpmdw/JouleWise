@@ -1,0 +1,14 @@
+/Users/edr/night-custody/qpe01-pilot-n1-20260919:
+total 32
+drwxr-xr-x@  6 edr  staff   192 Sep 19 21:00 .
+drwxr-xr-x@ 10 edr  staff   320 Sep 19 21:00 ..
+-rwxr-xr-x@  1 edr  staff  1527 Sep 19 21:00 chain.zsh
+-rw-r--r--@  1 edr  staff    95 Sep 19 21:00 chain.zsh.chain-source.sha256
+-rw-r--r--@  1 edr  staff    76 Sep 19 21:00 chain.zsh.sha256
+-rw-r--r--@  1 edr  staff  1085 Sep 19 21:00 evidence_manifest.json
+
+/Users/edr/night-plan-staging/qpe01-pilot-n1-20260919:
+total 8
+drwxr-xr-x@ 3 edr  staff   96 Sep 19 21:00 .
+drwxr-xr-x@ 9 edr  staff  288 Sep 19 21:00 ..
+-rw-------@ 1 edr  staff  778 Sep 19 21:00 night_plan.json
