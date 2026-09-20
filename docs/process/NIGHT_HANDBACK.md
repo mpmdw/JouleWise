@@ -222,11 +222,14 @@ quiet-admission threshold is activated by this night. Only the lead,
 after a ruling on the pilot summary, may arm block two; the courier has
 no scientific decision authority.
 
-**Pins.** `repo_head = measurement_head = <H>`. The frozen triple is
-`(qpe01-pilot-n1-20260920, /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1, <H>)`.
+**Pins.** `repo_head = measurement_head = H`, where H is the main head the
+fresh measurement clone is detached at (PR #369, the render-only fix, merged
+and this handback landed); the published plan and the notice record its full
+SHA as both `repo_head` and `measurement_head`. The frozen triple is
+`(qpe01-pilot-n1-20260920, /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1, H)`.
 The fresh measurement clone is detached at the merge of the render-only
-fix; the lead fills `<H>` with that reviewed commit before arm, and the
-plan and notice carry its full SHA. The courier reads this handback from
+fix; the lead pins H at the bench before arm, and the plan and notice carry
+its full SHA. The courier reads this handback from
 the clone at the plan's `measurement_head`. The custody root is
 `/Users/edr/night-custody/qpe01-pilot-n1-20260920`. The plan's repo-relative
 `registration_path` is
@@ -246,7 +249,7 @@ the lead confirms the discovery set at the bench (87a F4).
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at
 t0 − 480 s; TERM at t0 − 360 s; KILL at t0 − 300 s. Acquisition,
 completion / courier and daily dead-man use the plan values above.
-The notice is generated from staged bytes and sent after `<H>` is fixed,
+The notice is generated from staged bytes and sent after H is pinned,
 before publication and installation. Power, powermode, census, load and
 probe evidence are recorded at the bench. Ed's NO on the notice thread
 stands the night down.
@@ -484,7 +487,7 @@ Armed 2026-09-19 03:15:29 PDT by headless activation 4ca26e9c as the runbook §2
 
 The successor magistrate rebuilds the coordinates from the frozen triple
 `qpe01-pilot-n1-20260920` /
-`/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1` / `<H>`,
+`/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1` / H (the SHA in the published plan),
 resolved in the published plan and arm record. Harvest after
 `night/courier.sent`, per record 85 step 5 in
 `docs/process_traces/2026-09-19-activation-d0b83820/85-pilot-night-one-arm-recipe.md`,
