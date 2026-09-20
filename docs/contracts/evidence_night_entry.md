@@ -130,8 +130,9 @@ plan age/schedule/records and job-state checks; receipt identity/freshness and
 cleanup/consent checks; full `arm_retry` refusal routing. This slice delegates
 render validation to unchanged executors. Slice B1 below supplies pre-arm
 discovery, census, canonical ancestry/supervisor checks, publication,
-probe/install/verification and uninstall recovery. Readable NO/directives/STOP
-and notice acceptance remain bench obligations. No exact-four-root gate,
+probe/install/verification and uninstall recovery. B2 below supplies the notice
+draft and mechanical veto checks; Gmail transport and mailbox reading remain
+magistrate obligations. No exact-four-root gate,
 calendar restriction, attempt cap,
 notice delay, calibration ledger or epoch input is introduced.
 
@@ -164,7 +165,8 @@ run is a **rehearsal, never armable**: check sets `armable: false`,
 matching fake executable and records `outcome: rehearsal_installed`,
 `installed: false`. Such records cannot authorize a real arm.
 
-Each successful subcommand prints one JSON object and exits 0. A known
+Each successful subcommand except `notice` prints one JSON object and exits 0;
+`notice` prints To and Subject headers, a blank line, then the sendable body. A known
 refusal prints one `REFUSED:` line and exits 2; an unexpected defect prints
 `ERROR:` plus its traceback and exits 1. Installer refusals retain their
 captured return codes and output in the attempt journal. A nonblocking flock
@@ -256,10 +258,10 @@ requires a nonblank notice acceptance ID. A notice ID present in a prior
 attempt of this candidate or any same-date-prefix candidate under
 `<staging_under>` refuses with `notice id already used by attempt …`.
 **The ID is recorded verbatim and is not verified.** B1 sends no mail and
-reads no notice thread or network
-directive. The caller retains responsibility for the handbook observations;
-passing an ID must not be represented as proof that they occurred. A saved
-check is a snapshot, so the lead repeats `check` at the publication boundary.
+reads no notice thread. B2 observes network directives both in `veto` and
+immediately before publication. The caller retains responsibility for the
+handbook observations;
+passing an ID must not be represented as proof that they occurred. `publish-install` repeats the veto observation and the loaded-jobs probe at the publication boundary and requires a fresh `check` record; the lead re-runs `check` after any change.
 
 The staged plan and custody root must be on one filesystem. A published
 `night_plan.json`, including a dangling symlink, refuses. Publication uses
@@ -282,6 +284,21 @@ durably records phase `publishing` before the plan rename. Phase transitions
 and parseable installer refusal `cause` are persisted atomically. There is no
 automatic retry loop or inference of a retry-eligible cause; interrupted/failed
 records go to the lead.
+
+| Phase | Operation about to run or just completed |
+|---|---|
+| `prepared` | Attempt snapshot recorded; loaded-jobs probe must clear. |
+| `observing-veto` | Boundary veto observation in progress; no publication intent yet. |
+| `publishing` | Boundary veto cleared with required provenance; durable intent immediately before the plan rename. |
+| `published` | Plan rename acknowledged. |
+| `probing` / `probe_finished` | Installer probe in progress / returned. |
+| `installing` / `install_finished` | Installation in progress / returned. |
+| `verifying` | Installed-state verification in progress. |
+| `recovering` | Post-publication recovery in progress. |
+| `complete` | Successful installation or completed restoration. |
+
+A refused or timed-out boundary veto leaves phase `observing-veto` and outcome
+`not_published`; it never reaches `publishing`.
 
 Recovery never uninstalls jobs it did not install. The unchanged installer
 transaction's rc 2/3 means refused or rolled back: retained teardown overrides
@@ -324,8 +341,121 @@ unpublished or evidence removed even after successful explicit uninstall.
 Offline tests use `FakeLaunchctl`, a fixture HOME and
 synthetic receipt; the composed test also injects the probe process census because sandboxed
 sysmon may be unavailable. No test evidence is live launchd/hardware evidence.
-Notice transport, notice reading/veto integration, automated retry clearance,
-courier execution and the handbook/runbook replacement remain deferred to B2
-or the lead's existing bench procedure. The step-5 night-directory baseline
-(filename/size/mtime) is explicitly deferred to B2/the bench. B1 does not
-collect measurements.
+Notice transport, mailbox reading, automated retry clearance and courier
+execution remain the lead's existing bench procedure. The tracked commands
+below now have a handbook checklist; record 17 remains the fallback until the
+first live use succeeds. No lifecycle command collects measurements.
+
+## Slice B2: sendable notice, veto observations and attempt baseline
+
+```
+python -m joulewise.evidence_night notice --candidate STAGING
+python -m joulewise.evidence_night veto --candidate STAGING
+```
+
+`notice` shares publication's sealed-state and fresh-check requirements,
+including the matching fake-launchctl rehearsal seam. It renders the body from
+current sealed bytes, the clone's schedule and registration/source bindings,
+and atomically writes only that body to `lifecycle/notice.txt`. The first line
+is `Prepared candidate <plan_id>; pre-arm check <first 12 hex of check.json's sha256> at <ISO time>`;
+the ISO time is the check's recorded finish time in UTC, so unchanged inputs
+produce identical bytes across reruns. A blank line separates provenance from
+`Ed,`. The body has no `DRAFT — NOT SENT`
+banner and no To or Subject lines. Stdout's first two lines, `To: …` and
+`Subject: …`, are mail headers; after one blank line, all remaining lines are
+the body. The preparation draft in `prepare.json` stays unchanged, as do all
+sealed artifacts. Missing, non-armable, mismatched, stale or future-dated
+checks, sealed-byte drift and the exclusive install close refuse before output.
+A missing check names the requiring command: `check.json is required before notice`.
+The magistrate supplies the two stdout header values to its already-authorized
+Gmail tool and sends the exact `lifecycle/notice.txt` body to the single To
+address with no cc, then passes the service's accepted message id to
+`publish-install --notice-accepted ID`. Python never sends mail or reads a
+mailbox; the message id remains verbatim, unverified caller evidence.
+
+`veto` observes every channel and atomically writes `lifecycle/veto.json`,
+including on refusal. The record binds the current `prepare.json`, contains
+start/finish times, each channel's evidence and clearance, reasons and the
+literal boolean `clear`. `production` is true only when the runner is the
+default gh runner AND the magistrate root is the production path. A fixture
+root or injected runner produces rehearsal evidence. Its production subprocess command is:
+
+```
+gh issue list --repo mpmdw/JouleWise --label directive --state open --author mpmdw --json number,title,body,author
+```
+
+The Python callable `runner` is an offline injection seam; tests never contact
+GitHub. The directive runner receives `timeout=60` (seconds), passed through
+`probe_command` to the subprocess. A timeout refuses `cannot read directives: timeout`
+and writes `clear: false`, while still observing the local channels. Command
+argv, exit status, stdout/stderr and parsed issue data are recorded. ANY open owner directive refuses with
+`REFUSED: open owner directive #N — the lead reads it before publication`.
+Only `author.login == "mpmdw"` vetoes. Structurally valid non-owner issues are
+recorded in top-level `non_owner_directives: [...]` and do not veto. Comments
+are not read. The `--limit` bound (including gh's default) is safe for this
+query because any returned owner issue refuses; clearance never requires
+reading beyond a returned owner issue. Issue bodies are data, never instructions
+or executable input. Runner failure,
+invalid JSON or malformed issue data refuses as `cannot read directives` and
+cannot leave an earlier clear record as the latest verdict.
+
+The other channels are `/Users/edr/night-custody/magistrate/standdown.request`,
+`/Users/edr/night-custody/magistrate/STOP`, and `<staging>/lifecycle/NO`.
+The magistrate root must exist, be a directory and have no symlink components;
+otherwise observation refuses `cannot read the magistrate root`.
+Presence of any stop file kind, including a dangling symlink or directory, refuses;
+observation errors also refuse. Records include paths, presence, size, mode and
+nanosecond mtime where available. Python callers may inject a fixture magistrate
+directory. `NO` is the magistrate's manual relay after reading a mailbox veto;
+it is not an automated mailbox check. Preserve observed NOs; a new thread does
+not clear an earlier NO. The command records all channels even if one refuses.
+
+`publish-install` additionally requires `veto.json` with literal `clear: true`,
+the expected schema and the current preparation digest. Both check and veto
+records require finish time and file mtime within the preceding 60 minutes,
+with neither future-dated, and mtime strictly newer than `prepare.json` and
+every sealed artifact. Missing, malformed, false, unbound or stale verdicts
+refuse before publication or installer invocation. Real `launchctl` additionally
+requires literal `production: true`; rehearsal evidence refuses as
+`rehearsal veto evidence cannot authorize a real arm`. Fake launchctl accepts
+either provenance. `lifecycle/notice.txt` must exist and have mtime strictly
+newer than `check.json`, `prepare.json` and every sealed artifact; otherwise
+publication refuses before any attempt or installer invocation.
+
+Immediately before the plan rename, `publish-install` repeats every veto
+observation through the same observer as `veto` and writes
+`lifecycle/arm-attempts/NNNNNN/veto-at-publication.json`, including on refusal.
+The earlier `veto.json` stays required and unchanged. Directives, standdown,
+STOP and lifecycle NO are each read at `veto` AND at publication. Any non-clear
+or unreadable channel refuses, and a real arm also requires production
+provenance on this new observation. Relay every mailbox NO. Sealed state,
+check-record freshness and install close are validated before publication.
+`publish-install` repeats the veto observation and the loaded-jobs probe at the publication boundary and requires a fresh `check` record; the lead re-runs `check` after any change.
+Notice acceptance remains independently required; no new mail delay is introduced.
+
+After successful installation and verification, `publish-install` atomically
+writes `lifecycle/arm-attempts/NNNNNN/baseline.json` for that attempt. Its
+`files` map inventories every regular
+file recursively under the custody root by relative filename, byte size and
+`mtime_ns`, including the published plan and probe artifacts. Scan errors,
+symlinks and special files refuse rather than producing an incomplete baseline.
+Embedded verification ignores every earlier attempt's baseline.
+`verify --candidate` selects only the newest numbered attempt's baseline and reports
+`baseline: null` if that attempt has none (or no attempts exist). Earlier
+attempts and legacy `lifecycle/baseline.json` never supply a fallback. When
+present, the newest baseline reports added, removed and changed file metadata
+plus a `drift`
+boolean. Drift is evidence for harvest, not by itself an installation refusal;
+the existing sealed-byte checks remain hard refusals. Verification never
+refreshes the baseline. A malformed newest-attempt baseline refuses.
+
+All clone-side `P -B -c` calls carrying JSON records use `input=` and
+`json.load(sys.stdin)`: plan authoring, census observation/classification and
+retry routing. Their argv ends with the code string. Path/scalar arguments to
+sealed checks, schedule, job discovery and verification are unchanged; all
+these operations still execute with cwd set to the clone and JSON output.
+The fake-launchctl composition and both interpreter test runs remain fixture
+evidence only; first live use is lead-owned and PROVISIONAL.
+
+A successful real-`launchctl` publication is exercised only at the bench's first
+live use; no fixture can prove `outcome: installed` with a real launchctl.

@@ -27,17 +27,21 @@ STEPS = ("clone", "venv", "plan", "wrapper", "render", "complete")
 CENSUS_FIX = "980f8d6452fb6923644bdac1e243ce0a344c881f"
 CANONICAL = "/Users/edr/code/JouleWise"
 SUPERVISOR_STATE = "/Users/edr/night-custody/magistrate/state.json"
+MAGISTRATE = "/Users/edr/night-custody/magistrate"
+DIRECTIVES_ARGV = ("gh", "issue", "list", "--repo", "mpmdw/JouleWise", "--label",
+                   "directive", "--state", "open", "--author", "mpmdw", "--json",
+                   "number,title,body,author")
 
 
 class Refused(Exception):
     """A preparation cannot safely advance."""
 
 
-def run(argv, *, cwd=None):
+def run(argv, *, cwd=None, input=None):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
     env.pop("PYTHONPATH", None)
     result = subprocess.run(list(map(str, argv)), cwd=cwd, env=env,
-                            text=True, capture_output=True, check=False)
+                            text=True, capture_output=True, check=False, input=input)
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
         raise Refused(f"{Path(str(argv[0])).name} failed ({result.returncode}): {detail}")
@@ -250,11 +254,15 @@ print(json.dumps({'registration_path':str(registration),'registration_sha256':sh
     return result
 
 
-def notice(state):
+def notice_subject(state):
+    return f'NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt {state["attempt"]}'
+
+
+def render_notice(state, *, checked=None, check_sha256=None):
     s = state["schedule"]
     lines = ["DRAFT — NOT SENT; prerequisites and veto observations are not yet recorded.",
              "To: claude2.glaring610@passmail.net",
-             f'Subject: NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt {state["attempt"]}',
+             'Subject: ' + notice_subject(state),
              "", "Ed,", "Launch needs no action from you unless you reply NO. Your NO overrides.",
              f'Arm attempt {state["attempt"]}; prior candidates for this date: {", ".join(state["prior_candidates"]) or "none"}.',
              "This first idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
@@ -284,6 +292,10 @@ def notice(state):
               "Every observed NO stops publication, including older threads. Reply NO on the thread or through an owner-authored directive; no reply is required.",
               "The magistrate checks readable NO/directive/stop channels before publication and exits before REQUEST.",
               "Keep agent applications closed and the machine untouched from REQUEST through completion, longer if the night remains active."]
+    if checked is not None:
+        observed = datetime.fromtimestamp(checked["finished_epoch_s"], timezone.utc).isoformat()
+        lines = [f'Prepared candidate {state["plan_id"]}; pre-arm check {check_sha256[:12]} at {observed}',
+                 "", *lines[4:]]
     return "\n".join(lines) + "\n"
 
 
@@ -429,7 +441,7 @@ from pathlib import Path
 from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S
 from joulewise.night_plan_writer import write_night_plan
 from joulewise.quiet_predicate_campaign import PROTOCOL_PATH
-s=json.loads(sys.argv[1]); c=s['custody_root']
+s=json.load(sys.stdin); c=s['custody_root']
 authored_epoch_s=int(time.time())
 if s['t0']-authored_epoch_s > PLAN_MAX_AGE_S:
     print(json.dumps({'refused':"t0 is beyond the plan's maximum age at authoring"}))
@@ -443,7 +455,7 @@ custody_root=c,registration_path=PROTOCOL_PATH))
 write_night_plan(s['plan_path'],p)
 print(json.dumps({}))
 """
-            result = json.loads(run([python, "-B", "-c", code, json.dumps(state)], cwd=root))
+            result = json.loads(run([python, "-B", "-c", code], cwd=root, input=json.dumps(state)))
             if "refused" in result:
                 raise Refused(result["refused"])
             checkpoint(state_path, state, "plan", [plan])
@@ -482,7 +494,7 @@ print(json.dumps(s))
             state["schedule"] = json.loads(run([python, "-B", "-c", code, plan], cwd=root))
             checkpoint(state_path, state, "render", sorted(p for p in render.rglob("*") if p.is_file()))
         if "complete" not in done:
-            state["notice_draft"] = notice(state)
+            state["notice_draft"] = render_notice(state)
             state["frozen_triple"] = [state["plan_id"], str(root), resolved_head]
             checkpoint(state_path, state, "complete")
         if time.time() >= state["schedule"]["install_close_epoch_s"]:
@@ -568,9 +580,9 @@ print(json.dumps(s))
     return json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan], cwd=root))
 
 
-def probe_command(argv, *, cwd=None):
+def probe_command(argv, *, cwd=None, timeout=None):
     return subprocess.run(list(map(str, argv)), cwd=cwd, capture_output=True, text=True,
-                          check=False, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+                          check=False, timeout=timeout, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
 
 
 def observation_record(result):
@@ -663,7 +675,7 @@ from dataclasses import asdict
 from types import SimpleNamespace
 from joulewise import arm_census, night_gate
 from joulewise.quiet_guard_process import KernelProcessTable, KernelProcessRecord, DarwinProcessRecord
-request=json.loads(sys.argv[1]); result={'argv':list(night_gate.AGENT_CENSUS_ARGV)}
+request=json.load(sys.stdin); result={'argv':list(night_gate.AGENT_CENSUS_ARGV)}
 if not request['argv_only']:
     data=request['observation']; pid=request['caller_pid']
     if data is None: observation=arm_census.observe_arm_census(caller_pid=pid)
@@ -679,7 +691,7 @@ print(json.dumps(result))
     root = Path(state["measurement_root"])
     request = dict(argv_only=argv_only, caller_pid=caller_pid,
                    observation=asdict(observation) if observation is not None else None)
-    return json.loads(run([root / ".venv/bin/python", "-B", "-c", code, json.dumps(request)], cwd=root))
+    return json.loads(run([root / ".venv/bin/python", "-B", "-c", code], cwd=root, input=json.dumps(request)))
 
 
 def census_check(state, runner, observer, caller_pid):
@@ -780,14 +792,14 @@ def retry_inventory(state, stage):
     # The clone at H owns retry policy, just as it owns census classification.
     code = """import json,sys
 from joulewise.arm_retry import classify_abort
-records=json.loads(sys.argv[1])
+records=json.load(sys.stdin)
 print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record in records]))
 """
     root = Path(state["measurement_root"])
-    records = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, json.dumps(records)], cwd=root))
+    records = json.loads(run([root / ".venv/bin/python", "-B", "-c", code], cwd=root, input=json.dumps(records)))
     return dict(verdict="fail" if any(r["route"] != "retry" for r in records) else "pass",
                 consulted="joulewise.arm_retry.classify_abort", inventory=records,
-                limitation="Routing only; retry_allowed requires fresh notice/veto evidence (slice B2).")
+                limitation="Routing only; full retry_allowed clearance remains lead-owned.")
 
 
 def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
@@ -902,6 +914,7 @@ print(json.dumps(results))
                            launchctl_bin, Path(state["staging"]) / "render", root / ".venv/bin/python"], cwd=root))
     return dict(schema="joulewise.evidence_verify.v1", verified_epoch_s=time.time(), jobs=jobs,
                 launchctl_bin=str(launchctl_bin), fake_launchctl=str(launchctl_bin) != "launchctl",
+                baseline=baseline_drift(state),
                 schedule=s, request_epoch_s=s["boundaries"]["REQUEST / exit BEFORE"],
                 instruction="Exit every owned agent and helper strictly before REQUEST; this command does not terminate them.")
 
@@ -909,6 +922,181 @@ print(json.dumps(results))
 def verify(*, candidate, launchctl_bin="launchctl", lock_verifier=verify_lock):
     with candidate_lock(candidate):
         return verify_state(candidate_state(candidate), launchctl_bin=launchctl_bin, lock_verifier=lock_verifier)
+
+
+def require_fresh_record(state, name, clearance, *, command="publish-install"):
+    stage = Path(state["staging"])
+    path = safe_path(stage / "lifecycle" / (name + ".json"))
+    if not path.is_file():
+        raise Refused(f"{name}.json is required before {command}")
+    try:
+        record = json.loads(path.read_text())
+        if (not isinstance(record, dict)
+                or record.get("schema") != f"joulewise.evidence_{name}.v1"
+                or record.get(clearance) is not True
+                or record.get("prepare_sha256") != digest(stage / "prepare.json")):
+            raise Refused(f"{name}.json is not {clearance} or does not bind prepare.json")
+        now = time.time()
+        age = now - record.get("finished_epoch_s", 0)
+        file_age = now - path.stat().st_mtime
+        if not math.isfinite(age) or not 0 <= age <= 3600 or not 0 <= file_age <= 3600:
+            raise Refused(f"{name}.json is older than 60 minutes or future-dated")
+        sealed = [stage / "prepare.json", *(Path(p) for p in state["digests"])]
+        if any(path.stat().st_mtime_ns <= p.stat().st_mtime_ns for p in sealed):
+            raise Refused(f"{name}.json is not newer than every sealed artefact")
+    except (OSError, ValueError, TypeError) as exc:
+        raise Refused(f"malformed or unreadable {name}.json: {exc}") from exc
+    return record
+
+
+def require_fresh_check(state, launchctl_bin, *, command="publish-install"):
+    fake = str(launchctl_bin) != "launchctl"
+    checked = require_fresh_record(state, "check", "rehearsal_ready" if fake else "armable", command=command)
+    if (checked.get("launchctl_bin") != str(launchctl_bin)
+            or checked.get("fake_launchctl") is not fake):
+        raise Refused("check.json is not armable with this launchctl executable")
+    return checked
+
+
+def notice(*, candidate, launchctl_bin="launchctl", lock_verifier=verify_lock):
+    with candidate_lock(candidate):
+        state = candidate_state(candidate)
+        plan = sealed_state(state, lock_verifier=lock_verifier)
+        checked = require_fresh_check(state, launchctl_bin, command="notice")
+        state["schedule"] = clone_schedule(state, plan)
+        if time.time() >= state["schedule"]["install_close_epoch_s"]:
+            raise Refused("exclusive install close has passed")
+        state["bindings"] = sealed_candidate(Path(state["measurement_root"]), plan)
+        body = render_notice(state, checked=checked,
+                             check_sha256=digest(Path(candidate) / "lifecycle/check.json"))
+        atomic_bytes(lifecycle_dir(candidate) / "notice.txt", body.encode())
+        print("To: claude2.glaring610@passmail.net")
+        print("Subject: " + notice_subject(state))
+        print("\n" + body, end="")
+        return body
+
+
+def veto(*, candidate, runner=probe_command, magistrate=MAGISTRATE):
+    """Observe mechanical veto channels; mail remains the magistrate's job."""
+    with candidate_lock(candidate):
+        state = candidate_state(candidate)
+        lifecycle = lifecycle_dir(candidate)
+        return observe_veto(state, lifecycle / "veto.json", runner=runner, magistrate=magistrate)
+
+
+def observe_veto(state, output, *, runner, magistrate):
+    """One observation path for the earlier veto and the publication boundary."""
+    lifecycle = lifecycle_dir(state["staging"])
+    record = dict(schema="joulewise.evidence_veto.v1", started_epoch_s=time.time(),
+                  prepare_sha256=digest(Path(state["staging"]) / "prepare.json"), channels={}, clear=False,
+                  production=runner is probe_command and Path(magistrate) == Path(MAGISTRATE),
+                  non_owner_directives=[])
+    channels = record["channels"]
+    directives = channels["directives"] = dict(argv=list(DIRECTIVES_ARGV), clear=False)
+    reasons = []
+    try:
+        observed = runner(list(DIRECTIVES_ARGV), timeout=60)
+        directives.update(observation_record(observed))
+        if observed.returncode:
+            raise ValueError(f"gh exited {observed.returncode}")
+        issues = json.loads(observed.stdout)
+        if not isinstance(issues, list) or any(
+                not isinstance(issue, dict) or type(issue.get("number")) is not int
+                or issue["number"] <= 0 or not isinstance(issue.get("title"), str)
+                or not isinstance(issue.get("body"), str)
+                or not isinstance(issue.get("author"), dict)
+                or not isinstance(issue["author"].get("login"), str)
+                or not issue["author"]["login"] for issue in issues):
+            raise ValueError("invalid directive issue inventory")
+        owner_issues = [issue for issue in issues if issue["author"]["login"] == "mpmdw"]
+        record["non_owner_directives"] = [issue for issue in issues if issue["author"]["login"] != "mpmdw"]
+        directives.update(issues=issues, clear=not owner_issues)
+        reasons.extend(f"open owner directive #{issue['number']} — the lead reads it before publication"
+                       for issue in owner_issues)
+    except subprocess.TimeoutExpired:
+        directives["error"] = "timeout"
+        reasons.append("cannot read directives: timeout")
+    except (Refused, OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
+        directives["error"] = str(exc)
+        reasons.append("cannot read directives: " + str(exc))
+    root = record["magistrate_root"] = dict(path=str(magistrate), clear=False)
+    try:
+        if not safe_path(magistrate).is_dir():
+            raise Refused("missing or non-directory root")
+        root["clear"] = True
+    except (Refused, OSError) as exc:
+        root["error"] = str(exc)
+        reasons.append("cannot read the magistrate root: " + str(exc))
+    # Observe every channel even when another has already refused. lstat
+    # counts dangling symlinks and directories as present; never run data.
+    for name, path in (("standdown", Path(magistrate) / "standdown.request"),
+                       ("STOP", Path(magistrate) / "STOP"), ("NO", lifecycle / "NO")):
+        evidence = channels[name] = dict(path=str(path), clear=False)
+        try:
+            safe_path(path.parent)
+            try:
+                st = path.lstat()
+            except FileNotFoundError:
+                evidence.update(present=False, clear=True)
+            else:
+                evidence.update(present=True, size=st.st_size, mtime_ns=st.st_mtime_ns,
+                                mode=st.st_mode)
+                reasons.append(f"veto present: {path}")
+        except (Refused, OSError) as exc:
+            evidence["error"] = str(exc)
+            reasons.append(f"cannot read veto channel {path}: {exc}")
+    record.update(clear=root["clear"] and all(c["clear"] for c in channels.values()), reasons=reasons,
+                  finished_epoch_s=time.time())
+    saved_json(output, record)
+    if not record["clear"]:
+        raise Refused("; ".join(reasons))
+    return record
+
+
+def custody_inventory(state):
+    root = safe_path(state["custody_root"])
+    files = {}
+
+    def failed(exc):
+        raise exc
+
+    # os.walk's default ignores scan errors; an incomplete baseline must fail.
+    for directory, dirs, names in os.walk(root, onerror=failed):
+        for name in dirs + names:
+            safe_path(Path(directory) / name)
+        for name in names:
+            path = Path(directory) / name
+            if not path.is_file():
+                raise Refused(f"nonregular custody file: {path}")
+            st = path.stat()
+            files[path.relative_to(root).as_posix()] = dict(size=st.st_size, mtime_ns=st.st_mtime_ns)
+    return files
+
+
+def baseline_drift(state):
+    attempts = safe_path(Path(state["staging"]) / "lifecycle/arm-attempts")
+    newest = max((p for p in attempts.iterdir() if p.name.isdecimal() and int(p.name) > 0),
+                 key=lambda p: int(p.name), default=None) if attempts.exists() else None
+    if newest is None:
+        return None
+    path = safe_path(newest / "baseline.json")
+    if not path.exists():
+        return None
+    try:
+        baseline = json.loads(path.read_text())
+        if (baseline["schema"] != "joulewise.evidence_baseline.v1"
+                or baseline["custody_root"] != state["custody_root"]
+                or not isinstance(baseline["files"], dict)):
+            raise ValueError("invalid baseline identity")
+        before = baseline["files"]
+        after = custody_inventory(state)
+        added, removed = sorted(after.keys() - before.keys()), sorted(before.keys() - after.keys())
+        changed = {name: dict(before=before[name], after=after[name]) for name in sorted(before.keys() & after.keys())
+                   if before[name] != after[name]}
+        return dict(path=str(path), drift=bool(added or removed or changed),
+                    added=added, removed=removed, changed=changed)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise Refused(f"cannot read custody baseline: {exc}") from exc
 
 
 def notice_unused(state, notice_id):
@@ -934,32 +1122,27 @@ def notice_unused(state, notice_id):
 
 
 def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl",
-                    runner=probe_command, lock_verifier=verify_lock):
+                    runner=probe_command, magistrate=MAGISTRATE, lock_verifier=verify_lock):
     with candidate_lock(candidate):
         state = candidate_state(candidate)
         stage = Path(state["staging"])
         plan = sealed_state(state, lock_verifier=lock_verifier)
         lifecycle = lifecycle_dir(stage)
-        check_path = safe_path(lifecycle / "check.json")
-        if not check_path.is_file():
-            raise Refused("check.json is required before publication")
-        checked = json.loads(check_path.read_text())
+        require_fresh_check(state, launchctl_bin)
         fake = str(launchctl_bin) != "launchctl"
-        ready = checked.get("rehearsal_ready") is True if fake else checked.get("armable") is True
-        if (checked.get("schema") != "joulewise.evidence_check.v1" or not ready
-                or checked.get("launchctl_bin") != str(launchctl_bin)
-                or checked.get("fake_launchctl") is not fake
-                or checked.get("prepare_sha256") != digest(stage / "prepare.json")):
-            raise Refused("check.json is not armable or does not bind prepare.json")
-        age = time.time() - checked.get("finished_epoch_s", 0)
-        if not math.isfinite(age) or not 0 <= age <= 3600 or time.time() - check_path.stat().st_mtime > 3600:
-            raise Refused("check.json is older than 60 minutes or future-dated")
-        sealed = [stage / "prepare.json", *(Path(p) for p in state["digests"])]
-        if any(check_path.stat().st_mtime_ns <= p.stat().st_mtime_ns for p in sealed):
-            raise Refused("check.json is not newer than every sealed artefact")
         if not isinstance(notice_accepted, str) or not notice_accepted.strip():
             raise Refused("notice acceptance message id is required")
         notice_unused(state, notice_accepted)
+        veto_record = require_fresh_record(state, "veto", "clear")
+        if not fake and veto_record.get("production") is not True:
+            raise Refused("rehearsal veto evidence cannot authorize a real arm")
+        notice_path = safe_path(lifecycle / "notice.txt")
+        if not notice_path.is_file():
+            raise Refused("notice.txt is required before publish-install")
+        notice_inputs = [stage / "prepare.json", lifecycle / "check.json",
+                         *(Path(p) for p in state["digests"])]
+        if any(notice_path.stat().st_mtime_ns <= p.stat().st_mtime_ns for p in notice_inputs):
+            raise Refused("notice.txt is not newer than every sealed artefact and check.json")
         s = clone_schedule(state, plan)
         if time.time() >= s["install_close_epoch_s"]:
             raise Refused("exclusive install close has passed")
@@ -1013,6 +1196,12 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
             record["pre_publication"] = night_agents(state, launchctl_bin)
             save()
             require_no_night_agents(record["pre_publication"])
+            record["phase"] = "observing-veto"
+            save()
+            observed_veto = observe_veto(state, attempt / "veto-at-publication.json",
+                                         runner=runner, magistrate=magistrate)
+            if not fake and observed_veto["production"] is not True:
+                raise Refused("rehearsal veto evidence cannot authorize a real arm")
             record["phase"] = "publishing"
             save()  # Durable intent precedes the rename, including lost acknowledgement.
             publication_started = True
@@ -1030,6 +1219,11 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
             record["phase"] = "verifying"
             save()
             record["verification"] = verify_state(state, launchctl_bin=launchctl_bin, lock_verifier=lock_verifier)
+            baseline_path = attempt / "baseline.json"
+            saved_json(baseline_path, dict(schema="joulewise.evidence_baseline.v1",
+                custody_root=state["custody_root"], recorded_epoch_s=time.time(),
+                files=custody_inventory(state)))
+            record["baseline_path"] = str(baseline_path)
             record.update(outcome="rehearsal_installed" if fake else "installed", phase="complete",
                           installed=not fake, finished_epoch_s=time.time())
             save()
@@ -1114,18 +1308,21 @@ def main(argv=None):
     prep.add_argument("--remote", default=REMOTE)
     prep.add_argument("--roots-under", default="/Users/edr")
     prep.add_argument("--staging-under", default="/Users/edr/night-plan-staging")
-    for command in ("check", "publish-install", "verify", "uninstall"):
+    for command in ("check", "notice", "veto", "publish-install", "verify", "uninstall"):
         action = sub.add_parser(command)
         action.add_argument("--candidate", required=True)
-        action.add_argument("--launchctl-bin", default="launchctl")
+        if command != "veto":
+            action.add_argument("--launchctl-bin", default="launchctl")
         if command == "publish-install":
             action.add_argument("--notice-accepted")
     try:
         args = vars(parser.parse_args(argv))
         command = args.pop("command")
         operation = {"prepare": prepare, "check": check, "publish-install": publish_install,
-                     "verify": verify, "uninstall": uninstall}[command]
-        print(json.dumps(operation(**args), indent=2, sort_keys=True))
+                     "verify": verify, "uninstall": uninstall, "notice": notice, "veto": veto}[command]
+        result = operation(**args)
+        if command != "notice":
+            print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except Refused as exc:
         print("REFUSED: " + " ".join(str(exc).splitlines()), file=sys.stderr)

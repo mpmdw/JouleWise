@@ -283,6 +283,18 @@ new pattern. The next plan needs fresh artefacts (manifest/wrapper/digest/plan/
 probe receipt) because `quiet_predicate_campaign.MANIFEST_PATHS` hashes
 `night_gate.py`; no ruled registration hash changes.
 
+**Arm procedure via the tracked commands.** Use `python -m joulewise.evidence_night`
+in this order: `prepare --kind quiet_predicate_evidence --t0 next` → `check` →
+`notice` (stdout's first two lines, `To: …` and `Subject: …`, are mail headers;
+a blank line separates them from the body, also saved alone in
+`lifecycle/notice.txt`; the magistrate sends that body via Gmail using those
+header values, with no cc, and records the accepted message id) → `veto` →
+`publish-install --notice-accepted <id>` → `verify` → exit before REQUEST →
+after the night, `uninstall`. Pass `--candidate <staging>` to each command
+after prepare; relay any mailbox NO into `<staging>/lifecycle/NO` before veto;
+`publish-install` repeats the veto observation and the loaded-jobs probe at the publication boundary and requires a fresh `check` record; the lead re-runs `check` after any change.
+Record 17's script set remains the fallback until the first live use succeeds.
+
 **Timeline.** The plan's relative boundaries are: install strictly before
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at
 t0 − 480 s; TERM at t0 − 360 s; KILL at t0 − 300 s. Acquisition,
