@@ -295,7 +295,7 @@ def render_notice(state, *, checked=None, check_sha256=None):
     if checked is not None:
         observed = datetime.fromtimestamp(checked["finished_epoch_s"], timezone.utc).isoformat()
         lines = [f'Prepared candidate {state["plan_id"]}; pre-arm check {check_sha256[:12]} at {observed}',
-                 *lines[4:]]
+                 "", *lines[4:]]
     return "\n".join(lines) + "\n"
 
 
@@ -580,9 +580,9 @@ print(json.dumps(s))
     return json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan], cwd=root))
 
 
-def probe_command(argv, *, cwd=None):
+def probe_command(argv, *, cwd=None, timeout=None):
     return subprocess.run(list(map(str, argv)), cwd=cwd, capture_output=True, text=True,
-                          check=False, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+                          check=False, timeout=timeout, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
 
 
 def observation_record(result):
@@ -995,7 +995,7 @@ def observe_veto(state, output, *, runner, magistrate):
     directives = channels["directives"] = dict(argv=list(DIRECTIVES_ARGV), clear=False)
     reasons = []
     try:
-        observed = runner(list(DIRECTIVES_ARGV))
+        observed = runner(list(DIRECTIVES_ARGV), timeout=60)
         directives.update(observation_record(observed))
         if observed.returncode:
             raise ValueError(f"gh exited {observed.returncode}")
@@ -1013,6 +1013,9 @@ def observe_veto(state, output, *, runner, magistrate):
         directives.update(issues=issues, clear=not owner_issues)
         reasons.extend(f"open owner directive #{issue['number']} — the lead reads it before publication"
                        for issue in owner_issues)
+    except subprocess.TimeoutExpired:
+        directives["error"] = "timeout"
+        reasons.append("cannot read directives: timeout")
     except (Refused, OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
         directives["error"] = str(exc)
         reasons.append("cannot read directives: " + str(exc))
@@ -1193,12 +1196,14 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
             record["pre_publication"] = night_agents(state, launchctl_bin)
             save()
             require_no_night_agents(record["pre_publication"])
-            record["phase"] = "publishing"
-            save()  # Durable intent precedes the rename, including lost acknowledgement.
+            record["phase"] = "observing-veto"
+            save()
             observed_veto = observe_veto(state, attempt / "veto-at-publication.json",
                                          runner=runner, magistrate=magistrate)
             if not fake and observed_veto["production"] is not True:
                 raise Refused("rehearsal veto evidence cannot authorize a real arm")
+            record["phase"] = "publishing"
+            save()  # Durable intent precedes the rename, including lost acknowledgement.
             publication_started = True
             os.replace(plan, target)
             published = True

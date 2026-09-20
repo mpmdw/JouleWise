@@ -261,8 +261,7 @@ attempt of this candidate or any same-date-prefix candidate under
 reads no notice thread. B2 observes network directives both in `veto` and
 immediately before publication. The caller retains responsibility for the
 handbook observations;
-passing an ID must not be represented as proof that they occurred. A saved
-check is a snapshot, so the lead repeats `check` at the publication boundary.
+passing an ID must not be represented as proof that they occurred. `publish-install` repeats the veto observation and the loaded-jobs probe at the publication boundary and requires a fresh `check` record; the lead re-runs `check` after any change.
 
 The staged plan and custody root must be on one filesystem. A published
 `night_plan.json`, including a dangling symlink, refuses. Publication uses
@@ -285,6 +284,21 @@ durably records phase `publishing` before the plan rename. Phase transitions
 and parseable installer refusal `cause` are persisted atomically. There is no
 automatic retry loop or inference of a retry-eligible cause; interrupted/failed
 records go to the lead.
+
+| Phase | Operation about to run or just completed |
+|---|---|
+| `prepared` | Attempt snapshot recorded; loaded-jobs probe must clear. |
+| `observing-veto` | Boundary veto observation in progress; no publication intent yet. |
+| `publishing` | Boundary veto cleared with required provenance; durable intent immediately before the plan rename. |
+| `published` | Plan rename acknowledged. |
+| `probing` / `probe_finished` | Installer probe in progress / returned. |
+| `installing` / `install_finished` | Installation in progress / returned. |
+| `verifying` | Installed-state verification in progress. |
+| `recovering` | Post-publication recovery in progress. |
+| `complete` | Successful installation or completed restoration. |
+
+A refused or timed-out boundary veto leaves phase `observing-veto` and outcome
+`not_published`; it never reaches `publishing`.
 
 Recovery never uninstalls jobs it did not install. The unchanged installer
 transaction's rc 2/3 means refused or rolled back: retained teardown overrides
@@ -345,7 +359,8 @@ current sealed bytes, the clone's schedule and registration/source bindings,
 and atomically writes only that body to `lifecycle/notice.txt`. The first line
 is `Prepared candidate <plan_id>; pre-arm check <first 12 hex of check.json's sha256> at <ISO time>`;
 the ISO time is the check's recorded finish time in UTC, so unchanged inputs
-produce identical bytes across reruns. The body has no `DRAFT — NOT SENT`
+produce identical bytes across reruns. A blank line separates provenance from
+`Ed,`. The body has no `DRAFT — NOT SENT`
 banner and no To or Subject lines. Stdout's first two lines, `To: …` and
 `Subject: …`, are mail headers; after one blank line, all remaining lines are
 the body. The preparation draft in `prepare.json` stays unchanged, as do all
@@ -370,8 +385,10 @@ gh issue list --repo mpmdw/JouleWise --label directive --state open --author mpm
 ```
 
 The Python callable `runner` is an offline injection seam; tests never contact
-GitHub. Command argv, exit status, stdout/stderr and parsed issue data are
-recorded. ANY open owner directive refuses with
+GitHub. The directive runner receives `timeout=60` (seconds), passed through
+`probe_command` to the subprocess. A timeout refuses `cannot read directives: timeout`
+and writes `clear: false`, while still observing the local channels. Command
+argv, exit status, stdout/stderr and parsed issue data are recorded. ANY open owner directive refuses with
 `REFUSED: open owner directive #N — the lead reads it before publication`.
 Only `author.login == "mpmdw"` vetoes. Structurally valid non-owner issues are
 recorded in top-level `non_owner_directives: [...]` and do not veto. Comments
@@ -411,10 +428,10 @@ observation through the same observer as `veto` and writes
 The earlier `veto.json` stays required and unchanged. Directives, standdown,
 STOP and lifecycle NO are each read at `veto` AND at publication. Any non-clear
 or unreadable channel refuses, and a real arm also requires production
-provenance on this new observation. Relay every mailbox NO. The sealed-state,
-check-record freshness, install-close and job-state checks still repeat at the
-publication boundary. Notice acceptance remains independently required; no
-new mail delay is introduced.
+provenance on this new observation. Relay every mailbox NO. Sealed state,
+check-record freshness and install close are validated before publication.
+`publish-install` repeats the veto observation and the loaded-jobs probe at the publication boundary and requires a fresh `check` record; the lead re-runs `check` after any change.
+Notice acceptance remains independently required; no new mail delay is introduced.
 
 After successful installation and verification, `publish-install` atomically
 writes `lifecycle/arm-attempts/NNNNNN/baseline.json` for that attempt. Its
@@ -439,3 +456,6 @@ sealed checks, schedule, job discovery and verification are unchanged; all
 these operations still execute with cwd set to the clone and JSON output.
 The fake-launchctl composition and both interpreter test runs remain fixture
 evidence only; first live use is lead-owned and PROVISIONAL.
+
+A successful real-`launchctl` publication is exercised only at the bench's first
+live use; no fixture can prove `outcome: installed` with a real launchctl.

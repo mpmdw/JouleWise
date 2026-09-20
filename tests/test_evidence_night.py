@@ -40,6 +40,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ArgumentsTests(unittest.TestCase):
+    def test_e3_boundary_check_documentation_agrees(self):
+        clause = ("`publish-install` repeats the veto observation and the loaded-jobs probe "
+                  "at the publication boundary and requires a fresh `check` record; "
+                  "the lead re-runs `check` after any change.")
+        for path in ("docs/contracts/evidence_night_entry.md", "docs/process/NIGHT_HANDBACK.md"):
+            with self.subTest(path=path):
+                self.assertIn(clause, (ROOT / path).read_text())
+
+    def test_e4_contract_reserves_real_installed_outcome_for_bench(self):
+        contract = " ".join((ROOT / "docs/contracts/evidence_night_entry.md").read_text().split())
+        self.assertIn("A successful real-`launchctl` publication is exercised only at the bench's first live use", contract)
+        self.assertIn("no fixture can prove `outcome: installed` with a real launchctl", contract)
+
     def test_lifecycle_contract_refusals_and_rehearsal_boundary(self):
         contract = (ROOT / "docs/contracts/evidence_night_entry.md").read_text()
         for refusal in ("unresolved raw census row", "malformed attempt journal",
@@ -819,7 +832,7 @@ class LifecycleTests(unittest.TestCase):
     def vetoed(self, **kwargs):
         (self.base / "magistrate").mkdir(exist_ok=True)
         return entry.veto(candidate=self.stage, magistrate=self.base / "magistrate",
-                          runner=kwargs.pop("runner", lambda argv: subprocess.CompletedProcess(argv, 0, "[]", "")),
+                          runner=kwargs.pop("runner", lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "[]", "")),
                           **kwargs)
 
     def publish(self, **kwargs):
@@ -1298,7 +1311,7 @@ class LifecycleTests(unittest.TestCase):
         provenance = (f'Prepared candidate {self.state["plan_id"]}; pre-arm check '
                       f'{entry.digest(self.journal("check.json"))[:12]} at '
                       + datetime.fromtimestamp(checked["finished_epoch_s"], timezone.utc).isoformat())
-        self.assertEqual(body.splitlines()[0], provenance)
+        self.assertEqual(body.splitlines()[:3], [provenance, "", "Ed,"])
         self.assertFalse(any(line.startswith(("To:", "Subject:", "DRAFT — NOT SENT"))
                              for line in body.splitlines()))
         with patch.object(entry, "sealed_candidate", return_value=bindings), \
@@ -1321,7 +1334,7 @@ class LifecycleTests(unittest.TestCase):
     def test_veto_clear_and_exact_directive_query(self):
         (self.base / "magistrate").mkdir()
         calls = []
-        def runner(argv):
+        def runner(argv, **kwargs):
             calls.append(argv)
             return subprocess.CompletedProcess(argv, 0, "[]", "")
         record = self.vetoed(runner=runner)
@@ -1342,7 +1355,7 @@ class LifecycleTests(unittest.TestCase):
         marker = self.base / "SHOULD_NOT_EXIST"
         issue = dict(number=99, title="Owner directive", body=f"$(touch {marker})", author={"login": "mpmdw"})
         with self.assertRaisesRegex(entry.Refused, "open owner directive #99 — the lead reads it before publication"):
-            self.vetoed(runner=lambda argv: subprocess.CompletedProcess(argv, 0, json.dumps([issue]), ""))
+            self.vetoed(runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, json.dumps([issue]), ""))
         record = json.loads(self.journal("veto.json").read_text())
         self.assertFalse(record["clear"])
         self.assertEqual(record["channels"]["directives"]["issues"], [issue])
@@ -1365,11 +1378,11 @@ class LifecycleTests(unittest.TestCase):
                 path.unlink()
 
     def test_directive_failures_never_record_clear(self):
-        def unavailable(argv):
+        def unavailable(argv, **kwargs):
             raise FileNotFoundError("gh unavailable")
         runners = [unavailable]
         for rc, raw in ((1, "[]"), (0, "not json"), (0, "{}"), (0, "[{}]")):
-            runners.append(lambda argv, rc=rc, raw=raw: subprocess.CompletedProcess(argv, rc, raw, "failure"))
+            runners.append(lambda argv, rc=rc, raw=raw, **kwargs: subprocess.CompletedProcess(argv, rc, raw, "failure"))
         for runner in runners:
             with self.subTest(runner=runner):
                 self.vetoed()  # An old clear record must not survive failure.
@@ -1460,7 +1473,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_d2_non_owner_is_recorded_without_veto(self):
         issue = dict(number=52, title="External directive", body="NO", author={"login": "someone-else"})
-        record = self.vetoed(runner=lambda argv: subprocess.CompletedProcess(argv, 0, json.dumps([issue]), ""))
+        record = self.vetoed(runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, json.dumps([issue]), ""))
         self.assertTrue(record["clear"])
         self.assertEqual(record["non_owner_directives"], [issue])
         self.assertEqual(json.loads(self.journal("veto.json").read_text()), record)
@@ -1468,7 +1481,7 @@ class LifecycleTests(unittest.TestCase):
         for missing in ("number", "title", "body", "author"):
             broken = {key: value for key, value in issue.items() if key != missing}
             with self.subTest(missing=missing), self.assertRaisesRegex(entry.Refused, "cannot read directives"):
-                self.vetoed(runner=lambda argv: subprocess.CompletedProcess(argv, 0, json.dumps([broken]), ""))
+                self.vetoed(runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, json.dumps([broken]), ""))
 
     def test_d3_missing_nondirectory_and_symlink_magistrate_refuse(self):
         root = self.base / "invalid-magistrate"
@@ -1479,7 +1492,7 @@ class LifecycleTests(unittest.TestCase):
                 root.symlink_to(self.base, target_is_directory=True)
             with self.subTest(kind=kind), self.assertRaisesRegex(entry.Refused, "cannot read the magistrate root"):
                 entry.veto(candidate=self.stage, magistrate=root,
-                           runner=lambda argv: subprocess.CompletedProcess(argv, 0, "[]", ""))
+                           runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "[]", ""))
             record = json.loads(self.journal("veto.json").read_text())
             self.assertFalse(record["clear"])
             self.assertEqual(len(record["channels"]), 4)
@@ -1496,6 +1509,95 @@ class LifecycleTests(unittest.TestCase):
                 runner=lambda argv, **kw: subprocess.CompletedProcess(argv, 2, "", "unexpected installer"))
         self.assertIs(json.loads(self.journal("veto.json").read_text())["production"], False)
         self.assertFalse(self.journal("arm-attempts").exists())
+
+    def test_e1_boundary_rehearsal_veto_cannot_authorize_real_launchctl(self):
+        entry.check(**dict(self.kw, launchctl_bin="launchctl"))
+        earlier = self.vetoed()
+        # Only the earlier record is production-marked. The actual boundary
+        # observer still uses the fixture root and injected directive runner.
+        entry.saved_json(self.journal("veto.json"), dict(earlier, production=True))
+        earlier_bytes = self.journal("veto.json").read_bytes()
+        self.notice_fixture()
+        calls = []
+        def runner(argv, **kwargs):
+            calls.append(argv)
+            if argv == list(entry.DIRECTIVES_ARGV):
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            self.fail("boundary rehearsal evidence reached the installer")
+        with self.assertRaisesRegex(entry.Refused, "^rehearsal veto evidence cannot authorize a real arm$"):
+            entry.publish_install(**dict(self.publication_kwargs(), launchctl_bin="launchctl"),
+                                  notice_accepted="boundary-refused", runner=runner)
+        self.assertEqual(calls, [list(entry.DIRECTIVES_ARGV)])
+        self.assertEqual(self.journal("veto.json").read_bytes(), earlier_bytes)
+        boundary = json.loads(self.journal("arm-attempts/000001/veto-at-publication.json").read_text())
+        self.assertTrue(boundary["clear"])
+        self.assertIs(boundary["production"], False)
+        attempt = json.loads(self.journal("arm-attempts/000001/install.json").read_text())
+        self.assertEqual(attempt["phase"], "observing-veto")
+        self.assertEqual(attempt["outcome"], "not_published")
+        self.assertEqual(attempt["commands"], [])
+        self.assertTrue(self.plan.is_file())
+        self.assertFalse((self.custody / "night_plan.json").exists())
+
+    def test_e2_boundary_veto_phase_precedes_publishing(self):
+        self.checked()
+        phases = []
+        save = entry.saved_json
+        def journal(path, record):
+            save(path, record)
+            if path == self.journal("arm-attempts/000001/install.json"):
+                phases.append(json.loads(path.read_text())["phase"])
+        def runner(argv, **kwargs):
+            attempt = json.loads(self.journal("arm-attempts/000001/install.json").read_text())
+            if argv == list(entry.DIRECTIVES_ARGV):
+                self.assertEqual(attempt["phase"], "observing-veto")
+                self.assertNotIn("publishing", phases)
+                self.assertTrue(self.plan.is_file())
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            return subprocess.CompletedProcess(argv, 2, "", "fixture probe refusal")
+        self.vetoed()
+        self.notice_fixture()
+        with patch.object(entry, "saved_json", side_effect=journal):
+            with self.assertRaisesRegex(entry.Refused, "fixture probe refusal"):
+                entry.publish_install(**self.publication_kwargs(), notice_accepted="phase-order", runner=runner)
+        self.assertEqual(phases, ["prepared", "prepared", "observing-veto", "publishing",
+                                 "published", "probing", "probe_finished", "recovering", "complete"])
+
+    def test_e2_sleeping_directive_runner_times_out_before_publishing(self):
+        self.checked()
+        self.vetoed()
+        self.notice_fixture()
+        phases, timeouts = [], []
+        save = entry.saved_json
+        run = subprocess.run
+        def journal(path, record):
+            save(path, record)
+            if path == self.journal("arm-attempts/000001/install.json"):
+                phases.append(json.loads(path.read_text())["phase"])
+        def short_deadline(argv, **kwargs):
+            # Exercise a real sleeping subprocess with a shortened test
+            # deadline, while pinning the production runner's 60-second budget.
+            timeouts.append(kwargs.get("timeout"))
+            if kwargs.get("timeout") is not None:
+                kwargs["timeout"] = 0.05
+            return run(argv, **kwargs)
+        def runner(argv, **kwargs):
+            if argv != list(entry.DIRECTIVES_ARGV):
+                self.fail("timed-out directive query reached the installer")
+            with patch.object(subprocess, "run", side_effect=short_deadline):
+                return entry.probe_command([sys.executable, "-B", "-c",
+                    "import time; time.sleep(0.2); print('[]')"], **kwargs)
+        with patch.object(entry, "saved_json", side_effect=journal):
+            with self.assertRaisesRegex(entry.Refused, "^cannot read directives: timeout$"):
+                entry.publish_install(**self.publication_kwargs(), notice_accepted="timeout", runner=runner)
+        self.assertEqual(timeouts, [60])
+        self.assertEqual(phases, ["prepared", "prepared", "observing-veto", "observing-veto"])
+        boundary = json.loads(self.journal("arm-attempts/000001/veto-at-publication.json").read_text())
+        self.assertFalse(boundary["clear"])
+        self.assertEqual(boundary["channels"]["directives"]["error"], "timeout")
+        self.assertEqual(len(boundary["channels"]), 4)
+        self.assertTrue(self.plan.is_file())
+        self.assertFalse((self.custody / "night_plan.json").exists())
 
     def test_d6_publication_requires_notice_newer_than_all_inputs(self):
         self.checked()
@@ -1608,7 +1710,7 @@ class LifecycleTests(unittest.TestCase):
         original = entry.veto
         def operation(**kwargs):
             return original(**kwargs, magistrate=self.base / "magistrate",
-                            runner=lambda argv: subprocess.CompletedProcess(argv, 0, "[]", ""))
+                            runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "[]", ""))
         with patch.object(entry, "veto", side_effect=operation):
             with contextlib.redirect_stdout(io.StringIO()) as output:
                 self.assertEqual(entry.main(["veto", "--candidate", str(self.stage)]), 0)
@@ -1692,12 +1794,14 @@ os.execv(sys.executable,[sys.executable,*args])
             self.assertTrue(checked["rehearsal_ready"])
             self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))
             self.assertFalse(any("--launchctl-bin" in c for c in calls))
-            draft = entry.notice(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
+            with contextlib.redirect_stdout(io.StringIO()) as notice_output:
+                draft = entry.notice(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
+            self.assertTrue(notice_output.getvalue().endswith(draft))
             self.assertEqual(draft, (stage / "lifecycle/notice.txt").read_text())
             self.assertIn(state["plan_id"], draft)
             (base / "magistrate").mkdir()
             entry.veto(candidate=stage, magistrate=base / "magistrate",
-                       runner=lambda argv: subprocess.CompletedProcess(argv, 0, "[]", ""))
+                       runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "[]", ""))
             published = custody / "night_plan.json"
             raw = (stage / "night_plan.json").read_bytes()
             inode = (stage / "night_plan.json").stat().st_ino
