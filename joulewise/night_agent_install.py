@@ -1127,8 +1127,11 @@ def validate_install(args, repo):
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
                         courier_path, schedule, run_night.install_spans_for_day,
                         getattr(args, "probe_timeout_s", 600))
-    records = [name for name in ("receipt.json", "result.json", "refusal.json", "chain.started",
-               "chain.exited", "courier.json", "courier.sent") if os.path.lexists(prepared.custody_night / name)]
+    # calibration-refusal.json is interpreted by the driver from its existence
+    # alone (refuter 10 F1): a stray one must refuse admission like any record.
+    records = [name for name in ("receipt.json", "result.json", "refusal.json", "calibration-refusal.json",
+               "chain.started", "chain.exited", "courier.json", "courier.sent")
+               if os.path.lexists(prepared.custody_night / name)]
     if records:
         raise Refused(3, "refusing install: existing night records: " + " ".join(records))
     # All read-only refusals precede admission and mkdir.
@@ -1141,9 +1144,18 @@ def validate_install(args, repo):
         from joulewise import night_gate
         chain = Path(plan.chain_path)
         try:
-            chain_text = chain.read_text()
-        except (OSError, UnicodeError):
-            # Legacy render fixtures may name a binary or unavailable chain.
+            chain_bytes = chain.read_bytes()
+        except OSError:
+            # Legacy render fixtures may name an unavailable chain.
+            chain_bytes = b""
+        try:
+            chain_text = chain_bytes.decode("utf-8")
+        except UnicodeError as exc:
+            # A binary stub (legacy fixtures) keeps the legacy branch; a wrapper
+            # that declares a payload kind but cannot be decoded is corrupt and
+            # must never fall through to a branch that executes it (Opus 12 #1).
+            if b"NIGHT_PAYLOAD_KIND" in chain_bytes:
+                raise Refused(2, "night wrapper is not valid UTF-8: " + str(exc))
             chain_text = ""
         try:
             payload_kind = night_gate.probe_payload_kind(chain_text)
@@ -1152,9 +1164,12 @@ def validate_install(args, repo):
         if payload_kind == "quiet_predicate_evidence":
             from joulewise.quiet_predicate_campaign import verify_manifest, PROTOCOL_PATH
             sha = _digest(chain)
-            tokens = Path(plan.chain_sha256_path).read_text().split()
+            try:
+                tokens = Path(plan.chain_sha256_path).read_text().split()
+            except OSError as exc:
+                raise Refused(2, "chain_sha256 sidecar unreadable: " + str(exc))
             if not tokens or tokens[0] != sha or len(tokens) > 2 or (len(tokens) == 2 and tokens[1] != chain.name):
-                raise ValueError("chain_sha256 mismatch")
+                raise Refused(2, "chain_sha256 mismatch")
             try:
                 manifest_path, manifest, manifest_sha = verify_manifest(plan, chain_text)
             except (OSError, ValueError) as exc:
@@ -1163,7 +1178,7 @@ def validate_install(args, repo):
                 raise Refused(2, "evidence plan path mismatch")
             ruled = night_gate.RULED_REGISTRATIONS.get(manifest["files"][PROTOCOL_PATH])
             if ruled is None or not ruled["binds_chain"]:
-                raise ValueError("registration is not a chain-bound ruled registration")
+                raise Refused(2, "registration is not a chain-bound ruled registration")
             # Printed digests are advisory: nothing consumes them. The launchd
             # probe executes the chain verify-only before any install.
             print(json.dumps({"payload_kind": "quiet_predicate_evidence", "chain_sha256": sha, "input_digests": {

@@ -2042,7 +2042,7 @@ class EvidenceRenderOnlyTests(unittest.TestCase):
     def test_wrong_chain_sidecar_refuses_render(self):
         Path(self.f.plan.chain_sha256_path).write_text("0" * 64 + "\n")
         result, output, errors = self.render(self.staged)
-        self.assertNotEqual(result, 0)
+        self.assertEqual(result, 2)
         self.assertIn("chain_sha256 mismatch", errors)
         self.assertNotIn('"input_digests"', output)
         self.assertFalse((self.f.root / "rendered").exists())
@@ -2060,9 +2060,38 @@ class EvidenceRenderOnlyTests(unittest.TestCase):
         with patch.dict(night_gate.RULED_REGISTRATIONS,
                         {night_gate.QPE01_PILOT_REGISTRATION_SHA256: {"binds_chain": False}}):
             result, output, errors = self.render(self.staged)
-        self.assertNotEqual(result, 0)
+        self.assertEqual(result, 2)
         self.assertIn("registration is not a chain-bound ruled registration", errors)
         self.assertNotIn('"input_digests"', output)
+
+
+    def test_missing_chain_sidecar_refuses_render_typed(self):
+        Path(self.f.plan.chain_sha256_path).unlink()
+        result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 2)
+        self.assertIn("chain_sha256 sidecar unreadable", errors)
+        self.assertNotIn('"input_digests"', output)
+
+    def test_undecodable_evidence_wrapper_refuses_before_legacy_inspection(self):
+        """One corrupt byte must not route the wrapper to the branch that executes it (Opus 12 #1)."""
+        from unittest.mock import patch
+        wrapper = Path(self.f.plan.chain_path)
+        wrapper.write_bytes(wrapper.read_bytes() + b"\n# \xff\xfe corrupt\n")
+        with patch.object(self.engine, "reservation_input_digests") as inspection:
+            result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 2)
+        self.assertIn("night wrapper is not valid UTF-8", errors)
+        inspection.assert_not_called()
+        self.assertNotIn('"input_digests"', output)
+
+    def test_stray_calibration_refusal_record_refuses_admission(self):
+        """The driver interprets calibration-refusal.json from its existence alone (refuter 10 F1)."""
+        night = self.f.custody / "night"
+        night.mkdir(exist_ok=True)
+        (night / "calibration-refusal.json").write_text("{}\n")
+        result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 3)
+        self.assertIn("existing night records: calibration-refusal.json", errors)
 
 
 class EvidencePlanPublicationTests(unittest.TestCase):
