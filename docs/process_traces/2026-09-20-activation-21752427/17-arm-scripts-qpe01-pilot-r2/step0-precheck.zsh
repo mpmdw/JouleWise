@@ -27,6 +27,10 @@ if ! git -C /Users/edr/code/JouleWise merge-base --is-ancestor "$H" HEAD; then
   print -u2 -- 'REFUSED: canonical checkout /Users/edr/code/JouleWise does not contain H (watchdog ticks import night_gate from it); fast-forward it first'
   exit 3
 fi
+if [[ -n "$(git -C /Users/edr/code/JouleWise status --porcelain 2>&1)" ]]; then
+  print -u2 -- 'REFUSED: canonical checkout /Users/edr/code/JouleWise has a dirty working tree (the watchdog imports the working tree, not HEAD)'
+  exit 3
+fi
 resident_pid="$(/Users/edr/code/JouleWise/.venv/bin/python -B - <<'PYTHON'
 import json
 with open('/Users/edr/night-custody/magistrate/state.json') as f:
@@ -55,15 +59,25 @@ if [[ -n "$resident_pid" ]]; then
       start_epoch="$(date -j -f '%a %b %d %T %Y' "$started" +%s)" || {
         print -u2 -- 'REFUSED: cannot parse the resident supervisor start time'; exit 3
       }
-      move_ref="$(git -C /Users/edr/code/JouleWise reflog -1 --date=unix --format=%gd)" || {
+      # "The move" = the OLDEST reflog entry from which HEAD has continuously
+      # contained H (fresh eyes 21 F1/F2): walk newest→oldest while the entry
+      # still contains H; the last stamp that held is when the fix arrived.
+      move_epoch=""
+      reflog_lines="$(git -C /Users/edr/code/JouleWise reflog --date=unix --format='%gd %H')" || {
         print -u2 -- 'REFUSED: cannot read the canonical checkout reflog'; exit 3
       }
-      move_epoch="${${move_ref#*@\{}%\}}"
-      [[ "$move_epoch" == <-> ]] || { print -u2 -- "REFUSED: unparseable reflog stamp $move_ref"; exit 3; }
+      while read -r ref sha; do
+        [[ -n "$sha" ]] || continue
+        git -C /Users/edr/code/JouleWise merge-base --is-ancestor "$H" "$sha" 2>/dev/null || break
+        stamp="${${ref#*@\{}%\}}"
+        [[ "$stamp" == <-> ]] || { print -u2 -- "REFUSED: unparseable reflog stamp $ref"; exit 3; }
+        move_epoch="$stamp"
+      done <<< "$reflog_lines"
+      [[ -n "$move_epoch" ]] || { print -u2 -- 'REFUSED: no reflog entry contains H (check (a) should have refused)'; exit 3; }
       if (( start_epoch > move_epoch )); then
-        print -- "OK: resident supervisor pid $resident_pid started $started, after the canonical checkout's last move ($move_epoch); it imported the current module"
+        print -- "OK: resident supervisor pid $resident_pid started $started ($start_epoch), after the canonical checkout came to contain H ($move_epoch); it imported the fixed module"
       else
-        print -u2 -- "REFUSED: a resident supervisor predates the canonical checkout's last move (pid $resident_pid, started $started, move $move_epoch); it must end before arming"
+        print -u2 -- "REFUSED: a resident supervisor started before the canonical checkout contained H (pid $resident_pid, started $started = $start_epoch; H arrived $move_epoch); it must end before arming"
         exit 3
       fi
     fi

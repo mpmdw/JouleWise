@@ -255,8 +255,8 @@ resident supervisor keeps the module it imported; its stale bare-word
 pgrep is visible to the new driver census and reproduces the 09-20 abort
 (the reverse is not true). Its census rows carry no argv, so check the
 processes before arming: (a) `git -C /Users/edr/code/JouleWise merge-base
---is-ancestor <fix commit> HEAD` must exit 0 (the canonical reflog,
-`git -C /Users/edr/code/JouleWise reflog --date=iso`, dates the move), else
+--is-ancestor <fix commit> HEAD` must exit 0 and `git -C … status
+--porcelain` must be empty (the watchdog imports the working tree), else
 no arm; (b) read
 `resident_session.supervisor_pid` from
 `/Users/edr/night-custody/magistrate/state.json` — `launchctl print` shows
@@ -264,12 +264,16 @@ the supervisor as "not running" once it is reparented, so it is not the
 source — and `null`, or a pid that `ps -o pid=,lstart=,command= -p "$pid"`
 cannot find or whose command line does not name `magistrate_watchdog.py`
 (pid reuse), means no resident supervisor and nothing stale; a live pid
-whose start is later than the move imported the fixed module and is fine
-(it ends with its magistrate session before REQUEST — the arming
-magistrate's own supervisor is always alive at arm time); a live supervisor
-that predates the move blocks the arm (re-check after it has ended). "The
-move" is the canonical checkout's last HEAD change:
-`git -C /Users/edr/code/JouleWise reflog -1 --date=unix`.
+whose start is later than the moment the checkout came to contain the fix
+imported the fixed module and is fine (it ends with its magistrate session
+before REQUEST — the arming magistrate's own supervisor is always alive at
+arm time); a live supervisor that started before that moment blocks the
+arm (re-check after it has ended). That moment is the OLDEST reflog entry
+from which HEAD has continuously contained the fix: walk
+`git -C /Users/edr/code/JouleWise reflog --date=unix --format='%gd %H'`
+newest to oldest while `merge-base --is-ancestor <fix commit> <sha>` holds,
+and take the last stamp that held (not `reflog -1`: a later unrelated move
+would refuse a fresh supervisor, and an older one would pass a stale one).
 Per-night arm scripts re-authored from the trace templates must use the
 bracketed pattern, single-quoted in zsh (unquoted brackets glob).
 `scripts/prewindow_check.sh` is a bench tool run before an arm, never inside
