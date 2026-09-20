@@ -21,3 +21,6 @@ Queue data DOCS-EVIDENCE-REFUSALS-01 (the two new refusal strings into the runbo
 
 ## 5. Merge shape
 Records-only merge of `bookkeeping/2026-09-19-activation-d0b83820` into the branch = the exact candidate (no code delta vs `cf17e865`); ledger validated with `scripts/check_gate_ledger.py`; merge under D-072 on hosted gate-ledger + quick green; matrix post-merge (fix forward if red). After the merge: lane 254 retired; `87-arm-scripts-qpe01-pilot/arm-env.zsh` H re-pinned to the merge; the pilot arm hands to a fresh activation.
+
+## Addendum 20:25 PDT — replay 90b filled in
+Record 90b at `9f452559`: 6,587 tests / 245 module runs, 244 PASS; the lone census error re-run alone at `cf17e865` with no seat alive → 76 OK; record 90c (edited test modules at `cf17e865`) 73 OK. Section 3's condition is met. **Verdict stands: MERGE** on the records-only candidate.

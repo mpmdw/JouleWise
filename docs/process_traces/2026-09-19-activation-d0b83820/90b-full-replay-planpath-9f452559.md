@@ -10,3 +10,5 @@ Branch worktree `JouleWise-wt-planpath-d0b83820` fast-forwarded to `9f452559` an
 | 4 | 62 | 1757 | 0 | 0 | 7 | PASS |
 
 Total 6,587 tests / 245 module runs (244 PASS). The one error is once more `tests.test_arm_readiness_evidence_t0.test_g4_real_ruled_census_pgrep_dialect` (fresh-eyes seat 92 was alive for the run's first half; the TEST-PGREP-DIALECT-MULTILINE-01 class). The module is re-run alone at the final head `cf17e865` with no seat alive (`90b-census-module-alone.log`, addendum below). The two modules edited after this head are covered by record 90c (73 OK at `cf17e865`).
+
+**Addendum 20:25 PDT:** `tests.test_arm_readiness_evidence_t0` alone at `cf17e865` with no seat alive: **76 tests OK in 362 s** (`90b-census-module-alone-cf17e865.log`).
