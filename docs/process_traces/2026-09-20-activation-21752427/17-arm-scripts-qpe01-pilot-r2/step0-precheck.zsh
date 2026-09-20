@@ -27,7 +27,7 @@ if ! git -C /Users/edr/code/JouleWise merge-base --is-ancestor "$H" HEAD; then
   print -u2 -- 'REFUSED: canonical checkout /Users/edr/code/JouleWise does not contain H (watchdog ticks import night_gate from it); fast-forward it first'
   exit 3
 fi
-if [[ -n "$(git -C /Users/edr/code/JouleWise status --porcelain 2>&1)" ]]; then
+if [[ -n "$(git -C /Users/edr/code/JouleWise --no-optional-locks status --porcelain -uno 2>&1)" ]]; then
   print -u2 -- 'REFUSED: canonical checkout /Users/edr/code/JouleWise has a dirty working tree (the watchdog imports the working tree, not HEAD)'
   exit 3
 fi

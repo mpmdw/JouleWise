@@ -255,9 +255,10 @@ resident supervisor keeps the module it imported; its stale bare-word
 pgrep is visible to the new driver census and reproduces the 09-20 abort
 (the reverse is not true). Its census rows carry no argv, so check the
 processes before arming: (a) `git -C /Users/edr/code/JouleWise merge-base
---is-ancestor <fix commit> HEAD` must exit 0 and `git -C … status
---porcelain` must be empty (the watchdog imports the working tree), else
-no arm; (b) read
+--is-ancestor <fix commit> HEAD` must exit 0 and `git -C …
+--no-optional-locks status --porcelain -uno` must be empty (the watchdog
+imports the working tree; untracked files cannot change it), else no arm;
+(b) read
 `resident_session.supervisor_pid` from
 `/Users/edr/night-custody/magistrate/state.json` — `launchctl print` shows
 the supervisor as "not running" once it is reparented, so it is not the
