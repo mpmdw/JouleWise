@@ -3,6 +3,7 @@ import contextlib
 import fcntl
 from datetime import datetime, timezone
 import io
+import inspect
 import json
 import os
 from pathlib import Path
@@ -592,7 +593,7 @@ class LifecycleTests(unittest.TestCase):
         self.raw = subprocess.CompletedProcess([], 1, "", "")
         self.kw = dict(candidate=self.stage, canonical=self.canonical, supervisor_state=self.resident,
                        runner=self.runner, caller_pid=90, census_observer=lambda **kw: self.fixture,
-                       lock_verifier=lambda root: None)
+                       lock_verifier=lambda root: None, launchctl_bin="/fixture/launchctl")
         self.schedule = dict(install_close_epoch_s=self.t0 - 1800,
                              boundaries={"REQUEST / exit BEFORE": self.t0 - 900})
         for p in (patch.object(entry, "CENSUS_FIX", self.head),
@@ -634,7 +635,7 @@ class LifecycleTests(unittest.TestCase):
         before = snapshot()
         record = self.checked()
         after = snapshot()
-        self.assertTrue(record["armable"])
+        self.assertTrue(record["rehearsal_ready"])
         self.assertEqual(set(after) - set(before), {str(self.stage / "lifecycle/check.json"),
             str(self.stage.parent / ".locks" / (self.stage.name + ".lock"))})
         self.assertEqual(before, {p: after[p] for p in before})
@@ -655,7 +656,7 @@ class LifecycleTests(unittest.TestCase):
         self.checked("canonical")
         subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.tip], check=True)
         (self.canonical / "untracked").write_text("irrelevant")
-        self.assertTrue(self.checked()["armable"])
+        self.assertTrue(self.checked()["rehearsal_ready"])
         self.assertTrue(any(c[-4:] == ["--no-optional-locks", "status", "--porcelain", "-uno"] for c in self.calls))
 
     def test_candidate_must_contain_census_fix(self):
@@ -690,9 +691,9 @@ class LifecycleTests(unittest.TestCase):
 
     def test_supervisor_pid_reuse_absence_and_observation_errors(self):
         self.live_supervisor(self.arrival - 100, command="/bin/sleep 10")
-        self.assertTrue(self.checked()["armable"])
+        self.assertTrue(self.checked()["rehearsal_ready"])
         self.ps = subprocess.CompletedProcess([], 1, "", "")
-        self.assertTrue(self.checked()["armable"])
+        self.assertTrue(self.checked()["rehearsal_ready"])
         self.ps = subprocess.CompletedProcess([], 2, "", "unreadable")
         self.checked("supervisor")
         entry.saved_json(self.resident, {"resident_session": {"supervisor_pid": True}})
@@ -713,7 +714,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual([r["classification"] for r in result["inventory"]], ["retained", "retained", "UNKNOWN"])
         self.assertTrue((root / "night_plan.json").exists())
         (root / "night/result.json").write_text("{}")
-        self.assertTrue(self.checked()["armable"])
+        self.assertTrue(self.checked()["rehearsal_ready"])
 
     def test_census_foreign_workload_and_unknown_refuse(self):
         from dataclasses import replace
@@ -755,7 +756,7 @@ class LifecycleTests(unittest.TestCase):
             return original(argv, **kwargs)
         with patch.object(entry, "run", side_effect=spy):
             record = self.checked(None if route == "retry" else "retry")
-        self.assertEqual(record["armable"], route == "retry")
+        self.assertEqual(record["rehearsal_ready"], route == "retry")
         self.assertEqual(record["checks"]["retry"]["inventory"],
                          [dict(path=str(path), cause=cause, route=route)])
         self.assertTrue(executions)
@@ -816,6 +817,7 @@ class LifecycleTests(unittest.TestCase):
                     lifecycle_path.unlink()
 
     def vetoed(self, **kwargs):
+        (self.base / "magistrate").mkdir(exist_ok=True)
         return entry.veto(candidate=self.stage, magistrate=self.base / "magistrate",
                           runner=kwargs.pop("runner", lambda argv: subprocess.CompletedProcess(argv, 0, "[]", "")),
                           **kwargs)
@@ -823,20 +825,37 @@ class LifecycleTests(unittest.TestCase):
     def publish(self, **kwargs):
         # B1 recovery tests supply B2's independent clear-veto prerequisite.
         self.vetoed()
-        return entry.publish_install(candidate=self.stage, notice_accepted="message verbatim ",
-                                     lock_verifier=lambda root: None, **kwargs)
+        self.notice_fixture()
+        installer = kwargs.pop("runner", lambda argv, **kw: self.fail("unexpected installer"))
+        def runner(argv, **kw):
+            if argv == list(entry.DIRECTIVES_ARGV):
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            return installer(argv, **kw)
+        return entry.publish_install(notice_accepted="message verbatim ", runner=runner,
+                                     **dict(self.publication_kwargs(), **kwargs))
+
+    def publication_kwargs(self):
+        # Keep counterfactual replay on the pre-fix signature meaningful.
+        kwargs = dict(candidate=self.stage, launchctl_bin="/fixture/launchctl",
+                      lock_verifier=lambda root: None)
+        if "magistrate" in inspect.signature(entry.publish_install).parameters:
+            kwargs["magistrate"] = self.base / "magistrate"
+        return kwargs
+
+    def notice_fixture(self):
+        entry.atomic_bytes(entry.lifecycle_dir(self.stage) / "notice.txt", b"fixture notice body\n")
 
     def test_publish_requires_check_armable_freshness_notice_and_sealed_bytes(self):
         with self.assertRaisesRegex(entry.Refused, "check.json"):
             self.publish()
         record = self.checked()
-        record["armable"] = False
+        record["rehearsal_ready"] = False
         entry.saved_json(self.stage / "lifecycle/check.json", record)
-        with self.assertRaisesRegex(entry.Refused, "armable"):
+        with self.assertRaisesRegex(entry.Refused, "rehearsal_ready"):
             self.publish()
         self.checked()
         with self.assertRaisesRegex(entry.Refused, "notice acceptance"):
-            entry.publish_install(candidate=self.stage, lock_verifier=lambda root: None)
+            entry.publish_install(**self.publication_kwargs())
         os.utime(self.plan, ns=(time.time_ns(), time.time_ns()))
         with self.assertRaisesRegex(entry.Refused, "newer"):
             self.publish()
@@ -1172,7 +1191,9 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(record["fake_launchctl"])
         self.assertTrue(record["rehearsal_ready"])
         with self.assertRaisesRegex(entry.Refused, "not armable"):
-            self.publish(runner=lambda *a, **kw: self.fail("real installer invoked"))
+            entry.publish_install(candidate=self.stage, notice_accepted="id",
+                                  lock_verifier=lambda root: None,
+                                  runner=lambda *a, **kw: self.fail("real installer invoked"))
 
     def test_b8_verify_records_launchctl_provenance(self):
         os.replace(self.plan, self.custody / "night_plan.json")
@@ -1225,10 +1246,10 @@ class LifecycleTests(unittest.TestCase):
 
     def test_notice_refusal_matrix_preserves_preparation(self):
         original = (self.stage / "prepare.json").read_bytes()
-        call = lambda: entry.notice(candidate=self.stage, lock_verifier=lambda root: None)
+        call = lambda: entry.notice(candidate=self.stage, launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None)
         with self.assertRaisesRegex(entry.Refused, "check.json is required"):
             call()
-        for change, reason in (({"armable": False}, "not armable"),
+        for change, reason in (({"rehearsal_ready": False}, "not rehearsal_ready"),
                                ({"prepare_sha256": "wrong"}, "bind prepare"),
                                ({"launchctl_bin": "/fake"}, "launchctl"),
                                ({"finished_epoch_s": time.time() - 3601}, "older"),
@@ -1247,7 +1268,7 @@ class LifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(entry.Refused, "sealed-byte drift"):
             call()
         self.assertEqual((self.stage / "prepare.json").read_bytes(), original)
-        self.assertFalse(self.journal("notice-draft.txt").exists())
+        self.assertFalse(self.journal("notice.txt").exists())
 
     def test_notice_refreshes_draft_and_prints_plain_text(self):
         plan = json.loads(self.plan.read_text())
@@ -1264,11 +1285,28 @@ class LifecycleTests(unittest.TestCase):
         original = entry.notice
         with patch.object(entry, "sealed_candidate", return_value=bindings), \
                 patch.object(entry, "clone_schedule", return_value=schedule), \
-                patch.object(entry, "notice", side_effect=lambda **kw: original(**kw, lock_verifier=lambda root: None)), \
+                patch.object(entry, "notice", side_effect=lambda **kw: original(**dict(kw, launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None))), \
                 contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(entry.main(["notice", "--candidate", str(self.stage)]), 0)
         draft = output.getvalue()
-        self.assertEqual(draft, self.journal("notice-draft.txt").read_text())
+        headers, body = draft.split("\n\n", 1)
+        self.assertEqual(headers.splitlines(), ["To: claude2.glaring610@passmail.net",
+                         "Subject: NIGHT NOTICE — " + self.state["plan_id"] +
+                         " (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt 2"])
+        self.assertEqual(body, self.journal("notice.txt").read_text())
+        checked = json.loads(self.journal("check.json").read_text())
+        provenance = (f'Prepared candidate {self.state["plan_id"]}; pre-arm check '
+                      f'{entry.digest(self.journal("check.json"))[:12]} at '
+                      + datetime.fromtimestamp(checked["finished_epoch_s"], timezone.utc).isoformat())
+        self.assertEqual(body.splitlines()[0], provenance)
+        self.assertFalse(any(line.startswith(("To:", "Subject:", "DRAFT — NOT SENT"))
+                             for line in body.splitlines()))
+        with patch.object(entry, "sealed_candidate", return_value=bindings), \
+                patch.object(entry, "clone_schedule", return_value=schedule), \
+                contextlib.redirect_stdout(io.StringIO()) as repeated:
+            original(candidate=self.stage, launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None)
+        self.assertEqual(repeated.getvalue(), draft)
+        self.assertEqual(self.journal("notice.txt").read_bytes(), body.encode())
         for text in (self.state["plan_id"], self.head, "attempt 2", "prior", "a" * 64,
                      "b" * 64, "REQUEST / exit BEFORE", "install span 1 close EXCLUDED",
                      "To: claude2.glaring610@passmail.net", entry.digest(self.plan)):
@@ -1278,9 +1316,10 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(before, (self.stage / "prepare.json").read_bytes())
         with patch.object(entry, "clone_schedule", return_value=dict(schedule, install_close_epoch_s=0)):
             with self.assertRaisesRegex(entry.Refused, "exclusive install close"):
-                original(candidate=self.stage, lock_verifier=lambda root: None)
+                original(candidate=self.stage, launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None)
 
     def test_veto_clear_and_exact_directive_query(self):
+        (self.base / "magistrate").mkdir()
         calls = []
         def runner(argv):
             calls.append(argv)
@@ -1300,12 +1339,14 @@ class LifecycleTests(unittest.TestCase):
         (magistrate / "STOP").symlink_to(magistrate / "missing")
         entry.lifecycle_dir(self.stage)
         self.journal("NO").write_text("mailbox NO relayed manually")
-        issue = dict(number=99, title="Owner directive", body="$(touch SHOULD_NOT_EXIST)", author={"login": "mpmdw"})
+        marker = self.base / "SHOULD_NOT_EXIST"
+        issue = dict(number=99, title="Owner directive", body=f"$(touch {marker})", author={"login": "mpmdw"})
         with self.assertRaisesRegex(entry.Refused, "open owner directive #99 — the lead reads it before publication"):
             self.vetoed(runner=lambda argv: subprocess.CompletedProcess(argv, 0, json.dumps([issue]), ""))
         record = json.loads(self.journal("veto.json").read_text())
         self.assertFalse(record["clear"])
         self.assertEqual(record["channels"]["directives"]["issues"], [issue])
+        self.assertFalse(marker.exists())
         self.assertEqual(len(record["reasons"]), 4)
         for name in ("standdown", "STOP", "NO"):
             self.assertTrue(record["channels"][name]["present"])
@@ -1341,8 +1382,8 @@ class LifecycleTests(unittest.TestCase):
     def test_publication_requires_fresh_clear_bound_veto(self):
         self.checked()
         def publish():
-            return entry.publish_install(candidate=self.stage, notice_accepted="new-id",
-                lock_verifier=lambda root: None, runner=lambda *a, **kw: self.fail("installer reached"))
+            return entry.publish_install(**self.publication_kwargs(), notice_accepted="new-id",
+                runner=lambda *a, **kw: self.fail("installer reached"))
         with self.assertRaisesRegex(entry.Refused, "veto.json is required"):
             publish()
         for change, reason in (({"clear": False}, "not clear"),
@@ -1367,6 +1408,154 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(self.plan.exists())
         self.assertFalse(self.journal("arm-attempts").exists())
 
+    def test_d1_publication_observes_new_directive_and_each_stop(self):
+        self.checked()
+        self.notice_fixture()
+        issues, calls = [], []
+        def runner(argv, **kwargs):
+            calls.append(list(argv))
+            if argv == list(entry.DIRECTIVES_ARGV):
+                return subprocess.CompletedProcess(argv, 0, json.dumps(issues), "")
+            return subprocess.CompletedProcess(argv, 2, "", "installer must not be reached")
+        channels = [(None, "open owner directive"),
+                    (self.base / "magistrate/STOP", "veto present"),
+                    (self.base / "magistrate/standdown.request", "veto present"),
+                    (self.journal("NO"), "veto present")]
+        for index, (path, reason) in enumerate(channels, 1):
+            with self.subTest(channel=str(path)):
+                self.vetoed(runner=runner)
+                earlier = self.journal("veto.json").read_bytes()
+                if path is None:
+                    issues.append(dict(number=42, title="Stop", body="NO", author={"login": "mpmdw"}))
+                else:
+                    path.write_text("NO after the earlier veto")
+                try:
+                    with self.assertRaisesRegex(entry.Refused, reason):
+                        entry.publish_install(**self.publication_kwargs(), notice_accepted=f"new-{index}", runner=runner)
+                    boundary = self.journal(f"arm-attempts/{index:06d}/veto-at-publication.json")
+                    record = json.loads(boundary.read_text())
+                    self.assertFalse(record["clear"])
+                    self.assertEqual(self.journal("veto.json").read_bytes(), earlier)
+                    self.assertEqual(calls, [list(entry.DIRECTIVES_ARGV)] * (index * 2))
+                    self.assertTrue(self.plan.is_file())
+                    self.assertFalse((self.custody / "night_plan.json").exists())
+                finally:
+                    if path is None:
+                        issues.clear()
+                    else:
+                        path.unlink()
+
+    def test_d1_unreadable_publication_channels_refuse(self):
+        self.checked()
+        self.notice_fixture()
+        self.vetoed()
+        def unavailable(argv, **kwargs):
+            if argv == list(entry.DIRECTIVES_ARGV):
+                raise OSError("cannot observe gh")
+            return subprocess.CompletedProcess(argv, 2, "", "unexpected installer")
+        with self.assertRaisesRegex(entry.Refused, "cannot read directives"):
+            entry.publish_install(**self.publication_kwargs(), notice_accepted="unreadable", runner=unavailable)
+        self.assertFalse(json.loads(self.journal("arm-attempts/000001/veto-at-publication.json").read_text())["clear"])
+        self.assertTrue(self.plan.exists())
+
+    def test_d2_non_owner_is_recorded_without_veto(self):
+        issue = dict(number=52, title="External directive", body="NO", author={"login": "someone-else"})
+        record = self.vetoed(runner=lambda argv: subprocess.CompletedProcess(argv, 0, json.dumps([issue]), ""))
+        self.assertTrue(record["clear"])
+        self.assertEqual(record["non_owner_directives"], [issue])
+        self.assertEqual(json.loads(self.journal("veto.json").read_text()), record)
+        self.assertTrue(record["channels"]["directives"]["clear"])
+        for missing in ("number", "title", "body", "author"):
+            broken = {key: value for key, value in issue.items() if key != missing}
+            with self.subTest(missing=missing), self.assertRaisesRegex(entry.Refused, "cannot read directives"):
+                self.vetoed(runner=lambda argv: subprocess.CompletedProcess(argv, 0, json.dumps([broken]), ""))
+
+    def test_d3_missing_nondirectory_and_symlink_magistrate_refuse(self):
+        root = self.base / "invalid-magistrate"
+        for kind in ("missing", "file", "symlink"):
+            if kind == "file":
+                root.write_text("not a directory")
+            elif kind == "symlink":
+                root.symlink_to(self.base, target_is_directory=True)
+            with self.subTest(kind=kind), self.assertRaisesRegex(entry.Refused, "cannot read the magistrate root"):
+                entry.veto(candidate=self.stage, magistrate=root,
+                           runner=lambda argv: subprocess.CompletedProcess(argv, 0, "[]", ""))
+            record = json.loads(self.journal("veto.json").read_text())
+            self.assertFalse(record["clear"])
+            self.assertEqual(len(record["channels"]), 4)
+            if kind != "missing":
+                root.unlink()
+
+    def test_d4_rehearsal_veto_cannot_authorize_real_launchctl(self):
+        entry.check(**dict(self.kw, launchctl_bin="launchctl"))
+        self.notice_fixture()
+        self.vetoed()
+        with self.assertRaisesRegex(entry.Refused, "rehearsal veto evidence cannot authorize a real arm"):
+            entry.publish_install(**dict(self.publication_kwargs(), launchctl_bin="launchctl"),
+                notice_accepted="real-arm-refused",
+                runner=lambda argv, **kw: subprocess.CompletedProcess(argv, 2, "", "unexpected installer"))
+        self.assertIs(json.loads(self.journal("veto.json").read_text())["production"], False)
+        self.assertFalse(self.journal("arm-attempts").exists())
+
+    def test_d6_publication_requires_notice_newer_than_all_inputs(self):
+        self.checked()
+        self.vetoed()
+        kwargs = dict(self.publication_kwargs(), notice_accepted="notice-order",
+                      runner=lambda argv, **kw: subprocess.CompletedProcess(argv, 2, "", "unexpected installer"))
+        with self.subTest(case="missing"), self.assertRaisesRegex(entry.Refused, "notice.txt is required"):
+            entry.publish_install(**kwargs)
+        inputs = [self.stage / "prepare.json", self.journal("check.json"),
+                  *(Path(p) for p in self.state["digests"])]
+        for path in inputs:
+            with self.subTest(path=path):
+                self.notice_fixture()
+                kwargs["notice_accepted"] = "notice-order-" + str(path)
+                stamp = path.stat().st_mtime_ns
+                os.utime(self.journal("notice.txt"), ns=(stamp, stamp))
+                with self.assertRaisesRegex(entry.Refused, "notice.txt is not newer"):
+                    entry.publish_install(**kwargs)
+        self.assertFalse(self.journal("arm-attempts").exists())
+
+    def test_d7_new_attempt_ignores_malformed_earlier_baselines(self):
+        self.checked()
+        self.vetoed()
+        self.notice_fixture()
+        previous = self.journal("arm-attempts/000001")
+        previous.mkdir(parents=True)
+        (previous / "baseline.json").write_text("malformed earlier attempt")
+        # Preserve legacy B2 baseline leftovers too; neither may authorize or
+        # derail the current attempt's embedded verification.
+        self.journal("baseline.json").write_text("malformed legacy baseline")
+        original_run = entry.run
+        def run(argv, **kwargs):
+            if "-c" in argv and "LaunchctlAdapter" in str(argv[argv.index("-c") + 1]):
+                return "[]"
+            return original_run(argv, **kwargs)
+        def runner(argv, **kwargs):
+            if argv == list(entry.DIRECTIVES_ARGV):
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            self.assertNotIn("--uninstall", argv, "earlier baseline must not enter recovery")
+            if "--launchd-probe" in argv:
+                (self.custody / "night_probe_receipt.json").write_text("fixture receipt")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        with patch.object(entry, "run", side_effect=run):
+            installed = entry.publish_install(**self.publication_kwargs(), notice_accepted="attempt-two", runner=runner)
+            attempt = self.journal("arm-attempts/000002")
+            self.assertEqual(installed["baseline_path"], str(attempt / "baseline.json"))
+            self.assertIsNone(installed["verification"]["baseline"])
+            verified = entry.verify(candidate=self.stage, launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None)
+            self.assertEqual(verified["baseline"]["path"], str(attempt / "baseline.json"))
+            self.assertFalse(verified["baseline"]["drift"])
+            self.journal("arm-attempts/000003").mkdir()
+            self.assertIsNone(entry.verify(candidate=self.stage, launchctl_bin="/fixture/launchctl",
+                                          lock_verifier=lambda root: None)["baseline"])
+        self.assertEqual((previous / "baseline.json").read_text(), "malformed earlier attempt")
+        self.assertEqual(self.journal("baseline.json").read_text(), "malformed legacy baseline")
+
+    def test_d8_missing_check_names_notice_command(self):
+        with self.assertRaisesRegex(entry.Refused, "^check.json is required before notice$"):
+            entry.notice(candidate=self.stage, launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None)
+
     def test_baseline_reports_added_removed_and_metadata_changes(self):
         entry.lifecycle_dir(self.stage)
         nested = self.custody / "night"
@@ -1376,7 +1565,9 @@ class LifecycleTests(unittest.TestCase):
         changed.write_text("before")
         removed.write_text("gone")
         before = entry.custody_inventory(self.state)
-        path = self.journal("baseline.json")
+        attempt = self.journal("arm-attempts/000001")
+        attempt.mkdir(parents=True)
+        path = attempt / "baseline.json"
         entry.saved_json(path, dict(schema="joulewise.evidence_baseline.v1",
                                   custody_root=str(self.custody), files=before))
         raw = path.read_bytes()
@@ -1413,6 +1604,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn([], seen)
 
     def test_veto_cli_refusal_and_json_output(self):
+        (self.base / "magistrate").mkdir()
         original = entry.veto
         def operation(**kwargs):
             return original(**kwargs, magistrate=self.base / "magistrate",
@@ -1501,14 +1693,17 @@ os.execv(sys.executable,[sys.executable,*args])
             self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))
             self.assertFalse(any("--launchctl-bin" in c for c in calls))
             draft = entry.notice(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
-            self.assertEqual(draft, (stage / "lifecycle/notice-draft.txt").read_text())
+            self.assertEqual(draft, (stage / "lifecycle/notice.txt").read_text())
             self.assertIn(state["plan_id"], draft)
+            (base / "magistrate").mkdir()
             entry.veto(candidate=stage, magistrate=base / "magistrate",
                        runner=lambda argv: subprocess.CompletedProcess(argv, 0, "[]", ""))
             published = custody / "night_plan.json"
             raw = (stage / "night_plan.json").read_bytes()
             inode = (stage / "night_plan.json").stat().st_ino
             def real_installer(argv, **kwargs):
+                if argv == list(entry.DIRECTIVES_ARGV):
+                    return subprocess.CompletedProcess(argv, 0, "[]", "")
                 if "--launchd-probe" in argv:
                     self.assertFalse((stage / "night_plan.json").exists())
                     self.assertEqual(published.stat().st_ino, inode, "publication must be a rename")
@@ -1528,7 +1723,8 @@ os.execv(sys.executable,[sys.executable,*args])
                                    receipt_path=str(custody / "night_probe_receipt.pending.json"))
                 return entry.probe_command(argv, **kwargs)
             installed = entry.publish_install(candidate=stage, notice_accepted="gmail-fixture-id",
-                launchctl_bin=str(fake.executable), runner=real_installer, lock_verifier=lambda root: None)
+                launchctl_bin=str(fake.executable), runner=real_installer, magistrate=base / "magistrate",
+                lock_verifier=lambda root: None)
             self.assertEqual(installed["outcome"], "rehearsal_installed")
             self.assertFalse(installed["installed"])
             self.assertTrue(installed["fake_launchctl"])
@@ -1539,7 +1735,14 @@ os.execv(sys.executable,[sys.executable,*args])
             self.assertTrue(all(fake.loaded(label) for label in LABELS))
             verified = entry.verify(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
             self.assertFalse(verified["baseline"]["drift"])
-            baseline_path = stage / "lifecycle/baseline.json"
+            attempt = Path(installed["attempt_path"])
+            boundary_veto = json.loads((attempt / "veto-at-publication.json").read_text())
+            self.assertTrue(boundary_veto["clear"])
+            self.assertFalse(boundary_veto["production"])
+            self.assertGreater(boundary_veto["finished_epoch_s"],
+                               json.loads((stage / "lifecycle/veto.json").read_text())["finished_epoch_s"])
+            baseline_path = attempt / "baseline.json"
+            self.assertEqual(installed["baseline_path"], str(baseline_path))
             baseline_raw = baseline_path.read_bytes()
             baseline = json.loads(baseline_raw)
             self.assertEqual(baseline["files"], entry.custody_inventory(state))

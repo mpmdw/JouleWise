@@ -254,11 +254,15 @@ print(json.dumps({'registration_path':str(registration),'registration_sha256':sh
     return result
 
 
-def render_notice(state):
+def notice_subject(state):
+    return f'NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt {state["attempt"]}'
+
+
+def render_notice(state, *, checked=None, check_sha256=None):
     s = state["schedule"]
     lines = ["DRAFT — NOT SENT; prerequisites and veto observations are not yet recorded.",
              "To: claude2.glaring610@passmail.net",
-             f'Subject: NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt {state["attempt"]}',
+             'Subject: ' + notice_subject(state),
              "", "Ed,", "Launch needs no action from you unless you reply NO. Your NO overrides.",
              f'Arm attempt {state["attempt"]}; prior candidates for this date: {", ".join(state["prior_candidates"]) or "none"}.',
              "This first idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
@@ -288,6 +292,10 @@ def render_notice(state):
               "Every observed NO stops publication, including older threads. Reply NO on the thread or through an owner-authored directive; no reply is required.",
               "The magistrate checks readable NO/directive/stop channels before publication and exits before REQUEST.",
               "Keep agent applications closed and the machine untouched from REQUEST through completion, longer if the night remains active."]
+    if checked is not None:
+        observed = datetime.fromtimestamp(checked["finished_epoch_s"], timezone.utc).isoformat()
+        lines = [f'Prepared candidate {state["plan_id"]}; pre-arm check {check_sha256[:12]} at {observed}',
+                 *lines[4:]]
     return "\n".join(lines) + "\n"
 
 
@@ -916,11 +924,11 @@ def verify(*, candidate, launchctl_bin="launchctl", lock_verifier=verify_lock):
         return verify_state(candidate_state(candidate), launchctl_bin=launchctl_bin, lock_verifier=lock_verifier)
 
 
-def require_fresh_record(state, name, clearance):
+def require_fresh_record(state, name, clearance, *, command="publish-install"):
     stage = Path(state["staging"])
     path = safe_path(stage / "lifecycle" / (name + ".json"))
     if not path.is_file():
-        raise Refused(f"{name}.json is required before publication")
+        raise Refused(f"{name}.json is required before {command}")
     try:
         record = json.loads(path.read_text())
         if (not isinstance(record, dict)
@@ -941,9 +949,9 @@ def require_fresh_record(state, name, clearance):
     return record
 
 
-def require_fresh_check(state, launchctl_bin):
+def require_fresh_check(state, launchctl_bin, *, command="publish-install"):
     fake = str(launchctl_bin) != "launchctl"
-    checked = require_fresh_record(state, "check", "rehearsal_ready" if fake else "armable")
+    checked = require_fresh_record(state, "check", "rehearsal_ready" if fake else "armable", command=command)
     if (checked.get("launchctl_bin") != str(launchctl_bin)
             or checked.get("fake_launchctl") is not fake):
         raise Refused("check.json is not armable with this launchctl executable")
@@ -954,14 +962,18 @@ def notice(*, candidate, launchctl_bin="launchctl", lock_verifier=verify_lock):
     with candidate_lock(candidate):
         state = candidate_state(candidate)
         plan = sealed_state(state, lock_verifier=lock_verifier)
-        require_fresh_check(state, launchctl_bin)
+        checked = require_fresh_check(state, launchctl_bin, command="notice")
         state["schedule"] = clone_schedule(state, plan)
         if time.time() >= state["schedule"]["install_close_epoch_s"]:
             raise Refused("exclusive install close has passed")
         state["bindings"] = sealed_candidate(Path(state["measurement_root"]), plan)
-        draft = render_notice(state)
-        atomic_bytes(lifecycle_dir(candidate) / "notice-draft.txt", draft.encode())
-        return draft
+        body = render_notice(state, checked=checked,
+                             check_sha256=digest(Path(candidate) / "lifecycle/check.json"))
+        atomic_bytes(lifecycle_dir(candidate) / "notice.txt", body.encode())
+        print("To: claude2.glaring610@passmail.net")
+        print("Subject: " + notice_subject(state))
+        print("\n" + body, end="")
+        return body
 
 
 def veto(*, candidate, runner=probe_command, magistrate=MAGISTRATE):
@@ -969,54 +981,73 @@ def veto(*, candidate, runner=probe_command, magistrate=MAGISTRATE):
     with candidate_lock(candidate):
         state = candidate_state(candidate)
         lifecycle = lifecycle_dir(candidate)
-        record = dict(schema="joulewise.evidence_veto.v1", started_epoch_s=time.time(),
-                      prepare_sha256=digest(Path(candidate) / "prepare.json"), channels={}, clear=False)
-        channels = record["channels"]
-        directives = channels["directives"] = dict(argv=list(DIRECTIVES_ARGV), clear=False)
-        reasons = []
+        return observe_veto(state, lifecycle / "veto.json", runner=runner, magistrate=magistrate)
+
+
+def observe_veto(state, output, *, runner, magistrate):
+    """One observation path for the earlier veto and the publication boundary."""
+    lifecycle = lifecycle_dir(state["staging"])
+    record = dict(schema="joulewise.evidence_veto.v1", started_epoch_s=time.time(),
+                  prepare_sha256=digest(Path(state["staging"]) / "prepare.json"), channels={}, clear=False,
+                  production=runner is probe_command and Path(magistrate) == Path(MAGISTRATE),
+                  non_owner_directives=[])
+    channels = record["channels"]
+    directives = channels["directives"] = dict(argv=list(DIRECTIVES_ARGV), clear=False)
+    reasons = []
+    try:
+        observed = runner(list(DIRECTIVES_ARGV))
+        directives.update(observation_record(observed))
+        if observed.returncode:
+            raise ValueError(f"gh exited {observed.returncode}")
+        issues = json.loads(observed.stdout)
+        if not isinstance(issues, list) or any(
+                not isinstance(issue, dict) or type(issue.get("number")) is not int
+                or issue["number"] <= 0 or not isinstance(issue.get("title"), str)
+                or not isinstance(issue.get("body"), str)
+                or not isinstance(issue.get("author"), dict)
+                or not isinstance(issue["author"].get("login"), str)
+                or not issue["author"]["login"] for issue in issues):
+            raise ValueError("invalid directive issue inventory")
+        owner_issues = [issue for issue in issues if issue["author"]["login"] == "mpmdw"]
+        record["non_owner_directives"] = [issue for issue in issues if issue["author"]["login"] != "mpmdw"]
+        directives.update(issues=issues, clear=not owner_issues)
+        reasons.extend(f"open owner directive #{issue['number']} — the lead reads it before publication"
+                       for issue in owner_issues)
+    except (Refused, OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
+        directives["error"] = str(exc)
+        reasons.append("cannot read directives: " + str(exc))
+    root = record["magistrate_root"] = dict(path=str(magistrate), clear=False)
+    try:
+        if not safe_path(magistrate).is_dir():
+            raise Refused("missing or non-directory root")
+        root["clear"] = True
+    except (Refused, OSError) as exc:
+        root["error"] = str(exc)
+        reasons.append("cannot read the magistrate root: " + str(exc))
+    # Observe every channel even when another has already refused. lstat
+    # counts dangling symlinks and directories as present; never run data.
+    for name, path in (("standdown", Path(magistrate) / "standdown.request"),
+                       ("STOP", Path(magistrate) / "STOP"), ("NO", lifecycle / "NO")):
+        evidence = channels[name] = dict(path=str(path), clear=False)
         try:
-            observed = runner(list(DIRECTIVES_ARGV))
-            directives.update(observation_record(observed))
-            if observed.returncode:
-                raise ValueError(f"gh exited {observed.returncode}")
-            issues = json.loads(observed.stdout)
-            if not isinstance(issues, list) or any(
-                    not isinstance(issue, dict) or type(issue.get("number")) is not int
-                    or issue["number"] <= 0 or not isinstance(issue.get("title"), str)
-                    or not isinstance(issue.get("body"), str)
-                    or not isinstance(issue.get("author"), dict)
-                    or issue["author"].get("login") != "mpmdw" for issue in issues):
-                raise ValueError("invalid directive issue inventory")
-            directives.update(issues=issues, clear=not issues)
-            reasons.extend(f"open owner directive #{issue['number']} — the lead reads it before publication"
-                           for issue in issues)
-        except (Refused, OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
-            directives["error"] = str(exc)
-            reasons.append("cannot read directives: " + str(exc))
-        # Observe every channel even when another has already refused. lstat
-        # counts dangling symlinks and directories as present; never run data.
-        for name, path in (("standdown", Path(magistrate) / "standdown.request"),
-                           ("STOP", Path(magistrate) / "STOP"), ("NO", lifecycle / "NO")):
-            evidence = channels[name] = dict(path=str(path), clear=False)
+            safe_path(path.parent)
             try:
-                safe_path(path.parent)
-                try:
-                    st = path.lstat()
-                except FileNotFoundError:
-                    evidence.update(present=False, clear=True)
-                else:
-                    evidence.update(present=True, size=st.st_size, mtime_ns=st.st_mtime_ns,
-                                    mode=st.st_mode)
-                    reasons.append(f"veto present: {path}")
-            except (Refused, OSError) as exc:
-                evidence["error"] = str(exc)
-                reasons.append(f"cannot read veto channel {path}: {exc}")
-        record.update(clear=all(c["clear"] for c in channels.values()), reasons=reasons,
-                      finished_epoch_s=time.time())
-        saved_json(lifecycle / "veto.json", record)
-        if not record["clear"]:
-            raise Refused("; ".join(reasons))
-        return record
+                st = path.lstat()
+            except FileNotFoundError:
+                evidence.update(present=False, clear=True)
+            else:
+                evidence.update(present=True, size=st.st_size, mtime_ns=st.st_mtime_ns,
+                                mode=st.st_mode)
+                reasons.append(f"veto present: {path}")
+        except (Refused, OSError) as exc:
+            evidence["error"] = str(exc)
+            reasons.append(f"cannot read veto channel {path}: {exc}")
+    record.update(clear=root["clear"] and all(c["clear"] for c in channels.values()), reasons=reasons,
+                  finished_epoch_s=time.time())
+    saved_json(output, record)
+    if not record["clear"]:
+        raise Refused("; ".join(reasons))
+    return record
 
 
 def custody_inventory(state):
@@ -1040,7 +1071,12 @@ def custody_inventory(state):
 
 
 def baseline_drift(state):
-    path = safe_path(Path(state["staging"]) / "lifecycle/baseline.json")
+    attempts = safe_path(Path(state["staging"]) / "lifecycle/arm-attempts")
+    newest = max((p for p in attempts.iterdir() if p.name.isdecimal() and int(p.name) > 0),
+                 key=lambda p: int(p.name), default=None) if attempts.exists() else None
+    if newest is None:
+        return None
+    path = safe_path(newest / "baseline.json")
     if not path.exists():
         return None
     try:
@@ -1083,7 +1119,7 @@ def notice_unused(state, notice_id):
 
 
 def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl",
-                    runner=probe_command, lock_verifier=verify_lock):
+                    runner=probe_command, magistrate=MAGISTRATE, lock_verifier=verify_lock):
     with candidate_lock(candidate):
         state = candidate_state(candidate)
         stage = Path(state["staging"])
@@ -1094,7 +1130,16 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
         if not isinstance(notice_accepted, str) or not notice_accepted.strip():
             raise Refused("notice acceptance message id is required")
         notice_unused(state, notice_accepted)
-        require_fresh_record(state, "veto", "clear")
+        veto_record = require_fresh_record(state, "veto", "clear")
+        if not fake and veto_record.get("production") is not True:
+            raise Refused("rehearsal veto evidence cannot authorize a real arm")
+        notice_path = safe_path(lifecycle / "notice.txt")
+        if not notice_path.is_file():
+            raise Refused("notice.txt is required before publish-install")
+        notice_inputs = [stage / "prepare.json", lifecycle / "check.json",
+                         *(Path(p) for p in state["digests"])]
+        if any(notice_path.stat().st_mtime_ns <= p.stat().st_mtime_ns for p in notice_inputs):
+            raise Refused("notice.txt is not newer than every sealed artefact and check.json")
         s = clone_schedule(state, plan)
         if time.time() >= s["install_close_epoch_s"]:
             raise Refused("exclusive install close has passed")
@@ -1150,6 +1195,10 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
             require_no_night_agents(record["pre_publication"])
             record["phase"] = "publishing"
             save()  # Durable intent precedes the rename, including lost acknowledgement.
+            observed_veto = observe_veto(state, attempt / "veto-at-publication.json",
+                                         runner=runner, magistrate=magistrate)
+            if not fake and observed_veto["production"] is not True:
+                raise Refused("rehearsal veto evidence cannot authorize a real arm")
             publication_started = True
             os.replace(plan, target)
             published = True
@@ -1165,7 +1214,7 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
             record["phase"] = "verifying"
             save()
             record["verification"] = verify_state(state, launchctl_bin=launchctl_bin, lock_verifier=lock_verifier)
-            baseline_path = lifecycle / "baseline.json"
+            baseline_path = attempt / "baseline.json"
             saved_json(baseline_path, dict(schema="joulewise.evidence_baseline.v1",
                 custody_root=state["custody_root"], recorded_epoch_s=time.time(),
                 files=custody_inventory(state)))
@@ -1267,9 +1316,7 @@ def main(argv=None):
         operation = {"prepare": prepare, "check": check, "publish-install": publish_install,
                      "verify": verify, "uninstall": uninstall, "notice": notice, "veto": veto}[command]
         result = operation(**args)
-        if command == "notice":
-            print(result, end="")
-        else:
+        if command != "notice":
             print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except Refused as exc:
