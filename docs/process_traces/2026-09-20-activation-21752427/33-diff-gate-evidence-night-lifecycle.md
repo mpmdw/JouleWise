@@ -31,3 +31,6 @@ Final code head `789542c6` = `b678b1dc` (B1) + `472d12c5` (round 1, twelve closu
 PR #374 head `d2b9d7da` (records-only merge of main `9f70d0e7` onto `789542c6`): 15/15 checks pass — build: pass; calibration-exits-exclusive (3.13): pass; calibration-writer-crash-matrix-exclusive (3.13, 1): pass; calibration-writer-crash-matrix-exclusive (3.13, 2): pass; changes: pass; fences: pass; gate-ledger: pass; installed-wheel: pass; quick: pass; test (3.13, 1): pass; test (3.13, 2): pass; test (3.13, 3): pass; test (3.13, 4): pass; test (3.13, 5): pass; test (3.13, 6): pass. Merge proceeds; the post-merge matrix (incl. the 3.11 shards) is watched after the merge (fix forward if red).
 
 Bench tail (12:30–12:42 PDT, final tree `789542c6`): `tests.test_run_night tests.test_sample_quiet_predicate_evidence tests.test_night_agent_install tests.test_axi_controller_events` → `Ran 370 tests in 752.845s OK`; `tests.test_evidence_night` under python3.11 → OK.
+
+## §6 Post-merge matrix on main `e216ca00`, 13:32 PDT
+Run 35534394828: conclusion SUCCESS — every job green, including all six 3.11 shards. Slice B1 is delivered end to end.
