@@ -240,10 +240,40 @@ inputs or calibration-plan copy are required for this evidence payload
 (record 85).
 
 **Census.** This is a real night: no stub-only idle-interactive exemption.
-The arm-time census classifies every `codex|claude|t3` match by ancestry
+The arm-time census classifies every `[c]odex|[c]laude|[t]3` match by ancestry
 and aborts on any foreign process; every owned helper closes before
 REQUEST (ruling 87a F6). Retained production roots remain discoverable;
 the lead confirms the discovery set at the bench (87a F4).
+Every census producer that can run while the chain runs must carry the
+2026-09-20 self-match fix (`[c]odex|[c]laude|[t]3`): the driver and chain (from
+the clone at the plan's `measurement_head`), the t0 author, and the WATCHDOG
+PROCESS. `com.joulewise.magistrate` is a launchd job with `StartInterval`
+300: each tick is a short-lived process that re-imports `night_gate` from
+the canonical checkout, so an ordinary tick is never stale. Only a tick
+that spawned or adopted a magistrate session and stayed alive as the
+resident supervisor keeps the module it imported; its stale bare-word
+pgrep is visible to the new driver census and reproduces the 09-20 abort
+(the reverse is not true). Its census rows carry no argv, so check the
+processes before arming: (a) `git -C /Users/edr/code/JouleWise merge-base
+--is-ancestor <fix commit> HEAD` must exit 0 (the canonical reflog,
+`git -C /Users/edr/code/JouleWise reflog --date=iso`, dates the move), else
+no arm; (b) read
+`resident_session.supervisor_pid` from
+`/Users/edr/night-custody/magistrate/state.json` — `launchctl print` shows
+the supervisor as "not running" once it is reparented, so it is not the
+source — and `null`, or a pid that `ps -o pid=,lstart=,command= -p "$pid"`
+cannot find or whose command line does not name `magistrate_watchdog.py`
+(pid reuse), means no resident supervisor and nothing stale; a live pid
+must show a start later than the move, and any resident supervisor alive
+at arm time blocks the arm (the magistrate session exits before REQUEST
+and the supervisor ends with it; re-check after it has).
+Per-night arm scripts re-authored from the trace templates must use the
+bracketed pattern, single-quoted in zsh (unquoted brackets glob).
+`scripts/prewindow_check.sh` is a bench tool run before an arm, never inside
+acquisition: its `grep -E "codex|claude|t3|…"` child's argv would match the
+new pattern. The next plan needs fresh artefacts (manifest/wrapper/digest/plan/
+probe receipt) because `quiet_predicate_campaign.MANIFEST_PATHS` hashes
+`night_gate.py`; no ruled registration hash changes.
 
 **Timeline.** The plan's relative boundaries are: install strictly before
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at

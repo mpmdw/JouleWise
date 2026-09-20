@@ -415,7 +415,7 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         before = {path: Path(path).read_bytes() for path in authored["receipt_paths"]}
         for pattern, kind in (
             ("XProtect", "MAINTENANCE_CENSUS"),
-            ("codex|claude|t3", "PROCESS_CENSUS"),
+            ("[c]odex|[c]laude|[t]3", "PROCESS_CENSUS"),
         ):
             for exit_code, stdout in (
                 (0, "123 forbidden-process\n"), (2, ""), (1, "123 stale-output\n")

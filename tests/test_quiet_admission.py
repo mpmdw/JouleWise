@@ -153,7 +153,7 @@ class SamplerCommandTests(unittest.TestCase):
             ('/bin/ps', '-Ao', 'pid,ppid,lstart,time,comm'),
             ('/usr/sbin/sysctl', '-n', 'hw.logicalcpu'),
             ('/usr/sbin/sysctl', '-n', 'vm.loadavg'),
-            ('/usr/bin/pgrep', '-lf', 'codex|claude|t3'),
+            ('/usr/bin/pgrep', '-lf', '[c]odex|[c]laude|[t]3'),
         ])
         self.assertEqual(calls[2].kwargs['timeout'], 60)
         self.assertFalse(calls[-1].kwargs['check'])  # pgrep exit 1 is an empty census

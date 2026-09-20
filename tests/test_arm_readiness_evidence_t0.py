@@ -2522,6 +2522,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             side_effect=lambda *args, **kwargs: real_popen(*args, **kwargs),
         ) as popen:
             probes = tuple(t0._execute_probe(command, cwd=ROOT) for command in commands)
+        for probe in probes:
+            if (probe.argv[0] == "/usr/bin/pgrep" and probe.exit_code == 3
+                    and "Cannot get process list" in probe.stderr):
+                self.skipTest("/usr/bin/pgrep unavailable in sandbox: exit 3, Cannot get process list")
         self.assertEqual(popen.call_count, len(commands))
         row = t0._DerivedRow(
             f"test.{kind.lower()}",
@@ -2582,7 +2586,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             "PROCESS_CENSUS",
             (
                 ("/usr/bin/pgrep", "-x", "caffeinate"),
-                ("/usr/bin/pgrep", "-lf", "codex|claude|t3"),
+                ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
                 (
                     "/usr/bin/pgrep",
                     "-lf",
@@ -2649,7 +2653,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         """
         commands = (
             ("/usr/bin/pgrep", "-x", "caffeinate"),
-            ("/usr/bin/pgrep", "-lf", "codex|claude|t3"),
+            ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
             ("/usr/bin/pgrep", "-lf", t0._BROWSER_CENSUS_PATTERN),
             ("/usr/bin/pgrep", "-lf", t0._MONITOR_CENSUS_PATTERN),
         )

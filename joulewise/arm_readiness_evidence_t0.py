@@ -1722,10 +1722,12 @@ def _derive_machine_readiness(context: _Context) -> _DerivedRow:
 
 
 def _derive_process_census(context: _Context) -> _DerivedRow:
+    from joulewise.night_gate import AGENT_CENSUS_ARGV
+
     kind = "PROCESS_CENSUS"
     probes = (
         _fresh_probe(context, kind, "keep-awake", ("/usr/bin/pgrep", "-x", "caffeinate")),
-        _fresh_probe(context, kind, "agent", ("/usr/bin/pgrep", "-lf", "codex|claude|t3")),
+        _fresh_probe(context, kind, "agent", AGENT_CENSUS_ARGV),
         _fresh_probe(context, kind, "browser", ("/usr/bin/pgrep", "-lf", _BROWSER_CENSUS_PATTERN)),
         _fresh_probe(context, kind, "monitor", ("/usr/bin/pgrep", "-lf", _MONITOR_CENSUS_PATTERN)),
     )
