@@ -16,7 +16,10 @@ from unittest.mock import patch
 # The generator refuses any path carrying a census substring ("codex", "claude",
 # "t3"); a random tempfile suffix can contain "t3" (seen once: case-qa4uqbt3),
 # so every fixture directory is re-drawn until its name is census-clean.
-_CENSUS_SUBSTRINGS = ("codex", "claude", "t3")
+try:  # the generator's own guard list is the source of truth
+    from scripts.gen_derivation_night import CENSUS_SUBSTRINGS as _CENSUS_SUBSTRINGS
+except ImportError:  # pragma: no cover - defensive fallback for a moved module
+    _CENSUS_SUBSTRINGS = ("codex", "claude", "t3")
 
 
 def _census_clean_tempdir(**kwargs):
@@ -81,7 +84,7 @@ class ArgumentsTests(unittest.TestCase):
                           roots_under=ROOT, staging_under=ROOT / "staging")
 
     def test_real_lock_verifier_and_builder_recipe(self):
-        with _census_clean_tempdir() as tmp:
+        with _census_clean_tempdir(prefix="recipe-", dir="/tmp") as tmp:
             root = Path(tmp).resolve()
             (root / "env").mkdir()
             (root / "env/mac-measurement-lock.txt").write_text("# lock\na==1\nb==2\n")
@@ -103,9 +106,6 @@ class PrepareTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = _census_clean_tempdir(prefix="night-entry-", dir="/tmp")
-        while any(token in cls.temp.name.lower() for token in ("codex", "claude", "t3")):
-            cls.temp.cleanup()
-            cls.temp = _census_clean_tempdir(prefix="night-entry-", dir="/tmp")
         cls.base = Path(cls.temp.name).resolve()
         cls.remote = cls.base / "remote.git"
         subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(ROOT), str(cls.remote)], check=True)

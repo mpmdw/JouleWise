@@ -95,6 +95,17 @@ or silently delete partial evidence. A published plan, any custody additions
 or invocation records end preparation reuse. State is local ownership evidence,
 not an authenticated defense against deliberate alteration of the state file.
 
+The installer's render-only path itself runs the driver preflight
+(`scripts/run_night.py preflight --plan`, refused as "night driver preflight
+failed"), so the bench step-2 preflight is exercised without a separate call.
+The bench scripts' hard 40-minute floor at authoring is superseded by the
+runway warning (consult 18: a planning default, not a gate). Further
+refusals not listed below, all sealed-state checks on resume: "unknown or
+uncheckpointed staging output", "unknown or missing render output",
+"published, invoked or unknown custody output", "interpreter identity
+drift". The exclusive-install-close refusal runs last, after the clone and
+venv; a candidate prepared too late still pays that cost before refusing.
+
 Refusals exit 2 with one `REFUSED:` line: invalid/unresolved kind, malformed H,
 H unavailable from remote main, invalid/non-minute/ambiguous/past t0, foreign
 root or staging, symlink/path collisions, unknown prior ownership, concurrent
