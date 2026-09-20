@@ -12,8 +12,14 @@ single test with TMPDIR=/tmp/tmp-d03-proof at main 790cce67 (stash): FAILED (fai
 ```
 Replay for row 9: the delta is one test assertion; the module alone at the bench plus the counterfactual; the hosted matrix on the PR head and post-merge are the platform proof.
 
-## §3 Counter-review (rows 1/2/6/10)
-(appended: Opus review)
+## §3 Counter-review (rows 1/2/6/10) — Opus 5 subagent, read-only; verbatim
+FIX-FIRST (the committed fix is correct; an identical, bench-proven-failing sibling remains two tests below it in the same file).
+R1 — the new assertion proves the intent, with one nuance. Only the capture carries `--slot` (`scripts/night_chains/calibration_derivation_only.zsh:259` `--slot "$slot"`, `:260` `--attempt-id "${SESSION_ID}-${slot}"`). The reservation carries `--slot-count` (`:194`), not `--slot`, and `"--slot" in call["args"]` is exact element membership, so the reservation call is filtered out. No coverage is lost: the reservation never names an individual slot id; the only place a slot id can appear is the capture pair. The abort carries no slot id. `:543` pins the call count and `:557–561` pins `slot_unused slot=d03`, so an unexpected d03 capture fails three ways. Exact-value comparison replaces substring matching — strictly stronger.
+R2 — same-class substring assertions: `tests/test_issue_calibration_acceptance_generation.py:610` `assertNotIn("d03", str(calls))` — LIVE FLAKE, identical class, reproduced: under `TMPDIR=/tmp/tmp-d03-proof`, `test_slot_count_override_and_writer_error_stop` FAILS. Safe (literals too long / characters mkdtemp cannot produce): same file `:598`, `:612`/`:651`/`:675`, `:676`; siblings `tests/test_identity_pins.py:1444`, `tests/test_launch_window.py:2481`, `tests/test_family_marker.py:1525`, `tests/test_paper_custody.py:685`, `tests/test_arm_readiness_evidence_packauth.py:389`.
+R3 — Module: `Ran 114 tests in 54.294s / OK`. Single test with `TMPDIR=/tmp/tmp-d03-proof`: OK. Worktree clean; canonical untouched.
+Recommendation: fold the `:610` two-line change into this commit and merge.
+
+Disposition: folded as the second commit (sibling reproduced failing under the d03 TMPDIR before the change; module 114 OK after). The safe list is the sweep the lead's §5 lesson asked for — done by the review; no further lane needed.
 
 ## §4 Terminal review (row 12) and hosted result (row 11)
 (appended before merge)
