@@ -81,6 +81,15 @@ class EvidenceGeneratorTests(unittest.TestCase):
             subprocess.run(["/bin/zsh", "-n", str(wrapper)], check=True)
         self.assertFalse((self.f.custody / "night").exists())
 
+    def test_relative_custody_root_refuses_at_the_desk(self):
+        # Opus 90 S2: a relative custody root would seal a relative plan path.
+        from scripts.gen_derivation_night import GenerationRefusal
+        self.f.plan = replace(self.f.plan, custody_root=os.path.relpath(self.f.custody))
+        self.f.write_plan()
+        with self.assertRaisesRegex(GenerationRefusal, "night custody root must be an absolute path"):
+            generator.generate(self.f.plan_path)
+        self.assertFalse(Path(self.f.plan.chain_path).exists())
+
     def test_wrong_class_v4_and_frozen_window_refuse(self):
         from tests.test_quiet_admission import POLICY
         for change in ({"receipt_class": "REHEARSAL_STUB"}, {"window_max_s": 9001},

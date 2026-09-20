@@ -1878,10 +1878,6 @@ class LaunchdAccessProbeTests(unittest.TestCase):
                     self.engine.probe_process_census(self.label, self.fixture.plan_path, {"chain_pgid": 12345})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class EvidencePlanPublicationTests(unittest.TestCase):
     def setUp(self):
         from tests.test_gen_evidence_night import EvidenceFixture
@@ -1909,6 +1905,19 @@ class EvidencePlanPublicationTests(unittest.TestCase):
         self.assertFalse(self.f.plan_path.exists())
         with self.assertRaisesRegex(ValueError, "^evidence plan not at its published path$"):
             self.engine.evidence_probe_bindings(self.f.plan, self.staged, sys.executable)
+
+    def test_aliased_custody_root_passes_with_the_installer_resolved_plan_path(self):
+        # Opus 90 S1 / refuter 89 R1: the installer hands the probe the RESOLVED
+        # published path (/private/tmp/... for a /tmp custody root); identity is
+        # compared resolved while the sealed literal stays content-derived.
+        os.replace(self.staged, self.f.plan_path)
+        resolved = self.f.plan_path.resolve()
+        self.assertNotEqual(str(resolved), str(self.f.plan_path))  # /tmp is an alias on macOS
+        bindings = self.engine.evidence_probe_bindings(self.f.plan, resolved, sys.executable)
+        self.assertEqual(bindings["plan_sha256"], hashlib.sha256(self.f.plan_path.read_bytes()).hexdigest())
+        link = self.f.root / "custody-link"
+        link.symlink_to(self.f.custody)
+        self.engine.evidence_probe_bindings(self.f.plan, link / "night_plan.json", sys.executable)
 
 
 class EvidenceProbeReceiptTests(unittest.TestCase):
@@ -2004,3 +2013,8 @@ class EvidenceProbeReceiptTests(unittest.TestCase):
         with mock.patch.dict(night_gate.RULED_REGISTRATIONS, {}, clear=True):
             with self.assertRaisesRegex(ValueError,'ruled registration'):
                 self.engine.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)
+
+
+
+if __name__ == "__main__":
+    unittest.main()
