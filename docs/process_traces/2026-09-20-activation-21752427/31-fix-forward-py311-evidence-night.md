@@ -22,5 +22,5 @@ R3. Accurate except one number: commit 8963dcf0 says "errored 13 tests"; the fai
 
 Disposition: the contract sentence and the test name corrected in the third commit; the count corrected in §1 above (the commit message of 8963dcf0 keeps its "13", noted here).
 
-## §4 Terminal review (row 12) and hosted result (row 11)
-(appended before merge)
+## §4 Terminal review (row 12) and hosted result (row 11), 10:30 PDT
+Candidate `b2367357` (records-only merge of main onto `1babfb91`): PR #373 checks 15/15 PASS — build: pass; calibration-exits-exclusive (3.13): pass; calibration-writer-crash-matrix-exclusive (3.13, 1): pass; calibration-writer-crash-matrix-exclusive (3.13, 2): pass; changes: pass; fences: pass; gate-ledger: pass; installed-wheel: pass; quick: pass; test (3.13, 1): pass; test (3.13, 2): pass; test (3.13, 3): pass; test (3.13, 4): pass; test (3.13, 5): pass; test (3.13, 6): pass. The PR matrix is 3.13-only; the decisive proof is the POST-MERGE matrix's 3.11 shards, watched after merge (run id appended below). Terminal review: three commits (probe relocation; two assertions; contract sentence + test name), code unchanged since `ab95e377`, bench green on 3.11 and 3.13, one Opus review with executed mutants — verdict MERGE.
