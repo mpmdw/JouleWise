@@ -2075,9 +2075,10 @@ arguments through the driver's production environment builder; for a
 calibration plan, render-only prints these input fingerprints. For an evidence
 plan (`NIGHT_PAYLOAD_KIND=quiet_predicate_evidence`), render-only never runs
 the chain: it authenticates the wrapper statically (sidecar, sealed manifest,
-chain-bound registration, the sealed published plan path) and prints advisory
-digests of the supplied plan bytes and the manifest; the launchd probe is the
-step that executes the chain verify-only. Installation recomputes the bindings and accepts
+chain-bound registration, the sealed published plan path) and prints one
+advisory JSON line — the wrapper's SHA-256 and digests of the supplied plan
+bytes and the sealed manifest — that nothing downstream consumes; the launchd
+probe is the step that executes the chain verify-only. Installation recomputes the bindings and accepts
 only an `ok` receipt whose finish time and file modification time are less
 than six hours old; the finish time may be at most 60 s ahead of the clock.
 It also refuses the install unless the receipt's single measured custody pass
@@ -2132,9 +2133,10 @@ independently of this driver pin.
 publication, including the same t0, install-close and install-span checks as
 a real install. The night and dead-man plists name the future
 `<custody_root>/night_plan.json`, so the validated agent arguments are the
-ones that will run after publication (the third, probe plist names the plan
-path as supplied, so a staged render's probe file differs from the published
-one by that path alone). It never calls launchctl. This also
+ones that will run after publication (the third, probe plist is rendered from
+the plan path as supplied — its `--plan` argument, pending-receipt path and
+probe directory all derive from that path — so a staged render's probe file
+differs from the published one in those derived fields). It never calls launchctl. This also
 implements D-175's REHEARSAL_STUB procedure: stage outside the watchdog's
 glob, validate with `--render-only` from the pinned checkout, then publish.
 The atomic `os.replace` remains the single irreversible publication step;

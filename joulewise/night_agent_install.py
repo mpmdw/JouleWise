@@ -1127,11 +1127,16 @@ def validate_install(args, repo):
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
                         courier_path, schedule, run_night.install_spans_for_day,
                         getattr(args, "probe_timeout_s", 600))
-    # calibration-refusal.json is interpreted by the driver from its existence
-    # alone (refuter 10 F1): a stray one must refuse admission like any record.
-    records = [name for name in ("receipt.json", "result.json", "refusal.json", "calibration-refusal.json",
-               "chain.started", "chain.exited", "courier.json", "courier.sent")
+    # Every refusal document the driver would report from its existence alone
+    # (run_night._refusal_paths: refusal.json, refusal-N.json,
+    # calibration-refusal.json and its .*.json siblings) refuses admission like
+    # any other night record (refuter 10 F1; fresh eyes 17 F2).
+    records = [name for name in ("receipt.json", "result.json", "chain.started",
+               "chain.exited", "courier.json", "courier.sent")
                if os.path.lexists(prepared.custody_night / name)]
+    if prepared.custody_night.is_dir():
+        records += [path.name for path in run_night._refusal_paths(prepared.custody_night)]
+    records = sorted(set(records))
     if records:
         raise Refused(3, "refusing install: existing night records: " + " ".join(records))
     # All read-only refusals precede admission and mkdir.
@@ -1151,12 +1156,11 @@ def validate_install(args, repo):
         try:
             chain_text = chain_bytes.decode("utf-8")
         except UnicodeError as exc:
-            # A binary stub (legacy fixtures) keeps the legacy branch; a wrapper
-            # that declares a payload kind but cannot be decoded is corrupt and
-            # must never fall through to a branch that executes it (Opus 12 #1).
-            if b"NIGHT_PAYLOAD_KIND" in chain_bytes:
-                raise Refused(2, "night wrapper is not valid UTF-8: " + str(exc))
-            chain_text = ""
+            # An unreadable chain (legacy fixtures name a missing stub) keeps the
+            # legacy branch above; a chain that exists but is not UTF-8 is
+            # corrupt and must never fall through to a branch that executes it
+            # (Opus 12 #1; fresh eyes 17 F1: never key this on marker bytes).
+            raise Refused(2, "night wrapper is not valid UTF-8: " + str(exc))
         try:
             payload_kind = night_gate.probe_payload_kind(chain_text)
         except ValueError as exc:

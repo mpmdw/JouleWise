@@ -2073,25 +2073,37 @@ class EvidenceRenderOnlyTests(unittest.TestCase):
         self.assertNotIn('"input_digests"', output)
 
     def test_undecodable_evidence_wrapper_refuses_before_legacy_inspection(self):
-        """One corrupt byte must not route the wrapper to the branch that executes it (Opus 12 #1)."""
-        from unittest.mock import patch
+        """A corrupt byte anywhere — including on the payload marker itself — must
+        not route the wrapper to the branch that executes it (Opus 12 #1, fresh
+        eyes 17 F1). The render harness asserts the chain never ran."""
         wrapper = Path(self.f.plan.chain_path)
-        wrapper.write_bytes(wrapper.read_bytes() + b"\n# \xff\xfe corrupt\n")
-        with patch.object(self.engine, "reservation_input_digests") as inspection:
-            result, output, errors = self.render(self.staged)
-        self.assertEqual(result, 2)
-        self.assertIn("night wrapper is not valid UTF-8", errors)
-        inspection.assert_not_called()
-        self.assertNotIn('"input_digests"', output)
+        for corruption in (lambda raw: raw + b"\n# \xff\xfe corrupt\n",
+                           lambda raw: raw.replace(b"NIGHT_PAYLOAD_KIND", b"NIGHT_PAYLOAD_KIN\xff")):
+            with self.subTest(corruption=corruption.__code__.co_firstlineno):
+                sealed = wrapper.read_bytes()
+                try:
+                    wrapper.write_bytes(corruption(sealed))
+                    result, output, errors = self.render(self.staged)
+                finally:
+                    wrapper.write_bytes(sealed)
+                self.assertEqual(result, 2, errors)
+                self.assertIn("night wrapper is not valid UTF-8", errors)
+                self.assertNotIn('"input_digests"', output)
 
-    def test_stray_calibration_refusal_record_refuses_admission(self):
-        """The driver interprets calibration-refusal.json from its existence alone (refuter 10 F1)."""
+    def test_stray_refusal_documents_refuse_admission(self):
+        """Every refusal document the driver reports from existence alone refuses
+        admission (refuter 10 F1; fresh eyes 17 F2: the driver's glob, not a list)."""
         night = self.f.custody / "night"
         night.mkdir(exist_ok=True)
-        (night / "calibration-refusal.json").write_text("{}\n")
-        result, output, errors = self.render(self.staged)
-        self.assertEqual(result, 3)
-        self.assertIn("existing night records: calibration-refusal.json", errors)
+        for name in ("calibration-refusal.json", "refusal-01.json", "calibration-refusal.json.4242.json"):
+            with self.subTest(name=name):
+                (night / name).write_text("{}\n")
+                try:
+                    result, output, errors = self.render(self.staged)
+                finally:
+                    (night / name).unlink()
+                self.assertEqual(result, 3, errors)
+                self.assertIn("existing night records: " + name, errors)
 
 
 class EvidencePlanPublicationTests(unittest.TestCase):
