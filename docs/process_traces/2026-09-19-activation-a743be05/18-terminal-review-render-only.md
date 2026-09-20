@@ -11,3 +11,5 @@
 **Residual / deferred:** Opus 4c aliasing key (no action); fresh-eyes-2 LOW-1 dangling-symlink-on-3.11 (D-161, no action) and LOW-2 admission list vs `_WRITE_ONCE_RECORDS` (into EVIDENCE-INSTALLER-SPLIT-01); Astra P3 supervisor receipt init (lane 258). Nit D (composed test loads only the installer from the clone) noted for the split lane.
 
 **Verdict: MERGE** once record 15's full replay is recorded green (addendum below) and the hosted gate-ledger + quick checks on the records-only merge candidate are green.
+
+**Addendum 23:07 PDT:** record 15 green (6,605 tests, 4/4 shards PASS). Hosted quick on the PR head `0c6626f7` PASS (1m59s); gate-ledger failed only because the evidence paths were not yet in the PR tree — the records-only merge candidate follows. Verdict stands: MERGE.
