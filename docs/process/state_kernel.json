@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38n — 2026-09-20: census self-match cure merged (PR #371); pilot night one aborted, harvested, uninstalled",
-    "path": "docs/process_traces/2026-09-20-activation-21752427/12-diff-gate-census-self-match.md"
+    "label": "T38o — 2026-09-20: evidence-night entry point designed (consult 18); pre-arm supervisor clause corrected",
+    "path": "docs/process_traces/2026-09-20-activation-21752427/19-ruling-supervisor-clause-and-entry-point-design.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2661,24 +2661,28 @@
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
-    "EVIDENCE-INSTALLER-SPLIT-01": {
+    "EVIDENCE-NIGHT-ENTRY-01": {
       "acceptance": {
         "evidence": [
           "docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md (Ed’s reply (c), 10:57 PDT)",
           "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md (magistrate ruling 04a and directives #367/#368)",
           "docs/process_traces/2026-09-19-activation-a743be05/09a-ruling-kernel-touch.md (registration field rulings)",
-          "Ed #368 item 2; ruling 04a addendum: tonight arms on payload-kind dispatch, separate entry point follows."
+          "Ed #368 item 2; ruling 04a addendum: tonight arms on payload-kind dispatch, separate entry point follows.",
+          "docs/process_traces/2026-09-20-activation-21752427/18-consult-evidence-installer-split-astra.md (ranked design, refusal inventory keep/drop/replace table, PR split and effort)",
+          "docs/process_traces/2026-09-20-activation-21752427/19-ruling-supervisor-clause-and-entry-point-design.md (§1: adopted successor entry-point design; supervisor-clause correction; PR 2 census provenance)",
+          "PR 1: tests/test_evidence_night.py covers interruption/resume, sealed-byte preservation and no chain/mail/launchctl during prepare; tests/test_evidence_arm_sequence.py exercises the façade through the real installer machinery.",
+          "PR 1: docs/contracts/evidence_night_entry.md enumerates the refusal inventory and recovery boundaries; docs/process/NIGHT_HANDBACK.md and docs/phase_2/derivation_night_runbook.md provide the checklist replacing per-night script copies."
         ],
         "pointer": {
-          "json_pointer": "/tasks/EVIDENCE-INSTALLER-SPLIT-01/acceptance",
-          "label": "EVIDENCE-INSTALLER-SPLIT-01 acceptance",
+          "json_pointer": "/tasks/EVIDENCE-NIGHT-ENTRY-01/acceptance",
+          "label": "EVIDENCE-NIGHT-ENTRY-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "An evidence plan installs/probes/uninstalls through the new entry point with its refusal list enumerated in a contract doc; the composed arm-sequence test runs against it; calibration path untouched."
+        "summary": "PR 1 removes per-night script copying through tracked preparation and a thin render/probe/install/uninstall/verify façade over the existing installer, not a second installer. Repeated prepare preserves every sealed byte and never invokes chain/mail/launchctl; it stops at the notice boundary. Honour consult 18’s refusal inventory: keep every physics/evidence/pre-registration refusal and evidence receipt freshness; drop calibration-only inputs; replace exact-four-roots equality with discovery + ownership; 40 minutes is a planning default only. The new tests, extended composed arm-sequence test, contract and handbook/runbook checklist cover these boundaries; calibration compatibility remains intact."
       },
       "authority": {
-        "label": "Ed's directives of 2026-09-19: reply (c) 10:57 PDT, issues #367 and #368; magistrate ruling 04a",
-        "path": "docs/process_traces/2026-09-19-activation-a743be05/04a-ruling-render-only-evidence.md"
+        "label": "Record 19 §1: consult 18 evidence-night entry-point design adopted; Ed #368 zero-owner-input windows",
+        "path": "docs/process_traces/2026-09-20-activation-21752427/19-ruling-supervisor-clause-and-entry-point-design.md"
       },
       "dependencies": [],
       "fallback": {
@@ -2691,13 +2695,13 @@
       },
       "fences": [],
       "flags": [],
-      "goal": "The evidence (quiet-predicate / instrument) night path gets a minimal separate entry point that keeps ONLY the physics, evidence and pre-registration refusals (D-161: operator-only adversary); custody-budget arithmetic, ledger pins, receipt-budget checks and the other calibration custody machinery do not apply to it; the calibration installer stops growing executor-specific branches.",
-      "id": "EVIDENCE-INSTALLER-SPLIT-01",
+      "goal": "PR 1: deliver tracked python -m joulewise.evidence_night prepare --kind quiet_predicate_evidence --t0 next [--head H] that clones and builds the locked venv at H, authors the v2 plan and renders the wrapper at staging, runs the real installer render-only FROM the clone, resumes idempotently on sealed bytes, and STOPS at the notice boundary. Add a thin evidence lifecycle façade (render/probe/install/uninstall/verify) delegating to existing installer machinery, not a second installer; tests/test_evidence_night.py, extended tests/test_evidence_arm_sequence.py, docs/contracts/evidence_night_entry.md and the handbook/runbook checklist replace per-night script copies. PR 2 later, after lifecycle decision F3: notice → wait → veto → publish → install orchestration through a narrow transport adapter, plus census argv and producer identity provenance in the watchdog’s census events, separately reviewed.",
+      "id": "EVIDENCE-NIGHT-ENTRY-01",
       "lane": "agent",
-      "priority": "p2_next_slice",
+      "priority": "p1_phase_gate",
       "rank": 256,
       "status": "queued",
-      "status_note": "2026-09-20 activation 21752427 — READY [AGENT]. INSTALLER-RENDER-ONLY-EVIDENCE-01 and REHEARSAL-MOCK-FREE-01 retired by removal after PR #369 (merge 2f4fc128, 2026-09-19 about 23:00 PDT); the real installer + driver bench rehearsal (seat 11) and the live pilot arm passed every step first time. Ed directive #368 closed. Evidence: docs/process_traces/2026-09-19-activation-a743be05/03-arm-record-qpe01-pilot-n1-20260919.md (§ARMED); RUN_STATE.md block ARMED 23:16:55. The merged installer dependency is cleared; Ed #368 item 2 remains this lane’s authority.",
+      "status_note": "2026-09-20 activation 21752427, touch 3 — EVIDENCE-INSTALLER-SPLIT-01 retired by removal and EVIDENCE-NIGHT-ENTRY-01 registered at the same rank 256 (220 tasks unchanged), per consult 18 adopted in record 19 §1. Queued [AGENT], p1_phase_gate: path to zero-owner-input windows (Ed #368). PR 1 effort: Astra high, approximately 4–6 seat hours. PR 2 follows the lifecycle decision F3; record 19 corrects the pre-arm supervisor clause. No start dependencies: census cure merged as PR #371 (980f8d64). Prior installer/rehearsal closure remains PR #369 (2f4fc128); INSTALLER-RENDER-ONLY-EVIDENCE-01 and REHEARSAL-MOCK-FREE-01 retired, with real installer + driver rehearsal and pilot-arm evidence in docs/process_traces/2026-09-19-activation-a743be05/03-arm-record-qpe01-pilot-n1-20260919.md (§ARMED).",
       "stop_card": null
     },
     "FIXTURE-FAKE-VLLM-LEAK-01": {

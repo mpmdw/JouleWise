@@ -5347,7 +5347,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-20). Latest report: [T38n — 2026-09-20: census self-match cure merged (PR #371); pilot night one aborted, harvested, uninstalled](docs/process_traces/2026-09-20-activation-21752427/12-diff-gate-census-self-match.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-20). Latest report: [T38o — 2026-09-20: evidence-night entry point designed (consult 18); pre-arm supervisor clause corrected](docs/process_traces/2026-09-20-activation-21752427/19-ruling-supervisor-clause-and-entry-point-design.md).
 
 ### [ED-EXTERNAL]
 
