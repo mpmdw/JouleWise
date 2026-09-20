@@ -549,7 +549,11 @@ else:
                          ["--reason", "window_exhausted", "--custody-budget-s", "120"])
         self.assertNotIn("--custody-deadline-epoch-s", python[-1]["args"])
         self.assertIn("abort-session", python[-1]["args"])
-        self.assertNotIn("d03", str(python))
+        # Assert on the reserved/captured slot ids, never on the whole argv:
+        # the argv carries the random temporary directory, and a name such as
+        # /tmp/tmp69h2kd03 contains "d03" (post-merge run 35542767131).
+        self.assertNotIn("d03", [call["args"][call["args"].index("--slot") + 1]
+                                 for call in python if "--slot" in call["args"]])
         self.assertEqual(log[-3:], [
             "slot_end slot=d02 disposition=valid",
             "slot_unused slot=d03 reason=window_exhausted",
