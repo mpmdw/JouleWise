@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python",
+    "-B",
+    "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/run_night.py",
+    "_bind-worker",
+    "--kind",
+    "smoke-hard",
+    "--job-id",
+    "smoke-hard-2",
+    "--result-fd",
+    "7",
+    "--request",
+    "{}"
+  ],
+  "pid": 79143,
+  "stamp": {
+    "epoch_s": 1789890603.563127,
+    "monotonic_after_s": 112164.983844833,
+    "monotonic_before_s": 112164.983843791,
+    "monotonic_resolution_s": 4.166666666666666e-08,
+    "wall_resolution_s": 1.0000000000000002e-06
+  },
+  "start_identity": "Sun Sep 20 00:50:03 2026"
+}

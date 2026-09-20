@@ -1,0 +1,6 @@
+{
+  "cleanup_proven": true,
+  "envelopes_attempted": 0,
+  "error": "InterruptedError: evidence chain signal 15",
+  "outcome": "refused"
+}

@@ -1,0 +1,38 @@
+{
+  "plan_id": "qpe01-pilot-n1-20260920",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal": {
+    "detail": "agent census refused while the chain was running",
+    "evidence": {
+      "argv": [
+        "/usr/bin/pgrep",
+        "-lf",
+        "codex|claude|t3"
+      ],
+      "exit_code": 0,
+      "monotonic_ns": 112165100416000,
+      "refusal": {
+        "detail": "pgrep exit 0; forbidden process output: 79146 /usr/bin/pgrep -lf codex|claude|t3",
+        "evidence": [
+          {
+            "argv": [
+              "/usr/bin/pgrep",
+              "-lf",
+              "codex|claude|t3"
+            ],
+            "exit_code": 0,
+            "monotonic_ns": 112165100416000,
+            "stderr": "",
+            "stdout": "79146 /usr/bin/pgrep -lf codex|claude|t3\n"
+          }
+        ],
+        "reason": "night_refused_agent_present"
+      },
+      "stderr": "",
+      "stdout": "79146 /usr/bin/pgrep -lf codex|claude|t3\n"
+    },
+    "reason": "night_aborted_agent_present"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}

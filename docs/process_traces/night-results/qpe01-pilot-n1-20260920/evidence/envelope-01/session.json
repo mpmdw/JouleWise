@@ -1,0 +1,273 @@
+{
+  "alignment_model": "affine wall clock; production rate-aware bound; PROVISIONAL",
+  "argv": [
+    "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/sample_quiet_predicate_evidence.py",
+    "collect",
+    "--state",
+    "idle",
+    "--repeat",
+    "1",
+    "--duration-s",
+    "600",
+    "--sample-interval-s",
+    "30",
+    "--interior-offset-s",
+    "60",
+    "--interior-s",
+    "480",
+    "--envelope-start-mono-s",
+    "112163.404087708",
+    "--power-interval-ms",
+    "100",
+    "--out",
+    "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/evidence/envelope-01"
+  ],
+  "boot_id": "CD5B815A-DF9B-4FC7-921A-8E97D8ABA867",
+  "collector": {
+    "pid": 79122,
+    "start_identity": "Sun Sep 20 00:50:02 2026"
+  },
+  "deadline_mono_s": 112763.404087708,
+  "duration_s": 600.0,
+  "end_stamp": {
+    "epoch_s": 1789890603.895827,
+    "monotonic_after_s": 112165.316546833,
+    "monotonic_before_s": 112165.316546583,
+    "monotonic_resolution_s": 4.166666666666666e-08,
+    "wall_resolution_s": 1.0000000000000002e-06
+  },
+  "error": "KeyboardInterrupt: collector termination requested",
+  "error_rounds": 0,
+  "evidence_status": "PROVISIONAL",
+  "interior": {
+    "complete_support": false,
+    "duration_s": 480.0,
+    "end_epoch_s": 1789891141.9833803,
+    "native_samples": 0,
+    "power": null,
+    "power_reason": "not available in source evidence",
+    "reason": "clock anchor unresolved",
+    "start_epoch_s": 1789890661.9833803,
+    "status": "partial"
+  },
+  "load_setting": null,
+  "load_setting_reason": "not available in source evidence",
+  "metadata_errors": [],
+  "network_time_provenance": null,
+  "network_time_provenance_reason": "not established by this desk harness",
+  "observer_definition": "SELF + reaped CHILDREN over production smoke incl. raw/stamp hooks; recorder CPU excluded",
+  "os_build": "25G83",
+  "power": {
+    "anchor": {
+      "clock_stamps": {
+        "first_parse": {
+          "epoch_s": 1789890603.342087,
+          "monotonic_after_s": 112164.762803541,
+          "monotonic_before_s": 112164.762799291,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "post_parse": {
+          "epoch_s": 1789890603.895736,
+          "monotonic_after_s": 112165.316456708,
+          "monotonic_before_s": 112165.316453083,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "pre_spawn": {
+          "epoch_s": 1789890602.302128,
+          "monotonic_after_s": 112163.722836458,
+          "monotonic_before_s": 112163.7228355,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "sampling_started": {
+          "epoch_s": 1789890603.342141,
+          "monotonic_after_s": 112164.76285725,
+          "monotonic_before_s": 112164.76285675,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "sampling_stopped": {
+          "epoch_s": 1789890603.885229,
+          "monotonic_after_s": 112165.305949041,
+          "monotonic_before_s": 112165.3059485,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        }
+      },
+      "detail": "no_native_second_rollover",
+      "method": "powermetrics_native_second_rate_aware_set_membership_v1",
+      "reason": "clock_anchor_unresolved",
+      "status": "unknown"
+    },
+    "argv": [
+      "sudo",
+      "-n",
+      "/usr/bin/powermetrics",
+      "-b",
+      "0",
+      "-i",
+      "100",
+      "--samplers",
+      "cpu_power,gpu_power,ane_power,thermal",
+      "--format",
+      "plist",
+      "-o",
+      "/Users/edr/night-custody/qpe01-pilot-n1-20260920/night/evidence/envelope-01/raw/powermetrics-idle-1.plist"
+    ],
+    "cleanup": {
+      "kill": false,
+      "reap_after_observer_bracket": true,
+      "returncode": 0,
+      "term": true
+    },
+    "dropped_final_frame": null,
+    "dropped_final_frame_reason": "not available in source evidence",
+    "identity": {
+      "pid": 79133,
+      "start_identity": "Sun Sep 20 00:50:02 2026"
+    },
+    "kill_sent": false,
+    "processes": [
+      {
+        "command": "sudo",
+        "cumulative_cpu_seconds": 0.01,
+        "pid": 79133,
+        "ppid": 79122,
+        "start_epoch_s": 1789890602.0,
+        "start_identity": "Sun Sep 20 00:50:02 2026"
+      },
+      {
+        "command": "/usr/bin/powermetrics",
+        "cumulative_cpu_seconds": 0.69,
+        "pid": 79136,
+        "ppid": 79133,
+        "start_epoch_s": 1789890602.0,
+        "start_identity": "Sun Sep 20 00:50:02 2026"
+      }
+    ],
+    "stamps": {
+      "first_parse": {
+        "epoch_s": 1789890603.342087,
+        "monotonic_after_s": 112164.762803541,
+        "monotonic_before_s": 112164.762799291,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "post_parse": {
+        "epoch_s": 1789890603.895736,
+        "monotonic_after_s": 112165.316456708,
+        "monotonic_before_s": 112165.316453083,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "pre_spawn": {
+        "epoch_s": 1789890602.302128,
+        "monotonic_after_s": 112163.722836458,
+        "monotonic_before_s": 112163.7228355,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "sampling_started": {
+        "epoch_s": 1789890603.342141,
+        "monotonic_after_s": 112164.76285725,
+        "monotonic_before_s": 112164.76285675,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "sampling_stopped": {
+        "epoch_s": 1789890603.885229,
+        "monotonic_after_s": 112165.305949041,
+        "monotonic_before_s": 112165.3059485,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      }
+    },
+    "term_sent": true
+  },
+  "power_enabled": true,
+  "power_interval_ms": 100,
+  "powermetrics_identity": {
+    "path": "/usr/bin/powermetrics",
+    "sha256": "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5"
+  },
+  "powermetrics_needs_root": true,
+  "repeat": "1",
+  "round_workers": [
+    {
+      "argv": [],
+      "identities": [
+        {
+          "argv": [
+            "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python",
+            "-B",
+            "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/run_night.py",
+            "_bind-worker",
+            "--kind",
+            "census",
+            "--job-id",
+            "census-1",
+            "--result-fd",
+            "5",
+            "--request",
+            "{}"
+          ],
+          "pid": 79142,
+          "stamp": {
+            "epoch_s": 1789890603.563104,
+            "monotonic_after_s": 112164.983821791,
+            "monotonic_before_s": 112164.983820375,
+            "monotonic_resolution_s": 4.166666666666666e-08,
+            "wall_resolution_s": 1.0000000000000002e-06
+          },
+          "start_identity": "Sun Sep 20 00:50:03 2026"
+        },
+        {
+          "argv": [
+            "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/.venv/bin/python",
+            "-B",
+            "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1/scripts/run_night.py",
+            "_bind-worker",
+            "--kind",
+            "smoke-hard",
+            "--job-id",
+            "smoke-hard-2",
+            "--result-fd",
+            "7",
+            "--request",
+            "{}"
+          ],
+          "pid": 79143,
+          "stamp": {
+            "epoch_s": 1789890603.563127,
+            "monotonic_after_s": 112164.983844833,
+            "monotonic_before_s": 112164.983843791,
+            "monotonic_resolution_s": 4.166666666666666e-08,
+            "wall_resolution_s": 1.0000000000000002e-06
+          },
+          "start_identity": "Sun Sep 20 00:50:03 2026"
+        }
+      ],
+      "round": 1,
+      "workers": []
+    }
+  ],
+  "sample_interval_s": 30.0,
+  "scheduled_mono_s": 112163.404087708,
+  "schema": "joulewise.quiet_predicate_evidence.v1",
+  "session": "2448e68c-7ea5-450c-93db-1d22072a704f",
+  "start_drift_s": 0.3184247500030324,
+  "start_stamp": {
+    "epoch_s": 1789890602.301805,
+    "monotonic_after_s": 112163.722513625,
+    "monotonic_before_s": 112163.722512458,
+    "monotonic_resolution_s": 4.166666666666666e-08,
+    "wall_resolution_s": 1.0000000000000002e-06
+  },
+  "state": "idle",
+  "sudo_policy_probed": false,
+  "sw_vers": "ProductName:\t\tmacOS\nProductVersion:\t\t26.6.2\nBuildVersion:\t\t25G83",
+  "whole_envelope_observer_cpu_s": 1.343184,
+  "whole_envelope_observer_definition": "SELF + all reaped CHILDREN, including power recorder; never subtracted"
+}

@@ -1,0 +1,14 @@
+{"epoch_s": 1789890602.141172, "kind": "recorder", "pgid": 79121}
+{"epoch_s": 1789890602.147697, "kind": "collector", "pgid": 79122}
+{"epoch_s": 1789890602.311777, "kind": "power", "pgid": 79133}
+{"epoch_s": 1789890603.4540591, "kind": "sampler_or_probe", "pgid": 79142}
+{"epoch_s": 1789890603.455613, "kind": "sampler_or_probe", "pgid": 79143}
+{"epoch_s": 1789890603.5595431, "kind": "sampler_or_probe", "pgid": 79142}
+{"epoch_s": 1789890603.559568, "kind": "sampler_or_probe", "pgid": 79143}
+{"epoch_s": 1789890603.729967, "kind": "sampler_or_probe", "pgid": 79154}
+{"kind": "cleanup", "pgid": 79142, "state": "absent"}
+{"kind": "cleanup", "pgid": 79143, "state": "absent"}
+{"kind": "cleanup", "pgid": 79121, "state": "absent"}
+{"kind": "cleanup", "pgid": 79122, "state": "absent"}
+{"kind": "cleanup", "pgid": 79133, "state": "absent"}
+{"kind": "cleanup", "pgid": 79154, "state": "absent"}

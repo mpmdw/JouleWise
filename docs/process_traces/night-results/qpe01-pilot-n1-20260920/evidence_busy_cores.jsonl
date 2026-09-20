@@ -1,0 +1,1 @@
+{"admits_nothing": true, "error": "Command '('/usr/bin/top', '-l', '2', '-s', '30', '-n', '0')' died with <Signals.SIGTERM: 15>.", "evidence_status": "PROVISIONAL", "monotonic_end": 112165.157501208, "monotonic_start": 112163.8048675, "observation": null, "observer_cpu_s": 0.12368600000000002, "role": "covariate_only"}

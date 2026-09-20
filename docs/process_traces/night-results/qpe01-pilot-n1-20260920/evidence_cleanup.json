@@ -1,0 +1,15 @@
+{
+  "budget_s": 30,
+  "cleanup_proven": true,
+  "errors": [],
+  "groups": [
+    79121,
+    79122,
+    79133,
+    79142,
+    79143,
+    79154
+  ],
+  "residue": [],
+  "signal_errors": []
+}

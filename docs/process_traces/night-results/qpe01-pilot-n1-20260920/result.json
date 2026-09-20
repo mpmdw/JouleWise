@@ -1,0 +1,143 @@
+{
+  "aborted_reason": "night_aborted_agent_present",
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "fae1afbf6838a44bf031b60853c4f60e23f649886324fcd3b0cd163a3a52eb73"
+    },
+    {
+      "path": "night/receipt.json",
+      "sha256": "697d0b6dd4cd9f25dffff9c297c924b00ad4cacb5ab40563b89edda0ca33aac6"
+    },
+    {
+      "path": "night/refusal-01.json",
+      "sha256": "f9bfe65e2a8bd4a737bf5890d1f19b9603464339fe0df1a51821a0db8b62424a"
+    },
+    {
+      "path": "night/refusal.json",
+      "sha256": "9776f32c84cd98426bf5497e3f28c073f8f93a671720513e530d4a50aa210951"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "719627eda9f3bc377df985067fd09457b34468404eefa843a6d789b6a1bc3122"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "b70ea86692fb94c7fd3f099e0a46f6dd8163f804b4444ee30f59ef2293e1f5a8"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "649bc089ec0ece3c29dc622f54e08a5f7730abd9b2204be838f9a3d666dc0626"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "69953fdae96e7f29d11086aa603e387a0c8229e0c3dee4b38f1afcee818f42a2"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/evidence_busy_cores.jsonl",
+      "sha256": "95e0e475006073d5ffa95ce683f9364284277e2a2fe65a01a99d773bfb99c4c6"
+    },
+    {
+      "path": "night/evidence_processes.jsonl",
+      "sha256": "ee29e0c3af3a6b75c55f3fbe094e991c07d81deb065c57ad2e539bc3e908c87d"
+    },
+    {
+      "path": "night/evidence_cleanup.json",
+      "sha256": "7801d26ba7b4e45b1a4fc00545a382c01cceae64e4e4b819c8b99777349baaa4"
+    },
+    {
+      "path": "night/evidence_outcome.json",
+      "sha256": "787d118789bcb17256e84dc83d0ffc9355472234e7dab33d336da32033ae49e1"
+    },
+    {
+      "path": "night/evidence/summary.json",
+      "sha256": "59757748eee6a274200de1b508ac582ed4224ffc51b57bdeb32fcdf9e1e6f6fa"
+    },
+    {
+      "path": "night/evidence/summary.md",
+      "sha256": "18e589ba79cc249838bbcf36455449e0e11fe2dd053efac9ae7d6165d3dd3e6a"
+    },
+    {
+      "path": "night/evidence/envelope-01/rounds.jsonl",
+      "sha256": "e28c3e247fde6a30801e7a8b16d173104e57a76b212e537ac864c2594b674ce4"
+    },
+    {
+      "path": "night/evidence/envelope-01/session.json",
+      "sha256": "470679d8150052f77cb92df42a0ca94e48dbf2af5448f27d389f2f2ad60d6fab"
+    },
+    {
+      "path": "night/evidence/envelope-01/raw/powermetrics-idle-1.plist",
+      "sha256": "12386bff41a1e3908da65e4cabd006b9965d5bf2abe4a7b7e278e91bdf6657f9"
+    },
+    {
+      "path": "night/evidence/envelope-01/raw/powermetrics-idle-1.processes.txt",
+      "sha256": "860123c8ae27449fe12c6a91eb06b77fc2b507ff3f92c9033e91d23e94f674f3"
+    },
+    {
+      "path": "night/evidence/envelope-01/raw/powermetrics-idle-1.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/evidence/envelope-01/raw/round-0001/census-1-identity.json",
+      "sha256": "a78a55b9ee37de6580466922967df2dc6a60c9035d909c80754b6c1ad08eb12c"
+    },
+    {
+      "path": "night/evidence/envelope-01/raw/round-0001/smoke-hard-2-identity.json",
+      "sha256": "c152184aa68b7a4f76a29332025cbeed639df6214cd997b0798e2d44aa17ce36"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 21,
+  "census_hits": [
+    {
+      "argv": [
+        "/usr/bin/pgrep",
+        "-lf",
+        "codex|claude|t3"
+      ],
+      "exit_code": 0,
+      "monotonic_ns": 112165100416000,
+      "refusal": {
+        "detail": "pgrep exit 0; forbidden process output: 79146 /usr/bin/pgrep -lf codex|claude|t3",
+        "evidence": [
+          {
+            "argv": [
+              "/usr/bin/pgrep",
+              "-lf",
+              "codex|claude|t3"
+            ],
+            "exit_code": 0,
+            "monotonic_ns": 112165100416000,
+            "stderr": "",
+            "stdout": "79146 /usr/bin/pgrep -lf codex|claude|t3\n"
+          }
+        ],
+        "reason": "night_refused_agent_present"
+      },
+      "stderr": "",
+      "stdout": "79146 /usr/bin/pgrep -lf codex|claude|t3\n"
+    }
+  ],
+  "chain_exit_code": 2,
+  "chain_sha256": "570dba7ec7492e933f680db09e56aaad89a8efa50de761fa092a7cafe18b7705",
+  "ended_epoch_s": 1789890604.0865228,
+  "ended_monotonic_ns": 112165507244750,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "plan_id": "qpe01-pilot-n1-20260920",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal_documents": [
+    "night/refusal-01.json",
+    "night/refusal.json"
+  ],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1789890001.689644,
+  "started_monotonic_ns": 111563106107250,
+  "verdict": "ABORTED"
+}

@@ -1,0 +1,11 @@
+{
+  "plan_id": "qpe01-pilot-n1-20260920",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal": {
+    "detail": "evidence chain refused: InterruptedError: evidence chain signal 15",
+    "evidence": null,
+    "reason": "night_probe_error"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}

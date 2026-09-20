@@ -1,0 +1,22 @@
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111563105614208, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111563191542375, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111593363154833, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111623500834958, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111653633537125, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111683736640916, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111713883635708, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111743961328208, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111774111176833, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111804115874791, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111834214174500, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111864329085458, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111894332189541, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111924482037208, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111954632932166, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 111984707191500, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 112014817711916, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 112044965757000, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 112075014600583, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 112105057762625, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 112135055447250, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 0, "monotonic_ns": 112165100416000, "refusal": {"detail": "pgrep exit 0; forbidden process output: 79146 /usr/bin/pgrep -lf codex|claude|t3", "evidence": [{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 0, "monotonic_ns": 112165100416000, "stderr": "", "stdout": "79146 /usr/bin/pgrep -lf codex|claude|t3\n"}], "reason": "night_refused_agent_present"}, "stderr": "", "stdout": "79146 /usr/bin/pgrep -lf codex|claude|t3\n"}

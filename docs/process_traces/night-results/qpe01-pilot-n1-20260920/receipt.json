@@ -1,0 +1,101 @@
+{
+  "authored_monotonic_ns": 111563173088666,
+  "conditions": [
+    {
+      "basis": null,
+      "condition_id": "C1",
+      "evidence": [
+        "registration:configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json"
+      ],
+      "measured": {
+        "detail": "registration hash passed: QPE-01 idle-variance pilot protocol v1",
+        "registration_bound_chain_source_sha256": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
+        "registration_label": "QPE-01 idle-variance pilot protocol v1",
+        "registration_path": "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json",
+        "registration_ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b",
+        "registration_sha256": "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
+      },
+      "status": "PASS"
+    },
+    {
+      "basis": "no_pack_by_design",
+      "condition_id": "C2",
+      "evidence": [],
+      "measured": {},
+      "status": "NOT_APPLICABLE"
+    },
+    {
+      "basis": null,
+      "condition_id": "C3",
+      "evidence": [
+        "probe:/usr/bin/pgrep -lf codex|claude|t3",
+        "probe:/usr/bin/defaults -currentHost read com.apple.screensaver idleTime",
+        "probe:/usr/bin/pmset -g batt",
+        "probe:/usr/bin/pmset -g",
+        "probe:/usr/sbin/sysctl -n vm.loadavg",
+        "probe:/usr/bin/pmset -g therm"
+      ],
+      "measured": {
+        "ac_power_raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=23003235)\t80%; AC attached; not charging present: true\n",
+        "agent_census_exit_code": 1,
+        "agent_census_stdout": "",
+        "cpu_speed_limit": null,
+        "detail": "agent, HID, AC, display, load, and thermal predicates passed",
+        "displaysleep": "0",
+        "hid_idle_raw": "0\n",
+        "load_1m": 0.36,
+        "load_average_raw": "{ 0.36 0.74 1.11 }\n",
+        "pmset_g_raw": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            10\n sleep                0 (sleep prevented by powerd)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         0\n tcpkeepalive         1\n powermode            0\n womp                 1\n",
+        "thermal_raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "basis": null,
+      "condition_id": "C4",
+      "evidence": [
+        "probe:/usr/sbin/sysctl -n kern.bootsessionuuid",
+        "clock:epoch+monotonic"
+      ],
+      "measured": {
+        "boot_session_uuid": "cd5b815a-df9b-4fc7-921a-8e97d8aba867",
+        "clock_epoch_s": 1789890001.756624,
+        "clock_monotonic_ns": 111563173088666
+      },
+      "status": "PASS"
+    },
+    {
+      "basis": null,
+      "condition_id": "C5",
+      "evidence": [
+        "chain:/Users/edr/night-custody/qpe01-pilot-n1-20260920/chain.zsh",
+        "chain_sha256:/Users/edr/night-custody/qpe01-pilot-n1-20260920/chain.zsh.sha256",
+        "chain_source:cd10ce9d12f291070a0be77bc8c7768aa5e58ace:scripts/night_chains/quiet_predicate_evidence.zsh"
+      ],
+      "measured": {
+        "authored_epoch_s": 1789884874.0,
+        "chain_path": "/Users/edr/night-custody/qpe01-pilot-n1-20260920/chain.zsh",
+        "chain_sha256": "570dba7ec7492e933f680db09e56aaad89a8efa50de761fa092a7cafe18b7705",
+        "chain_sha256_path": "/Users/edr/night-custody/qpe01-pilot-n1-20260920/chain.zsh.sha256",
+        "chain_source_sha256": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
+        "detail": "window, plan freshness, measurement HEAD, and chain identity passed",
+        "driver_checkout_head": "cd10ce9d12f291070a0be77bc8c7768aa5e58ace",
+        "expected_chain_sha256": "570dba7ec7492e933f680db09e56aaad89a8efa50de761fa092a7cafe18b7705",
+        "measurement_checkout_head": "cd10ce9d12f291070a0be77bc8c7768aa5e58ace",
+        "measurement_root": "/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1",
+        "observed_epoch_s": 1789890001.690258,
+        "payload_kind": "quiet_predicate_evidence",
+        "plan_measurement_head": "cd10ce9d12f291070a0be77bc8c7768aa5e58ace",
+        "plan_repo_head": "cd10ce9d12f291070a0be77bc8c7768aa5e58ace",
+        "t0_epoch_s": 1789890000.0,
+        "window_max_s": 9000
+      },
+      "status": "PASS"
+    }
+  ],
+  "plan_id": "qpe01-pilot-n1-20260920",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "refusal": null,
+  "schema": "joulewise.unattended_night_receipt.v2",
+  "verdict": "GO"
+}
