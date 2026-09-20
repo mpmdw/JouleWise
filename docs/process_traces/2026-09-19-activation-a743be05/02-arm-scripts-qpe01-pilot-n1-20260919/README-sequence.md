@@ -92,7 +92,7 @@ exports in a child script do not persist in its parent.
    unaccepted `notice.json` template. Exit 0 means PREPARED ONLY. Re-running
    over an existing attempt stops; do not delete or overwrite attempt evidence.
 5. **Lead's manual Gmail call only:** after resolving the no-Git wording,
-   use the printed subject, recipient `claude.ai.copper531@passmail.net`, and
+   use the printed subject, recipient `claude2.glaring610@passmail.net`, and
    exact body file. None of these scripts sends mail. Preserve actual accepted
    body, plan digest/H, message id, thread id and acceptance epoch in
    `$ATTEMPT_DIR/notice-evidence.txt`. Fill `notice.json` from those observations:
@@ -224,7 +224,7 @@ can assign the repair separately or resume this seat with an explicit allowlist.
   a root to make the check pass. **Blocked work:** none in script preparation;
   an execution mismatch stops for the lead.
 - **Question:** Keep the template's notice recipient for QPE-01?
-  **Options:** use `claude.ai.copper531@passmail.net` or provide a different
+  **Options:** use `claude2.glaring610@passmail.net` or provide a different
   authorized destination. **Recommendation:** retain the bench-tested recipient
   unless the lead directs otherwise. **Blocked work:** none in preparation;
   the lead owns the actual Gmail call.

@@ -33,7 +33,7 @@ e=os.environ
 raw=Path(e["STAGED_PLAN"]).read_bytes(); p=json.loads(raw)
 assert raw==(Path(e["ATTEMPT_DIR"])/"plan.json").read_bytes()
 s=schedule(NightPlan.from_mapping(p)); t=p["t0_epoch_s"]
-print("To: claude.ai.copper531@passmail.net")
+print("To: claude2.glaring610@passmail.net")
 print(f'Subject: NIGHT NOTICE — {p["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt 1')
 print("\nEd,\n")
 print("Launch needs no action from you unless you reply NO. Your NO overrides.")
