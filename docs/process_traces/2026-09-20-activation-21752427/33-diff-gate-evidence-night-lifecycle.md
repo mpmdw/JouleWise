@@ -29,3 +29,5 @@ Final code head `789542c6` = `b678b1dc` (B1) + `472d12c5` (round 1, twelve closu
 
 ## §5 Hosted checks on the PR head (row 11)
 (filled before merge)
+
+Bench tail (12:30–12:42 PDT, final tree `789542c6`): `tests.test_run_night tests.test_sample_quiet_predicate_evidence tests.test_night_agent_install tests.test_axi_controller_events` → `Ran 370 tests in 752.845s OK`; `tests.test_evidence_night` under python3.11 → OK.
