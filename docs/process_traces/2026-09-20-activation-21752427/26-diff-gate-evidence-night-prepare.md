@@ -9,8 +9,16 @@ Design-level answers:
 - **Residual noted for slice B:** the never-invokes spy sees in-process `subprocess.run` only (record 24 R6); the real venv build is exercised only by the recipe test (offline); a crashed `prepare.tmp` wedges a staging dir for lead inspection (documented).
 Verdict of the diff gate: MERGE-able pending the delta re-audit (record 27) and replay (§2).
 
-## §2 Replay (row 9)
-(appended: full sharded replay at `8e3b8852` in the branch worktree, `replay-26/full-replay-8e3b8852.log`)
+## §2 Replay (row 9) — full sharded replay at `8e3b8852` in the branch worktree, untouched during the run (07:59–08:58 PDT; the delta auditor ran its own tests in a /tmp copy concurrently, so wall time exceeded record 12's)
+```
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/time -p …/.venv/bin/python -B scripts/shard_tests.py --workers 4 --split
+SHARD SUMMARY index=1/4 modules=61 tests=1815 failures=0 errors=0 skipped=76 result=PASS
+SHARD SUMMARY index=2/4 modules=62 tests=1658 failures=0 errors=0 skipped=5 result=PASS
+SHARD SUMMARY index=3/4 modules=62 tests=1712 failures=0 errors=0 skipped=20 result=PASS
+SHARD SUMMARY index=4/4 modules=63 tests=1452 failures=0 errors=0 skipped=2 result=PASS
+WORKERS SUMMARY shards=4 modules=248 tests=6637 failures=0 errors=0 skipped=103 failed_shards=none result=PASS
+```
+Log: `/tmp/magistrate-21752427/replay-26/full-replay-8e3b8852.log`. Round 2 (`f5013dd9`) is docs + tests only; its module re-run alone at the bench: `Ran 23 tests in 66.160s OK`.
 
 ## §3 Fix contract / same-signature (rows 3 and 5)
 Fix contract = brief 25 (dictated closures with counterfactual tests; ruling 25a for C4). Seat 25 proved each closure's test fails against the `bd17126b` module loaded in memory (15 failures + 1 error) and passes on the working tree (13 tests OK). Same-signature: the class "the entry point silently diverges from the bench procedure" (refuter 23) — every named divergence (F1 upper age bound, F3 st_dev, F4 zsh -n, F6 version/fetch) is closed by a check that executes the bench assertion; the delta re-audit rules on survivors.
