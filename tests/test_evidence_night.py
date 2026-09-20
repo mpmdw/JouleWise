@@ -178,6 +178,24 @@ class PrepareTests(unittest.TestCase):
         with self.assertRaisesRegex(entry.Refused, "published, invoked"):
             entry.prepare(**self.kw)
 
+    def test_b4_prepare_check_prepare(self):
+        from tests.test_arm_census import observation, row
+        state = entry.prepare(**self.kw)
+        resident = self.base_dir / "resident.json"
+        entry.saved_json(resident, {"resident_session": None})
+        def probes(argv, **kwargs):
+            if Path(str(argv[0])).name == "pgrep":
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return entry.probe_command(argv, **kwargs)
+        absent = dict(jobs=[], plists=[], listing=dict(exit_code=0))
+        with patch.object(entry, "night_agents", return_value=absent, create=True):
+            entry.check(candidate=state["staging"], canonical=state["measurement_root"],
+                supervisor_state=resident, runner=probes, caller_pid=90,
+                census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
+                lock_verifier=lambda root: None)
+        self.assertEqual(entry.prepare(**self.kw), state)
+        self.assertTrue((Path(state["staging"]) / "lifecycle/check.json").is_file())
+
     def test_cross_device_refused_before_clone(self):
         original = Path.stat
         custody_parent = Path(self.kw["roots_under"]) / "night-custody"
@@ -447,6 +465,18 @@ class PrepareTests(unittest.TestCase):
             entry.prepare(**self.kw)
 
 
+def enable_fake_list(fake):
+    """Extend the existing fake only in this fixture; no real launchctl."""
+    source = fake.executable.read_text()
+    source = source.replace('action = args[0]', """action = args[0]
+if action == 'list':
+    print('PID\tStatus\tLabel')
+    for marker in sorted(root.glob('*.loaded')):
+        print('-\t0\t' + marker.name[:-7])
+    sys.exit(0)""")
+    fake.executable.write_text(source)
+
+
 class LifecycleTests(unittest.TestCase):
     """Real fixture Git/reflog and sealed bytes; no host process observation."""
 
@@ -462,6 +492,13 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / ".gitignore").write_text(".venv/\n")
         (self.canonical / "env").mkdir()
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
+        (self.canonical / "joulewise").mkdir()
+        (self.canonical / "joulewise/__init__.py").write_text("")
+        for name in ("night_gate.py", "arm_census.py", "quiet_guard_process.py", "night_agent_install.py"):
+            shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
+        if self._testMethodName == "test_b6_clone_old_census_literal_is_reported":
+            gate = self.canonical / "joulewise/night_gate.py"
+            gate.write_text(gate.read_text().replace("[c]odex|[c]laude|[t]3", "codex|claude|t3"))
         self.arrival = int(time.time()) - 1000
         self.old = self.commit("old", self.arrival - 100)
         self.head = self.commit("fix", self.arrival)
@@ -474,6 +511,7 @@ class LifecycleTests(unittest.TestCase):
         self.root.parent.mkdir(parents=True)
         subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(self.canonical), str(self.root)], check=True)
         subprocess.run(["git", "-C", str(self.root), "checkout", "-q", "--detach", self.head], check=True)
+        PrepareTests.fake_builder(self.root)
         self.stage.mkdir(parents=True)
         self.custody.mkdir(parents=True)
         (self.stage / "render").mkdir()
@@ -495,6 +533,11 @@ class LifecycleTests(unittest.TestCase):
             interpreter={"fixture": True}, steps=[dict(step=s) for s in entry.STEPS],
             digests={str(p): entry.digest(p) for p in files})
         entry.saved_json(self.stage / "prepare.json", self.state)
+        self.absent_agents = dict(jobs=[dict(label=label, liveness="ABSENT") for label in
+            ("com.joulewise.night", "com.joulewise.night.deadman")], plists=[], listing=dict(exit_code=0))
+        self.agent_probe = patch.object(entry, "night_agents", return_value=self.absent_agents, create=True)
+        self.agent_probe.start()
+        self.addCleanup(self.agent_probe.stop)
         self.resident = self.base / "state.json"
         entry.saved_json(self.resident, {"resident_session": None})
         self.fixture = observation(row(20, 1, "/bin/claude"), row(90, 20, "/bin/python3"), hits=(20,))
@@ -540,7 +583,7 @@ class LifecycleTests(unittest.TestCase):
         if fail:
             with self.assertRaisesRegex(entry.Refused, fail):
                 entry.check(**self.kw)
-            return json.loads((self.stage / "check.json").read_text())
+            return json.loads((self.stage / "lifecycle/check.json").read_text())
         return entry.check(**self.kw)
 
     def test_check_passes_and_writes_only_check_json(self):
@@ -550,7 +593,8 @@ class LifecycleTests(unittest.TestCase):
         record = self.checked()
         after = snapshot()
         self.assertTrue(record["armable"])
-        self.assertEqual(set(after) - set(before), {str(self.stage / "check.json")})
+        self.assertEqual(set(after) - set(before), {str(self.stage / "lifecycle/check.json"),
+            str(self.stage.parent / ".locks" / (self.stage.name + ".lock"))})
         self.assertEqual(before, {p: after[p] for p in before})
         self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
@@ -656,19 +700,19 @@ class LifecycleTests(unittest.TestCase):
 
     def publish(self, **kwargs):
         return entry.publish_install(candidate=self.stage, notice_accepted="message verbatim ",
-                                     launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None, **kwargs)
+                                     lock_verifier=lambda root: None, **kwargs)
 
     def test_publish_requires_check_armable_freshness_notice_and_sealed_bytes(self):
         with self.assertRaisesRegex(entry.Refused, "check.json"):
             self.publish()
         record = self.checked()
         record["armable"] = False
-        entry.saved_json(self.stage / "check.json", record)
+        entry.saved_json(self.stage / "lifecycle/check.json", record)
         with self.assertRaisesRegex(entry.Refused, "armable"):
             self.publish()
         self.checked()
         with self.assertRaisesRegex(entry.Refused, "notice acceptance"):
-            entry.publish_install(candidate=self.stage)
+            entry.publish_install(candidate=self.stage, lock_verifier=lambda root: None)
         os.utime(self.plan, ns=(time.time_ns(), time.time_ns()))
         with self.assertRaisesRegex(entry.Refused, "newer"):
             self.publish()
@@ -681,7 +725,7 @@ class LifecycleTests(unittest.TestCase):
             self.publish()
         self.assertFalse((self.custody / "night_plan.json").exists())
 
-    def test_post_publication_failure_uninstalls_before_matching_byte_restore(self):
+    def test_probe_refusal_preserves_jobs_before_matching_byte_restore(self):
         self.checked()
         raw = self.plan.read_bytes()
         calls = []
@@ -692,13 +736,14 @@ class LifecycleTests(unittest.TestCase):
             return subprocess.CompletedProcess(argv, 0 if "--uninstall" in argv else 2, "", "fixture refusal")
         with self.assertRaisesRegex(entry.Refused, "installer --launchd-probe failed"):
             self.publish(runner=fail)
-        self.assertIn("--uninstall", calls[-1])
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("--uninstall", calls[0])
         self.assertEqual(self.plan.read_bytes(), raw)
         self.assertFalse((self.custody / "night_plan.json").exists())
-        record = json.loads((self.stage / "install.json").read_text())
+        record = json.loads((self.stage / "lifecycle/install.json").read_text())
         self.assertEqual(record["outcome"], "restored_unpublished")
         self.assertEqual(record["notice_accepted"], "message verbatim ")
-        self.assertEqual([c["exit_code"] for c in record["commands"]], [2, 0])
+        self.assertEqual([c["exit_code"] for c in record["commands"]], [2])
         self.checked("retry")  # Bare nonzero is never silently arm_transport.
 
     def test_nonzero_cleanup_or_changed_bytes_preserves_published_state(self):
@@ -710,17 +755,19 @@ class LifecycleTests(unittest.TestCase):
                         if mode == "changed":
                             (self.custody / "night_plan.json").write_text("changed")
                         return subprocess.CompletedProcess(argv, 1 if mode == "nonzero" else 0, "", "")
-                    return subprocess.CompletedProcess(argv, 2, "", "failed")
-                with self.assertRaisesRegex(entry.Refused, "retained state"):
+                    if "--launchd-probe" in argv:
+                        (self.custody / "night_probe_receipt.json").write_text("fixture receipt")
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                with patch.object(entry, "verify_state", side_effect=entry.Refused("verify failed")), self.assertRaisesRegex(entry.Refused, "retained state"):
                     self.publish(runner=failure)
                 self.assertTrue((self.custody / "night_plan.json").exists())
                 self.assertFalse(self.plan.exists())
-                self.assertEqual(json.loads((self.stage / "install.json").read_text())["outcome"], "retained")
+                self.assertEqual(json.loads((self.stage / "lifecycle/install.json").read_text())["outcome"], "retained")
                 # Fixture reset only, never a production remedy.
                 (self.custody / "night_plan.json").unlink()
-                attempt = next((self.stage / "arm-attempts").iterdir())
+                attempt = next((self.stage / "lifecycle/arm-attempts").iterdir())
                 self.plan.write_bytes((attempt / "plan.json").read_bytes())
-                shutil.rmtree(self.stage / "arm-attempts")
+                shutil.rmtree(self.stage / "lifecycle/arm-attempts")
 
     def test_verify_failure_and_unexpected_defect_both_recover(self):
         for exception in (entry.Refused("calendar differs"), RuntimeError("defect")):
@@ -739,10 +786,10 @@ class LifecycleTests(unittest.TestCase):
                 self.assertIn("--launchd-probe", calls[0])
                 self.assertNotIn("--launchd-probe", calls[1])
                 self.assertIn("--uninstall", calls[2])
-                self.assertEqual(json.loads((self.stage / "install.json").read_text())["outcome"], "restored_unpublished")
-                shutil.rmtree(self.stage / "arm-attempts")
+                self.assertEqual(json.loads((self.stage / "lifecycle/install.json").read_text())["outcome"], "restored_unpublished")
+                shutil.rmtree(self.stage / "lifecycle/arm-attempts")
 
-    def test_exception_immediately_after_atomic_move_still_uninstalls(self):
+    def test_exception_immediately_after_atomic_move_preserves_jobs(self):
         self.checked()
         original = os.replace
         calls = []
@@ -758,7 +805,7 @@ class LifecycleTests(unittest.TestCase):
         with patch.object(entry.os, "replace", side_effect=interrupted):
             with self.assertRaisesRegex(RuntimeError, "lost publication"):
                 self.publish(runner=cleanup)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 0)
         self.assertTrue(self.plan.exists())
         self.assertFalse((self.custody / "night_plan.json").exists())
 
@@ -807,7 +854,250 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("--uninstall", calls[0])
         self.assertNotIn("--python", calls[0])
         self.assertEqual(published.read_bytes(), before)
-        self.assertEqual(json.loads((self.stage / "uninstall.json").read_text())[0]["exit_code"], 7)
+        self.assertEqual(json.loads((self.stage / "lifecycle/uninstall.json").read_text())[0]["exit_code"], 7)
+
+    def journal(self, name):
+        """Find the actual layout, also when replaying against b678b1dc."""
+        base = self.stage / "lifecycle" if (self.stage / "lifecycle").exists() else self.stage
+        return base / name
+
+    def test_b1_check_rejects_foreign_jobs_plists_and_unknown(self):
+        for mode in ("LOADED", "UNKNOWN", "plists"):
+            evidence = json.loads(json.dumps(self.absent_agents))
+            if mode == "plists":
+                evidence["plists"] = [str(self.base / (j["label"] + ".plist")) for j in evidence["jobs"]]
+            else:
+                for job in evidence["jobs"]:
+                    job["liveness"] = mode
+            with self.subTest(mode=mode), patch.object(entry, "night_agents", return_value=evidence, create=True):
+                with self.assertRaisesRegex(entry.Refused, "^night agents already loaded or plists present:"):
+                    entry.check(**self.kw)
+
+    def test_night_agent_gate_uses_typed_fake_liveness_and_plist_paths(self):
+        from tests.test_night_agent_install import FakeLaunchctl, LABELS
+        self.agent_probe.stop()
+        fake = FakeLaunchctl(self.base / "fake")
+        enable_fake_list(fake)
+        home = self.base / "home"
+        plists = home / "Library/LaunchAgents"
+        plists.mkdir(parents=True)
+        for label in LABELS:
+            fake.set_loaded(label, True)
+            (plists / (label + ".plist")).write_text("foreign plist")
+        before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in plists.iterdir()}
+        with patch.dict(os.environ, HOME=str(home)):
+            with self.assertRaisesRegex(entry.Refused, "night agents already loaded or plists present"):
+                entry.check(**dict(self.kw, launchctl_bin=str(fake.executable)))
+            self.assertEqual(before, {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in plists.iterdir()})
+            self.assertTrue(all(fake.loaded(label) for label in LABELS))
+            for label in LABELS:
+                fake.set_loaded(label, False)
+                (plists / (label + ".plist")).unlink()
+            sidecar = plists / (LABELS[0] + ".plist.prior")
+            sidecar.write_text("retained prior")
+            with self.assertRaisesRegex(entry.Refused, "plist.prior"):
+                entry.check(**dict(self.kw, launchctl_bin=str(fake.executable)))
+            sidecar.unlink()
+            probe = "com.joulewise.night-probe.foreign"
+            fake.set_loaded(probe, True)
+            with self.assertRaisesRegex(entry.Refused, probe):
+                entry.check(**dict(self.kw, launchctl_bin=str(fake.executable)))
+            fake.set_loaded(probe, False)
+            fake.directive(LABELS[0], "print", fault=9)
+            with self.assertRaisesRegex(entry.Refused, "UNKNOWN"):
+                entry.check(**dict(self.kw, launchctl_bin=str(fake.executable)))
+        self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))
+
+    def test_b1_rechecks_before_publication(self):
+        self.checked()
+        evidence = dict(self.absent_agents, plists=["foreign.plist"])
+        with patch.object(entry, "night_agents", return_value=evidence, create=True):
+            with self.assertRaisesRegex(entry.Refused, "night agents already loaded or plists present"):
+                self.publish(runner=lambda *a, **kw: self.fail("installer reached"))
+        self.assertTrue(self.plan.exists())
+
+    def test_b1_foreign_jobs_preserved_after_installer_refusal(self):
+        self.checked()
+        foreign = self.base / "foreign"
+        foreign.mkdir()
+        paths = []
+        for job in self.absent_agents["jobs"]:
+            for suffix in (".plist", ".loaded"):
+                path = foreign / (job["label"] + suffix)
+                path.write_bytes(b"foreign state")
+                paths.append(path)
+        before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in paths}
+        calls = []
+        def refused(argv, **kwargs):
+            calls.append(argv)
+            if "--uninstall" in argv:
+                for path in paths:
+                    path.unlink()
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            if "--launchd-probe" in argv:
+                (self.custody / "night_probe_receipt.json").write_text("fixture receipt")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            return subprocess.CompletedProcess(argv, 3, "", "night_agent_already_loaded: fixture foreign job")
+        # Force past both gates to reproduce the installer admission race.
+        evidence = dict(jobs=[dict(j, liveness="LOADED") for j in self.absent_agents["jobs"]],
+                        plists=[str(p) for p in paths if p.suffix == ".plist"], listing=dict(exit_code=0))
+        with patch.object(entry, "night_agents", return_value=evidence, create=True), \
+                patch.object(entry, "require_no_night_agents", create=True):
+            with self.assertRaisesRegex(entry.Refused, "night_agent_already_loaded"):
+                self.publish(runner=refused)
+        self.assertFalse(any("--uninstall" in c for c in calls))
+        self.assertEqual(before, {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in paths})
+        self.assertTrue(self.plan.exists())
+        self.assertFalse((self.custody / "night_plan.json").exists())
+        record = json.loads(self.journal("install.json").read_text())
+        self.assertEqual(record["recovery"], "foreign_jobs_preserved")
+        self.assertEqual(record["pre_publication"], evidence)
+        self.assertEqual(record["cause"], "night_agent_already_loaded")
+
+    def test_b2_malformed_uninstall_has_no_mutation(self):
+        self.checked()
+        path = self.journal("uninstall.json")
+        for content in ("{", "{}", '[{"exit_code":0}]'):
+            path.write_text(content)
+            before = {p: p.read_bytes() for p in self.base.rglob("*") if p.is_file()}
+            calls = []
+            def runner(argv, **kwargs):
+                calls.append(argv)
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            with self.subTest(content=content), self.assertRaisesRegex(entry.Refused, "^malformed uninstall journal$"):
+                entry.uninstall(candidate=self.stage, runner=runner)
+            self.assertEqual(calls, [])
+            self.assertEqual(before, {p: p.read_bytes() for p in self.base.rglob("*") if p.is_file()})
+
+    def test_b3_unresolved_raw_pid_reobserved_once(self):
+        self.raw = subprocess.CompletedProcess([], 0, "456 /bin/claude foreign-session\n", "")
+        with patch.dict(self.kw, census_observer=unittest.mock.Mock(return_value=self.fixture)):
+            with self.assertRaisesRegex(entry.Refused, "^unresolved raw census hit pid 456$"):
+                entry.check(**self.kw)
+            self.assertEqual(self.kw["census_observer"].call_count, 2)
+
+    def test_b5_atomic_json_preserves_previous_record_on_failure(self):
+        path = self.stage / "record.json"
+        path.write_text('{"old":true}\n')
+        original = path.read_bytes()
+        with patch.object(entry.json, "dump", side_effect=RuntimeError("encode")), \
+                patch.object(entry.json, "dumps", side_effect=RuntimeError("encode")):
+            with self.assertRaisesRegex(RuntimeError, "encode"):
+                entry.saved_json(path, {"new": True})
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_b5_publishing_journal_precedes_plan_move(self):
+        self.checked()
+        original = os.replace
+        seen = []
+        def replace(source, target):
+            if source == self.plan:
+                record = json.loads(self.journal("install.json").read_text())
+                self.assertEqual(record["phase"], "publishing")
+                self.assertEqual(json.loads((Path(record["attempt_path"]) / "install.json").read_text()), record)
+                self.assertEqual((Path(record["attempt_path"]) / "plan.json").read_bytes(), self.plan.read_bytes())
+                seen.append(record)
+            return original(source, target)
+        with patch.object(entry.os, "replace", side_effect=replace):
+            with self.assertRaisesRegex(entry.Refused, "installer --launchd-probe failed"):
+                self.publish(runner=lambda argv, **kw: subprocess.CompletedProcess(argv, 2, "", "refused"))
+        self.assertEqual(len(seen), 1)
+
+    def test_b6_clone_old_census_literal_is_reported(self):
+        with patch.object(entry, "CENSUS_FIX", self.tip):
+            with self.assertRaisesRegex(entry.Refused, "canonical"):
+                entry.check(**self.kw)
+        record = json.loads(self.journal("check.json").read_text())
+        self.assertIn("census fix", record["checks"]["canonical"]["reason"])
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "codex|claude|t3")
+
+    def test_b6_classification_runs_inside_clone(self):
+        original = entry.run
+        executions = []
+        def spy(argv, **kwargs):
+            if "-c" in argv and "classify_arm_census" in str(argv[argv.index("-c") + 1]):
+                executions.append((argv, kwargs))
+            return original(argv, **kwargs)
+        with patch.object(entry, "run", side_effect=spy):
+            record = self.checked()
+        self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
+        self.assertTrue(executions)
+        self.assertTrue(all(argv[:3] == [self.root / ".venv/bin/python", "-B", "-c"] and
+                            kw["cwd"] == self.root for argv, kw in executions))
+
+    def test_b7_notice_reuse_across_same_day_candidates(self):
+        self.checked()
+        for base in (self.stage, self.stage.with_name(self.stage.name + "-other")):
+            attempt = base / "lifecycle/arm-attempts/000001"
+            attempt.mkdir(parents=True, exist_ok=True)
+            entry.saved_json(attempt / "install.json", {"notice_accepted": "message verbatim "})
+            with self.subTest(base=base), self.assertRaisesRegex(entry.Refused, "notice id already used by attempt"):
+                self.publish(runner=lambda *a, **kw: self.fail("reused notice reached installer"))
+            shutil.rmtree(base / "lifecycle/arm-attempts")
+
+    def test_b8_fake_check_cannot_authorize_real_arm(self):
+        # Calling through the CLI also proves check exposes the same fake seam.
+        original = entry.check
+        def checked(**kwargs):
+            return original(**dict(self.kw, launchctl_bin=kwargs["launchctl_bin"]))
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(entry, "check", side_effect=checked), contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            self.assertEqual(entry.main(["check", "--candidate", str(self.stage), "--launchctl-bin", "/fixture/fake"]), 0, errors.getvalue())
+        record = json.loads(output.getvalue())
+        self.assertFalse(record["armable"])
+        self.assertTrue(record["fake_launchctl"])
+        self.assertTrue(record["rehearsal_ready"])
+        with self.assertRaisesRegex(entry.Refused, "not armable"):
+            self.publish(runner=lambda *a, **kw: self.fail("real installer invoked"))
+
+    def test_b8_verify_records_launchctl_provenance(self):
+        os.replace(self.plan, self.custody / "night_plan.json")
+        original = entry.run
+        def run(argv, **kwargs):
+            if "-c" in argv and "LaunchctlAdapter" in str(argv[argv.index("-c") + 1]):
+                return "[]"
+            return original(argv, **kwargs)
+        with patch.object(entry, "run", side_effect=run):
+            record = entry.verify(candidate=self.stage, launchctl_bin="/fixture/fake", lock_verifier=lambda root: None)
+        self.assertEqual(record["launchctl_bin"], "/fixture/fake")
+        self.assertTrue(record["fake_launchctl"])
+
+    def test_b9_second_publication_is_refusal_not_error(self):
+        self.checked()
+        os.replace(self.plan, self.custody / "night_plan.json")
+        original = entry.publish_install
+        with patch.object(entry, "publish_install", side_effect=lambda **kw: original(**kw, lock_verifier=lambda root: None)), \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(entry.main(["publish-install", "--candidate", str(self.stage), "--notice-accepted", "new-id"]), 2)
+        self.assertTrue(errors.getvalue().startswith("REFUSED:"))
+
+    def test_b10_prepare_lock_excludes_lifecycle(self):
+        with entry.staging_lock(self.stage.parent, self.stage.name):
+            with self.assertRaisesRegex(entry.Refused, "concurrent"):
+                entry.check(**self.kw)
+        self.assertFalse(self.journal("check.json").exists())
+
+    def test_b11_check_age_bound_and_cause_recorded(self):
+        self.checked()
+        path = self.journal("check.json")
+        record = json.loads(path.read_text())
+        record["finished_epoch_s"] = time.time() - 3601
+        entry.saved_json(path, record)
+        with self.assertRaisesRegex(entry.Refused, "older than 60 minutes"):
+            self.publish(runner=lambda *a, **kw: self.fail("stale check reached installer"))
+        self.checked()
+        with self.assertRaisesRegex(entry.Refused, "install_span_closed"):
+            self.publish(runner=lambda argv, **kw: subprocess.CompletedProcess(argv, 2, "", "install_span_closed: fixture"))
+        self.assertEqual(json.loads(self.journal("install.json").read_text())["cause"], "install_span_closed")
+
+    def test_b12_retained_plan_must_be_regular(self):
+        root = self.custody.parent / "retained"
+        (root / "night").mkdir(parents=True)
+        (root / "night/result.json").write_text("{}")
+        (root / "night_plan.json").mkdir()
+        with self.assertRaisesRegex(entry.Refused, "retained_roots"):
+            entry.check(**self.kw)
+        self.assertTrue((root / "night_plan.json").is_dir())
 
 
 @unittest.skipUnless(Path('/bin/zsh').is_file(), 'real installer requires zsh')
@@ -830,6 +1120,7 @@ class LifecycleCompositionTests(unittest.TestCase):
         base = Path(temp.name).resolve()
         home = base / "home"
         fake = FakeLaunchctl(base / "fake")
+        enable_fake_list(fake)
         canonical = base / "canonical"
         subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(self.remote), str(canonical)], check=True)
         resident = base / "resident.json"
@@ -875,11 +1166,12 @@ os.execv(sys.executable,[sys.executable,*args])
                 builder=builder, lock_verifier=lambda root: None)
             stage, custody = Path(state["staging"]), Path(state["custody_root"])
             checked = entry.check(candidate=stage, canonical=canonical, supervisor_state=resident,
-                runner=probes, caller_pid=90, census_observer=lambda **kw: observation(
+                launchctl_bin=str(fake.executable), runner=probes, caller_pid=90, census_observer=lambda **kw: observation(
                     row(20, 1, "/bin/claude"), row(90, 20, "/bin/python3"), hits=(20,)),
                 lock_verifier=lambda root: None)
-            self.assertTrue(checked["armable"])
-            self.assertFalse(fake.calls(), "prepare + check invoked launchctl")
+            self.assertFalse(checked["armable"])
+            self.assertTrue(checked["rehearsal_ready"])
+            self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))
             self.assertFalse(any("--launchctl-bin" in c for c in calls))
             published = custody / "night_plan.json"
             raw = (stage / "night_plan.json").read_bytes()
@@ -905,12 +1197,17 @@ os.execv(sys.executable,[sys.executable,*args])
                 return entry.probe_command(argv, **kwargs)
             installed = entry.publish_install(candidate=stage, notice_accepted="gmail-fixture-id",
                 launchctl_bin=str(fake.executable), runner=real_installer, lock_verifier=lambda root: None)
-            self.assertEqual(installed["outcome"], "installed")
+            self.assertEqual(installed["outcome"], "rehearsal_installed")
+            self.assertFalse(installed["installed"])
+            self.assertTrue(installed["fake_launchctl"])
+            self.assertEqual(installed["launchctl_bin"], str(fake.executable))
             self.assertEqual([c["exit_code"] for c in installed["commands"]], [0, 0])
             self.assertEqual(installed["probe_receipt_sha256"], entry.digest(custody / "night_probe_receipt.json"))
             self.assertEqual(installed["verification"]["request_epoch_s"], state["schedule"]["boundaries"]["REQUEST / exit BEFORE"])
             self.assertTrue(all(fake.loaded(label) for label in LABELS))
             verified = entry.verify(candidate=stage, launchctl_bin=str(fake.executable), lock_verifier=lambda root: None)
+            self.assertTrue(verified["fake_launchctl"])
+            self.assertEqual(verified["launchctl_bin"], str(fake.executable))
             self.assertEqual([j["calendar"] for j in verified["jobs"]],
                              [state["schedule"]["night_calendar"], state["schedule"]["deadman_calendar"]])
             self.assertEqual([j["label"] for j in verified["jobs"]], list(LABELS))
