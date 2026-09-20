@@ -45,7 +45,7 @@ class EvidenceFixture:
         self.head = git("rev-parse", "HEAD")
         self.custody = self.root / "custody"
         self.custody.mkdir()
-        self.plan_path = self.custody / "plan.json"
+        self.plan_path = self.custody / "night_plan.json"
         self.plan = replace(make_plan(), plan_id="qpe-fixture", repo_head=self.head,
             measurement_root=str(self.repo), measurement_head=self.head,
             custody_root=str(self.custody), chain_path=str(self.custody / "chain.zsh"),
@@ -80,6 +80,15 @@ class EvidenceGeneratorTests(unittest.TestCase):
         if Path("/bin/zsh").is_file():
             subprocess.run(["/bin/zsh", "-n", str(wrapper)], check=True)
         self.assertFalse((self.f.custody / "night").exists())
+
+    def test_relative_custody_root_refuses_at_the_desk(self):
+        # Opus 90 S2: a relative custody root would seal a relative plan path.
+        from scripts.gen_derivation_night import GenerationRefusal
+        self.f.plan = replace(self.f.plan, custody_root=os.path.relpath(self.f.custody))
+        self.f.write_plan()
+        with self.assertRaisesRegex(GenerationRefusal, "night custody root must be an absolute path"):
+            generator.generate(self.f.plan_path)
+        self.assertFalse(Path(self.f.plan.chain_path).exists())
 
     def test_wrong_class_v4_and_frozen_window_refuse(self):
         from tests.test_quiet_admission import POLICY
@@ -127,6 +136,24 @@ class EvidenceGeneratorTests(unittest.TestCase):
         generator.generate(self.f.plan_path)
         with self.assertRaisesRegex(generator.GenerationRefusal, "exists"):
             generator.generate(self.f.plan_path)
+
+    def test_staged_and_published_plan_render_identical_bytes(self):
+        staged = self.f.root / "staging" / "night_plan.json"
+        staged.parent.mkdir()
+        os.replace(self.f.plan_path, staged)
+        wrapper = generator.generate(staged)
+        artifacts = (wrapper, Path(self.f.plan.chain_sha256_path),
+                     wrapper.with_name("evidence_manifest.json"),
+                     Path(str(wrapper) + ".chain-source.sha256"))
+        staged_bytes = {path: path.read_bytes() for path in artifacts}
+        self.assertEqual(night_gate.chain_literal(wrapper.read_text(), "EVIDENCE_PLAN_PATH"),
+                         str(self.f.plan_path))
+        self.assertFalse(self.f.plan_path.exists())
+        os.replace(staged, self.f.plan_path)
+        for path in artifacts:
+            path.unlink()
+        generator.generate(self.f.plan_path)
+        self.assertEqual({path: path.read_bytes() for path in artifacts}, staged_bytes)
 
     def test_protocol_reread_mutation_refuses_before_execute(self):
         generator.generate(self.f.plan_path)

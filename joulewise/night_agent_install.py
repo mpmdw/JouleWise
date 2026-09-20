@@ -894,7 +894,15 @@ def evidence_probe_bindings(plan, plan_path, python):
     if not tokens or tokens[0] != sha or len(tokens) > 2 or (len(tokens) == 2 and tokens[1] != chain.name):
         raise ValueError("chain_sha256 mismatch")
     manifest_path, manifest, manifest_sha = verify_manifest(plan, chain.read_text())
-    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(Path(plan_path).absolute()):
+    # The sealed literal is content-derived (never resolved: wrapper bytes must
+    # not depend on filesystem state); file IDENTITY is compared resolved, as
+    # Prepared.admit does, so an aliased or symlinked custody root (/tmp vs
+    # /private/tmp) cannot make the two guards mutually unsatisfiable (Opus 90
+    # S1 / refuter 89 R1).
+    published_plan_path = Path(plan.custody_root) / "night_plan.json"
+    if Path(plan_path).resolve() != published_plan_path.resolve():
+        raise ValueError("evidence plan not at its published path")
+    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(published_plan_path):
         raise ValueError("evidence plan path mismatch")
     registration_sha = manifest["files"][PROTOCOL_PATH]
     ruled = night_gate.RULED_REGISTRATIONS.get(registration_sha)
