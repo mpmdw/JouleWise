@@ -56,7 +56,9 @@ These summaries are PROVISIONAL descriptions. You have no scientific decision
 authority: do not select a cutoff, invent a confidence method, authorize block
 two, reinterpret exclusions, or turn a successful probe into capture authority.
 
-Email Ed at claude.ai.copper531@passmail.net. Use plain words. State the
+Email Ed at claude2.glaring610@passmail.net, that ONE address only (no cc to
+any other alias: both aliases forward to the same inbox, so a cc delivers
+every notice twice — Ed, 2026-09-19). Use plain words. State the
 verdict, the chain exit code, any refusal reason and detail, and the results
 branch name `night-results/<plan_id>` (updated 2026-09-15,
 INSTALL-WINDOWS-MULTI-01: one branch per plan). After the email is accepted, write
