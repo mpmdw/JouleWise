@@ -6919,36 +6919,6 @@
       "status": "partial",
       "stop_card": null
     },
-    "STAGE-A-EVIDENCE-EXECUTOR-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/ (independent adjudication packet for the unattended evidence executor)",
-          "docs/process_traces/2026-09-19-activation-d0b83820/10a-adjudication-stage-a-executor.md (project lead's synthesis of the executor rulings)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/STAGE-A-EVIDENCE-EXECUTOR-01/acceptance",
-          "label": "STAGE-A-EVIDENCE-EXECUTOR-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The executor implements the adjudicated registration table, chain-source binding, typed evidence probe and single-export dispatch, authoring tool, and both contract amendments without changing the version-2 diagnostic-plan schema. The frozen pilot uses twelve 600 s envelopes with 480 s interiors, δ = 1 J, and block-two sizing from the upper 90% confidence bound on paired spread; it preserves the pre-registered \"no cutoff qualifies\" branch. Complete contract and execution refutation reviews, re-audit the resulting changes, obtain an independent counter-review, replay the full tests, and submit a pull request before pilot night one under the night handoff contract. Quiet-machine collection remains lead-controlled with no agent session active."
-      },
-      "authority": {
-        "label": "2026-09-19 afternoon registration by the project lead",
-        "path": "docs/process_traces/2026-09-19-activation-d0b83820/57-brief-kernel-registration-2.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Build an unattended executor for Stage A, the initial evidence campaign that will derive the night gate's quiet-admission cutoff: the maximum busy-core level at which an unattended measurement may start. Busy cores are busy processor seconds per elapsed second; 1.0 means one fully busy core. No ruling has activated this threshold. The cold gate, an independent adjudication, ruled a separate evidence payload (the program run overnight) under the unchanged version-2 diagnostic plan. Implement a ruled-registration table in the night gate, keyed by a digest (a cryptographic content hash) and bound to the chain-source digest, the hash of the tracked execution-script template. Add a typed evidence probe receipt, a structured record of verification without measurement, dispatched by one `NIGHT_PAYLOAD_KIND` environment-variable export; amend `docs/process/NIGHT_HANDBACK.md`, the night handoff contract, and the runbook's verify-only probe row. Add the authoring tool `scripts/gen_evidence_night.py` and freeze the idle-only pilot protocol before collection: twelve 600 s envelopes (scheduled measurement intervals), each with a 480 s interior used for analysis; delta (δ), the target energy difference, is 1 joule (J). Size block two, the follow-up measurement block, from the upper confidence bound on the paired spread, the variability of paired energy differences. Pre-register the branch that concludes \"no cutoff qualifies\".",
-      "id": "STAGE-A-EVIDENCE-EXECUTOR-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 248,
-      "status": "active",
-      "status_note": "2026-09-19 afternoon — ACTIVE [AGENT] for implementation on `feat/2026-09-19-stage-a-evidence-executor`: parts 1–2 landed on that branch; part 3 implements the sizing statistic. Next: contract and execution refutation reviews, re-audit of the changes, independent counter-review, full test replay, pull request, then pilot night one under `docs/process/NIGHT_HANDBACK.md`, the night handoff contract. The pilot requires a quiet machine with no agent session.",
-      "stop_card": null
-    },
     "SUPERSESSION-CHAINED-RECOVERY-01": {
       "acceptance": {
         "evidence": [
