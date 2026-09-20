@@ -607,7 +607,11 @@ else:
         self.assertEqual(len([c for c in calls if c["name"] == "python3"]), 3)
         result, calls, log = self.run_chain(fail="d02")
         self.assertEqual(result.returncode, 7)
-        self.assertNotIn("d03", str(calls))
+        # Same rule as test_window_exhausted…: assert on slot ids, never on the
+        # argv string (random temp names can contain "d03").
+        self.assertNotIn("d03", [call["args"][call["args"].index("--slot") + 1]
+                                 for call in calls
+                                 if call["name"] == "python3" and "--slot" in call["args"]])
         # A refused capture stops the chain; it never aborts or retries in-window.
         self.assertNotIn("abort-session", str(calls))
         self.assertEqual(log[-1], "slot_refused slot=d02 rc=7")
