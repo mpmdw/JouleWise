@@ -240,10 +240,14 @@ inputs or calibration-plan copy are required for this evidence payload
 (record 85).
 
 **Census.** This is a real night: no stub-only idle-interactive exemption.
-The arm-time census classifies every `codex|claude|t3` match by ancestry
+The arm-time census classifies every `[c]odex|[c]laude|[t]3` match by ancestry
 and aborts on any foreign process; every owned helper closes before
 REQUEST (ruling 87a F6). Retained production roots remain discoverable;
 the lead confirms the discovery set at the bench (87a F4).
+All concurrently active census producers (driver, chain, watchdog checkout,
+and t0 author) must run at or after the 2026-09-20 census self-match fix, and
+the next plan needs fresh artefacts (manifest/wrapper/digest/plan/probe receipt)
+because `quiet_predicate_campaign.MANIFEST_PATHS` hashes `night_gate.py`.
 
 **Timeline.** The plan's relative boundaries are: install strictly before
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at

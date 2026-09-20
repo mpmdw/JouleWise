@@ -63,7 +63,7 @@ END_MARKER = "<!-- END GENERATED: derivation-night-wrapper -->"
 TRACKED_CHAIN_RELPATH = "scripts/night_chains/calibration_derivation_only.zsh"
 TRACKED_CHAIN_PATH = REPO_ROOT / TRACKED_CHAIN_RELPATH
 
-# joulewise/night_gate.py:42 censuses `pgrep -lf "codex|claude|t3"` every 30 s
+# joulewise/night_gate.py censuses `pgrep -lf "[c]odex|[c]laude|[t]3"` every 30 s
 # and aborts the night on any hit, so no literal this wrapper bakes into a
 # command line may contain one of these substrings.
 CENSUS_SUBSTRINGS = ("codex", "claude", "t3")

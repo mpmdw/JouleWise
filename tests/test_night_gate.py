@@ -296,7 +296,7 @@ class NightGateTests(unittest.TestCase):
 
     def test_production_argv_constants_match_the_t0_author_literals(self) -> None:
         self.assertEqual(
-            ("/usr/bin/pgrep", "-lf", "codex|claude|t3"),
+            ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
             night_gate.AGENT_CENSUS_ARGV,
         )
         self.assertEqual(
@@ -353,6 +353,33 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual(1, observed.exit_code)
         self.assertIsNone(refusal)
 
+    def test_census_does_not_match_peer_argv(self) -> None:
+        """Old literal + sibling pgrep argv falsely refuses at agent_census."""
+        peer = "79146 " + " ".join(night_gate.AGENT_CENSUS_ARGV)
+
+        def census(processes):
+            def run(argv):
+                # Model pgrep -f over full command lines, using the requested
+                # production regex rather than supplying a pre-filtered result.
+                hits = [line for line in processes if re.search(argv[-1], line)]
+                return result(argv, exit_code=0 if hits else 1,
+                              stdout="".join(line + "\n" for line in hits))
+            return night_gate.agent_census(mock.Mock(run=run, monotonic_ns=lambda: 10))
+
+        observed, refusal = census([peer])
+        self.assertIsNone(refusal)
+        self.assertEqual("", observed.stdout)
+        for command in ("/usr/bin/claude -p", "node codex mcp-server", "t3 code"):
+            with self.subTest(command=command):
+                observed, refusal = census([peer, "42 " + command])
+                self.assertEqual("night_refused_agent_present", refusal.reason)
+                self.assertEqual("42 " + command + "\n", observed.stdout)
+        for outcome in (None, OSError("process list unavailable")):
+            with self.subTest(probe=outcome):
+                run = mock.Mock(side_effect=outcome) if isinstance(outcome, Exception) else mock.Mock(return_value=outcome)
+                _, refusal = night_gate.agent_census(mock.Mock(run=run, monotonic_ns=lambda: 10))
+                self.assertEqual("night_probe_error", refusal.reason)
+
     def test_a_census_that_finds_lines_refuses_and_preserves_them(self) -> None:
         source = FakeProbeSource()
         source.results[night_gate.AGENT_CENSUS_ARGV] = result(
@@ -380,7 +407,7 @@ class NightGateTests(unittest.TestCase):
         _, refusal = night_gate.agent_census(source.probes())
         self.assertEqual("night_refused_agent_present", refusal.reason)
         self.assertIn("25658 /Applications/ChatGPT.app", refusal.detail)
-        self.assertEqual(("/usr/bin/pgrep", "-lf", "codex|claude|t3"), night_gate.AGENT_CENSUS_ARGV)
+        self.assertEqual(("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), night_gate.AGENT_CENSUS_ARGV)
 
     def test_a_nonmatch_exit_with_output_still_refuses_the_census(self) -> None:
         source = FakeProbeSource()
@@ -1192,6 +1219,9 @@ class QuietGatePhaseTests(unittest.TestCase):
         raw = subprocess.check_output(['git', 'show', 'a90ab4e8:joulewise/night_gate.py'],
                                       cwd=Path(__file__).resolve().parents[1], text=True)
         exec(raw, baseline.__dict__)
+        # CENSUS-SELF-MATCH-01 deliberately changes the probe argv. Compare
+        # receipt/refusal semantics with that one input aligned in both engines.
+        baseline.AGENT_CENSUS_ARGV = night_gate.AGENT_CENSUS_ARGV
         scenarios = [(None, None, 1005),
             (night_gate.LOAD_AVG_ARGV, '{ 3.70 1.00 1.00 }', 1005),
             (night_gate.PMSET_BATT_ARGV, "Now drawing from 'Battery Power'", 1005),

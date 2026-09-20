@@ -10,6 +10,7 @@ import json
 import math
 import os
 import plistlib
+import re
 import shutil
 import signal
 import subprocess
@@ -653,7 +654,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual([], calls)
         prepare.assert_not_called()
         author.assert_not_called()
-        self.assertEqual(("/usr/bin/pgrep", "-lf", "codex|claude|t3"), events[0])
+        self.assertEqual(("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"), events[0])
         night = self.custody / "night"
         for name in ("receipt.json", "refusal.json"):
             record = json.loads((night / name).read_text())
@@ -934,6 +935,51 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual(exited["exit_code"], 0)
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
 
+    def _run_with_peer_census(self, *, foreign_after_go=False):
+        peer = "79146 " + " ".join(night_gate.AGENT_CENSUS_ARGV)
+        census_calls = []
+
+        def run(argv):
+            if argv != night_gate.AGENT_CENSUS_ARGV:
+                return self.source.run(argv)
+            processes = [peer]
+            if foreign_after_go and census_calls:
+                processes.append("42 /usr/bin/claude -p")
+            hits = [line for line in processes if re.search(argv[-1], line)]
+            census_calls.append(argv)
+            return _probe(argv, exit_code=0 if hits else 1,
+                          stdout="".join(line + "\n" for line in hits))
+
+        self.probes_mock.return_value = replace(self.source.probes(), run=run)
+        _, spawn = self._popen_recorder(running_once=True)
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn), \
+             mock.patch.object(self.driver.os, "killpg") as kill_group, \
+             mock.patch.object(self.driver.time, "sleep"), \
+             mock.patch.object(self.driver, "_group_census", return_value=(True, [])), \
+             mock.patch.object(self.driver, "_run_chain_once", wraps=self.driver._run_chain_once) as chain:
+            code = self.driver.run_night(self.plan_path)
+        result = json.loads((self.custody / "night/result.json").read_text())
+        return code, result, chain, kill_group, census_calls
+
+    def test_peer_census_reaches_and_completes_chain(self) -> None:
+        """Old literal + peer-only argv refuses before run_night._run_chain_once."""
+        code, result, chain, kill_group, censuses = self._run_with_peer_census()
+        self.assertEqual(0, code, result)
+        chain.assert_called_once()
+        self.assertGreaterEqual(len(censuses), 2)  # admission AND running census
+        kill_group.assert_not_called()
+        self.assertIsNone(result["aborted_reason"])
+        self.assertEqual([], result["census_hits"])
+
+    def test_foreign_agent_alongside_peer_still_aborts_chain(self) -> None:
+        """Foreign claude after GO must abort inside run_night._run_chain_once."""
+        code, result, chain, kill_group, _ = self._run_with_peer_census(foreign_after_go=True)
+        self.assertEqual(4, code, result)
+        chain.assert_called_once()
+        kill_group.assert_any_call(4242, self.driver.signal.SIGTERM)
+        self.assertEqual("night_aborted_agent_present", result["aborted_reason"])
+        self.assertEqual("42 /usr/bin/claude -p\n", result["census_hits"][0]["stdout"])
+
     def test_idle_agent_appearing_after_go_still_aborts_real_chain(self) -> None:
         self.source.census_responses = [
             _probe(night_gate.AGENT_CENSUS_ARGV, exit_code=1),
@@ -955,7 +1001,7 @@ runpy.run_path(script, run_name='__main__')
         self.assertEqual("night_aborted_agent_present", result["aborted_reason"])
         self.assertEqual("night_aborted_agent_present", refusal["refusal"]["reason"])
         self.assertEqual("20 claude\n", result["census_hits"][0]["stdout"])
-        self.assertEqual(["/usr/bin/pgrep", "-lf", "codex|claude|t3"], result["census_hits"][0]["argv"])
+        self.assertEqual(["/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"], result["census_hits"][0]["argv"])
 
     def test_courier_uses_one_launch_three_retries_and_every_backoff(self) -> None:
         plan = self.driver._load_plan(self.plan_path)
@@ -3327,7 +3373,7 @@ class PackNightProducerTests(unittest.TestCase):
         self.assertEqual("REFUSED", result["verdict"])
         self.assertEqual("night_refused_agent_present", result["aborted_reason"])
         census = json.loads((night / "censuses.jsonl").read_text().splitlines()[0])
-        self.assertEqual(["/usr/bin/pgrep", "-lf", "codex|claude|t3"], census["argv"])
+        self.assertEqual(["/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"], census["argv"])
         self.assertEqual("20 claude\n", census["stdout"])
         self.assertFalse((night / "go_receipt.json").exists())
 

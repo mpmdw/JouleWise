@@ -1815,7 +1815,7 @@ def sample_pack_night_go() -> dict[str, Any]:
         "confirmation_record": dict(ref),
         "authorization": {**ref, "purpose": "G2B_SHAKEDOWN", "attempt_id": "plan/1",
                           "claim_eligible": False},
-        "census": {"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"],
+        "census": {"argv": ["/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"],
                    "exit_code": 1, "stdout_sha256": ZERO_SHA, "monotonic_ns": 1},
         "issued_epoch_s": 1.0, "issued_monotonic_ns": 2,
         "valid_until_monotonic_ns": 99,

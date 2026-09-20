@@ -85,7 +85,9 @@ def probe_payload_kind(text):
     except ValueError as exc:
         raise ValueError("probe payload kind ambiguous") from exc
     return "quiet_predicate_evidence"
-AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "codex|claude|t3")
+# Brackets preserve agent matches but exclude peer pgrep argv: overlapping
+# driver/chain censuses self-matched and aborted the 2026-09-20 pilot night.
+AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")
 
 PMSET_BATT_ARGV = ("/usr/bin/pmset", "-g", "batt")
 PMSET_GENERAL_ARGV = ("/usr/bin/pmset", "-g")

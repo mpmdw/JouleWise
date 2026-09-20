@@ -400,9 +400,9 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_a_census_substring_anywhere_in_the_night_refuses(self) -> None:
-        """`pgrep -lf "codex|claude|t3"` aborts the night on its own argv.
+        """`pgrep -lf "[c]odex|[c]laude|[t]3"` still matches unsafe plan argv.
 
-        The census probe (joulewise/night_gate.py:42, :498-525) matches full
+        The census probe (joulewise/night_gate.py:agent_census) matches full
         command lines, so a session id or night root carrying one of those
         substrings would make the night kill itself mid-capture.
         """
