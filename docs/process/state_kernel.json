@@ -1507,6 +1507,36 @@
       "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
       "stop_card": null
     },
+    "COURIER-DIAGNOSTIC-PERSISTENCE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/83-fresh-eyes-round-4-astra.md (R1–R3 with executed counterfactuals)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/83a-ruling-diagnostic-preservation-deferred.md (deferral and the accepted guarantee)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COURIER-DIAGNOSTIC-PERSISTENCE-01/acceptance",
+          "label": "COURIER-DIAGNOSTIC-PERSISTENCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A consult record names the sink and its ordering; a regression per review-83 counterfactual (in-courier post-prompt failure, publisher logging failure after a successful push, unwritable night log) shows the diagnostic on the sink; delivery counts and verdicts unchanged; full replay green."
+      },
+      "authority": {
+        "label": "2026-09-19 evening registration by the project lead (ruling 83a)",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/83a-ruling-diagnostic-preservation-deferred.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Give the night driver's courier path one durable reporting sink that is written last, after every other operation, on a surface that does not depend on the night log, so that a diagnostic produced after the courier prompt was issued (a failed sent-marker sync, a failed attempt-journal write, a failed lock release, a failed second results-branch push, or a failed night-log append) always survives somewhere the morning harvest reads. Fresh-eyes review 83 of the evidence executor branch showed three such losses at the final head; none changes delivery or the measurement verdict, which is why they were deferred rather than patched a third time. Consult once on the sink's shape before implementing.",
+      "id": "COURIER-DIAGNOSTIC-PERSISTENCE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 252,
+      "status": "queued",
+      "status_note": "2026-09-19 evening — QUEUED [AGENT], consult first. Deferred from the Stage A executor PR by ruling 83a (class not shrinking round over round).",
+      "stop_card": null
+    },
     "COURIER-LOCK-OWNERSHIP-FLOCK-01": {
       "acceptance": {
         "evidence": [
@@ -2660,6 +2690,36 @@
       "rank": 198,
       "status": "queued",
       "status_note": "2026-09-15 activation d6888966: registered from activation decae362 record 00 Follow-up and the d6888966 State found census; not started; not night-critical. Sibling of REPLAY-FIXTURE-LEAK-01, kept separate because it covers a different fixture and file. Separate ed_external note: culling the existing orphan processes is Ed's call; no orphan cull is authorized by this agent lane.",
+      "stop_card": null
+    },
+    "FIXTURE-TMPNAME-CENSUS-SUBSTRING-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-19-activation-d0b83820/81-delta-reaudit-round-4-astra.md (flag F3)",
+          "docs/process_traces/2026-09-19-activation-d0b83820/83-fresh-eyes-round-4-astra.md (flag E3)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-TMPNAME-CENSUS-SUBSTRING-01/acceptance",
+          "label": "FIXTURE-TMPNAME-CENSUS-SUBSTRING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A regression constructs the offending name deterministically and shows the fixture no longer refuses it (or the census no longer matches a random substring); the flake class is named in the test."
+      },
+      "authority": {
+        "label": "2026-09-19 evening registration by the project lead (ruling 83a)",
+        "path": "docs/process_traces/2026-09-19-activation-d0b83820/83a-ruling-diagnostic-preservation-deferred.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Stop test fixtures from tripping the machine census by accident. The census refuses process or path names that contain agent-harness markers such as ; a random temporary directory name (for example ) can contain that substring by chance, and the evidence-night generator then refuses the fixture, failing an unrelated test once in a while (observed twice on 2026-09-19 by two independent review seats and once at the lead's bench). Make fixture temp names use an alphabet or prefix that cannot match a census marker, or anchor the census marker so a random substring cannot match.",
+      "id": "FIXTURE-TMPNAME-CENSUS-SUBSTRING-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 253,
+      "status": "queued",
+      "status_note": "2026-09-19 evening — QUEUED [AGENT]. Fixture flake, not a driver defect; three sightings in one afternoon.",
       "stop_card": null
     },
     "FLOOR-BIND-01": {
