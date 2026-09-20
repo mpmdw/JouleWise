@@ -9,7 +9,16 @@ Design-level reading:
 - **Overbuild / prune:** none — no scheduler, no mail client, no second installer.
 Verdict of the diff gate: MERGE-able pending the delta re-audit (record 45) and replay (§2).
 
-## §2 Replay (row 9) — (pending: full sharded replay at `67a147c4`, `replay-44/full-replay-67a147c4.log`)
+## §2 Replay (row 9) — full sharded replay at `67a147c4` (round 1) in the B2 worktree, untouched during the run (14:18–15:23 PDT; the delta auditor ran in a /tmp copy)
+```
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/time -p …/.venv/bin/python -B scripts/shard_tests.py --workers 4 --split
+SHARD SUMMARY index=1/4 modules=61 tests=1815 failures=0 errors=0 skipped=76 result=PASS
+SHARD SUMMARY index=2/4 modules=62 tests=1658 failures=0 errors=0 skipped=5 result=PASS
+SHARD SUMMARY index=3/4 modules=62 tests=1712 failures=0 errors=0 skipped=20 result=PASS
+SHARD SUMMARY index=4/4 modules=63 tests=1516 failures=0 errors=0 skipped=2 result=PASS
+WORKERS SUMMARY shards=4 modules=248 tests=6701 failures=0 errors=0 skipped=103 failed_shards=none result=PASS
+```
+Log: `/tmp/magistrate-21752427/replay-44/full-replay-67a147c4.log`. Round 2 (`97b357ad`) changes only the module, its tests, the contract and the handbook paragraph; its module was re-run alone at the bench under 3.13 (92 OK) and by the auditor under 3.11 (92 OK); the related modules (`test_evidence_arm_sequence`, `test_arm_retry`, `test_night_gate`) 108 OK in the seat and the auditor.
 ## §3 Fix contract (row 3) and same-signature (row 5)
 Fix contracts = brief 43 (eight dictated closures D1–D8 from refuter 41 + Opus 42; the seat's counterfactual table: every closure's test FAIL→PASS against the `798bced1` module in memory) and brief 46 (E1–E4 from fresh eyes 45; six tests FAIL→PASS against `67a147c4`). Same-signature: "the entry point silently diverges from the bench procedure" — closed in both directions at record 47 (docs state what the code repeats at the boundary and what the lead still owns); "an evidence-affecting side effect without a refusal path" — closed at 45/47 (re-observation before publication; fail-closed timeout; missing magistrate root refuses; rehearsal containment on both seams); "stale-module evidence" — unchanged from B1 (all lenses run in the clone).
 
