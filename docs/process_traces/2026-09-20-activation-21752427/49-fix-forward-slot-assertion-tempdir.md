@@ -26,3 +26,6 @@ Candidate `f3c0432f` (records-only merge of main onto `96c9ffa8`): PR #376 check
 
 ## §5 Lesson (for the codex-delegation field notes)
 Two post-merge reds today came from random temporary names colliding with asserted substrings ("t3" via the generator's census guard; "d03" via a slot-id assertion). Assertions must target the specific argument, and fixtures that feed name-sensitive guards must draw census-clean names (`_census_clean_tempdir`). A sweep of `assertNotIn("<short literal>", str(...))` across tests/ is a cheap successor nit lane.
+
+## §6 Post-merge matrix on main `f7b66e28`, 17:05 PDT
+Run 35545209896: conclusion SUCCESS — every job green, including all 3.11 shards. Main is green with all seven PRs of the day merged (#370–#376).
