@@ -1043,9 +1043,16 @@ def execute(plan, protocol, night_dir):
     # state: the captured envelopes were taken under a proven OFF and stay
     # valid.  It gets its own code (3, distinct from the refusal 2) so the
     # harvester re-attempts the restore and surfaces it.
-    if not network_time_restored:
-        return 3
-    return 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
+    #
+    # PRECEDENCE: the refusal wins.  Code 3 means "the envelopes are valid,
+    # the machine is not", so a harvester acting on that documented meaning
+    # must never be handed a night that refused and produced no valid
+    # envelopes -- which is what returning 3 for a refused night whose restore
+    # also failed did.  The restore's own verdict is on
+    # `evidence_outcome.json` (`network_time_restored`) on every path, so
+    # nothing is hidden by giving 2 the precedence.
+    base = 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
+    return 3 if base == 0 and not network_time_restored else base
 
 
 def main(argv=None):

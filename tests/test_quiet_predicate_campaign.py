@@ -1248,3 +1248,36 @@ class ZeroOutputGuardTests(FrozenExecutorTests):
                                  [[] if state == "authenticated"
                                   else ["network_time_unattested"]] * 12)
                 self.assertEqual(summary["retained"], 12 if state == "authenticated" else 0)
+
+
+class ExitCodePrecedenceTests(FrozenExecutorTests):
+    """Item 3 (05b S2, 05a N2): 2 is a refusal; 3 is a machine left wrong."""
+
+    ROWS = (
+        # label, exercise kwargs, outcome, restored, refusals, exit code
+        ("complete, restored", {}, "complete", True, 0, 0),
+        ("complete, restore failed", {"on_exit": 1}, "complete", False, 0, 3),
+        ("partial, restored", {"errors": {3}}, "partial", True, 0, 0),
+        ("partial, restore failed", {"errors": {3}, "on_exit": 1}, "partial", False, 0, 3),
+        ("refused (dead recorder), restored",
+         {"recorder_dead": True}, "refused", True, 1, 2),
+        ("refused (dead recorder), restore failed",
+         {"recorder_dead": True, "on_exit": 1}, "refused", False, 1, 2),
+        ("refused (two cleanup_unproven), restored",
+         {"cleanup_failures": {3, 4}}, "refused", True, 1, 2),
+        ("refused (two cleanup_unproven), restore failed",
+         {"cleanup_failures": {3, 4}, "on_exit": 1}, "refused", False, 1, 2),
+    )
+
+    def test_the_eight_row_truth_table_over_outcome_cleanup_and_restore(self):
+        for label, kwargs, expected_outcome, restored, refusal_count, code in self.ROWS:
+            with self.subTest(case=label):
+                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(**kwargs)
+                self.assertEqual(outcome["outcome"], expected_outcome)
+                self.assertTrue(outcome["cleanup_proven"])
+                # The restore's verdict is on the outcome document on EVERY
+                # path, so collapsing its code into the refusal hides nothing.
+                self.assertIn("network_time_restored", outcome)
+                self.assertIs(outcome["network_time_restored"], restored)
+                self.assertEqual(refusals, refusal_count)
+                self.assertEqual(rc, code, label)
