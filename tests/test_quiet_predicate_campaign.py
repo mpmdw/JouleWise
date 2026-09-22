@@ -695,8 +695,8 @@ class TimedLogScannerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             out = Path(tmp)
             (out / "session.json").write_text(json.dumps({"power": {"anchor": {"clock_stamps": {
-                "sampling_started": {"epoch_s": 1000.0},
-                "sampling_stopped": {"epoch_s": 1600.0}}}}}))
+                "sampling_started": {"epoch_s": 1000.0, "monotonic_before_s": 50.0},
+                "sampling_stopped": {"epoch_s": 1600.0, "monotonic_before_s": 650.0}}}}}))
             with patch.object(campaign.subprocess, "run",
                               return_value=SimpleNamespace(returncode=1, stdout="", stderr="")):
                 attestation = campaign.attest_network_time(out)

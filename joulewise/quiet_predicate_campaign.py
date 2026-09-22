@@ -431,27 +431,72 @@ def timed_log_matches(text):
     return events
 
 
-def attest_network_time(out):
+def capture_still_live(cleanup):
+    """A reason the attestation must not run yet, or None.
+
+    The teardown proves every supervised group of this envelope gone.  While
+    one is unproven a ``powermetrics`` recorder may still be sampling, and
+    ``log show``'s work in ``logd`` would land inside a recorded window as
+    observer energy no one can attribute (A269 ruling 10 Q4 ii).
+    """
+
+    if cleanup.get("residue"):
+        return "supervised capture groups still present: " + ", ".join(
+            str(pgid) for pgid in cleanup["residue"])
+    if cleanup.get("errors"):
+        return "group teardown could not prove the capture ended: " + "; ".join(cleanup["errors"])
+    return None
+
+
+def attestation_window(stamps):
+    """The capture window in wall time, union of both clocks (ruling 10 Q4 i).
+
+    Each end stamp carries the same instant on two clocks: ``epoch_s`` (wall,
+    which a step can move) and ``monotonic_before_s`` (which no step moves).
+    The monotonic pair gives the capture's true LENGTH; each wall stamp gives
+    a candidate position.  If a step displaced the start stamp, the end stamp
+    minus the length is the truer start, and the other way round for the end,
+    so the window is the union of both readings -- widened by one second on
+    each side for the stamps' own resolution.  A plain +-1 s window around the
+    two wall stamps would miss the capture entirely under a 30 s step, and the
+    query would authenticate an envelope by looking at the wrong minute.
+    """
+
+    started, stopped = stamps["sampling_started"], stamps["sampling_stopped"]
+    span = float(stopped["monotonic_before_s"]) - float(started["monotonic_before_s"])
+    start_epoch, stop_epoch = float(started["epoch_s"]), float(stopped["epoch_s"])
+    return [min(start_epoch, stop_epoch - span) - 1, max(stop_epoch, start_epoch + span) + 1]
+
+
+ATTESTATION_WINDOW_METHOD = "epoch_monotonic_union_v1"
+
+
+def attest_network_time(out, blocked=None):
     """Authenticate one envelope's clock discipline from the ``timed`` log.
 
     A set-command receipt proves an instruction was accepted; it does not
     prove no correction was applied during the capture.  The unified log does:
     ``timed`` records every applied slew or step.  Zero matched lines over the
-    capture window (padded by one second on each side) is an AUTHENTICATED
-    envelope; any match is ``slew_attested`` and excluded; a failed query is
-    ``asserted`` and excluded.  Run here, immediately after the collector
-    exits, because the log store is rotated -- never deferred to harvest.
+    capture window (:func:`attestation_window`) is an AUTHENTICATED envelope;
+    any match is ``slew_attested`` and excluded; a failed query, or one that
+    must not run because the capture is not provably over (``blocked``), is
+    ``asserted`` and excluded.  Run immediately after the collector exits and
+    its groups are reaped, because the log store is rotated -- never deferred
+    to harvest.
     """
 
     attestation = {"state": "asserted", "method": TIMED_LOG_ATTESTATION_METHOD,
-                   "window_epoch_s": None, "log": None, "log_sha256": None,
+                   "window_epoch_s": None, "window_method": ATTESTATION_WINDOW_METHOD,
+                   "log": None, "log_sha256": None,
                    "matched_lines": None, "exit_code": None, "argv": None,
                    "attested_epoch_s": time.time()}
+    if blocked:
+        attestation["reason"] = "attestation not run beside a live capture: " + blocked
+        return attestation
     try:
         session = json.loads((out / "session.json").read_text())
         stamps = session["power"]["anchor"]["clock_stamps"]
-        window = [float(stamps["sampling_started"]["epoch_s"]) - 1,
-                  float(stamps["sampling_stopped"]["epoch_s"]) + 1]
+        window = attestation_window(stamps)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         attestation["reason"] = f"capture window unavailable: {type(exc).__name__}: {exc}"
         return attestation
@@ -483,14 +528,22 @@ def record_attestation(out, attestation):
     """Add the attestation to the envelope's own provenance, atomically.
 
     The collector has exited, so the chain owns this write; temp plus rename
-    means a reader never sees a half-written session record.
+    means a reader never sees a half-written session record.  The attestation
+    carries ``session_sha256_before`` -- the digest of the file this rewrite
+    replaced -- so the one edit made after the collector exits is auditable
+    from the record itself (A269 ruling 10 Q4 iii).  Nothing else rewrites
+    ``session.json`` after the collector exits: under cure 2 there is no
+    finaliser pass, so this digest can only ever name the collector's own
+    bytes.
     """
 
     path = out / "session.json"
     try:
-        session = json.loads(path.read_text())
+        raw = path.read_bytes()
+        session = json.loads(raw)
     except (OSError, ValueError):
         return False
+    attestation["session_sha256_before"] = digest(raw)
     provenance = session.get("network_time_provenance")
     if not isinstance(provenance, dict):
         provenance = {"state": "unknown",
@@ -872,8 +925,14 @@ def execute(plan, protocol, night_dir):
                                      exclude={recorder.pid})
             # Authenticate this envelope's clock discipline now, while the log
             # store still holds the window (ruling 14 R4); the state joins the
-            # envelope's own provenance and the exclusion vocabulary.
-            attestation = attest_network_time(out)
+            # envelope's own provenance and the exclusion vocabulary.  It runs
+            # HERE -- after the teardown, before the next slot's sleep -- so
+            # `log show`'s work inside `logd` can never land in a recorded
+            # window as unattributable observer energy (A269 ruling 10 Q4 ii).
+            # If the teardown did not prove every supervised group gone, a
+            # recorder may still be sampling, and the query is refused rather
+            # than run beside it: the envelope becomes `asserted`.
+            attestation = attest_network_time(out, blocked=capture_still_live(cleanup))
             record_attestation(out, attestation)
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
