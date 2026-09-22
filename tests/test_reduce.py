@@ -2102,7 +2102,7 @@ class D078R01RegressionTests(unittest.TestCase):
                 REPO_ROOT
                 / "configs"
                 / "calibration"
-                / "calibration_acceptance_d079_v2_n17_r6.json"
+                / "calibration_acceptance_d079_v2_n17_r7.json"
             ).read_text(encoding="utf-8")
         )
         self.assertEqual(
