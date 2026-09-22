@@ -44,7 +44,8 @@ def good_round(busy=0):
 
 
 class CampaignTests(unittest.TestCase):
-    def summarize(self, energies, excluded=(), missing=(), observer_core=None, recorder=False, drift=0):
+    def summarize(self, energies, excluded=(), missing=(), observer_core=None, recorder=False,
+                  drift=0, slew=()):
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
             root = Path(tmp) / 'evidence'
             root.mkdir()
@@ -55,7 +56,8 @@ class CampaignTests(unittest.TestCase):
                 out = root / f'envelope-{index:02d}'
                 out.mkdir()
                 session = {'session':'fixture', 'boot_id':'boot', 'os_build':'25G83',
-                    'network_time_provenance': provenance(),
+                    'network_time_provenance': provenance(
+                        *(('slew_attested', 1) if index in slew else ())),
                     'power':{'anchor':{'status':'bounded'}},
                     'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':energy, 'combined_w':energy}}}}
@@ -85,6 +87,20 @@ class CampaignTests(unittest.TestCase):
         excluded = self.summarize([10]*12, recorder=True, excluded={5})
         self.assertEqual(excluded['clean_machine_busy_cores']['max'], .01)
         self.assertEqual(excluded['envelopes'][4]['busy_cores']['max'], 99)
+
+    def test_a_slew_attested_envelope_never_feeds_the_clean_busy_core_diagnostic(self):
+        # Item 13 (05a N4).  Envelope 05 carries the recorder's 99-core
+        # excursion AND an applied clock correction inside its window.  It is
+        # excluded by name, and the "clean machine" distribution -- which
+        # describes the machine the retained envelopes were captured on --
+        # must not be shaped by it.  Before the fix the attestation was
+        # computed after the busy-core join, so it was.
+        report = self.summarize([10] * 12, recorder=True, slew={5})
+        self.assertEqual(report['envelopes'][4]['excluded'], ['network_time_slew_attested'])
+        self.assertEqual(report['retained'], 11)
+        self.assertEqual(report['envelopes'][4]['busy_cores']['max'], 99)
+        self.assertEqual(report['clean_machine_busy_cores']['max'], .01)
+        self.assertEqual(report['busy_cores']['max'], .01)
 
     def test_twelve_constant_energies_point_one_observer_core_stops(self):
         report = self.summarize([10]*12, observer_core=.1)

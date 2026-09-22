@@ -831,20 +831,28 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         all_rows.extend(rows)
         hard = hard_exclusions(rows)
         excluded.extend(hard)
-        if not hard:
-            clean_busy.extend(busy)
-        interior = session.get("interior", {})
         # Clock-discipline attestation (ruling 14 R4): only an envelope whose
         # capture window carries no applied correction in the ``timed`` log is
         # claim-bearing.  A slew inside the window and a failed or missing
         # query are both HARD exclusions; the session record is authoritative
         # and the executor's own envelope entry is the fallback, so a summary
         # re-derived from disk reaches the same verdict.
+        #
+        # It is computed BEFORE the clean busy-core diagnostic below because
+        # that diagnostic describes the machine an envelope was captured on:
+        # an envelope whose clock was slewed, or whose discipline could not be
+        # attested at all, is not a clean-machine observation either, and
+        # feeding its covariates into the "clean" distribution would let an
+        # excluded envelope shape the number the paper reports.
         provenance = session.get("network_time_provenance")
         attestation = provenance.get("attestation") if isinstance(provenance, dict) else None
         state = (attestation.get("state") if isinstance(attestation, dict)
                  else entry.get("network_time_attestation"))
-        excluded.extend(attestation_exclusions(state))
+        unattested = attestation_exclusions(state)
+        excluded.extend(unattested)
+        if not hard and not unattested:
+            clean_busy.extend(busy)
+        interior = session.get("interior", {})
         if (session.get("power") or {}).get("anchor", {}).get("status") != "bounded":
             excluded.append("clock_anchor_unresolved")
         if not interior.get("complete_support"):
