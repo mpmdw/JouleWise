@@ -1427,6 +1427,18 @@ class AttestationBudgetTests(FrozenExecutorTests):
         self.assertGreater(campaign.attestation_timeout_s(tight)
                            + campaign.cleanup_budget_s(tight),
                            tight['slot_pitch_s'] - tight['envelope_s'])
+        # Ruling 18 Q2: a TWO-POINT pin, because a one-point one (20 s gap
+        # only) is killed by `return ATTESTATION_TIMEOUT_FLOOR_S` and by
+        # nothing else.  `cleanup_budget_s` reads the module global at call
+        # time, so moving the reserve to 10 moves what the query is left:
+        # 10 s at the 20 s gap, and still the 5 s FLOOR at the 3 s gap.  The
+        # pair additionally kills `return CLEANUP_BUDGET_RESERVE_S`,
+        # `return max(FLOOR, RESERVE)` and the unfloored `gap -
+        # cleanup_budget_s` (which gives 2 at the 3 s gap).
+        with patch.object(campaign, "CLEANUP_BUDGET_RESERVE_S", 10):
+            self.assertEqual(campaign.attestation_timeout_s(PROTOCOL), 10)
+            self.assertEqual(campaign.attestation_timeout_s(
+                {**PROTOCOL, 'slot_pitch_s': 603}), 5)
         self.assertIn("start_drift_abort_s", PROTOCOL)
 
     def test_the_bound_is_the_registrations_gap_and_a_timeout_keeps_the_schedule(self):
