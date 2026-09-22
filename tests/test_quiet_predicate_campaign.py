@@ -1472,6 +1472,52 @@ class ZeroOutputGuardTests(FrozenExecutorTests):
                 self.assertEqual(summary["retained"], 12 if state == "authenticated" else 0)
 
 
+class UnreadableSessionRecordTests(FrozenExecutorTests):
+    """Q5 item 1 (R5.1): an annotation that cannot read what it annotates."""
+
+    def test_an_absent_or_malformed_session_record_is_asserted_never_authenticated(self):
+        # `record_attestation` returned False and left the state alone, so an
+        # envelope whose record could not be read was journalled
+        # `authenticated` -- the one claim-bearing state -- on the strength of
+        # a query whose subject the chain could not name.
+        for label, payload, exception in (("absent", None, "FileNotFoundError"),
+                                          ("malformed", "{ not json\n", "JSONDecodeError")):
+            with self.subTest(case=label):
+                with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                    out = Path(tmp)
+                    if payload is not None:
+                        (out / "session.json").write_text(payload)
+                    attestation = {"state": "authenticated", "matched_lines": 0}
+                    self.assertFalse(campaign.record_attestation(out, attestation))
+                    self.assertEqual(attestation["state"], "asserted")
+                    self.assertTrue(attestation["reason"].startswith(
+                        f"session record unreadable: {exception}: "), attestation["reason"])
+                    self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                                     ["network_time_unattested"])
+
+    def test_a_record_that_vanishes_before_the_annotation_is_journalled_asserted(self):
+        # End to end: the journal row and the summary's exclusions are built
+        # from the attestation AFTER `record_attestation` has had it, so the
+        # state set there is the state the night reports.
+        def spy(stack, module):
+            real = module.record_attestation
+            def vanishing(out, attestation):
+                (out / "session.json").unlink()
+                return real(out, attestation)
+            stack.enter_context(patch.object(module, "record_attestation",
+                                             side_effect=vanishing))
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(spy=spy)
+        self.assertEqual(rc, 0)
+        self.assertEqual(sessions, [])
+        self.assertEqual([row["network_time_attestation"] for row in self.envelope_journal],
+                         ["asserted"] * 12)
+        # Nothing is retained.  With no session record the summary also loses
+        # the interior support, so the exclusion IT prints is that one; the
+        # attestation's own verdict is read off the journal row above.
+        self.assertTrue(all(v["excluded"] for v in summary["envelopes"]))
+        self.assertEqual(summary["retained"], 0)
+
+
 class ExitCodePrecedenceTests(FrozenExecutorTests):
     """Item 3 (05b S2, 05a N2): 2 is a refusal; 3 is a machine left wrong."""
 

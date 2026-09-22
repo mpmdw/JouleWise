@@ -697,7 +697,13 @@ def record_attestation(out, attestation):
     try:
         raw = path.read_bytes()
         session = json.loads(raw)
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        # The annotation could not even read the record it annotates, so it
+        # cannot say the collector's bytes were the ones attested: the
+        # envelope loses its claim-bearing state and says why, exactly as a
+        # failed rewrite below does.
+        attestation["state"] = "asserted"
+        attestation["reason"] = f"session record unreadable: {type(exc).__name__}: {exc}"
         return False
     attestation["session_sha256_before"] = digest(raw)
     provenance = session.get("network_time_provenance")
