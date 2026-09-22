@@ -1242,6 +1242,14 @@ def execute(plan, protocol, night_dir):
                               # these numbers rather than guessed.
                               "cleanup_wall_s": cleanup_wall_s,
                               "network_time_attestation": attestation["state"],
+                              # The attestation's own account of itself, on the
+                              # row (ruling 18 C7).  A rewrite that could not
+                              # land leaves `session.json` unannotated, so
+                              # WITHOUT this key the reason -- which names the
+                              # failure that cost the envelope its claim --
+                              # exists only in the executor's memory and dies
+                              # with the process.
+                              "network_time_attestation_reason": attestation.get("reason"),
                               "network_time_attestation_wall_s": attestation_wall_s,
                               "network_time_attestation_matched_lines": attestation["matched_lines"]})
             append_event(night_dir / "evidence_envelopes.jsonl", envelopes[-1])

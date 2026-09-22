@@ -1927,6 +1927,12 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
             self.assertNotIn("attestation", session["network_time_provenance"])
         self.assertEqual([row["network_time_attestation"] for row in self.envelope_journal],
                          ["asserted"] * 12)
+        # Ruling 18 C7: the reason is DURABLE.  `session.json` keeps the
+        # collector's unannotated bytes on this path, so the journal row is
+        # the only place a harvester can read why the envelope was withdrawn.
+        for row in self.envelope_journal:
+            self.assertIn("session rewrite failed: PermissionError: read-only envelope",
+                          row["network_time_attestation_reason"])
         self.assertEqual([v["excluded"] for v in summary["envelopes"]],
                          [["network_time_unattested"]] * 12)
         self.assertEqual(summary["retained"], 0)
