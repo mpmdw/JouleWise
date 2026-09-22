@@ -469,6 +469,17 @@ def timed_log_window_epoch_s(argv):
     envelope was placed by; this is what the argv strings say, parsed back
     from those same strings, so an auditor reading the record never has to
     re-derive the truncation to know what was queried.
+
+    One ambiguity is inherited, not introduced.  The strings carry no UTC
+    offset, and ``.timestamp()`` on a naive datetime reads it in the
+    machine's local zone.  On the night the clock goes back an hour at the
+    end of daylight saving, one wall-clock hour happens TWICE, so a string
+    inside it names two different epochs; Python resolves such a string to
+    the FIRST of the two (the still-daylight-saving one).  `log show` is
+    handed the same strings and has the same choice to make, so the record
+    and the query agree either way; a capture window that straddles the
+    repeated hour is an hour wider or an hour narrower than the envelope
+    intended, and the drift and window pins are what would show it.
     """
 
     return [datetime.strptime(argv[argv.index(flag) + 1], "%Y-%m-%d %H:%M:%S").timestamp()
@@ -482,7 +493,20 @@ def timed_log_marker_lines(text):
 
 
 def timed_log_moment(line):
-    """Seconds since the epoch of a syslog-style line, or None."""
+    """Seconds since the epoch of a syslog-style line, or None.
+
+    The pattern matches ``YYYY-MM-DD HH:MM:SS.ffffff`` and nothing after it,
+    so the ``-0700`` offset that ``--style syslog`` prints is DISCARDED and
+    the stamp is read in the machine's local zone, exactly as
+    :func:`timed_log_window_epoch_s` reads the argv strings (``--style
+    compact`` prints no offset at all).  The repeated hour at the end of
+    daylight saving is therefore ambiguous here too, and resolves the same
+    way: to the first of its two occurrences.  This value only GROUPS the
+    three log lines of one applied correction inside
+    ``TIMED_LOG_EVENT_WINDOW_S``; every nonzero count excludes the envelope
+    whatever the grouping, so the ambiguity cannot buy an envelope its
+    claim-bearing state.
+    """
     match = re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+", line)
     if match is None:
         return None
