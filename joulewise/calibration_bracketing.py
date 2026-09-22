@@ -139,7 +139,7 @@ ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH = (
 )
 ANCHOR_V3_R7_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r7"
 ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256 = (
-    "14c891eb94a72cb53552cc66f4f8b96ee3bad472a3c606afb7b0647175b56195"
+    "9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16"
 )
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under

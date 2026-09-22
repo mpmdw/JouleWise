@@ -492,13 +492,13 @@
     }
   },
   "derivation_notes": {
-    "generation": "SCIENCE-NEUTRAL reissue of d079_calibration_acceptance_v2_n17_r5 at the capture-pipeline presentation and calibration-capture-time taxonomy head. Only governed estimator bytes rotated; the full 19-member corpus replay reproduced every anchor bound, disposition, projection cell count, and b_fiducial value exactly.",
+    "generation": "SCIENCE-NEUTRAL reissue of d079_calibration_acceptance_v2_n17_r6 at the clock-anchor v3.1 head (lane A267; cold gate rulings 10 and 14 of 2026-09-22, merge transaction ruled by cold gate #3). Exactly one governed estimator file rotated, joulewise/uncertainty_evidence.py (257cda08\u2026 -> b583f35a\u2026); the other three governed pins are unchanged. The 17-member table, its statistics and its primary-evidence hashes reproduce r6 exactly (tests/verify_calibration_acceptance_corpus.py: identical n, minimum, maximum, range, mean, sample_sd; PRIMARY_EVIDENCE_HASH_CROSSCHECK=OK for r6 and r7), and the 38-member on-disk calibration corpus replayed through the v3 default-method deriver at the reissue head is EQUAL 38 / DIFF 0 / NOT_EXECUTED 0 against the main baseline.",
     "predecessor": {
-      "acceptance_id": "d079_calibration_acceptance_v2_n17_r5",
-      "relative_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r5.json",
-      "file_sha256": "92b9c0608bc97fbd7769050213b1433c32d3fe060d1292167920363e58b8cf0f",
-      "derivation_sha256": "12e8462f632915049fb92fe3b1d6ea06f2bdb21ba1b2919795c58f730e2f7620",
-      "relationship": "retained byte-identical forever as the intermediate anchor-v3 generation; r6 supersedes r5 only as the LIVE generation and differs from it in governed estimator pins alone"
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "relative_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+      "derivation_sha256": "18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3",
+      "relationship": "retained byte-identical forever as the anchor-v3 generation issued at the capture-pipeline presentation head; r7 supersedes r6 only as the LIVE generation and differs from it in governed estimator pins alone"
     },
     "method_identity": {
       "anchor_method": "powermetrics_native_second_rate_aware_set_membership_v1",
@@ -627,16 +627,12 @@
       "kind": "estimator_pin_rotation_only",
       "changed_estimator_pins": {
         "joulewise/uncertainty_evidence.py": {
-          "predecessor": "67e34a1a1dd209d4201036e7b436bb93fe1cca8766c6e4a5616acc85eb3850d6",
-          "reissued": "257cda08be1b41ec9607e6c8e68a9b583cfeb71355700b4e6793075976112a5f"
-        },
-        "joulewise/reduce.py": {
-          "predecessor": "1da45a4791ae4e4aa5ee05d3a26a60088ff85fe50d9f440ac975f2037408fcdb",
-          "reissued": "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
+          "predecessor": "257cda08be1b41ec9607e6c8e68a9b583cfeb71355700b4e6793075976112a5f",
+          "reissued": "b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8"
         }
       },
-      "science_neutrality_evidence": "the full 19-member corpus was replayed through rederive_detection_from_artifacts at the capture-presentation head; every b_fiducial, anchor bound, refusal disposition and projection cell count reproduced the r4 derivation record exactly"
+      "science_neutrality_evidence": "the 38-member on-disk calibration corpus (35 bounded, 3 unknown) was replayed through scripts.paper_anchor_correction_quantified._derive_anchors under the default method at the reissue head and every v3 anchor record and raw plist sha256 reproduced the main-baseline record exactly (EQUAL 38 / DIFF 0 / NOT_EXECUTED 0); tests/verify_calibration_acceptance_corpus.py re-derived the 17-member table from primary bytes with statistics identical to r6 and PRIMARY_EVIDENCE_HASH_CROSSCHECK=OK; the r6->r7 recursive field diff outside derivation_notes is acceptance_id, derivation_sha256 and the one rotated estimator pin"
     }
   },
-  "derivation_sha256": "03d10ab282ad4c0929db86a299463c83b4255255369db7d5b85b83adfb12b9e4"
+  "derivation_sha256": "2c7dab72ecdd4bfad740fc962f0c36820dd9adedcf65c2446956b1580b35c118"
 }
