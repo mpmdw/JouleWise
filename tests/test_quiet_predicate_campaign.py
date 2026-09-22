@@ -322,11 +322,22 @@ class CampaignTests(unittest.TestCase):
 class FrozenExecutorTests(unittest.TestCase):
     def exercise(self, errors=(), cleanup_failures=(), recorder_dead=False,
                  off_stdout=None, on_exit=0, timed_log="", commands=None,
-                 interrupt_settle=False):
+                 interrupt_settle=False, protocol=None, burn=0, stepped_stop_s=0,
+                 window_max_s=9000, spy=None):
+        """Drive the real ``execute`` against a stub collector on a fake clock.
+
+        ``burn`` is the seconds the stub collector spends AFTER its capture
+        before it exits -- the finalisation tail (recorder exit wait, plist
+        parse, anchor derive) that A269 measured at 7.6-10.2 s on the real
+        night.  It is the whole counterfactual: under the pre-cure schedule
+        the tail pushed the next spawn late and nothing noticed.
+        """
         from contextlib import ExitStack
         from dataclasses import replace
         from types import SimpleNamespace
         from tests.test_night_gate import make_plan
+        protocol = PROTOCOL if protocol is None else protocol
+        envelope_s = protocol['envelope_s']
         calls, processes = [], {}
         class Clock:
             now = 0.
@@ -335,7 +346,7 @@ class FrozenExecutorTests(unittest.TestCase):
             def time(self): return 1000+self.now
             def sleep(self, seconds):
                 self.now += seconds
-                if self.interrupt and seconds == PROTOCOL['settle_s']:
+                if self.interrupt and seconds == protocol['settle_s']:
                     # Exactly what the executor's own SIGTERM handler raises.
                     self.interrupt = False
                     raise InterruptedError('evidence chain signal 15')
@@ -351,12 +362,19 @@ class FrozenExecutorTests(unittest.TestCase):
                     out.mkdir()
                     index = int(argv[argv.index('--repeat')+1])
                     self.index = index
-                    self.end = float(argv[argv.index('--envelope-start-mono-s')+1])+600
+                    self.end = float(argv[argv.index('--envelope-start-mono-s')+1])+envelope_s
+                    # Both clocks stamp both ends: the monotonic pair gives the
+                    # capture's length and the wall pair its position, which is
+                    # what the union window (ruling 10 Q4 i) reads.
+                    # ``stepped_stop_s`` displaces the stop stamp's WALL
+                    # reading only, exactly as a clock step would.
                     session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
                         'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
                         'power':{'anchor':{'status':'bounded','clock_stamps':{
-                            'sampling_started':{'epoch_s':1000+self.end-600},
-                            'sampling_stopped':{'epoch_s':1000+self.end}}}},
+                            'sampling_started':{'epoch_s':1000+self.end-envelope_s,
+                                                'monotonic_before_s':self.end-envelope_s},
+                            'sampling_stopped':{'epoch_s':1000+self.end+stepped_stop_s,
+                                                'monotonic_before_s':self.end}}}},
                         'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                     (out/'session.json').write_text(json.dumps(session))
@@ -366,16 +384,18 @@ class FrozenExecutorTests(unittest.TestCase):
                     self.returncode = 1
                 return self.returncode
             def wait(self, timeout):
-                clock.now = max(clock.now, self.end)
+                clock.now = max(clock.now, self.end) + burn
                 self.returncode = 1 if self.index in errors else 0
                 return self.returncode
         real_cleanup = campaign.cleanup_groups
         cleanup_count = 0
+        self.slot_cleanup_budgets = []
         def cleanup(*args, **kwargs):
             nonlocal cleanup_count
             result = real_cleanup(*args, **kwargs)
             if kwargs.get('exclude'):
                 cleanup_count += 1
+                self.slot_cleanup_budgets.append(result['budget_s'])
                 if cleanup_count in cleanup_failures:
                     result['cleanup_proven'] = False
             return result
@@ -416,10 +436,15 @@ class FrozenExecutorTests(unittest.TestCase):
             enter(patch.object(campaign,'group_absent',side_effect=lambda pgid:processes[pgid].returncode is not None))
             enter(patch.object(campaign.os,'killpg',side_effect=terminate))
             enter(patch.object(campaign,'cleanup_groups',side_effect=cleanup))
-            plan=replace(make_plan(),t0_epoch_s=1000,window_max_s=9000)
-            rc = campaign.execute(plan,PROTOCOL,Path(tmp))
+            if spy is not None:
+                spy(stack, campaign)
+            plan=replace(make_plan(),t0_epoch_s=1000,window_max_s=window_max_s)
+            rc = campaign.execute(plan,protocol,Path(tmp))
             cleanup=json.loads((Path(tmp)/'evidence_cleanup.json').read_text())
             self.assertTrue(cleanup['cleanup_proven'])
+            journal=Path(tmp)/'evidence_envelopes.jsonl'
+            self.envelope_journal=[json.loads(line) for line in
+                                   journal.read_text().splitlines() if line] if journal.exists() else []
             self.envelope_directories=sorted(
                 p.name for p in (Path(tmp)/'evidence').glob('envelope-*'))
             self.timed_logs=sorted(
@@ -454,8 +479,13 @@ class FrozenExecutorTests(unittest.TestCase):
         self.assertEqual(summary['envelopes'][2]['excluded'], ['collect_error'])
         self.assertEqual(outcome['outcome'], 'partial')
         self.assertEqual(refusals, 0)
+        # A269 cure 2: the SPAWNS run on slot_pitch_s (620 s), the captures
+        # keep envelope_s (600 s); the 20 s difference is the gap the
+        # finalisation tail, teardown and attestation live in.
         starts = [float(a[a.index('--envelope-start-mono-s')+1]) for a in calls if 'collect' in a]
-        self.assertEqual(starts, list(range(600, 7800, 600)))
+        self.assertEqual(starts, [600 + 620 * i for i in range(12)])
+        durations = {a[a.index('--duration-s')+1] for a in calls if 'collect' in a}
+        self.assertEqual(durations, {'600'})
 
     def test_isolated_cleanup_unproven_continues_but_two_consecutive_refuse(self):
         for failures, attempted, retained, refusal_count in (({3}, 12, 11, 0), ({3,5}, 12, 10, 0), ({3,4}, 4, 2, 1)):

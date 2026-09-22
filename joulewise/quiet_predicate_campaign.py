@@ -182,6 +182,25 @@ def group_absent(pgid):
     return _group_census(pgid, timeout_s=.2)[0]
 
 
+def groups_absent(pgids):
+    """Absence for every journaled group from ONE census (A269 brief 7).
+
+    The teardown used to spawn one ``pgrep`` per journaled group; after
+    twelve envelopes that is 113 spawns, ~1.6 s of the 20 s inter-envelope
+    gap, for a question one ``pgrep -g a,b,c`` answers in 14 ms.  A single
+    group still takes the single-group path, so nothing about the one-group
+    case changes.  Returns {pgid: absent}; a census that could not answer
+    reports False (present), never absence.
+    """
+
+    pgids = sorted(set(pgids))
+    if len(pgids) <= 1:
+        return {pgid: group_absent(pgid) for pgid in pgids}
+    from scripts.run_night import _group_census_batch
+    return {pgid: absent for pgid, (absent, _) in
+            _group_census_batch(pgids, timeout_s=.2).items()}
+
+
 def process_groups(path):
     if not path.exists():
         return set()  # A pre-execute refusal launched no supervised children.
@@ -215,11 +234,16 @@ def cleanup_groups(path, children=(), budget_s=30, exclude=()):
             errors.append(str(exc))
             break
         known.update(pending)
+        # ONE census for the whole sweep (A269 brief 7): the kill decision for
+        # every group in this pass reads the same answer, and a group that
+        # exits between the census and its own kill is proven absent by the
+        # next sweep, exactly as a per-group census would have proven it.
+        census = groups_absent(pending)
         for pgid in sorted(pending):
             if time.monotonic() >= deadline:
                 break
             try:
-                if group_absent(pgid):
+                if census.get(pgid, False):
                     append_event(path, {"kind": "cleanup", "pgid": pgid, "state": "absent"})
                     checked.add(pgid)
                 else:
@@ -730,6 +754,39 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     return report
 
 
+# The gap between the end of one capture and the next spawn (20 s under v2:
+# slot_pitch_s 620 - envelope_s 600) holds the collector's exit, the plist
+# parse, the anchor derivation, the group teardown and the clock attestation.
+# The teardown's budget is the gap minus a reserve that the attestation's
+# `log show` fits in (worst observed 1.45 s; A269 gate C4 measured 0.70/0.84 s),
+# so a teardown can never eat the attestation's time or run into the next
+# spawn.  Derived from the registration at the call site, never a literal.
+CLEANUP_BUDGET_RESERVE_S = 5
+
+
+def cleanup_budget_s(protocol):
+    """The per-slot teardown budget: the gap, less the attestation reserve."""
+    gap = protocol["slot_pitch_s"] - protocol["envelope_s"]
+    return max(1, gap - CLEANUP_BUDGET_RESERVE_S)
+
+
+def window_budget_ok(plan, protocol):
+    """Does the whole frozen schedule fit inside the night's window?
+
+    Cure 2 spawns envelope i at ``settle_s + (i-1) * slot_pitch_s`` and the
+    last one captures for ``envelope_s``, so the schedule needs
+    ``settle_s + (envelopes-1) * slot_pitch_s + envelope_s`` seconds of the
+    window.  Under v2 that is 600 + 11*620 + 600 = 8020 s against
+    ``window_max_s`` 9000.  A pitch that does not fit is refused BEFORE any
+    collector is launched (A269 ruling 10 Q1 amendment A2), because the
+    alternative is discovering it at envelope 12, after eleven captures.
+    """
+
+    needed = (protocol["settle_s"] + (protocol["envelopes"] - 1) * protocol["slot_pitch_s"]
+              + protocol["envelope_s"])
+    return needed <= min(plan.window_max_s, protocol["window_max_s"]), needed
+
+
 def execute(plan, protocol, night_dir):
     """No schedule knobs: all quantities come from the authenticated protocol."""
     from scripts import sample_quiet_predicate_evidence as harness
@@ -753,6 +810,13 @@ def execute(plan, protocol, night_dir):
         append_event(journal, {"kind": kind, "pgid": process.pid, "epoch_s": time.time()})
         return process
     try:
+        # The whole frozen schedule must fit the window BEFORE anything is
+        # launched (A269 ruling 10 Q1 A2); a pitch that overruns is a
+        # registration defect, not a night to discover at envelope 12.
+        fits, needed = window_budget_ok(plan, protocol)
+        if not fits:
+            raise ValueError(f"window_budget_exceeded: the frozen schedule needs {needed} s "
+                             f"of a {min(plan.window_max_s, protocol['window_max_s'])} s window")
         # Network time OFF is established BEFORE the settle, so the settle also
         # absorbs any in-flight slew the daemon had already started (a 20 ms
         # adjtime slew completes in seconds).  Failure refuses the night here:
@@ -766,11 +830,31 @@ def execute(plan, protocol, night_dir):
         first = go + protocol["settle_s"]
         recorder = launch("recorder", [sys.executable, "-B", "-m", "joulewise.quiet_predicate_campaign", "record"])
         for index in range(1, protocol["envelopes"] + 1):
-            scheduled = first + (index - 1) * protocol["envelope_s"]
+            # The SCHEDULE runs on the pitch; the CAPTURE keeps its own length.
+            # Every slot therefore starts from a quiet machine like envelope 01
+            # did (chain drift 0.160 s, session 0.318 s on the 2026-09-22 pilot)
+            # instead of inheriting its predecessor's finalisation tail.
+            scheduled = first + (index - 1) * protocol["slot_pitch_s"]
             time.sleep(max(0, scheduled - time.monotonic()))
             if time.time() + protocol["envelope_s"] > plan.t0_epoch_s + plan.window_max_s:
                 raise ValueError("evidence window exhausted; no compressed envelope or top-up")
             actual = time.monotonic()
+            # Pre-registered in-chain abort (A269 ruling 10 Q3, amended to every
+            # envelope): a spawn later than start_drift_abort_s after its
+            # scheduled instant means the tail is back, and the night ends
+            # REFUSED here -- before this slot's capture, never as an
+            # INCONCLUSIVE data verdict afterwards.  `top_up: false` in the
+            # registration forbids pooling an aborted night's envelopes, so
+            # stopping costs nothing that a later night could have reused.
+            # Envelope 01 follows the settle and tests no pitch, so it is exempt.
+            drift = actual - scheduled
+            if index >= 2 and drift > protocol["start_drift_abort_s"]:
+                append_event(night_dir / "evidence_envelopes.jsonl",
+                             {"index": index, "scheduled_mono_s": scheduled,
+                              "actual_mono_s": actual, "start_drift_s": drift,
+                              "abort": "start_drift_abort"})
+                raise ValueError(f"start_drift_abort: envelope {index} would start {drift:.3f} s "
+                                 f"after its scheduled instant (bar {protocol['start_drift_abort_s']} s)")
             out = directory / f"envelope-{index:02d}"
             collector = launch("collector", [sys.executable, "-B", str(Path(plan.measurement_root) / HARNESS_PATHS[0]),
                 "collect", "--state", "idle", "--repeat", str(index), "--duration-s", str(protocol["envelope_s"]),
@@ -783,7 +867,9 @@ def execute(plan, protocol, night_dir):
                 code = 124
             # The covariate recorder spans all envelopes. Each collector and
             # its independent sampler/power groups must be reaped between slots.
-            cleanup = cleanup_groups(journal, children, budget_s=30, exclude={recorder.pid})
+            # The budget is the gap this registration leaves, never a literal.
+            cleanup = cleanup_groups(journal, children, budget_s=cleanup_budget_s(protocol),
+                                     exclude={recorder.pid})
             # Authenticate this envelope's clock discipline now, while the log
             # store still holds the window (ruling 14 R4); the state joins the
             # envelope's own provenance and the exclusion vocabulary.

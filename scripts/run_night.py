@@ -3435,6 +3435,94 @@ def _group_census(pgid: int, timeout_s: float = 1) -> tuple[bool, list[str]]:
     return False, lines
 
 
+# One `pgrep -g a,b,c .` costs what one `pgrep -g a .` costs (13.8 ms, A269
+# gate exhibit C5), so a teardown that censuses 113 journaled groups one at a
+# time spends ~1.6 s of the inter-envelope gap on process spawns alone.
+# GROUP_CENSUS_BATCH bounds how many group ids go into one argv: 256 ids is
+# under 2 kB, three orders of magnitude below ARG_MAX, and the bound exists so
+# the argv can never grow without a stated limit (A269 ruling 10 Q1, brief 7).
+GROUP_CENSUS_BATCH = 256
+
+
+def _group_census_batch(
+    pgids: "list[int] | tuple[int, ...]", timeout_s: float = 1
+) -> "dict[int, tuple[bool, list[str]]]":
+    """Census many process groups at once: {pgid: (absent, lines listed)}.
+
+    `pgrep -g` takes a comma-separated list and answers for the union, so one
+    call settles every group -- but its output lines ("pid command") do not
+    say WHICH group each pid is in. When the union is empty the question is
+    already answered (exit 1 with no output: every group in the batch is
+    absent) and nothing further runs; that is the teardown's common case.
+    Only a non-empty union costs a second call, one `ps`, to resolve the
+    matched pids back to their groups.
+
+    Absence rests on exactly the evidence the single-group census requires: a
+    census that could not answer -- timeout, OSError, malformed argument, an
+    unparsable line, or a pid the attribution pass could not resolve -- yields
+    False for every group in the batch, never an empty group.
+    """
+
+    groups = sorted({int(pgid) for pgid in pgids})
+    if not groups:
+        return {}
+    if len(groups) == 1:  # One group is its own batch: keep the exact semantics.
+        return {groups[0]: _group_census(groups[0], timeout_s)}
+    census: dict[int, tuple[bool, list[str]]] = {}
+    for start in range(0, len(groups), GROUP_CENSUS_BATCH):
+        census.update(_census_chunk(groups[start:start + GROUP_CENSUS_BATCH], timeout_s))
+    return census
+
+
+def _census_chunk(chunk: "list[int]", timeout_s: float) -> "dict[int, tuple[bool, list[str]]]":
+    argv = ["/usr/bin/pgrep", "-lf", "-g", ",".join(str(pgid) for pgid in chunk), "."]
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True,
+                                timeout=timeout_s, check=False)
+    except (OSError, subprocess.SubprocessError) as error:
+        return {pgid: (False, [f"census_failed: {type(error).__name__}: {error}"])
+                for pgid in chunk}
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode == 1 and not lines:
+        return {pgid: (True, []) for pgid in chunk}
+    if result.returncode not in {0, 1}:
+        line = f"census_exit_{result.returncode}: {result.stderr.strip()}"
+        return {pgid: (False, [line, *lines]) for pgid in chunk}
+    pids = []
+    for line in lines:
+        token = line.split(None, 1)[0]
+        if not token.isdigit():
+            return {pgid: (False, [f"census_unparsed: {line}", *lines]) for pgid in chunk}
+        pids.append(token)
+    attributed, unresolved = _attribute_pids(pids, timeout_s)
+    if unresolved:
+        return {pgid: (False, [f"census_unattributed: {' '.join(unresolved)}", *lines])
+                for pgid in chunk}
+    return {pgid: (not attributed.get(pgid), attributed.get(pgid, [])) for pgid in chunk}
+
+
+def _attribute_pids(
+    pids: "list[str]", timeout_s: float
+) -> "tuple[dict[int, list[str]], list[str]]":
+    """Map the matched pids back to their process groups with one `ps` call."""
+    argv = ["/bin/ps", "-o", "pgid=,pid=,command=", "-p", ",".join(pids)]
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True,
+                                timeout=timeout_s, check=False)
+    except (OSError, subprocess.SubprocessError) as error:
+        return {}, [f"{type(error).__name__}: {error}"]
+    attributed: dict[int, list[str]] = {}
+    seen = set()
+    for line in result.stdout.splitlines():
+        fields = line.split(None, 2)
+        if len(fields) < 2 or not fields[0].isdigit() or not fields[1].isdigit():
+            continue
+        seen.add(fields[1])
+        attributed.setdefault(int(fields[0]), []).append(" ".join(fields[1:]))
+    # A pid that exited between the two calls cannot prove its group empty.
+    return attributed, sorted(set(pids) - seen)
+
+
 def _probe_group_absent(pgid: int, timeout_s: float = 1) -> bool:
     return _group_census(pgid, timeout_s)[0]
 
