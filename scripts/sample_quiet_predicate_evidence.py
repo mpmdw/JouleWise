@@ -884,15 +884,32 @@ def replay_source_plist(source_dir):
 
 
 class ReplayRecorder(PowerRecorder):
-    """`PowerRecorder` with ONE difference: what argv it spawns (brief D1).
+    """`PowerRecorder` with one difference that matters: what argv it spawns.
 
-    Only ``__init__`` is overridden.  ``start`` (Popen, process journal, the
-    first-complete-frame wait, the ps identity and the owned-process tree),
-    the deadline ``threading.Timer``, ``request_stop``'s SIGTERM, the 5 s kill
-    timer, and ``finish``'s parse/anchor derivation are all inherited and run
-    the production lines -- which is the point: the bench replay is supposed to
-    measure the real finalisation tail, and only a real recorder subprocess
-    replaced by a real feeder subprocess does that.
+    TWO methods are overridden, and only two (brief D1; delta lenses:
+    execution NIT 2, contract N2 -- this paragraph used to say "only
+    ``__init__``", which the `finish` override below had already made
+    false):
+
+    * ``__init__`` builds the feeder's argv in place of `powermetrics`' and
+      records the replay provenance the bench artifact quotes per slot.
+    * ``finish`` calls ``super().finish()`` and then reads the shift K and
+      its basis back from the feeder's sidecar.  It has to be ``finish``:
+      under ``--label-shift auto`` the FEEDER derives K at its own spawn
+      instant and writes the sidecar only when it stops, so the file does
+      not exist while ``__init__`` runs, and ``super().finish()`` is the
+      point at which the feeder is guaranteed to have exited.  The
+      annotation is best-effort -- an unreadable sidecar leaves the field
+      null with a reason and does not disturb the night's finalisation.
+
+    Everything else is inherited and runs the production lines -- ``start``
+    (Popen, process journal, the first-complete-frame wait, the ps identity
+    and the owned-process tree), the deadline ``threading.Timer``,
+    ``request_stop``'s SIGTERM, the 5 s kill timer, and the parse/anchor
+    derivation inside ``PowerRecorder.finish`` itself.  That is the point:
+    the bench replay is supposed to measure the real finalisation tail, and
+    only a real recorder subprocess replaced by a real feeder subprocess
+    does that.
     """
 
     def __init__(self, path, interval_ms, clock, deadline):
