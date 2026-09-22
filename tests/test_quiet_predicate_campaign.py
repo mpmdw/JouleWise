@@ -2105,12 +2105,61 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         # Fail-closed: an absent marker is not a claim of production
         # provenance.  A session that never said what recorded it cannot be
         # admitted on the strength of not having said "replay".
-        rc, summary, outcome, *_ = FrozenExecutorTests().exercise(recorder_kind=None)
+        rc, summary, outcome, _refusals, _calls, _control, sessions = \
+            FrozenExecutorTests().exercise(recorder_kind=None)
+        # The variant is a power RECORD that omits the key -- a recorder was
+        # built and did not say what it was -- never `power: null`, which is
+        # the early-refusal path L1 exempts.
+        for session in sessions:
+            self.assertIsInstance(session["power"], dict)
+            self.assertNotIn("recorder_kind", session["power"])
         self.assertEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
         self.assertEqual([row["recorder_kind"] for row in summary["replay_recorder_envelopes"]],
                          [None] * 12)
         self.assertEqual(outcome["outcome"], "refused")
         self.assertEqual(rc, 2)
+
+    def test_L1_a_real_night_with_a_power_null_envelope_is_not_a_replay(self):
+        """Lane contract lens 17a S1: an early refusal is not a replay.
+
+        `collect` initialises `session["power"] = None` and only replaces it
+        with the recorder's metadata once a recorder was BUILT, so an
+        envelope that refused on the network-time provenance path -- before
+        any recorder existed -- writes `power: null`.  Reading
+        `(session.get("power") or {}).get("recorder_kind")` turned that null
+        into "does not say powermetrics" and discarded the WHOLE night as a
+        bench replay: twelve envelopes, `retained: []`, rc 2, under a reason
+        that is false.  The night here is a real one (the replay variable is
+        absent) whose envelope 07 refused early; it keeps its own exclusion
+        and the other eleven keep their verdict.
+        """
+        from unittest.mock import patch
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            real = module.pilot_summary
+            def refuse_envelope_seven(directory, protocol, envelopes, observer_cpu_s=None):
+                path = directory / "envelope-07" / "session.json"
+                session = json.loads(path.read_text())
+                session["power"] = None
+                path.write_text(json.dumps(session))
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, "pilot_summary",
+                                             side_effect=refuse_envelope_seven))
+
+        rc, summary, outcome, refusals, _calls, _control, _sessions = harness.exercise(spy=spy)
+        self.assertNotEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertNotIn("replay_recorder_envelopes", summary)
+        self.assertEqual(summary["evidence_status"], "PROVISIONAL")
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome["outcome"], "complete")
+        self.assertEqual(outcome["recorder_kind"], "powermetrics")
+        self.assertEqual(refusals, 0)
+        # Envelope 07 is excluded on its OWN terms and nothing else is.
+        by_index = {v["index"]: v for v in summary["envelopes"]}
+        self.assertIn("clock_anchor_unresolved", by_index[7]["excluded"])
+        self.assertEqual([v["index"] for v in summary["envelopes"] if v["excluded"]], [7])
+        self.assertEqual(summary["retained"], 11)
 
     def test_R9_no_child_of_an_ordinary_night_ever_sees_the_replay_switch(self):
         from scripts import sample_quiet_predicate_evidence as sampler

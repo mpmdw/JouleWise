@@ -958,9 +958,19 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         # attest to anything, so both refuse.  The refusal is the SUMMARY's,
         # not an exclusion reason -- A269 byte-pins the registration's
         # exclusion list, and a new reason would force a registration v3.
-        recorder_kind = (session.get("power") or {}).get("recorder_kind")
-        if recorder_kind != harness.RECORDER_KIND_PRODUCTION:
-            replay_recorders.append({"index": entry["index"], "recorder_kind": recorder_kind})
+        # `power: null` is NOT a contradicted claim of production provenance:
+        # the collector initialises it to null and only fills it once a
+        # recorder was BUILT, so a null is an envelope that refused before any
+        # recorder existed -- the network-time provenance refusal path, which
+        # excludes itself on its own terms.  Refusing a whole REAL night as a
+        # "replay" because one envelope refused early is a false record, and
+        # it was reachable (lane contract lens 17a S1).  Anything else -- a
+        # power record that exists and does not say `powermetrics` -- refuses.
+        power = session.get("power")
+        if power is not None:
+            recorder_kind = power.get("recorder_kind") if isinstance(power, dict) else None
+            if recorder_kind != harness.RECORDER_KIND_PRODUCTION:
+                replay_recorders.append({"index": entry["index"], "recorder_kind": recorder_kind})
         all_rows.extend(rows)
         hard = hard_exclusions(rows)
         excluded.extend(hard)
