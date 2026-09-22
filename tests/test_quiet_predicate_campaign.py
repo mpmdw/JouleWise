@@ -1518,3 +1518,53 @@ class RestoreOrderTests(FrozenExecutorTests):
         self.assertIsNotNone(control["on"], "the restore did not run before cleanup_record")
         self.assertEqual(control["on"]["exit_code"], 0)
         self.assertEqual(control["on"]["argv"][-1], "on")
+
+
+class AttestationWindowRecordTests(unittest.TestCase):
+    """Item 14: what the query was asked, and what an absurd epoch does."""
+
+    def test_the_record_carries_both_the_union_window_and_the_queried_seconds(self):
+        # 05a N3: `--start`/`--end` take whole seconds, so the query runs over
+        # a truncated window.  Both readings are on the record.
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = stamped_envelope(Path(tmp) / "envelope-01",
+                                   started=1790000000.4, stopped=1790000600.9)
+            with patch.object(campaign.subprocess, "run",
+                              return_value=SimpleNamespace(
+                                  returncode=0, stdout=TIMED_LOG_HEADER, stderr="")):
+                attestation = campaign.attest_network_time(out)
+        self.assertEqual(attestation["state"], "authenticated")
+        window = attestation["window_epoch_s"]
+        self.assertEqual(window, campaign.attestation_window({
+            "sampling_started": {"epoch_s": 1790000000.4, "monotonic_before_s": 50.0},
+            "sampling_stopped": {"epoch_s": 1790000600.9, "monotonic_before_s": 650.0}}))
+        argv_window = attestation["window_argv_epoch_s"]
+        self.assertEqual(argv_window, campaign.timed_log_window_epoch_s(attestation["argv"]))
+        # Whole seconds, each the truncation of its float counterpart, so the
+        # queried span is never narrower than a second either side of it.
+        for named, floated in zip(argv_window, window):
+            self.assertEqual(named, math.floor(floated))
+        self.assertEqual(argv_window[1] - argv_window[0], 602)
+
+    def test_a_non_finite_or_absurd_capture_window_is_asserted_not_a_traceback(self):
+        # 05b N1: `datetime.fromtimestamp` raises on both, from inside the
+        # guarded section now.
+        cases = {"not a number": float("nan"), "infinite": float("inf"),
+                 "absurd but finite": 1e300, "out of range": 1e18}
+        for label, stopped in cases.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                out = Path(tmp) / "envelope-01"
+                out.mkdir()
+                (out / "session.json").write_text(json.dumps(
+                    {"power": {"anchor": {"clock_stamps": {
+                        "sampling_started": {"epoch_s": 1000.0, "monotonic_before_s": 50.0},
+                        "sampling_stopped": {"epoch_s": stopped,
+                                             "monotonic_before_s": 650.0}}}}}))
+                with patch.object(campaign.subprocess, "run",
+                                  side_effect=AssertionError("must not query logd")):
+                    attestation = campaign.attest_network_time(out)
+                self.assertEqual(attestation["state"], "asserted")
+                self.assertIn("capture window unavailable", attestation["reason"])
+                self.assertIsNone(attestation["window_epoch_s"])
+                self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                                 ["network_time_unattested"])

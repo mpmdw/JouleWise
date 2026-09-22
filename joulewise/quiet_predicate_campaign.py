@@ -22,7 +22,10 @@ CHAIN_PATH = night_gate.EVIDENCE_CHAIN_PATH
 # Absolute executables, resolved through module constants (cold gate
 # 2026-09-22, ruling 10 Q1 rules 1 and 4, 14 R4).  The production argv strings
 # are exactly the NOPASSWD sudoers slice's two set forms and the unified-log
-# reader; the zsh ``log`` builtin shadows /usr/bin/log and returns nothing, so
+# reader.  The SUDOERS SLICE is the whole of what the machine's NOPASSWD entry
+# grants this chain without a password: ``systemsetup -setusingnetworktime on``
+# and ``... off``, and nothing else -- no read form, no other subcommand.  The
+# zsh ``log`` builtin shadows /usr/bin/log and returns nothing, so
 # the absolute path is load-bearing, not cosmetic.  A test substitutes its own
 # executables by rebinding these names -- PATH cannot fake an absolute path --
 # and a regression pins the production values.
@@ -453,6 +456,22 @@ def timed_log_has_header(text):
     return all(field in first for field in TIMED_LOG_HEADER_FIELDS)
 
 
+def timed_log_window_epoch_s(argv):
+    """The epochs the ``--start``/``--end`` strings actually name.
+
+    ``timed_log_argv`` formats local wall time to whole seconds, so the query
+    really runs over the union window TRUNCATED at both ends (wider at the
+    start, and still past ``sampling_stopped`` at the end because of the one
+    second of pad).  ``window_epoch_s`` keeps the float union window the
+    envelope was placed by; this is what the argv strings say, parsed back
+    from those same strings, so an auditor reading the record never has to
+    re-derive the truncation to know what was queried.
+    """
+
+    return [datetime.strptime(argv[argv.index(flag) + 1], "%Y-%m-%d %H:%M:%S").timestamp()
+            for flag in ("--start", "--end")]
+
+
 def timed_log_marker_lines(text):
     """Raw count of log lines carrying any applied-correction marker."""
     return sum(any(marker in line for marker in TIMED_LOG_MARKERS)
@@ -608,11 +627,19 @@ def attest_network_time(out, blocked=None, timeout=ATTESTATION_TIMEOUT_FLOOR_S):
         session = json.loads((out / "session.json").read_text())
         stamps = session["power"]["anchor"]["clock_stamps"]
         window = attestation_window(stamps)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+        if not all(math.isfinite(moment) for moment in window):
+            raise ValueError(f"capture window is not finite: {window}")
+        # Formatting the window is inside the guard too: an absurd but finite
+        # epoch (1e300) raises OverflowError out of `datetime.fromtimestamp`,
+        # and an envelope whose window cannot even be written down is
+        # `asserted`, never a traceback that ends the night.
+        argv = timed_log_argv(*window)
+        window_argv = timed_log_window_epoch_s(argv)
+    except (OSError, ValueError, KeyError, TypeError, OverflowError) as exc:
         attestation["reason"] = f"capture window unavailable: {type(exc).__name__}: {exc}"
         return attestation
-    argv = timed_log_argv(*window)
-    attestation.update(window_epoch_s=window, argv=list(argv))
+    attestation.update(window_epoch_s=window, argv=list(argv),
+                       window_argv_epoch_s=window_argv)
     try:
         completed = subprocess.run(list(argv), capture_output=True, text=True, timeout=timeout)
         path = out / TIMED_LOG_BASENAME

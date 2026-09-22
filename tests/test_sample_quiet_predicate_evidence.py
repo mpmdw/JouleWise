@@ -1371,6 +1371,35 @@ class ExactTilingTests(unittest.TestCase):
         self.assertEqual(oracle.call_args.kwargs["method"], CLOCK_METHOD_V3_1)
 
 
+class EndpointRoundingTests(unittest.TestCase):
+    """Item 14 (05b N3): the one float-to-nanosecond conversion in the tiling.
+
+    14 R5 rounds the anchor's binary64 endpoint to nearest, ONCE, and every
+    later endpoint is an integer sum of the recorder's own ``elapsed_ns``.
+    Truncating instead of rounding shifts the whole tiling by up to one
+    nanosecond and survived the pre-fix suite, because at epoch scale the
+    product has no fractional part to lose.  This fixture puts the endpoint at
+    a magnitude where it does.
+    """
+
+    def test_the_endpoint_is_rounded_to_nearest_never_truncated(self):
+        frames, _ = harness.parse_frames(stream(
+            document(), document(timestamp=1003, elapsed_ns=2_000_000_000, cpu=4000)))
+        endpoint_s = 1000.0000000007
+        product = endpoint_s * 1e9
+        self.assertNotEqual(round(product), int(product))
+        deriver = Mock(return_value={"status": "bounded",
+                                     "first_sample_end_point_epoch_s": endpoint_s})
+        aligned, anchor = harness.align_frames(frames, {}, deriver=deriver)
+        self.assertEqual(aligned[0]["end_ns"], round(product))
+        self.assertEqual(aligned[0]["end_ns"] - int(product), 1)
+        # And the tiling that follows is integer sums of elapsed_ns, so the
+        # shift would have moved every later frame too.
+        self.assertEqual(aligned[1]["start_ns"], aligned[0]["end_ns"])
+        self.assertEqual(aligned[1]["end_ns"] - aligned[1]["start_ns"],
+                         aligned[1]["elapsed_ns"])
+
+
 class NetworkTimeProvenanceTests(unittest.TestCase):
     """Regression on ruling 10 Q1 rule 3: no receipt, no envelope."""
 

@@ -271,9 +271,10 @@ def align_frames(frames, stamps, deriver=derive_powermetrics_anchor_v3):
     endpoint field is the binary64 ``first_sample_end_point_epoch_s``, so it is
     rounded ONCE here to integer nanoseconds and every later endpoint is an
     integer sum of the recorder's own integer ``elapsed_ns``.  Tiling in float
-    epoch seconds mis-placed consecutive frames by up to one ulp (238 ns at
-    epoch scale) each, which is what the retired 1 microsecond comparators were
-    measuring.  The float ``start_s``/``end_s`` fields are kept for readers, but
+    epoch seconds mis-placed consecutive frames by up to one ulp each -- one
+    UNIT IN THE LAST PLACE, the spacing between adjacent float64 values, which
+    at epoch scale (1.8e9 s) is 238 ns -- and that is what the retired
+    1 microsecond comparators were measuring.  The float ``start_s``/``end_s`` fields are kept for readers, but
     they are now DERIVED from the integers, never the other way round.
 
     The evidence consumer prices the anchor bound in joules, so it selects the
