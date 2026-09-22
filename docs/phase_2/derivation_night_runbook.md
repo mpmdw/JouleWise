@@ -696,10 +696,11 @@ interactive session is the `arm_idle_interactive` retry cause under §1.4a once 
 closes; A172 never equates interactive with idle for those classes, and missing evidence
 follows the existing refusal path. A173 alone owns classification and exemption changes.
 
-### 0.7 Nothing else is armed or discoverable
+### 0.7 Nothing else is armed, and every discoverable root is retained
 
 No stand-down, no Ed NO, no unresolved owner-authored `directive` issue, no
-discoverable prior plan root, no active or indeterminate measurement ownership.
+discoverable prior plan root that is ACTIVE or UNKNOWN (a harvested, retained
+root may remain discoverable), no active or indeterminate measurement ownership.
 Remove every `REHEARSAL_STUB` plan root before arming any real plan
 (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Install handoff").
 
@@ -721,11 +722,37 @@ The night's own driver never discovers anything — launchd hands
 `--plan` argument (its `--plan` is `required=True`), so the driver reads the
 file it was installed with and no other.
 
-Check it, and expect no output:
+Check it. Prior roots may be discoverable; what stops an arm is any root whose
+chain is open, whose span is active, whose night agents are installed, or whose
+records show no terminal state. The executable form is
+`python -m joulewise.evidence_night check --candidate STAGING`, whose
+`night_agents` and `retained_roots` items must both pass with every inventoried
+root classified `retained` (contract item 4: `ACTIVE` and `UNKNOWN` refuse).
+For a manual read, run the same classifier the check binds, read-only, from the
+root of the entry checkout:
 
 ```zsh
-print -rl -- /Users/edr/night-custody/*/night_plan.json(N)
+python3 -B -c 'import json; from joulewise import evidence_night as e; print(json.dumps(e.retained_roots({"roots_under": "/Users/edr"}), indent=1))'
 ```
+
+It prints one row per `/Users/edr/night-custody/*/night_plan.json` with
+`classification`, `reason` and the full paths of every marker found, then
+`verdict`. Every row must read `retained`; an `ACTIVE` or `UNKNOWN` row, a
+`Refused:` exit, or any installed night plist stops the arm. The classifier
+raises `Refused` when a path it inspects, or any directory above that path, is
+a symbolic link: the root's `night_plan.json`, its `night/` directory,
+`night/courier.sent`, `night/result.json`, `night/chain.exited`,
+`night/chain.started`, or any file in `night/` matched by the refusal names in
+contract item 4. A symbolic link elsewhere under a root, such as `night/notes`
+or `<root>/scratch`, is not inspected and does not refuse. Do not move or edit
+a root to change its row. This is the same function `check` runs (contract item
+4), evaluated at the current time with the entry checkout's timing constants,
+so it sees the span rule.
+
+Source: cold-gate ruling 2026-09-21 (packet 05 Q2, lane A230); the shell loop
+that ruling illustrated was replaced by the direct call on the cold gate's
+round-3 ruling (activation ce7c57a9, Q5) after it printed `retained` for a
+symlinked `night/` directory that the classifier refuses.
 
 ### 0.8 The clone's tree is clean, and the two desk inputs are written
 

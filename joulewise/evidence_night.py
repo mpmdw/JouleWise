@@ -696,18 +696,55 @@ def supervisor_check(state, canonical, state_path, runner):
                 continuous_reflog=walked)
 
 
-def retained_roots(state):
+# Night records that classify a discovered custody root. Several families can
+# coexist (a refusal written mid-chain, then chain.exited); an open chain takes
+# precedence over every marker, and a retained root whose plan span is still
+# active by the watchdog's rule is ACTIVE too. The installer refuses re-admission
+# on the same names (night_agent_install); the refusal names come from the
+# driver's own run_night._refusal_paths, and the span rule from the watchdog's
+# plan_span_active — both entry-checkout modules, evaluated with the entry
+# checkout's constants.
+TERMINAL_NIGHT_RECORDS = ("courier.sent", "result.json", "chain.exited")
+
+
+def retained_roots(state, now_epoch_s=None):
+    from joulewise.night_gate import NightPlan, PlanError
+    from scripts.magistrate_watchdog import Storage, plan_span_active
+    from scripts.run_night import _refusal_paths
+    now = time.time() if now_epoch_s is None else now_epoch_s
     inventory = []
     for plan in sorted((safe_path(state["roots_under"]) / "night-custody").glob("*/night_plan.json")):
         safe_path(plan)
         if not plan.is_file():
             raise Refused("retained plan is not a regular non-symlink file: " + str(plan))
-        markers = [p for p in (plan.parent / "night/courier.sent", plan.parent / "night/result.json")
-                   if safe_path(p).is_file()]
-        inventory.append(dict(plan=str(plan), classification="retained" if markers else "UNKNOWN",
+        night = plan.parent / "night"
+        markers = [night / name for name in TERMINAL_NIGHT_RECORDS if safe_path(night / name).is_file()]
+        markers.extend(p for p in _refusal_paths(night) if safe_path(p).is_file())
+        chain_open = (safe_path(night / "chain.started").is_file()
+                      and not safe_path(night / "chain.exited").is_file())
+        if chain_open:
+            classification, reason = "ACTIVE", "chain.started without chain.exited"
+        elif not markers:
+            classification, reason = "UNKNOWN", "no terminal night record"
+        else:
+            classification, reason = "retained", None
+            try:
+                parsed = NightPlan.from_mapping(json.loads(plan.read_text(encoding="utf-8")))
+                if os.path.realpath(parsed.custody_root) != os.path.realpath(plan.parent):
+                    classification = "UNKNOWN"
+                    reason = f"plan custody_root {parsed.custody_root} is not {plan.parent}"
+                elif plan_span_active(parsed, now, Storage(plan.parent)):
+                    classification = "ACTIVE"
+                    reason = "plan span active (scripts/magistrate_watchdog.plan_span_active)"
+                else:
+                    reason = ("terminal record present; plan span inactive at observation time "
+                              "(scripts/magistrate_watchdog.plan_span_active)")
+            except (PlanError, ValueError, TypeError, OverflowError, OSError, RecursionError) as exc:
+                classification, reason = "UNKNOWN", f"plan unreadable: {type(exc).__name__}: {exc}"
+        inventory.append(dict(plan=str(plan), classification=classification, reason=reason,
                               evidence=[str(p) for p in markers]))
-    return dict(inventory=inventory, verdict="fail" if any(
-        row["classification"] == "UNKNOWN" for row in inventory) else "pass")
+    return dict(inventory=inventory, now_epoch_s=now, verdict="pass" if all(
+        row["classification"] == "retained" for row in inventory) else "fail")
 
 
 def clone_census(state, caller_pid, observation=None, *, argv_only=False):

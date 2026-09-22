@@ -295,6 +295,51 @@ after prepare; relay any mailbox NO into `<staging>/lifecycle/NO` before veto;
 `publish-install` repeats the veto observation and the loaded-jobs probe at the publication boundary and requires a fresh `check` record; the lead re-runs `check` after any change.
 Record 17's script set remains the fallback until the first live use succeeds.
 
+Pre-check step, ruled by the cold gate 2026-09-21 (packet 05 Q3, wording
+corrected by the cold gate's packet 06 ruling): the census lists every process
+whose full command line matches `codex`, `claude` or `t3` (the exact command is
+`night_gate.AGENT_CENSUS_ARGV`, a `pgrep -lf` over those three words) and
+classifies each listed process that is neither the checking process nor one of
+its ancestors as foreign (`arm_census.classify_arm_census`); a process whose
+command line matches none of the three words is never foreign, whatever its
+ancestry. The tracked check refuses on any foreign PID, so the session's own
+MCP helpers, which match `codex`, must be gone first. The ruled text, with its
+commands corrected by the cold gate 2026-09-21 (activation ce7c57a9, round-3
+packet, Q2; `pgrep -lP` prints process names only and `pkill -P` reaches
+immediate children only, both verified against the installed manual and a live
+process tree):
+
+Before running `check` on a real plan, this session terminates its own idle MCP
+helpers, and nothing else. Let `ROOT` be the PID of the session root: the
+interactive `claude` process this session is running in, which the census
+recognises by executable basename `claude` and an argv carrying no `-p` or
+`--print` (`arm_census._interactive_root`). Find it with `pgrep -lf claude`,
+take the PID whose command line carries no `-p`, and confirm it with `ps -o
+pid=,command= -p $ROOT` before using it. List the session root's children with
+their full command lines: `pgrep -flP $ROOT`. Every child whose command line
+contains `codex mcp-server` is a helper. For each helper, enumerate all of its
+descendants, at every depth, and send SIGTERM to the helper and every
+descendant:
+
+```zsh
+descendants() { local pid; for pid in $(pgrep -P $1); do print -- $pid; descendants $pid; done }
+for h in $(pgrep -flP $ROOT | grep -F 'codex mcp-server' | cut -d' ' -f1); do
+  victims=($h $(descendants $h)); print -r -- "helper $h: TERM ${(j:,:)victims}"; kill -TERM $victims
+done
+```
+
+Then wait until no descendant of the session root, at any depth, has `codex
+mcp-server` in its command line: repeat `for d in $(descendants $ROOT); do ps
+-o pid=,command= -p $d; done | grep -F 'codex mcp-server'` until it prints
+nothing. Record every PID terminated, with its command line, in the check
+record. Terminate nothing that is not a descendant of `ROOT`. Then run `check`.
+If the census still reports any descendant of the session root as foreign,
+stop; never relabel it "diagnostic" (a diagnostic is the census's own report
+that it could not observe something: a discovery command that failed or printed
+an unparsable row, or a listed PID with no readable process record; the check
+refuses on diagnostics exactly as on foreign PIDs, so the relabel would not
+clear it).
+
 **Timeline.** The plan's relative boundaries are: install strictly before
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at
 t0 − 480 s; TERM at t0 − 360 s; KILL at t0 − 300 s. Acquisition,
