@@ -651,13 +651,35 @@ class NetworkTimeControlTests(FrozenExecutorTests):
 
     def test_termination_during_settle_still_restores_network_time(self):
         commands = self.fake_commands()
+        toggles = []
+        def spy(stack, module):
+            # The real set form still runs; this only reads the clock at the
+            # instant each toggle is issued (item 10 / 05a S3).
+            real = module.set_network_time
+            def watched(state):
+                toggles.append((state, module.time.monotonic()))
+                return real(state)
+            stack.enter_context(patch.object(module, "set_network_time", side_effect=watched))
         rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands, interrupt_settle=True)
+            commands=commands, interrupt_settle=True, spy=spy)
         self.assertEqual(rc, 2)
         self.assertEqual(self.envelope_directories, [])
         self.assertIn("InterruptedError", outcome["error"])
         self.assertEqual(control["on"]["exit_code"], 0)
         self.assertTrue(outcome["network_time_restored"])
+        # Q1 rule 1's PLACEMENT, not just its argv order: the OFF receipt
+        # exists on a night that died inside the settle, and the clock had not
+        # yet advanced by settle_s when the toggle was issued -- so the settle
+        # really does absorb any in-flight slew the daemon had started.  Moving
+        # the toggle after the sleep leaves this night with no OFF receipt at
+        # all, which is what the old assertions (on ``on`` alone) missed.
+        self.assertIsNotNone(control["off"], "the night died inside the settle with no OFF receipt")
+        self.assertEqual(control["off"]["stdout"], EXPECTED_OFF)
+        self.assertEqual(control["off"]["exit_code"], 0)
+        self.assertEqual([state for state, _ in toggles], ["off", "on"])
+        self.assertEqual(toggles[0][1], 0.0)
+        self.assertLess(toggles[0][1], PROTOCOL["settle_s"])
+        self.assertGreaterEqual(toggles[1][1], PROTOCOL["settle_s"])
 
     def test_failed_restore_is_reported_with_its_own_exit_code(self):
         commands = self.fake_commands(on_exit=1)
