@@ -2560,6 +2560,57 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         report["kind"] = "full"
         self.assertNotIn("CANNOT resolve at this envelope length", bench.markdown(report))
 
+    def test_X5_a_slewed_slot_is_expected_on_the_bench_an_asserted_one_is_not(self):
+        """Execution lens 17b S3: the bench never turns network time off.
+
+        The `systemsetup` stub toggles nothing, so `timed` keeps applying
+        corrections for the whole run; the lens's slot 2 came back
+        `slew_attested` on a real, live slew.  On a night that is an
+        exclusion; on the bench it is the expected state, and the attestation
+        walls the bench reports are live-log-with-slews costs.  `asserted` is
+        a defect: the query did not run, so its cost was not measured.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
+                     session_start_drift_s=0.2,
+                     attestation_state="slew_attested" if i == 2 else "authenticated")
+                for i in range(1, 13)]
+        passing = bench.verdict(rows, protocol)
+        self.assertEqual(passing["status"], "PASS")
+        self.assertEqual(passing["slot_defects"], [])
+        for state in ("asserted", None, "unknown"):
+            with self.subTest(state=state):
+                broken = [dict(row) for row in rows]
+                broken[3]["attestation_state"] = state
+                result = bench.verdict(broken, protocol)
+                self.assertEqual(result["status"], "FAIL")
+                self.assertEqual(result["slot_defects"],
+                                 [{"index": 4, "field": "attestation_state", "value": state,
+                                   "required": "authenticated or slew_attested"}])
+                self.assertIn(f"slot 4 attestation_state={state!r}", result["statement"])
+        # The smoke does not exempt it either: a query that did not run is a
+        # query whose cost was not measured, at any envelope length.
+        broken = [dict(row) for row in rows]
+        broken[3]["attestation_state"] = "asserted"
+        self.assertEqual(bench.verdict(broken, protocol, smoke=True)["status"], "FAIL")
+        # And the artifact says why a slew is not a failure here.
+        report = {"schema": bench.SCHEMA, "kind": "full", "head": "a" * 40,
+                  "clean_tree": True, "slots": rows, "verdict": passing,
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("The bench NEVER turns network time off", text)
+        self.assertIn("`slew_attested` and `authenticated` alike", text)
+        self.assertIn("Only `asserted`", text)
+
     def test_R7_a_journal_short_of_the_registered_slot_count_never_passes(self):
         from scripts import bench_replay_start_drift as bench
         rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1, session_start_drift_s=0.2)

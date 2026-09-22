@@ -304,6 +304,15 @@ ADMISSIBLE_SLOT = (("collector_exit", 0), ("cleanup_proven", True),
 # there.  Those two fields are therefore not admissible input under
 # `--smoke`, and the smoke's own artifact says so.  Nothing else is exempt.
 SMOKE_EXEMPT_FIELDS = ("anchor_status", "interior_complete_support")
+# The attestation states a BENCH slot may hold (execution lens 17b S3).  The
+# bench never turns network time off -- the `systemsetup` stub toggles
+# nothing -- so `timed` goes on applying corrections for the whole run and a
+# slot whose capture window contains one comes back `slew_attested`.  On a
+# NIGHT that is an exclusion; here it is the expected state of a machine
+# whose clock is still being disciplined, and it is not a bench failure.
+# `asserted` is: it means the query failed, was blocked or timed out, so the
+# `log show` whose wall cost this bench exists to measure did not run.
+BENCH_ATTESTATION_STATES = ("authenticated", "slew_attested")
 
 
 def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BAR_S,
@@ -330,9 +339,16 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
                           if r["session_start_drift_s"] is not None and r["session_start_drift_s"] > session_bar_s)
     required = [(field, value) for field, value in ADMISSIBLE_SLOT
                 if not (smoke and field in SMOKE_EXEMPT_FIELDS)]
-    defects = [{"index": r["index"], "field": field, "value": r.get(field),
-                "required": value}
-               for r in rows for field, value in required if r.get(field) != value]
+    defects = []
+    for r in rows:
+        for field, value in required:
+            if r.get(field) != value:
+                defects.append({"index": r["index"], "field": field,
+                                "value": r.get(field), "required": value})
+        if r.get("attestation_state") not in BENCH_ATTESTATION_STATES:
+            defects.append({"index": r["index"], "field": "attestation_state",
+                            "value": r.get("attestation_state"),
+                            "required": " or ".join(BENCH_ATTESTATION_STATES)})
     complete = len(rows) == expected and not missing
     if defects or not complete or over:
         status = "FAIL"
@@ -422,6 +438,17 @@ def markdown(report):
         lines.append(f"| {r['index']} | {r['recorder_kind']} | {r['label_shift']} | {r['label_shift_s']} | "
                      f"{r['frames_written']} | `{r['source_plist_sha256']}` | `{r['written_stream_sha256']}` |")
     lines += ["",
+              "The bench NEVER turns network time off: the `systemsetup` stub toggles nothing, "
+              "it only prints the exact stdout the chain's comparator demands. `timed` "
+              "therefore goes on applying clock corrections for the whole run, and a slot "
+              "whose capture window contains one comes back `slew_attested`. On a night that "
+              "is an exclusion; here it is the EXPECTED state of a machine whose clock is "
+              "still being disciplined, and it is not a bench failure — the verdict treats "
+              "`slew_attested` and `authenticated` alike. Only `asserted` (the query failed, "
+              "was blocked, or timed out) is a named slot defect, because then the `log show` "
+              "whose wall cost this bench exists to measure did not run. The attestation "
+              "walls in the table above are the cost of a LIVE `log show` over a log that is "
+              "still receiving `timed` entries.", "",
               "Under `--label-shift auto` the plist the feeder writes carries LIVE-LOOKING "
               "dates: every `<date>` label is the archived one moved forward by one constant "
               "whole number of seconds K, so the file cannot be told from a fresh capture by "
