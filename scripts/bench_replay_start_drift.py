@@ -364,7 +364,18 @@ def markdown(report):
     for r in rows:
         lines.append(f"| {r['index']} | {r['recorder_kind']} | {r['label_shift']} | {r['label_shift_s']} | "
                      f"{r['frames_written']} | `{r['source_plist_sha256']}` | `{r['written_stream_sha256']}` |")
-    lines += ["", f"Archive (read-only, never copied): `{report['archive']}`.",
+    lines += ["",
+              "Under `--label-shift auto` the plist the feeder writes carries LIVE-LOOKING "
+              "dates: every `<date>` label is the archived one moved forward by one constant "
+              "whole number of seconds K, so the file cannot be told from a fresh capture by "
+              "reading it. Nothing in the plist marks it. The provenance is entirely "
+              "OUT-OF-BAND, in three places that all survive the run: the feeder's sidecar "
+              "(`source_sha256`, `written_stream_sha256`, `label_shift_s` = K), the envelope's "
+              "`session.json` (`power.recorder_kind: \"replay\"`, `power.replay.*`, including "
+              "K read back from the sidecar), and the custody root itself (`~/night-bench/`, "
+              "plan id `bench-replay-…`). Under `--label-shift none` the labels are the "
+              "archived ones and K is 0.", "",
+              f"Archive (read-only, never copied): `{report['archive']}`.",
               f"Outcome: `{report['outcome']}` (rc {report['returncode']}); summary status "
               f"`{report['summary_status']}`; `evidence_outcome.json` recorder_kind "
               f"`{report['outcome_recorder_kind']}`; plan id `{report['plan_id']}`; custody root "

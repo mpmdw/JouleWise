@@ -1725,6 +1725,47 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
             self.assertIsNone(dropped)
             self.assertEqual([f["elapsed_ns"] for f in frames], record["frame_elapsed_ns"])
 
+    def test_L5_the_session_record_carries_the_K_the_feeder_applied(self):
+        """Lane contract lens 17a N4: K must not live only in the sidecar.
+
+        Under `auto` the feeder derives K at ITS spawn instant, so
+        `__init__` cannot know it and leaves `replay.label_shift_s` null.
+        The written plist meanwhile carries live-looking dates (N1), so a
+        reader holding only `session.json` had no way to tell how far the
+        labels had been moved.  `finish` reads the sidecar back.
+        """
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+                os.environ, {harness.REPLAY_ENV: str(self.FIXTURE),
+                             harness.REPLAY_LABEL_SHIFT_ENV: "auto"}, clear=False):
+            path = Path(tmp) / "powermetrics-idle-1.plist"
+            recorder = harness.ReplayRecorder(path, 100, FakeClock(), 10)
+            # At construction K is unknown, exactly as before.
+            self.assertIsNone(recorder.metadata["replay"]["label_shift_s"])
+            Path(recorder.replay_sidecar).write_text(json.dumps(
+                {"label_shift_s": 36497, "label_shift_basis":
+                 "archived_anchor_first_sample_end_point"}))
+            recorder.finish()
+            replay = recorder.metadata["replay"]
+            self.assertEqual(replay["label_shift_s"], 36497)
+            self.assertEqual(replay["label_shift_basis"],
+                             "archived_anchor_first_sample_end_point")
+            self.assertIn("read back from", replay["label_shift_s_reason"])
+            # An unreadable sidecar costs the annotation and nothing else.
+            recorder = harness.ReplayRecorder(path, 100, FakeClock(), 10)
+            Path(recorder.replay_sidecar).unlink()
+            recorder.finish()
+            self.assertIsNone(recorder.metadata["replay"]["label_shift_s"])
+            self.assertIn("could not be read back",
+                          recorder.metadata["replay"]["label_shift_s_reason"])
+        # Under `none` there is nothing to read back: K is 0 at construction.
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+                os.environ, {harness.REPLAY_ENV: str(self.FIXTURE)}, clear=False):
+            os.environ.pop(harness.REPLAY_LABEL_SHIFT_ENV, None)
+            recorder = harness.ReplayRecorder(
+                Path(tmp) / "powermetrics-idle-1.plist", 100, FakeClock(), 10)
+            recorder.finish()
+            self.assertEqual(recorder.metadata["replay"]["label_shift_s"], 0)
+
     def test_R3_auto_shifts_every_label_by_one_constant_whole_second_K(self):
         import re
         import time as time_module

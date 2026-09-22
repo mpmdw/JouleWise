@@ -924,7 +924,40 @@ class ReplayRecorder(PowerRecorder):
             # `reasons()` would supply a generic sibling; say the specific thing.
             self.metadata["replay"]["label_shift_s_reason"] = (
                 "the feeder derives K from the archived anchor at spawn time; "
-                "the applied value is in the sidecar")
+                "the applied value is read back from the sidecar in finish()")
+
+    def finish(self):
+        """Inherited finish, plus the one thing only the feeder can report.
+
+        Under ``auto`` the shift K is derived by the FEEDER at its own spawn
+        instant, so `__init__` cannot know it and left
+        ``replay.label_shift_s`` null -- while the plist the feeder wrote
+        carries live-looking dates (lane contract lens 17a N1/N4).  A reader
+        holding only `session.json` then had no way to tell how far those
+        labels had been moved.  The sidecar has K by the time the feeder has
+        exited, which `super().finish()` guarantees, so it is read back here
+        and joined to the session record.  Nothing else is overridden, and a
+        sidecar that is missing or unreadable costs the annotation only: the
+        field stays null with a reason, and the night's finalisation is not
+        disturbed.
+        """
+
+        try:
+            return super().finish()
+        finally:
+            replay = self.metadata["replay"]
+            if replay["label_shift"] == "auto":
+                try:
+                    sidecar = json.loads(Path(self.replay_sidecar).read_text())
+                    replay["label_shift_s"] = sidecar["label_shift_s"]
+                    replay["label_shift_basis"] = sidecar.get("label_shift_basis")
+                    replay["label_shift_s_reason"] = (
+                        "K derived by the feeder at spawn and read back from "
+                        f"{Path(self.replay_sidecar).name}")
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    replay["label_shift_s_reason"] = (
+                        "the feeder's sidecar could not be read back: "
+                        f"{type(exc).__name__}: {exc}")
 
 
 def census_condition(censuses, errors=()):
