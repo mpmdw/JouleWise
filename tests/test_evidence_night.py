@@ -858,7 +858,8 @@ class LifecycleTests(unittest.TestCase):
                          [("ACTIVE", "chain.started without chain.exited")])
         (root / "night/chain.exited").write_text('{"exit_code": -15}')
         result = self.checked()["checks"]["retained_roots"]
-        self.assertEqual([r["classification"] for r in result["inventory"]], ["retained"])
+        self.assertEqual([(r["classification"], r["reason"]) for r in result["inventory"]],
+                         [("retained", "terminal record present; plan span over")])
         self.assertEqual(result["inventory"][0]["evidence"],
                          [str(root / "night/chain.exited"), str(root / "night/refusal.json")])
         # An open chain stays ACTIVE even when a courier marker exists.
@@ -908,7 +909,8 @@ class LifecycleTests(unittest.TestCase):
         record = self.checked()
         self.assertTrue(record["rehearsal_ready"])
         self.assertEqual(record["checks"]["retained_roots"]["inventory"],
-                         [dict(plan=str(only / "night_plan.json"), classification="retained", reason=None,
+                         [dict(plan=str(only / "night_plan.json"), classification="retained",
+                               reason="terminal record present; plan span over",
                                evidence=[str(only / "night/refusal.json")])])
 
     def test_discovery_span_fence_reuses_the_watchdog_rule(self):

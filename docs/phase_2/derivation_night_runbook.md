@@ -742,7 +742,7 @@ done
 
 Every line must read `retained`; an `ACTIVE` or `UNKNOWN` line, or any
 installed night plist, stops the arm. Do not move or edit a root to change its
-line.
+line. This loop reads records only and cannot see the span rule; `check` binds.
 
 Source: cold-gate ruling 2026-09-21 (packet 05 Q2, lane A230). The `(N.)`
 qualifier restricts each glob to regular files, matching contract item 4's
@@ -750,7 +750,8 @@ regular-file rule; it is the one correction to the ruled loop (record 02 of
 activation 29ea94df). The span half of the check above is `retained_roots`'s
 reuse of `scripts/magistrate_watchdog.plan_span_active`; the manual loop reads
 records only, so a root inside its span shows `retained` here and ACTIVE to the
-tracked check, which is the one that binds.
+tracked check, which is the one that binds. `refusal-N.json` names are two-digit
+(`refusal-01.json` and later).
 
 ### 0.8 The clone's tree is clean, and the two desk inputs are written
 

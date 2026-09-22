@@ -700,17 +700,17 @@ def supervisor_check(state, canonical, state_path, runner):
 # coexist (a refusal written mid-chain, then chain.exited); an open chain takes
 # precedence over every marker, and a retained root whose plan span is still
 # active by the watchdog's rule is ACTIVE too. The installer refuses re-admission
-# on the same names (night_agent_install) and run_night._refusal_paths owns the
-# refusal globs; both are mirrored here so the entry checkout classifies without
-# importing the clone.
+# on the same names (night_agent_install); the refusal names come from the
+# driver's own run_night._refusal_paths, and the span rule from the watchdog's
+# plan_span_active — both entry-checkout modules, evaluated with the entry
+# checkout's constants.
 TERMINAL_NIGHT_RECORDS = ("courier.sent", "result.json", "chain.exited")
-REFUSAL_RECORD_GLOBS = ("refusal.json", "refusal-[0-9]*.json",
-                        "calibration-refusal.json", "calibration-refusal.json.*.json")
 
 
 def retained_roots(state, now_epoch_s=None):
     from joulewise.night_gate import NightPlan, PlanError
     from scripts.magistrate_watchdog import Storage, plan_span_active
+    from scripts.run_night import _refusal_paths
     now = time.time() if now_epoch_s is None else now_epoch_s
     inventory = []
     for plan in sorted((safe_path(state["roots_under"]) / "night-custody").glob("*/night_plan.json")):
@@ -719,8 +719,7 @@ def retained_roots(state, now_epoch_s=None):
             raise Refused("retained plan is not a regular non-symlink file: " + str(plan))
         night = plan.parent / "night"
         markers = [night / name for name in TERMINAL_NIGHT_RECORDS if safe_path(night / name).is_file()]
-        for pattern in REFUSAL_RECORD_GLOBS:
-            markers.extend(p for p in sorted(night.glob(pattern)) if safe_path(p).is_file())
+        markers.extend(p for p in _refusal_paths(night) if safe_path(p).is_file())
         chain_open = (safe_path(night / "chain.started").is_file()
                       and not safe_path(night / "chain.exited").is_file())
         if chain_open:
@@ -728,7 +727,7 @@ def retained_roots(state, now_epoch_s=None):
         elif not markers:
             classification, reason = "UNKNOWN", "no terminal night record"
         else:
-            classification, reason = "retained", None
+            classification, reason = "retained", "terminal record present; plan span over"
             try:
                 parsed = NightPlan.from_mapping(json.loads(plan.read_text(encoding="utf-8")))
                 if os.path.realpath(parsed.custody_root) != os.path.realpath(plan.parent):

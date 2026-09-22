@@ -223,16 +223,19 @@ with the clone's code. It then writes verdicts and evidence for:
    `night/chain.exited` is ACTIVE and refuses. Otherwise an existing regular
    `night/courier.sent`, `night/result.json`, `night/chain.exited`, or any
    regular file matched by `run_night._refusal_paths` (`refusal.json`,
-   `refusal-N.json`, `calibration-refusal.json`,
+   `refusal-01.json` and later numbers, `calibration-refusal.json`,
    `calibration-refusal.json.*.json`) classifies its root as retained; the
    record lists every marker found. Otherwise it is UNKNOWN and refuses.
    A retained root whose plan span is still active by the watchdog's rule
    (`scripts/magistrate_watchdog.plan_span_active`, evaluated on that root's
-   own `night_plan.json` at observation time) is ACTIVE and refuses; a root
-   whose plan does not parse, or whose `custody_root` is not its own
-   directory, is UNKNOWN and refuses. Each row records its reason.
-   Discovery never removes a root, and has no fixed root count. Retention
-   classification does not certify process liveness or completed delivery.
+   own `night_plan.json` at observation time with the entry checkout's timing
+   constants, which may differ from the head that authored an older sibling
+   plan) is ACTIVE and refuses; a root whose plan does not parse, or whose
+   `custody_root` is not its own directory, is UNKNOWN and refuses. Each row
+   records its reason. Discovery never removes a root, and has no fixed root
+   count. Classifying a root `retained` certifies only that a terminal record
+   exists and that the plan's span is over; it does not certify that the
+   courier's delivery succeeded.
 5. The exact raw bracketed `night_gate.AGENT_CENSUS_ARGV` result is retained
    alongside `arm_census.observe_arm_census` and `classify_arm_census` evidence.
    The argv derivation and ancestry classification execute inside the clone's
