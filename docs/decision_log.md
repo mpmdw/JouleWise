@@ -226,6 +226,7 @@ be re-derived by a future agent gets an entry here.
 | D-180 | ARM RECOVERABILITY AND STEERABILITY — install spans recur within a day; pre-authorized retry class for non-physics arm aborts (idle interactive session, stale notice hash, uncertain tick, transport) without a cold gate; idle interactive sessions not foreign at the arm-time census of stub nights (plan span unchanged); remote control between windows; lanes INSTALL-WINDOWS-MULTI-01 / ARM-RETRY-CLASS-01 / ARM-CENSUS-IDLE-INTERACTIVE-01 / REMOTE-CONTROL-BETWEEN-WINDOWS-01 | ratified by Ed (2026-09-10; decided ≠ done, each clause lands under gates) |
 | D-181 | WINDOWS RUN WHENEVER THE MACHINE IS QUIET — no cadence rule (clean census, day or night, several windows per day when the gates pass; every soundness fence unchanged); Fable 5.1 is the final eyes on every merge (gate rows 7/12 unchanged, final head sha in row 12); the owner's hands step for the first pack night prepared and emailed; lanes INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01 promoted to the head of the agent lane behind the 09-15 harvest event | ratified by Ed (2026-09-14, directive issue #337; recorded verbatim, nothing installed by the entry) |
 | D-182 | ZERO-CAPTURE MACHINE-STATE REFUSAL LICENSES ONE NEW-PLAN SUCCESSOR — a night that refuses on machine state (census, load or CPU quietness, bind-window expiry, screensaver configuration, boot clock) with zero capture licenses ONE new-plan successor once the courier has delivered: new plan id, fresh notice, ≥ 60 s spacing, bounded by the new plan's install close; never a re-arm of the same plan; every observed NO still stops; physics/evidence refusals and every gate at the successor's own t0 unchanged | ratified by Ed (2026-09-16 00:35 PDT for t0 refusals, lane record 06 amendment of activation 08ca8197; re-affirmed and extended to bind-window expiry 2026-09-17, interactive session 5c919872, "affirm of course"; recorded verbatim, nothing installed by the entry) |
+| D-183 | NO ARTIFICIAL OWNER STOPS — the process exists to prevent bad science, not to idle; any precondition an agent can satisfy itself with its own authority (git, gh, launchctl at the documented interfaces) is satisfied by the agent, never queued as an owner action. First instance: the canonical checkout `/Users/edr/code/JouleWise` behind a merged cure stalled the loop 40 h (05:10 09-20 → 21:40 09-21) because the relaunch prompt fenced every git operation there; now a clean canonical tree behind H is fast-forwarded by the evidence-night `check` itself (`git pull --ff-only`, evidence `fast_forward`) whenever no night agent is loaded, the relaunch prompt licenses that one move and requires the session to exit for a fresh supervisor instead of holding, and owner actions remain ONLY hardware, sudo, and the notice NO. Soundness fences unchanged: no move while anything is armed or loaded, no reset/force, dirty trees refuse | ratified by Ed (2026-09-21 21:50 PDT, interactive session: "make sure no more idiotic stops artificially, you have gh auth for a reason"; "the process is meant to prevent bad science not work for 40h") |
 
 ---
 
@@ -12014,3 +12015,59 @@ stay fail-closed (D-161); the successor passes every gate anew at its own t0,
 including the census (D-181); the refusal that ends a span ends it (no waiting
 inside a refused span beyond the bind window the plan itself seals); no
 frequency bound is added (every bound must be scientific, D-181).
+
+## D-183: No artificial owner stops — an agent satisfies any precondition it can satisfy itself (Ed, 2026-09-21)
+
+**Status:** ratified by Ed, 2026-09-21 ~21:50 PDT, in the interactive session
+a87c3444 (verbatim: "make sure no more idiotic stops artificially, you have gh
+auth for a reason"; "obviously idiotic and should not have a 40h stall, def fix
+stuff like that, the process is meant to prevent bad science not work for 40h").
+Recorded by the session that received the ruling; the first implementation lands
+in the same PR (record
+`docs/process_traces/2026-09-21-interactive-a87c3444/01-d183-canonical-self-fast-forward.md`).
+
+**The rule.** Any precondition that an agent can satisfy with authority it
+already holds is satisfied by the agent and recorded, never queued as an action
+for Ed. The authority an agent already holds is: git operations that cannot lose
+work (a fast-forward-only pull of a clean tree), GitHub operations under the
+existing merge gate (D-072), and launchctl at the documented night-agent
+interfaces. Owner actions are only hardware and sudo (the standing rule since
+2026-08-14) and the notice NO.
+
+**Terms, so the rule can be applied without this session's context.** The
+*canonical checkout* is the repository at `/Users/edr/code/JouleWise`, the one
+the watchdog LaunchAgent imports the census code from on every 300-second run.
+A *fast-forward-only pull* (`git pull --ff-only`) moves a branch forward to its
+upstream only when the upstream already contains every local commit; it can
+never discard a commit and fails instead of merging. A *clean tree* has no
+tracked file modified (`git status --porcelain -uno` prints nothing); untracked
+files do not count. *Loaded* means a `com.joulewise.night*` label is present in
+launchd or its plist is on disk, which is the state between arming a night and
+uninstalling it after the night. *Armed* is the plan-level view of the same
+span: a published plan whose agents are installed.
+
+**Why now.** The census self-match cure merged at 05:10 PDT 09-20 (PR #371), but
+the relaunch prompt read "Perform no git operation in the canonical root", so the
+headless magistrate emailed Ed once and held. The canonical checkout stayed 157
+commits behind until Ed ran the pull at 21:40 PDT 09-21: about 40 hours with
+nothing armed, every PR green, and a clean fast-forward as the only missing step.
+The hold bought no soundness. The one email was one of nine sent that night, and
+the session's Gmail authorisation later expired, so no reminder went out.
+
+**What this changes.** (1) The evidence-night `check` command fast-forwards the
+canonical checkout itself when the tree is clean, nothing is loaded (its item 0
+passed) and the checkout does not yet contain candidate H; it records
+`fast_forward: {before, after, pull}` in its evidence, or `null` when no move was
+needed. A dirty tree, a missing or divergent upstream, or a pull that still
+lacks H refuses. (2) The relaunch prompt licenses exactly that move and requires
+the session to commit, push and exit when the move makes its own resident
+supervisor stale, so the watchdog's successor arms; it no longer holds for an
+owner. (3) Every future "waiting for Ed" line must name the soundness the wait
+buys; a wait that buys none is a defect and is logged as one.
+
+**What this does not change.** No git operation in the canonical root other than
+the fast-forward, and none at all while anything is armed or loaded; no reset,
+force or checkout; the supervisor-freshness rule (activation records 19/21)
+still refuses a supervisor that started before the checkout came to contain H;
+physics, evidence and pre-registration refusals stay fail-closed (D-161); the
+notice NO still stops everything.
