@@ -1631,9 +1631,12 @@ class UnreadableSessionRecordTests(FrozenExecutorTests):
         self.assertEqual([row["network_time_attestation"] for row in self.envelope_journal],
                          ["asserted"] * 12)
         # Nothing is retained.  With no session record the summary also loses
-        # the interior support, so the exclusion IT prints is that one; the
-        # attestation's own verdict is read off the journal row above.
-        self.assertTrue(all(v["excluded"] for v in summary["envelopes"]))
+        # the interior support, so the exclusion list it prints carries that
+        # one TOO; the attestation's own verdict has to be asserted by
+        # membership (ruling 18 Q3 C4), never by equality against a
+        # one-element list, or the pin passes on an accident of ordering.
+        for v in summary["envelopes"]:
+            self.assertIn("network_time_unattested", v["excluded"])
         self.assertEqual(summary["retained"], 0)
 
 
