@@ -67,3 +67,25 @@ Findings and dispositions (lead-triaged; nothing silently applied):
 ### §6.3 Full affected modules, round 2 (after the Opus fixes)
 
 `pytest -q tests/test_evidence_night.py tests/test_docs_freshness.py tests/test_magistrate_watchdog.py` → `224 passed, 692 subtests passed in 175.07s`, exit 0. Two fix iterations inside the round, both test-side: a wrapped runner that delegated to the real `probe_command` let a real `pgrep` see the live successor magistrate (never delegate past the fixture runner), and the bounded-pull test first expected the canonical reason on the raised line (only night_agents, census and the stale-supervisor case are re-raised verbatim; canonical stays under the generic line).
+
+### §6.4 Sol refuter (execution lens, gpt-5.6-sol high, read-only, on `98e05bba`) — VERDICT BLOCK on that head; delta re-audit on `c84f4db0` clears it
+
+Executed by the refuter against the real functions with counterfactual repositories (its scripts: `/tmp/canonical_counterfactuals.py`, `/tmp/run_canonical_mutation.py`, `/tmp/pull_bound_probe.py`): (a) diverged upstream → refused (`Not possible to fast-forward`), HEAD unmoved; (b) deleted remote → refused, HEAD unmoved; (c) upstream on a branch without H → refused but HEAD moved and the structured evidence was discarded; (d) untracked file → fast-forwarded with evidence; (e) staged change → refused, HEAD unmoved. JSON serialisation of real records OK. Mutations on `98e05bba`: `may_fast_forward=True` killed by the loaded-agents test; the post-pull containment guard replaced by `pass` SURVIVED.
+
+| Tier | Finding (on `98e05bba`) | Disposition |
+| --- | --- | --- |
+| BLOCKER | Wrong upstream moves canonical before refusal while discarding before/after/pull evidence. | Same finding as Opus #6; FIXED in `c84f4db0`: the refusal names `HEAD moved <before> -> <after>`; `clean_before` kept. The move itself is inherent to `pull --ff-only` and stays within the checkout's upstream branch; documented in contract item 1. |
+| BLOCKER | `git pull --ff-only` unbounded and prompt-capable (`pull kwargs: {}`). | Same as Opus #7; FIXED in `c84f4db0`: `timeout=120`, `GIT_TERMINAL_PROMPT=0`, `TimeoutExpired` → refusal. |
+| SHOULD-FIX | Post-pull containment guard not pinned by any test (mutation survived). | FIXED in `c84f4db0`: `test_canonical_fast_forward_that_still_lacks_h_refuses_and_keeps_evidence`. |
+
+**Delta re-audit (lead, bench, `c84f4db0`, the refuter's own scripts re-pinned with `sed 's/98e05bba:/c84f4db0:/'` and the mutation's target text updated to the new refusal):**
+
+- `pull_bound_probe.py` → `pull kwargs: {'timeout': 120, 'env': {'GIT_TERMINAL_PROMPT': '0'}}`; `return keys: ['after', 'before', 'clean_before', 'pull']`.
+- `run_canonical_mutation.py postpull_pass` → `FAILED (failures=1)` over the five canonical tests: KILLED.
+- `run_canonical_mutation.py license_true` → `FAILED (errors=1)`: KILLED.
+
+Same-signature statement: the two blockers and the should-fix are one fix round; their signatures (unbounded subprocess, evidence discarded on refusal, unpinned guard) do not recur in the delta. No round three.
+
+### §6.5 Terminal review (Fable, full session context)
+
+Merge candidate = the records-only head after this section (sha in the PR ledger row 12). Diff read in full at the bench: one function pair plus a flag in `evidence_night.py`, `probe_command` env merge, five tests, four doc edits, D-183 row + body. Fences verified by reading and by the refuter's executed cases: no move while loaded (item 0 gate, mutation killed), no reset/force (only `pull --ff-only`), dirty refuses (case e), bounded and prompt-free (probe). Verdict: MERGE on green hosted checks.
