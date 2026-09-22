@@ -1285,11 +1285,12 @@ SYNTHETIC_COMPONENT_SHA256S = (
 )
 # The synthetic producer plans embed the LIVE issued acceptance (identity and
 # both digests), so these frozen pins move with a D-079 issuance. Re-derived
-# once for the r6 generation d079_calibration_acceptance_v2_n17_r6
-# (file SHA-256 0227bca3...) with the independent fixture oracle
-# `_fixture_canonical_sha256`, never with the mint code under test. The
-# acceptance-independent component and CLI component pins were rechecked and
-# remain unchanged at that r6 issuance. Pins also move with a reviewed
+# once for the r7 generation d079_calibration_acceptance_v2_n17_r7
+# (file SHA-256 9c3a29f6...) with the independent fixture oracle
+# `_fixture_canonical_sha256`, never with the mint code under test. They were
+# re-derived the same way at the r6 issuance before it (file SHA-256
+# 0227bca3...). The acceptance-independent component and CLI component pins
+# were rechecked and remain unchanged at both issuances. Pins also move with a reviewed
 # component-contract change: first instance 2026-09-05, PR #292 v2
 # planning-sizing metadata object (ruling 50). SYNTHETIC_COMPONENT_SHA256S
 # and CLI_COMPONENT_SHA256S move for that object alone;
@@ -1301,11 +1302,11 @@ SYNTHETIC_COMPONENT_SHA256S = (
 # for the same object and its embedded producer-set hash. Per-constant byte
 # diffs are recorded in 51-fb-v2-ci-fix-3-report.md.
 SYNTHETIC_PRODUCER_PIN_SHA256S = (
-    "0a9d4d5f0cd046787575876ce9fd53ad01b2ea4097360c4aec5a2fa8b0ad8100",
-    "a15195aabe749c18d55f12612f45d9afc890f490547e10366f3cee95c8cbf09a",
+    "0873dfbaba8562065ca2156418167b9e3fac8dd93086cb1398e907326686cbc4",
+    "a92cf81e56e5a5ea082b5ee9b449d8c6a7124207e1cd4ff35a64620e94e53ed1",
 )
 SYNTHETIC_PRODUCER_SET_SHA256 = (
-    "02fca6e419bc2506a8595987bc0680f8fa86b09b8afce51ccb9ca3ddd1ff8f26"
+    "bdee676282a1fc7e0dee99a412fb22cfa4a30722f5de84923831c6ccf6b012a0"
 )
 CLI_COMPONENT_SHA256S = (
     "5d0b4bafbb106b3a2f577f642f9fdee7b426e20fdbbf8aeaa6f1b126806fdc03",
@@ -6273,21 +6274,21 @@ class V2PinsetAndMintTests(unittest.TestCase):
             SYNTHETIC_COMPONENT_SHA256S,
         )
         # Ruling 50: the reviewed component-contract re-pin must not move
-        # any issued acceptance field, including either r6 digest.
+        # any issued acceptance field, including either r7 digest.
         before = copy.deepcopy(loaded.value["producer_plans"])
         old_components = (
             "8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495",
             "a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70",
         )
         old_producers = (
-            "1d9bd87ab82f721ea08a013d97630683e665d5afb23455255899ebb8a642d74c",
-            "509e6b38c155897c523320a7061253b115609e70bf4f9b95f8b17d1c96f009d1",
+            "8151052a4c7d2294124486d6a1967a4a2a29d0ecee2074b159c7b4c87aeafa66",
+            "e9760631722b2e9bb49b9a2b967544ab071baeb8dbe204c3cdf34b1ba331c178",
         )
         acceptance_bytes = (
-            b'{"acceptance_id":"d079_calibration_acceptance_v2_n17_r6",'
-            b'"artifact_sha256":"0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",'
+            b'{"acceptance_id":"d079_calibration_acceptance_v2_n17_r7",'
+            b'"artifact_sha256":"9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16",'
             b'"derivation_rule_id":"joulewise.calibration_acceptance_bound.v2",'
-            b'"derivation_sha256":"18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3"}'
+            b'"derivation_sha256":"2c7dab72ecdd4bfad740fc962f0c36820dd9adedcf65c2446956b1580b35c118"}'
         )
         for old, new, component_hash, producer_hash, current_hash in zip(
             before, loaded.value["producer_plans"], old_components,
@@ -6304,7 +6305,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 )
         self.assertEqual(
             _fixture_canonical_sha256(before),
-            "fe9c031e6fbcec9d1bc771ba2297972469c8a72140596d5655f37559e85c7065",
+            "5d22aa113ceb339aa208c1cd558499c15c07a982feb62204b618418746cdb842",
         )
         self.assertEqual(
             _fixture_canonical_sha256(loaded.value["producer_plans"]),
@@ -7039,7 +7040,18 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     file_sha256(
                         StableTemporaryDirectory.path / "floor.json"
                     ),
-                    "9d3c2984fcd719a4f7292668cdb247faee7ac77c53302d84473989cddb22dd8f",
+                    # Moved by the D-079 r7 issuance (r6 value
+                    # 9d3c2984...). The scenario's floor.json differs
+                    # between the two generations in exactly ONE leaf,
+                    # ``provenance.calibration_plan.sha256``
+                    # (b44a28e5... -> 6e3c39d3...), which is the pinset's
+                    # ``aggregate.producer_set_sha256``; the pinset in turn
+                    # differs only in the two producer plans' three
+                    # ``calibration_acceptance`` identity fields and the
+                    # self-hashes covering them.  Both digests were captured
+                    # by executing this same pinned scenario, the r6 one
+                    # against the pre-transaction canonical checkout.
+                    "5a2444110275ef84b91179200fc3e4818d8e6fbc2063485ef4ae7ac85ee83f16",
                 )
         finally:
             shutil.rmtree(StableTemporaryDirectory.path, ignore_errors=True)

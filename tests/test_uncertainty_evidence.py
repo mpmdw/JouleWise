@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import math
 import random
 import unittest
 from dataclasses import replace
 from fractions import Fraction
 from itertools import combinations
+from pathlib import Path
 
 from joulewise.clock import ClockStamp
 from joulewise.detection_floor import _validate_idle_drift_guard
@@ -946,3 +948,338 @@ class AnchorV3ExactTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "unregistered"):
             resolve_anchor_deriver("unknown")
+
+
+# --------------------------------------------------------------------------
+# A267 QPE01-CLOCK-DISCIPLINE-ANCHOR-01 — cold-gate regressions 1-5 and 8-12
+# (packet 2026-09-22, ruling 10 Q2/Q4 as amended by rebuttal ruling 14
+# R1/R2/R3/R5).  Fixtures are the twelve archived envelopes of the pilot night
+# qpe01-pilot-n1-20260922-0217; see tests/fixtures/.../SOURCES.md for the
+# archive digests.
+# --------------------------------------------------------------------------
+
+PILOT_FIXTURES = (
+    Path(__file__).resolve().parent / "fixtures" / "qpe01_pilot_n1_20260922"
+)
+
+
+def pilot_envelope(index: int) -> dict:
+    return json.loads((PILOT_FIXTURES / f"envelope-{index:02d}.json").read_text())
+
+
+def pilot_stamps(fixture: dict) -> dict[str, ClockStamp]:
+    return {name: ClockStamp(**value)
+            for name, value in fixture["clock_stamps"].items()}
+
+
+def pilot_records(fixture: dict):
+    from joulewise.uncertainty_evidence import NativeAnchorRecord
+
+    return [
+        NativeAnchorRecord(
+            elapsed_s=elapsed_ns / 1e9,
+            native_timestamp_s=native_ns / 1e9,
+            power_w=power_w,
+            energy_j=energy_j,
+            is_delta=is_delta,
+            elapsed_ns=elapsed_ns,
+            native_timestamp_ns=native_ns,
+        )
+        for elapsed_ns, native_ns, power_w, energy_j, is_delta in fixture["records"]
+    ]
+
+
+class AnchorV31ColdGateTests(unittest.TestCase):
+    """The v3.1 evidence identity: what it admits, what it refuses, and why.
+
+    Every refusal here is a REFUSAL, not a clipped value: the anchor either
+    bounds the first sample's endpoint on the wall timeline or says it cannot.
+    """
+
+    DURATION_S = Fraction(600)
+    # Real captures stamp a wall read with a finite resolution; a zero-width
+    # bracket would force five exact float equalities on two unknowns.
+    RESOLUTION_S = 1e-6
+
+    def derive(self, **kwargs):
+        from joulewise.uncertainty_evidence import derive_powermetrics_anchor_v3
+
+        return derive_powermetrics_anchor_v3(**kwargs)
+
+    def v3_1(self, *, stamps, records):
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1
+
+        return self.derive(stamps=stamps, records=records, method=CLOCK_METHOD_V3_1)
+
+    def synthetic(self, *, rate_ppm=0, duration_s=None, step_s=Fraction(0),
+                  resolution_s=None):
+        """A capture whose wall clock runs at a known rate, with optional step.
+
+        ``rate_ppm`` tilts wall against monotonic over the whole capture (the
+        residual frequency correction a network-time-OFF machine keeps
+        applying); ``step_s`` moves the wall clock once, between
+        ``sampling_started`` and ``sampling_stopped``, with native rows on
+        both sides.
+        """
+        duration = self.DURATION_S if duration_s is None else Fraction(duration_s)
+        resolution = self.RESOLUTION_S if resolution_s is None else resolution_s
+        rate = Fraction(1) + Fraction(int(rate_ppm), 10 ** 6)
+        base_epoch = Fraction(1000)
+        anchor_ns = 1_001_000_000_000
+
+        def make(monotonic: Fraction, offset: Fraction = Fraction(0)) -> ClockStamp:
+            epoch = base_epoch + rate * (monotonic - 100) + offset
+            return ClockStamp(float(epoch), float(monotonic), float(monotonic),
+                              resolution, resolution)
+
+        first = Fraction(100) + Fraction(1) + Fraction(1, 1024)
+        stamps = {
+            "pre_spawn": make(Fraction(100)),
+            "first_parse": make(first),
+            "sampling_started": make(max(first, Fraction(102))),
+            "sampling_stopped": make(Fraction(100) + duration, step_s),
+            "post_parse": make(Fraction(101) + duration, step_s),
+        }
+        from joulewise.uncertainty_evidence import NativeAnchorRecord
+
+        records, elapsed_total = [], 0
+        for index in range(int(duration) + 1):
+            elapsed_ns = 999_000_000 if index == 0 else 1_000_000_000
+            if index:
+                elapsed_total += elapsed_ns
+            endpoint = Fraction(anchor_ns) + rate * elapsed_total
+            native_ns = (endpoint.numerator // endpoint.denominator
+                         // 1_000_000_000 * 1_000_000_000)
+            records.append(NativeAnchorRecord(
+                elapsed_s=elapsed_ns / 1e9, native_timestamp_s=native_ns / 1e9,
+                power_w=1.0, energy_j=elapsed_ns / 1e9, is_delta=True,
+                elapsed_ns=elapsed_ns, native_timestamp_ns=native_ns))
+        return stamps, records
+
+    # -- regression 1 ------------------------------------------------------
+    def test_envelope_08_is_bounded_under_v3_1_with_the_drift_priced_in(self) -> None:
+        from joulewise.uncertainty_evidence import (
+            CLOCK_METHOD_V3_1, SCHEMA_VERSION_V3_1, V3_1_CAPS,
+        )
+
+        fixture = pilot_envelope(8)
+        record = self.v3_1(stamps=pilot_stamps(fixture),
+                           records=pilot_records(fixture))
+        self.assertEqual(record["status"], "bounded", record.get("detail"))
+        self.assertEqual(record["method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(record["clock_anchor_method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(record["schema_version"], SCHEMA_VERSION_V3_1)
+        self.assertEqual(record["caps"], dict(V3_1_CAPS))
+        self.assertEqual(len(record["caps"]), 4)
+        # The night's own -7.60 ppm residual frequency correction over a 591 s
+        # capture: 4.54 ms of wall-versus-monotonic drift.
+        self.assertGreaterEqual(record["wall_minus_monotonic_span_s"], 0.00454)
+        self.assertLessEqual(record["wall_minus_monotonic_span_s"], 0.00455)
+        # The drift is PRICED, not clipped: it is the dominant term of the
+        # emitted bound.  Restoring an absolute 5 ms cap on the bound would
+        # refuse this envelope (regression 2); dropping the span term from the
+        # bound would leave under 1 ms and understate the mapping error.
+        self.assertGreaterEqual(record["effective_clock_anchor_bound_s"], 0.0050)
+        self.assertLessEqual(record["effective_clock_anchor_bound_s"], 0.0052)
+        self.assertLess(record["anchor_only_bound_s"], 0.001)
+        self.assertLess(record["placement_bound_s"],
+                        V3_1_CAPS["max_placement_bound_s"])
+
+    # -- regression 2 ------------------------------------------------------
+    def test_envelope_08_still_refuses_under_the_default_v3_identity(self) -> None:
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
+
+        fixture = pilot_envelope(8)
+        record = self.derive(stamps=pilot_stamps(fixture),
+                             records=pilot_records(fixture))
+        self.assertEqual(record["status"], "unknown")
+        self.assertEqual(record["detail"], "effective_clock_anchor_bound_exceeded")
+        self.assertEqual(record["method"], CLOCK_METHOD_V3)
+        self.assertAlmostEqual(record["effective_clock_anchor_bound_s"],
+                               0.0050768, places=6)
+        # v3 records gain no identity key at all (review condition 6).
+        for key in ("clock_anchor_method", "schema_version", "caps",
+                    "placement_bound_s", "first_sample_end_point_epoch_ns"):
+            self.assertNotIn(key, record)
+
+    # -- regression 3 ------------------------------------------------------
+    def test_envelope_07_trips_the_backstop_and_reports_its_38_ppm_rate(self) -> None:
+        """The night's 20 ms adjtime slew: refused before the fit is attempted.
+
+        Ruling 14 R1 puts the frozen 15 ms span backstop BEFORE the 25 ppm
+        rate gate, so this 22.36 ms excursion is caught by the backstop; the
+        sustained rate is emitted on both rate-aware refusals so the evidence
+        a reader needs is never deleted by whichever gate fires first.
+        """
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1, V3_1_CAPS
+
+        fixture = pilot_envelope(7)
+        record = self.v3_1(stamps=pilot_stamps(fixture),
+                           records=pilot_records(fixture))
+        self.assertEqual(record["status"], "unknown")
+        self.assertEqual(record["detail"], "wall_minus_monotonic_span_exceeded")
+        # 14 R2: EVERY v3.1 record carries the identity that chose its caps --
+        # a refusal most of all, since a reader cannot otherwise tell which
+        # limits refused it.  Stripping the identity from the unresolved half
+        # survived the pre-fix suite.
+        self.assertEqual(record["clock_anchor_method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(record["schema_version"], "p2-038.4")
+        self.assertEqual(record["caps"], dict(V3_1_CAPS))
+        self.assertGreaterEqual(record["wall_minus_monotonic_rate_ppm"], 37)
+        self.assertLessEqual(record["wall_minus_monotonic_rate_ppm"], 39)
+        self.assertEqual(record["max_wall_minus_monotonic_span_s"], 0.015)
+        self.assertAlmostEqual(record["wall_minus_monotonic_span_s"], 0.0223608,
+                               places=6)
+        self.assertGreater(record["rate_fit_baseline_s"], 500)
+
+    # -- regression 4 ------------------------------------------------------
+    def test_six_millisecond_wall_step_refuses_and_two_tenths_is_bounded(self) -> None:
+        stamps, records = self.synthetic(step_s=Fraction(6, 1000))
+        stepped = self.v3_1(stamps=stamps, records=records)
+        self.assertEqual(stepped["status"], "unknown")
+        # Observed detail on first run; pinned exactly thereafter.  Both
+        # members of the ruled pair are fit refusals, not gate refusals.
+        self.assertEqual(stepped["detail"], "affine_clock_fit_empty")
+        self.assertIn(stepped["detail"],
+                      {"rate_aware_native_set_empty", "affine_clock_fit_empty"})
+        small, records = self.synthetic(step_s=Fraction(2, 10_000))
+        bounded = self.v3_1(stamps=small, records=records)
+        self.assertEqual(bounded["status"], "bounded", bounded.get("detail"))
+        self.assertAlmostEqual(bounded["wall_minus_monotonic_span_s"], 0.0002,
+                               places=7)
+
+    # -- regressions 5 and 9 ----------------------------------------------
+    def test_thirty_ppm_refuses_and_twenty_ppm_is_bounded_with_its_drift(self) -> None:
+        stamps, records = self.synthetic(rate_ppm=30)
+        refused = self.v3_1(stamps=stamps, records=records)
+        self.assertEqual(refused["status"], "unknown")
+        # 30 ppm over 600 s is 18 ms, which the 15 ms backstop catches first.
+        self.assertEqual(refused["detail"], "wall_minus_monotonic_span_exceeded")
+        self.assertAlmostEqual(refused["wall_minus_monotonic_rate_ppm"], 30.05,
+                               places=2)
+        stamps, records = self.synthetic(rate_ppm=20)
+        bounded = self.v3_1(stamps=stamps, records=records)
+        self.assertEqual(bounded["status"], "bounded", bounded.get("detail"))
+        self.assertAlmostEqual(bounded["wall_minus_monotonic_span_s"], 0.01202,
+                               places=5)
+        # The 12 ms of drift is inside the emitted bound, not discarded.
+        self.assertGreater(bounded["effective_clock_anchor_bound_s"],
+                           bounded["wall_minus_monotonic_span_s"])
+        self.assertLess(bounded["effective_clock_anchor_bound_s"], 0.013)
+
+    def test_the_twenty_five_ppm_rate_gate_refuses_a_short_fast_capture(self) -> None:
+        """The rate gate's own kill: 30 ppm over 300 s is 9 ms, under the
+        backstop, and must still refuse."""
+        stamps, records = self.synthetic(rate_ppm=30, duration_s=300)
+        record = self.v3_1(stamps=stamps, records=records)
+        self.assertEqual(record["status"], "unknown")
+        self.assertEqual(record["detail"], "wall_minus_monotonic_rate_exceeded")
+        self.assertAlmostEqual(record["wall_minus_monotonic_rate_ppm"], 30.1,
+                               places=2)
+        self.assertEqual(record["max_sustained_rate_ppm"], 25.0)
+        self.assertLess(record["wall_minus_monotonic_span_s"], 0.015)
+        self.assertAlmostEqual(record["rate_fit_baseline_s"], 300, places=6)
+
+    # -- regression 8 ------------------------------------------------------
+    def test_all_twelve_archived_envelopes_replay_v3_byte_identical(self) -> None:
+        """Ruling 14 R3(i): zero delta on twelve real members, refusals
+        included, under the default method."""
+        for index in range(1, 13):
+            with self.subTest(envelope=index):
+                fixture = pilot_envelope(index)
+                self.assertEqual(
+                    self.derive(stamps=pilot_stamps(fixture),
+                                records=pilot_records(fixture)),
+                    fixture["recorded_anchor"],
+                )
+
+    # -- regression 10 -----------------------------------------------------
+    def test_placement_over_five_milliseconds_refuses_at_a_lawful_rate(self) -> None:
+        """A 6 ms stamp resolution places the endpoint no better than 6 ms.
+
+        The rate is zero, so neither the backstop nor the rate gate fires:
+        only the placement cap stands between this capture and a bound it has
+        not earned.
+        """
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1, V3_1_CAPS
+
+        stamps, records = self.synthetic(resolution_s=0.006)
+        record = self.v3_1(stamps=stamps, records=records)
+        self.assertEqual(record["status"], "unknown")
+        self.assertEqual(record["detail"], "effective_clock_anchor_bound_exceeded")
+        # The other unresolved v3.1 path, refused by a different gate: same
+        # identity, same schema, same frozen caps.
+        self.assertEqual(record["clock_anchor_method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(record["schema_version"], "p2-038.4")
+        self.assertEqual(record["caps"], dict(V3_1_CAPS))
+        self.assertEqual(record["wall_minus_monotonic_span_s"], 0.0)
+        self.assertGreater(record["placement_bound_s"], 0.005)
+        self.assertGreater(record["stamp_resolution_s"], 0.005)
+
+    # -- regression 11 -----------------------------------------------------
+    def test_lawful_rate_over_a_long_capture_still_trips_the_backstop(self) -> None:
+        """20 ppm is admissible; 20 ppm for 900 s is 18 ms of drift and is not.
+
+        Deleting the backstop would leave this capture bounded, with 18 ms of
+        unpriced rigid shift (0.72 J at the 40 W loaded bracket edge).
+        """
+        stamps, records = self.synthetic(rate_ppm=20, duration_s=900)
+        record = self.v3_1(stamps=stamps, records=records)
+        self.assertEqual(record["status"], "unknown")
+        self.assertEqual(record["detail"], "wall_minus_monotonic_span_exceeded")
+        self.assertAlmostEqual(record["wall_minus_monotonic_span_s"], 0.01802,
+                               places=5)
+        self.assertLess(record["wall_minus_monotonic_rate_ppm"], 25.0)
+
+    # -- regression 12 (deriver half) --------------------------------------
+    def test_caps_are_frozen_to_their_identity_and_never_caller_supplied(self) -> None:
+        from joulewise.uncertainty_evidence import (
+            ANCHOR_CAPS_BY_METHOD, CLOCK_METHOD_V3, CLOCK_METHOD_V3_1,
+            SCHEMA_FOR_ANCHOR_METHOD, SCHEMA_VERSION_V3_1, V3_1_CAPS, V3_CAPS,
+        )
+        import inspect
+        from joulewise.uncertainty_evidence import derive_powermetrics_anchor_v3
+
+        self.assertEqual(set(ANCHOR_CAPS_BY_METHOD),
+                         {CLOCK_METHOD_V3, CLOCK_METHOD_V3_1})
+        with self.assertRaises(TypeError):
+            ANCHOR_CAPS_BY_METHOD[CLOCK_METHOD_V3] = dict(V3_1_CAPS)
+        with self.assertRaises(TypeError):
+            V3_1_CAPS["max_sustained_rate_ppm"] = 1000.0
+        self.assertEqual(dict(V3_CAPS), {
+            "form": "absolute",
+            "max_wall_minus_monotonic_span_s": 0.005,
+            "max_effective_clock_anchor_bound_s": 0.005})
+        self.assertEqual(dict(V3_1_CAPS), {
+            "form": "rate_and_placement",
+            "max_sustained_rate_ppm": 25.0,
+            "max_placement_bound_s": 0.005,
+            "max_wall_minus_monotonic_span_s": 0.015})
+        self.assertEqual(SCHEMA_FOR_ANCHOR_METHOD[CLOCK_METHOD_V3_1],
+                         SCHEMA_VERSION_V3_1)
+        self.assertEqual(CLOCK_METHOD_V3_1,
+                         "powermetrics_native_second_rate_aware_set_membership_v1.1")
+        self.assertEqual(SCHEMA_VERSION_V3_1, "p2-038.4")
+        # No caps argument exists: an identity is the only way to name limits.
+        parameters = inspect.signature(derive_powermetrics_anchor_v3).parameters
+        self.assertNotIn("caps", parameters)
+        self.assertEqual(parameters["method"].default, CLOCK_METHOD_V3)
+        fixture = pilot_envelope(2)
+        stamps, records = pilot_stamps(fixture), pilot_records(fixture)
+        with self.assertRaisesRegex(ValueError, "unregistered anchor method"):
+            self.derive(stamps=stamps, records=records, method="v9")
+        self.assertEqual(self.derive(stamps=stamps, records=records),
+                         self.derive(stamps=stamps, records=records,
+                                     method=CLOCK_METHOD_V3))
+
+    def test_v3_1_emits_the_exact_integer_endpoint_of_its_own_midpoint(self) -> None:
+        fixture = pilot_envelope(2)
+        record = self.v3_1(stamps=pilot_stamps(fixture),
+                           records=pilot_records(fixture))
+        exact_ns = record["first_sample_end_point_epoch_ns"]
+        self.assertIsInstance(exact_ns, int)
+        # Within one float64 ulp at epoch scale of the recorded float field,
+        # and not merely a re-rounding of it.
+        self.assertLess(abs(exact_ns - record["first_sample_end_point_epoch_s"] * 1e9), 512)
+        self.assertGreaterEqual(exact_ns, round(record["admissible_lower_epoch_s"] * 1e9))
+        self.assertLessEqual(exact_ns, round(record["admissible_upper_epoch_s"] * 1e9))

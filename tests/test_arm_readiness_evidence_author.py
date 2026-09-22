@@ -121,13 +121,14 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
     for relative in (
         # Every registered issued generation is available to the fixture:
         # historical `_v1`/`_v2` packs pin n19/n19_r2, and successor packs may
-        # name any retained n17 r3-r6 issuance.
+        # name any retained n17 r3-r7 issuance.
         "configs/calibration/calibration_acceptance_d079_v2.json",
         "configs/calibration/calibration_acceptance_d079_v2_r2.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r3.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r4.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r5.json",
         "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+        "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json",
         "docs/decision_log.md",
         "docs/phase_2/window_runbook.md",
         "joulewise/analysis_manifest_v3.py",
