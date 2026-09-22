@@ -2687,9 +2687,13 @@ class BenchReplayFailClosedTests(unittest.TestCase):
                           (7, "anchor_status", "unknown"),
                           (8, "interior_complete_support", False)])
         for fragment in ("slot 5 collector_exit=1", "slot 6 cleanup_proven=False",
-                         "slot 7 anchor_status='unknown'",
-                         "slot 8 interior_complete_support=False"):
+                         "slot 7 anchor_status='unknown'"):
             self.assertIn(fragment, result["statement"])
+        # Four defective slots is one over the cap the statement spells out,
+        # so the fourth is summarised rather than named (fix round 2 item 3,
+        # delta execution lens NIT 1); `slot_defects` above still carries it.
+        self.assertIn("… and 1 more", result["statement"])
+        self.assertNotIn("slot 8 interior_complete_support=False", result["statement"])
         # The smoke is exempt from the two fields a 60 s envelope cannot
         # produce -- and from nothing else.
         smoke = bench.verdict(broken, protocol, smoke=True)
@@ -2716,6 +2720,49 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertIn("`anchor_status` CANNOT resolve at this envelope length", text)
         report["kind"] = "full"
         self.assertNotIn("CANNOT resolve at this envelope length", bench.markdown(report))
+
+    def test_D3_an_admissibility_only_fail_opens_with_the_defect_and_stays_short(self):
+        """Delta execution lens NIT 1: the leading clause is the real defect.
+
+        An admissibility-only FAIL -- every chain figure under the bar, the
+        journal complete, the tails that did not run -- opened with "max <=
+        0.5 s NOT shown: over=[] missing=[] recorded=12/12", which reports
+        the bar as unmet when it was met and hides the defect behind three
+        empty fields; twelve unresolved slots then appended 24 clauses to
+        that one line, which is what the artifact headline and the terminal
+        both print.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1, session_start_drift_s=0.2,
+                     anchor_status="unknown", interior_complete_support=False)
+                for i in range(1, 13)]
+        result = bench.verdict(rows, protocol)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(len(result["slot_defects"]), 24)
+        statement = result["statement"]
+        self.assertTrue(statement.startswith("12/12 slots NOT admissible"), statement)
+        self.assertNotIn("NOT shown", statement)
+        self.assertIn("… and 21 more", statement)
+        self.assertLess(len(statement), 600)
+        # The counterfactual, executed: the same rows with ONE chain figure
+        # over the bar keep the drift-first opening, because then the bar
+        # really was not met.
+        over = [dict(row) for row in rows]
+        over[2]["chain_start_drift_s"] = 0.9
+        self.assertTrue(bench.verdict(over, protocol)["statement"].startswith(
+            "max <= 0.5 s NOT shown: over=[3]"))
+        # Three defective slots is at the cap: all of them are named, nothing
+        # is summarised.
+        few = [dict(row, anchor_status="bounded", interior_complete_support=True)
+               for row in rows]
+        for i in (0, 1, 2):
+            few[i]["cleanup_proven"] = False
+        statement = bench.verdict(few, protocol)["statement"]
+        self.assertTrue(statement.startswith("3/12 slots NOT admissible"), statement)
+        self.assertNotIn("more", statement.split("under the bar")[0])
+        for index in (1, 2, 3):
+            self.assertIn(f"slot {index} cleanup_proven=False", statement)
 
     def test_X5_a_slewed_slot_is_expected_on_the_bench_an_asserted_one_is_not(self):
         """Execution lens 17b S3: the bench never turns network time off.

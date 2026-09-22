@@ -313,6 +313,11 @@ SMOKE_EXEMPT_FIELDS = ("anchor_status", "interior_complete_support")
 # `asserted` is: it means the query failed, was blocked or timed out, so the
 # `log show` whose wall cost this bench exists to measure did not run.
 BENCH_ATTESTATION_STATES = ("authenticated", "slew_attested")
+# How many slots the FAIL statement spells out before it summarises the rest
+# (delta execution lens NIT 1).  Twelve unresolved slots appended 24 clauses
+# to one line; the statement is read in the artifact's headline and in a
+# terminal, and the first defective slots are what a reader acts on.
+DEFECT_SLOT_CLAUSE_CAP = 3
 
 
 def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BAR_S,
@@ -383,13 +388,32 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
                      f"on slots {session_over}): a split verdict is ESCALATED to the "
                      "magistrate, never passed")
     else:
-        statement = (f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
-                     f"recorded={len(rows)}/{expected}"
-                     + "".join(f"; slot {d['index']} {d['field']}={d['value']!r} "
-                               f"(required {d['required']!r})" for d in defects)
-                     + (f"; the session-level bar is exceeded too (max "
-                        f"{max(session):.3f} s > {session_bar_s} s on slots {session_over})"
-                        if session_bar_exceeded else ""))
+        # A FAIL has a LEADING defect, and it is whichever one actually
+        # happened (delta execution lens NIT 1).  An admissibility-only FAIL
+        # -- every chain figure at or under the bar, the journal complete,
+        # one slot whose tail did not run -- used to open "max <= 0.5 s NOT
+        # shown: over=[] missing=[] recorded=12/12", which reports the bar as
+        # unmet when it was met and buries the defect that failed the run
+        # behind three empty fields.
+        defect_slots = sorted({d["index"] for d in defects})
+        clauses = [f"slot {d['index']} {d['field']}={d['value']!r} "
+                   f"(required {d['required']!r})" for d in defects]
+        if len(defect_slots) > DEFECT_SLOT_CLAUSE_CAP:
+            clauses = (clauses[:DEFECT_SLOT_CLAUSE_CAP]
+                       + [f"… and {len(defects) - DEFECT_SLOT_CLAUSE_CAP} more"])
+        if defects and complete and not over and not missing:
+            statement = (f"{len(defect_slots)}/{len(rows)} slots NOT admissible, so their "
+                         f"drift figures are not a measurement of the finalisation tail: "
+                         + "; ".join(clauses)
+                         + (f"; the chain figures themselves are under the bar "
+                            f"(max {max(chain):.3f} s <= {bar_s} s)" if chain else ""))
+        else:
+            statement = (f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
+                         f"recorded={len(rows)}/{expected}"
+                         + "".join(f"; {clause}" for clause in clauses))
+        if session_bar_exceeded:
+            statement += (f"; the session-level bar is exceeded too (max "
+                          f"{max(session):.3f} s > {session_bar_s} s on slots {session_over})")
     return {"bar_s": bar_s, "session_bar_s": session_bar_s, "slots_expected": expected,
             "slots_recorded": len(rows), "slots_missing_chain_drift": missing,
             "max_chain_start_drift_s": max(chain) if chain else None,
