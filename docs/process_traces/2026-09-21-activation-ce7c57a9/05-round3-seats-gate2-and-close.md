@@ -74,3 +74,29 @@ OK
 Read in this session: the code diff `9e0a4995..cfc56921` for `joulewise/evidence_night.py` and `tests/test_evidence_night.py` (record 03 §3; the retained reason is assigned only after the span rule, `RecursionError` is caught at the parse boundary, the three regressions are defect-shaped and their kills are reproduced above and in the seat), the three document diffs at both rounds (every sentence is gate-supplied, fidelity MATCH, and each rule sentence has an executed probe in a ruling or in records 03/05), the kernel diff (A230 retired to the Completed Queue Items table with A263; A264, A265, A266 registered with resolving pointers; regions regenerated). Classification unchanged from the packet-05 ruling: open chain → ACTIVE; terminal record incl. `_refusal_paths` names → retained unless the plan is unparseable / foreign `custody_root` (UNKNOWN) or the span is active (ACTIVE); verdict `pass` only when every row is `retained`. Real roots on this machine: three harvested nights, all `retained` (record 02 exhibit A1 Q3). Nothing in the candidate touches arming, the installer, the watchdog, or a measurement root. MERGE, on the green replay and quick tier of §6 and the hosted matrix per the post-merge CI ruling.
 
 ## §6 Replay tails (appended before merge)
+
+Both replays ran detached at the bench (`scripts/shard_tests.py --workers 4`, python3 3.14.7), then `scripts/quick_suite.py --tier touched --since 9e0a4995`; logs `/tmp/magistrate-ce7c57a9/12-…15-…`.
+
+Round-3 head `cfc56921` (code identical to the candidate), started 23:40 PDT, 68 min:
+
+```
+WORKERS SUMMARY shards=4 modules=245 tests=6717 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+shard rc=0
+QUICK SUMMARY tier=touched modules=173 excluded=72 failures=0 seconds=767.801 result=PASS
+quick rc=0
+```
+
+Merge candidate `36ddbb37` (this record's first commit), started 00:07 PDT, 61 min + quick 11 min:
+
+```
+SHARD SUMMARY index=1/4 modules=62 tests=1822 failures=0 errors=0 skipped=17 result=PASS
+SHARD SUMMARY index=2/4 modules=60 tests=1453 failures=0 errors=0 skipped=6 result=PASS
+SHARD SUMMARY index=3/4 modules=62 tests=2332 failures=0 errors=0 skipped=80 result=PASS
+SHARD SUMMARY index=4/4 modules=61 tests=1110 failures=0 errors=0 skipped=6 result=PASS
+WORKERS SUMMARY shards=4 modules=245 tests=6717 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+shard rc=0
+QUICK SUMMARY tier=touched modules=173 excluded=72 failures=0 seconds=644.039 result=PASS
+quick rc=0
+```
+
+Hosted matrix on `36ddbb37` (PR #379): every job green (build, changes, fences, installed-wheel, quick, gate-ledger after the ledger cells were reduced to one `RUN <path>` each, calibration-exits-exclusive, calibration-writer-crash-matrix-exclusive ×2, test ×6). The commit that appends this section is docs-only (this file); it is the final head named in ledger row 12; per the post-merge CI ruling the hosted run on it is post-merge confirmation.
