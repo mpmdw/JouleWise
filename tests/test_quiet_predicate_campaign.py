@@ -322,15 +322,19 @@ class CampaignTests(unittest.TestCase):
 class FrozenExecutorTests(unittest.TestCase):
     def exercise(self, errors=(), cleanup_failures=(), recorder_dead=False,
                  off_stdout=None, on_exit=0, timed_log="", commands=None,
-                 interrupt_settle=False, protocol=None, burn=0, stepped_stop_s=0,
-                 window_max_s=9000, spy=None):
+                 interrupt_settle=False, protocol=None, burn=0, burn_at=None,
+                 settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None):
         """Drive the real ``execute`` against a stub collector on a fake clock.
 
         ``burn`` is the seconds the stub collector spends AFTER its capture
         before it exits -- the finalisation tail (recorder exit wait, plist
         parse, anchor derive) that A269 measured at 7.6-10.2 s on the real
         night.  It is the whole counterfactual: under the pre-cure schedule
-        the tail pushed the next spawn late and nothing noticed.
+        the tail pushed the next spawn late and nothing noticed.  ``burn_at``
+        is the same thing for one named envelope, and ``settle_overshoot``
+        delays envelope 01 alone (the slot that follows the settle and tests
+        no pitch).  ``timeline`` records each spawn and each attestation in
+        order, so the placement of the clock query can be asserted.
         """
         from contextlib import ExitStack
         from dataclasses import replace
@@ -338,7 +342,9 @@ class FrozenExecutorTests(unittest.TestCase):
         from tests.test_night_gate import make_plan
         protocol = PROTOCOL if protocol is None else protocol
         envelope_s = protocol['envelope_s']
+        burn_at = burn_at or {}
         calls, processes = [], {}
+        self.timeline = timeline = []
         class Clock:
             now = 0.
             interrupt = interrupt_settle
@@ -346,6 +352,8 @@ class FrozenExecutorTests(unittest.TestCase):
             def time(self): return 1000+self.now
             def sleep(self, seconds):
                 self.now += seconds
+                if seconds == protocol['settle_s']:
+                    self.now += settle_overshoot
                 if self.interrupt and seconds == protocol['settle_s']:
                     # Exactly what the executor's own SIGTERM handler raises.
                     self.interrupt = False
@@ -358,6 +366,7 @@ class FrozenExecutorTests(unittest.TestCase):
                 calls.append(argv)
                 processes[self.pid] = self
                 if 'collect' in argv:
+                    timeline.append(('spawn', int(argv[argv.index('--repeat')+1])))
                     out = Path(argv[argv.index('--out')+1])
                     out.mkdir()
                     index = int(argv[argv.index('--repeat')+1])
@@ -384,7 +393,7 @@ class FrozenExecutorTests(unittest.TestCase):
                     self.returncode = 1
                 return self.returncode
             def wait(self, timeout):
-                clock.now = max(clock.now, self.end) + burn
+                clock.now = max(clock.now, self.end) + burn + burn_at.get(self.index, 0)
                 self.returncode = 1 if self.index in errors else 0
                 return self.returncode
         real_cleanup = campaign.cleanup_groups
@@ -436,6 +445,18 @@ class FrozenExecutorTests(unittest.TestCase):
             enter(patch.object(campaign,'group_absent',side_effect=lambda pgid:processes[pgid].returncode is not None))
             enter(patch.object(campaign.os,'killpg',side_effect=terminate))
             enter(patch.object(campaign,'cleanup_groups',side_effect=cleanup))
+            real_attest = campaign.attest_network_time
+            def attest(out, **kwargs):
+                # Every supervised child of this envelope must already be
+                # reaped when the clock query runs: `log show` beside a live
+                # recorder is observer energy inside a recorded window.
+                live = [c for c in processes.values()
+                        if 'collect' in c.argv and c.returncode is None]
+                attestation = real_attest(out, **kwargs)
+                timeline.append(('attest', int(out.name.split('-')[1]),
+                                 [c.pid for c in live], (out/'timed-log.txt').exists()))
+                return attestation
+            enter(patch.object(campaign,'attest_network_time',side_effect=attest))
             if spy is not None:
                 spy(stack, campaign)
             plan=replace(make_plan(),t0_epoch_s=1000,window_max_s=window_max_s)
@@ -734,3 +755,368 @@ class TimedLogScannerTests(unittest.TestCase):
             self.assertEqual(session["network_time_provenance"]["state"], "off")
             self.assertEqual(session["session"], "fixture")
             self.assertFalse(list(out.glob("*.tmp")))
+
+
+# --------------------------------------------------------------------------
+# A269 ENVELOPE-START-DRIFT-01 — cold-gate regressions 1-7 (ruling 10
+# §Regressions) plus R-a and R-b (refuter 11, adopted in synthesis 15).
+#
+# The counterfactual for every cadence regression is the pre-cure harness: a
+# schedule whose pitch IS the capture length, driven by a stub collector that
+# burns time after its capture.  On the 2026-09-22 pilot that tail was
+# 7.6-10.2 s and pushed every envelope after the first off its schedule; the
+# scaled protocol below reproduces it in a 12 s slot.
+# --------------------------------------------------------------------------
+
+SCALED = {**PROTOCOL, 'envelope_s': 6, 'slot_pitch_s': 12, 'envelopes': 4,
+          'start_drift_abort_s': 2, 'start_drift_max_s': 10}
+
+
+class StartDriftCadenceTests(FrozenExecutorTests):
+    """The pitch schedules, the capture measures, and a late spawn refuses."""
+
+    def test_regression_1_the_pitch_absorbs_a_tail_longer_than_the_gap(self):
+        # R-a: the stub burns 14 s, longer than the 6 s gap, so the cure cannot
+        # simply absorb it -- the chain must REFUSE at the first late slot.
+        rc, summary, outcome, refusals, calls, *_ = self.exercise(
+            protocol=SCALED, burn=14)
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        self.assertIn('start_drift_abort', outcome['error'])
+        self.assertEqual([row.get('abort') for row in self.envelope_journal],
+                         [None, 'start_drift_abort'])
+        aborted = self.envelope_journal[-1]
+        self.assertEqual(aborted['index'], 2)
+        self.assertAlmostEqual(aborted['start_drift_s'], 8)
+        self.assertEqual(self.envelope_directories, ['envelope-01'])
+        self.assertEqual(sum('collect' in cmd for cmd in calls), 1)
+        # A tail that FITS the gap is absorbed silently and completely: every
+        # slot starts on its scheduled instant, which is the whole point of
+        # separating the pitch from the capture.
+        rc, summary, outcome, refusals, calls, *_ = self.exercise(
+            protocol=SCALED, burn=5)
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome['outcome'], 'complete')
+        self.assertEqual(sum('collect' in cmd for cmd in calls), 4)
+        drifts = [row['start_drift_s'] for row in self.envelope_journal]
+        self.assertEqual(len(drifts), 4)
+        for drift in drifts:
+            self.assertLessEqual(abs(drift), .02)
+        starts = [float(a[a.index('--envelope-start-mono-s')+1]) for a in calls if 'collect' in a]
+        self.assertEqual(starts, [600, 612, 624, 636])
+
+    def test_regression_2_the_whole_schedule_is_budgeted_before_the_first_spawn(self):
+        # A2: 600 + 11*750 + 600 = 9450 s does not fit a 9000 s window, and the
+        # night says so before network time is touched or a child exists.
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            protocol={**PROTOCOL, 'slot_pitch_s': 750})
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        self.assertEqual(calls, [])
+        self.assertEqual(self.envelope_directories, [])
+        self.assertIn('window_budget_exceeded', outcome['error'])
+        self.assertIn('9450', outcome['error'])
+        # The ruled pitch fits, with 980 s to spare.
+        fits, needed = campaign.window_budget_ok(
+            SimpleNamespace(window_max_s=9000), PROTOCOL)
+        self.assertTrue(fits)
+        self.assertEqual(needed, 8020)
+
+    def test_regression_2_the_registration_binds_the_cadence_fields(self):
+        sha = campaign.digest((ROOT / campaign.CHAIN_PATH).read_bytes())
+        self.assertEqual(campaign.validate_protocol(PROTOCOL, sha), PROTOCOL)
+        self.assertEqual(PROTOCOL['slot_pitch_s'], 620)
+        self.assertEqual(PROTOCOL['start_drift_abort_s'], 2)
+        cases = {
+            'missing slot_pitch_s': {k: v for k, v in PROTOCOL.items() if k != 'slot_pitch_s'},
+            'missing start_drift_abort_s': {k: v for k, v in PROTOCOL.items()
+                                            if k != 'start_drift_abort_s'},
+            'pitch under the capture': {**PROTOCOL, 'slot_pitch_s': 599},
+            'abort above the exclusion bar': {**PROTOCOL, 'start_drift_abort_s': 11},
+            'non-numeric pitch': {**PROTOCOL, 'slot_pitch_s': '620'},
+        }
+        for label, protocol in cases.items():
+            with self.subTest(case=label):
+                # Even with the digest check satisfied, the field rules refuse.
+                with patch.object(campaign, 'frozen_protocol', return_value=protocol):
+                    with self.assertRaises(ValueError):
+                        campaign.validate_protocol(protocol, sha)
+        # A CLI override of any other field is still refused by identity.
+        with self.assertRaises(ValueError):
+            campaign.validate_protocol({**PROTOCOL, 'envelope_s': 1}, sha)
+
+    def test_regression_2_frozen_protocol_takes_v2_and_refuses_v1(self):
+        directory = ROOT / 'configs/campaigns/quiet_predicate_evidence_01'
+        v2 = (directory / 'pilot_protocol_v2.json').read_bytes()
+        v1 = (directory / 'pilot_protocol_v1.json').read_bytes()
+        self.assertEqual(campaign.PROTOCOL_PATH,
+                         'configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json')
+        self.assertEqual(campaign.frozen_protocol(v2)['slot_pitch_s'], 620)
+        with self.assertRaisesRegex(ValueError, 'not the ruled pilot registration'):
+            campaign.frozen_protocol(v1)
+        # v1 differs from v2 in exactly the four ruled fields and nothing else.
+        first, second = json.loads(v1), json.loads(v2)
+        differing = {k for k in set(first) | set(second) if first.get(k) != second.get(k)}
+        self.assertEqual(differing, {'slot_pitch_s', 'start_drift_abort_s',
+                                     'exclusions', 'ruling'})
+        self.assertEqual(second['exclusions'],
+                         first['exclusions'] + ['network_time_slew_attested',
+                                                'network_time_unattested'])
+        self.assertEqual(second['chain_source_sha256'], first['chain_source_sha256'])
+
+    def test_regression_3_a_late_spawn_aborts_the_night_before_its_capture(self):
+        # 2.5 s of drift injected at envelope 3: the slot is never launched,
+        # the journal names the abort, and the night ends REFUSED.
+        rc, summary, outcome, refusals, calls, *_ = self.exercise(burn_at={2: 22.5})
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        self.assertEqual(sum('collect' in cmd for cmd in calls), 2)
+        self.assertEqual(self.envelope_directories, ['envelope-01', 'envelope-02'])
+        aborted = self.envelope_journal[-1]
+        self.assertEqual(aborted['index'], 3)
+        self.assertEqual(aborted['abort'], 'start_drift_abort')
+        self.assertAlmostEqual(aborted['start_drift_s'], 2.5)
+        self.assertEqual(aborted['scheduled_mono_s'], 600 + 2 * 620)
+        self.assertIn('start_drift_abort', outcome['error'])
+        self.assertEqual(outcome['outcome'], 'refused')
+        self.assertEqual(outcome['envelopes_attempted'], 2)
+        # Envelope 01 follows the settle and tests no pitch: the same 2.5 s is
+        # not an abort there, and the night runs to its twelfth envelope.
+        rc, summary, outcome, refusals, calls, *_ = self.exercise(settle_overshoot=2.5)
+        self.assertEqual(rc, 0)
+        self.assertEqual(sum('collect' in cmd for cmd in calls), 12)
+        self.assertAlmostEqual(self.envelope_journal[0]['start_drift_s'], 2.5)
+        self.assertEqual([row.get('abort') for row in self.envelope_journal], [None] * 12)
+
+    def test_regression_5_the_attestation_runs_in_the_gap_never_beside_a_capture(self):
+        commands = NetworkTimeControlTests.fake_commands(self)
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            commands=commands)
+        self.assertEqual(rc, 0)
+        # Strict alternation: envelope i is attested, with its log on disk,
+        # before envelope i+1 is spawned, and no collector is alive at any
+        # attestation.
+        self.assertEqual([(kind, index) for kind, index, *_ in self.timeline],
+                         [step for index in range(1, 13)
+                          for step in (('spawn', index), ('attest', index))])
+        for step in self.timeline:
+            if step[0] == 'attest':
+                _, index, live, log_written = step
+                self.assertEqual(live, [], f'envelope {index} attested beside a live capture')
+                self.assertTrue(log_written, index)
+        for session in sessions:
+            attestation = session['network_time_provenance']['attestation']
+            self.assertEqual(attestation['window_method'], 'epoch_monotonic_union_v1')
+            stamps = session['power']['anchor']['clock_stamps']
+            self.assertEqual(attestation['window_epoch_s'], campaign.attestation_window(stamps))
+
+    def test_regression_5_a_stepped_wall_clock_keeps_the_window_over_the_capture(self):
+        # The stamps' monotonic pair fixes the capture's LENGTH; a wall step
+        # moves one endpoint's POSITION.  The union covers the true capture
+        # whichever endpoint moved -- a +-1 s window around the two wall
+        # stamps does not when the step ran the clock BACK.
+        for step in (30, -30):
+            with self.subTest(step=step):
+                commands = NetworkTimeControlTests.fake_commands(self)
+                *_, sessions = self.exercise(commands=commands, stepped_stop_s=step)
+                for session in sessions:
+                    stamps = session['power']['anchor']['clock_stamps']
+                    started = stamps['sampling_started']['epoch_s']
+                    stopped = stamps['sampling_stopped']['epoch_s']
+                    span = (stamps['sampling_stopped']['monotonic_before_s']
+                            - stamps['sampling_started']['monotonic_before_s'])
+                    window = session['network_time_provenance']['attestation']['window_epoch_s']
+                    self.assertEqual(window, [min(started, stopped - span) - 1,
+                                              max(stopped, started + span) + 1])
+                    # Both wall readings of the capture's true extent lie
+                    # inside the window; that is what the +-1 s form loses.
+                    for moment in (started, started + span, stopped - span, stopped):
+                        self.assertLessEqual(window[0], moment)
+                        self.assertGreaterEqual(window[1], moment)
+                if step < 0:
+                    narrow = [started - 1, stopped + 1]
+                    self.assertLess(narrow[1], started + span,
+                                    'the +-1 s form would have missed the capture')
+
+    def test_regression_5_an_unproven_teardown_refuses_the_query_not_the_night(self):
+        self.assertIsNone(campaign.capture_still_live(
+            {'residue': [], 'errors': [], 'cleanup_proven': True}))
+        blocked = campaign.capture_still_live(
+            {'residue': [4242], 'errors': [], 'cleanup_proven': False})
+        self.assertIn('4242', blocked)
+        self.assertIn('teardown', campaign.capture_still_live(
+            {'residue': [], 'errors': ['journal unreadable']}))
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            out = Path(tmp)
+            with patch.object(campaign.subprocess, 'run',
+                              side_effect=AssertionError('must not query logd')):
+                attestation = campaign.attest_network_time(out, blocked=blocked)
+        self.assertEqual(attestation['state'], 'asserted')
+        self.assertIsNone(attestation['window_epoch_s'])
+        self.assertIn('live capture', attestation['reason'])
+        self.assertEqual(campaign.attestation_exclusions(attestation['state']),
+                         ['network_time_unattested'])
+
+    def test_regression_6_a_failed_query_reaches_the_summary_as_unattested(self):
+        # A267 Part 4 already pins the absolute argv and `--info --debug`
+        # (test_the_production_commands_are_the_ruled_absolute_argv), the
+        # exhibit-D ten-match slew path
+        # (test_an_applied_slew_inside_a_window_excludes_that_night_envelope)
+        # and the scanner's zero-match behaviour
+        # (test_exhibit_d_has_ten_applied_corrections_and_a_clean_log_has_none).
+        # What was not covered end to end: a query that EXITS NONZERO must
+        # reach pilot_summary as network_time_unattested.
+        commands = NetworkTimeControlTests.fake_commands(self)
+        (self.command_directory / 'log').write_text(
+            f'#!/bin/sh\nprintf %s "$@" >> "{self.command_directory}/log-calls.txt"\nexit 3\n')
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            commands=commands)
+        for session in sessions:
+            attestation = session['network_time_provenance']['attestation']
+            self.assertEqual(attestation['state'], 'asserted')
+            self.assertEqual(attestation['exit_code'], 3)
+        self.assertEqual([v['excluded'] for v in summary['envelopes']],
+                         [['network_time_unattested']] * 12)
+        self.assertEqual(summary['retained'], 0)
+        self.assertEqual(summary['status'], 'INCONCLUSIVE')
+
+    def test_regression_8_the_teardown_budget_is_the_gap_not_a_literal(self):
+        self.exercise()
+        reserve = campaign.CLEANUP_BUDGET_RESERVE_S
+        ceiling = PROTOCOL['slot_pitch_s'] - PROTOCOL['envelope_s'] - reserve
+        self.assertEqual(ceiling, 15)
+        self.assertEqual(self.slot_cleanup_budgets, [15] * 12)
+        for budget in self.slot_cleanup_budgets:
+            self.assertLessEqual(budget, ceiling)
+        # The budget follows the registration, never a constant in the code.
+        self.assertEqual(campaign.cleanup_budget_s(SCALED), 1)
+        self.assertEqual(campaign.cleanup_budget_s({**PROTOCOL, 'slot_pitch_s': 700}), 95)
+
+
+class BatchedCensusTests(unittest.TestCase):
+    """Regression 4: one census per sweep, however many groups are journaled."""
+
+    def test_one_pgrep_settles_one_hundred_and_twenty_groups(self):
+        from scripts import run_night
+        live = 5000
+        pgids = list(range(4000, 4120))
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            path = Path(tmp) / 'groups.jsonl'
+            for pgid in pgids + [live]:
+                campaign.append_event(path, {'kind': 'collector', 'pgid': pgid})
+            calls = []
+            real_run = run_night.subprocess.run
+            def run(argv, **kwargs):
+                calls.append(argv)
+                from subprocess import CompletedProcess
+                if argv[0].endswith('pgrep'):
+                    # Only the live group has members; pgrep lists its pids.
+                    return CompletedProcess(argv, 0, f'{live + 1} python collector\n', '')
+                self.assertEqual(argv[0], '/bin/ps')
+                return CompletedProcess(argv, 0, f'{live} {live + 1} python collector\n', '')
+            with patch.object(run_night.subprocess, 'run', side_effect=run), \
+                    patch.object(campaign.os, 'killpg') as killpg:
+                census = campaign.groups_absent(pgids + [live])
+            pgreps = [argv for argv in calls if argv[0].endswith('pgrep')]
+            self.assertLessEqual(len(pgreps), 2, pgreps)
+            self.assertEqual(len(calls) - len(pgreps), 1)  # one attribution pass
+            self.assertEqual(pgreps[0][:4],
+                             ['/usr/bin/pgrep', '-lf', '-g',
+                              ','.join(str(p) for p in sorted(pgids + [live]))])
+            # The live group is still reported PRESENT; every other is absent.
+            self.assertFalse(census[live])
+            self.assertTrue(all(census[pgid] for pgid in pgids))
+            self.assertEqual(len(census), 121)
+            del real_run, killpg
+
+    def test_an_unanswerable_census_never_reports_an_empty_group(self):
+        from scripts import run_night
+        from subprocess import CompletedProcess
+        cases = {
+            'pgrep timed out': lambda argv, **kw: (_ for _ in ()).throw(
+                run_night.subprocess.TimeoutExpired(argv, 1)),
+            'pgrep argument malformed': lambda argv, **kw: CompletedProcess(argv, 2, '', 'usage'),
+            'an unparsable listing': lambda argv, **kw: CompletedProcess(argv, 0, 'not-a-pid x\n', ''),
+            'a pid that vanished': lambda argv, **kw: CompletedProcess(
+                argv, 0, '7001 python\n' if argv[0].endswith('pgrep') else '', ''),
+        }
+        for label, side_effect in cases.items():
+            with self.subTest(case=label):
+                with patch.object(run_night.subprocess, 'run', side_effect=side_effect):
+                    census = run_night._group_census_batch([7000, 7001], .2)
+                self.assertEqual([absent for absent, _ in census.values()], [False, False])
+                for _, lines in census.values():
+                    self.assertTrue(lines)
+
+    def test_the_single_group_census_keeps_its_exact_shape(self):
+        from scripts import run_night
+        from subprocess import CompletedProcess
+        for exit_code, stdout, expected in ((1, '', (True, [])),
+                                            (0, '99 python\n', (False, ['99 python']))):
+            with patch.object(run_night.subprocess, 'run',
+                              return_value=CompletedProcess([], exit_code, stdout, '')) as run:
+                self.assertEqual(run_night._group_census_batch([99], .2), {99: expected})
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args[0][0][:3], ['/usr/bin/pgrep', '-lf', '-g'])
+
+
+class LargerDriftTests(unittest.TestCase):
+    """Regression 7: the exclusion reads the larger of the two drift figures."""
+
+    def test_a_session_level_drift_alone_excludes_the_envelope(self):
+        protocol = {**PROTOCOL, 'start_drift_max_s': 2}
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            root = Path(tmp) / 'evidence'
+            root.mkdir()
+            entries = []
+            for index in range(1, 13):
+                out = root / f'envelope-{index:02d}'
+                out.mkdir()
+                (out / 'session.json').write_text(json.dumps({
+                    'session': 'fixture', 'boot_id': 'boot', 'os_build': '25G83',
+                    'start_drift_s': 2.3,  # what the collector measured
+                    'network_time_provenance': provenance(),
+                    'power': {'anchor': {'status': 'bounded'}},
+                    'interior': {'complete_support': True,
+                                 'power': {'energy_j': {'rail_sum_w': 10, 'combined_w': 10}}}}))
+                (out / 'rounds.jsonl').write_text(json.dumps(good_round()) + '\n')
+                # What the CHAIN measured is well inside the bar; the session
+                # figure is the larger one, and the bar is assessed on it (A1).
+                entries.append({'index': index, 'scheduled_mono_s': index * 600,
+                                'start_drift_s': 0.2})
+            report = campaign.pilot_summary(root, protocol, entries)
+        self.assertEqual(report['retained'], 0)
+        self.assertEqual([v['excluded'] for v in report['envelopes']], [['start_drift']] * 12)
+        self.assertEqual([v['collector_start_drift_s'] for v in report['envelopes']], [2.3] * 12)
+
+
+class SessionRewriteAuditTests(unittest.TestCase):
+    """Regression 9: the one post-collector rewrite names what it replaced."""
+
+    def test_session_sha256_before_is_the_digest_of_the_replaced_file(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            out = Path(tmp)
+            original = json.dumps({'session': 'fixture',
+                                   'network_time_provenance': {'state': 'off'}})
+            (out / 'session.json').write_text(original)
+            before = campaign.digest(original.encode())
+            attestation = {'state': 'authenticated', 'matched_lines': 0}
+            renames = []
+            real_replace = campaign.os.replace
+            def replace(source, target):
+                renames.append((Path(source).name, Path(target).name))
+                return real_replace(source, target)
+            with patch.object(campaign.os, 'replace', side_effect=replace):
+                self.assertTrue(campaign.record_attestation(out, attestation))
+            self.assertEqual(renames, [('session.json.tmp', 'session.json')])
+            session = json.loads((out / 'session.json').read_text())
+            recorded = session['network_time_provenance']['attestation']
+            self.assertEqual(recorded['session_sha256_before'], before)
+            self.assertNotEqual(campaign.digest((out / 'session.json').read_bytes()), before)
+            # Nothing else rewrites session.json after the collector exits:
+            # cure 2 has no finaliser pass, so no such call site exists.
+            source = (ROOT / 'joulewise/quiet_predicate_campaign.py').read_text()
+            self.assertEqual(source.count('os.replace('), 1)
+            self.assertIn('os.replace(temporary, path)', source)
+            self.assertNotIn('def finalis', source)
+            self.assertNotIn('def finaliz', source)
