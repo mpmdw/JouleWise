@@ -15,9 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = json.loads((ROOT / campaign.PROTOCOL_PATH).read_text())
 EXPECTED_OFF = campaign.EXPECTED_NETWORK_TIME_OFF_STDOUT
 # What `log show --style syslog` prints before any entry, and prints even
-# when the predicate matched nothing: the first line of the packet's own
-# exhibit D.  A fake log that omits it is a query that did not run.
-TIMED_LOG_HEADER = "Timestamp               Ty Process[PID:TID]\n"
+# when the predicate matched nothing: the first line of the two LIVE captures
+# taken with the ruled argv (fixtures exhibit-D2/exhibit-D3 below).  A fake
+# log that omits it is a query that did not run.  The packet's exhibit D was
+# captured in `--style compact`, whose header is a DIFFERENT line; it is a
+# negative fixture from here on (cold gate #3 Q2, Q6).
+TIMED_LOG_HEADER = campaign.TIMED_LOG_SYSLOG_HEADER + "\n"
 
 
 def provenance(state="authenticated", matched=0):
@@ -590,6 +593,16 @@ class FrozenExecutorTests(unittest.TestCase):
 # --------------------------------------------------------------------------
 
 FIXTURES = ROOT / "tests/fixtures/qpe01_pilot_n1_20260922"
+# The compact capture stays as the marker/envelope corpus and becomes the
+# NEGATIVE header fixture; the two syslog captures are its production-format
+# twins, taken by the ruled argv on the 2026-09-22 pilot night.  Their bytes
+# are pinned here, so a fixture edited into agreement with the guard is a
+# failing test rather than a silent re-definition of what the guard means.
+COMPACT_FIXTURE = FIXTURES / "exhibit-D-timed-log.txt"
+SYSLOG_FIXTURE = FIXTURES / "exhibit-D2-timed-log-0210-0435-syslog.txt"
+ZERO_MATCH_FIXTURE = FIXTURES / "exhibit-D3-timed-log-zero-match-syslog.txt"
+SYSLOG_FIXTURE_SHA256 = "dba7fb7cb92e9179a8e4d09e40290b578bbd68d12f29bb42eb417abcf6a4eb63"
+ZERO_MATCH_FIXTURE_SHA256 = "da1b28eff7848fc42698579387fb9881a2bd1ceda8151ba16617a3b63550718b"
 
 
 class NetworkTimeControlTests(FrozenExecutorTests):
@@ -740,17 +753,60 @@ class NetworkTimeControlTests(FrozenExecutorTests):
         self.assertEqual([v["excluded"] for v in summary["envelopes"]], [[]] * 12)
 
     def test_an_applied_slew_inside_a_window_excludes_that_night_envelope(self):
-        commands = self.fake_commands(timed_log=(FIXTURES / "exhibit-D-timed-log.txt").read_text())
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
-            commands=commands)
-        for session in sessions:
-            attestation = session["network_time_provenance"]["attestation"]
-            self.assertEqual(attestation["state"], "slew_attested")
-            self.assertEqual(attestation["matched_lines"], 10)
-        self.assertEqual(summary["retained"], 0)
-        self.assertEqual([v["excluded"] for v in summary["envelopes"]],
-                         [["network_time_slew_attested"]] * 12)
-        self.assertEqual(summary["status"], "INCONCLUSIVE")
+        """R2.3 and R2.5: the twin corpora, one query format apart.
+
+        The same ten applied corrections were captured twice on the pilot
+        night -- once in `--style compact` (the retained exhibit D) and once
+        in the ruled `--style syslog` (exhibit D2).  Everything the scanner
+        measures is equal across the pair (`matched_lines` 10, marker lines
+        30) and only the BYTES differ, so `log_sha256` differs.  The states
+        differ, and that difference IS the cure: a body in the wrong format
+        did not come from the ruled query, so it is `asserted` with the
+        header reason (R2.3's end-to-end half).  The counterfactual at
+        489b0953 is this pair exactly INVERTED -- the old guard asked only
+        for "Timestamp" and "Process" in the first line, which the compact
+        header carries and the syslog header (lower-case "(process)") does
+        not, so it accepted the format the night never produces and rejected
+        the one it does.
+        """
+        runs = {}
+        for label, fixture, state, exclusion in (
+                ("syslog (the ruled argv)", SYSLOG_FIXTURE, "slew_attested",
+                 "network_time_slew_attested"),
+                ("compact (negative fixture)", COMPACT_FIXTURE, "asserted",
+                 "network_time_unattested")):
+            with self.subTest(case=label):
+                body = fixture.read_text()
+                # Supplementary S3: ruling 14 R3 regression 12's scanner is
+                # `timed_log_matches`, and it reads 10 on BOTH formats.
+                self.assertEqual(campaign.timed_log_matches(body), 10)
+                self.assertEqual(campaign.timed_log_marker_lines(body), 30)
+                commands = self.fake_commands(timed_log=body)
+                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+                    commands=commands)
+                self.assertEqual(len(sessions), 12)
+                attestations = [session["network_time_provenance"]["attestation"]
+                                for session in sessions]
+                for attestation in attestations:
+                    self.assertEqual(attestation["state"], state)
+                    self.assertEqual(attestation["matched_lines"], 10)
+                    self.assertEqual(attestation["matched_marker_lines"], 30)
+                    if state == "asserted":
+                        self.assertEqual(attestation["reason"],
+                                         "timed log query returned no header")
+                self.assertEqual(summary["retained"], 0)
+                self.assertEqual([v["excluded"] for v in summary["envelopes"]],
+                                 [[exclusion]] * 12)
+                self.assertEqual(summary["status"], "INCONCLUSIVE")
+                runs[state] = attestations
+        for syslog, compact in zip(runs["slew_attested"], runs["asserted"]):
+            self.assertEqual(syslog["matched_lines"], compact["matched_lines"])
+            self.assertEqual(syslog["matched_marker_lines"], compact["matched_marker_lines"])
+            self.assertNotEqual(syslog["log_sha256"], compact["log_sha256"])
+        self.assertEqual(runs["slew_attested"][0]["log_sha256"],
+                         campaign.digest(SYSLOG_FIXTURE.read_bytes()))
+        self.assertEqual(runs["asserted"][0]["log_sha256"],
+                         campaign.digest(COMPACT_FIXTURE.read_bytes()))
 
     def test_the_production_commands_are_the_ruled_absolute_argv(self):
         self.assertEqual(campaign.SUDO, "/usr/bin/sudo")
@@ -778,12 +834,23 @@ class TimedLogScannerTests(unittest.TestCase):
     """Regression 12: the scanner over the packet's own exhibit D."""
 
     def test_exhibit_d_has_ten_applied_corrections_and_a_clean_log_has_none(self):
-        text = (FIXTURES / "exhibit-D-timed-log.txt").read_text()
-        self.assertEqual(len(text.splitlines()), 191)
-        self.assertEqual(campaign.timed_log_matches(text), 10)
-        clean = "\n".join(line for line in text.splitlines()
-                          if not any(marker in line for marker in campaign.TIMED_LOG_MARKERS))
-        self.assertEqual(campaign.timed_log_matches(clean), 0)
+        # Ruling 14 R3 regression 12 runs over BOTH formats of the same ten
+        # corrections: the retained compact capture and its syslog twin
+        # (cold gate #3 Q2 R2.5, supplementary S3).
+        for label, path in (("compact", COMPACT_FIXTURE), ("syslog", SYSLOG_FIXTURE)):
+            with self.subTest(case=label):
+                text = path.read_text()
+                self.assertEqual(len(text.splitlines()), 191)
+                self.assertEqual(campaign.timed_log_matches(text), 10)
+                self.assertEqual(campaign.timed_log_marker_lines(text), 30)
+                clean = "\n".join(line for line in text.splitlines()
+                                  if not any(marker in line
+                                             for marker in campaign.TIMED_LOG_MARKERS))
+                self.assertEqual(campaign.timed_log_matches(clean), 0)
+        # The zero-match capture is a header and nothing else.
+        self.assertEqual(campaign.timed_log_matches(ZERO_MATCH_FIXTURE.read_text()), 0)
+        self.assertEqual(campaign.timed_log_marker_lines(ZERO_MATCH_FIXTURE.read_text()), 0)
+        text = COMPACT_FIXTURE.read_text()
         self.assertEqual(campaign.timed_log_matches(""), 0)
         for marker in ("ntp_adjtime", "settimeofday"):
             self.assertEqual(campaign.timed_log_matches(f"a {marker} b"), 1)
@@ -1282,16 +1349,42 @@ class ZeroOutputGuardTests(FrozenExecutorTests):
     """Item 2 (05b S1): an empty result is not a clean machine."""
 
     def test_a_body_without_the_syslog_header_is_asserted_never_authenticated(self):
-        # The repo's own evidence says a query that ran emits the header.
-        self.assertTrue(campaign.timed_log_has_header(
-            (FIXTURES / "exhibit-D-timed-log.txt").read_text()))
+        # R2.1: the two LIVE captures of the ruled argv are accepted, and the
+        # bytes that were accepted are the bytes pinned here.
+        self.assertEqual(campaign.digest(SYSLOG_FIXTURE.read_bytes()), SYSLOG_FIXTURE_SHA256)
+        self.assertEqual(campaign.digest(ZERO_MATCH_FIXTURE.read_bytes()),
+                         ZERO_MATCH_FIXTURE_SHA256)
+        for label, path in (("the 191-line capture", SYSLOG_FIXTURE),
+                            ("the zero-match capture", ZERO_MATCH_FIXTURE)):
+            self.assertTrue(campaign.timed_log_has_header(path.read_text()), label)
         self.assertTrue(campaign.timed_log_has_header(TIMED_LOG_HEADER))
-        for body in ("", "<html>error</html>\n", "\n", "2026-09-22 02:28:08.226 Df timed\n"):
+        # R2.6: `log` pads the header line with four trailing spaces; the
+        # guard tolerates them and their absence alike.  (Counterfactual:
+        # with `==` in place of `.rstrip() ==`, the live captures fail.)
+        self.assertEqual(ZERO_MATCH_FIXTURE.read_text(),
+                         campaign.TIMED_LOG_SYSLOG_HEADER + "    \n")
+        self.assertTrue(campaign.timed_log_has_header(
+            campaign.TIMED_LOG_SYSLOG_HEADER + "    \n"))
+        self.assertTrue(campaign.timed_log_has_header(campaign.TIMED_LOG_SYSLOG_HEADER))
+        # R2.3: the compact style's header is the defect this guard cures.
+        self.assertFalse(campaign.timed_log_has_header(COMPACT_FIXTURE.read_text()))
+        self.assertFalse(campaign.timed_log_has_header(
+            COMPACT_FIXTURE.read_text().splitlines()[0]))
+        # R2.4: no body, an error page, a bare newline, and an entry line
+        # with no header above it (each format's own second line).
+        for body in ("", "<html>error</html>\n", "\n", "2026-09-22 02:28:08.226 Df timed\n",
+                     COMPACT_FIXTURE.read_text().splitlines()[1] + "\n",
+                     SYSLOG_FIXTURE.read_text().splitlines()[1] + "\n"):
             self.assertFalse(campaign.timed_log_has_header(body), repr(body))
         for label, body, state in (
                 ("empty", "", "asserted"),
                 ("an error page", "<html>error</html>\n", "asserted"),
-                ("header only", TIMED_LOG_HEADER, "authenticated")):
+                ("the compact header", COMPACT_FIXTURE.read_text().splitlines()[0] + "\n",
+                 "asserted"),
+                ("header only", TIMED_LOG_HEADER, "authenticated"),
+                # R2.2: the live zero-match capture, end to end.
+                ("the live zero-match capture", ZERO_MATCH_FIXTURE.read_text(),
+                 "authenticated")):
             with self.subTest(case=label):
                 commands = NetworkTimeControlTests.fake_commands(self, timed_log=body)
                 rc, summary, outcome, refusals, calls, control, sessions = self.exercise(

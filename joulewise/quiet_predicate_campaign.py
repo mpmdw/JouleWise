@@ -440,20 +440,18 @@ def timed_log_argv(start_epoch_s, end_epoch_s):
             "--start", local(start_epoch_s), "--end", local(end_epoch_s))
 
 
-# `log show --style syslog` prints a column header -- `Timestamp ... Ty
-# Process[PID:TID]` -- before any entry, and prints it even when nothing
-# matched the predicate; the packet's own exhibit D opens with that line.  A
-# body that does not carry it therefore did not come from a query that ran:
-# zero bytes, an HTML error page or a truncated pipe all land here.  Such a
-# result must never buy `authenticated`, the one claim-bearing state, on the
-# reasoning that it "matched no correction".
-TIMED_LOG_HEADER_FIELDS = ("Timestamp", "Process")
+# `log show --style syslog` (the argv ruled by A267 ruling 14 R4) prints this
+# exact column header before any entry, and prints it when nothing matched
+# (live zero-match capture 07c-exhibit-D3, one line).  The `--style compact`
+# header is `Timestamp               Ty Process[PID:TID]` and is REJECTED:
+# the guard pins the ruled argv's output, not any header.
+TIMED_LOG_SYSLOG_HEADER = "Timestamp                       (process)[PID]"
 
 
 def timed_log_has_header(text):
-    """Did this body come from a ``log show`` that actually produced output?"""
+    """Did this body come from the ruled ``log show --style syslog`` query?"""
     first = text.splitlines()[0] if text else ""
-    return all(field in first for field in TIMED_LOG_HEADER_FIELDS)
+    return first.rstrip() == TIMED_LOG_SYSLOG_HEADER
 
 
 def timed_log_window_epoch_s(argv):
