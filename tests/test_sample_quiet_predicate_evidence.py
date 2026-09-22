@@ -280,7 +280,7 @@ class IntegrationTests(unittest.TestCase):
     def test_known_overlap_integral_and_weighted_residency(self):
         frames = aligned_fixture()
         frames[1]["cpus"][0]["active_ratio"] = .9
-        reduced = harness.integrate(frames, 1000.5, 1002)
+        reduced = harness.integrate_seconds(frames, 1000.5, 1002)
         self.assertAlmostEqual(reduced["power"]["energy_j"]["cpu_w"], 5)
         self.assertAlmostEqual(reduced["power"]["cpu_w"], 10 / 3)
         self.assertAlmostEqual(reduced["power"]["energy_j"]["rail_sum_w"], 5.9)
@@ -290,31 +290,31 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(reduced["error_bound_j"], 0)
 
     def test_gap_or_span_mismatch_cannot_have_finite_energy_bound(self):
-        reduced = harness.integrate(aligned_fixture(), 999, 1002, .01)
+        reduced = harness.integrate_seconds(aligned_fixture(), 999, 1002, .01)
         self.assertTrue(reduced["span_mismatch"])
         self.assertEqual(reduced["power"]["coverage_s"], 2)
         self.assertIsNone(reduced["error_bound_j"])
 
     def test_anchor_uncertainty_exposing_unobserved_edge_is_unbounded(self):
-        reduced = harness.integrate(aligned_fixture(), 1000, 1002, .01)
+        reduced = harness.integrate_seconds(aligned_fixture(), 1000, 1002, .01)
         self.assertFalse(reduced["span_mismatch"])
         self.assertIsNone(reduced["error_bound_j"])
 
     def test_alignment_bound_contains_shifted_integrals(self):
         frames = aligned_fixture()
-        reduced = harness.integrate(frames, 1000.5, 1002, .01)
+        reduced = harness.integrate_seconds(frames, 1000.5, 1002, .01)
         energy = reduced["power"]["energy_j"]["rail_sum_w"]
         self.assertAlmostEqual(reduced["error_bound_j"], (2.6 + 4.6) * .02)
         for delta in (-.01, -.003, .01):
             shifted = [placed(f, f["start_s"] + delta, f["end_s"] + delta) for f in frames]
-            actual = harness.integrate(shifted, 1000.5, 1002)["power"]["energy_j"]["rail_sum_w"]
+            actual = harness.integrate_seconds(shifted, 1000.5, 1002)["power"]["energy_j"]["rail_sum_w"]
             self.assertLessEqual(abs(actual - energy), reduced["error_bound_j"])
 
     def test_overlapping_frames_are_rejected(self):
         frames = aligned_fixture()
         frames[1] = placed(frames[1], 1000.9, frames[1]["end_s"])
         with self.assertRaises(ValueError):
-            harness.integrate(frames, 1000.5, 1002)
+            harness.integrate_seconds(frames, 1000.5, 1002)
 
 
 class CollectionTests(NetworkTimeOffMixin, unittest.TestCase):
@@ -1491,3 +1491,68 @@ class NetworkTimeComparatorTests(unittest.TestCase):
             provenance, reason = harness.network_time_provenance(
                 {harness.NETWORK_TIME_RECORD_ENV: str(record)})
             self.assertEqual(provenance["state"], "off")
+
+
+class IntegerWindowTests(unittest.TestCase):
+    """Item 12 (05a N1, 05b N2): the window crosses into integrate as integers.
+
+    ``integrate`` used to take float seconds and re-round them, so
+    ``reduce_interior`` handed back the integers it had just computed.  That
+    round trip is the identity only when the value lies on the 256 ns float64
+    lattice at epoch scale, which the pilot's 480 s window happens to do; for
+    a 12.345 s window it loses 64 ns, and against an exact completeness gate
+    that reports a fully covered interior as partial.
+    """
+
+    START_NS = 1_790_000_000_000_000_000
+    DURATION_S = 12.345
+    DURATION_NS = 12_345_000_000
+
+    def tile(self, start_ns, end_ns, watts=10.0):
+        power = dict.fromkeys(harness.RAILS)
+        power["rail_sum_w"] = power["combined_w"] = watts
+        return {"native_timestamp_s": end_ns / 1e9, "native_timestamp_ns": end_ns,
+                "elapsed_ns": end_ns - start_ns, "elapsed_s": (end_ns - start_ns) / 1e9,
+                "is_delta": True, "energy_j": None, "power": power,
+                "clusters": [], "cpus": [], "start_ns": start_ns, "end_ns": end_ns,
+                "start_s": start_ns / 1e9, "end_s": end_ns / 1e9}
+
+    def frames(self):
+        edges = [self.START_NS - 1_000_000_000 + i * 1_000_000_000 for i in range(16)]
+        return [self.tile(a, b) for a, b in zip(edges, edges[1:])]
+
+    def test_an_interior_off_the_float_lattice_is_covered_exactly(self):
+        self.assertEqual(round(self.DURATION_S * 1e9), self.DURATION_NS)
+        end_ns = self.START_NS + self.DURATION_NS
+        # The round trip this signature retired: the window's own width moves.
+        self.assertNotEqual(round(end_ns / 1e9 * 1e9) - round(self.START_NS / 1e9 * 1e9),
+                            self.DURATION_NS)
+        anchor = {"status": "bounded", "effective_clock_anchor_bound_s": .0005}
+        interior = harness.reduce_interior(self.frames(), anchor,
+                                           self.START_NS / 1e9, self.DURATION_S)
+        self.assertFalse(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], self.DURATION_NS)
+        self.assertEqual(interior["rail_coverage_ns"]["rail_sum_w"], self.DURATION_NS)
+        self.assertEqual(interior["rail_coverage_ns"]["combined_w"], self.DURATION_NS)
+        self.assertTrue(interior["complete_support"])
+        self.assertEqual(interior["status"], "complete")
+
+    def test_integrate_refuses_anything_but_integer_nanoseconds(self):
+        frames = self.frames()
+        start_ns, end_ns = self.START_NS, self.START_NS + self.DURATION_NS
+        for label, args in (("float start", (start_ns / 1e9, end_ns, 0)),
+                            ("float end", (start_ns, float(end_ns), 0)),
+                            ("float uncertainty", (start_ns, end_ns, 1e-9))):
+            with self.subTest(case=label):
+                with self.assertRaises(TypeError):
+                    harness.integrate(frames, *args)
+        exact = harness.integrate(frames, start_ns, end_ns, 0)
+        self.assertEqual(exact["coverage_ns"], self.DURATION_NS)
+        # The adapter is the only float door, and it rounds the uncertainty
+        # OUTWARD: one picosecond still buys a whole nanosecond of expansion.
+        widened = harness.integrate_seconds(frames, start_ns / 1e9, end_ns / 1e9, 1e-12)
+        self.assertGreater(widened["error_bound_j"], 0)
+        self.assertAlmostEqual(widened["error_bound_j"],
+                               sum(10.0 * 2e-9 for frame in frames
+                                   if harness.overlap(start_ns - 1, end_ns + 1,
+                                                      frame["start_ns"], frame["end_ns"]) > 0))

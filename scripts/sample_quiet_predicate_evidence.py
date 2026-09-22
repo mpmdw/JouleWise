@@ -310,7 +310,25 @@ def overlap(a, b, c, d):
     return max(0, min(b, d) - max(a, c))
 
 
-def integrate(frames, start, end, uncertainty_s=0.0):
+def integrate_seconds(frames, start_s, end_s, uncertainty_s=0.0):
+    """Float-seconds adapter: map the window ONCE, then integrate in integers.
+
+    The round-level reduction in :func:`collect` is the only caller whose
+    window exists solely as binary64 seconds (``round_wall_start_s`` /
+    ``round_wall_end_s`` off the wall-clock stamps), so the seconds-to-integer
+    mapping lives here instead of inside :func:`integrate`.  The endpoints are
+    rounded to nearest; the uncertainty is rounded OUTWARD (ceiling) so the
+    expanded round is never narrowed by the conversion -- an uncertainty of
+    one picosecond still buys a full nanosecond of expansion.
+    """
+
+    if end_s <= start_s or uncertainty_s < 0:
+        raise ValueError("invalid round support or alignment uncertainty")
+    return integrate(frames, round(start_s * 1e9), round(end_s * 1e9),
+                     math.ceil(uncertainty_s * 1e9))
+
+
+def integrate(frames, start_ns, end_ns, uncertainty_ns=0):
     """Overlap seconds times watts; means divide by each rail's own coverage.
 
     For each averaging interval, moving either boundary by at most epsilon
@@ -318,20 +336,32 @@ def integrate(frames, start, end, uncertainty_s=0.0):
     touching the expanded round. This conservative interval-power bound does
     not shrink with sample count. Unobserved gaps have no finite energy bound.
 
-    All interval arithmetic is exact integer nanoseconds (ruling 10 Q3): the
-    round boundaries are mapped once, the frame endpoints arrive as integers
-    from ``align_frames``, and ``uncertainty_ns`` is rounded OUTWARD (ceiling)
-    so the expanded round is never narrowed by the conversion.  ``coverage_ns``
-    and the per-rail coverage are integer sums, and the two former ``> 1e-6``
-    comparators become exact equality.  They remain live fail-closed gap
+    All interval arithmetic is exact integer nanoseconds (ruling 10 Q3 as
+    worded by 14 R5), and the WINDOW ARRIVES AS INTEGERS: ``start_ns``,
+    ``end_ns`` and ``uncertainty_ns`` are integer nanoseconds, the frame
+    endpoints arrive as integers from ``align_frames``, ``coverage_ns`` and
+    the per-rail coverage are integer sums, and the two former ``> 1e-6``
+    comparators are exact equality.  They remain live fail-closed gap
     detectors, not dead code: under exact tiling any nonzero mismatch is a
     missing or duplicated frame interval, never rounding.  Seconds appear only
     at the ``P * w`` multiply and in the reported fields.
+
+    The signature is integer because the float round trip is NOT the identity:
+    mapping an epoch-scale integer to seconds and back is exact only when the
+    value sits on the 256 ns float64 lattice at that magnitude.  It happens to
+    be exact for the pilot's 480 s, 570 s and 600 s windows, and wrong by up
+    to 128 ns for durations such as 12.345 s -- which, against an exact
+    completeness gate, turns a fully covered interior into a partial one.
+
+    Every caller in the repository: ``reduce_interior`` (which computes the
+    interior window's integers itself and passes them straight through) and
+    ``integrate_seconds``, the float adapter used by the round-level reduction
+    in ``collect``.  There is no other call site.
     """
-    if end <= start or uncertainty_s < 0:
+    if any(type(value) is not int for value in (start_ns, end_ns, uncertainty_ns)):
+        raise TypeError("integrate takes integer nanoseconds")
+    if end_ns <= start_ns or uncertainty_ns < 0:
         raise ValueError("invalid round support or alignment uncertainty")
-    start_ns, end_ns = round(start * 1e9), round(end * 1e9)
-    uncertainty_ns = math.ceil(uncertainty_s * 1e9)
     for left, right in zip(frames, frames[1:]):
         if right["start_ns"] < left["end_ns"]:
             raise ValueError("overlapping or unordered native supports")
@@ -387,6 +417,12 @@ def reduce_interior(frames, anchor, start, duration):
     (ruling 10 Q3): a rail is complete only when its covered nanoseconds equal
     the window's, so a one-nanosecond hole is a partial interior, not a
     rounding artefact.
+
+    Those integers go STRAIGHT to ``integrate``.  Handing them over as float
+    seconds and re-rounding them there moved the window's width by up to
+    128 ns for any duration off the 256 ns float64 lattice at epoch scale --
+    exact for the pilot's 480 s, and enough to report a fully covered 12.345 s
+    interior as partial.
     """
     result = {"start_epoch_s": start, "end_epoch_s": start + duration,
               "duration_s": duration, "complete_support": False, "status": "partial",
@@ -396,8 +432,8 @@ def reduce_interior(frames, anchor, start, duration):
     start_ns = round(start * 1e9)
     duration_ns = round(duration * 1e9)
     end_ns = start_ns + duration_ns
-    values = integrate(frames, start_ns / 1e9, end_ns / 1e9,
-                       anchor["effective_clock_anchor_bound_s"])
+    values = integrate(frames, start_ns, end_ns,
+                       math.ceil(anchor["effective_clock_anchor_bound_s"] * 1e9))
     complete = (not values["span_mismatch"] and all(
         values["rail_coverage_ns"][rail] == duration_ns
         for rail in ("rail_sum_w", "combined_w")))
@@ -969,7 +1005,8 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
             # Add this round's own wall-read brackets to the production bound.
             epsilon += max(s["monotonic_after_s"] - s["monotonic_before_s"]
                            for s in (align["round_start_stamp"], align["round_end_stamp"]))
-            values = integrate(frames, row["round_wall_start_s"], row["round_wall_end_s"], epsilon)
+            values = integrate_seconds(frames, row["round_wall_start_s"],
+                                       row["round_wall_end_s"], epsilon)
             row.update({k: values[k] for k in ("power", "clusters", "cpus")})
             align.update(anchor_lo=anchor["admissible_lower_epoch_s"], anchor_hi=anchor["admissible_upper_epoch_s"],
                          error_bound_j=values["error_bound_j"], rail_error_bound_j=values["rail_error_bound_j"],
