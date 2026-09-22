@@ -698,6 +698,11 @@ follows the existing refusal path. A173 alone owns classification and exemption 
 
 ### 0.7 Nothing else is armed, and every discoverable root is retained
 
+Three project-wide terms this section turns on — to **arm** a night, a
+**retained** root, and a root whose **chain is open** — are defined in the
+first-use table (§8); for the last two the binding definition §8 points at is
+item 4 of `docs/contracts/evidence_night_entry.md`.
+
 No stand-down, no Ed NO, no unresolved owner-authored `directive` issue, no
 discoverable prior plan root that is ACTIVE or UNKNOWN (a harvested, retained
 root may remain discoverable), no active or indeterminate measurement ownership.
@@ -3310,13 +3315,15 @@ means. A term is listed only if it does technical work.
 | Δ (delta) | §1.2 | The elapsed time from the plan's `t0` to the moment the chain's settle begins: driver gate work + chain preflight + session reservation. `d12` is admitted only while Δ ≤ 1320 s. |
 | plan span / exit boundary | §0.6, §1.3 | The interval from `t0 − 8 min` in which no agent may be resident; the activation's hard exit time. |
 | census | §0.6 | An inventory of running processes; the night gate uses the unfiltered `pgrep -lf codex\|claude\|t3` result. |
-| arm / arm-time census | §0.6 | Publishing a plan and installing its night/report jobs; the separate process check immediately before that publication. |
+| arm / arming / arm-time census | §0.6, §0.7, performed §1.4 | To **arm** is to publish an approved night plan into its night root and install the night's two launchd jobs from that published plan — the night job `com.joulewise.night` and the dead-man `com.joulewise.night.deadman` (`LABELS` in `joulewise/night_agent_install.py`) — so the night fires at `t0` with nobody present. `publish-install` (`publish_install` in `joulewise/evidence_night.py`) does both: `os.replace` moves the staged plan to `<custody_root>/night_plan.json`, then `scripts/install_night_agent.sh` execs the installer module `joulewise.night_agent_install`. Nothing is armed until both jobs are loaded and accepted by the installer. The **arm-time census** is the separate process check immediately before that publication. |
 | own / foreign | §0.6 | Own PIDs are the census caller and its ancestors reached through current PPID links; other processes are foreign unless the stub-only idle-session exception applies. No saved lock or guessed owner PID selects own. |
 | PID / PPID / process tree | §0.6 | A process's numeric identifier / its parent's identifier / all children and later descendants reached through those parent links. |
 | interactive session | §0.6 | A Claude executable named `claude` meeting the watchdog's interactive-role rules, or a Node process whose script operand ends in `/t3-code/dist/cli.js`. |
 | idle / busy (arm only) | §0.6 | No descendant matches the ruled workload table / at least one does; unknown helpers and unreadable observations count as idle. Neither low CPU usage nor a fixture filename decides this classification. |
 | exit code (arm census) | §0.6 | The command's integer result: 0 clear or diagnostic-only; 3 busy/foreign stub blocking publication; 2 invalid plan or invocation; 1 the census did not run — preserve the transcript; not a busy verdict. |
 | plan digest | §0.6 | The SHA-256 identifying the exact plan bytes read by the command. |
+| retained (of a night root) | §0.7, binding definition in contract item 4 | The one classification of a discovered night root that lets an arm proceed: its `night/` directory holds at least one terminal record — `courier.sent`, `result.json`, `chain.exited`, or a refusal file the driver wrote — and its plan span is inactive at the moment of observation. `retained_roots` in `joulewise/evidence_night.py` classifies every discovered root; the other two classifications, `ACTIVE` and `UNKNOWN`, stop the arm. The binding definition, with the exact record names and the span rule, is item 4 of `docs/contracts/evidence_night_entry.md`. This is not the ledger sense of the word above (*retained value / retained m*, *retained n*), which counts captures, not custody directories. |
+| chain is open / open chain | §0.7, binding definition in contract item 4 | A night root whose `night/chain.started` is a regular file with no regular `night/chain.exited` beside it: the driver claimed the once-only chain start (`_claim_chain_start` in `scripts/run_night.py`) and never recorded the chain's exit (`_record_chain_exit`, same file), so that night is treated as still running. An open chain classifies its root `ACTIVE` ahead of every terminal record present, and stops an arm. |
 | frozen checkout triple | §1.5 | Exactly `(plan_id, root, head)` — the three fields the watchdog renders into the relaunch prompt's `@@FENCED_CHECKOUTS@@` list. It fences those checkouts against movement; §2.0 reconstructs every further harvest coordinate from it. |
 | terminal (session) | §2.2 | The session's last declared slot is final, or the session was aborted. |
 | dispatch (writer-status) | §2.4 | The chain branching on the capture's EXACT status number rather than on "non-zero": 0 valid and 1 non-valid both finalize the row and continue the night; 2 or more is a refusal or crash that stops it with the session open. |

@@ -220,9 +220,10 @@ with the clone's code. It then writes verdicts and evidence for:
 4. Every `<roots_under>/night-custody/*/night_plan.json` is inventoried and
    must be a regular non-symlink file; directories and special files refuse. A
    root whose `night/chain.started` is a regular file without a regular
-   `night/chain.exited` is ACTIVE and refuses. Otherwise an existing regular
-   `night/courier.sent`, `night/result.json`, `night/chain.exited`, or any
-   regular file matched by `run_night._refusal_paths` (`refusal.json`,
+   `night/chain.exited` — its chain is open — is ACTIVE and refuses. Otherwise
+   an existing regular `night/courier.sent`, `night/result.json`,
+   `night/chain.exited`, or any regular file matched by
+   `run_night._refusal_paths` (`refusal.json`,
    `refusal-N.json`, `calibration-refusal.json`,
    `calibration-refusal.json.*.json`) classifies its root as retained; the
    record lists every marker found. Otherwise it is UNKNOWN and refuses. Here

@@ -2,7 +2,10 @@
 
 This file is what the night courier reads first (`NIGHT_COURIER_PROMPT.md`).
 The magistrate rewrites the three sections below before every armed night
-(ruling R-9, `docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md`)
+(**arm**, **arming**: defined in the derivation-night runbook's first-use
+table, `docs/phase_2/derivation_night_runbook.md` §8, which §"Arm-time census
+for rehearsal plans" below already names as owning the term definitions;
+ruling R-9, `docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md`)
 and commits the rewrite with the night's plan. Between nights the sections
 hold the standing template text, so a courier that reads this file on a
 night nobody armed reports exactly that.
@@ -242,8 +245,10 @@ inputs or calibration-plan copy are required for this evidence payload
 **Census.** This is a real night: no stub-only idle-interactive exemption.
 The arm-time census classifies every `[c]odex|[c]laude|[t]3` match by ancestry
 and aborts on any foreign process; every owned helper closes before
-REQUEST (ruling 87a F6). Retained production roots remain discoverable;
-the lead confirms the discovery set at the bench (87a F4).
+REQUEST (ruling 87a F6). Retained production roots remain discoverable
+(**retained**, of a night root: item 4 of
+`docs/contracts/evidence_night_entry.md` is the binding definition, indexed in
+the runbook's §8); the lead confirms the discovery set at the bench (87a F4).
 Every census producer that can run while the chain runs must carry the
 2026-09-20 self-match fix (`[c]odex|[c]laude|[t]3`): the driver and chain (from
 the clone at the plan's `measurement_head`), the t0 author, and the WATCHDOG

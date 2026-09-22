@@ -696,7 +696,11 @@ def supervisor_check(state, canonical, state_path, runner):
                 continuous_reflog=walked)
 
 
-# Night records that classify a discovered custody root. Several families can
+# Night records that classify a discovered custody root. "An open chain" and
+# "retained" below are defined by item 4 of
+# docs/contracts/evidence_night_entry.md, their binding definition; the
+# derivation-night runbook's first-use table (section 8 of
+# docs/phase_2/derivation_night_runbook.md) indexes both. Several families can
 # coexist (a refusal written mid-chain, then chain.exited); an open chain takes
 # precedence over every marker, and a retained root whose plan span is still
 # active by the watchdog's rule is ACTIVE too. The installer refuses re-admission
