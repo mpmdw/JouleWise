@@ -481,11 +481,13 @@ def timed_log_window_epoch_s(argv):
     machine's local zone.  On the night the clock goes back an hour at the
     end of daylight saving, one wall-clock hour happens TWICE, so a string
     inside it names two different epochs; Python resolves such a string to
-    the FIRST of the two (the still-daylight-saving one).  `log show` is
-    handed the same strings and has the same choice to make, so the record
-    and the query agree either way; a capture window that straddles the
-    repeated hour is an hour wider or an hour narrower than the envelope
-    intended, and the drift and window pins are what would show it.
+    the FIRST of the two (the still-daylight-saving one).  How `log show`
+    resolves the same fold-ambiguous string is NOT established -- nothing in
+    this project has tested it -- so the record and the query cannot be
+    assumed to agree on which of the two epochs was meant (ruling 18 Q3 C5).
+    A capture window that straddles the repeated hour is an hour wider or an
+    hour narrower than the envelope intended, and the drift and window pins
+    are what would show it.
     """
 
     return [datetime.strptime(argv[argv.index(flag) + 1], "%Y-%m-%d %H:%M:%S").timestamp()
