@@ -457,9 +457,17 @@ def attestation_window(stamps):
     a candidate position.  If a step displaced the start stamp, the end stamp
     minus the length is the truer start, and the other way round for the end,
     so the window is the union of both readings -- widened by one second on
-    each side for the stamps' own resolution.  A plain +-1 s window around the
-    two wall stamps would miss the capture entirely under a 30 s step, and the
-    query would authenticate an envelope by looking at the wrong minute.
+    each side for the stamps' own resolution.
+
+    The worked case a plain +-1 s window loses: a 600 s capture starts at wall
+    1000 and the clock is stepped BACK 30 s partway through, so the stop stamp
+    reads 1570.  Entries written just before the step carry wall timestamps up
+    to 1600, outside [999, 1571] -- the +-1 s window around the two wall
+    stamps -- so a slew applied in that stretch goes unseen and the envelope
+    is authenticated on an incomplete log.  The union window is
+    [min(1000, 970) - 1, max(1570, 1600) + 1] = [969, 1601] and holds both
+    readings of the capture's extent.  (A step FORWARD widens the wall
+    interval instead, and there the two forms agree.)
     """
 
     started, stopped = stamps["sampling_started"], stamps["sampling_stopped"]
