@@ -71,10 +71,47 @@ def stream(*docs):
     return b"\0".join(plistlib.dumps(d) for d in docs) + b"\0"
 
 
+def placed(frame, start_s, end_s, **extra):
+    """Place a parsed frame on the wall timeline in both representations.
+
+    After the cold gate (ruling 10 Q3) the integer-nanosecond endpoints are the
+    load-bearing ones and the float seconds are derived from them, so a fixture
+    that set only ``start_s``/``end_s`` would no longer describe a frame.
+    """
+    start_ns, end_ns = round(start_s * 1e9), round(end_s * 1e9)
+    return {**frame, "start_ns": start_ns, "end_ns": end_ns,
+            "start_s": start_ns / 1e9, "end_s": end_ns / 1e9, **extra}
+
+
 def aligned_fixture():
     frames, _ = harness.parse_frames(stream(document(), document(timestamp=1003, elapsed_ns=2_000_000_000, cpu=4000)))
-    return [{**frames[0], "start_s": 1000.0, "end_s": 1001.0},
-            {**frames[1], "start_s": 1001.0, "end_s": 1003.0}]
+    return [placed(frames[0], 1000.0, 1001.0), placed(frames[1], 1001.0, 1003.0)]
+
+
+def network_time_control(directory, stdout=None, exit_code=0):
+    """The chain's OFF receipt, the only admission the collector accepts."""
+    path = Path(directory) / "network_time_control.json"
+    path.write_text(json.dumps({"schema": "joulewise.network_time_control.v1",
+        "off": {"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
+                         "-setusingnetworktime", "off"],
+                "exit_code": exit_code, "epoch_s": 1000.0, "monotonic_s": 10.0,
+                "stdout": harness.EXPECTED_NETWORK_TIME_OFF_STDOUT if stdout is None else stdout},
+        "on": None}))
+    return path
+
+
+class NetworkTimeOffMixin:
+    """Ruling 10 Q1 rule 3: every collect() needs the chain's OFF receipt."""
+
+    def setUp(self):
+        super().setUp()
+        directory = tempfile.TemporaryDirectory(dir="/tmp")
+        self.addCleanup(directory.cleanup)
+        self.network_time_record = network_time_control(directory.name)
+        patcher = patch.dict(os.environ,
+                             {harness.NETWORK_TIME_RECORD_ENV: str(self.network_time_record)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 def collect_args(directory, **kwargs):
@@ -269,18 +306,18 @@ class IntegrationTests(unittest.TestCase):
         energy = reduced["power"]["energy_j"]["rail_sum_w"]
         self.assertAlmostEqual(reduced["error_bound_j"], (2.6 + 4.6) * .02)
         for delta in (-.01, -.003, .01):
-            shifted = [{**f, "start_s": f["start_s"] + delta, "end_s": f["end_s"] + delta} for f in frames]
+            shifted = [placed(f, f["start_s"] + delta, f["end_s"] + delta) for f in frames]
             actual = harness.integrate(shifted, 1000.5, 1002)["power"]["energy_j"]["rail_sum_w"]
             self.assertLessEqual(abs(actual - energy), reduced["error_bound_j"])
 
     def test_overlapping_frames_are_rejected(self):
         frames = aligned_fixture()
-        frames[1]["start_s"] = 1000.9
+        frames[1] = placed(frames[1], 1000.9, frames[1]["end_s"])
         with self.assertRaises(ValueError):
             harness.integrate(frames, 1000.5, 1002)
 
 
-class CollectionTests(unittest.TestCase):
+class CollectionTests(NetworkTimeOffMixin, unittest.TestCase):
     def test_hard_probe_results_survive_complete_and_interrupted_rounds(self):
         from joulewise import night_gate
         from scripts import run_night
@@ -443,7 +480,8 @@ runpy.run_path(script, run_name="__main__")
 '''
             command = [sys.executable, "-B", "-c", audit, command[2], tmp, *command[3:]]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=20,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/tmp"})
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/tmp",
+                     harness.NETWORK_TIME_RECORD_ENV: str(self.network_time_record)})
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertNotIn("OUTSIDE_OUTPUT", completed.stdout)
             root = Path(tmp)
@@ -560,7 +598,7 @@ runpy.run_path(script, run_name="__main__")
         recorder = Mock()
         recorder.metadata = {"argv": ["fake"], "cleanup": {"returncode": 0}}
         frame = aligned_fixture()[0]
-        frames = [{**frame, "start_s": 999.0, "end_s": 1006.0, "elapsed_s": 7}]
+        frames = [placed(frame, 999.0, 1006.0, elapsed_s=7)]
         recorder.finish.return_value = (frames, {"status": "bounded", "admissible_lower_epoch_s": 1000,
             "admissible_upper_epoch_s": 1000.002, "effective_clock_anchor_bound_s": .001, "method": "fixture"})
         with tempfile.TemporaryDirectory() as tmp:
@@ -576,7 +614,7 @@ runpy.run_path(script, run_name="__main__")
         clock.now = 2
         recorder = Mock()
         recorder.metadata = {'cleanup': {'returncode':0}}
-        frames = [{**aligned_fixture()[0], 'start_s':1000., 'end_s':1600., 'elapsed_s':600}]
+        frames = [placed(aligned_fixture()[0], 1000., 1600., elapsed_s=600)]
         recorder.finish.return_value = (frames, {'status':'bounded', 'effective_clock_anchor_bound_s':0,
             'admissible_lower_epoch_s':1000, 'admissible_upper_epoch_s':1000})
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
@@ -948,7 +986,7 @@ print(json.dumps(rows))
         self.assertIsNone(harness.stationarity(periods, 0)["mean_busy_cores"])
 
 
-class SummaryTests(unittest.TestCase):
+class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
     def test_row_os_build_cannot_be_substituted_or_joined_to_another_session(self):
         for field, replacement in (("os_build", "25G80"), ("session", "other-session")):
             with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
@@ -1137,7 +1175,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class NativeInteriorAndLoadJoinTests(unittest.TestCase):
+class NativeInteriorAndLoadJoinTests(NetworkTimeOffMixin, unittest.TestCase):
     def test_interior_uses_native_support_not_scaled_whole_envelope_mean(self):
         frames = aligned_fixture()
         anchor = {'status':'bounded','effective_clock_anchor_bound_s':0}

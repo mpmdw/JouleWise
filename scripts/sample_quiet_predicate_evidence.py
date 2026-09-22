@@ -23,8 +23,13 @@ native support, early first-parse observation, energy counters and is_delta;
 unresolved evidence stays null with the production reason. No arrival-time or
 linear fallback is silently substituted. Like the adapter, endpoints advance
 by elapsed_ns after record zero (powermetrics.py:1775-1785, 2009-2025).
-The bound is conditional on the anchor's affine clock model; network-time
-provenance is unknown here, so these artifacts are PROVISIONAL desk evidence.
+The bound is conditional on the anchor's affine clock model AND on network
+time being OFF for the whole capture.  The collector does not toggle it: the
+evidence chain establishes OFF before settle and names its receipt in
+EVIDENCE_NETWORK_TIME_RECORD, which this collector reads and records as
+structured provenance.  With no readable receipt the envelope is refused
+before powermetrics is spawned (exit 3); provenance is never null.  Every
+artifact remains PROVISIONAL desk evidence.
 
 Schema joulewise.quiet_predicate_evidence.v1 adds per-round censuses (source,
 job_id and unchanged result), census_errors, and census_clean. Clean is true
@@ -65,12 +70,23 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise import quiet_admission
 from joulewise.adapters import powermetrics as pm
+from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 from joulewise.clock import ClockStamp
 from joulewise.uncertainty_evidence import (
-    NativeAnchorRecord, derive_powermetrics_anchor_v3,
+    CLOCK_METHOD_V3_1, NativeAnchorRecord, derive_powermetrics_anchor_v3,
 )
 
 SCHEMA = "joulewise.quiet_predicate_evidence.v1"
+# Cold gate 2026-09-22, ruling 10 Q1 rule 3: the evidence chain establishes
+# network time OFF before settle and names its receipt in this variable.  A
+# collector that cannot read and match that receipt refuses the envelope
+# before powermetrics is spawned; it never records an unknown clock regime as
+# if it were a measurement.
+NETWORK_TIME_RECORD_ENV = "EVIDENCE_NETWORK_TIME_RECORD"
+NETWORK_TIME_REFUSAL = "network_time_provenance"
+NETWORK_TIME_REFUSAL_EXIT = 3
+NETWORK_TIME_PROVENANCE_METHOD = "systemsetup_setusingnetworktime_off_exact_stdout"
+NETWORK_TIME_PROVENANCE_REASON = "established by the evidence chain before settle"
 ALIGNMENT_MODEL = "affine wall clock; production rate-aware bound; PROVISIONAL"
 RAILS = ("cpu_w", "gpu_w", "ane_w", "rail_sum_w", "combined_w", "dram_w")
 ROUND_KEYS = (
@@ -214,28 +230,84 @@ def parse_frames(data):
     return frames, asdict(dropped) if dropped else None
 
 
+def network_time_provenance(environ=None):
+    """Read the chain's network-time receipt, or say exactly why there is none.
+
+    Returns ``(provenance, reason)``.  ``provenance`` is ``None`` -- which the
+    caller turns into a refusal before any child is launched -- when the
+    environment variable naming the receipt is absent, the receipt cannot be
+    read as JSON, or its recorded ``off`` result is not an exit-0 run whose
+    stdout is EXACTLY ``joulewise.arm_readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT``.
+    The comparator is imported, never retyped (ruling 10 Q1 rule 1), and the
+    comparison is byte equality: the observed ``setUsingNetworkTime: off``
+    (lower case) of a different code path is NOT a match.
+    """
+
+    environ = os.environ if environ is None else environ
+    path = environ.get(NETWORK_TIME_RECORD_ENV)
+    if not path:
+        return None, f"{NETWORK_TIME_RECORD_ENV} is not set by the evidence chain"
+    try:
+        raw = Path(path).read_bytes()
+        control = json.loads(raw)
+        off = control["off"]
+        stdout, exit_code = off["stdout"], off["exit_code"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, f"network time control record unreadable: {type(exc).__name__}: {exc}"
+    if exit_code != 0 or stdout != EXPECTED_NETWORK_TIME_OFF_STDOUT:
+        return None, ("network time OFF not proven by the control record: "
+                      f"exit {exit_code!r}, stdout {stdout!r}")
+    return {"state": "off", "method": NETWORK_TIME_PROVENANCE_METHOD,
+            "established_epoch_s": off.get("epoch_s"),
+            "established_monotonic_s": off.get("monotonic_s"),
+            "record": Path(path).name,
+            "record_sha256": hashlib.sha256(raw).hexdigest()}, NETWORK_TIME_PROVENANCE_REASON
+
+
 def align_frames(frames, stamps, deriver=derive_powermetrics_anchor_v3):
+    """Tile the native frames on the wall timeline in exact integer nanoseconds.
+
+    Cold gate 2026-09-22, ruling 10 Q3 as worded by 14 R5: the anchor's only
+    endpoint field is the binary64 ``first_sample_end_point_epoch_s``, so it is
+    rounded ONCE here to integer nanoseconds and every later endpoint is an
+    integer sum of the recorder's own integer ``elapsed_ns``.  Tiling in float
+    epoch seconds mis-placed consecutive frames by up to one ulp (238 ns at
+    epoch scale) each, which is what the retired 1 microsecond comparators were
+    measuring.  The float ``start_s``/``end_s`` fields are kept for readers, but
+    they are now DERIVED from the integers, never the other way round.
+
+    The evidence consumer prices the anchor bound in joules, so it selects the
+    v3.1 anchor identity (``method=CLOCK_METHOD_V3_1``; ruling 14 R2).
+    """
+
     records = [NativeAnchorRecord(
         elapsed_s=f["elapsed_s"], native_timestamp_s=f["native_timestamp_s"],
         power_w=f["power"]["rail_sum_w"] if f["power"]["rail_sum_w"] is not None else math.nan,
         energy_j=f["energy_j"], is_delta=f["is_delta"],
         elapsed_ns=f["elapsed_ns"], native_timestamp_ns=f["native_timestamp_ns"])
         for f in frames]
-    anchor = deriver(stamps=stamps, records=records)
+    anchor = deriver(stamps=stamps, records=records, method=CLOCK_METHOD_V3_1)
     if anchor["status"] != "bounded":
         return [], anchor
-    endpoint = anchor["first_sample_end_point_epoch_s"]
+    endpoint_ns = round(anchor["first_sample_end_point_epoch_s"] * 1e9)
     aligned, elapsed_ns = [], 0
     for i, frame in enumerate(frames):
         if i:
             elapsed_ns += frame["elapsed_ns"]
-        end = endpoint + elapsed_ns / 1e9
-        aligned.append({**frame, "start_s": end - frame["elapsed_s"], "end_s": end})
+        end_ns = endpoint_ns + elapsed_ns
+        start_ns = end_ns - frame["elapsed_ns"]
+        aligned.append({**frame, "start_ns": start_ns, "end_ns": end_ns,
+                        "start_s": start_ns / 1e9, "end_s": end_ns / 1e9})
     return aligned, anchor
 
 
 def overlap(a, b, c, d):
-    return max(0.0, min(b, d) - max(a, c))
+    """Intersection length of [a,b] and [c,d]; exact on integer nanoseconds.
+
+    The zero floor is the integer 0, so an all-integer call returns an exact
+    integer count of nanoseconds and a float call is unchanged.
+    """
+    return max(0, min(b, d) - max(a, c))
 
 
 def integrate(frames, start, end, uncertainty_s=0.0):
@@ -245,31 +317,44 @@ def integrate(frames, start, end, uncertainty_s=0.0):
     changes overlap by <=2*epsilon. Sum P_i*min(dt_i,2*epsilon) over frames
     touching the expanded round. This conservative interval-power bound does
     not shrink with sample count. Unobserved gaps have no finite energy bound.
+
+    All interval arithmetic is exact integer nanoseconds (ruling 10 Q3): the
+    round boundaries are mapped once, the frame endpoints arrive as integers
+    from ``align_frames``, and ``uncertainty_ns`` is rounded OUTWARD (ceiling)
+    so the expanded round is never narrowed by the conversion.  ``coverage_ns``
+    and the per-rail coverage are integer sums, and the two former ``> 1e-6``
+    comparators become exact equality.  They remain live fail-closed gap
+    detectors, not dead code: under exact tiling any nonzero mismatch is a
+    missing or duplicated frame interval, never rounding.  Seconds appear only
+    at the ``P * w`` multiply and in the reported fields.
     """
     if end <= start or uncertainty_s < 0:
         raise ValueError("invalid round support or alignment uncertainty")
+    start_ns, end_ns = round(start * 1e9), round(end * 1e9)
+    uncertainty_ns = math.ceil(uncertainty_s * 1e9)
     for left, right in zip(frames, frames[1:]):
-        if right["start_s"] < left["end_s"] - 1e-6:
+        if right["start_ns"] < left["end_ns"]:
             raise ValueError("overlapping or unordered native supports")
-    weighted = [(f, overlap(start, end, f["start_s"], f["end_s"])) for f in frames]
-    coverage = math.fsum(w for _, w in weighted)
-    energy, rail_coverage, bounds, power = {}, {}, {}, {}
+    weighted = [(f, overlap(start_ns, end_ns, f["start_ns"], f["end_ns"])) for f in frames]
+    coverage_ns = sum(w for _, w in weighted)
+    energy, rail_coverage, rail_coverage_ns, bounds, power = {}, {}, {}, {}, {}
     for rail in RAILS:
         selected = [(f["power"][rail], w) for f, w in weighted
                     if w > 0 and f["power"][rail] is not None]
-        den = math.fsum(w for _, w in selected)
-        expanded_coverage = math.fsum(overlap(start - uncertainty_s, end + uncertainty_s,
-            f["start_s"], f["end_s"]) for f in frames if f["power"][rail] is not None)
-        joules = math.fsum(p * w for p, w in selected)
-        rail_coverage[rail] = den
-        energy[rail] = joules if den else None
-        power[rail] = joules / den if den else None
+        den_ns = sum(w for _, w in selected)
+        rail_coverage_ns[rail] = den_ns
+        expanded_coverage_ns = sum(overlap(start_ns - uncertainty_ns, end_ns + uncertainty_ns,
+            f["start_ns"], f["end_ns"]) for f in frames if f["power"][rail] is not None)
+        joules = math.fsum(p * (w / 1e9) for p, w in selected)
+        rail_coverage[rail] = den_ns / 1e9
+        energy[rail] = joules if den_ns else None
+        power[rail] = joules / (den_ns / 1e9) if den_ns else None
         bounds[rail] = (math.fsum(
-            f["power"][rail] * min(f["elapsed_s"], 2 * uncertainty_s)
+            f["power"][rail] * (min(f["end_ns"] - f["start_ns"], 2 * uncertainty_ns) / 1e9)
             for f in frames if f["power"][rail] is not None
-            and overlap(start - uncertainty_s, end + uncertainty_s, f["start_s"], f["end_s"]) > 0)
-            if expanded_coverage >= end - start + 2 * uncertainty_s - 1e-6 else None)
-    power.update(coverage_s=coverage, rail_coverage_s=rail_coverage, energy_j=energy)
+            and overlap(start_ns - uncertainty_ns, end_ns + uncertainty_ns, f["start_ns"], f["end_ns"]) > 0)
+            if expanded_coverage_ns >= end_ns - start_ns + 2 * uncertainty_ns else None)
+    power.update(coverage_s=coverage_ns / 1e9, rail_coverage_s=rail_coverage, energy_j=energy)
     def average_entities(kind, id_key, keys):
         ids = sorted({entry[id_key] for f, w in weighted if w > 0
                       for entry in f[kind] if entry[id_key] is not None}, key=str)
@@ -279,33 +364,45 @@ def integrate(frames, start, end, uncertainty_s=0.0):
             for key in keys:
                 values = [(entry[key], w) for f, w in weighted if w > 0 for entry in f[kind]
                           if entry[id_key] == entity and entry[key] is not None]
-                den = math.fsum(w for _, w in values)
+                den = sum(w for _, w in values)  # integer nanoseconds
                 row[key] = math.fsum(v * w for v, w in values) / den if den else None
-                row["coverage_s"][key] = den
+                row["coverage_s"][key] = den / 1e9
             result.append(reasons(row))
         return result
     return {
         "power": reasons(power, "no covered native samples for this rail"),
         "clusters": average_entities("clusters", "name", ("active_ratio", "idle_ratio", "down_ratio", "online_ratio", "freq_hz")) or None,
         "cpus": average_entities("cpus", "cpu", ("active_ratio", "freq_hz")) or None,
-        "span_mismatch": abs(coverage - (end - start)) > 1e-6,
+        "coverage_ns": coverage_ns, "rail_coverage_ns": rail_coverage_ns,
+        "span_mismatch": coverage_ns != end_ns - start_ns,
         "error_bound_j": bounds["rail_sum_w"], "rail_error_bound_j": reasons(bounds, "incomplete rail coverage; unobserved energy is unbounded"),
     }
 
 
 def reduce_interior(frames, anchor, start, duration):
-    """Integrate native interval supports; never rescale a whole-round mean."""
+    """Integrate native interval supports; never rescale a whole-round mean.
+
+    The interior window is mapped to integer nanoseconds ONCE here, and the
+    per-rail coverage check is exact integer equality against that window
+    (ruling 10 Q3): a rail is complete only when its covered nanoseconds equal
+    the window's, so a one-nanosecond hole is a partial interior, not a
+    rounding artefact.
+    """
     result = {"start_epoch_s": start, "end_epoch_s": start + duration,
               "duration_s": duration, "complete_support": False, "status": "partial",
               "native_samples": 0, "power": None, "reason": "clock anchor unresolved"}
     if anchor.get("status") != "bounded":
         return reasons(result)
-    values = integrate(frames, start, start + duration, anchor["effective_clock_anchor_bound_s"])
+    start_ns = round(start * 1e9)
+    duration_ns = round(duration * 1e9)
+    end_ns = start_ns + duration_ns
+    values = integrate(frames, start_ns / 1e9, end_ns / 1e9,
+                       anchor["effective_clock_anchor_bound_s"])
     complete = (not values["span_mismatch"] and all(
-        abs(values["power"]["rail_coverage_s"][rail] - duration) <= 1e-6
+        values["rail_coverage_ns"][rail] == duration_ns
         for rail in ("rail_sum_w", "combined_w")))
     result.update(values, complete_support=complete, status="complete" if complete else "partial",
-                  native_samples=sum(overlap(start, start + duration, f["start_s"], f["end_s"]) > 0 for f in frames),
+                  native_samples=sum(overlap(start_ns, end_ns, f["start_ns"], f["end_ns"]) > 0 for f in frames),
                   reason="complete native support" if complete else "incomplete interior support")
     return reasons(result)
 
@@ -742,14 +839,15 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                             "collector": identity(os.getpid()), "argv": sys.argv,
                             "metadata_errors": [v[1] for v in (boot, build) if isinstance(v, tuple)]})
     metadata = metadata_reader()
+    provenance, provenance_reason = network_time_provenance()
     session = {"schema": SCHEMA, "session": session_id, **metadata,
                "state": args.state, "repeat": args.repeat, "load_setting": args.load_cores,
                "duration_s": args.duration_s, "sample_interval_s": args.sample_interval_s,
                "power_interval_ms": args.power_interval_ms, "power_enabled": args.power,
                "powermetrics_needs_root": True, "sudo_policy_probed": False,
-               "evidence_status": "PROVISIONAL", "network_time_provenance": None,
+               "evidence_status": "PROVISIONAL", "network_time_provenance": provenance,
                "alignment_model": ALIGNMENT_MODEL,
-               "network_time_provenance_reason": "not established by this desk harness",
+               "network_time_provenance_reason": provenance_reason,
                "observer_definition": "SELF + reaped CHILDREN over production smoke incl. raw/stamp hooks; recorder CPU excluded",
                "round_workers": [], "power": None, "error": None, "error_rounds": 0}
     envelope_cpu_start = cpu_total()
@@ -760,6 +858,16 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
     session["start_drift_s"] = start.monotonic_before_s - scheduled if scheduled is not None else None
     session["start_stamp"] = asdict(start)
     session["deadline_mono_s"] = deadline
+    if provenance is None:
+        # Ruling 10 Q1 rule 3: refuse the envelope here, BEFORE powermetrics is
+        # spawned, rather than capture under an unknown clock regime and record
+        # the provenance as null.  main() maps this to exit 3.
+        session["error"] = "network time provenance not established: " + provenance_reason
+        session["error_class"] = NETWORK_TIME_REFUSAL
+        session["error_rounds"] = 0
+        write_json(out / "session.json", session)
+        (out / "rounds.jsonl").write_text("")
+        return session, []
     write_json(out / "session.json", session)
     recorder = None
     rows, frames, anchor = [], [], {"status": "unresolved", "detail": "power disabled"}
@@ -1357,6 +1465,9 @@ def main(argv=None):
                 session, _ = collect(args)
             finally:
                 signal.signal(signal.SIGTERM, previous)
+            if session.get("error_class") == NETWORK_TIME_REFUSAL:
+                print(f"error: {session['error']}", file=sys.stderr)
+                return NETWORK_TIME_REFUSAL_EXIT
             return int(session["error"] is not None)
         if args.command == "load":
             return int(load(args)["error"] is not None)
