@@ -1686,7 +1686,44 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
             self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                              ["network_time_unattested"])
             self.assertEqual((out / "session.json").read_bytes(), before)
-            self.assertFalse(list(out.glob("*.tmp")))
+
+    def test_a_rename_that_fails_leaves_no_temporary_behind(self):
+        """R5.2: the `.tmp` assertion belongs on the path that can make one.
+
+        On the read-only-directory path above the temporary can never be
+        created, so asserting its absence there proved nothing.  Here the
+        write SUCCEEDS and only `os.replace` fails, which is the shape that
+        left a complete `session.json.tmp` -- carrying the `authenticated`
+        state this branch withdraws -- beside the record it failed to
+        replace.
+        """
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope-01"
+            out.mkdir()
+            (out / "session.json").write_text(json.dumps({"session": "fixture"}))
+            before = (out / "session.json").read_bytes()
+            attestation = {"state": "authenticated", "matched_lines": 0}
+            written = {}
+            def replace(source, target):
+                written["existed"] = Path(source).exists()
+                written["payload"] = json.loads(Path(source).read_text())
+                raise OSError("cross-device link")
+            with patch.object(campaign.os, "replace", side_effect=replace):
+                self.assertFalse(campaign.record_attestation(out, attestation))
+            # The temporary really was complete when the rename failed ...
+            self.assertTrue(written["existed"])
+            self.assertEqual(
+                written["payload"]["network_time_provenance"]["attestation"]["state"],
+                "authenticated")
+            # ... and nothing of it survives.
+            self.assertEqual(list(out.glob("*.tmp")), [])
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["session.json"])
+            self.assertEqual((out / "session.json").read_bytes(), before)
+            self.assertEqual(attestation["state"], "asserted")
+            self.assertTrue(attestation["reason"].startswith("session rewrite failed: "),
+                            attestation["reason"])
+            self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                             ["network_time_unattested"])
 
     def test_a_night_whose_annotations_cannot_land_still_finishes(self):
         def spy(stack, module):

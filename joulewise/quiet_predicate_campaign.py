@@ -723,6 +723,13 @@ def record_attestation(out, attestation):
         # and says why.  `pilot_summary` reads the executor's own envelope
         # entry whenever the session record carries no attestation, so the
         # `asserted` state set here is the state the summary sees.
+        #
+        # The temporary goes first.  A write that landed and a rename that
+        # did not leaves a COMPLETE `session.json.tmp` beside the record it
+        # failed to replace -- one carrying the `authenticated` state this
+        # branch is about to withdraw -- so a harvester would have two
+        # candidate records for one envelope, the stale one claim-bearing.
+        temporary.unlink(missing_ok=True)
         attestation["state"] = "asserted"
         attestation["reason"] = f"session rewrite failed: {type(exc).__name__}: {exc}"
         return False
