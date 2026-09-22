@@ -675,13 +675,13 @@ def record_attestation(out, attestation):
     The collector has exited, so the chain owns this write; temp plus rename
     means a reader never sees a half-written session record, and a write that
     cannot land is reported in the attestation rather than raised (an
-    unwritable envelope directory used to refuse the whole night from here).  The attestation
-    carries ``session_sha256_before`` -- the digest of the file this rewrite
-    replaced -- so the one edit made after the collector exits is auditable
-    from the record itself (A269 ruling 10 Q4 iii).  Nothing else rewrites
-    ``session.json`` after the collector exits: under cure 2 there is no
-    finaliser pass, so this digest can only ever name the collector's own
-    bytes.
+    unwritable envelope directory used to refuse the whole night from here).
+    The attestation carries ``session_sha256_before`` -- the digest of the
+    file this rewrite replaced -- so the one edit made after the collector
+    exits is auditable from the record itself (A269 ruling 10 Q4 iii).
+    Nothing else rewrites ``session.json`` after the collector exits:
+    under cure 2 there is no finaliser pass, so this digest can only ever
+    name the collector's own bytes.
     """
 
     path = out / "session.json"
