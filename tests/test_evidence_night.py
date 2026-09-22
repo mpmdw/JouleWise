@@ -859,7 +859,7 @@ class LifecycleTests(unittest.TestCase):
         (root / "night/chain.exited").write_text('{"exit_code": -15}')
         result = self.checked()["checks"]["retained_roots"]
         self.assertEqual([(r["classification"], r["reason"]) for r in result["inventory"]],
-                         [("retained", "terminal record present; plan span over")])
+                         [("retained", "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)")])
         self.assertEqual(result["inventory"][0]["evidence"],
                          [str(root / "night/chain.exited"), str(root / "night/refusal.json")])
         # An open chain stays ACTIVE even when a courier marker exists.
@@ -910,7 +910,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(record["rehearsal_ready"])
         self.assertEqual(record["checks"]["retained_roots"]["inventory"],
                          [dict(plan=str(only / "night_plan.json"), classification="retained",
-                               reason="terminal record present; plan span over",
+                               reason="terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)",
                                evidence=[str(only / "night/refusal.json")])])
 
     def test_discovery_span_fence_reuses_the_watchdog_rule(self):
@@ -940,6 +940,52 @@ class LifecycleTests(unittest.TestCase):
         self.sibling_root("bare", "courier.sent", plan_text="{}")
         row = entry.retained_roots(state)["inventory"][0]
         self.assertEqual(row["classification"], "UNKNOWN"); self.assertTrue(row["reason"].startswith("plan unreadable: PlanError"))
+
+    def test_retained_reason_names_the_span_rule_and_holds_before_the_span(self):
+        # Cold gate 2026-09-21 (activation ce7c57a9, Q4): the watchdog rule reports a plan
+        # inactive before t0 - PLAN_LEAD_S too, so a terminal record observed before the
+        # span classifies retained with the rule named; an unparseable plan never
+        # carries the retained reason.
+        state = {"roots_under": str(self.custody.parent.parent)}
+        t0 = 1_800_000_000
+        self.sibling_root("early", "refusal.json", t0=t0)
+        row = entry.retained_roots(state, now_epoch_s=t0 - 7200)["inventory"][0]
+        self.assertEqual((row["classification"], row["reason"]), ("retained", "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)"))
+        shutil.rmtree(self.custody.parent / "early")
+        self.sibling_root("bare", "refusal.json", plan_text="{}")
+        row = entry.retained_roots(state, now_epoch_s=t0 - 7200)["inventory"][0]
+        self.assertEqual(row["classification"], "UNKNOWN")
+        self.assertNotEqual(row["reason"], "terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)")
+
+    def test_deep_json_plan_is_unknown_and_the_failing_check_record_persists(self):
+        # Cold gate 2026-09-21 (activation ce7c57a9, Q6 A1-F2): RecursionError from a deeply
+        # nested plan is a RuntimeError, outside the ValueError family; interpreter-
+        # independent via a patched parser (3.14's decoder converts it to JSONDecodeError).
+        from unittest import mock
+        from joulewise.night_gate import NightPlan
+        state = {"roots_under": str(self.custody.parent.parent)}
+        self.sibling_root("deep", "refusal.json")
+        with mock.patch.object(NightPlan, "from_mapping", side_effect=RecursionError("maximum recursion depth exceeded")):
+            row = entry.retained_roots(state)["inventory"][0]
+            self.assertEqual(row["classification"], "UNKNOWN")
+            self.assertTrue(row["reason"].startswith("plan unreadable: RecursionError"), row["reason"])
+            record = self.checked(fail="retained_roots")
+        self.assertIn("RecursionError", json.dumps(record))
+        self.assertFalse(record["rehearsal_ready"])
+
+    def test_custody_root_spellings_equal_under_realpath_classify_alike(self):
+        # Cold gate 2026-09-21 (activation ce7c57a9, Q6 A1-F3): realpath-equal, string-unequal
+        # spellings of custody_root classify exactly as the plain spelling (kills a
+        # string comparison). Symlink spellings are refused by safe_path and are not used.
+        state = {"roots_under": str(self.custody.parent.parent)}
+        t0 = 1_800_000_000
+        for name, suffix in (("slash", "/"), ("dots", "/night/..")):
+            root = self.custody.parent / name
+            self.sibling_root(name, "chain.started", "chain.exited", t0=t0, custody_root=str(root) + suffix)
+            with self.subTest(spelling=suffix):
+                self.assertEqual(entry.retained_roots(state, now_epoch_s=t0 + 600)["inventory"][0]["classification"], "ACTIVE")
+                self.assertEqual(entry.retained_roots(state, now_epoch_s=t0 + 30 * 86400)["inventory"][0]["classification"], "retained")
+            shutil.rmtree(root)
 
     def test_census_foreign_workload_and_unknown_refuse(self):
         from dataclasses import replace

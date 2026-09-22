@@ -298,17 +298,32 @@ Record 17's script set remains the fallback until the first live use succeeds.
 Pre-check step, ruled by the cold gate 2026-09-21 (packet 05 Q3): the census
 classifies every process outside the caller's ancestor chain as foreign, and
 the tracked check refuses on any foreign PID, so the session's own MCP helpers
-must be gone first. The ruled text:
+must be gone first. The ruled text, with its commands corrected by the cold
+gate 2026-09-21 (activation ce7c57a9, round-3 packet, Q2; `pgrep -lP` prints
+process names only and `pkill -P` reaches immediate children only, both
+verified against the installed manual and a live process tree):
 
-Before running `check` on a real plan, this session terminates its own idle
-MCP helpers. List the children of the session root: `pgrep -lP
-<session-root-pid>`. For every child whose command line contains `codex
-mcp-server`, send SIGTERM to that child and its descendants (`pkill -TERM -P
-<child-pid>`; `kill -TERM <child-pid>`), wait until `pgrep -f 'codex
-mcp-server'` lists no descendant of the session root, and record the PIDs
-terminated in the check record. Terminate nothing outside the session root's
-descendants. Then run `check`. If the census still reports any descendant of
-the own session root as foreign, stop; never relabel it "diagnostic".
+Before running `check` on a real plan, this session terminates its own idle MCP
+helpers, and nothing else. Let `ROOT` be the session root's PID. List the
+session root's children with their full command lines: `pgrep -flP $ROOT`.
+Every child whose command line contains `codex mcp-server` is a helper. For
+each helper, enumerate all of its descendants, at every depth, and send SIGTERM
+to the helper and every descendant:
+
+```zsh
+descendants() { local pid; for pid in $(pgrep -P $1); do print -- $pid; descendants $pid; done }
+for h in $(pgrep -flP $ROOT | grep -F 'codex mcp-server' | cut -d' ' -f1); do
+  victims=($h $(descendants $h)); print -r -- "helper $h: TERM ${(j:,:)victims}"; kill -TERM $victims
+done
+```
+
+Then wait until no descendant of the session root, at any depth, has `codex
+mcp-server` in its command line: repeat `for d in $(descendants $ROOT); do ps
+-o pid=,command= -p $d; done | grep -F 'codex mcp-server'` until it prints
+nothing. Record every PID terminated, with its command line, in the check
+record. Terminate nothing that is not a descendant of `ROOT`. Then run `check`.
+If the census still reports any descendant of the session root as foreign,
+stop; never relabel it "diagnostic".
 
 **Timeline.** The plan's relative boundaries are: install strictly before
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at

@@ -218,24 +218,32 @@ with the clone's code. It then writes verdicts and evidence for:
 3. `shutil.which("claude")` finds the courier executable required by the
    unchanged installer. This checks availability; it never invokes the courier.
 4. Every `<roots_under>/night-custody/*/night_plan.json` is inventoried and
-   must be a regular non-symlink file; directories and special files refuse.
-   A root whose `night/chain.started` is a regular file without a regular
+   must be a regular non-symlink file; directories and special files refuse. A
+   root whose `night/chain.started` is a regular file without a regular
    `night/chain.exited` is ACTIVE and refuses. Otherwise an existing regular
    `night/courier.sent`, `night/result.json`, `night/chain.exited`, or any
    regular file matched by `run_night._refusal_paths` (`refusal.json`,
-   `refusal-01.json` and later numbers, `calibration-refusal.json`,
+   `refusal-N.json`, `calibration-refusal.json`,
    `calibration-refusal.json.*.json`) classifies its root as retained; the
-   record lists every marker found. Otherwise it is UNKNOWN and refuses.
-   A retained root whose plan span is still active by the watchdog's rule
-   (`scripts/magistrate_watchdog.plan_span_active`, evaluated on that root's
-   own `night_plan.json` at observation time with the entry checkout's timing
-   constants, which may differ from the head that authored an older sibling
-   plan) is ACTIVE and refuses; a root whose plan does not parse, or whose
-   `custody_root` is not its own directory, is UNKNOWN and refuses. Each row
-   records its reason. Discovery never removes a root, and has no fixed root
-   count. Classifying a root `retained` certifies only that a terminal record
-   exists and that the plan's span is over; it does not certify that the
-   courier's delivery succeeded.
+   record lists every marker found. Otherwise it is UNKNOWN and refuses. Here
+   `refusal-N.json` means any name matching `refusal-[0-9]*.json`, the second
+   glob in `run_night._refusal_paths` (`scripts/run_night.py:282`); the
+   driver's allocator writes `N` with a minimum of two digits (`{index:02d}` at
+   `scripts/run_night.py:273`: `refusal-01.json` … `refusal-99.json`, then
+   `refusal-100.json`), and a name with fewer digits, such as `refusal-7.json`,
+   also counts. A retained root whose plan span is still active by the
+   watchdog's rule (`scripts/magistrate_watchdog.plan_span_active`, evaluated
+   on that root's own `night_plan.json` at observation time with the entry
+   checkout's timing constants, which may differ from the head that authored an
+   older sibling plan) is ACTIVE and refuses; a root whose plan does not parse,
+   or whose `custody_root` is not its own directory, is UNKNOWN and refuses.
+   Each row records its reason. Discovery never removes a root, and has no
+   fixed root count. Classifying a root `retained` certifies only that a
+   terminal record exists and that the watchdog's span rule
+   (`scripts/magistrate_watchdog.plan_span_active`) reported the plan's span
+   inactive at observation time, which is also the answer for a plan whose span
+   has not yet begun (observation earlier than `t0 − PLAN_LEAD_S`); it does not
+   certify that the courier's delivery succeeded.
 5. The exact raw bracketed `night_gate.AGENT_CENSUS_ARGV` result is retained
    alongside `arm_census.observe_arm_census` and `classify_arm_census` evidence.
    The argv derivation and ancestry classification execute inside the clone's

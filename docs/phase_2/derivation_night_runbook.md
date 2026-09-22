@@ -728,30 +728,25 @@ records show no terminal state. The executable form is
 `python -m joulewise.evidence_night check --candidate STAGING`, whose
 `night_agents` and `retained_roots` items must both pass with every inventoried
 root classified `retained` (contract item 4: `ACTIVE` and `UNKNOWN` refuse).
-For a manual read:
+For a manual read, run the same classifier the check binds, read-only, from the
+root of the entry checkout:
 
 ```zsh
-for p in /Users/edr/night-custody/*/night_plan.json(N); do
-  n=${p:h}/night; r=${p:h:t}
-  if [[ ! -f $p || -L $p ]]; then print -r -- "$r: REFUSED plan is not a regular file"; continue; fi
-  if [[ -f $n/chain.started && ! -f $n/chain.exited ]]; then print -r -- "$r: ACTIVE"; continue; fi
-  m=($n/courier.sent(N.) $n/result.json(N.) $n/chain.exited(N.) $n/refusal.json(N.) $n/refusal-<0-9>*.json(N.) $n/calibration-refusal.json(N.) $n/calibration-refusal.json.*.json(N.))
-  (( $#m )) && print -r -- "$r: retained ${m[1]:t}" || print -r -- "$r: UNKNOWN"
-done
+python3 -B -c 'import json; from joulewise import evidence_night as e; print(json.dumps(e.retained_roots({"roots_under": "/Users/edr"}), indent=1))'
 ```
 
-Every line must read `retained`; an `ACTIVE` or `UNKNOWN` line, or any
-installed night plist, stops the arm. Do not move or edit a root to change its
-line. This loop reads records only and cannot see the span rule; `check` binds.
+It prints one row per `/Users/edr/night-custody/*/night_plan.json` with
+`classification`, `reason` and the full paths of every marker found, then
+`verdict`. Every row must read `retained`; an `ACTIVE` or `UNKNOWN` row, a
+`Refused:` exit (for example a symlink anywhere under a root), or any installed
+night plist stops the arm. Do not move or edit a root to change its row. This
+is the same function `check` runs (contract item 4), evaluated at the current
+time with the entry checkout's timing constants, so it sees the span rule.
 
-Source: cold-gate ruling 2026-09-21 (packet 05 Q2, lane A230). The `(N.)`
-qualifier restricts each glob to regular files, matching contract item 4's
-regular-file rule; it is the one correction to the ruled loop (record 02 of
-activation 29ea94df). The span half of the check above is `retained_roots`'s
-reuse of `scripts/magistrate_watchdog.plan_span_active`; the manual loop reads
-records only, so a root inside its span shows `retained` here and ACTIVE to the
-tracked check, which is the one that binds. `refusal-N.json` names are two-digit
-(`refusal-01.json` and later).
+Source: cold-gate ruling 2026-09-21 (packet 05 Q2, lane A230); the shell loop
+that ruling illustrated was replaced by the direct call on the cold gate's
+round-3 ruling (activation ce7c57a9, Q5) after it printed `retained` for a
+symlinked `night/` directory that the classifier refuses.
 
 ### 0.8 The clone's tree is clean, and the two desk inputs are written
 

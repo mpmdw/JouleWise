@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38r — 2026-09-20: evidence-night entry point complete through B2 (PRs #372–#375); pilot night one aborted/harvested; census cure merged",
-    "path": "docs/process_traces/2026-09-20-activation-21752427/44-diff-gate-evidence-night-b2.md"
+    "label": "T38s — 2026-09-21: RETAINED-ROOT-REFUSAL-CLASS-01 round 3 under the cold gate's structural change (gate-supplied prose only); A230 retired; A264/A265 registered",
+    "path": "docs/process_traces/2026-09-21-activation-ce7c57a9/03-round3-under-the-gate.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1025,6 +1025,35 @@
       "rank": 131,
       "status": "queued",
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five (its section 3.3 is the finding, section 5 item 3 the prescription). The audit names joulewise/authentication_io.py as the natural home; that is a suggestion, not a ruling.",
+      "stop_card": null
+    },
+    "CANONICAL-REFUSAL-STRINGS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-21-activation-ce7c57a9/02-coldgate-packet-retained-root-round3/11-opus-contract-refuter.md (§Rule-sentence audit item 3; §Findings N-1)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CANONICAL-REFUSAL-STRINGS-01/acceptance",
+          "label": "CANONICAL-REFUSAL-STRINGS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Contract item 1 names every refusal string `canonical_fast_forward` and `canonical_status` can raise, each checked against its code line by an executed probe, and a test pins the dirty-tree string; the same rule-sentence audit (sentence, code line, probe, TRUE/FALSE) is recorded for the D-183 paragraph."
+      },
+      "authority": {
+        "label": "2026-09-21 activation ce7c57a9, round-3 cold-gate packet, Opus refuter N-1",
+        "path": "docs/process_traces/2026-09-21-activation-ce7c57a9/02-coldgate-packet-retained-root-round3/11-opus-contract-refuter.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Contract item 1 of docs/contracts/evidence_night_entry.md (the D-183 paragraph merged from PR #378) says a dirty tree, a missing or divergent upstream, a timeout, or a pull that still lacks H refuses with `canonical fast-forward failed: ...`; the code path (`canonical_fast_forward` calls `canonical_status` first) refuses a dirty tree with `canonical checkout is dirty or unreadable: ...`, and two further refusal strings the sentence omits exist (`cannot read canonical HEAD: ...`, `cannot read canonical HEAD after fast-forward: ...`). Found by the Opus contract-lens refuter of the round-3 cold gate (rule-sentence audit item 3, finding N-1); out of that lane's write scope.",
+      "id": "CANONICAL-REFUSAL-STRINGS-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 265,
+      "status": "queued",
+      "status_note": "2026-09-21: registered by the magistrate from the refuter's finding; not fixed under RETAINED-ROOT-REFUSAL-CLASS-01 (its WRITE_SCOPE excluded the D-183 paragraph). Registration, not a ruling.",
       "stop_card": null
     },
     "CGV-HARDEN-01": {
@@ -3704,6 +3733,35 @@
       "status_note": "Registered 2026-09-03 from the packet-45 cold gate's residual nits. Cited sites at the time of the ruling: arm_readiness.py:9020 (expected_path.resolve strict) and :10222 (the consumption launch_manifest path resolve), against inputs.py:2778-2782 which catches only LaunchLineageError. Line numbers are as-of the ruling and must be re-derived before work starts. Surfaced by the cold seat's own harness (E2a first attempt, cascade S6 first run); reachable in production only as a race, which is why it was ruled a NIT and not a blocker.",
       "stop_card": null
     },
+    "MAGISTRATE-LAUNCH-WITHOUT-MCP-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-21-activation-29ea94df/05-coldgate-packet-a230-retained-root-discovery/10-coldgate-fable-ruling.md (§Q3)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MAGISTRATE-LAUNCH-WITHOUT-MCP-01/acceptance",
+          "label": "MAGISTRATE-LAUNCH-WITHOUT-MCP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The watchdog launches the headless magistrate without the project MCP server (Claude Code's strict MCP-config flags), the post-launch census shows no descendant of the session root, and the handbook step becomes a no-op check. Needs its own gate packet (cold-gate ruling packet 05 Q3, preferred durable form (c))."
+      },
+      "authority": {
+        "label": "2026-09-21 activation 29ea94df, packet 05 Q3",
+        "path": "docs/process_traces/2026-09-21-activation-29ea94df/05-coldgate-packet-a230-retained-root-discovery/10-coldgate-fable-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The headless magistrate is launched with the project Codex MCP server, so every activation owns two idle `codex mcp-server` processes that the pre-arm census classifies as foreign (descendants of the session root outside the caller's ancestor chain); the ruled cure is a manual termination step before `check` (NIGHT_HANDBACK §Arm procedure via the tracked commands).",
+      "id": "MAGISTRATE-LAUNCH-WITHOUT-MCP-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 264,
+      "status": "queued",
+      "status_note": "2026-09-21: registered in the kernel by activation ce7c57a9 (round 3 of RETAINED-ROOT-REFUSAL-CLASS-01, cold-gate Q6 A2-F1); the row text was first hand-written into the generated queue region by fix round 1 and had no kernel backing.",
+      "stop_card": null
+    },
     "MET-WINDOW-C-01": {
       "acceptance": {
         "evidence": [
@@ -4317,37 +4375,6 @@
       "rank": 219,
       "status": "queued",
       "status_note": "2026-09-16 interactive 5239df1e: root cause PROVEN from the unified log (record 01 addendum): tccd prompted 'access to iCloud Drive by python3.13' at 09:45:03.142 (msgID 165.165) and replied at 20:52:04.644 with a Create grant for kTCCServiceFileProviderDomain keyed by the interpreter path; ledger written 20:52:06; owner's session in the census 20:52:13; the download alternative is excluded (no downloads in the iCloud daemon log, all 190 files local); design consult run and ADOPTED (record 02); the e0c58148 record calls this lane NIGHT-RESERVATION-STALL-01; FIRST item for the successor magistrate: implementation seat in a linked worktree under WRITE_SCOPE from record 02's files-and-functions list, distinct-lens refuters, delta re-audit; no re-plan of the equivalence night before this lane is cured.",
-      "stop_card": null
-    },
-    "NIGHT-ROOT-RETENTION-DISCOVERY-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-16-activation-9853dd2b/77-arm-record-n1-20260917.md (section Step 2, discovery bullet)",
-          "docs/phase_2/derivation_night_runbook.md (section 0.7)",
-          "docs/process/NIGHT_HANDBACK.md (section Next lane, retention sentence)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/NIGHT-ROOT-RETENTION-DISCOVERY-01/acceptance",
-          "label": "NIGHT-ROOT-RETENTION-DISCOVERY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "One rule holds in both documents, chosen by the cold gate or Ed (rule 11): either retained roots move out of discovery to a retained-custody location that is not /Users/edr/night-custody/<plan_id> (with the handback's retention wording and the inventory updated), or section 0.7's precondition is restated as 'no plan whose span is active or whose agents are installed', with the executable check that the watchdog already applies; the runbook and the handback then say the same thing and the arm scripts assert the executable form."
-      },
-      "authority": {
-        "label": "2026-09-17 activation 9853dd2b, arm record 77 (n1-20260917); registration by the magistrate, not a ruling",
-        "path": "docs/process_traces/2026-09-16-activation-9853dd2b/77-arm-record-n1-20260917.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "docs/phase_2/derivation_night_runbook.md section 0.7 says the arm precondition `print -rl -- /Users/edr/night-custody/*/night_plan.json(N)` must print nothing, while docs/process/NIGHT_HANDBACK.md section Next lane rules that the clone and night root of a night that opened a ledger session are RETAINED (only a refused night's plan root is retired). After the 2026-09-16 night, which opened a session, its root /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260916 stays discoverable by that glob, so the two texts contradict each other for every retained root. The watchdog fences only active spans (plan_span_active, plan_is_armed in scripts/magistrate_watchdog.py) and the installer reads no sibling, so a completed retained root arms nothing; the 2026-09-17 arm proceeded on that reading and recorded it (arm record 77).",
-      "id": "NIGHT-ROOT-RETENTION-DISCOVERY-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 230,
-      "status": "queued",
-      "status_note": "2026-09-17 activation 9853dd2b: docs contradiction found at the arm; magistrate registration, not a ruling; the 09-16 root was NOT moved (the launch charge forbids moving plan directories this session did not author). Goes to the cold gate or Ed before the next harvest retires or retains a root. 2026-09-18 headless activation f0b608b7 (record 01): the 09-16 harvest archive `~/night-archive/d079-epoch-25g83-derivation-n1-20260916-harvest-20260916/`, found empty by arm record 21, was re-harvested byte-exact from the retained live root (20/20 sums OK against the live root and the copy, `SHA256SUMS` inside the archive, inventories identical); the 09-16 root remains retained under this lane's rule and may now be retired when the lane rules, with a complete archive. The 09-17 plan root was retired 2026-09-18 19:26 (arm record 21, step 0). 2026-09-19 — A third retained, inert night root (the directory holding a completed night's plan and evidence), `d079-epoch-25g83-derivation-n2-20260919`, now remains alongside the 2026-09-16 and `n1-20260919` roots.",
       "stop_card": null
     },
     "NIGHT-STALL-WALLCLOCK-ABORT-01": {
@@ -9517,5 +9544,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-20"
+  "updated": "2026-09-21"
 }

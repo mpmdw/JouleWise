@@ -727,7 +727,7 @@ def retained_roots(state, now_epoch_s=None):
         elif not markers:
             classification, reason = "UNKNOWN", "no terminal night record"
         else:
-            classification, reason = "retained", "terminal record present; plan span over"
+            classification, reason = "retained", None
             try:
                 parsed = NightPlan.from_mapping(json.loads(plan.read_text(encoding="utf-8")))
                 if os.path.realpath(parsed.custody_root) != os.path.realpath(plan.parent):
@@ -736,7 +736,10 @@ def retained_roots(state, now_epoch_s=None):
                 elif plan_span_active(parsed, now, Storage(plan.parent)):
                     classification = "ACTIVE"
                     reason = "plan span active (scripts/magistrate_watchdog.plan_span_active)"
-            except (PlanError, ValueError, TypeError, OverflowError, OSError) as exc:
+                else:
+                    reason = ("terminal record present; plan span inactive at observation time "
+                              "(scripts/magistrate_watchdog.plan_span_active)")
+            except (PlanError, ValueError, TypeError, OverflowError, OSError, RecursionError) as exc:
                 classification, reason = "UNKNOWN", f"plan unreadable: {type(exc).__name__}: {exc}"
         inventory.append(dict(plan=str(plan), classification=classification, reason=reason,
                               evidence=[str(p) for p in markers]))
