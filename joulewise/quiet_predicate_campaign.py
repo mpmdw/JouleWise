@@ -772,7 +772,15 @@ def record_attestation(out, attestation):
     try:
         temporary.write_text(json.dumps(session, sort_keys=True, indent=2, allow_nan=False) + "\n")
         os.replace(temporary, path)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
+        # `ValueError` is caught beside `OSError` (ruling 18 C8) for one
+        # pre-existing reason: `json.loads` ACCEPTS the non-standard `NaN`
+        # token and `json.dumps(allow_nan=False)` then refuses to write it
+        # back, so a collector that recorded a NaN anywhere in its session
+        # record used to refuse the whole night from `execute`'s outer
+        # handler.  It is the same class of defect as the unlink above: a
+        # single envelope's annotation failing, costing twelve.
+        #
         # One envelope's annotation must never refuse the NIGHT.  The write is
         # an annotation on a capture that is already complete and already on
         # disk; if it cannot land, the envelope loses its claim-bearing state

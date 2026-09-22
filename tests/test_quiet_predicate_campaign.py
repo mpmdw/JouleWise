@@ -1883,6 +1883,36 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
             self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                              ["network_time_unattested"])
 
+    def test_C8_a_NaN_in_the_session_record_asserts_the_envelope_not_the_night(self):
+        """Ruling 18 C8 (pre-existing): `json.loads` takes NaN, `dumps` will not.
+
+        A collector that wrote `NaN` anywhere in `session.json` produced a
+        record that parses and then cannot be written back under
+        `allow_nan=False`.  The `ValueError` that raises is not an `OSError`,
+        so it escaped `record_attestation` and `execute`'s outer handler
+        refused the NIGHT -- twelve envelopes lost to one envelope's
+        annotation.  Now it is the same withdrawal every other failed
+        rewrite gets.
+        """
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope-01"
+            out.mkdir()
+            (out / "session.json").write_text(
+                '{"session": "fixture", "interior": {"power": {"energy_j": NaN}}}')
+            before = (out / "session.json").read_bytes()
+            self.assertTrue(math.isnan(
+                json.loads(before)["interior"]["power"]["energy_j"]))
+            attestation = {"state": "authenticated", "matched_lines": 0}
+            self.assertFalse(campaign.record_attestation(out, attestation))
+            self.assertEqual(attestation["state"], "asserted")
+            self.assertTrue(attestation["reason"].startswith(
+                "session rewrite failed: ValueError: "), attestation["reason"])
+            self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                             ["network_time_unattested"])
+            # The collector's own bytes are kept, and no temporary survives.
+            self.assertEqual((out / "session.json").read_bytes(), before)
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["session.json"])
+
     def test_R_C1_a_cleanup_that_raises_never_costs_the_night(self):
         """Ruling 18 Q1: the withdrawal comes first, the cleanup cannot raise.
 
