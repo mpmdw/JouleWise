@@ -1679,8 +1679,16 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
                                        100, FakeClock(), 10)
         self.assertIn("envelope-02", str(caught.exception))
 
-    def feed(self, tmp, label_shift, seconds=2.6):
-        """Run the feeder as a REAL subprocess over the 3-frame fixture."""
+    def feed(self, tmp, label_shift, seconds=3.5):
+        """Run the feeder as a REAL subprocess over the 3-frame fixture.
+
+        ``seconds`` is a wall-clock tolerance, not a measurement: it must be
+        long enough for the fixture's three archived intervals to elapse on a
+        loaded machine before the SIGTERM.  The lens measured this suite
+        under load 5-8 and called 2.6 s one scheduler hiccup from red
+        (17b NIT), so it is 3.5 s -- still ~1 s of slack over the archived
+        cadence, and nothing here depends on stopping promptly.
+        """
         import signal as signal_module
         import time as time_module
         out = Path(tmp) / "raw" / "powermetrics-idle-1.plist"
@@ -1718,7 +1726,12 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
             deltas = [b - a for a, b in zip(writes, writes[1:])]
             self.assertEqual(len(deltas), 2)
             for delta, elapsed_ns in zip(deltas, record["frame_elapsed_ns"][1:]):
-                self.assertAlmostEqual(delta, elapsed_ns / 1e9, delta=0.08)
+                # A wall-clock race under load: the assertion is that the
+                # feeder paces from the ARCHIVED elapsed_ns rather than from
+                # the declared interval (~260 ms against 100 ms), which 0.25 s
+                # still separates.  0.08 s was one scheduler hiccup from red
+                # on a machine at load 5-8 (17b NIT).
+                self.assertAlmostEqual(delta, elapsed_ns / 1e9, delta=0.25)
             # And the production recorder's own finaliser parses it.
             frames, dropped = harness.parse_frames(out.read_bytes())
             self.assertEqual(len(frames), 3)

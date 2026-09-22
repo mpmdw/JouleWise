@@ -2189,6 +2189,9 @@ class BenchReplayFailClosedTests(unittest.TestCase):
                          list(range(1, 13)))
         self.assertEqual(outcome["outcome"], "refused")
         self.assertEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        # X7: the outcome document reads the SESSIONS too, so it says `replay`
+        # even though this executor's environment never carried the switch.
+        self.assertEqual(outcome["recorder_kind"], "replay")
         self.assertEqual(rc, 2)
         self.assertEqual(refusals, 1)
         # Each envelope still reports the read that failed, on its own terms.

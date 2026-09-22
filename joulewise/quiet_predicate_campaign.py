@@ -1315,9 +1315,17 @@ def execute(plan, protocol, night_dir):
             signal.signal(signum, signal.SIG_IGN)
         network_time_restored = restore_network_time(night_dir)
         cleanup = cleanup_record(night_dir, children)
+        # Read off the SESSIONS as well as the environment (execution lens
+        # 17b NIT): the outcome document's `recorder_kind` was derived from
+        # the executor's own environment alone, and the two can disagree --
+        # a session that says `replay` under an executor that was not told to
+        # replay is the disagreement that matters, and it wins.
+        replay_sessions = False
         try:
             report = pilot_summary(directory, protocol, envelopes,
                                    harness.cpu_total() - cpu_start if cleanup["cleanup_proven"] else None)
+            replay_sessions = any(row.get("recorder_kind") == harness.RECORDER_KIND_REPLAY
+                                  for row in report.get("replay_recorder_envelopes") or [])
             if report.get("status") == REPLAY_NEVER_EVIDENCE:
                 # Brief D6: a night any replay recorder touched is REFUSED
                 # here, at the harvest boundary, with rc 2 -- while every
@@ -1345,7 +1353,8 @@ def execute(plan, protocol, night_dir):
             # RUN-side marker (brief D6): the outcome document names the
             # recorder the collectors were told to use, so a reader holding
             # only this file can tell a bench replay from a night.
-            "recorder_kind": harness.RECORDER_KIND_REPLAY if os.environ.get(harness.REPLAY_ENV)
+            "recorder_kind": harness.RECORDER_KIND_REPLAY
+                             if os.environ.get(harness.REPLAY_ENV) or replay_sessions
                              else harness.RECORDER_KIND_PRODUCTION,
             "network_time_restored": network_time_restored})
         for signum, handler in old.items():
