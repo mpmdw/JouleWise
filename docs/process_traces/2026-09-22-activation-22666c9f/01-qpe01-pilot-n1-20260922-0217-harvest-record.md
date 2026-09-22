@@ -164,16 +164,41 @@ units of 2⁻¹⁶ ppm) set at each sync. Every envelope's measured offset chang
 No `settimeofday` or step event occurred. The sign and size of every
 discrete slew match the envelope it lands in, and the steady per-envelope
 change matches the daemon's frequency term to within 0.1 ms. Envelope 04's
-empty fit (1.33 ms change, no discrete slew logged) is the one row this
-record does not fully explain; the refuter is asked to (§9).
+empty fit (1.33 ms change, no discrete slew logged) is best explained by the
+tail of the 02:56 `adjtime` slew completing inside envelope 04 (envelope 03
+captured only ~4.1 of the 4.29 ms plus drift; envelope 04's offset moves
+~10 ppm in its first second), which breaks the affine model within its 250 µs
+allowance: likely, not proven (§9).
 
 **Why it never showed before.** The v3 anchor was ratified by the cold
-science review of 2026-08-18 and exercised on short captures; the thirteen
-published `night-results/*` branches contain no v3 anchor record at all
-(`git grep` on the 09-13 and both 09-19 branches: zero `bounded`, zero
-`clock_anchor_unresolved`). This pilot is the first night to run the anchor
-on twelve 600 s captures, long enough for the daemon's ~30 min sync cadence
-and its ppm-level frequency corrections to exceed a 5 ms absolute cap.
+science review of 2026-08-18 and exercised on short captures: the test
+fixtures use 61 s and 101 s records (`tests/test_uncertainty_evidence.py`
+491–535, `tests/test_environment_admission.py` 50–58) and the span test
+injects a 6 ms step; no fixture exceeds 101 s. The 09-19 derivation-night
+results branches contain no v3 anchor record; the 09-20 pilot attempt ran one
+600 s envelope through v3 but it was refused earlier as
+`no_native_second_rollover` (the envelope lived 2 s). This is the first night
+with twelve completed 600 s captures under the anchor, long enough for the
+daemon's ~30 min sync cadence and its ppm-level frequency corrections to
+exceed a 5 ms absolute cap.
+
+**The method's own precondition was not established (refuter finding, §9).**
+The deriver's docstring (`joulewise/uncertainty_evidence.py:837–843`) states
+that wall-clock discipline during a capture is excluded *structurally* by the
+authenticated network-time-OFF admission, and that a capture with network
+time ON or unknown is validation-only material. Every `session.json` of this
+night carries `network_time_provenance: null` ("not established by this desk
+harness"); the log shows NTP syncs every ~30 min all night and no toggle in
+the arm window. The `clock.network_time_off` readiness probe
+(`joulewise/arm_readiness_evidence_t0.py:1216–1243`) and the scheduler C4
+code `scheduler_c4_network_time_on` exist for the pack-bearing T-0 path but
+did not govern the evidence-night entry point. So the caps did what the method
+says; the environment control that makes the caps reachable did not run. Two
+consequences for the packet: (1) turning network time OFF for windows is an
+admin (`systemsetup`) action, Ed's to take or delegate; (2) even with NTP off
+the kernel keeps the last frequency correction, and at −7.6 ppm a 600 s
+capture accrues 4.5 ms and fails the absolute effective bound alone (envelopes
+8 and 9), so relaxing only the span cap does not cure the class.
 
 **Materiality (pre-computed for the ruling).** The largest offset change
 seen is 22.3 ms. Interior power in the retained envelopes is ~0.32 W
@@ -181,8 +206,11 @@ seen is 22.3 ms. Interior power in the retained envelopes is ~0.32 W
 most 22.3 ms × 0.32 W ≈ **7 mJ** of energy in or out of the interior; even
 priced at both edges it is < 15 mJ. The unfiltered envelope-to-envelope SD
 is 1.45 J and the ratified attribution limit is ~1 J (D-078 cl. 11). The
-caps therefore refuse envelopes for an alignment error two orders of
-magnitude below the instrument's own floor and the night's scatter. Under
+caps therefore refuse envelopes for an alignment error 140–390× (about
+2.5 orders of magnitude) below the instrument's own floor and the night's
+scatter. The caps are power-independent: at a 40 W loaded capture the same
+22 ms would be ≈ 0.9 J, so a 5 ms cap is sized for loaded captures, not for
+idle ones. Under
 Ed's standing rule that every tolerance is sized to the instrument (~1 J /
 ~5 J; never microscopic), a 1 J budget at 0.32 W corresponds to ~3 s of
 alignment error, 600× the present cap. Relaxing or re-shaping the caps is a
@@ -248,3 +276,43 @@ INSTRUMENT-CADENCE-ATTRIBUTION-25G83-01 (rank 243). Noted on that lane.
 
 ## §9 Refuter (blind Fable seat, read-only; verdict appended when returned)
 
+Blind Fable seat (general-purpose subagent, read-only, briefed with the §6
+claim and asked to break it; returned 05:36 PDT). **VERDICT: CONFIRMED in
+substance, with two corrections and one missed finding that changes the
+framing.** Verbatim substance:
+
+1. Every per-envelope number in §2 and §6 re-derives from `power.anchor` and
+   `clock_stamps` in the session files; nothing wrong.
+2. Which check fired: `wall_minus_monotonic_span_exceeded` from
+   `_offset_envelope_s` (lines 310–329, max minus min of epoch − monotonic over
+   the five host stamps) compared at lines 998–1005 to the absolute 0.005
+   (line 35); `affine_clock_fit_empty` at lines 1097–1100 (the exact LP over
+   native whole-second rows plus stamp rows is infeasible under the 250 µs
+   allowance, line 37); `effective_clock_anchor_bound_exceeded` at lines
+   1178–1184 / 1225 (anchor half-width + span + resolution + padding: envelope
+   08 = 0.000532 + 0.004542 + 2e-6 = 0.005077). No scaling by capture length.
+3. Root cause reconciled to 0.1 ms for every envelope from the `timed` log:
+   frequency corrections −0.69 / −1.94 / −7.60 / −2.53 ppm across the night
+   (rate × duration reproduces envelopes 02, 05, 06, 08, 09, 11, 12) plus four
+   `adjtime` slews (envelope 07: 20.28 + 1.94 ppm × 431 s + 7.6 ppm × 160 s =
+   22.34 ms, observed 22.36; envelope 10: −7.6 × 405 s + 16.60 − 2.53 × 186 s =
+   +13.04, observed +13.03). Alternatives excluded with the fields used: stamp
+   ordering / parse bracket (first_parse vs sampling_started differ ≤ 3 µs,
+   sampling_stopped vs post_parse ≤ 40 µs; `first_parse_lag_s` 0.06–0.15 s);
+   a single step (four corrections, no `settimeofday`); native timestamps
+   (the span check uses host stamps only); the 100 ms interval / 130 MB plist
+   (not the cause).
+4. Corrections: materiality is 140–390× (≈ 2.5 orders), not four; the caps are
+   power-independent (22 ms ≈ 0.9 J at 40 W); the novelty claim was partly
+   wrong (the 09-20 envelope-01 went through v3 and was refused as
+   `no_native_second_rollover`).
+5. Missed finding (adopted into §6 above): the method's network-time-OFF
+   precondition was never established on this entry point
+   (`network_time_provenance: null`); and with NTP off the residual frequency
+   correction alone still fails the absolute bound at 600 s.
+
+Magistrate's synthesis: the diagnosis stands; the packet for A267 now carries
+both halves, the unestablished environment control (Ed's admin action or an
+entry-point refusal when network time is ON) and the absolute caps that fail
+even a disciplined-but-NTP-off clock at 600 s. §7 is unchanged: no next pilot
+night on the present code.
