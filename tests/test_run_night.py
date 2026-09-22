@@ -2986,6 +2986,65 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         self.assertEqual(str(getattr(self.plan, "custody_budget_s", 120)),
                          environment["CUSTODY_BUDGET_S"])
 
+    def test_R4_an_inherited_replay_recorder_variable_refuses_the_night(self):
+        """R4: the ARM-side fail-closed point of the bench replay (brief D6).
+
+        Counterfactual, executed below: pop the variable instead of raising,
+        and the night launches -- silently repaired, with nothing in the
+        record to say the shell it was armed from was carrying the switch that
+        turns a measurement into a replay of archived frames.
+        """
+
+        from scripts import sample_quiet_predicate_evidence as sampler
+        driver = _load_driver()
+        # The spelling in the driver is a literal (the sampler imports the
+        # driver, so importing back would close a cycle); this is what keeps
+        # the two from drifting apart and disarming the refusal.
+        self.assertEqual(driver.REPLAY_RECORDER_ENV, sampler.REPLAY_ENV)
+        self.assertEqual(driver.REPLAY_RECORDER_ENV, "EVIDENCE_POWER_RECORDER_REPLAY")
+        with mock.patch.dict(os.environ, {driver.REPLAY_RECORDER_ENV: "/Users/edr/night-archive/x"}):
+            with self.assertRaises(ValueError) as caught:
+                driver._chain_environment(self.plan, self.root / "night")
+        message = str(caught.exception)
+        self.assertIn(driver.REPLAY_RECORDER_ENV, message)
+        self.assertIn("never runs a replay recorder", message)
+        # The counterfactual: a POP leaves a usable environment and no signal.
+        with mock.patch.dict(os.environ, {driver.REPLAY_RECORDER_ENV: "/Users/edr/night-archive/x"}):
+            popped = dict(os.environ)
+            popped.pop(driver.REPLAY_RECORDER_ENV)
+            with mock.patch.dict(os.environ, popped, clear=True):
+                environment = driver._chain_environment(self.plan, self.root / "night")
+        self.assertNotIn(driver.REPLAY_RECORDER_ENV, environment)
+        self.assertEqual(environment["NIGHT_PLAN_ID"], self.plan.plan_id)
+
+    def test_R8_no_launchd_template_can_carry_the_replay_variable(self):
+        """R8 (half): the agent's environment is the tracked template, and the
+        template has no free-form environment to carry the switch in."""
+        driver = _load_driver()
+        repo = Path(__file__).resolve().parents[1]
+        expected_environment = {
+            "com.joulewise.night.plist.template": {"PATH"},
+            "com.joulewise.night-probe.plist.template": {"PATH", "JOULEWISE_LAUNCHD_LABEL"},
+            "com.joulewise.magistrate.plist.template": {
+                "PATH", "MAGISTRATE_SESSION_BIN", "MAGISTRATE_WATCHDOG_CUSTODY_ROOT"}}
+        templates = sorted((repo / "configs/launchd").glob("*.plist.template"))
+        self.assertEqual({t.name for t in templates}, set(expected_environment))
+        for template in templates:
+            with self.subTest(template=template.name):
+                text = template.read_text()
+                self.assertNotIn(driver.REPLAY_RECORDER_ENV, text)
+                self.assertNotIn("POWER_RECORDER", text)
+                # Every substitution the renderer performs is an @@TOKEN@@
+                # and no token is an environment KEY, so the rendered plist's
+                # environment is exactly the template's.  Pin that set by
+                # enumeration: a future template that grows a free-form
+                # environment entry fails here rather than quietly acquiring
+                # the ability to carry the switch into an armed night.
+                body = text.split("<key>EnvironmentVariables</key>")[1].split("</dict>")[0] \
+                    if "EnvironmentVariables" in text else ""
+                self.assertEqual(set(re.findall(r"<key>(\w+)</key>", body)),
+                                 expected_environment[template.name])
+
     def test_writer_custody_passes_constant_matches_the_memoized_writer(self):
         from joulewise import night_agent_install as engine
         # The worst-case number of whole-corpus custody passes the capture
@@ -4733,6 +4792,11 @@ class BindSupervisionProcessTests(unittest.TestCase):
         self.assertIsNone(result['receipt']['go_epoch_s'])
 
 
+def campaign_chain_path():
+    from joulewise.quiet_predicate_campaign import CHAIN_PATH
+    return CHAIN_PATH
+
+
 class EvidenceProbeTests(unittest.TestCase):
     def setUp(self):
         from tests.test_gen_evidence_night import EvidenceFixture
@@ -4746,6 +4810,29 @@ class EvidenceProbeTests(unittest.TestCase):
         publication = mock.patch.object(self.driver, '_durable_record', return_value=None)
         self.publication = publication.start()
         self.addCleanup(publication.stop)
+
+    def test_R8_the_sealed_wrapper_exports_a_fixed_set_without_the_replay_key(self):
+        """R8 (half): `gen_evidence_night` emits a FIXED literal export set.
+
+        The armed night's environment comes from the tracked launchd template
+        (pinned separately) and from this wrapper.  Neither has anywhere to put
+        a free-form variable, which is what makes the bench replay's switch
+        unreachable from an arm -- so the export set is pinned by enumeration,
+        not merely searched for the one key.
+        """
+
+        from scripts import run_night
+        text = Path(self.f.plan.chain_path).read_text()
+        exports = re.findall(r"^export ([A-Z_0-9]+)=", text, re.MULTILINE)
+        self.assertEqual(set(exports), {
+            "NIGHT_PAYLOAD_KIND", "PYTHONDONTWRITEBYTECODE", "EVIDENCE_PLAN_PATH",
+            "EVIDENCE_MANIFEST_PATH", "EVIDENCE_MANIFEST_SHA256",
+            "EVIDENCE_CHAIN_SOURCE_SHA256", "PY", "PYTHONPATH"})
+        self.assertNotIn(run_night.REPLAY_RECORDER_ENV, text)
+        self.assertNotIn("POWER_RECORDER", text)
+        # And the chain source the wrapper execs carries none of it either.
+        chain = Path(self.f.plan.measurement_root) / campaign_chain_path()
+        self.assertNotIn(run_night.REPLAY_RECORDER_ENV, chain.read_text())
 
     @unittest.skipUnless(Path('/bin/zsh').is_file(), 'zsh required for shell probe fixture')
     def test_worker_verify_only_round_trip_never_starts_collection(self):

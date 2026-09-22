@@ -1589,3 +1589,167 @@ class IntegerWindowTests(unittest.TestCase):
                                    if harness.overlap(start_ns - 1, end_ns + 1,
                                                       frame["start_ns"], frame["end_ns"]) > 0))
 
+
+class BenchReplayRecorderSeamTests(unittest.TestCase):
+    """R1-R3: the bench replay's ONE seam, and what pins production when absent.
+
+    Cold gate #3 ruling 10 Q7 / A269 ruling 10 Q3 replacement R6.  The whole
+    safety argument of the bench replay is that ``EVIDENCE_POWER_RECORDER_REPLAY``
+    is the only thing that changes the collector's behaviour, and that absent it
+    the collector spawns the production ``sudo -n powermetrics`` argv it always
+    spawned.  Each test below names the counterfactual that kills it.
+    """
+
+    FIXTURE = Path(__file__).resolve().parents[1] / "tests/fixtures/replay"
+    FEEDER = Path(__file__).resolve().parents[1] / "scripts/replay_powermetrics_frames.py"
+
+    def collect_args(self, out, repeat="1"):
+        return harness.parser().parse_args(
+            ["collect", "--state", "idle", "--repeat", repeat, "--duration-s", "1",
+             "--out", str(out), "--no-power"])
+
+    def main_recorder_factory(self, environment):
+        """Which factory does ``main()``'s collect branch hand to ``collect``?"""
+        seen = {}
+
+        def collect(args, **kwargs):
+            seen.update(kwargs)
+            return {"error": None}, []
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict(os.environ, environment, clear=False), \
+                patch.object(harness, "collect", side_effect=collect):
+            if not environment.get(harness.REPLAY_ENV):
+                os.environ.pop(harness.REPLAY_ENV, None)
+            self.assertEqual(harness.main(
+                ["collect", "--state", "idle", "--repeat", "1", "--duration-s", "1",
+                 "--out", str(Path(tmp) / "out"), "--no-power"]), 0)
+        return seen["recorder_factory"]
+
+    def test_R1_without_the_variable_the_collector_is_the_production_recorder(self):
+        # Counterfactual (executed below): give the variable a default value in
+        # `main`'s selection and this test fails -- which is the whole point,
+        # because a defaulted-on seam would make every night a replay.
+        self.assertIs(self.main_recorder_factory({}), harness.PowerRecorder)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "powermetrics-idle-1.plist"
+            recorder = harness.PowerRecorder(path, 100, FakeClock(), 10)
+        self.assertIn("sudo", recorder.argv)
+        self.assertIn(harness.pm.POWER_METRICS, recorder.argv)
+        self.assertEqual(recorder.metadata["recorder_kind"], "powermetrics")
+        self.assertEqual(recorder.metadata["recorder_kind"], harness.RECORDER_KIND_PRODUCTION)
+        self.assertNotIn("replay", recorder.metadata)
+
+    def test_R1_counterfactual_a_defaulted_variable_selects_the_replay_recorder(self):
+        # The kill: with the variable present (i.e. defaulted on), the very
+        # same selection returns the replay factory.  R1's assertion above is
+        # therefore load-bearing, not vacuous.
+        self.assertIs(self.main_recorder_factory({harness.REPLAY_ENV: str(self.FIXTURE)}),
+                      harness.ReplayRecorder)
+
+    def test_R2_with_the_variable_the_argv_is_the_feeder_and_names_no_privilege(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+                os.environ, {harness.REPLAY_ENV: str(self.FIXTURE)}, clear=False):
+            path = Path(tmp) / "powermetrics-idle-1.plist"
+            recorder = harness.ReplayRecorder(path, 100, FakeClock(), 10)
+        joined = " ".join(recorder.argv)
+        self.assertEqual(recorder.argv[0], sys.executable)
+        self.assertIn(str(self.FEEDER), recorder.argv)
+        for token in ("sudo", "powermetrics", "/usr/bin/powermetrics"):
+            self.assertNotIn(token, [part for part in recorder.argv])
+        self.assertNotIn("sudo", joined)
+        self.assertNotIn(harness.pm.POWER_METRICS, joined)
+        self.assertEqual(recorder.metadata["recorder_kind"], harness.RECORDER_KIND_REPLAY)
+        self.assertEqual(recorder.metadata["argv"], recorder.argv)
+        replay = recorder.metadata["replay"]
+        source = self.FIXTURE / "envelope-01" / "raw" / "powermetrics-idle-1.plist"
+        self.assertEqual(replay["source"], str(source))
+        self.assertEqual(replay["source_plist_sha256"], harness.stream_sha256(source))
+        self.assertEqual(replay["source_session_sha256"],
+                         harness.stream_sha256(self.FIXTURE / "envelope-01" / "session.json"))
+        self.assertEqual(replay["label_shift"], "none")
+        self.assertEqual(replay["label_shift_s"], 0)
+
+    def test_R2_slot_index_selects_the_matching_archived_envelope(self):
+        # Brief D5: slot i replays archived envelope i, read off the output name.
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+                os.environ, {harness.REPLAY_ENV: str(self.FIXTURE)}, clear=False):
+            with self.assertRaises(ValueError) as caught:
+                harness.ReplayRecorder(Path(tmp) / "powermetrics-idle-2.plist",
+                                       100, FakeClock(), 10)
+        self.assertIn("envelope-02", str(caught.exception))
+
+    def feed(self, tmp, label_shift, seconds=2.6):
+        """Run the feeder as a REAL subprocess over the 3-frame fixture."""
+        import signal as signal_module
+        import time as time_module
+        out = Path(tmp) / "raw" / "powermetrics-idle-1.plist"
+        sidecar = Path(str(out) + ".replay.json")
+        source = self.FIXTURE / "envelope-01" / "raw" / "powermetrics-idle-1.plist"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        process = subprocess.Popen(
+            [sys.executable, "-B", str(self.FEEDER), "--source", str(source),
+             "--session", str(self.FIXTURE / "envelope-01" / "session.json"),
+             "--out", str(out), "--interval-ms", "100", "--label-shift", label_shift,
+             "--sidecar", str(sidecar)],
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        time_module.sleep(seconds)
+        process.send_signal(signal_module.SIGTERM)
+        code = process.wait(timeout=30)
+        return out, sidecar, code, source
+
+    def test_R3_feeder_writes_the_archived_bytes_at_the_archived_cadence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out, sidecar, code, source = self.feed(tmp, "none")
+            # SIGTERM is how the collector stops its recorder: exit 0, like a
+            # recorder that was asked to stop, never a crash the collector
+            # would report as "powermetrics exited during startup".
+            self.assertEqual(code, 0)
+            record = json.loads(sidecar.read_text())
+            self.assertEqual(record["frames_written"], 3)
+            self.assertEqual(record["exit_reason"], "term")
+            # Verbatim: the written stream IS the archived source's bytes.
+            self.assertEqual(out.read_bytes(), source.read_bytes())
+            self.assertEqual(record["written_stream_sha256"], record["source_sha256"])
+            self.assertEqual(record["label_shift_s"], 0)
+            # Cadence: each inter-frame write delta is that frame's own
+            # archived elapsed_ns, within the scheduler's jitter.
+            writes = record["write_monotonic_s"]
+            deltas = [b - a for a, b in zip(writes, writes[1:])]
+            self.assertEqual(len(deltas), 2)
+            for delta, elapsed_ns in zip(deltas, record["frame_elapsed_ns"][1:]):
+                self.assertAlmostEqual(delta, elapsed_ns / 1e9, delta=0.08)
+            # And the production recorder's own finaliser parses it.
+            frames, dropped = harness.parse_frames(out.read_bytes())
+            self.assertEqual(len(frames), 3)
+            self.assertIsNone(dropped)
+            self.assertEqual([f["elapsed_ns"] for f in frames], record["frame_elapsed_ns"])
+
+    def test_R3_auto_shifts_every_label_by_one_constant_whole_second_K(self):
+        import re
+        import time as time_module
+        with tempfile.TemporaryDirectory() as tmp:
+            out, sidecar, code, source = self.feed(tmp, "auto")
+            self.assertEqual(code, 0)
+            record = json.loads(sidecar.read_text())
+            shift = record["label_shift_s"]
+            self.assertEqual(shift, int(shift))
+            self.assertGreater(shift, 0)
+            self.assertEqual(record["label_shift_basis"], "archived_anchor_first_sample_end_point")
+
+            def labels(data):
+                return [datetime.strptime(m.decode(), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                        for m in re.findall(rb"<date>([^<]*)</date>", data)]
+
+            archived, written = labels(source.read_bytes()), labels(out.read_bytes())
+            self.assertEqual(len(written), 3)
+            self.assertEqual([w.timestamp() - a.timestamp() for a, w in zip(archived, written)],
+                             [float(shift)] * 3)
+            # ONE shift, applied to the labels only: strip the dates and the
+            # remaining bytes are the archived bytes, byte for byte.
+            strip = lambda data: re.sub(rb"<date>[^<]*</date>", b"<date/>", data)
+            self.assertEqual(strip(out.read_bytes()), strip(source.read_bytes()))
+            # Counterfactual for the shift itself: the UNSHIFTED stream's
+            # first endpoint is thousands of seconds from now, so the live
+            # bracket the deriver intersects with cannot contain it.
+            self.assertGreater(abs(labels(source.read_bytes())[0].timestamp() - time_module.time()), 2)

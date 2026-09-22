@@ -3,6 +3,7 @@ import json
 import math
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import time
 from types import SimpleNamespace
@@ -348,7 +349,8 @@ class FrozenExecutorTests(unittest.TestCase):
                  off_stdout=None, on_exit=0, timed_log=None, commands=None,
                  interrupt_settle=False, protocol=None, burn=0, burn_at=None,
                  settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None,
-                 attest_burn=0, tolerate_raise=False, final_cleanup_unproven=False):
+                 attest_burn=0, tolerate_raise=False, final_cleanup_unproven=False,
+                 recorder_kind='powermetrics'):
         """Drive the real ``execute`` against a stub collector on a fake clock.
 
         ``burn`` is the seconds the stub collector spends AFTER its capture
@@ -381,6 +383,9 @@ class FrozenExecutorTests(unittest.TestCase):
         envelope_s = protocol['envelope_s']
         burn_at = burn_at or {}
         calls, processes = [], {}
+        # Every environment the executor hands a child, so a regression can
+        # prove the bench replay's switch is in none of them (R9).
+        self.popen_envs = popen_envs = []
         self.timeline = timeline = []
         class Clock:
             now = 0.
@@ -401,6 +406,7 @@ class FrozenExecutorTests(unittest.TestCase):
                 self.pid = 8000000+len(calls)
                 self.argv, self.returncode = argv, None
                 calls.append(argv)
+                popen_envs.append(dict(kwargs.get('env') or {}))
                 processes[self.pid] = self
                 if 'collect' in argv:
                     timeline.append(('spawn', int(argv[argv.index('--repeat')+1])))
@@ -414,13 +420,19 @@ class FrozenExecutorTests(unittest.TestCase):
                     # what the union window (ruling 10 Q4 i) reads.
                     # ``stepped_stop_s`` displaces the stop stamp's WALL
                     # reading only, exactly as a clock step would.
-                    session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
-                        'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
-                        'power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded','clock_stamps':{
+                    power={'anchor':{'status':'bounded','clock_stamps':{
                             'sampling_started':{'epoch_s':1000+self.end-envelope_s,
                                                 'monotonic_before_s':self.end-envelope_s},
                             'sampling_stopped':{'epoch_s':1000+self.end+stepped_stop_s,
-                                                'monotonic_before_s':self.end}}}},
+                                                'monotonic_before_s':self.end}}}}
+                    # ``recorder_kind=None`` writes NO key at all: a session
+                    # that never said which recorder produced its frames is
+                    # not a claim of production provenance either (R5).
+                    if recorder_kind is not None:
+                        power['recorder_kind'] = recorder_kind
+                    session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
+                        'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
+                        'power':power,
                         'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                     (out/'session.json').write_text(json.dumps(session))
@@ -1870,3 +1882,164 @@ class AttestationWindowRecordTests(unittest.TestCase):
                 self.assertIsNone(attestation["window_epoch_s"])
                 self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                                  ["network_time_unattested"])
+
+
+class BenchReplayFailClosedTests(unittest.TestCase):
+    """R5-R7, R9: the bench replay can never be labelled evidence.
+
+    Cold gate #3 ruling 10 Q7; brief D6.  Three independent refusal points
+    exist (arm, run, harvest); the arm one lives in `run_night` and is pinned
+    in that module's tests.  These are the run and harvest ones, plus the
+    driver's own verdict and the proof that an ordinary night's children never
+    see the switch.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+    STUB = ROOT / "scripts/bench_replay_systemsetup_stub.py"
+
+    def test_R5_a_replay_recorder_refuses_the_whole_night_at_the_summary(self):
+        from unittest.mock import patch
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            # The executor reads the variable to stamp the outcome document;
+            # the bench driver is what sets it in the real run.
+            stack.enter_context(patch.dict(
+                module.os.environ, {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}))
+
+        rc, summary, outcome, refusals, _calls, _control, sessions = \
+            harness.exercise(recorder_kind="replay", spy=spy)
+        # HARVEST: the summary is replaced outright, not annotated.
+        self.assertEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual(summary["evidence_status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual(summary["retained"], [])
+        self.assertIsNone(summary["s_upper"])
+        self.assertEqual([row["index"] for row in summary["replay_recorder_envelopes"]],
+                         list(range(1, 13)))
+        # RUN: the outcome document names the recorder, the night is refused,
+        # and the process exits 2.
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(outcome["error"], "replay_recorder")
+        self.assertEqual(outcome["recorder_kind"], "replay")
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # And the drift measurement -- the only thing the bench is for --
+        # survives the refusal intact, because the rows are appended inside
+        # the slot loop, before anything the refusal touches.
+        self.assertEqual([row["index"] for row in harness.envelope_journal], list(range(1, 13)))
+        for row in harness.envelope_journal:
+            self.assertIn("start_drift_s", row)
+            self.assertIn("cleanup_wall_s", row)
+            self.assertIn("network_time_attestation_wall_s", row)
+        self.assertEqual([s["power"]["recorder_kind"] for s in sessions], ["replay"] * 12)
+
+    def test_R5_counterfactual_the_same_night_under_powermetrics_completes(self):
+        # The kill.  One field changes and the night is a night again: rc 0,
+        # outcome complete, twelve retained, a real spread status.
+        rc, summary, outcome, refusals, *_ = FrozenExecutorTests().exercise(
+            recorder_kind="powermetrics")
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome["outcome"], "complete")
+        self.assertEqual(outcome["recorder_kind"], "powermetrics")
+        self.assertEqual(summary["status"], "SPREAD_RECORDED")
+        self.assertEqual(summary["retained"], 12)
+        self.assertEqual(refusals, 0)
+        self.assertNotIn("replay_recorder_envelopes", summary)
+
+    def test_R5_a_session_with_no_recorder_kind_at_all_also_refuses(self):
+        # Fail-closed: an absent marker is not a claim of production
+        # provenance.  A session that never said what recorded it cannot be
+        # admitted on the strength of not having said "replay".
+        rc, summary, outcome, *_ = FrozenExecutorTests().exercise(recorder_kind=None)
+        self.assertEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual([row["recorder_kind"] for row in summary["replay_recorder_envelopes"]],
+                         [None] * 12)
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(rc, 2)
+
+    def test_R9_no_child_of_an_ordinary_night_ever_sees_the_replay_switch(self):
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+        rc, *_ = harness.exercise()
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(harness.popen_envs), 13)
+        for environment in harness.popen_envs:
+            self.assertNotIn(sampler.REPLAY_ENV, environment)
+            self.assertIn(campaign.NETWORK_TIME_RECORD_ENV, environment)
+
+    def test_R6_the_systemsetup_stub_refuses_without_the_variable(self):
+        from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
+        from scripts import sample_quiet_predicate_evidence as sampler
+        argv = [str(self.STUB), "-n", str(self.STUB), "-setusingnetworktime", "off"]
+        bare = {k: v for k, v in os.environ.items() if k != sampler.REPLAY_ENV}
+        without = subprocess.run(argv, capture_output=True, text=True, env=bare, timeout=30)
+        # The exact shape of a toggle that did not happen.
+        self.assertEqual(without.returncode, 2)
+        self.assertEqual(without.stdout, "")
+        # The kill: the guard is what produces that shape.  With the variable
+        # set, the very same argv prints the line the chain's imported
+        # comparator demands and exits 0.
+        with_variable = subprocess.run(
+            argv, capture_output=True, text=True, timeout=30,
+            env={**bare, sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"})
+        self.assertEqual(with_variable.returncode, 0)
+        self.assertEqual(with_variable.stdout, EXPECTED_NETWORK_TIME_OFF_STDOUT)
+        # And a refused toggle refuses the NIGHT: `establish_network_time_off`
+        # is the production function, run here with both executable constants
+        # rebound to the stub, exactly as the bench driver rebinds them.
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(campaign, "SUDO", str(self.STUB)), \
+                patch.object(campaign, "SYSTEMSETUP", str(self.STUB)), \
+                patch.dict(os.environ, bare, clear=True):
+            with self.assertRaises(ValueError) as caught:
+                campaign.establish_network_time_off(Path(tmp))
+            record = json.loads((Path(tmp) / campaign.NETWORK_TIME_CONTROL_BASENAME).read_text())
+        self.assertIn("network time OFF not established", str(caught.exception))
+        self.assertEqual(record["off"]["exit_code"], 2)
+        self.assertEqual(record["off"]["stdout"], "")
+
+    def test_R7_the_bench_verdict_fails_on_a_single_slot_over_the_bar(self):
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [{"index": i, "chain_start_drift_s": 0.12 + i * 0.001,
+                 "session_start_drift_s": 0.26 + i * 0.001} for i in range(1, 13)]
+        passing = bench.verdict(rows, protocol)
+        self.assertEqual(passing["status"], "PASS")
+        self.assertLessEqual(passing["max_chain_start_drift_s"], bench.START_DRIFT_BAR_S)
+        self.assertFalse(passing["escalate_chain_pass_session_fail"])
+        # One slot at 0.6 s -- inside the night's 2 s in-chain abort, over the
+        # ruled 0.5 s bench bar.  The two bars are sequential, not
+        # alternatives, so this FAILS.
+        over = [dict(row) for row in rows]
+        over[6]["chain_start_drift_s"] = 0.6
+        failing = bench.verdict(over, protocol)
+        self.assertEqual(failing["status"], "FAIL")
+        self.assertEqual(failing["slots_over_bar"], [7])
+        self.assertIn("NOT shown", failing["statement"])
+        # The counterfactual, executed: compare the SAME journal against the
+        # 2 s abort threshold instead of the ruled bar and it passes -- which
+        # is the mistake this regression exists to kill.
+        self.assertEqual(bench.verdict(over, protocol, bar_s=2)["status"], "PASS")
+        self.assertEqual(bench.START_DRIFT_BAR_S, 0.5)
+
+    def test_R7_a_chain_pass_with_a_session_figure_over_the_bar_escalates(self):
+        # A269 ruling 10 A1: the session-level figure runs ~0.12-0.16 s above
+        # the chain-level one, and a split verdict is escalated, never passed.
+        from scripts import bench_replay_start_drift as bench
+        rows = [{"index": i, "chain_start_drift_s": 0.45, "session_start_drift_s": 0.61}
+                for i in range(1, 13)]
+        result = bench.verdict(rows, {"envelopes": 12})
+        self.assertEqual(result["status"], "PASS")
+        self.assertTrue(result["escalate_chain_pass_session_fail"])
+        self.assertEqual(result["session_slots_over_bar"], list(range(1, 13)))
+
+    def test_R7_a_journal_short_of_the_registered_slot_count_never_passes(self):
+        from scripts import bench_replay_start_drift as bench
+        rows = [{"index": i, "chain_start_drift_s": 0.1, "session_start_drift_s": 0.2}
+                for i in range(1, 12)]
+        result = bench.verdict(rows, {"envelopes": 12})
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["slots_recorded"], 11)
