@@ -23,7 +23,8 @@ REMOTE = "https://github.com/mpmdw/JouleWise"
 SCHEMA = "joulewise.evidence_prepare.v1"
 STEPS = ("clone", "venv", "plan", "wrapper", "render", "complete")
 # Activation records 19/21: every arm needs a supervisor started after the
-# canonical fast-forward; H must include the bracketed census cure.
+# canonical fast-forward; H must include the bracketed census cure. D-183:
+# `check` performs that fast-forward itself when nothing is loaded.
 CENSUS_FIX = "980f8d6452fb6923644bdac1e243ce0a344c881f"
 CANONICAL = "/Users/edr/code/JouleWise"
 SUPERVISOR_STATE = "/Users/edr/night-custody/magistrate/state.json"
@@ -596,16 +597,45 @@ def contains_head(canonical, head, commit, runner):
     return result.returncode == 0
 
 
-def canonical_check(state, canonical, runner):
-    if not contains_head(Path(state["measurement_root"]), CENSUS_FIX, state["head"], runner):
-        raise Refused("candidate H does not contain the census fix " + CENSUS_FIX)
-    if not contains_head(canonical, state["head"], "HEAD", runner):
-        raise Refused("canonical checkout does not contain candidate H")
+def canonical_status(canonical, runner):
     result = runner(["git", "-C", canonical, "--no-optional-locks", "status", "--porcelain", "-uno"])
     if result.returncode or result.stdout.strip():
         raise Refused("canonical checkout is dirty or unreadable: " + result.stdout + result.stderr)
+    return result
+
+
+def canonical_fast_forward(state, canonical, runner):
+    # D-183 (Ed, 2026-09-21): a clean canonical checkout behind candidate H is
+    # moved here by a fast-forward-only pull whenever no night agent is loaded;
+    # it is never an owner action. A dirty tree, a divergent or unreachable
+    # remote, or a pull that still lacks H refuses; nothing is reset or forced.
+    canonical_status(canonical, runner)
+    before = runner(["git", "-C", canonical, "rev-parse", "HEAD"])
+    if before.returncode:
+        raise Refused("cannot read canonical HEAD: " + before.stderr.strip())
+    pull = runner(["git", "-C", canonical, "pull", "--ff-only"])
+    if pull.returncode:
+        raise Refused("canonical fast-forward failed: " + (pull.stderr.strip() or pull.stdout.strip()))
+    after = runner(["git", "-C", canonical, "rev-parse", "HEAD"])
+    if after.returncode:
+        raise Refused("cannot read canonical HEAD after fast-forward: " + after.stderr.strip())
+    if not contains_head(canonical, state["head"], "HEAD", runner):
+        raise Refused("canonical checkout still does not contain candidate H after fast-forward")
+    return dict(before=before.stdout.strip(), after=after.stdout.strip(), pull=observation_record(pull))
+
+
+def canonical_check(state, canonical, runner, may_fast_forward=False):
+    if not contains_head(Path(state["measurement_root"]), CENSUS_FIX, state["head"], runner):
+        raise Refused("candidate H does not contain the census fix " + CENSUS_FIX)
+    fast_forward = None
+    if not contains_head(canonical, state["head"], "HEAD", runner):
+        if not may_fast_forward:
+            raise Refused("canonical checkout does not contain candidate H "
+                          "(fast-forward not licensed while night agents are loaded)")
+        fast_forward = canonical_fast_forward(state, canonical, runner)
+    result = canonical_status(canonical, runner)
     return dict(path=str(canonical), required_head=state["head"], census_fix=CENSUS_FIX,
-                status=observation_record(result))
+                status=observation_record(result), fast_forward=fast_forward)
 
 
 def supervisor_check(state, canonical, state_path, runner):
@@ -829,8 +859,9 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             return dict(digests=state["digests"], schedule=s)
 
         if inspect("sealed", seal):
-            inspect("night_agents", lambda: require_no_night_agents(night_agents(state, launchctl_bin)))
-            inspect("canonical", lambda: canonical_check(state, safe_path(canonical), runner))
+            nothing_loaded = inspect("night_agents", lambda: require_no_night_agents(night_agents(state, launchctl_bin)))
+            inspect("canonical", lambda: canonical_check(state, safe_path(canonical), runner,
+                                                         may_fast_forward=nothing_loaded))
             inspect("supervisor", lambda: supervisor_check(state, safe_path(canonical), supervisor_state, runner))
             courier = shutil.which("claude")
             checks["courier"] = dict(verdict="pass" if courier else "fail", path=courier,
