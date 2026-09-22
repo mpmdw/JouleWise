@@ -880,7 +880,7 @@ class TimedLogScannerTests(unittest.TestCase):
                 "sampling_stopped": {"epoch_s": 1600.0, "monotonic_before_s": 650.0}}}}}))
             with patch.object(campaign.subprocess, "run",
                               return_value=SimpleNamespace(returncode=1, stdout="", stderr="")):
-                attestation = campaign.attest_network_time(out)
+                attestation = campaign.attest_network_time(out, timeout=5)
             self.assertEqual(attestation["state"], "asserted")
             self.assertEqual(attestation["exit_code"], 1)
             self.assertEqual(attestation["window_epoch_s"], [999.0, 1601.0])
@@ -888,7 +888,28 @@ class TimedLogScannerTests(unittest.TestCase):
             (out / "session.json").write_text("{}")
             with patch.object(campaign.subprocess, "run",
                               side_effect=AssertionError("must not query")):
-                self.assertEqual(campaign.attest_network_time(out)["state"], "asserted")
+                self.assertEqual(campaign.attest_network_time(out, timeout=5)["state"], "asserted")
+
+    def test_the_query_bound_must_be_passed_and_cannot_be_defaulted(self):
+        """R5.5: no call site binds the floor by accident.
+
+        The bound belongs to the registration the night is running -- the
+        inter-slot gap less the teardown's budget -- and a default here let a
+        caller that forgot it run a 5 s query while believing it had asked
+        for the gap.  It is keyword-only with no default, so forgetting it is
+        a `TypeError` at the call, not a quiet 5 s.
+        """
+        import inspect
+        parameter = inspect.signature(campaign.attest_network_time).parameters["timeout"]
+        self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(parameter.default, inspect.Parameter.empty)
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            with self.assertRaises(TypeError) as raised:
+                campaign.attest_network_time(Path(tmp))
+            self.assertIn("timeout", str(raised.exception))
+            # Positionally, too: the third argument is no longer reachable.
+            with self.assertRaises(TypeError):
+                campaign.attest_network_time(Path(tmp), None, 5)
 
     def test_every_attestation_record_names_what_was_queried_even_when_nothing_was(self):
         """R4: the skeleton carries `window_argv_epoch_s`, so no reader KeyErrors.
@@ -1144,7 +1165,7 @@ class StartDriftCadenceTests(FrozenExecutorTests):
             out = Path(tmp)
             with patch.object(campaign.subprocess, 'run',
                               side_effect=AssertionError('must not query logd')):
-                attestation = campaign.attest_network_time(out, blocked=blocked)
+                attestation = campaign.attest_network_time(out, blocked=blocked, timeout=5)
         self.assertEqual(attestation['state'], 'asserted')
         self.assertIsNone(attestation['window_epoch_s'])
         self.assertIn('live capture', attestation['reason'])
@@ -1813,7 +1834,7 @@ class AttestationWindowRecordTests(unittest.TestCase):
             with patch.object(campaign.subprocess, "run",
                               return_value=SimpleNamespace(
                                   returncode=0, stdout=TIMED_LOG_HEADER, stderr="")):
-                attestation = campaign.attest_network_time(out)
+                attestation = campaign.attest_network_time(out, timeout=5)
         self.assertEqual(attestation["state"], "authenticated")
         window = attestation["window_epoch_s"]
         self.assertEqual(window, campaign.attestation_window({
@@ -1843,7 +1864,7 @@ class AttestationWindowRecordTests(unittest.TestCase):
                                              "monotonic_before_s": 650.0}}}}}))
                 with patch.object(campaign.subprocess, "run",
                                   side_effect=AssertionError("must not query logd")):
-                    attestation = campaign.attest_network_time(out)
+                    attestation = campaign.attest_network_time(out, timeout=5)
                 self.assertEqual(attestation["state"], "asserted")
                 self.assertIn("capture window unavailable", attestation["reason"])
                 self.assertIsNone(attestation["window_epoch_s"])

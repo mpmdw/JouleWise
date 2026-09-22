@@ -638,7 +638,7 @@ def attestation_timeout_s(protocol):
     return max(ATTESTATION_TIMEOUT_FLOOR_S, gap - cleanup_budget_s(protocol))
 
 
-def attest_network_time(out, blocked=None, timeout=ATTESTATION_TIMEOUT_FLOOR_S):
+def attest_network_time(out, blocked=None, *, timeout):
     """Authenticate one envelope's clock discipline from the ``timed`` log.
 
     A set-command receipt proves an instruction was accepted; it does not
@@ -650,6 +650,11 @@ def attest_network_time(out, blocked=None, timeout=ATTESTATION_TIMEOUT_FLOOR_S):
     ``asserted`` and excluded.  Run immediately after the collector exits and
     its groups are reaped, because the log store is rotated -- never deferred
     to harvest.
+
+    ``timeout`` is keyword-only and has NO default: the bound belongs to the
+    registration the night is running (:func:`attestation_timeout_s` derives
+    it from the inter-slot gap), and a default here would let a new call site
+    bind the 5 s floor silently while believing it had asked for the gap.
     """
 
     attestation = {"state": "asserted", "method": TIMED_LOG_ATTESTATION_METHOD,
