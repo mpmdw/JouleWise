@@ -1725,6 +1725,66 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
             self.assertIsNone(dropped)
             self.assertEqual([f["elapsed_ns"] for f in frames], record["frame_elapsed_ns"])
 
+    def test_X4_the_sidecar_source_digest_is_the_whole_file_not_the_prefix_read(self):
+        """Execution lens 17b S2: a provenance digest must name the whole file.
+
+        The digest was folded in as chunks were read, and SIGTERM -- the
+        NORMAL stop -- abandons the generator mid-file, so `source_sha256`
+        was a digest of the prefix consumed.  Observed live on envelope-01 of
+        the first `auto` smoke: sidecar `ee01f351…` against the file's true
+        `ef4429b4…`.  Here the feeder is stopped after the first frame and
+        before the last, and the sidecar must still carry the file's digest:
+        the same value `session.power.replay.source_plist_sha256` carries and
+        the same value a `shasum -a 256` of the source produces.
+        """
+        import signal as signal_module
+        import time as time_module
+        archived = (self.FIXTURE / "envelope-01" / "raw"
+                    / "powermetrics-idle-1.plist").read_bytes()
+        frames = [frame for frame in archived.split(b"\0") if frame]
+        with tempfile.TemporaryDirectory() as tmp:
+            # A source LARGER than the feeder's read chunk (1 MiB): the live
+            # defect needs a file that is still being read when the stop
+            # arrives, which is every real 130 MB plist and is not the
+            # three-frame fixture (one chunk, read whole before frame 1).
+            source = Path(tmp) / "big-powermetrics-idle-1.plist"
+            source.write_bytes(b"".join(
+                frames[i % len(frames)] + b"\0" for i in range(700)))
+            self.assertGreater(source.stat().st_size, 1 << 20)
+            out = Path(tmp) / "raw" / "powermetrics-idle-1.plist"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            sidecar = Path(str(out) + ".replay.json")
+            process = subprocess.Popen(
+                [sys.executable, "-B", str(self.FEEDER), "--source", str(source),
+                 "--session", str(self.FIXTURE / "envelope-01" / "session.json"),
+                 "--out", str(out), "--interval-ms", "100", "--label-shift", "none",
+                 "--sidecar", str(sidecar)],
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+            time_module.sleep(1.0)
+            process.send_signal(signal_module.SIGTERM)
+            self.assertEqual(process.wait(timeout=30), 0)
+            record = json.loads(sidecar.read_text())
+            # Stopped mid-file: something was written, and nothing like all.
+            self.assertGreaterEqual(record["frames_written"], 1)
+            self.assertLess(record["frames_written"], 700)
+            self.assertEqual(record["exit_reason"], "term")
+            self.assertNotEqual(record["written_stream_sha256"], record["source_sha256"])
+            # The three ways of naming the source file's digest agree.
+            true_digest = subprocess.run(["/usr/bin/shasum", "-a", "256", str(source)],
+                                         capture_output=True, text=True, timeout=30
+                                         ).stdout.split()[0]
+            self.assertEqual(record["source_sha256"], true_digest)
+            self.assertEqual(record["source_sha256"], harness.stream_sha256(source))
+            self.assertIn("whole source file", record["source_sha256_scope"])
+            # And the field the SESSION record carries for the same file is
+            # that same whole-file digest (`stream_sha256` at construction).
+            with patch.dict(os.environ, {harness.REPLAY_ENV: str(self.FIXTURE)}, clear=False):
+                recorder = harness.ReplayRecorder(
+                    Path(tmp) / "powermetrics-idle-1.plist", 100, FakeClock(), 10)
+            replay = recorder.metadata["replay"]
+            self.assertEqual(replay["source_plist_sha256"],
+                             harness.stream_sha256(replay["source"]))
+
     def test_L5_the_session_record_carries_the_K_the_feeder_applied(self):
         """Lane contract lens 17a N4: K must not live only in the sidecar.
 

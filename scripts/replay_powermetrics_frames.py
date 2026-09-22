@@ -125,12 +125,31 @@ def archived_endpoint_epoch_s(session_path, first_frame):
     return parse_label(first_frame)[1].timestamp(), "first_frame_label"
 
 
-def source_frames(path, digest):
+def source_sha256(path):
+    """The WHOLE source file's digest, in its own pass, before any pacing.
+
+    Folding the digest into the pacing pass (as this feeder first did) made
+    `source_sha256` a digest of however much had been READ when SIGTERM
+    arrived -- and SIGTERM is the normal stop, so the sidecar's own
+    provenance field named a 130 MB file and digested a prefix of it.  It was
+    observed live: envelope-01 of the first `auto` smoke recorded
+    `ee01f351…` against the file's true `ef4429b4…` (execution lens 17b S2).
+    A separate streaming pass costs one read of the source before the first
+    frame is due and cannot be truncated by a stop.
+    """
+
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        while chunk := stream.read(CHUNK_BYTES):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def source_frames(path):
     """Yield whole frames, one at a time, never holding the file in memory."""
     pending = b""
     with Path(path).open("rb") as stream:
         while chunk := stream.read(CHUNK_BYTES):
-            digest.update(chunk)
             pending += chunk
             while (index := pending.find(b"\0")) >= 0:
                 yield pending[:index]
@@ -170,9 +189,12 @@ def run(args):
 
     signal.signal(signal.SIGTERM, stopping)
     signal.signal(signal.SIGINT, stopping)
-    source_digest, out_digest = hashlib.sha256(), hashlib.sha256()
+    # The whole-file digest is taken HERE, before the first frame is due, so
+    # a SIGTERM mid-stream cannot truncate it (17b S2).
+    source_digest = source_sha256(args.source)
+    out_digest = hashlib.sha256()
     interval_ns = int(round(args.interval_ms * 1e6))
-    frames = source_frames(args.source, source_digest)
+    frames = source_frames(args.source)
     written, writes, labels, since_first_ns = 0, [], [], 0
     shift_s, shift_basis, endpoint = 0, None, None
     exit_reason = "source_exhausted_then_term"
@@ -222,7 +244,8 @@ def run(args):
     deltas = [b - a for a, b in zip(labels, labels[1:])]
     write_sidecar(args.sidecar, {
         "schema": SCHEMA, "source": str(args.source), "session": str(args.session),
-        "out": str(out), "source_sha256": source_digest.hexdigest(),
+        "out": str(out), "source_sha256": source_digest,
+        "source_sha256_scope": "whole source file, digested in its own pass before pacing",
         "written_stream_sha256": out_digest.hexdigest(),
         "label_shift": args.label_shift, "label_shift_s": shift_s,
         "label_shift_basis": shift_basis, "archived_endpoint_epoch_s": endpoint,
