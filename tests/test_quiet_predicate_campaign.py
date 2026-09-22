@@ -329,7 +329,7 @@ class FrozenExecutorTests(unittest.TestCase):
                  off_stdout=None, on_exit=0, timed_log=None, commands=None,
                  interrupt_settle=False, protocol=None, burn=0, burn_at=None,
                  settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None,
-                 attest_burn=0):
+                 attest_burn=0, tolerate_raise=False):
         """Drive the real ``execute`` against a stub collector on a fake clock.
 
         ``burn`` is the seconds the stub collector spends AFTER its capture
@@ -481,7 +481,18 @@ class FrozenExecutorTests(unittest.TestCase):
             if spy is not None:
                 spy(stack, campaign)
             plan=replace(make_plan(),t0_epoch_s=1000,window_max_s=window_max_s)
-            rc = campaign.execute(plan,protocol,Path(tmp))
+            self.execute_error=None
+            try:
+                rc = campaign.execute(plan,protocol,Path(tmp))
+            except Exception as exc:
+                if not tolerate_raise:
+                    raise
+                # A variant that breaks the `finally` deliberately: the only
+                # readable artefact is whatever the finally wrote BEFORE the
+                # break, which is exactly what the ordering assertion needs.
+                self.execute_error=exc
+                self.control_text=(Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text()
+                return None, None, None, 0, calls, json.loads(self.control_text), []
             cleanup=json.loads((Path(tmp)/'evidence_cleanup.json').read_text())
             self.assertTrue(cleanup['cleanup_proven'])
             journal=Path(tmp)/'evidence_envelopes.jsonl'
@@ -1472,3 +1483,22 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
         self.assertEqual([v["excluded"] for v in summary["envelopes"]],
                          [["network_time_unattested"]] * 12)
         self.assertEqual(summary["retained"], 0)
+
+
+class RestoreOrderTests(FrozenExecutorTests):
+    """Item 11 (05a S4): the restore is the FIRST action of the finally."""
+
+    def test_the_restore_precedes_the_cleanup_record_on_every_path(self):
+        def spy(stack, module):
+            # The step that follows the restore in the `finally` cannot run.
+            # If the restore had been ordered after it, the machine would be
+            # left with network time OFF and no receipt saying so.
+            stack.enter_context(patch.object(module, "cleanup_record",
+                                             side_effect=OSError("cleanup journal lost")))
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            spy=spy, tolerate_raise=True)
+        self.assertIsInstance(self.execute_error, OSError)
+        self.assertEqual(control["off"]["stdout"], EXPECTED_OFF)
+        self.assertIsNotNone(control["on"], "the restore did not run before cleanup_record")
+        self.assertEqual(control["on"]["exit_code"], 0)
+        self.assertEqual(control["on"]["argv"][-1], "on")
