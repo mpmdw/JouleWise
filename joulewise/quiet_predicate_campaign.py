@@ -35,6 +35,9 @@ NETWORK_TIME_CONTROL_SCHEMA = "joulewise.network_time_control.v1"
 # regression can shorten it without a fake clock.
 NETWORK_TIME_SET_TIMEOUT_S = 30
 NETWORK_TIME_CONTROL_BASENAME = "network_time_control.json"
+# Where the restore receipt goes when the control record cannot be read or
+# is not an object: a sibling file, so the original bytes survive.
+NETWORK_TIME_RESTORE_BASENAME = "network_time_control.restore.json"
 NETWORK_TIME_RECORD_ENV = "EVIDENCE_NETWORK_TIME_RECORD"
 TIMED_LOG_BASENAME = "timed-log.txt"
 TIMED_LOG_ATTESTATION_METHOD = "timed_log_show_predicate_v1"
@@ -353,34 +356,71 @@ def restore_network_time(night_dir):
     Runs as the first action of the executor's ``finally`` (after the signal
     handlers are neutralised), so a refusal, an exception and a SIGTERM all
     leave the machine as they found it.  The READ form is outside the sudoers
-    slice, so the prior state is unknowable without a password and ON is the
-    ruled end state.  A failed restore does NOT invalidate the envelopes
-    already captured under a proven OFF: it is reported as
+    slice -- the two ``systemsetup`` set forms the NOPASSWD entry grants -- so
+    the prior state is unknowable without a password and ON is the ruled end
+    state.  A failed restore does NOT invalidate the envelopes already
+    captured under a proven OFF: it is reported as
     ``network_time_restored: false`` and a distinct exit code.
+
+    Two rules hold the receipt itself.  (1) The ON receipt is added to the
+    control record ONLY when that record is absent (nothing was established
+    yet, so there are no bytes to protect) or reads back as an object.  A record
+    that is unreadable, or parses to a list, a string, a number or ``null``,
+    keeps its bytes and the receipt goes to a sibling
+    ``network_time_control.restore.json``: rewriting it as ``{"off": null,
+    ...}`` would leave an artifact asserting OFF was never established for a
+    night whose every envelope carries the digest of the original bytes.
+    (2) Nothing raises out of here.  This is the ``finally``; an exception
+    escaping it replaces a measured outcome -- the outcome document, the
+    refusal, the summary -- with no outcome at all, which is precisely what a
+    control record parsing to ``null`` used to do (``TypeError`` on item
+    assignment, caught by no except tuple in the call chain).
     """
 
-    path = night_dir / NETWORK_TIME_CONTROL_BASENAME
     try:
-        control = json.loads(path.read_text())
-    except (OSError, ValueError):
-        control = {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": None}
-    try:
-        on = set_network_time("on")
-    except Exception as exc:  # noqa: BLE001 - see below
-        # This runs in the executor's ``finally``.  Whatever the restore hits,
-        # the night's outcome document and refusal must still be written and
-        # the condition reported; a traceback escaping here would replace a
-        # measured outcome with no outcome at all.
-        on = {"argv": list(network_time_argv("on")), "exit_code": None, "stdout": None,
-              "error": f"{type(exc).__name__}: {exc}", "epoch_s": None, "monotonic_s": None}
-    control["on"] = on
-    try:
-        write_control_record(path, control)
-    except OSError:
-        pass  # The exit code still reports the restore; never mask it here.
-    # Success is the set form's own exit code: no READ form exists in the
-    # slice to confirm the state, and no stdout comparator for ON is ruled.
-    return on["exit_code"] == 0
+        path = night_dir / NETWORK_TIME_CONTROL_BASENAME
+        if not path.exists():
+            # Nothing was ever established (a refusal before the toggle): no
+            # bytes to protect, so the restore opens the record itself.
+            control = {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": None}
+        else:
+            try:
+                control = json.loads(path.read_text())
+            except (OSError, ValueError):
+                control = None
+        try:
+            on = set_network_time("on")
+        except Exception as exc:  # noqa: BLE001 - see rule (2) above
+            on = {"argv": list(network_time_argv("on")), "exit_code": None, "stdout": None,
+                  "error": f"{type(exc).__name__}: {exc}", "epoch_s": None, "monotonic_s": None}
+        try:
+            if isinstance(control, dict):
+                control["on"] = on
+                write_control_record(path, control)
+            else:
+                write_control_record(night_dir / NETWORK_TIME_RESTORE_BASENAME,
+                                     {"schema": NETWORK_TIME_CONTROL_SCHEMA,
+                                      "off": {"state": "unreadable",
+                                              "reason": f"{NETWORK_TIME_CONTROL_BASENAME} is "
+                                                        "not a readable control record",
+                                              "record": NETWORK_TIME_CONTROL_BASENAME},
+                                      "on": on})
+        except Exception:  # noqa: BLE001
+            pass  # The exit code still reports the restore; never mask it here.
+        # Success is the set form's own exit code: no READ form exists in the
+        # slice to confirm the state, and no stdout comparator for ON is ruled.
+        return on["exit_code"] == 0
+    except Exception as exc:  # noqa: BLE001 - rule (2): the finally is sacred
+        try:
+            write_control_record(night_dir / NETWORK_TIME_RESTORE_BASENAME,
+                                 {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": None,
+                                  "on": {"argv": list(network_time_argv("on")),
+                                         "exit_code": None, "stdout": None,
+                                         "error": f"{type(exc).__name__}: {exc}",
+                                         "epoch_s": None, "monotonic_s": None}})
+        except Exception:  # noqa: BLE001
+            pass
+        return False
 
 
 def timed_log_argv(start_epoch_s, end_epoch_s):

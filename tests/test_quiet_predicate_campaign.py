@@ -494,7 +494,16 @@ class FrozenExecutorTests(unittest.TestCase):
             summary=json.loads((Path(tmp)/'evidence/summary.json').read_text())
             outcome=json.loads((Path(tmp)/'evidence_outcome.json').read_text())
             refusals=list(Path(tmp).glob('refusal*.json'))
-            control=json.loads((Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text())
+            # The control record's BYTES are kept too: a test that corrupts it
+            # asserts they survived the restore, and an unparsable record must
+            # not break the harness before the assertion runs.
+            self.control_text=(Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text()
+            try:
+                control=json.loads(self.control_text)
+            except ValueError:
+                control=None
+            receipt=Path(tmp)/campaign.NETWORK_TIME_RESTORE_BASENAME
+            self.restore_receipt=json.loads(receipt.read_text()) if receipt.exists() else None
             sessions=[json.loads(path.read_text())
                       for path in sorted((Path(tmp)/'evidence').glob('envelope-*/session.json'))]
             return rc, summary, outcome, len(refusals), calls, control, sessions
@@ -1318,3 +1327,83 @@ class NetworkTimeReceiptTests(FrozenExecutorTests):
         # ... and the restore ran anyway, on the same refused path.
         self.assertEqual(control["on"]["exit_code"], 0)
         self.assertTrue(outcome["network_time_restored"])
+
+
+class RestoreReceiptTests(FrozenExecutorTests):
+    """Item 5 (05b S4, S5): the restore protects the record and never raises."""
+
+    def receipt(self, exit_code=0):
+        return {"argv": list(campaign.network_time_argv("on")), "exit_code": exit_code,
+                "stdout": "setUsingNetworkTime: On\n", "epoch_s": 1.0, "monotonic_s": 2.0}
+
+    def test_an_unreadable_or_non_dict_record_keeps_its_bytes(self):
+        cases = {"a json list": "[]\n", "json null": "null\n", "a json string": '"off"\n',
+                 "a number": "17\n", "garbage bytes": "{ not json\n"}
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            night = Path(tmp)
+            path = night / campaign.NETWORK_TIME_CONTROL_BASENAME
+            sibling = night / campaign.NETWORK_TIME_RESTORE_BASENAME
+            for label, payload in cases.items():
+                with self.subTest(case=label):
+                    path.write_text(payload)
+                    sibling.unlink(missing_ok=True)
+                    with patch.object(campaign, "set_network_time",
+                                      return_value=self.receipt()):
+                        self.assertTrue(campaign.restore_network_time(night))
+                    self.assertEqual(path.read_text(), payload)
+                    written = json.loads(sibling.read_text())
+                    self.assertEqual(written["on"]["exit_code"], 0)
+                    self.assertEqual(written["off"]["state"], "unreadable")
+                    self.assertEqual(written["off"]["record"],
+                                     campaign.NETWORK_TIME_CONTROL_BASENAME)
+                    # The verdict is still the set form's own exit code.
+                    with patch.object(campaign, "set_network_time",
+                                      return_value=self.receipt(exit_code=1)):
+                        self.assertFalse(campaign.restore_network_time(night))
+                    self.assertEqual(path.read_text(), payload)
+
+    def test_no_exception_class_escapes_the_restore(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            night = Path(tmp)
+            path = night / campaign.NETWORK_TIME_CONTROL_BASENAME
+            path.write_text(json.dumps({"schema": campaign.NETWORK_TIME_CONTROL_SCHEMA,
+                                        "off": {"exit_code": 0}}))
+            # A toggle that raises is reported, not propagated.
+            with patch.object(campaign, "set_network_time", side_effect=OSError("no sudo")):
+                self.assertFalse(campaign.restore_network_time(night))
+            self.assertIn("OSError", json.loads(path.read_text())["on"]["error"])
+            # A failure that is NOT the toggle (here: a receipt with no exit
+            # code at all) still returns a verdict instead of a traceback.
+            with patch.object(campaign, "set_network_time", return_value=None):
+                self.assertFalse(campaign.restore_network_time(night))
+            self.assertIn("TypeError",
+                          json.loads((night / campaign.NETWORK_TIME_RESTORE_BASENAME)
+                                     .read_text())["on"]["error"])
+            # A write failure does not mask a restore that worked.
+            with patch.object(campaign, "set_network_time", return_value=self.receipt()), \
+                    patch.object(campaign, "write_control_record",
+                                 side_effect=PermissionError("read-only night")):
+                self.assertTrue(campaign.restore_network_time(night))
+
+    def test_a_night_whose_record_is_corrupted_still_writes_its_outcome(self):
+        for label, payload in (("a json list", "[]\n"), ("garbage bytes", "{ not json\n")):
+            with self.subTest(case=label):
+                def spy(stack, module, payload=payload):
+                    real = module.write_control_record
+                    def corrupting(path, control):
+                        real(path, control)
+                        # Replace the record between OFF and the restore, the
+                        # way a truncated write or a stray editor would.
+                        if (path.name == campaign.NETWORK_TIME_CONTROL_BASENAME
+                                and control.get("on") is None):
+                            path.write_text(payload)
+                    stack.enter_context(patch.object(module, "write_control_record",
+                                                     side_effect=corrupting))
+                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(spy=spy)
+                self.assertEqual(rc, 0)
+                self.assertEqual(outcome["outcome"], "complete")
+                self.assertTrue(outcome["network_time_restored"])
+                self.assertEqual(summary["retained"], 12)
+                self.assertEqual(self.control_text, payload)
+                self.assertEqual(self.restore_receipt["on"]["exit_code"], 0)
+                self.assertEqual(self.restore_receipt["off"]["state"], "unreadable")
