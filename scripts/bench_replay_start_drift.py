@@ -288,15 +288,36 @@ def slot_rows(night_dir, protocol):
     return out
 
 
-def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BAR_S):
-    """PASS only when EVERY slot's chain-level drift is at or under the bar.
+# The slot fields a verdict is allowed to be taken over, and the value each
+# must hold (execution lens 17b B2).  The bench exists to time the
+# inter-slot TAIL -- collector exit, plist parse, anchor derivation, group
+# teardown, interior reduction -- so a slot whose tail did not actually run
+# is not a measurement of it, however small its drift figure looks.  In the
+# lens's live smoke all three slots came back `anchor_status: "unknown"`
+# (`clock_fit_span_insufficient`) with `interior_complete_support: False`:
+# `align_frames` returned nothing, the expensive part of the tail never ran,
+# and the bench returned PASS anyway.
+ADMISSIBLE_SLOT = (("collector_exit", 0), ("cleanup_proven", True),
+                   ("anchor_status", "bounded"), ("interior_complete_support", True))
+# A 60 s smoke envelope is too short for the clock fit the anchor needs, so
+# the anchor and the interior reduction that depends on it CANNOT resolve
+# there.  Those two fields are therefore not admissible input under
+# `--smoke`, and the smoke's own artifact says so.  Nothing else is exempt.
+SMOKE_EXEMPT_FIELDS = ("anchor_status", "interior_complete_support")
 
-    Three failure shapes are distinguished, because they mean different
-    things: a slot over the bar (the tail still does not fit the gap); a slot
-    that produced no chain-level figure at all (the journal is incomplete, so
-    the bar is not evidenced); and a chain-level pass whose session-level
-    figure is over the bar, which A269 ruling 10 A1 makes an ESCALATION rather
-    than a pass or a fail.
+
+def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BAR_S,
+            smoke=False):
+    """PASS only when EVERY slot is admissible and its chain drift is at or under the bar.
+
+    Four failure shapes are distinguished, because they mean different
+    things: a slot whose finalisation tail did not run (`ADMISSIBLE_SLOT`;
+    its drift figure is not a measurement of the thing the bar is about); a
+    slot over the bar (the tail still does not fit the gap); a slot that
+    produced no chain-level figure at all (the journal is incomplete, so the
+    bar is not evidenced); and a chain-level pass whose session-level figure
+    is over the bar, which A269 ruling 10 A1 makes an ESCALATION rather than
+    a pass or a fail.
     """
 
     chain = [r["chain_start_drift_s"] for r in rows if r["chain_start_drift_s"] is not None]
@@ -307,8 +328,13 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
                   if r["chain_start_drift_s"] is not None and r["chain_start_drift_s"] > bar_s)
     session_over = sorted(r["index"] for r in rows
                           if r["session_start_drift_s"] is not None and r["session_start_drift_s"] > session_bar_s)
+    required = [(field, value) for field, value in ADMISSIBLE_SLOT
+                if not (smoke and field in SMOKE_EXEMPT_FIELDS)]
+    defects = [{"index": r["index"], "field": field, "value": r.get(field),
+                "required": value}
+               for r in rows for field, value in required if r.get(field) != value]
     complete = len(rows) == expected and not missing
-    if not complete or over:
+    if defects or not complete or over:
         status = "FAIL"
     elif session_over:
         # A THIRD status, neither PASS nor FAIL (execution lens 17b B1).  The
@@ -327,6 +353,7 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
             "max_chain_start_drift_s": max(chain) if chain else None,
             "max_session_start_drift_s": max(session) if session else None,
             "slots_over_bar": over, "session_slots_over_bar": session_over,
+            "slot_defects": defects, "smoke_exempt_fields": list(SMOKE_EXEMPT_FIELDS) if smoke else [],
             "status": status, "escalate_chain_pass_session_fail": escalate,
             "statement": (
                 f"max(chain start_drift_s) = {max(chain):.3f} s <= {bar_s} s over "
@@ -336,7 +363,9 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
                 f"on slots {session_over}): a split verdict is ESCALATED to the magistrate, "
                 "never passed" if status == "ESCALATE" else
                 f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
-                f"recorded={len(rows)}/{expected}")}
+                f"recorded={len(rows)}/{expected}"
+                + ("".join(f"; slot {d['index']} {d['field']}={d['value']!r} "
+                           f"(required {d['required']!r})" for d in defects)))}
 
 
 def markdown(report):
@@ -365,7 +394,14 @@ def markdown(report):
               f"max(session `start_drift_s`) = {v['max_session_start_drift_s']} s "
               f"(bar {v['session_bar_s']} s; over: {v['session_slots_over_bar'] or 'none'}).",
               f"Chain-pass/session-fail split requiring escalation: "
-              f"{v['escalate_chain_pass_session_fail']}.", "",
+              f"{v['escalate_chain_pass_session_fail']}.",
+              f"Inadmissible slots (the finalisation tail did not run): "
+              f"{v.get('slot_defects') or 'none'}.",
+              *(["A 60 s smoke envelope is too short for the clock fit the anchor needs, so "
+                 "`anchor_status` CANNOT resolve at this envelope length and the interior "
+                 "reduction that depends on it cannot run either. Those two fields are "
+                 "exempt from admission HERE and only here; the full run at 600 s admits no "
+                 "such slot."] if report["kind"] == "smoke" else []), "",
               "## Per slot", "",
               "| slot | scheduled_mono_s | actual_mono_s | chain drift s | session drift s | "
               "collector exit | cleanup proven | cleanup wall s | attestation | attest wall s | "
@@ -495,7 +531,7 @@ def execute_bench(args):
         "wall_s": time.time() - started,
         "machine_start": machine_start, "machine_end": machine_end,
         "slots": rows}
-    report["verdict"] = verdict(rows, protocol)
+    report["verdict"] = verdict(rows, protocol, smoke=args.smoke)
     return report
 
 

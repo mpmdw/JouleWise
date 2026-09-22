@@ -2383,8 +2383,8 @@ class BenchReplayFailClosedTests(unittest.TestCase):
     def test_R7_the_bench_verdict_fails_on_a_single_slot_over_the_bar(self):
         from scripts import bench_replay_start_drift as bench
         protocol = {"envelopes": 12}
-        rows = [{"index": i, "chain_start_drift_s": 0.12 + i * 0.001,
-                 "session_start_drift_s": 0.26 + i * 0.001} for i in range(1, 13)]
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.12 + i * 0.001,
+                     session_start_drift_s=0.26 + i * 0.001) for i in range(1, 13)]
         passing = bench.verdict(rows, protocol)
         self.assertEqual(passing["status"], "PASS")
         self.assertLessEqual(passing["max_chain_start_drift_s"], bench.START_DRIFT_BAR_S)
@@ -2461,9 +2461,70 @@ class BenchReplayFailClosedTests(unittest.TestCase):
             self.assertEqual(report["verdict"]["status"], "FAIL")
             self.assertEqual(bench.main(["--archive", tmp]), 1)
 
+    def test_X2_a_slot_whose_finalisation_tail_never_ran_is_not_admissible(self):
+        """Execution lens 17b B2: the bench times the TAIL, so the tail must run.
+
+        `verdict` read only the two drift figures.  In all three slots of the
+        lens's live smoke the anchor was `unknown`
+        (`clock_fit_span_insufficient`) and `interior_complete_support` was
+        False -- `align_frames` returned nothing, so the per-round
+        integration and the interior reduction, the expensive part of the
+        tail the bench exists to time, did not run -- and the bench returned
+        PASS.  A slot is now admissible only with `collector_exit == 0`,
+        `cleanup_proven`, `anchor_status == "bounded"` and
+        `interior_complete_support`; the smoke, whose 60 s envelope cannot
+        resolve an anchor at all, is exempt from the last two and says so.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
+                     session_start_drift_s=0.2) for i in range(1, 13)]
+        self.assertEqual(bench.verdict(rows, protocol)["status"], "PASS")
+        broken = [dict(row) for row in rows]
+        broken[4]["collector_exit"] = 1
+        broken[5]["cleanup_proven"] = False
+        broken[6]["anchor_status"] = "unknown"
+        broken[7]["interior_complete_support"] = False
+        result = bench.verdict(broken, protocol)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual([(d["index"], d["field"], d["value"]) for d in result["slot_defects"]],
+                         [(5, "collector_exit", 1), (6, "cleanup_proven", False),
+                          (7, "anchor_status", "unknown"),
+                          (8, "interior_complete_support", False)])
+        for fragment in ("slot 5 collector_exit=1", "slot 6 cleanup_proven=False",
+                         "slot 7 anchor_status='unknown'",
+                         "slot 8 interior_complete_support=False"):
+            self.assertIn(fragment, result["statement"])
+        # The smoke is exempt from the two fields a 60 s envelope cannot
+        # produce -- and from nothing else.
+        smoke = bench.verdict(broken, protocol, smoke=True)
+        self.assertEqual([(d["index"], d["field"]) for d in smoke["slot_defects"]],
+                         [(5, "collector_exit"), (6, "cleanup_proven")])
+        unresolved = [dict(row, anchor_status="unknown", interior_complete_support=False)
+                      for row in rows]
+        self.assertEqual(bench.verdict(unresolved, protocol, smoke=True)["status"], "PASS")
+        self.assertEqual(bench.verdict(unresolved, protocol)["status"], "FAIL")
+        # And the smoke's artifact says why it was allowed to.
+        report = {"schema": bench.SCHEMA, "kind": "smoke", "head": "a" * 40,
+                  "clean_tree": True, "slots": unresolved,
+                  "verdict": bench.verdict(unresolved, protocol, smoke=True),
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("`anchor_status` CANNOT resolve at this envelope length", text)
+        report["kind"] = "full"
+        self.assertNotIn("CANNOT resolve at this envelope length", bench.markdown(report))
+
     def test_R7_a_journal_short_of_the_registered_slot_count_never_passes(self):
         from scripts import bench_replay_start_drift as bench
-        rows = [{"index": i, "chain_start_drift_s": 0.1, "session_start_drift_s": 0.2}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1, session_start_drift_s=0.2)
                 for i in range(1, 12)]
         result = bench.verdict(rows, {"envelopes": 12})
         self.assertEqual(result["status"], "FAIL")
