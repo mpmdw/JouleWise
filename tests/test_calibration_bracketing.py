@@ -40,8 +40,11 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R4_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R6_ACCEPTANCE_ID,
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R7_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_ID,
     ISSUED_ACCEPTANCE_REGISTRY,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
@@ -604,14 +607,22 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
-        # The live default is the ACTIVE generation.  Since the S1 fix-round
-        # barrier/taxonomy pin moves it is the n=17 r6 generation; all
+        # The live default is the ACTIVE generation.  Since the D-138 A267
+        # clock-anchor-deriver re-freeze it is the n=17 r7 generation; all
         # retained earlier generations keep their own registered pins and are
         # asserted below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R6_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R7_ACCEPTANCE_ID)
+        # r6 is RETAINED as an intermediate generation: superseded as the live
+        # default, still authenticating byte-identically under its own pin.
+        self.assertEqual(
+            hashlib.sha256(
+                ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH.read_bytes()
+            ).hexdigest(),
+            ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
+        )
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
@@ -3317,10 +3328,10 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         # Both numbers move together so the row stays internally consistent
         # (cutoff = 2 x count); only the comparison against the ARTIFACT can
         # refuse, which is what makes this counterfactual name the right site.
-        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R6_ACCEPTANCE_ID])
+        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
         rekeyed["cutoff_sequence"] = 80
         rekeyed["prior_observation_count"] = 40
-        with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
+        with _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, rekeyed):
             self.assertFalse(_valid_acceptance_bound(artifact))
 
     def test_generation_row_missing_a_fence_refuses_rather_than_defaulting(
@@ -3340,11 +3351,11 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                 partial = {
                     key: item
                     for key, item in _D102_GENERATION_DERIVATIONS[
-                        ANCHOR_V3_R6_ACCEPTANCE_ID
+                        ANCHOR_V3_R7_ACCEPTANCE_ID
                     ].items()
                     if key != dropped
                 }
-                with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, partial):
+                with _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, partial):
                     self.assertFalse(_valid_acceptance_bound(artifact))
 
     def test_unimplemented_screen_rule_refuses_instead_of_falling_back(self) -> None:
@@ -3356,16 +3367,16 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         from joulewise import calibration_bracketing as module
 
         artifact = load_calibration_acceptance_bound()
-        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R6_ACCEPTANCE_ID])
+        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
         rekeyed["screen_rule"] = "max_range_or_d125_floor"
         with patch.object(
             module,
             "_REGISTERED_SCREEN_RULES",
             frozenset({SCREEN_RULE_RANGE_EQUALS_SCREEN, "max_range_or_d125_floor"}),
-        ), _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
+        ), _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, rekeyed):
             self.assertFalse(_valid_acceptance_bound(artifact))
         # And the vocabulary fence itself still refuses an unknown name.
-        with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
+        with _registered_generation(ANCHOR_V3_R7_ACCEPTANCE_ID, rekeyed):
             self.assertFalse(_valid_acceptance_bound(artifact))
 
     def test_two_epoch_catalog_admits_and_an_unregistered_catalog_refuses(
