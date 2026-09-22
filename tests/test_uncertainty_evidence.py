@@ -1103,7 +1103,7 @@ class AnchorV31ColdGateTests(unittest.TestCase):
             self.assertNotIn(key, record)
 
     # -- regression 3 ------------------------------------------------------
-    def test_envelope_07_refuses_pre_fit_and_reports_its_38_ppm_rate(self) -> None:
+    def test_envelope_07_trips_the_backstop_and_reports_its_38_ppm_rate(self) -> None:
         """The night's 20 ms adjtime slew: refused before the fit is attempted.
 
         Ruling 14 R1 puts the frozen 15 ms span backstop BEFORE the 25 ppm
@@ -1111,11 +1111,20 @@ class AnchorV31ColdGateTests(unittest.TestCase):
         sustained rate is emitted on both rate-aware refusals so the evidence
         a reader needs is never deleted by whichever gate fires first.
         """
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1, V3_1_CAPS
+
         fixture = pilot_envelope(7)
         record = self.v3_1(stamps=pilot_stamps(fixture),
                            records=pilot_records(fixture))
         self.assertEqual(record["status"], "unknown")
         self.assertEqual(record["detail"], "wall_minus_monotonic_span_exceeded")
+        # 14 R2: EVERY v3.1 record carries the identity that chose its caps --
+        # a refusal most of all, since a reader cannot otherwise tell which
+        # limits refused it.  Stripping the identity from the unresolved half
+        # survived the pre-fix suite.
+        self.assertEqual(record["clock_anchor_method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(record["schema_version"], "p2-038.4")
+        self.assertEqual(record["caps"], dict(V3_1_CAPS))
         self.assertGreaterEqual(record["wall_minus_monotonic_rate_ppm"], 37)
         self.assertLessEqual(record["wall_minus_monotonic_rate_ppm"], 39)
         self.assertEqual(record["max_wall_minus_monotonic_span_s"], 0.015)
@@ -1192,10 +1201,17 @@ class AnchorV31ColdGateTests(unittest.TestCase):
         only the placement cap stands between this capture and a bound it has
         not earned.
         """
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1, V3_1_CAPS
+
         stamps, records = self.synthetic(resolution_s=0.006)
         record = self.v3_1(stamps=stamps, records=records)
         self.assertEqual(record["status"], "unknown")
         self.assertEqual(record["detail"], "effective_clock_anchor_bound_exceeded")
+        # The other unresolved v3.1 path, refused by a different gate: same
+        # identity, same schema, same frozen caps.
+        self.assertEqual(record["clock_anchor_method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(record["schema_version"], "p2-038.4")
+        self.assertEqual(record["caps"], dict(V3_1_CAPS))
         self.assertEqual(record["wall_minus_monotonic_span_s"], 0.0)
         self.assertGreater(record["placement_bound_s"], 0.005)
         self.assertGreater(record["stamp_resolution_s"], 0.005)
