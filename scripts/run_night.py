@@ -3445,8 +3445,8 @@ GROUP_CENSUS_BATCH = 256
 
 
 def _group_census_batch(
-    pgids: "list[int] | tuple[int, ...]", timeout_s: float = 1
-) -> "dict[int, tuple[bool, list[str]]]":
+    pgids: list[int] | tuple[int, ...], timeout_s: float = 1
+) -> dict[int, tuple[bool, list[str]]]:
     """Census many process groups at once: {pgid: (absent, lines listed)}.
 
     `pgrep -g` takes a comma-separated list and answers for the union, so one
@@ -3474,7 +3474,7 @@ def _group_census_batch(
     return census
 
 
-def _census_chunk(chunk: "list[int]", timeout_s: float) -> "dict[int, tuple[bool, list[str]]]":
+def _census_chunk(chunk: list[int], timeout_s: float) -> dict[int, tuple[bool, list[str]]]:
     argv = ["/usr/bin/pgrep", "-lf", "-g", ",".join(str(pgid) for pgid in chunk), "."]
     try:
         result = subprocess.run(argv, capture_output=True, text=True,
@@ -3502,8 +3502,8 @@ def _census_chunk(chunk: "list[int]", timeout_s: float) -> "dict[int, tuple[bool
 
 
 def _attribute_pids(
-    pids: "list[str]", timeout_s: float
-) -> "tuple[dict[int, list[str]], list[str]]":
+    pids: list[str], timeout_s: float
+) -> tuple[dict[int, list[str]], list[str]]:
     """Map the matched pids back to their process groups with one `ps` call."""
     argv = ["/bin/ps", "-o", "pgid=,pid=,command=", "-p", ",".join(pids)]
     try:
