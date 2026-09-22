@@ -1662,11 +1662,21 @@ class RestoreReceiptTests(FrozenExecutorTests):
             self.assertIn("TypeError",
                           json.loads((night / campaign.NETWORK_TIME_RESTORE_BASENAME)
                                      .read_text())["on"]["error"])
-            # A write failure does not mask a restore that worked.
+            # A write failure does not mask a restore that worked -- and
+            # R5.4: it is no longer silent.  The receipt is the only artifact
+            # that says the machine was put back; a write that cannot land
+            # leaves a hole in the record, and the hole now names itself on
+            # the executor's stdout, which the night log keeps.
+            import io
+            from contextlib import redirect_stdout
+            said = io.StringIO()
             with patch.object(campaign, "set_network_time", return_value=self.receipt()), \
                     patch.object(campaign, "write_control_record",
-                                 side_effect=PermissionError("read-only night")):
+                                 side_effect=PermissionError("read-only night")), \
+                    redirect_stdout(said):
                 self.assertTrue(campaign.restore_network_time(night))
+            self.assertIn("restore receipt write failed: PermissionError: read-only night",
+                          said.getvalue())
 
     def test_a_night_whose_record_is_corrupted_still_writes_its_outcome(self):
         for label, payload in (("a json list", "[]\n"), ("garbage bytes", "{ not json\n")):

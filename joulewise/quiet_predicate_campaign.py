@@ -408,8 +408,13 @@ def restore_network_time(night_dir):
                                                         "not a readable control record",
                                               "record": NETWORK_TIME_CONTROL_BASENAME},
                                       "on": on})
-        except Exception:  # noqa: BLE001
-            pass  # The exit code still reports the restore; never mask it here.
+        except Exception as exc:  # noqa: BLE001
+            # The exit code still reports the restore; never mask it here.
+            # But a receipt that could not be written is a hole in the
+            # night's record, and the only place that hole was visible was
+            # the absent file itself: say so on the executor's own stdout,
+            # which the night log keeps.
+            print(f"restore receipt write failed: {type(exc).__name__}: {exc}", flush=True)
         # Success is the set form's own exit code: no READ form exists in the
         # slice to confirm the state, and no stdout comparator for ON is ruled.
         return on["exit_code"] == 0
