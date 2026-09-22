@@ -1321,24 +1321,57 @@ class AttestationBudgetTests(FrozenExecutorTests):
         self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                          ["network_time_unattested"])
 
+    def test_the_bound_is_what_the_teardowns_budget_leaves_of_the_gap(self):
+        """R3.3: the teardown and the query are two parts of ONE gap.
+
+        The gap under v2 is 20 s, the teardown's budget is 15 s of it, and
+        the query gets the 5 s that leaves.  Before the cure both functions
+        subtracted the same 5 s reserve from the gap and each claimed 15 s:
+        30 s of work planned into 20 s of gap.
+        """
+        gaps = {"v2": PROTOCOL, "the scaled protocol": SCALED,
+                "a 700 s pitch": {**PROTOCOL, 'slot_pitch_s': 700},
+                # The boundary of the domain: gap == FLOOR + 1.
+                "the 6 s boundary gap": {**PROTOCOL, 'slot_pitch_s': 606}}
+        for label, protocol in gaps.items():
+            with self.subTest(case=label):
+                gap = protocol['slot_pitch_s'] - protocol['envelope_s']
+                self.assertGreaterEqual(gap, campaign.ATTESTATION_TIMEOUT_FLOOR_S + 1)
+                self.assertLessEqual(campaign.attestation_timeout_s(protocol)
+                                     + campaign.cleanup_budget_s(protocol), gap)
+        # Below the boundary the two FLOORS (1 s teardown, 5 s query) add to
+        # 6 and overrun the gap.  That is documented, not forbidden: the
+        # overrun pushes the next spawn late and `start_drift_abort_s` is the
+        # detector, so this pin records the behaviour rather than a guard.
+        tight = {**PROTOCOL, 'slot_pitch_s': 603}
+        self.assertEqual(campaign.cleanup_budget_s(tight), 1)
+        self.assertEqual(campaign.attestation_timeout_s(tight),
+                         campaign.ATTESTATION_TIMEOUT_FLOOR_S)
+        self.assertEqual(campaign.attestation_timeout_s(tight) + campaign.cleanup_budget_s(tight), 6)
+        self.assertGreater(campaign.attestation_timeout_s(tight)
+                           + campaign.cleanup_budget_s(tight),
+                           tight['slot_pitch_s'] - tight['envelope_s'])
+        self.assertIn("start_drift_abort_s", PROTOCOL)
+
     def test_the_bound_is_the_registrations_gap_and_a_timeout_keeps_the_schedule(self):
-        # 620 - 600 - 5 = 15 s under v2; the floor holds a tiny gap open.
-        self.assertEqual(campaign.attestation_timeout_s(PROTOCOL), 15)
+        # 620 - 600 = 20 s of gap, 15 s of it is the teardown's budget, and
+        # the query gets the 5 s that leaves; the floor holds a tiny gap open.
+        self.assertEqual(campaign.attestation_timeout_s(PROTOCOL), 5)
         self.assertEqual(campaign.attestation_timeout_s(SCALED),
                          campaign.ATTESTATION_TIMEOUT_FLOOR_S)
-        self.assertEqual(campaign.attestation_timeout_s({**PROTOCOL, 'slot_pitch_s': 700}), 95)
+        self.assertEqual(campaign.attestation_timeout_s({**PROTOCOL, 'slot_pitch_s': 700}), 5)
         self.assertNotIn("timeout=300", (ROOT / 'joulewise/quiet_predicate_campaign.py').read_text())
-        # Every query spends its whole 15 s bound and times out: the night
+        # Every query spends its whole 5 s bound and times out: the night
         # keeps its cadence, the envelopes lose their claim-bearing state, and
         # the cost of the query is on the record for the next budget.
-        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(attest_burn=15)
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(attest_burn=5)
         self.assertEqual(rc, 0)
-        self.assertEqual([kwargs["timeout"] for kwargs in self.attestation_kwargs], [15] * 12)
+        self.assertEqual([kwargs["timeout"] for kwargs in self.attestation_kwargs], [5] * 12)
         self.assertEqual([v["excluded"] for v in summary["envelopes"]],
                          [["network_time_unattested"]] * 12)
         self.assertEqual(summary["retained"], 0)
         self.assertEqual([row["network_time_attestation_wall_s"]
-                          for row in self.envelope_journal], [15] * 12)
+                          for row in self.envelope_journal], [5] * 12)
         starts = [float(a[a.index('--envelope-start-mono-s') + 1]) for a in calls if 'collect' in a]
         self.assertEqual(starts, [600 + 620 * i for i in range(12)])
         for row in self.envelope_journal:

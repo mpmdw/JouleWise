@@ -582,21 +582,31 @@ def attestation_timeout_s(protocol):
     retired literal of 300 s was thirty times the 10 s drift exclusion and a
     hundred and fifty times the 2 s abort bar: one slow `logd` would have
     pushed every later envelope off its schedule, and nothing measured the
-    cost.  The bound here is the gap less the same
-    ``CLEANUP_BUDGET_RESERVE_S`` the teardown leaves, floored at
-    ``ATTESTATION_TIMEOUT_FLOOR_S``: 15 s under v2.  A timeout is not a
+    cost.  The bound here is what the gap has LEFT once the teardown's own
+    budget (:func:`cleanup_budget_s`) is taken out of it, floored at
+    ``ATTESTATION_TIMEOUT_FLOOR_S``: 5 s under v2.  A timeout is not a
     failure of the night -- the envelope becomes ``asserted`` and excluded,
     which is the state a missing query already has.
 
-    A teardown that spends its full 15 s budget AND a query that spends its
-    full 15 s bound still exceed the 20 s gap; that residual is deliberate and
-    visible rather than silent, because the next slot's spawn then drifts past
-    ``start_drift_abort_s`` and the night ends REFUSED at a named abort
-    instead of producing envelopes nobody can place on the wall timeline.
+    Subtracting the teardown's BUDGET rather than the reserve that budget was
+    sized from is what makes the pair fit inside one gap.  The invariant is
+
+        attestation_timeout_s(p) + cleanup_budget_s(p) <= gap
+
+    and it holds -- with equality -- for every gap of
+    ``ATTESTATION_TIMEOUT_FLOOR_S + 1`` (6 s) or more, where the teardown
+    takes ``gap - CLEANUP_BUDGET_RESERVE_S`` and this query takes the 5 s
+    that leaves.  Below 6 s the two FLOORS (the teardown's 1 s and this
+    function's 5 s) add to 6 and overrun the gap: a teardown and a query that
+    each spend their whole floor push the next spawn late.  That residual is
+    deliberate and visible rather than silent, because the spawn then drifts
+    past ``start_drift_abort_s`` and the night ends REFUSED at a named abort
+    instead of producing envelopes nobody can place on the wall timeline.  No
+    registration this project runs is in that band -- v2's gap is 20 s.
     """
 
     gap = protocol["slot_pitch_s"] - protocol["envelope_s"]
-    return max(ATTESTATION_TIMEOUT_FLOOR_S, gap - CLEANUP_BUDGET_RESERVE_S)
+    return max(ATTESTATION_TIMEOUT_FLOOR_S, gap - cleanup_budget_s(protocol))
 
 
 def attest_network_time(out, blocked=None, timeout=ATTESTATION_TIMEOUT_FLOOR_S):
@@ -977,7 +987,10 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
 # The teardown's budget is the gap minus a reserve that the attestation's
 # `log show` fits in (worst observed 1.45 s; A269 gate C4 measured 0.70/0.84 s),
 # so a teardown can never eat the attestation's time or run into the next
-# spawn.  Derived from the registration at the call site, never a literal.
+# spawn.  `attestation_timeout_s` is the function that spends that reserve,
+# and it asks for exactly what this budget leaves of the gap -- the two are
+# the two parts of one gap, never two claims on the same seconds.  Derived
+# from the registration at the call site, never a literal.
 CLEANUP_BUDGET_RESERVE_S = 5
 
 
