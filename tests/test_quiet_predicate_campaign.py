@@ -2263,6 +2263,112 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertEqual(record["off"]["exit_code"], 2)
         self.assertEqual(record["off"]["stdout"], "")
 
+    def test_L4_the_drivers_own_guards_each_refuse_what_they_name(self):
+        """Lane contract lens 17a N3: the four refusals ahead of the night.
+
+        `verdict` was the only part of the driver with a regression.  These
+        are the guards that run BEFORE any collector is spawned, each driven
+        through its own seam: no real `launchctl`, no real `git`, no night.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import bench_replay_start_drift as bench
+
+        # 1. A loaded night agent.  The bench never runs beside one, and a
+        # census that could not be taken is not a claim that none is loaded.
+        loaded = "-\t0\tcom.joulewise.night.qpe01-pilot-n1-20260922-0217\n12\t0\tcom.apple.Finder\n"
+        with patch.object(bench, "run_text", return_value=(0, loaded)):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_no_night_agent()
+        self.assertIn("com.joulewise.night.qpe01-pilot-n1-20260922-0217", str(caught.exception))
+        with patch.object(bench, "run_text", return_value=(1, "")):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_no_night_agent()
+        self.assertIn("cannot prove no night agent is loaded", str(caught.exception))
+        # The counterfactual: an ordinary machine passes the same guard.
+        with patch.object(bench, "run_text", return_value=(0, "12\t0\tcom.apple.Finder\n")):
+            self.assertEqual(bench.require_no_night_agent(), [])
+
+        # 2. A dirty tree, and a HEAD that is not the sha the replay is pinned
+        # to: either way the run's sha would not name the bytes it ran.
+        def fake_git(dirty, head):
+            def git(*arguments):
+                if arguments[0] == "status":
+                    return " M joulewise/quiet_predicate_campaign.py\n" if dirty else ""
+                return head + "\n"
+            return git
+        with patch.object(bench, "git", fake_git(True, "a" * 40)):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_clean_head()
+        self.assertIn("working tree is not clean", str(caught.exception))
+        with patch.object(bench, "git", fake_git(False, "a" * 40)):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_clean_head("b" * 8)
+            self.assertEqual(bench.require_clean_head("a" * 8), "a" * 40)
+        self.assertIn("not the expected", str(caught.exception))
+
+        # 3. A smoke may never be filed under the ruled artifact's name: the
+        # bar comes from the 20 s gap and the smoke scales the gap away.
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            report = {"kind": "smoke", "night_dir": str(Path(tmp) / "night")}
+            ruled = Path(tmp) / f"2026-09-22{bench.RULED_ARTIFACT_SUFFIX}"
+            args = SimpleNamespace(raw=None, artifact=str(ruled))
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.write_outputs(report, args)
+            self.assertIn("a smoke never writes the ruled artifact name",
+                          str(caught.exception))
+            self.assertFalse(ruled.exists())
+            # The counterfactual: the same smoke under any other name writes.
+            args.artifact = str(Path(tmp) / "bench-replay-smoke.md")
+            report["slots"], report["verdict"] = [], {"status": "FAIL", "statement": "none",
+                "max_session_start_drift_s": None, "session_bar_s": 0.5,
+                "session_slots_over_bar": [], "escalate_chain_pass_session_fail": False}
+            report.update({"head": "a" * 40, "clean_tree": True, "schema": bench.SCHEMA,
+                           "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s",
+                                                       "settle_s", "envelopes")},
+                           "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                           "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                           "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                           "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                           "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                           "custody_root": tmp, "machine_start": {"uptime": "", "pgrep_claude": 0},
+                           "machine_end": {"uptime": "", "pgrep_claude": 0}})
+            raw, artifact = bench.write_outputs(report, args)
+            self.assertTrue(artifact.exists())
+
+        # 4. The plan id carries the ruled prefix and the root is the bench
+        # root -- never the night custody root, which has its own refusal.
+        self.assertEqual(bench.PLAN_ID_PREFIX, "bench-replay-")
+        self.assertEqual(bench.BENCH_ROOT, Path.home() / "night-bench")
+        self.assertEqual(bench.CUSTODY_ROOT_FORBIDDEN, Path.home() / "night-custody")
+        seen = {}
+        def stop_at_build_plan(plan_id, head, custody_root):
+            seen.update(plan_id=plan_id, custody_root=custody_root)
+            raise bench.BenchRefusal("stopped before staging")
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.object(bench, "require_clean_head", return_value="a" * 40), \
+                patch.object(bench, "require_no_night_agent", return_value=[]), \
+                patch.object(bench, "BENCH_ROOT", Path(tmp) / "night-bench"), \
+                patch.object(bench, "build_plan", side_effect=stop_at_build_plan):
+            args = SimpleNamespace(archive=tmp, smoke=True, label_shift="none",
+                                   expect_sha=None, transaction_merge=None)
+            with self.assertRaises(bench.BenchRefusal):
+                bench.execute_bench(args)
+        self.assertTrue(seen["plan_id"].startswith("bench-replay-"))
+        self.assertEqual(seen["custody_root"].parent.name, "night-bench")
+        # And with the bench root moved ONTO the custody root, the run refuses
+        # before it builds a plan at all.
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.object(bench, "require_clean_head", return_value="a" * 40), \
+                patch.object(bench, "require_no_night_agent", return_value=[]), \
+                patch.object(bench, "BENCH_ROOT", bench.CUSTODY_ROOT_FORBIDDEN), \
+                patch.object(bench, "build_plan", side_effect=stop_at_build_plan):
+            args = SimpleNamespace(archive=tmp, smoke=True, label_shift="none",
+                                   expect_sha=None, transaction_merge=None)
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.execute_bench(args)
+        self.assertIn("never writes under the night custody root", str(caught.exception))
+
     def test_R7_the_bench_verdict_fails_on_a_single_slot_over_the_bar(self):
         from scripts import bench_replay_start_drift as bench
         protocol = {"envelopes": 12}
