@@ -31,7 +31,7 @@ Slots that never produced a finalized row -- the window ran out (`unused
 many captures are retained.
 
 The REFERENCE ENVELOPE is the acceptance artifact in force,
-`d079_calibration_acceptance_v2_n17_r6`: the bound the project's measurements
+`d079_calibration_acceptance_v2_n17_r7`: the bound the project's measurements
 are already judged against.  It carries two comparators this tool uses.
 
 The LEVEL SCREEN (`preflight_level_screen_s`) is the absolute bound above which
@@ -94,7 +94,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.calibration_bracketing import (  # noqa: E402
     _D102_GENERATION_DERIVATIONS,
-    ANCHOR_V3_R6_ACCEPTANCE_ID,
+    ANCHOR_V3_R7_ACCEPTANCE_ID,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     acceptance_generation_operatives,
     load_calibration_acceptance_bound,
@@ -141,12 +141,14 @@ FORBIDDEN_OUT_PARTS = ("configs", "calibration")
 # that no spelling of the path -- case, Unicode alias, symlink -- reaches it.
 ACCEPTANCE_DIR = REPO_ROOT / "configs" / "calibration"
 # Issue 316 names the reference envelope by generation: "the acceptance in
-# force, d079_calibration_acceptance_v2_n17_r6".  Any other generation --
+# force", which after the D-138 r7 re-issue is
+# d079_calibration_acceptance_v2_n17_r7 (same screens as r6; r7 rotates only
+# the governed estimator pin).  Any other generation --
 # however well it authenticates -- carries different screens, and a caller
 # who points `--acceptance` at the n19 predecessor would turn a FAIL into a
 # PASS.  The id is pinned here; the path may vary (a clone's copy of the same
 # bytes is the same generation).
-REQUIRED_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
+REQUIRED_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
 
 VERDICT_PASS = "PASS"
 VERDICT_FAIL = "FAIL"

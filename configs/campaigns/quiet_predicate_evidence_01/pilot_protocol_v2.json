@@ -1,0 +1,82 @@
+{
+  "block_two": {
+    "authored_after_pilot": true,
+    "contrast": "idle-load-idle bracket",
+    "levels": [
+      0,
+      0.05
+    ],
+    "one_profile": true,
+    "one_qos": true,
+    "smallest_holdable_share": 0.05,
+    "upper_bound": "one-sided 95% paired-contrast upper bound"
+  },
+  "busy_cores_role": "covariate_only",
+  "cadence_exclusion": "start_drift: absolute collector start drift greater than 10 s from the frozen schedule",
+  "chain_source_sha256": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
+  "envelope_s": 600,
+  "envelopes": 12,
+  "exclusions": [
+    "census_not_clean_or_unknown",
+    "ac_not_AC_Power_or_probe_error",
+    "CPU_Speed_Limit_below_100_or_thermal_probe_error",
+    "clock_anchor_unresolved",
+    "incomplete_interior_support",
+    "collect_error",
+    "cleanup_unproven",
+    "start_drift",
+    "network_time_slew_attested",
+    "network_time_unattested"
+  ],
+  "interior_offset_s": 60,
+  "interior_s": 480,
+  "load_generator": false,
+  "minimum_adjacent_pairs": 4,
+  "minimum_retained": 8,
+  "pairing_rule": "disjoint_original_adjacent_pairs_both_retained_no_bridging",
+  "power_interval_ms": 100,
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "recorder_journal": "evidence_busy_cores.jsonl",
+  "ruling": "cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b; A269 cold gate 10 (2026-09-22) Q1(c)/Q2(a)/Q3",
+  "sample_interval_s": 30,
+  "schema": "joulewise.quiet_predicate_pilot.v1",
+  "settle_s": 600,
+  "sizing": {
+    "assumption": "independent normally distributed disjoint pair differences",
+    "chi_square_lower_tail_probability": 0.1,
+    "confidence": 0.9,
+    "delta_j": 1,
+    "formula": "max(3, ceil(8 * s_upper**2 / delta_j**2))",
+    "maximum_pairs": 24,
+    "minimum_pairs": 3,
+    "multiplier": 8,
+    "reference_factors": {
+      "n_4": 2.266,
+      "n_6": 1.762
+    },
+    "s_pair": "sample SD of retained disjoint differences, df = n - 1",
+    "s_upper": "s_pair * sqrt((n - 1) / chi_square_quantile(0.10, n - 1))"
+  },
+  "slot_pitch_s": 620,
+  "start_drift_abort_s": 2,
+  "start_drift_max_s": 10,
+  "stop_branches": {
+    "block_two_upper_bound_above_1_J": "no cutoff qualifies",
+    "observer_floor_above_smallest_holdable_share": "no cutoff qualifies",
+    "sized_pairs_above_24": "no cutoff qualifies"
+  },
+  "summary": [
+    "interior rail-sum and combined joules",
+    "retained disjoint pairs (e1,e2), (e3,e4), ..., (e11,e12); even minus odd interior joules; sample SD and upper 90% bound",
+    "overlapping adjacent differences and SD, maximum absolute difference: diagnostics only, never sizing",
+    "all single-envelope values and SD, first-to-last retained drift: diagnostics only, never sizing",
+    "name every overlapping original adjacent pair with absolute difference above 3 * s_pair; diagnostic only; never exclude by magnitude",
+    "whole-round observer cpu-s, self plus reaped children including recorder; never subtracted",
+    "recorder journal joined by monotonic support: per-envelope busy-core median/max and clean-machine distribution; covariates only",
+    "cadence and native sample counts",
+    "boot_id, os_build, sw_vers, powermetrics identity",
+    "all named exclusions; partial observations retained; PROVISIONAL, no cutoff authority"
+  ],
+  "top_up": false,
+  "window_max_s": 9000
+}

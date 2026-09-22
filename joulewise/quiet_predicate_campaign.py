@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import hashlib
 import json
 import math
@@ -14,9 +15,44 @@ import sys
 import time
 
 from joulewise import night_gate
+from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 
 PROTOCOL_PATH = night_gate.QPE01_PILOT_REGISTRATION_PATH
 CHAIN_PATH = night_gate.EVIDENCE_CHAIN_PATH
+# Absolute executables, resolved through module constants (cold gate
+# 2026-09-22, ruling 10 Q1 rules 1 and 4, 14 R4).  The production argv strings
+# are exactly the NOPASSWD sudoers slice's two set forms and the unified-log
+# reader.  The SUDOERS SLICE is the whole of what the machine's NOPASSWD entry
+# grants this chain without a password: ``systemsetup -setusingnetworktime on``
+# and ``... off``, and nothing else -- no read form, no other subcommand.  The
+# zsh ``log`` builtin shadows /usr/bin/log and returns nothing, so
+# the absolute path is load-bearing, not cosmetic.  A test substitutes its own
+# executables by rebinding these names -- PATH cannot fake an absolute path --
+# and a regression pins the production values.
+SUDO = "/usr/bin/sudo"
+SYSTEMSETUP = "/usr/sbin/systemsetup"
+LOG = "/usr/bin/log"
+NETWORK_TIME_CONTROL_SCHEMA = "joulewise.network_time_control.v1"
+# One `systemsetup` toggle answers in milliseconds; thirty seconds is the
+# bound past which it is not going to answer at all.  Named here so a
+# regression can shorten it without a fake clock.
+NETWORK_TIME_SET_TIMEOUT_S = 30
+NETWORK_TIME_CONTROL_BASENAME = "network_time_control.json"
+# Where the restore receipt goes when the control record cannot be read or
+# is not an object: a sibling file, so the original bytes survive.
+NETWORK_TIME_RESTORE_BASENAME = "network_time_control.restore.json"
+NETWORK_TIME_RECORD_ENV = "EVIDENCE_NETWORK_TIME_RECORD"
+TIMED_LOG_BASENAME = "timed-log.txt"
+TIMED_LOG_ATTESTATION_METHOD = "timed_log_show_predicate_v1"
+# ``timed`` writes one of these whenever it APPLIES a correction: a slewed
+# frequency/offset adjustment (``cmd,apply,src,``), the adjtime syscall, or a
+# hard step.  They are emitted at level Df, which plain ``log show`` drops --
+# hence ``--info --debug`` (ruling 14 R4 NIT: without them the scanner would
+# silently attest every envelope).
+TIMED_LOG_MARKERS = ("cmd,apply,src,", "ntp_adjtime", "settimeofday")
+TIMED_LOG_PREDICATE = 'process == "timed"'
+NETWORK_TIME_SLEW_EXCLUSION = "network_time_slew_attested"
+NETWORK_TIME_UNATTESTED_EXCLUSION = "network_time_unattested"
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
                   "joulewise/quiet_predicate_campaign.py", "joulewise/night_gate.py",
@@ -47,7 +83,34 @@ def frozen_protocol(raw=None):
     return json.loads(raw)
 
 
+def cadence_fields(protocol):
+    """Refuse a registration that cannot express the ruled cadence.
+
+    Cure 2 (A269 ruling 10 Q1(c)) separates the SCHEDULE PITCH from the
+    CAPTURE LENGTH: each envelope is spawned ``slot_pitch_s`` after the last,
+    captures for ``envelope_s``, and the difference is the gap in which the
+    collector exits, its groups are reaped and the clock attestation runs.  A
+    pitch shorter than the capture would schedule the next spawn inside the
+    running one, which is the defect A269 cures; a spawn whose drift exceeds
+    ``start_drift_abort_s`` aborts the night, so an abort threshold above the
+    exclusion bar ``start_drift_max_s`` would let a night run past the point
+    where every envelope it produced is already excluded.  Both are refused
+    here, fail-closed, before any collector exists.
+    """
+
+    for name in ("slot_pitch_s", "start_drift_abort_s", "envelope_s", "start_drift_max_s"):
+        value = protocol.get(name)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f"frozen pilot protocol needs a positive {name}")
+    if protocol["slot_pitch_s"] < protocol["envelope_s"]:
+        raise ValueError("slot_pitch_s is shorter than envelope_s: the schedule would overlap captures")
+    if protocol["start_drift_abort_s"] > protocol["start_drift_max_s"]:
+        raise ValueError("start_drift_abort_s above start_drift_max_s: the night would run on excluded envelopes")
+    return protocol
+
+
 def validate_protocol(protocol, source_digest):
+    cadence_fields(protocol)
     if protocol != frozen_protocol() or protocol.get("chain_source_sha256") != source_digest:
         raise ValueError("frozen pilot protocol mismatch; CLI overrides are forbidden")
     return protocol
@@ -129,6 +192,25 @@ def group_absent(pgid):
     return _group_census(pgid, timeout_s=.2)[0]
 
 
+def groups_absent(pgids):
+    """Absence for every journaled group from ONE census (A269 brief 7).
+
+    The teardown used to spawn one ``pgrep`` per journaled group; after
+    twelve envelopes that is 113 spawns, ~1.6 s of the 20 s inter-envelope
+    gap, for a question one ``pgrep -g a,b,c`` answers in 14 ms.  A single
+    group still takes the single-group path, so nothing about the one-group
+    case changes.  Returns {pgid: absent}; a census that could not answer
+    reports False (present), never absence.
+    """
+
+    pgids = sorted(set(pgids))
+    if len(pgids) <= 1:
+        return {pgid: group_absent(pgid) for pgid in pgids}
+    from scripts.run_night import _group_census_batch
+    return {pgid: absent for pgid, (absent, _) in
+            _group_census_batch(pgids, timeout_s=.2).items()}
+
+
 def process_groups(path):
     if not path.exists():
         return set()  # A pre-execute refusal launched no supervised children.
@@ -162,11 +244,16 @@ def cleanup_groups(path, children=(), budget_s=30, exclude=()):
             errors.append(str(exc))
             break
         known.update(pending)
+        # ONE census for the whole sweep (A269 brief 7): the kill decision for
+        # every group in this pass reads the same answer, and a group that
+        # exits between the census and its own kill is proven absent by the
+        # next sweep, exactly as a per-group census would have proven it.
+        census = groups_absent(pending)
         for pgid in sorted(pending):
             if time.monotonic() >= deadline:
                 break
             try:
-                if group_absent(pgid):
+                if census.get(pgid, False):
                     append_event(path, {"kind": "cleanup", "pgid": pgid, "state": "absent"})
                     checked.add(pgid)
                 else:
@@ -213,6 +300,483 @@ def write_refusal(night_dir, plan, detail):
     night_dir.mkdir(parents=True, exist_ok=True)
     return _write_driver_refusal(night_dir / "refusal.json", plan, "night_probe_error",
                                  "evidence chain refused: " + detail)
+
+
+def network_time_argv(state):
+    """The exact set form of the NOPASSWD sudoers slice; nothing is inferred."""
+    return (SUDO, "-n", SYSTEMSETUP, "-setusingnetworktime", state)
+
+
+def set_network_time(state):
+    """Run one set form and return its receipt: argv, code, stdout, both clocks."""
+    argv = network_time_argv(state)
+    completed = subprocess.run(list(argv), capture_output=True, text=True,
+                               timeout=NETWORK_TIME_SET_TIMEOUT_S)
+    return {"argv": list(argv), "exit_code": completed.returncode, "stdout": completed.stdout,
+            "epoch_s": time.time(), "monotonic_s": time.monotonic()}
+
+
+def establish_network_time_off(night_dir):
+    """Turn network time OFF before settle, or refuse the night (Q1 rules 1-3).
+
+    The method identity of the evidence anchor makes network-time-OFF the
+    structural exclusion of the one window in which the wall clock can move
+    non-affinely; a capture taken with it ON or unknown is validation-only
+    material, not evidence.  The receipt is written BEFORE the verdict so a
+    refused attempt is still on the record, and the exact stdout comparator is
+    imported from ``joulewise.arm_readiness``, never retyped.  Returns the
+    path of the receipt for the collectors' environment.
+    """
+
+    path = night_dir / NETWORK_TIME_CONTROL_BASENAME
+    try:
+        off = set_network_time("off")
+    except Exception as exc:  # noqa: BLE001 - every class refuses the night
+        # A toggle that timed out, or could not be run at all, is still an
+        # ATTEMPT that leaves the machine's network-time state unknown.  The
+        # receipt for it is written BEFORE the refusal for the same reason the
+        # exit-1 receipt is: a night that stopped here must say on its own
+        # record what it did to the machine, and `off: null` says nothing.
+        off = {"argv": list(network_time_argv("off")), "exit_code": None, "stdout": None,
+               "error": f"{type(exc).__name__}: {exc}",
+               "epoch_s": time.time(), "monotonic_s": time.monotonic()}
+        write_control_record(path, {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": off, "on": None})
+        raise ValueError("network time OFF not established: " + off["error"]) from exc
+    write_control_record(path, {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": off, "on": None})
+    if off["exit_code"] != 0 or off["stdout"] != EXPECTED_NETWORK_TIME_OFF_STDOUT:
+        raise ValueError("network time OFF not established: "
+                         f"exit {off['exit_code']}, stdout {off['stdout']!r}")
+    return path
+
+
+def write_control_record(path, control):
+    path.write_text(json.dumps(control, sort_keys=True, indent=2, allow_nan=False) + "\n")
+
+
+def restore_network_time(night_dir):
+    """Turn network time back ON, on every path; report, never hide, failure.
+
+    Runs as the first action of the executor's ``finally`` (after the signal
+    handlers are neutralised), so a refusal, an exception and a SIGTERM all
+    leave the machine as they found it.  The READ form is outside the sudoers
+    slice -- the two ``systemsetup`` set forms the NOPASSWD entry grants -- so
+    the prior state is unknowable without a password and ON is the ruled end
+    state.  A failed restore does NOT invalidate the envelopes already
+    captured under a proven OFF: it is reported as
+    ``network_time_restored: false`` and a distinct exit code.
+
+    Two rules hold the receipt itself.  (1) The ON receipt is added to the
+    control record ONLY when that record is absent (nothing was established
+    yet, so there are no bytes to protect) or reads back as an object.  A record
+    that is unreadable, or parses to a list, a string, a number or ``null``,
+    keeps its bytes and the receipt goes to a sibling
+    ``network_time_control.restore.json``: rewriting it as ``{"off": null,
+    ...}`` would leave an artifact asserting OFF was never established for a
+    night whose every envelope carries the digest of the original bytes.
+    (2) Nothing raises out of here.  This is the ``finally``; an exception
+    escaping it replaces a measured outcome -- the outcome document, the
+    refusal, the summary -- with no outcome at all, which is precisely what a
+    control record parsing to ``null`` used to do (``TypeError`` on item
+    assignment, caught by no except tuple in the call chain).
+    """
+
+    try:
+        path = night_dir / NETWORK_TIME_CONTROL_BASENAME
+        if not path.exists():
+            # Nothing was ever established (a refusal before the toggle): no
+            # bytes to protect, so the restore opens the record itself.
+            control = {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": None}
+        else:
+            try:
+                control = json.loads(path.read_text())
+            except (OSError, ValueError):
+                control = None
+        try:
+            on = set_network_time("on")
+        except Exception as exc:  # noqa: BLE001 - see rule (2) above
+            on = {"argv": list(network_time_argv("on")), "exit_code": None, "stdout": None,
+                  "error": f"{type(exc).__name__}: {exc}", "epoch_s": None, "monotonic_s": None}
+        try:
+            if isinstance(control, dict):
+                control["on"] = on
+                write_control_record(path, control)
+            else:
+                write_control_record(night_dir / NETWORK_TIME_RESTORE_BASENAME,
+                                     {"schema": NETWORK_TIME_CONTROL_SCHEMA,
+                                      "off": {"state": "unreadable",
+                                              "reason": f"{NETWORK_TIME_CONTROL_BASENAME} is "
+                                                        "not a readable control record",
+                                              "record": NETWORK_TIME_CONTROL_BASENAME},
+                                      "on": on})
+        except Exception as exc:  # noqa: BLE001
+            # The exit code still reports the restore; never mask it here.
+            # But a receipt that could not be written is a hole in the
+            # night's record, and the only place that hole was visible was
+            # the absent file itself: say so on the executor's own stdout,
+            # which the night log keeps.
+            print(f"restore receipt write failed: {type(exc).__name__}: {exc}", flush=True)
+        # Success is the set form's own exit code: no READ form exists in the
+        # slice to confirm the state, and no stdout comparator for ON is ruled.
+        return on["exit_code"] == 0
+    except Exception as exc:  # noqa: BLE001 - rule (2): the finally is sacred
+        try:
+            write_control_record(night_dir / NETWORK_TIME_RESTORE_BASENAME,
+                                 {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": None,
+                                  "on": {"argv": list(network_time_argv("on")),
+                                         "exit_code": None, "stdout": None,
+                                         "error": f"{type(exc).__name__}: {exc}",
+                                         "epoch_s": None, "monotonic_s": None}})
+        except Exception:  # noqa: BLE001
+            pass
+        return False
+
+
+def timed_log_argv(start_epoch_s, end_epoch_s):
+    """``log show`` over one envelope's capture window, timed process only.
+
+    ``log show`` takes LOCAL wall time as ``YYYY-MM-DD HH:MM:SS``.
+    """
+
+    def local(epoch_s):
+        return datetime.fromtimestamp(epoch_s).strftime("%Y-%m-%d %H:%M:%S")
+
+    return (LOG, "show", "--info", "--debug", "--style", "syslog",
+            "--predicate", TIMED_LOG_PREDICATE,
+            "--start", local(start_epoch_s), "--end", local(end_epoch_s))
+
+
+# `log show --style syslog` (the argv ruled by A267 ruling 14 R4) prints this
+# exact column header before any entry, and prints it when nothing matched
+# (live zero-match capture 07c-exhibit-D3, one line).  The `--style compact`
+# header is `Timestamp               Ty Process[PID:TID]` and is REJECTED:
+# the guard pins the ruled argv's output, not any header.
+TIMED_LOG_SYSLOG_HEADER = "Timestamp                       (process)[PID]"
+
+
+def timed_log_has_header(text):
+    """Did this body come from the ruled ``log show --style syslog`` query?"""
+    first = text.splitlines()[0] if text else ""
+    return first.rstrip() == TIMED_LOG_SYSLOG_HEADER
+
+
+def timed_log_window_epoch_s(argv):
+    """The epochs the ``--start``/``--end`` strings actually name.
+
+    ``timed_log_argv`` formats local wall time to whole seconds, so the query
+    really runs over the union window TRUNCATED at both ends (wider at the
+    start, and still past ``sampling_stopped`` at the end because of the one
+    second of pad).  ``window_epoch_s`` keeps the float union window the
+    envelope was placed by; this is what the argv strings say, parsed back
+    from those same strings, so an auditor reading the record never has to
+    re-derive the truncation to know what was queried.
+
+    One ambiguity is inherited, not introduced.  The strings carry no UTC
+    offset, and ``.timestamp()`` on a naive datetime reads it in the
+    machine's local zone.  On the night the clock goes back an hour at the
+    end of daylight saving, one wall-clock hour happens TWICE, so a string
+    inside it names two different epochs; Python resolves such a string to
+    the FIRST of the two (the still-daylight-saving one).  `log show` is
+    handed the same strings and has the same choice to make, so the record
+    and the query agree either way; a capture window that straddles the
+    repeated hour is an hour wider or an hour narrower than the envelope
+    intended, and the drift and window pins are what would show it.
+    """
+
+    return [datetime.strptime(argv[argv.index(flag) + 1], "%Y-%m-%d %H:%M:%S").timestamp()
+            for flag in ("--start", "--end")]
+
+
+def timed_log_marker_lines(text):
+    """Raw count of log lines carrying any applied-correction marker."""
+    return sum(any(marker in line for marker in TIMED_LOG_MARKERS)
+               for line in text.splitlines())
+
+
+def timed_log_moment(line):
+    """Seconds since the epoch of a syslog-style line, or None.
+
+    The pattern matches ``YYYY-MM-DD HH:MM:SS.ffffff`` and nothing after it,
+    so the ``-0700`` offset that ``--style syslog`` prints is DISCARDED and
+    the stamp is read in the machine's local zone, exactly as
+    :func:`timed_log_window_epoch_s` reads the argv strings (``--style
+    compact`` prints no offset at all).  The repeated hour at the end of
+    daylight saving is therefore ambiguous here too, and resolves the same
+    way: to the first of its two occurrences.  This value only GROUPS the
+    three log lines of one applied correction inside
+    ``TIMED_LOG_EVENT_WINDOW_S``; every nonzero count excludes the envelope
+    whatever the grouping, so the ambiguity cannot buy an envelope its
+    claim-bearing state.
+    """
+    match = re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+", line)
+    if match is None:
+        return None
+    try:
+        return datetime.strptime(match.group(0), "%Y-%m-%d %H:%M:%S.%f").timestamp()
+    except ValueError:
+        return None
+
+
+# One applied correction is logged three times within a millisecond or two:
+# ``cmd,ntp_adjtime:in``, ``:out``, then the ``cmd,apply,src,`` receipt.  The
+# receipt is therefore the event, and a bare syscall line counts only when no
+# receipt sits beside it -- which is how a log without receipt lines (another
+# macOS build, or a hard ``settimeofday`` step) still attests.  This window is
+# a GROUPING tolerance, never an admission tolerance: any nonzero count
+# excludes the envelope, so mis-grouping can only change a diagnostic number.
+TIMED_LOG_EVENT_WINDOW_S = 1.0
+
+
+def timed_log_matches(text):
+    """Count the clock corrections ``timed`` APPLIED (ruling 14 R4).
+
+    Calibrated on the packet's own exhibit D, which the cold gate read as ten
+    applied corrections: 10 ``cmd,apply,src,`` receipts, 20 ``ntp_adjtime``
+    lines (an in/out pair per receipt, one pair straddling a millisecond
+    boundary), 0 ``settimeofday``, 30 marker lines in total -- and 10 events.
+    """
+
+    applied, syscalls = [], []
+    for line in text.splitlines():
+        if TIMED_LOG_MARKERS[0] in line:
+            applied.append(timed_log_moment(line))
+        elif any(marker in line for marker in TIMED_LOG_MARKERS[1:]):
+            syscalls.append(timed_log_moment(line))
+    events = len(applied)
+    for moment in syscalls:
+        if moment is None or not any(
+                other is not None and abs(other - moment) <= TIMED_LOG_EVENT_WINDOW_S
+                for other in applied):
+            events += 1
+    return events
+
+
+def capture_still_live(cleanup):
+    """A reason the attestation must not run yet, or None.
+
+    The teardown proves every supervised group of this envelope gone.  While
+    one is unproven a ``powermetrics`` recorder may still be sampling, and
+    ``log show``'s work in ``logd`` would land inside a recorded window as
+    observer energy no one can attribute (A269 ruling 10 Q4 ii).
+    """
+
+    if cleanup.get("residue"):
+        return "supervised capture groups still present: " + ", ".join(
+            str(pgid) for pgid in cleanup["residue"])
+    if cleanup.get("errors"):
+        return "group teardown could not prove the capture ended: " + "; ".join(cleanup["errors"])
+    return None
+
+
+def attestation_window(stamps):
+    """The capture window in wall time, union of both clocks (ruling 10 Q4 i).
+
+    Each end stamp carries the same instant on two clocks: ``epoch_s`` (wall,
+    which a step can move) and ``monotonic_before_s`` (which no step moves).
+    The monotonic pair gives the capture's true LENGTH; each wall stamp gives
+    a candidate position.  If a step displaced the start stamp, the end stamp
+    minus the length is the truer start, and the other way round for the end,
+    so the window is the union of both readings -- widened by one second on
+    each side for the stamps' own resolution.
+
+    The worked case a plain +-1 s window loses: a 600 s capture starts at wall
+    1000 and the clock is stepped BACK 30 s partway through, so the stop stamp
+    reads 1570.  Entries written just before the step carry wall timestamps up
+    to 1600, outside [999, 1571] -- the +-1 s window around the two wall
+    stamps -- so a slew applied in that stretch goes unseen and the envelope
+    is authenticated on an incomplete log.  The union window is
+    [min(1000, 970) - 1, max(1570, 1600) + 1] = [969, 1601] and holds both
+    readings of the capture's extent.  (A step FORWARD widens the wall
+    interval instead, and there the two forms agree.)
+    """
+
+    started, stopped = stamps["sampling_started"], stamps["sampling_stopped"]
+    span = float(stopped["monotonic_before_s"]) - float(started["monotonic_before_s"])
+    start_epoch, stop_epoch = float(started["epoch_s"]), float(stopped["epoch_s"])
+    return [min(start_epoch, stop_epoch - span) - 1, max(stop_epoch, start_epoch + span) + 1]
+
+
+ATTESTATION_WINDOW_METHOD = "epoch_monotonic_union_v1"
+# The smallest query bound worth attempting.  A `log show` over one envelope's
+# window took 0.70-1.45 s on this machine (A269 gate C4), so five seconds is
+# already generous; it exists only so a registration with a tiny gap asks for a
+# real query rather than one guaranteed to time out.
+ATTESTATION_TIMEOUT_FLOOR_S = 5
+
+
+def attestation_timeout_s(protocol):
+    """Bound the clock query by the GAP it runs in, never by a literal.
+
+    The query runs between the end of one capture and the next spawn, and that
+    inter-slot gap is ``slot_pitch_s - envelope_s`` (20 s under v2).  The
+    retired literal of 300 s was thirty times the 10 s drift exclusion and a
+    hundred and fifty times the 2 s abort bar: one slow `logd` would have
+    pushed every later envelope off its schedule, and nothing measured the
+    cost.  The bound here is what the gap has LEFT once the teardown's own
+    budget (:func:`cleanup_budget_s`) is taken out of it, floored at
+    ``ATTESTATION_TIMEOUT_FLOOR_S``: 5 s under v2.  A timeout is not a
+    failure of the night -- the envelope becomes ``asserted`` and excluded,
+    which is the state a missing query already has.
+
+    Subtracting the teardown's BUDGET rather than the reserve that budget was
+    sized from is what makes the pair fit inside one gap.  The invariant is
+
+        attestation_timeout_s(p) + cleanup_budget_s(p) <= gap
+
+    and it holds -- with equality -- for every gap of
+    ``ATTESTATION_TIMEOUT_FLOOR_S + 1`` (6 s) or more, where the teardown
+    takes ``gap - CLEANUP_BUDGET_RESERVE_S`` and this query takes the 5 s
+    that leaves.  Below 6 s the two FLOORS (the teardown's 1 s and this
+    function's 5 s) add to 6 and overrun the gap: a teardown and a query that
+    each spend their whole floor push the next spawn late.  That residual is
+    deliberate and visible rather than silent, because the spawn then drifts
+    past ``start_drift_abort_s`` and the night ends REFUSED at a named abort
+    instead of producing envelopes nobody can place on the wall timeline.  No
+    registration this project runs is in that band -- v2's gap is 20 s.
+    """
+
+    gap = protocol["slot_pitch_s"] - protocol["envelope_s"]
+    return max(ATTESTATION_TIMEOUT_FLOOR_S, gap - cleanup_budget_s(protocol))
+
+
+def attest_network_time(out, blocked=None, *, timeout):
+    """Authenticate one envelope's clock discipline from the ``timed`` log.
+
+    A set-command receipt proves an instruction was accepted; it does not
+    prove no correction was applied during the capture.  The unified log does:
+    ``timed`` records every applied slew or step.  Zero matched lines over the
+    capture window (:func:`attestation_window`) is an AUTHENTICATED envelope;
+    any match is ``slew_attested`` and excluded; a failed query, or one that
+    must not run because the capture is not provably over (``blocked``), is
+    ``asserted`` and excluded.  Run immediately after the collector exits and
+    its groups are reaped, because the log store is rotated -- never deferred
+    to harvest.
+
+    ``timeout`` is keyword-only and has NO default: the bound belongs to the
+    registration the night is running (:func:`attestation_timeout_s` derives
+    it from the inter-slot gap), and a default here would let a new call site
+    bind the 5 s floor silently while believing it had asked for the gap.
+    """
+
+    attestation = {"state": "asserted", "method": TIMED_LOG_ATTESTATION_METHOD,
+                   "window_epoch_s": None, "window_argv_epoch_s": None,
+                   "window_method": ATTESTATION_WINDOW_METHOD,
+                   "log": None, "log_sha256": None,
+                   "matched_lines": None, "exit_code": None, "argv": None,
+                   "attested_epoch_s": time.time()}
+    if blocked:
+        attestation["reason"] = "attestation not run beside a live capture: " + blocked
+        return attestation
+    try:
+        session = json.loads((out / "session.json").read_text())
+        stamps = session["power"]["anchor"]["clock_stamps"]
+        window = attestation_window(stamps)
+        if not all(math.isfinite(moment) for moment in window):
+            raise ValueError(f"capture window is not finite: {window}")
+        # Formatting the window is inside the guard too: an absurd but finite
+        # epoch (1e300) raises OverflowError out of `datetime.fromtimestamp`,
+        # and an envelope whose window cannot even be written down is
+        # `asserted`, never a traceback that ends the night.
+        argv = timed_log_argv(*window)
+        window_argv = timed_log_window_epoch_s(argv)
+    except (OSError, ValueError, KeyError, TypeError, OverflowError) as exc:
+        attestation["reason"] = f"capture window unavailable: {type(exc).__name__}: {exc}"
+        return attestation
+    attestation.update(window_epoch_s=window, argv=list(argv),
+                       window_argv_epoch_s=window_argv)
+    try:
+        completed = subprocess.run(list(argv), capture_output=True, text=True, timeout=timeout)
+        path = out / TIMED_LOG_BASENAME
+        path.write_text(completed.stdout)
+    except subprocess.TimeoutExpired:
+        # The query is abandoned at the gap's edge, not at 300 s: the envelope
+        # loses its claim-bearing state, the night keeps its schedule.
+        attestation["reason"] = f"timed log query timed out after {timeout:g} s"
+        return attestation
+    except (OSError, subprocess.SubprocessError) as exc:
+        attestation["reason"] = f"timed log query failed: {type(exc).__name__}: {exc}"
+        return attestation
+    matched = timed_log_matches(completed.stdout)
+    attestation.update(exit_code=completed.returncode, log=path.name,
+                       log_sha256=digest(path.read_bytes()), matched_lines=matched,
+                       matched_marker_lines=timed_log_marker_lines(completed.stdout))
+    if completed.returncode != 0:
+        attestation["reason"] = f"timed log query exited {completed.returncode}"
+    elif not timed_log_has_header(completed.stdout):
+        attestation["reason"] = "timed log query returned no header"
+    elif matched:
+        attestation.update(state="slew_attested",
+                           reason=f"{matched} applied clock corrections inside the capture window")
+    else:
+        attestation.update(state="authenticated",
+                           reason="no applied clock correction inside the capture window")
+    return attestation
+
+
+def record_attestation(out, attestation):
+    """Add the attestation to the envelope's own provenance, atomically.
+
+    The collector has exited, so the chain owns this write; temp plus rename
+    means a reader never sees a half-written session record, and a write that
+    cannot land is reported in the attestation rather than raised (an
+    unwritable envelope directory used to refuse the whole night from here).
+    The attestation carries ``session_sha256_before`` -- the digest of the
+    file this rewrite replaced -- so the one edit made after the collector
+    exits is auditable from the record itself (A269 ruling 10 Q4 iii).
+    Nothing else rewrites ``session.json`` after the collector exits:
+    under cure 2 there is no finaliser pass, so this digest can only ever
+    name the collector's own bytes.
+    """
+
+    path = out / "session.json"
+    try:
+        raw = path.read_bytes()
+        session = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        # The annotation could not even read the record it annotates, so it
+        # cannot say the collector's bytes were the ones attested: the
+        # envelope loses its claim-bearing state and says why, exactly as a
+        # failed rewrite below does.
+        attestation["state"] = "asserted"
+        attestation["reason"] = f"session record unreadable: {type(exc).__name__}: {exc}"
+        return False
+    attestation["session_sha256_before"] = digest(raw)
+    provenance = session.get("network_time_provenance")
+    if not isinstance(provenance, dict):
+        provenance = {"state": "unknown",
+                      "reason": "collector recorded no network-time provenance"}
+    provenance["attestation"] = attestation
+    session["network_time_provenance"] = provenance
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        temporary.write_text(json.dumps(session, sort_keys=True, indent=2, allow_nan=False) + "\n")
+        os.replace(temporary, path)
+    except OSError as exc:
+        # One envelope's annotation must never refuse the NIGHT.  The write is
+        # an annotation on a capture that is already complete and already on
+        # disk; if it cannot land, the envelope loses its claim-bearing state
+        # and says why.  `pilot_summary` reads the executor's own envelope
+        # entry whenever the session record carries no attestation, so the
+        # `asserted` state set here is the state the summary sees.
+        #
+        # The temporary goes first.  A write that landed and a rename that
+        # did not leaves a COMPLETE `session.json.tmp` beside the record it
+        # failed to replace -- one carrying the `authenticated` state this
+        # branch is about to withdraw -- so a harvester would have two
+        # candidate records for one envelope, the stale one claim-bearing.
+        temporary.unlink(missing_ok=True)
+        attestation["state"] = "asserted"
+        attestation["reason"] = f"session rewrite failed: {type(exc).__name__}: {exc}"
+        return False
+    return True
+
+
+def attestation_exclusions(state):
+    """The ruled vocabulary: only an authenticated envelope is claim-bearing."""
+    if state == "authenticated":
+        return []
+    if state == "slew_attested":
+        return [NETWORK_TIME_SLEW_EXCLUSION]
+    return [NETWORK_TIME_UNATTESTED_EXCLUSION]
 
 
 def record_covariates(protocol, night_dir):
@@ -350,7 +914,26 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         all_rows.extend(rows)
         hard = hard_exclusions(rows)
         excluded.extend(hard)
-        if not hard:
+        # Clock-discipline attestation (ruling 14 R4): only an envelope whose
+        # capture window carries no applied correction in the ``timed`` log is
+        # claim-bearing.  A slew inside the window and a failed or missing
+        # query are both HARD exclusions; the session record is authoritative
+        # and the executor's own envelope entry is the fallback, so a summary
+        # re-derived from disk reaches the same verdict.
+        #
+        # It is computed BEFORE the clean busy-core diagnostic below because
+        # that diagnostic describes the machine an envelope was captured on:
+        # an envelope whose clock was slewed, or whose discipline could not be
+        # attested at all, is not a clean-machine observation either, and
+        # feeding its covariates into the "clean" distribution would let an
+        # excluded envelope shape the number the paper reports.
+        provenance = session.get("network_time_provenance")
+        attestation = provenance.get("attestation") if isinstance(provenance, dict) else None
+        state = (attestation.get("state") if isinstance(attestation, dict)
+                 else entry.get("network_time_attestation"))
+        unattested = attestation_exclusions(state)
+        excluded.extend(unattested)
+        if not hard and not unattested:
             clean_busy.extend(busy)
         interior = session.get("interior", {})
         if (session.get("power") or {}).get("anchor", {}).get("status") != "bounded":
@@ -446,6 +1029,42 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     return report
 
 
+# The gap between the end of one capture and the next spawn (20 s under v2:
+# slot_pitch_s 620 - envelope_s 600) holds the collector's exit, the plist
+# parse, the anchor derivation, the group teardown and the clock attestation.
+# The teardown's budget is the gap minus a reserve that the attestation's
+# `log show` fits in (worst observed 1.45 s; A269 gate C4 measured 0.70/0.84 s),
+# so a teardown can never eat the attestation's time or run into the next
+# spawn.  `attestation_timeout_s` is the function that spends that reserve,
+# and it asks for exactly what this budget leaves of the gap -- the two are
+# the two parts of one gap, never two claims on the same seconds.  Derived
+# from the registration at the call site, never a literal.
+CLEANUP_BUDGET_RESERVE_S = 5
+
+
+def cleanup_budget_s(protocol):
+    """The per-slot teardown budget: the gap, less the attestation reserve."""
+    gap = protocol["slot_pitch_s"] - protocol["envelope_s"]
+    return max(1, gap - CLEANUP_BUDGET_RESERVE_S)
+
+
+def window_budget_ok(plan, protocol):
+    """Does the whole frozen schedule fit inside the night's window?
+
+    Cure 2 spawns envelope i at ``settle_s + (i-1) * slot_pitch_s`` and the
+    last one captures for ``envelope_s``, so the schedule needs
+    ``settle_s + (envelopes-1) * slot_pitch_s + envelope_s`` seconds of the
+    window.  Under v2 that is 600 + 11*620 + 600 = 8020 s against
+    ``window_max_s`` 9000.  A pitch that does not fit is refused BEFORE any
+    collector is launched (A269 ruling 10 Q1 amendment A2), because the
+    alternative is discovering it at envelope 12, after eleven captures.
+    """
+
+    needed = (protocol["settle_s"] + (protocol["envelopes"] - 1) * protocol["slot_pitch_s"]
+              + protocol["envelope_s"])
+    return needed <= min(plan.window_max_s, protocol["window_max_s"]), needed
+
+
 def execute(plan, protocol, night_dir):
     """No schedule knobs: all quantities come from the authenticated protocol."""
     from scripts import sample_quiet_predicate_evidence as harness
@@ -469,17 +1088,51 @@ def execute(plan, protocol, night_dir):
         append_event(journal, {"kind": kind, "pgid": process.pid, "epoch_s": time.time()})
         return process
     try:
+        # The whole frozen schedule must fit the window BEFORE anything is
+        # launched (A269 ruling 10 Q1 A2); a pitch that overruns is a
+        # registration defect, not a night to discover at envelope 12.
+        fits, needed = window_budget_ok(plan, protocol)
+        if not fits:
+            raise ValueError(f"window_budget_exceeded: the frozen schedule needs {needed} s "
+                             f"of a {min(plan.window_max_s, protocol['window_max_s'])} s window")
+        # Network time OFF is established BEFORE the settle, so the settle also
+        # absorbs any in-flight slew the daemon had already started (a 20 ms
+        # adjtime slew completes in seconds).  Failure refuses the night here:
+        # no recorder, no envelope, no capture under an unknown clock regime.
+        control_path = establish_network_time_off(night_dir)
+        env[NETWORK_TIME_RECORD_ENV] = str(control_path)
+        print(f"evidence_network_time off record={control_path}", flush=True)
         # Settle belongs inside GO; verify-only never reaches this call.
         print(f"evidence_settle seconds={protocol['settle_s']}", flush=True)
         time.sleep(protocol["settle_s"])
         first = go + protocol["settle_s"]
         recorder = launch("recorder", [sys.executable, "-B", "-m", "joulewise.quiet_predicate_campaign", "record"])
         for index in range(1, protocol["envelopes"] + 1):
-            scheduled = first + (index - 1) * protocol["envelope_s"]
+            # The SCHEDULE runs on the pitch; the CAPTURE keeps its own length.
+            # Every slot therefore starts from a quiet machine like envelope 01
+            # did (chain drift 0.160 s, session 0.318 s on the 2026-09-22 pilot)
+            # instead of inheriting its predecessor's finalisation tail.
+            scheduled = first + (index - 1) * protocol["slot_pitch_s"]
             time.sleep(max(0, scheduled - time.monotonic()))
             if time.time() + protocol["envelope_s"] > plan.t0_epoch_s + plan.window_max_s:
                 raise ValueError("evidence window exhausted; no compressed envelope or top-up")
             actual = time.monotonic()
+            # Pre-registered in-chain abort (A269 ruling 10 Q3, amended to every
+            # envelope): a spawn later than start_drift_abort_s after its
+            # scheduled instant means the tail is back, and the night ends
+            # REFUSED here -- before this slot's capture, never as an
+            # INCONCLUSIVE data verdict afterwards.  `top_up: false` in the
+            # registration forbids pooling an aborted night's envelopes, so
+            # stopping costs nothing that a later night could have reused.
+            # Envelope 01 follows the settle and tests no pitch, so it is exempt.
+            drift = actual - scheduled
+            if index >= 2 and drift > protocol["start_drift_abort_s"]:
+                append_event(night_dir / "evidence_envelopes.jsonl",
+                             {"index": index, "scheduled_mono_s": scheduled,
+                              "actual_mono_s": actual, "start_drift_s": drift,
+                              "abort": "start_drift_abort"})
+                raise ValueError(f"start_drift_abort: envelope {index} would start {drift:.3f} s "
+                                 f"after its scheduled instant (bar {protocol['start_drift_abort_s']} s)")
             out = directory / f"envelope-{index:02d}"
             collector = launch("collector", [sys.executable, "-B", str(Path(plan.measurement_root) / HARNESS_PATHS[0]),
                 "collect", "--state", "idle", "--repeat", str(index), "--duration-s", str(protocol["envelope_s"]),
@@ -492,11 +1145,35 @@ def execute(plan, protocol, night_dir):
                 code = 124
             # The covariate recorder spans all envelopes. Each collector and
             # its independent sampler/power groups must be reaped between slots.
-            cleanup = cleanup_groups(journal, children, budget_s=30, exclude={recorder.pid})
+            # The budget is the gap this registration leaves, never a literal.
+            cleanup = cleanup_groups(journal, children, budget_s=cleanup_budget_s(protocol),
+                                     exclude={recorder.pid})
+            # Authenticate this envelope's clock discipline now, while the log
+            # store still holds the window (ruling 14 R4); the state joins the
+            # envelope's own provenance and the exclusion vocabulary.  It runs
+            # HERE -- after the teardown, before the next slot's sleep -- so
+            # `log show`'s work inside `logd` can never land in a recorded
+            # window as unattributable observer energy (A269 ruling 10 Q4 ii).
+            # If the teardown did not prove every supervised group gone, a
+            # recorder may still be sampling, and the query is refused rather
+            # than run beside it: the envelope becomes `asserted`.
+            # The query's bound is this registration's gap, and its WALL COST
+            # is journaled: an unmeasured second on the inter-slot path is how
+            # the drift A269 cures got in, and the next night's budget is read
+            # off these numbers, not guessed.
+            attestation_began = time.monotonic()
+            attestation = attest_network_time(out, blocked=capture_still_live(cleanup),
+                                              timeout=attestation_timeout_s(protocol))
+            attestation_wall_s = time.monotonic() - attestation_began
+            record_attestation(out, attestation)
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
-                              "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup})
+                              "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
+                              "network_time_attestation": attestation["state"],
+                              "network_time_attestation_wall_s": attestation_wall_s,
+                              "network_time_attestation_matched_lines": attestation["matched_lines"]})
             append_event(night_dir / "evidence_envelopes.jsonl", envelopes[-1])
-            print(f"envelope_end index={index} rc={code} cleanup_proven={cleanup['cleanup_proven']}", flush=True)
+            print(f"envelope_end index={index} rc={code} cleanup_proven={cleanup['cleanup_proven']}"
+                  f" clock_attestation={attestation['state']}", flush=True)
             consecutive_cleanup_failures = 0 if cleanup["cleanup_proven"] else consecutive_cleanup_failures + 1
             if consecutive_cleanup_failures >= 2:
                 raise ValueError("two consecutive cleanup_unproven envelopes")
@@ -508,6 +1185,7 @@ def execute(plan, protocol, night_dir):
     finally:
         for signum in old:
             signal.signal(signum, signal.SIG_IGN)
+        network_time_restored = restore_network_time(night_dir)
         cleanup = cleanup_record(night_dir, children)
         try:
             pilot_summary(directory, protocol, envelopes,
@@ -519,11 +1197,26 @@ def execute(plan, protocol, night_dir):
         if outcome == "refused":
             write_refusal(night_dir, plan, error or "evidence execution aborted")
         harness.write_json(night_dir / "evidence_outcome.json", {"outcome": outcome, "error": error,
-            "envelopes_attempted": len(envelopes), "cleanup_proven": cleanup["cleanup_proven"]})
+            "envelopes_attempted": len(envelopes), "cleanup_proven": cleanup["cleanup_proven"],
+            "network_time_restored": network_time_restored})
         for signum, handler in old.items():
             signal.signal(signum, handler)
-    print(f"evidence_end outcome={outcome} cleanup_proven={cleanup['cleanup_proven']}", flush=True)
-    return 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
+    print(f"evidence_end outcome={outcome} cleanup_proven={cleanup['cleanup_proven']}"
+          f" network_time_restored={network_time_restored}", flush=True)
+    # A failed restore leaves the machine, not the measurement, in the wrong
+    # state: the captured envelopes were taken under a proven OFF and stay
+    # valid.  It gets its own code (3, distinct from the refusal 2) so the
+    # harvester re-attempts the restore and surfaces it.
+    #
+    # PRECEDENCE: the refusal wins.  Code 3 means "the envelopes are valid,
+    # the machine is not", so a harvester acting on that documented meaning
+    # must never be handed a night that refused and produced no valid
+    # envelopes -- which is what returning 3 for a refused night whose restore
+    # also failed did.  The restore's own verdict is on
+    # `evidence_outcome.json` (`network_time_restored`) on every path, so
+    # nothing is hidden by giving 2 the precedence.
+    base = 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
+    return 3 if base == 0 and not network_time_restored else base
 
 
 def main(argv=None):

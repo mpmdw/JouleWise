@@ -71,10 +71,47 @@ def stream(*docs):
     return b"\0".join(plistlib.dumps(d) for d in docs) + b"\0"
 
 
+def placed(frame, start_s, end_s, **extra):
+    """Place a parsed frame on the wall timeline in both representations.
+
+    After the cold gate (ruling 10 Q3) the integer-nanosecond endpoints are the
+    load-bearing ones and the float seconds are derived from them, so a fixture
+    that set only ``start_s``/``end_s`` would no longer describe a frame.
+    """
+    start_ns, end_ns = round(start_s * 1e9), round(end_s * 1e9)
+    return {**frame, "start_ns": start_ns, "end_ns": end_ns,
+            "start_s": start_ns / 1e9, "end_s": end_ns / 1e9, **extra}
+
+
 def aligned_fixture():
     frames, _ = harness.parse_frames(stream(document(), document(timestamp=1003, elapsed_ns=2_000_000_000, cpu=4000)))
-    return [{**frames[0], "start_s": 1000.0, "end_s": 1001.0},
-            {**frames[1], "start_s": 1001.0, "end_s": 1003.0}]
+    return [placed(frames[0], 1000.0, 1001.0), placed(frames[1], 1001.0, 1003.0)]
+
+
+def network_time_control(directory, stdout=None, exit_code=0):
+    """The chain's OFF receipt, the only admission the collector accepts."""
+    path = Path(directory) / "network_time_control.json"
+    path.write_text(json.dumps({"schema": "joulewise.network_time_control.v1",
+        "off": {"argv": ["/usr/bin/sudo", "-n", "/usr/sbin/systemsetup",
+                         "-setusingnetworktime", "off"],
+                "exit_code": exit_code, "epoch_s": 1000.0, "monotonic_s": 10.0,
+                "stdout": harness.EXPECTED_NETWORK_TIME_OFF_STDOUT if stdout is None else stdout},
+        "on": None}))
+    return path
+
+
+class NetworkTimeOffMixin:
+    """Ruling 10 Q1 rule 3: every collect() needs the chain's OFF receipt."""
+
+    def setUp(self):
+        super().setUp()
+        directory = tempfile.TemporaryDirectory(dir="/tmp")
+        self.addCleanup(directory.cleanup)
+        self.network_time_record = network_time_control(directory.name)
+        patcher = patch.dict(os.environ,
+                             {harness.NETWORK_TIME_RECORD_ENV: str(self.network_time_record)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 def collect_args(directory, **kwargs):
@@ -243,7 +280,7 @@ class IntegrationTests(unittest.TestCase):
     def test_known_overlap_integral_and_weighted_residency(self):
         frames = aligned_fixture()
         frames[1]["cpus"][0]["active_ratio"] = .9
-        reduced = harness.integrate(frames, 1000.5, 1002)
+        reduced = harness.integrate_seconds(frames, 1000.5, 1002)
         self.assertAlmostEqual(reduced["power"]["energy_j"]["cpu_w"], 5)
         self.assertAlmostEqual(reduced["power"]["cpu_w"], 10 / 3)
         self.assertAlmostEqual(reduced["power"]["energy_j"]["rail_sum_w"], 5.9)
@@ -253,34 +290,34 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(reduced["error_bound_j"], 0)
 
     def test_gap_or_span_mismatch_cannot_have_finite_energy_bound(self):
-        reduced = harness.integrate(aligned_fixture(), 999, 1002, .01)
+        reduced = harness.integrate_seconds(aligned_fixture(), 999, 1002, .01)
         self.assertTrue(reduced["span_mismatch"])
         self.assertEqual(reduced["power"]["coverage_s"], 2)
         self.assertIsNone(reduced["error_bound_j"])
 
     def test_anchor_uncertainty_exposing_unobserved_edge_is_unbounded(self):
-        reduced = harness.integrate(aligned_fixture(), 1000, 1002, .01)
+        reduced = harness.integrate_seconds(aligned_fixture(), 1000, 1002, .01)
         self.assertFalse(reduced["span_mismatch"])
         self.assertIsNone(reduced["error_bound_j"])
 
     def test_alignment_bound_contains_shifted_integrals(self):
         frames = aligned_fixture()
-        reduced = harness.integrate(frames, 1000.5, 1002, .01)
+        reduced = harness.integrate_seconds(frames, 1000.5, 1002, .01)
         energy = reduced["power"]["energy_j"]["rail_sum_w"]
         self.assertAlmostEqual(reduced["error_bound_j"], (2.6 + 4.6) * .02)
         for delta in (-.01, -.003, .01):
-            shifted = [{**f, "start_s": f["start_s"] + delta, "end_s": f["end_s"] + delta} for f in frames]
-            actual = harness.integrate(shifted, 1000.5, 1002)["power"]["energy_j"]["rail_sum_w"]
+            shifted = [placed(f, f["start_s"] + delta, f["end_s"] + delta) for f in frames]
+            actual = harness.integrate_seconds(shifted, 1000.5, 1002)["power"]["energy_j"]["rail_sum_w"]
             self.assertLessEqual(abs(actual - energy), reduced["error_bound_j"])
 
     def test_overlapping_frames_are_rejected(self):
         frames = aligned_fixture()
-        frames[1]["start_s"] = 1000.9
+        frames[1] = placed(frames[1], 1000.9, frames[1]["end_s"])
         with self.assertRaises(ValueError):
-            harness.integrate(frames, 1000.5, 1002)
+            harness.integrate_seconds(frames, 1000.5, 1002)
 
 
-class CollectionTests(unittest.TestCase):
+class CollectionTests(NetworkTimeOffMixin, unittest.TestCase):
     def test_hard_probe_results_survive_complete_and_interrupted_rounds(self):
         from joulewise import night_gate
         from scripts import run_night
@@ -443,7 +480,8 @@ runpy.run_path(script, run_name="__main__")
 '''
             command = [sys.executable, "-B", "-c", audit, command[2], tmp, *command[3:]]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=20,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/tmp"})
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/tmp",
+                     harness.NETWORK_TIME_RECORD_ENV: str(self.network_time_record)})
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertNotIn("OUTSIDE_OUTPUT", completed.stdout)
             root = Path(tmp)
@@ -560,7 +598,7 @@ runpy.run_path(script, run_name="__main__")
         recorder = Mock()
         recorder.metadata = {"argv": ["fake"], "cleanup": {"returncode": 0}}
         frame = aligned_fixture()[0]
-        frames = [{**frame, "start_s": 999.0, "end_s": 1006.0, "elapsed_s": 7}]
+        frames = [placed(frame, 999.0, 1006.0, elapsed_s=7)]
         recorder.finish.return_value = (frames, {"status": "bounded", "admissible_lower_epoch_s": 1000,
             "admissible_upper_epoch_s": 1000.002, "effective_clock_anchor_bound_s": .001, "method": "fixture"})
         with tempfile.TemporaryDirectory() as tmp:
@@ -576,7 +614,7 @@ runpy.run_path(script, run_name="__main__")
         clock.now = 2
         recorder = Mock()
         recorder.metadata = {'cleanup': {'returncode':0}}
-        frames = [{**aligned_fixture()[0], 'start_s':1000., 'end_s':1600., 'elapsed_s':600}]
+        frames = [placed(aligned_fixture()[0], 1000., 1600., elapsed_s=600)]
         recorder.finish.return_value = (frames, {'status':'bounded', 'effective_clock_anchor_bound_s':0,
             'admissible_lower_epoch_s':1000, 'admissible_upper_epoch_s':1000})
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
@@ -948,7 +986,7 @@ print(json.dumps(rows))
         self.assertIsNone(harness.stationarity(periods, 0)["mean_busy_cores"])
 
 
-class SummaryTests(unittest.TestCase):
+class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
     def test_row_os_build_cannot_be_substituted_or_joined_to_another_session(self):
         for field, replacement in (("os_build", "25G80"), ("session", "other-session")):
             with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
@@ -1137,7 +1175,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class NativeInteriorAndLoadJoinTests(unittest.TestCase):
+class NativeInteriorAndLoadJoinTests(NetworkTimeOffMixin, unittest.TestCase):
     def test_interior_uses_native_support_not_scaled_whole_envelope_mean(self):
         frames = aligned_fixture()
         anchor = {'status':'bounded','effective_clock_anchor_bound_s':0}
@@ -1195,3 +1233,355 @@ class NativeInteriorAndLoadJoinTests(unittest.TestCase):
         self.assertEqual(result['workers'][0]['calibration_overlap_s'], 5)
         report['cleanup'] = [{'alive':True,'exitcode':None}]
         self.assertEqual(harness.join_load_log(row,report,before,after)['reason'], 'load cleanup incomplete or escalated')
+
+
+# --------------------------------------------------------------------------
+# A267 QPE01-CLOCK-DISCIPLINE-ANCHOR-01 — cold-gate regressions 6 and 9
+# (ruling 10 Q3 as worded by 14 R5; Q1 rule 3).  Envelope 11 of the pilot
+# night qpe01-pilot-n1-20260922-0217 is the real mis-tiled capture.
+# --------------------------------------------------------------------------
+
+PILOT_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "qpe01_pilot_n1_20260922"
+
+
+def pilot_envelope(index):
+    return json.loads((PILOT_FIXTURES / f"envelope-{index:02d}.json").read_text())
+
+
+def pilot_frames(fixture):
+    """Parsed-frame dicts rebuilt from the archived native rows."""
+    frames = []
+    for elapsed_ns, native_ns, rail_sum_w, energy_j, is_delta in fixture["records"]:
+        power = dict.fromkeys(harness.RAILS)
+        power["rail_sum_w"] = power["combined_w"] = rail_sum_w
+        frames.append({"native_timestamp_s": native_ns / 1e9,
+                       "native_timestamp_ns": native_ns, "elapsed_ns": elapsed_ns,
+                       "elapsed_s": elapsed_ns / 1e9, "is_delta": is_delta,
+                       "energy_j": energy_j, "power": power,
+                       "clusters": [], "cpus": []})
+    return frames
+
+
+def pilot_interior_epoch(fixture):
+    interior = fixture["interior"]
+    return (interior["start_stamp"]["epoch_s"] - (interior["start_drift_s"] or 0)
+            + interior["interior_offset_s"])
+
+
+class ExactTilingTests(unittest.TestCase):
+    """Regression 6: envelope 11's interior covers exactly 480 s, or it does not."""
+
+    def envelope_eleven(self):
+        fixture = pilot_envelope(11)
+        stamps = {name: harness.ClockStamp(**value)
+                  for name, value in fixture["clock_stamps"].items()}
+        aligned, anchor = harness.align_frames(pilot_frames(fixture), stamps)
+        return fixture, aligned, anchor
+
+    def test_envelope_eleven_interior_covers_exactly_four_hundred_eighty_seconds(self):
+        fixture, aligned, anchor = self.envelope_eleven()
+        self.assertEqual(anchor["status"], "bounded", anchor.get("detail"))
+        interior = harness.reduce_interior(
+            aligned, anchor, pilot_interior_epoch(fixture),
+            fixture["interior"]["interior_s"])
+        # The night recorded span_mismatch True and error_bound_j None for this
+        # envelope; under exact tiling the coverage is the integer 480 s and the
+        # conservative energy bound exists.
+        self.assertFalse(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], 480_000_000_000)
+        self.assertEqual(interior["rail_coverage_ns"]["rail_sum_w"], 480_000_000_000)
+        self.assertIsNotNone(interior["error_bound_j"])
+        self.assertTrue(interior["complete_support"])
+        self.assertEqual(interior["status"], "complete")
+
+    def test_one_nanosecond_of_missing_support_is_a_gap_not_a_rounding_error(self):
+        fixture, aligned, anchor = self.envelope_eleven()
+        epoch = pilot_interior_epoch(fixture)
+        duration = fixture["interior"]["interior_s"]
+        start_ns = round(epoch * 1e9)
+        index = next(i for i, frame in enumerate(aligned)
+                     if frame["start_ns"] > start_ns + 1_000_000_000)
+        mutated = list(aligned)
+        # One frame reports one nanosecond less support than it tiles: the
+        # exact comparator must see the hole.  A 1 microsecond float tolerance
+        # would not.
+        mutated[index] = {**mutated[index],
+                          "start_ns": mutated[index]["start_ns"] + 1,
+                          "start_s": (mutated[index]["start_ns"] + 1) / 1e9}
+        interior = harness.reduce_interior(mutated, anchor, epoch, duration)
+        self.assertTrue(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], 480_000_000_000 - 1)
+        self.assertIsNone(interior["error_bound_j"])
+        self.assertFalse(interior["complete_support"])
+
+    def test_a_rail_short_by_one_nanosecond_is_partial_though_the_span_tiles(self):
+        """Item 9 (05a S2): the PER-RAIL comparator is exact too.
+
+        The interior gate has two exact comparators: the whole-window span
+        (``coverage_ns`` against the window) and each claim-bearing rail's own
+        covered nanoseconds.  The span one has its own kill; this is the
+        rail one, and a 1 microsecond tolerance on it survived the pre-fix
+        suite because the span always failed first.
+
+        The fixture splits the frame the window opens inside into two tiles
+        that still abut exactly -- so the SPAN is untouched -- and drops
+        ``rail_sum_w`` from the one-nanosecond head.  That rail is then short
+        by exactly one nanosecond of a 480 s window.
+        """
+
+        fixture, aligned, anchor = self.envelope_eleven()
+        epoch = pilot_interior_epoch(fixture)
+        duration = fixture["interior"]["interior_s"]
+        start_ns = round(epoch * 1e9)
+        index = next(i for i, frame in enumerate(aligned)
+                     if frame["start_ns"] <= start_ns < frame["end_ns"])
+        frame = aligned[index]
+        self.assertGreater(frame["end_ns"], start_ns + 1)
+        head = {**frame, "end_ns": start_ns + 1,
+                "elapsed_ns": start_ns + 1 - frame["start_ns"],
+                "power": {**frame["power"], "rail_sum_w": None}}
+        tail = {**frame, "start_ns": start_ns + 1,
+                "elapsed_ns": frame["end_ns"] - start_ns - 1}
+        for tile in (head, tail):
+            tile["start_s"], tile["end_s"] = tile["start_ns"] / 1e9, tile["end_ns"] / 1e9
+        mutated = aligned[:index] + [head, tail] + aligned[index + 1:]
+        interior = harness.reduce_interior(mutated, anchor, epoch, duration)
+        self.assertFalse(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], 480_000_000_000)
+        self.assertEqual(interior["rail_coverage_ns"]["combined_w"], 480_000_000_000)
+        self.assertEqual(interior["rail_coverage_ns"]["rail_sum_w"], 480_000_000_000 - 1)
+        self.assertFalse(interior["complete_support"])
+        self.assertEqual(interior["status"], "partial")
+
+    def test_frames_tile_exactly_and_the_sampler_asks_for_the_v3_1_identity(self):
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1
+
+        fixture, aligned, anchor = self.envelope_eleven()
+        self.assertEqual(anchor["method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(anchor["clock_anchor_method"], CLOCK_METHOD_V3_1)
+        endpoint_ns = round(anchor["first_sample_end_point_epoch_s"] * 1e9)
+        self.assertEqual(aligned[0]["end_ns"], endpoint_ns)
+        for left, right in zip(aligned, aligned[1:]):
+            self.assertEqual(right["start_ns"], left["end_ns"])
+            self.assertEqual(right["end_ns"] - right["start_ns"], right["elapsed_ns"])
+        self.assertEqual(aligned[-1]["end_ns"] - aligned[0]["end_ns"],
+                         sum(f["elapsed_ns"] for f in aligned[1:]))
+        oracle = Mock(return_value={"status": "unknown"})
+        harness.align_frames([], {}, deriver=oracle)
+        self.assertEqual(oracle.call_args.kwargs["method"], CLOCK_METHOD_V3_1)
+
+
+class EndpointRoundingTests(unittest.TestCase):
+    """Item 14 (05b N3): the one float-to-nanosecond conversion in the tiling.
+
+    14 R5 rounds the anchor's binary64 endpoint to nearest, ONCE, and every
+    later endpoint is an integer sum of the recorder's own ``elapsed_ns``.
+    Truncating instead of rounding shifts the whole tiling by up to one
+    nanosecond and survived the pre-fix suite, because at epoch scale the
+    product has no fractional part to lose.  This fixture puts the endpoint at
+    a magnitude where it does.
+    """
+
+    def test_the_endpoint_is_rounded_to_nearest_never_truncated(self):
+        frames, _ = harness.parse_frames(stream(
+            document(), document(timestamp=1003, elapsed_ns=2_000_000_000, cpu=4000)))
+        endpoint_s = 1000.0000000007
+        product = endpoint_s * 1e9
+        self.assertNotEqual(round(product), int(product))
+        deriver = Mock(return_value={"status": "bounded",
+                                     "first_sample_end_point_epoch_s": endpoint_s})
+        aligned, anchor = harness.align_frames(frames, {}, deriver=deriver)
+        self.assertEqual(aligned[0]["end_ns"], round(product))
+        self.assertEqual(aligned[0]["end_ns"] - int(product), 1)
+        # And the tiling that follows is integer sums of elapsed_ns, so the
+        # shift would have moved every later frame too.
+        self.assertEqual(aligned[1]["start_ns"], aligned[0]["end_ns"])
+        self.assertEqual(aligned[1]["end_ns"] - aligned[1]["start_ns"],
+                         aligned[1]["elapsed_ns"])
+
+
+class NetworkTimeProvenanceTests(unittest.TestCase):
+    """Regression on ruling 10 Q1 rule 3: no receipt, no envelope."""
+
+    def collect(self, value, control=None):
+        environment = {} if value is None else {harness.NETWORK_TIME_RECORD_ENV: str(value)}
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.dict(os.environ, environment, clear=False), \
+                patch.object(harness, "PowerRecorder",
+                             side_effect=AssertionError("powermetrics must not be spawned")):
+            if value is None:
+                os.environ.pop(harness.NETWORK_TIME_RECORD_ENV, None)
+            args = collect_args(tmp, power=True)
+            session, rows = harness.collect(args, clock=FakeClock(),
+                                            round_runner=fake_round,
+                                            metadata_reader=lambda: {})
+            persisted = json.loads((Path(tmp) / "session.json").read_text())
+            plists = list((Path(tmp) / "raw").rglob("*.plist"))
+            return session, rows, persisted, plists
+
+    def test_absent_unreadable_and_inexact_receipts_each_refuse_the_envelope(self):
+        cases = {}
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            lower = network_time_control(tmp, stdout="setUsingNetworkTime: off\n")
+            cases["lower case stdout"] = str(lower)
+            failed = Path(tmp) / "failed.json"
+            failed.write_text(network_time_control(tmp, exit_code=1).read_text())
+            cases["nonzero exit"] = str(failed)
+            cases["absent variable"] = None
+            cases["unreadable record"] = str(Path(tmp) / "does-not-exist.json")
+            for label, value in cases.items():
+                with self.subTest(case=label):
+                    session, rows, persisted, plists = self.collect(value)
+                    self.assertEqual(rows, [])
+                    self.assertIsNone(session["network_time_provenance"])
+                    self.assertEqual(session["error_class"], harness.NETWORK_TIME_REFUSAL)
+                    self.assertIn("network time provenance not established",
+                                  session["error"])
+                    self.assertEqual(persisted["error"], session["error"])
+                    self.assertFalse(plists)
+
+    def test_the_chain_receipt_becomes_structured_provenance_on_the_session(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            record = network_time_control(tmp)
+            with patch.dict(os.environ,
+                            {harness.NETWORK_TIME_RECORD_ENV: str(record)}), \
+                    tempfile.TemporaryDirectory(dir="/tmp") as out:
+                session, rows = harness.collect(collect_args(out), clock=FakeClock(),
+                                                round_runner=fake_round,
+                                                metadata_reader=lambda: {})
+            provenance = session["network_time_provenance"]
+            self.assertEqual(provenance["state"], "off")
+            self.assertEqual(provenance["method"],
+                             "systemsetup_setusingnetworktime_off_exact_stdout")
+            self.assertEqual(provenance["record"], "network_time_control.json")
+            self.assertEqual(provenance["record_sha256"],
+                             harness.hashlib.sha256(record.read_bytes()).hexdigest())
+            self.assertEqual(provenance["established_epoch_s"], 1000.0)
+            self.assertEqual(session["network_time_provenance_reason"],
+                             "established by the evidence chain before settle")
+            self.assertIsNone(session["error"])
+            self.assertTrue(rows)
+
+    def test_the_command_line_maps_the_refusal_to_its_own_exit_code(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            os.environ.pop(harness.NETWORK_TIME_RECORD_ENV, None)
+            code = harness.main(["collect", "--no-power", "--out", tmp, "--state", "idle",
+                                 "--repeat", "1", "--duration-s", "1",
+                                 "--sample-interval-s", "1"])
+        self.assertEqual(code, harness.NETWORK_TIME_REFUSAL_EXIT)
+        self.assertEqual(code, 3)
+
+
+class NetworkTimeComparatorTests(unittest.TestCase):
+    """Item 7 (05b S7): the collector-side comparator is BYTE equality.
+
+    The chain-side comparator has its own kill (a lower-case ``off`` refuses
+    before any envelope); this is the one that gates every envelope's
+    provenance, and a ``.strip()`` there would admit a capture whose OFF
+    receipt came from some other code path's formatting.
+    """
+
+    def bodies(self):
+        expected = harness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+        return {"a trailing space": expected[:-1] + " \n",
+                "no newline at all": expected.strip(),
+                "a leading newline": "\n" + expected,
+                "surrounding spaces": " " + expected.strip() + " "}
+
+    def test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three(self):
+        expected = harness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            for label, stdout in self.bodies().items():
+                with self.subTest(case=label):
+                    # Each variant is strip-equivalent to the ruled bytes and
+                    # unequal to them: exactly what a loosened comparator
+                    # would let through.
+                    self.assertNotEqual(stdout, expected)
+                    self.assertEqual(stdout.strip(), expected.strip())
+                    record = network_time_control(tmp, stdout=stdout)
+                    provenance, reason = harness.network_time_provenance(
+                        {harness.NETWORK_TIME_RECORD_ENV: str(record)})
+                    self.assertIsNone(provenance)
+                    self.assertIn("network time OFF not proven", reason)
+                    out = Path(tmp) / f"out-{abs(hash(label))}"
+                    with patch.dict(os.environ,
+                                    {harness.NETWORK_TIME_RECORD_ENV: str(record)}):
+                        code = harness.main(["collect", "--no-power", "--out", str(out),
+                                             "--state", "idle", "--repeat", "1",
+                                             "--duration-s", "1", "--sample-interval-s", "1"])
+                    self.assertEqual(code, harness.NETWORK_TIME_REFUSAL_EXIT)
+                    self.assertEqual(code, 3)
+                    session = json.loads((out / "session.json").read_text())
+                    self.assertEqual(session["error_class"], harness.NETWORK_TIME_REFUSAL)
+                    self.assertIsNone(session["network_time_provenance"])
+            # The ruled bytes themselves still pass, so this is a comparator
+            # regression and not a blanket refusal.
+            record = network_time_control(tmp)
+            provenance, reason = harness.network_time_provenance(
+                {harness.NETWORK_TIME_RECORD_ENV: str(record)})
+            self.assertEqual(provenance["state"], "off")
+
+
+class IntegerWindowTests(unittest.TestCase):
+    """Item 12 (05a N1, 05b N2): the window crosses into integrate as integers.
+
+    ``integrate`` used to take float seconds and re-round them, so
+    ``reduce_interior`` handed back the integers it had just computed.  That
+    round trip is the identity only when the value lies on the 256 ns float64
+    lattice at epoch scale, which the pilot's 480 s window happens to do; for
+    a 12.345 s window it loses 64 ns, and against an exact completeness gate
+    that reports a fully covered interior as partial.
+    """
+
+    START_NS = 1_790_000_000_000_000_000
+    DURATION_S = 12.345
+    DURATION_NS = 12_345_000_000
+
+    def tile(self, start_ns, end_ns, watts=10.0):
+        power = dict.fromkeys(harness.RAILS)
+        power["rail_sum_w"] = power["combined_w"] = watts
+        return {"native_timestamp_s": end_ns / 1e9, "native_timestamp_ns": end_ns,
+                "elapsed_ns": end_ns - start_ns, "elapsed_s": (end_ns - start_ns) / 1e9,
+                "is_delta": True, "energy_j": None, "power": power,
+                "clusters": [], "cpus": [], "start_ns": start_ns, "end_ns": end_ns,
+                "start_s": start_ns / 1e9, "end_s": end_ns / 1e9}
+
+    def frames(self):
+        edges = [self.START_NS - 1_000_000_000 + i * 1_000_000_000 for i in range(16)]
+        return [self.tile(a, b) for a, b in zip(edges, edges[1:])]
+
+    def test_an_interior_off_the_float_lattice_is_covered_exactly(self):
+        self.assertEqual(round(self.DURATION_S * 1e9), self.DURATION_NS)
+        end_ns = self.START_NS + self.DURATION_NS
+        # The round trip this signature retired: the window's own width moves.
+        self.assertNotEqual(round(end_ns / 1e9 * 1e9) - round(self.START_NS / 1e9 * 1e9),
+                            self.DURATION_NS)
+        anchor = {"status": "bounded", "effective_clock_anchor_bound_s": .0005}
+        interior = harness.reduce_interior(self.frames(), anchor,
+                                           self.START_NS / 1e9, self.DURATION_S)
+        self.assertFalse(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], self.DURATION_NS)
+        self.assertEqual(interior["rail_coverage_ns"]["rail_sum_w"], self.DURATION_NS)
+        self.assertEqual(interior["rail_coverage_ns"]["combined_w"], self.DURATION_NS)
+        self.assertTrue(interior["complete_support"])
+        self.assertEqual(interior["status"], "complete")
+
+    def test_integrate_refuses_anything_but_integer_nanoseconds(self):
+        frames = self.frames()
+        start_ns, end_ns = self.START_NS, self.START_NS + self.DURATION_NS
+        for label, args in (("float start", (start_ns / 1e9, end_ns, 0)),
+                            ("float end", (start_ns, float(end_ns), 0)),
+                            ("float uncertainty", (start_ns, end_ns, 1e-9))):
+            with self.subTest(case=label):
+                with self.assertRaises(TypeError):
+                    harness.integrate(frames, *args)
+        exact = harness.integrate(frames, start_ns, end_ns, 0)
+        self.assertEqual(exact["coverage_ns"], self.DURATION_NS)
+        # The adapter is the only float door, and it rounds the uncertainty
+        # OUTWARD: one picosecond still buys a whole nanosecond of expansion.
+        widened = harness.integrate_seconds(frames, start_ns / 1e9, end_ns / 1e9, 1e-12)
+        self.assertGreater(widened["error_bound_j"], 0)
+        self.assertAlmostEqual(widened["error_bound_j"],
+                               sum(10.0 * 2e-9 for frame in frames
+                                   if harness.overlap(start_ns - 1, end_ns + 1,
+                                                      frame["start_ns"], frame["end_ns"]) > 0))
