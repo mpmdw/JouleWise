@@ -646,7 +646,9 @@ def record_attestation(out, attestation):
     """Add the attestation to the envelope's own provenance, atomically.
 
     The collector has exited, so the chain owns this write; temp plus rename
-    means a reader never sees a half-written session record.  The attestation
+    means a reader never sees a half-written session record, and a write that
+    cannot land is reported in the attestation rather than raised (an
+    unwritable envelope directory used to refuse the whole night from here).  The attestation
     carries ``session_sha256_before`` -- the digest of the file this rewrite
     replaced -- so the one edit made after the collector exits is auditable
     from the record itself (A269 ruling 10 Q4 iii).  Nothing else rewrites
@@ -669,8 +671,19 @@ def record_attestation(out, attestation):
     provenance["attestation"] = attestation
     session["network_time_provenance"] = provenance
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(session, sort_keys=True, indent=2, allow_nan=False) + "\n")
-    os.replace(temporary, path)
+    try:
+        temporary.write_text(json.dumps(session, sort_keys=True, indent=2, allow_nan=False) + "\n")
+        os.replace(temporary, path)
+    except OSError as exc:
+        # One envelope's annotation must never refuse the NIGHT.  The write is
+        # an annotation on a capture that is already complete and already on
+        # disk; if it cannot land, the envelope loses its claim-bearing state
+        # and says why.  `pilot_summary` reads the executor's own envelope
+        # entry whenever the session record carries no attestation, so the
+        # `asserted` state set here is the state the summary sees.
+        attestation["state"] = "asserted"
+        attestation["reason"] = f"session rewrite failed: {type(exc).__name__}: {exc}"
+        return False
     return True
 
 

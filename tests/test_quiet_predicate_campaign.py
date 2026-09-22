@@ -1407,3 +1407,46 @@ class RestoreReceiptTests(FrozenExecutorTests):
                 self.assertEqual(self.control_text, payload)
                 self.assertEqual(self.restore_receipt["on"]["exit_code"], 0)
                 self.assertEqual(self.restore_receipt["off"]["state"], "unreadable")
+
+
+class SessionRewriteFailureTests(FrozenExecutorTests):
+    """Item 6 (05b S6): an unwritable envelope costs its own claim, not the night."""
+
+    def test_a_read_only_envelope_asserts_itself_and_keeps_its_session(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope-01"
+            out.mkdir()
+            (out / "session.json").write_text(json.dumps({"session": "fixture"}))
+            before = (out / "session.json").read_bytes()
+            attestation = {"state": "authenticated", "matched_lines": 0}
+            out.chmod(0o500)
+            try:
+                self.assertFalse(campaign.record_attestation(out, attestation))
+            finally:
+                out.chmod(0o700)
+            self.assertEqual(attestation["state"], "asserted")
+            self.assertTrue(attestation["reason"].startswith("session rewrite failed: "),
+                            attestation["reason"])
+            self.assertIn("PermissionError", attestation["reason"])
+            self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                             ["network_time_unattested"])
+            self.assertEqual((out / "session.json").read_bytes(), before)
+            self.assertFalse(list(out.glob("*.tmp")))
+
+    def test_a_night_whose_annotations_cannot_land_still_finishes(self):
+        def spy(stack, module):
+            stack.enter_context(patch.object(module.os, "replace",
+                                             side_effect=PermissionError("read-only envelope")))
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(spy=spy)
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome["outcome"], "complete")
+        self.assertEqual(refusals, 0)
+        # Every envelope keeps the collector's own session record, unannotated,
+        # and the executor's entry carries the asserted state the summary reads.
+        for session in sessions:
+            self.assertNotIn("attestation", session["network_time_provenance"])
+        self.assertEqual([row["network_time_attestation"] for row in self.envelope_journal],
+                         ["asserted"] * 12)
+        self.assertEqual([v["excluded"] for v in summary["envelopes"]],
+                         [["network_time_unattested"]] * 12)
+        self.assertEqual(summary["retained"], 0)
