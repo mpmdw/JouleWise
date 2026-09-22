@@ -5357,7 +5357,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-21). Latest report: [T38s — 2026-09-21: RETAINED-ROOT-REFUSAL-CLASS-01 round 3 under the cold gate's structural change (gate-supplied prose only); A230 retired; A264/A265 registered](docs/process_traces/2026-09-21-activation-ce7c57a9/03-round3-under-the-gate.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-21). Latest report: [T38s — 2026-09-21: RETAINED-ROOT-REFUSAL-CLASS-01 closed under two cold-gate rulings (packets 02 and 06; gate-supplied prose only); A230 retired; A264/A265/A266 registered](docs/process_traces/2026-09-21-activation-ce7c57a9/05-round3-seats-gate2-and-close.md).
 
 ### [ED-EXTERNAL]
 

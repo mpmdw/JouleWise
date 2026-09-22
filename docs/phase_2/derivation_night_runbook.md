@@ -738,10 +738,16 @@ python3 -B -c 'import json; from joulewise import evidence_night as e; print(jso
 It prints one row per `/Users/edr/night-custody/*/night_plan.json` with
 `classification`, `reason` and the full paths of every marker found, then
 `verdict`. Every row must read `retained`; an `ACTIVE` or `UNKNOWN` row, a
-`Refused:` exit (for example a symlink anywhere under a root), or any installed
-night plist stops the arm. Do not move or edit a root to change its row. This
-is the same function `check` runs (contract item 4), evaluated at the current
-time with the entry checkout's timing constants, so it sees the span rule.
+`Refused:` exit, or any installed night plist stops the arm. The classifier
+raises `Refused` when a path it inspects, or any directory above that path, is
+a symbolic link: the root's `night_plan.json`, its `night/` directory,
+`night/courier.sent`, `night/result.json`, `night/chain.exited`,
+`night/chain.started`, or any file in `night/` matched by the refusal names in
+contract item 4. A symbolic link elsewhere under a root, such as `night/notes`
+or `<root>/scratch`, is not inspected and does not refuse. Do not move or edit
+a root to change its row. This is the same function `check` runs (contract item
+4), evaluated at the current time with the entry checkout's timing constants,
+so it sees the span rule.
 
 Source: cold-gate ruling 2026-09-21 (packet 05 Q2, lane A230); the shell loop
 that ruling illustrated was replaced by the direct call on the cold gate's

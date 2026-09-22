@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38s — 2026-09-21: RETAINED-ROOT-REFUSAL-CLASS-01 round 3 under the cold gate's structural change (gate-supplied prose only); A230 retired; A264/A265 registered",
-    "path": "docs/process_traces/2026-09-21-activation-ce7c57a9/03-round3-under-the-gate.md"
+    "label": "T38s — 2026-09-21: RETAINED-ROOT-REFUSAL-CLASS-01 closed under two cold-gate rulings (packets 02 and 06; gate-supplied prose only); A230 retired; A264/A265/A266 registered",
+    "path": "docs/process_traces/2026-09-21-activation-ce7c57a9/05-round3-seats-gate2-and-close.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -79,6 +79,36 @@
       "rank": 75,
       "status": "blocked",
       "status_note": "DEPENDENCY RETARGETED 2026-09-03 to V5-TRANSACTION-01, on the magistrate's ruling. This row's hard-start dependency named V4-TRANSACTION-01, which the same batch retired by supersession: D-164 rules that the _v4 family is never collected, and D-167 installs V5-TRANSACTION-01 as the live successor. Left as it was, this row would have been blocked forever on a shelved predecessor and its packet would have been authored against a family that will never be measured. The sequencing intent is unchanged and is what carries over - the arm packet is authored only AFTER the reviewed head and its executed end-to-end T-0 pass exist - but it is now the _v5 head, not the _v4 one. The B-7 ordering from the sitting B-21 authority still binds. Prior note follows. Sequenced inside the _v4 program: after V4-TRANSACTION-01's evidence/attestation stages define the reviewed head.",
+      "stop_card": null
+    },
+    "ARM-VOCABULARY-GLOSSARY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-21-activation-ce7c57a9/06-coldgate-packet-retained-root-round3-return/10-coldgate-fable-ruling.md (§Q3, deferred items)",
+          "docs/process_traces/2026-09-21-activation-ce7c57a9/04-pedagogy-lens-round3.md (§1 first-use table)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ARM-VOCABULARY-GLOSSARY-01/acceptance",
+          "label": "ARM-VOCABULARY-GLOSSARY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The runbook's Terms table is the one glossary home for the arm vocabulary; the first use of \"arm\", \"retained\" and \"chain is open\" in docs/contracts/evidence_night_entry.md item 4, docs/phase_2/derivation_night_runbook.md §0.7, docs/process/NIGHT_HANDBACK.md and the TERMINAL_NIGHT_RECORDS comment in joulewise/evidence_night.py points at that table or at contract item 4 by section; no document glosses a project-wide word locally; a pedagogy-lens pass (first-use test) over those passages returns no FAILS."
+      },
+      "authority": {
+        "label": "2026-09-21 activation ce7c57a9, cold-gate packet 06 ruling Q3 (deferred follow-up lane)",
+        "path": "docs/process_traces/2026-09-21-activation-ce7c57a9/06-coldgate-packet-retained-root-round3-return/10-coldgate-fable-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Give the arm vocabulary one glossary home, the runbook's Terms table, and make the first use of \"arm\", \"retained\" and \"chain is open\" in the contract, runbook §0.7, handbook and the `TERMINAL_NIGHT_RECORDS` comment point at that table or at contract item 4 by section, so no document glosses project-wide words locally.",
+      "id": "ARM-VOCABULARY-GLOSSARY-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 266,
+      "status": "queued",
+      "status_note": "2026-09-21: registered by the magistrate from the packet 06 ruling (Q3: \"arm\"/\"arming\", \"retained\" in the runbook and code comment, \"chain is open\" deferred here; the other six first-use failures were glossed in the same candidate with gate-supplied text). Registration, not a ruling.",
       "stop_card": null
     },
     "AUD-FOLLOWUPS": {

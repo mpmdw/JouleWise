@@ -231,14 +231,28 @@ with the clone's code. It then writes verdicts and evidence for:
    driver's allocator writes `N` with a minimum of two digits (`{index:02d}` at
    `scripts/run_night.py:273`: `refusal-01.json` … `refusal-99.json`, then
    `refusal-100.json`), and a name with fewer digits, such as `refusal-7.json`,
-   also counts. A retained root whose plan span is still active by the
-   watchdog's rule (`scripts/magistrate_watchdog.plan_span_active`, evaluated
-   on that root's own `night_plan.json` at observation time with the entry
-   checkout's timing constants, which may differ from the head that authored an
-   older sibling plan) is ACTIVE and refuses; a root whose plan does not parse,
-   or whose `custody_root` is not its own directory, is UNKNOWN and refuses.
-   Each row records its reason. Discovery never removes a root, and has no
-   fixed root count. Classifying a root `retained` certifies only that a
+   also counts. The plan span is the interval in which the watchdog treats a
+   plan as live, computed from that plan's own `t0_epoch_s` and `window_max_s`
+   with the constants `PLAN_LEAD_S` (480 s), `COURIER_DEADLINE_S` (300 s),
+   `COURIER_LOCK_FRESH_S` (900 s) and `DEADMAN_GRACE_S` (3600 s): it has not
+   begun before `t0 − PLAN_LEAD_S`; once begun it is active while
+   `night/chain.started` exists without `night/chain.exited`, and otherwise
+   until `t0 + window_max_s + COURIER_DEADLINE_S` has passed; after that it is
+   over if `night/courier.sent` exists, else it stays active until the dead-man
+   bound (`t0 + window_max_s + COURIER_DEADLINE_S + DEADMAN_GRACE_S`, rounded
+   up to the minute) plus `COURIER_LOCK_FRESH_S`. A retained root whose plan
+   span is still active by the watchdog's rule
+   (`scripts/magistrate_watchdog.plan_span_active`, evaluated on that root's
+   own `night_plan.json` at observation time with the timing constants of the
+   entry checkout, the git checkout whose `joulewise/evidence_night.py` is
+   executing rather than the measurement clone the plan names, which may differ
+   from the head that authored an older sibling plan, another
+   `<roots_under>/night-custody/*/night_plan.json` beside the candidate's
+   written by an earlier checkout) is ACTIVE and refuses; a root whose plan
+   does not parse, or whose `custody_root` field (the plan's own record of the
+   directory it must live in) does not name its own directory, is UNKNOWN and
+   refuses. Each row records its reason. Discovery never removes a root, and
+   has no fixed root count. Classifying a root `retained` certifies only that a
    terminal record exists and that the watchdog's span rule
    (`scripts/magistrate_watchdog.plan_span_active`) reported the plan's span
    inactive at observation time, which is also the answer for a plan whose span
