@@ -34,3 +34,22 @@ No override is issued.
 
 ### §2.4 Replay at `fc28d782`
 `env PYTHONDONTWRITEBYTECODE=1 TMPDIR=/tmp python3 -B -m unittest tests.test_evidence_night` → `Ran 94 tests in 169.226s` / `OK` / rc 0 (22:22 PDT).
+
+## §3 Refuters on `fc28d782` (two distinct lenses, both read-only in their own worktrees; two seats cannot share one worktree — the first Sol launch refused with rc 75 "another scoped runner holds the worktree lock")
+
+| Lens / seat | Result | Findings |
+|---|---|---|
+| Contract — Astra (gpt-6-astra, high), `/tmp/magistrate-29ea94df/seats/refuter-contract-astra.md` | no blocker | F1 should-fix: runbook §0.7 heading and opening sentence still forbid any discoverable root; F2 should-fix: the runbook's "whose span is active" is not implemented by the check (inherited from the ruling; = Opus R4, lane A263); F3 should-fix: the ruled zsh loop's `(N)` matches directories (contradicts the ruling's own regular-file rule); F4 should-fix: ruled case 1 (refusal-only) not asserted in isolation through `check()`, evidence compared by basename — two in-memory mutants survived; F5 nit: attribution appended inside the ruled passages (contract text itself verbatim); F6 nit: "exactly one family" comment wrong. Verified: classification matches the ruled rule; no scope creep. |
+| Execution — Sol (gpt-5.6-sol, xhigh), `/tmp/magistrate-29ea94df/seats/refuter-execution-sol.md` | no blocker | F1 should-fix: the manual loop prints `retained` for a directory marker, a symlinked marker and a directory plan (executed); fourteen fixtures classified as ruled; six mutations (precedence swap, drop chain.exited, literal refusal.json, `exists()` for `is_file()`, ACTIVE on chain.started alone, two-entry set) all KILLED by `test_retained_root_classification_ruled_cases`; module 94 OK (272.5 s); residual = A263 reproduced at t0 + 600. |
+
+Dispositions (lead): every should-fix applied in fix round 1; A263 implemented rather than deferred, because both refuters reproduced it and the ruled runbook text asserts the span half — a stricter fence added on top of the ruled rule, never a relaxation, recorded here as a labeled addition (not an override: the ruling's classification stands and is tested first). The `(N.)` qualifier and the plan-file guard are the one correction to the ruled loop text; the runbook names it as such.
+
+## §4 Fix round 1 → `518a65a8` (bench, this session)
+
+- `retained_roots(state, now_epoch_s=None)`: after the record classification, a `retained` root's own `night_plan.json` is parsed with `NightPlan.from_mapping`; `custody_root` must be the root's own directory (realpath) else UNKNOWN; `scripts/magistrate_watchdog.plan_span_active(plan, now, Storage(root))` true → ACTIVE ("plan span active"); `PlanError`/`ValueError`/`TypeError`/`OverflowError`/`OSError` → UNKNOWN ("plan unreadable: …"). Every row carries `reason`; the record carries `now_epoch_s`.
+- Runbook §0.7: heading "Nothing else is armed, and every discoverable root is retained"; opening sentence names ACTIVE/UNKNOWN; loop gains `[[ ! -f $p || -L $p ]] → REFUSED` and `(N.)` on every marker glob; attribution and the correction note moved below the ruled passage.
+- Handbook: ruled step verbatim in its own paragraph, preceded by a one-paragraph source note.
+- Contract item 4: span sentence appended after the ruled sentences (ruled text untouched).
+- TASK_QUEUE: A263 DONE (both tables); A264 stays READY.
+- Tests: `sibling_plan`/`sibling_root` helpers give every fixture root a parseable v2 plan ten days old; evidence asserted by full path everywhere; ruled case 1 in isolation through `check()` with the complete row; `test_discovery_span_fence_reuses_the_watchdog_rule` (inside t0 + window + courier deadline → ACTIVE with and without courier.sent; after it, courier.sent closes the span; without it the span runs to dead-man + lock freshness; foreign custody_root → UNKNOWN; `{}` plan → UNKNOWN "plan unreadable: PlanError").
+- Fast run at `518a65a8`: `-k retained -k discovery -k span` → 6 tests OK (14.4 s). Full module and full sharded suite: §5.
