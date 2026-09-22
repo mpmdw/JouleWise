@@ -1402,3 +1402,53 @@ class NetworkTimeProvenanceTests(unittest.TestCase):
                                  "--sample-interval-s", "1"])
         self.assertEqual(code, harness.NETWORK_TIME_REFUSAL_EXIT)
         self.assertEqual(code, 3)
+
+
+class NetworkTimeComparatorTests(unittest.TestCase):
+    """Item 7 (05b S7): the collector-side comparator is BYTE equality.
+
+    The chain-side comparator has its own kill (a lower-case ``off`` refuses
+    before any envelope); this is the one that gates every envelope's
+    provenance, and a ``.strip()`` there would admit a capture whose OFF
+    receipt came from some other code path's formatting.
+    """
+
+    def bodies(self):
+        expected = harness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+        return {"a trailing space": expected[:-1] + " \n",
+                "no newline at all": expected.strip(),
+                "a leading newline": "\n" + expected,
+                "surrounding spaces": " " + expected.strip() + " "}
+
+    def test_whitespace_variants_of_the_off_stdout_refuse_with_exit_three(self):
+        expected = harness.EXPECTED_NETWORK_TIME_OFF_STDOUT
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            for label, stdout in self.bodies().items():
+                with self.subTest(case=label):
+                    # Each variant is strip-equivalent to the ruled bytes and
+                    # unequal to them: exactly what a loosened comparator
+                    # would let through.
+                    self.assertNotEqual(stdout, expected)
+                    self.assertEqual(stdout.strip(), expected.strip())
+                    record = network_time_control(tmp, stdout=stdout)
+                    provenance, reason = harness.network_time_provenance(
+                        {harness.NETWORK_TIME_RECORD_ENV: str(record)})
+                    self.assertIsNone(provenance)
+                    self.assertIn("network time OFF not proven", reason)
+                    out = Path(tmp) / f"out-{abs(hash(label))}"
+                    with patch.dict(os.environ,
+                                    {harness.NETWORK_TIME_RECORD_ENV: str(record)}):
+                        code = harness.main(["collect", "--no-power", "--out", str(out),
+                                             "--state", "idle", "--repeat", "1",
+                                             "--duration-s", "1", "--sample-interval-s", "1"])
+                    self.assertEqual(code, harness.NETWORK_TIME_REFUSAL_EXIT)
+                    self.assertEqual(code, 3)
+                    session = json.loads((out / "session.json").read_text())
+                    self.assertEqual(session["error_class"], harness.NETWORK_TIME_REFUSAL)
+                    self.assertIsNone(session["network_time_provenance"])
+            # The ruled bytes themselves still pass, so this is a comparator
+            # regression and not a blanket refusal.
+            record = network_time_control(tmp)
+            provenance, reason = harness.network_time_provenance(
+                {harness.NETWORK_TIME_RECORD_ENV: str(record)})
+            self.assertEqual(provenance["state"], "off")
