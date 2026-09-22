@@ -148,10 +148,19 @@ def require_no_night_agent():
 
 
 def machine_state():
+    """Load at the moment of asking, so a FAIL under load can be told apart.
+
+    macOS `pgrep` has no `-c`, so the count is the line count of the match
+    list; exit 1 means no match, which is a count of zero, and any other
+    non-zero exit is an unanswered census and is recorded as null rather than
+    as zero -- a failed census is not a claim of an empty machine.
+    """
+
     _, uptime = run_text(["/usr/bin/uptime"])
-    code, census = run_text(["/usr/bin/pgrep", "-c", "claude"])
+    code, census = run_text(["/usr/bin/pgrep", "claude"])
+    lines = [line for line in census.splitlines() if line.strip()]
     return {"epoch_s": time.time(), "uptime": uptime.strip(),
-            "pgrep_c_claude": int(census.strip()) if code == 0 and census.strip().isdigit() else 0,
+            "pgrep_claude": len(lines) if code == 0 else (0 if code == 1 else None),
             "platform": platform.platform()}
 
 
@@ -357,9 +366,9 @@ def markdown(report):
               "the drift figures above come from.", "",
               "## Machine state", "",
               f"- at start: uptime `{report['machine_start']['uptime']}`, "
-              f"`pgrep -c claude` = {report['machine_start']['pgrep_c_claude']}",
+              f"`pgrep claude` = {report['machine_start']['pgrep_claude']}",
               f"- at end: uptime `{report['machine_end']['uptime']}`, "
-              f"`pgrep -c claude` = {report['machine_end']['pgrep_c_claude']}", "",
+              f"`pgrep claude` = {report['machine_end']['pgrep_claude']}", "",
               "Extra daytime load LENGTHENS the inter-slot tail, so a pass taken under load is a "
               "fortiori evidence for a quiet night; a FAIL under load is inconclusive and is "
               "retried on a census-clean machine.", ""]
