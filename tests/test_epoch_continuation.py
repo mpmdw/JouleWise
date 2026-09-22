@@ -64,6 +64,19 @@ class EpochContinuationTests(unittest.TestCase):
             "--d102-addendum-date", "2026-09-10", "--out", str(self.out), *extra,
         ]
 
+    # The s9 continuation witnesses under tests/fixtures/epoch_continuation/ are
+    # FROZEN records issued under the r6 generation: their
+    # `reference_envelope.acceptance_id` names r6, and the issuer's generation
+    # cross-check refuses any other acceptance before it compares a single
+    # science field.  The s9 tests therefore hand the issuer the witnesses' own
+    # generation (a later `--acceptance` overrides the default one above).  The
+    # ACTIVE generation is r7 (D-138 re-issue, 2026-09-22); replaying a witness
+    # against it refuses by name -- pinned by
+    # test_s9_witness_against_the_active_generation_refuses_by_name.
+    S9_WITNESS_ACCEPTANCE = (
+        "--acceptance", str(bracket.ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH),
+    )
+
     def run_cli(self, args):
         stdout, stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
@@ -956,7 +969,7 @@ class EpochContinuationTests(unittest.TestCase):
                 elif field == "holds":
                     value["level_screen_comparison"][field] = False
                 path.write_text(json.dumps(value))
-                rc, _, error = self.prepare("--equivalence-record", str(path), "--force")
+                rc, _, error = self.prepare(*self.S9_WITNESS_ACCEPTANCE, "--equivalence-record", str(path), "--force")
                 self.assertEqual(rc, 0 if field is None else 3)
                 if field is not None:
                     self.assertIn(field, error)
@@ -970,12 +983,12 @@ class EpochContinuationTests(unittest.TestCase):
         witness = Path(__file__).parent / "fixtures/epoch_continuation/s9-fail-level.json"
         # A FAIL night derives its record (the envelope gate applies only to a
         # PASS over the retained values), so the S9 FAIL projection is live.
-        record, artifact, session = issuer.derive_record(issuer.build_parser().parse_args(self.args()))
+        record, artifact, session = issuer.derive_record(issuer.build_parser().parse_args(self.args(*self.S9_WITNESS_ACCEPTANCE)))
         projection = issuer._s9_projection(record, artifact, session)
         expected = json.loads(witness.read_bytes())
         for key in ("level_screen_comparison", "bracket_screen_comparison"):
             self.assertEqual(projection[key], expected[key])
-        rc, out, error = self.prepare("--equivalence-record", str(witness))
+        rc, out, error = self.prepare(*self.S9_WITNESS_ACCEPTANCE, "--equivalence-record", str(witness))
         self.assertEqual((rc, error), (4, ""))
         self.assertEqual(json.loads(out)["verdict"], "fail")
         self.assertFalse(self.out.exists())
@@ -989,12 +1002,12 @@ class EpochContinuationTests(unittest.TestCase):
         witness = Path(__file__).parent / "fixtures/epoch_continuation/s9-fail-bracket.json"
         # A FAIL night derives its record (the envelope gate applies only to a
         # PASS over the retained values), so the S9 FAIL projection is live.
-        record, artifact, session = issuer.derive_record(issuer.build_parser().parse_args(self.args()))
+        record, artifact, session = issuer.derive_record(issuer.build_parser().parse_args(self.args(*self.S9_WITNESS_ACCEPTANCE)))
         projection = issuer._s9_projection(record, artifact, session)
         expected = json.loads(witness.read_bytes())
         for key in ("level_screen_comparison", "bracket_screen_comparison"):
             self.assertEqual(projection[key], expected[key])
-        rc, out, error = self.prepare("--equivalence-record", str(witness))
+        rc, out, error = self.prepare(*self.S9_WITNESS_ACCEPTANCE, "--equivalence-record", str(witness))
         self.assertEqual((rc, error), (4, ""))
         self.assertEqual(json.loads(out)["verdict"], "fail")
         self.assertFalse(self.out.exists())
@@ -1014,11 +1027,24 @@ class EpochContinuationTests(unittest.TestCase):
         ):
             with self.subTest(key=key):
                 path.write_text(json.dumps({**witness, key: value}))
-                rc, _, error = self.prepare("--equivalence-record", str(path))
+                rc, _, error = self.prepare(*self.S9_WITNESS_ACCEPTANCE, "--equivalence-record", str(path))
                 self.assertEqual(rc, 3)
                 self.assertIn(detail, error)
                 self.assertFalse(self.out.exists())
 
+    def test_s9_witness_against_the_active_generation_refuses_by_name(self):
+        # The witnesses name r6; the ACTIVE generation is r7.  Handing the
+        # issuer the active default must refuse on the generation identity,
+        # before any science field is compared (the cross-check that made the
+        # r6 override above necessary is itself the behaviour under test).
+        self.build()
+        fixture = Path(__file__).parent / "fixtures/epoch_continuation/s9-pass.json"
+        rc, _, error = self.run_cli(
+            self.args("--equivalence-record", str(fixture), "--force")
+        )
+        self.assertEqual(rc, 3)
+        self.assertIn("equivalence_record.reference_envelope.acceptance_id", error)
+        self.assertNotIn("b_fiducial_s", error)
     def test_malformed_self_pinned_json_refuses(self):
         with self.issued() as (value, path):
             raw = path.read_bytes()
