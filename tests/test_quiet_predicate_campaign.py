@@ -348,7 +348,7 @@ class FrozenExecutorTests(unittest.TestCase):
                  off_stdout=None, on_exit=0, timed_log=None, commands=None,
                  interrupt_settle=False, protocol=None, burn=0, burn_at=None,
                  settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None,
-                 attest_burn=0, tolerate_raise=False):
+                 attest_burn=0, tolerate_raise=False, final_cleanup_unproven=False):
         """Drive the real ``execute`` against a stub collector on a fake clock.
 
         ``burn`` is the seconds the stub collector spends AFTER its capture
@@ -367,6 +367,11 @@ class FrozenExecutorTests(unittest.TestCase):
         cost of the query on the inter-slot path is measurable without any
         real waiting.  ``self.attestation_kwargs`` keeps what ``execute``
         passed each query, so the bound itself can be pinned.
+
+        ``final_cleanup_unproven`` fails the NIGHT-level teardown -- the one
+        `cleanup_record` runs in the `finally`, after the last envelope --
+        rather than a slot's.  It is the axis the truth table had no row
+        for: residue that only the final sweep can see.
         """
         from contextlib import ExitStack
         from dataclasses import replace
@@ -439,6 +444,10 @@ class FrozenExecutorTests(unittest.TestCase):
                 self.slot_cleanup_budgets.append(result['budget_s'])
                 if cleanup_count in cleanup_failures:
                     result['cleanup_proven'] = False
+            elif final_cleanup_unproven:
+                # No `exclude` means this is `cleanup_record`'s own sweep.
+                result['cleanup_proven'] = False
+                result['residue'] = [9999999]
             return result
         def terminate(pgid, sig): processes[pgid].returncode = -sig
         # Only the OS boundary is faked: set_network_time, the exact-stdout
@@ -513,7 +522,7 @@ class FrozenExecutorTests(unittest.TestCase):
                 self.control_text=(Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text()
                 return None, None, None, 0, calls, json.loads(self.control_text), []
             cleanup=json.loads((Path(tmp)/'evidence_cleanup.json').read_text())
-            self.assertTrue(cleanup['cleanup_proven'])
+            self.assertEqual(cleanup['cleanup_proven'], not final_cleanup_unproven)
             journal=Path(tmp)/'evidence_envelopes.jsonl'
             self.envelope_journal=[json.loads(line) for line in
                                    journal.read_text().splitlines() if line] if journal.exists() else []
@@ -1535,14 +1544,33 @@ class ExitCodePrecedenceTests(FrozenExecutorTests):
          {"cleanup_failures": {3, 4}}, "refused", True, 1, 2),
         ("refused (two cleanup_unproven), restore failed",
          {"cleanup_failures": {3, 4}, "on_exit": 1}, "refused", False, 1, 2),
+        # `cleanup_proven` as a real axis: twelve complete envelopes, every
+        # slot's teardown proven, and residue that only the night's FINAL
+        # sweep sees.  Before this row every row in the table asserted
+        # `cleanup_proven` True, so the axis was a constant.
+        ("complete envelopes, final cleanup unproven",
+         {"final_cleanup_unproven": True}, "refused", True, 1, 2, False),
+        ("complete envelopes, final cleanup unproven, restore failed",
+         {"final_cleanup_unproven": True, "on_exit": 1}, "refused", False, 1, 2, False),
     )
 
-    def test_the_eight_row_truth_table_over_outcome_cleanup_and_restore(self):
-        for label, kwargs, expected_outcome, restored, refusal_count, code in self.ROWS:
+    def test_the_truth_table_over_outcome_cleanup_and_restore(self):
+        """R5.3: `cleanup_proven` is an axis of this table, not a constant.
+
+        The last two rows are the ones the table lacked.  Note what the
+        document says on them: the envelopes all completed, but a night whose
+        final teardown cannot be proven is REFUSED by `execute` before the
+        outcome is written, so `outcome` reads `refused` and never
+        `complete`.  The cold gate's phrasing ("a row with outcome ==
+        complete and final cleanup_proven False") describes the envelopes'
+        outcome, which `execute` computes and then overrides; the return code
+        it asks for -- 2 -- is what these rows pin.
+        """
+        for label, kwargs, expected_outcome, restored, refusal_count, code, *proven in self.ROWS:
             with self.subTest(case=label):
                 rc, summary, outcome, refusals, calls, control, sessions = self.exercise(**kwargs)
                 self.assertEqual(outcome["outcome"], expected_outcome)
-                self.assertTrue(outcome["cleanup_proven"])
+                self.assertIs(outcome["cleanup_proven"], proven[0] if proven else True)
                 # The restore's verdict is on the outcome document on EVERY
                 # path, so collapsing its code into the refusal hides nothing.
                 self.assertIn("network_time_restored", outcome)
