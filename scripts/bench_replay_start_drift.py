@@ -308,18 +308,35 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
     session_over = sorted(r["index"] for r in rows
                           if r["session_start_drift_s"] is not None and r["session_start_drift_s"] > session_bar_s)
     complete = len(rows) == expected and not missing
-    status = "PASS" if complete and not over else "FAIL"
-    escalate = status == "PASS" and bool(session_over)
+    if not complete or over:
+        status = "FAIL"
+    elif session_over:
+        # A THIRD status, neither PASS nor FAIL (execution lens 17b B1).  The
+        # split was recorded as a separate boolean beside `status: "PASS"`,
+        # the headline printed PASS and the process exited 0 -- and the
+        # lens's own live smoke produced exactly that: chain max 0.479 s
+        # under the bar, session max 0.734 s over it, exit 0.  The full run
+        # is launched detached and unattended, so a reader of the exit code
+        # and the headline would have proceeded to arm on a split.
+        status = "ESCALATE"
+    else:
+        status = "PASS"
+    escalate = status == "ESCALATE"
     return {"bar_s": bar_s, "session_bar_s": session_bar_s, "slots_expected": expected,
             "slots_recorded": len(rows), "slots_missing_chain_drift": missing,
             "max_chain_start_drift_s": max(chain) if chain else None,
             "max_session_start_drift_s": max(session) if session else None,
             "slots_over_bar": over, "session_slots_over_bar": session_over,
             "status": status, "escalate_chain_pass_session_fail": escalate,
-            "statement": (f"max(chain start_drift_s) = {max(chain):.3f} s <= {bar_s} s over "
-                          f"{len(rows)}/{expected} slots" if status == "PASS" and chain else
-                          f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
-                          f"recorded={len(rows)}/{expected}")}
+            "statement": (
+                f"max(chain start_drift_s) = {max(chain):.3f} s <= {bar_s} s over "
+                f"{len(rows)}/{expected} slots" if status == "PASS" and chain else
+                f"the chain-level bar is met ({max(chain):.3f} s <= {bar_s} s) but the "
+                f"session-level figure is not (max {max(session):.3f} s > {session_bar_s} s "
+                f"on slots {session_over}): a split verdict is ESCALATED to the magistrate, "
+                "never passed" if status == "ESCALATE" else
+                f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
+                f"recorded={len(rows)}/{expected}")}
 
 
 def markdown(report):
@@ -341,6 +358,10 @@ def markdown(report):
                   f"{report['transaction_merge_is_ancestor']}.", ""]
     lines += ["## Verdict", "",
               f"**{v['status']}** — {v['statement']}.",
+              *(["", "`ESCALATE` is neither a pass nor a fail: the chain-level bar is met and "
+                 "the session-level figure is not, which A269 ruling 10 A1 sends to the "
+                 "magistrate. The process exits 3.", ""]
+                if v['status'] == "ESCALATE" else []),
               f"max(session `start_drift_s`) = {v['max_session_start_drift_s']} s "
               f"(bar {v['session_bar_s']} s; over: {v['session_slots_over_bar'] or 'none'}).",
               f"Chain-pass/session-fail split requiring escalation: "
@@ -518,7 +539,9 @@ def main(argv=None):
     print(json.dumps(report["verdict"], sort_keys=True, indent=2))
     print(f"raw={raw}")
     print(f"artifact={artifact}")
-    return 0 if report["verdict"]["status"] == "PASS" else 1
+    # Three statuses, three codes: 0 a pass, 1 a fail, 3 a split that only the
+    # magistrate can resolve.  2 is already taken by `BENCH_REPLAY_REFUSED`.
+    return {"PASS": 0, "ESCALATE": 3}.get(report["verdict"]["status"], 1)
 
 
 if __name__ == "__main__":

@@ -2049,6 +2049,17 @@ class BenchReplayFailClosedTests(unittest.TestCase):
 
     ROOT = Path(__file__).resolve().parents[1]
     STUB = ROOT / "scripts/bench_replay_systemsetup_stub.py"
+    # A slot whose finalisation tail really ran: the fields `verdict` admits
+    # a slot on (execution lens 17b B2/S3).  Drift figures are per-test.
+    SLOT = {"collector_exit": 0, "cleanup_proven": True, "anchor_status": "bounded",
+            "interior_complete_support": True, "attestation_state": "authenticated",
+            # The rest is what `markdown()` prints; none of it is admissible
+            # input, and every value here is inert.
+            "scheduled_mono_s": 0.0, "actual_mono_s": 0.0, "cleanup_wall_s": 0.02,
+            "network_time_attestation_wall_s": 0.8, "tail_s": 1.0,
+            "recorder_kind": "replay", "label_shift": "auto", "label_shift_s": 36497,
+            "frames_written": 253, "source_plist_sha256": "0" * 64,
+            "written_stream_sha256": "0" * 64}
 
     def test_R5_a_replay_recorder_refuses_the_whole_night_at_the_summary(self):
         from unittest.mock import patch
@@ -2393,16 +2404,62 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertEqual(bench.verdict(over, protocol, bar_s=2)["status"], "PASS")
         self.assertEqual(bench.START_DRIFT_BAR_S, 0.5)
 
-    def test_R7_a_chain_pass_with_a_session_figure_over_the_bar_escalates(self):
-        # A269 ruling 10 A1: the session-level figure runs ~0.12-0.16 s above
-        # the chain-level one, and a split verdict is escalated, never passed.
+    def test_X1_a_chain_pass_with_a_session_figure_over_the_bar_escalates(self):
+        """Execution lens 17b B1: a split is a THIRD status, and exits 3.
+
+        A269 ruling 10 A1: the session-level figure runs ~0.12-0.16 s above
+        the chain-level one, and a split verdict is escalated, never passed.
+        It used to be a boolean beside `status: "PASS"`: the headline printed
+        `**PASS**` and `main()` returned 0.  The lens's own live smoke hit
+        it -- chain max 0.479 s under the bar, session max 0.734 s over it,
+        exit 0 -- on a run that is launched detached and unattended, where
+        the exit code and the headline are what a magistrate reads.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import patch
         from scripts import bench_replay_start_drift as bench
-        rows = [{"index": i, "chain_start_drift_s": 0.45, "session_start_drift_s": 0.61}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.4,
+                     session_start_drift_s=0.7 if i in (1, 3) else 0.3)
                 for i in range(1, 13)]
         result = bench.verdict(rows, {"envelopes": 12})
-        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "ESCALATE")
         self.assertTrue(result["escalate_chain_pass_session_fail"])
-        self.assertEqual(result["session_slots_over_bar"], list(range(1, 13)))
+        self.assertEqual(result["session_slots_over_bar"], [1, 3])
+        self.assertEqual(result["max_chain_start_drift_s"], 0.4)
+        self.assertEqual(result["max_session_start_drift_s"], 0.7)
+        self.assertIn("ESCALATED to the magistrate", result["statement"])
+        # The headline a reader sees.
+        report = {"schema": bench.SCHEMA, "kind": "full", "head": "a" * 40,
+                  "clean_tree": True, "slots": rows, "verdict": result,
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("**ESCALATE**", text)
+        self.assertNotIn("**PASS**", text)
+        # And the exit code the unattended run leaves behind.
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.object(bench, "execute_bench", return_value=report), \
+                patch.object(bench, "write_outputs",
+                             return_value=(Path(tmp) / "raw.json", Path(tmp) / "a.md")):
+            self.assertEqual(bench.main(["--archive", tmp]), 3)
+            # The counterfactual, executed: the same run with both figures
+            # under the bar exits 0, and one chain figure over it exits 1.
+            report["verdict"] = bench.verdict(
+                [dict(row, session_start_drift_s=0.3) for row in rows], {"envelopes": 12})
+            self.assertEqual(report["verdict"]["status"], "PASS")
+            self.assertEqual(bench.main(["--archive", tmp]), 0)
+            report["verdict"] = bench.verdict(
+                [dict(row, chain_start_drift_s=0.9, session_start_drift_s=0.3)
+                 for row in rows], {"envelopes": 12})
+            self.assertEqual(report["verdict"]["status"], "FAIL")
+            self.assertEqual(bench.main(["--archive", tmp]), 1)
 
     def test_R7_a_journal_short_of_the_registered_slot_count_never_passes(self):
         from scripts import bench_replay_start_drift as bench
