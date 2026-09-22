@@ -30,3 +30,14 @@ D8. **Artifact** `docs/process_traces/<activation>/<nn>-bench-replay-start-drift
 
 ## Exit contract
 Three brief modules + `tests.test_run_night` green; quick tier green; corpus replay 38/38 at the PR head (reduction untouched; cheap proof); the smoke executed for real by the execution lens with anchor status on all three slots reported. Report under 1500 words. Effort: Opus (no Codex under the sparing rule).
+
+## Dated addendum (12:20 PDT): items CARRIED from the A267 round-2 delta lenses (records 13a/13b) into this lane's PR
+
+The transaction head `0f8a395d` is sealed by the ruled proof set and is not re-opened for these; they ride this PR under its own gate, and C1 needs a bounded rebuttal-round ruling because it amends cold gate #3's ruled cure text (charter §5 bounded post-seal round):
+- C1 (13b SHOULD-FIX 2; 13a NIT 2) — `record_attestation`'s `except OSError`: set `state = "asserted"` and the reason FIRST, then `temporary.unlink(missing_ok=True)` inside its own `try/except OSError: pass`; regression: `os.replace` raising AND `Path.unlink` raising `PermissionError` → state `asserted`, nothing escapes, the night continues (counterfactual at 0f8a395d: `PermissionError` escapes with state left `authenticated`).
+- C2 (13b SHOULD-FIX 1) — test-only: pin `attestation_timeout_s(PROTOCOL) == 10` under `patch.object(campaign, "CLEANUP_BUDGET_RESERVE_S", 10)` so `return ATTESTATION_TIMEOUT_FLOOR_S` fails (at 0f8a395d the whole module survives that body swap because reserve == floor == 5 makes the bound 5 for every gap).
+- C3 (13b NIT 4) — a regression that a sub-6 s gap protocol's overrun is DETECTED by the drift abort (executed, not just arithmetic).
+- C4 (13b NIT 5) — `…vanishes_before_the_annotation…` asserts the specific exclusion `network_time_unattested`, not any exclusion.
+- C5 (13a NIT 1) — the `timed_log_window_epoch_s` docstring drops the clause claiming `log show` resolves the fold the same way (not established).
+- C6 (13a NIT 4 / 13b NIT 6) — `tests/fixtures/qpe01_pilot_n1_20260922/SOURCES.md` gains the two syslog fixtures' provenance (07c captures, sha256, argv, window).
+- Noted (13b observation): `tests.test_sample_quiet_predicate_evidence.LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child` flakes under machine load (`-9 != -15`), green alone; outside the delta; lieutenant robustness item.
