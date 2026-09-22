@@ -34,3 +34,8 @@ A single 600 s envelope therefore costs about 608–610 s of serial wall time ag
 3. **Re-size the drift budget** (`start_drift_max_s` 10 → 20): also a protocol re-registration, and it leaves the harness overrunning its own schedule.
 
 Cure 1 is a harness change under the twelve-row gate; cures 2 and 3 are registration changes. Under the sensible-gates rule the exclusion should be sized to what it protects (interior placement, absorbed by the 60 s offset), which argues for cure 1 with the exclusion left as is.
+
+
+## Addendum (dated; the text above is unchanged)
+
+Addendum 2026-09-22 (A269 cold gate 10, packet b7c37d6d…): on night qpe01-pilot-n1-20260922-0217 the `start_drift` exclusion (envelopes 03/06/09, chain-level 10.11/10.06/9.95 s, session-level 10.23/10.18/10.06 s) removed no envelope not already excluded for `incomplete_interior_support` (03, 06, 09) and `clock_anchor_unresolved` (03, 09); envelopes excluded for `start_drift` alone: none (evidence/summary.json sha256 9121f080…3d04). The as-observed claim that `start_drift` removed 03/06/09 is withdrawn. A269's p1 standing rests on the forward argument: with A267's two exclusion classes cured, `start_drift` alone would leave 9 retained envelopes and 3 disjoint pairs against `minimum_adjacent_pairs: 4`.
