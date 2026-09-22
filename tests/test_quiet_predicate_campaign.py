@@ -518,6 +518,17 @@ class FrozenExecutorTests(unittest.TestCase):
                                  [c.pid for c in live], (out/'timed-log.txt').exists()))
                 return attestation
             enter(patch.object(campaign,'attest_network_time',side_effect=attest))
+            # The executor reads the bench replay's switch from its OWN
+            # environment (the harvest refusal `execute` takes on it), so
+            # every night driven here runs under a SCRUBBED copy of this
+            # shell's environment rather than the shell itself: a desk shell
+            # that happens to carry the switch must not decide what these
+            # tests prove (execution lens 17b S4).  A spy that wants the
+            # variable sets it on top, and R9 puts it back deliberately.
+            from scripts.sample_quiet_predicate_evidence import REPLAY_ENV as _replay_env
+            enter(patch.dict(campaign.os.environ,
+                             {k: v for k, v in os.environ.items() if k != _replay_env},
+                             clear=True))
             if spy is not None:
                 spy(stack, campaign)
             plan=replace(make_plan(),t0_epoch_s=1000,window_max_s=window_max_s)
@@ -2271,9 +2282,46 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertEqual(summary["retained"], 11)
 
     def test_R9_no_child_of_an_ordinary_night_ever_sees_the_replay_switch(self):
+        """R9, rebuilt to construct its own condition (execution lens 17b S4).
+
+        The test used to run an ordinary night and assert the switch was in
+        none of its thirteen child environments -- true only because the
+        shell it ran in happened to be clean.  Run from a shell carrying the
+        variable the whole module went red (`env
+        EVIDENCE_POWER_RECORDER_REPLAY=… python3 -m unittest …` ->
+        "unexpectedly found"), so it could only ever fail for the wrong
+        reason.  Both halves are now built from environment COPIES:
+
+        (a) the ARM side, with the variable PRESENT: the driver's own
+            child-environment derivation raises rather than popping, so no
+            night can be armed from a shell carrying it -- which is why (b)
+            is a property of nights and not of this machine;
+        (b) the RUN side, under a SCRUBBED copy: every one of the thirteen
+            children of an ordinary night lacks the key.
+        """
+        from unittest.mock import patch
         from scripts import sample_quiet_predicate_evidence as sampler
-        harness = FrozenExecutorTests()
-        rc, *_ = harness.exercise()
+        from tests.test_night_gate import make_plan
+        from tests.test_run_night import _load_driver
+        driver = _load_driver()
+        self.assertEqual(driver.REPLAY_RECORDER_ENV, sampler.REPLAY_ENV)
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            # (a) present -> the arm refuses, whatever this shell carries.
+            with patch.dict(os.environ,
+                            {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}):
+                with self.assertRaises(ValueError) as caught:
+                    driver._chain_environment(make_plan(), Path(tmp) / "night")
+            self.assertIn("never runs a replay recorder", str(caught.exception))
+
+        # (b) scrubbed -> the night runs and no child sees the key.  The copy
+        # is built by removing the key from whatever this shell has, so the
+        # assertion holds from a carrying shell too.
+        scrubbed = {k: v for k, v in os.environ.items() if k != sampler.REPLAY_ENV}
+        with patch.dict(os.environ, scrubbed, clear=True):
+            self.assertNotIn(sampler.REPLAY_ENV, os.environ)
+            harness = FrozenExecutorTests()
+            rc, *_ = harness.exercise()
         self.assertEqual(rc, 0)
         self.assertEqual(len(harness.popen_envs), 13)
         for environment in harness.popen_envs:
