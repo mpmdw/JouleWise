@@ -285,7 +285,10 @@ class DeskEpochWatchTests(unittest.TestCase):
         self.assertEqual(args.ledger, issuer.DEFAULT_LEDGER_PATH)
         self.assertEqual(args.head_pin, issuer.DEFAULT_HEAD_PIN_PATH)
         self.assertEqual(args.acceptance, issuer.DEFAULT_ACCEPTANCE_BOUND_PATH)
-        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n17_r6.json")
+        # Spelled out so the default cannot silently drift off the
+        # ACTIVE generation.  Moved r6 -> r7 by the D-079 r7 issuance,
+        # which repointed DEFAULT_ACCEPTANCE_BOUND_PATH.
+        self.assertEqual(args.acceptance.name, "calibration_acceptance_d079_v2_n17_r7.json")
         result = subprocess.run(
             [
                 sys.executable, "-B",
