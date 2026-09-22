@@ -1075,13 +1075,30 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     if replay_recorders:
         # Nothing this night produced is a measurement.  The status, the
         # retained set and the spread bound are replaced outright rather than
-        # annotated, so no reader can lift a number out of this document: the
-        # per-envelope diagnostics stay because the drift and tail figures the
-        # bench exists to produce are in them.
+        # annotated -- and so is EVERY energy number the document would
+        # otherwise carry: the per-envelope joules and interiors, the sizing
+        # and adjacent pairs, and every spread or drift statistic derived
+        # from them (lane contract lens 17a N2 -- the claim below that no
+        # reader can lift a number was false while `sizing_pairs` and
+        # `envelopes[*].joules` survived the override).  What stays is the
+        # SCHEDULE side: index, scheduled and actual instants, start drift,
+        # collector exit, cleanup, attestation and busy-core covariates --
+        # the figures the bench replay exists to produce, none of which is an
+        # energy.
+        energy_blanked = [{**v, "joules": None, "combined_joules": None, "interior": None}
+                          for v in report["envelopes"]]
         report.update({
             "status": REPLAY_NEVER_EVIDENCE, "evidence_status": REPLAY_NEVER_EVIDENCE,
             "retained": [], "s_upper": None,
             "s_upper_reason": "replay recorder: no envelope of this night is a measurement",
+            "envelopes": energy_blanked,
+            "sizing_pairs": [], "retained_pairs": 0, "adjacent_pairs": [],
+            "adjacent_pair_sd_j": None, "pair_sd_j": None, "pair_df": None,
+            "s_upper_factor": None, "single_envelope_sd_j": None,
+            "unfiltered_single_envelope_sd_j": None,
+            "first_to_last_retained_drift_j": None, "pairs_above_3_pair_sd": [],
+            "max_abs_delta_j": None, "block_two_pairs": None, "block_two_stop": None,
+            "block_two_pairs_reason": "replay recorder: no sizing, no spread, no energy",
             "replay_recorder_envelopes": replay_recorders,
             "replay_recorder_reason": "one or more session.json records do not carry "
                                       f"power.recorder_kind == {harness.RECORDER_KIND_PRODUCTION!r}"})
@@ -1093,9 +1110,11 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             f"{', '.join(str(r['index']) for r in replay_recorders)} were produced by a recorder "
             f"that is not `powermetrics`, so this night is a BENCH REPLAY and none of it is a "
             "measurement: no envelope is retained, no spread bound is computed, and the executor "
-            "refuses the night. The per-envelope schedule, cleanup, attestation and drift "
-            "diagnostics in summary.json remain, because measuring the inter-slot tail is what "
-            "the replay is for.\n")
+            "refuses the night. Every energy number is blanked with it: no per-envelope "
+            "joules or interior, no sizing or adjacent pairs, no spread or drift statistic "
+            "derived from them. The per-envelope SCHEDULE, cleanup, attestation and "
+            "start-drift diagnostics in summary.json remain, because measuring the "
+            "inter-slot tail is what the replay is for.\n")
         return report
     (directory / "summary.md").write_text(
         "# QPE-01 pilot (PROVISIONAL, descriptive)\n\n" +

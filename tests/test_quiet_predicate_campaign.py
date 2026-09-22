@@ -2087,6 +2087,22 @@ class BenchReplayFailClosedTests(unittest.TestCase):
             self.assertIn("cleanup_wall_s", row)
             self.assertIn("network_time_attestation_wall_s", row)
         self.assertEqual([s["power"]["recorder_kind"] for s in sessions], ["replay"] * 12)
+        # L3 (17a N2): and no ENERGY survives the override, so the document's
+        # own claim that no number can be lifted from it is true.  The
+        # schedule-side diagnostics the bench exists for are what remain.
+        self.assertEqual(summary["sizing_pairs"], [])
+        self.assertEqual(summary["adjacent_pairs"], [])
+        self.assertIsNone(summary["pair_sd_j"])
+        self.assertIsNone(summary["single_envelope_sd_j"])
+        self.assertIsNone(summary["unfiltered_single_envelope_sd_j"])
+        self.assertIsNone(summary["max_abs_delta_j"])
+        self.assertIsNone(summary["block_two_stop"])
+        for v in summary["envelopes"]:
+            self.assertIsNone(v["joules"])
+            self.assertIsNone(v["combined_joules"])
+            self.assertIsNone(v["interior"])
+            self.assertIn("start_drift_s", v)
+            self.assertIn("busy_cores", v)
 
     def test_R5_counterfactual_the_same_night_under_powermetrics_completes(self):
         # The kill.  One field changes and the night is a night again: rc 0,
