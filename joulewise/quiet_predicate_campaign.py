@@ -329,10 +329,55 @@ def timed_log_argv(start_epoch_s, end_epoch_s):
             "--start", local(start_epoch_s), "--end", local(end_epoch_s))
 
 
-def timed_log_matches(text):
-    """Count lines in which ``timed`` APPLIED a correction (ruling 14 R4)."""
+def timed_log_marker_lines(text):
+    """Raw count of log lines carrying any applied-correction marker."""
     return sum(any(marker in line for marker in TIMED_LOG_MARKERS)
                for line in text.splitlines())
+
+
+def timed_log_moment(line):
+    """Seconds since the epoch of a syslog-style line, or None."""
+    match = re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+", line)
+    if match is None:
+        return None
+    try:
+        return datetime.strptime(match.group(0), "%Y-%m-%d %H:%M:%S.%f").timestamp()
+    except ValueError:
+        return None
+
+
+# One applied correction is logged three times within a millisecond or two:
+# ``cmd,ntp_adjtime:in``, ``:out``, then the ``cmd,apply,src,`` receipt.  The
+# receipt is therefore the event, and a bare syscall line counts only when no
+# receipt sits beside it -- which is how a log without receipt lines (another
+# macOS build, or a hard ``settimeofday`` step) still attests.  This window is
+# a GROUPING tolerance, never an admission tolerance: any nonzero count
+# excludes the envelope, so mis-grouping can only change a diagnostic number.
+TIMED_LOG_EVENT_WINDOW_S = 1.0
+
+
+def timed_log_matches(text):
+    """Count the clock corrections ``timed`` APPLIED (ruling 14 R4).
+
+    Calibrated on the packet's own exhibit D, which the cold gate read as ten
+    applied corrections: 10 ``cmd,apply,src,`` receipts, 20 ``ntp_adjtime``
+    lines (an in/out pair per receipt, one pair straddling a millisecond
+    boundary), 0 ``settimeofday``, 30 marker lines in total -- and 10 events.
+    """
+
+    applied, syscalls = [], []
+    for line in text.splitlines():
+        if TIMED_LOG_MARKERS[0] in line:
+            applied.append(timed_log_moment(line))
+        elif any(marker in line for marker in TIMED_LOG_MARKERS[1:]):
+            syscalls.append(timed_log_moment(line))
+    events = len(applied)
+    for moment in syscalls:
+        if moment is None or not any(
+                other is not None and abs(other - moment) <= TIMED_LOG_EVENT_WINDOW_S
+                for other in applied):
+            events += 1
+    return events
 
 
 def attest_network_time(out):
@@ -370,7 +415,8 @@ def attest_network_time(out):
         return attestation
     matched = timed_log_matches(completed.stdout)
     attestation.update(exit_code=completed.returncode, log=path.name,
-                       log_sha256=digest(path.read_bytes()), matched_lines=matched)
+                       log_sha256=digest(path.read_bytes()), matched_lines=matched,
+                       matched_marker_lines=timed_log_marker_lines(completed.stdout))
     if completed.returncode != 0:
         attestation["reason"] = f"timed log query exited {completed.returncode}"
     elif matched:

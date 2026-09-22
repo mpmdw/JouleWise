@@ -1233,3 +1233,172 @@ class NativeInteriorAndLoadJoinTests(NetworkTimeOffMixin, unittest.TestCase):
         self.assertEqual(result['workers'][0]['calibration_overlap_s'], 5)
         report['cleanup'] = [{'alive':True,'exitcode':None}]
         self.assertEqual(harness.join_load_log(row,report,before,after)['reason'], 'load cleanup incomplete or escalated')
+
+
+# --------------------------------------------------------------------------
+# A267 QPE01-CLOCK-DISCIPLINE-ANCHOR-01 — cold-gate regressions 6 and 9
+# (ruling 10 Q3 as worded by 14 R5; Q1 rule 3).  Envelope 11 of the pilot
+# night qpe01-pilot-n1-20260922-0217 is the real mis-tiled capture.
+# --------------------------------------------------------------------------
+
+PILOT_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "qpe01_pilot_n1_20260922"
+
+
+def pilot_envelope(index):
+    return json.loads((PILOT_FIXTURES / f"envelope-{index:02d}.json").read_text())
+
+
+def pilot_frames(fixture):
+    """Parsed-frame dicts rebuilt from the archived native rows."""
+    frames = []
+    for elapsed_ns, native_ns, rail_sum_w, energy_j, is_delta in fixture["records"]:
+        power = dict.fromkeys(harness.RAILS)
+        power["rail_sum_w"] = power["combined_w"] = rail_sum_w
+        frames.append({"native_timestamp_s": native_ns / 1e9,
+                       "native_timestamp_ns": native_ns, "elapsed_ns": elapsed_ns,
+                       "elapsed_s": elapsed_ns / 1e9, "is_delta": is_delta,
+                       "energy_j": energy_j, "power": power,
+                       "clusters": [], "cpus": []})
+    return frames
+
+
+def pilot_interior_epoch(fixture):
+    interior = fixture["interior"]
+    return (interior["start_stamp"]["epoch_s"] - (interior["start_drift_s"] or 0)
+            + interior["interior_offset_s"])
+
+
+class ExactTilingTests(unittest.TestCase):
+    """Regression 6: envelope 11's interior covers exactly 480 s, or it does not."""
+
+    def envelope_eleven(self):
+        fixture = pilot_envelope(11)
+        stamps = {name: harness.ClockStamp(**value)
+                  for name, value in fixture["clock_stamps"].items()}
+        aligned, anchor = harness.align_frames(pilot_frames(fixture), stamps)
+        return fixture, aligned, anchor
+
+    def test_envelope_eleven_interior_covers_exactly_four_hundred_eighty_seconds(self):
+        fixture, aligned, anchor = self.envelope_eleven()
+        self.assertEqual(anchor["status"], "bounded", anchor.get("detail"))
+        interior = harness.reduce_interior(
+            aligned, anchor, pilot_interior_epoch(fixture),
+            fixture["interior"]["interior_s"])
+        # The night recorded span_mismatch True and error_bound_j None for this
+        # envelope; under exact tiling the coverage is the integer 480 s and the
+        # conservative energy bound exists.
+        self.assertFalse(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], 480_000_000_000)
+        self.assertEqual(interior["rail_coverage_ns"]["rail_sum_w"], 480_000_000_000)
+        self.assertIsNotNone(interior["error_bound_j"])
+        self.assertTrue(interior["complete_support"])
+        self.assertEqual(interior["status"], "complete")
+
+    def test_one_nanosecond_of_missing_support_is_a_gap_not_a_rounding_error(self):
+        fixture, aligned, anchor = self.envelope_eleven()
+        epoch = pilot_interior_epoch(fixture)
+        duration = fixture["interior"]["interior_s"]
+        start_ns = round(epoch * 1e9)
+        index = next(i for i, frame in enumerate(aligned)
+                     if frame["start_ns"] > start_ns + 1_000_000_000)
+        mutated = list(aligned)
+        # One frame reports one nanosecond less support than it tiles: the
+        # exact comparator must see the hole.  A 1 microsecond float tolerance
+        # would not.
+        mutated[index] = {**mutated[index],
+                          "start_ns": mutated[index]["start_ns"] + 1,
+                          "start_s": (mutated[index]["start_ns"] + 1) / 1e9}
+        interior = harness.reduce_interior(mutated, anchor, epoch, duration)
+        self.assertTrue(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], 480_000_000_000 - 1)
+        self.assertIsNone(interior["error_bound_j"])
+        self.assertFalse(interior["complete_support"])
+
+    def test_frames_tile_exactly_and_the_sampler_asks_for_the_v3_1_identity(self):
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1
+
+        fixture, aligned, anchor = self.envelope_eleven()
+        self.assertEqual(anchor["method"], CLOCK_METHOD_V3_1)
+        self.assertEqual(anchor["clock_anchor_method"], CLOCK_METHOD_V3_1)
+        endpoint_ns = round(anchor["first_sample_end_point_epoch_s"] * 1e9)
+        self.assertEqual(aligned[0]["end_ns"], endpoint_ns)
+        for left, right in zip(aligned, aligned[1:]):
+            self.assertEqual(right["start_ns"], left["end_ns"])
+            self.assertEqual(right["end_ns"] - right["start_ns"], right["elapsed_ns"])
+        self.assertEqual(aligned[-1]["end_ns"] - aligned[0]["end_ns"],
+                         sum(f["elapsed_ns"] for f in aligned[1:]))
+        oracle = Mock(return_value={"status": "unknown"})
+        harness.align_frames([], {}, deriver=oracle)
+        self.assertEqual(oracle.call_args.kwargs["method"], CLOCK_METHOD_V3_1)
+
+
+class NetworkTimeProvenanceTests(unittest.TestCase):
+    """Regression on ruling 10 Q1 rule 3: no receipt, no envelope."""
+
+    def collect(self, value, control=None):
+        environment = {} if value is None else {harness.NETWORK_TIME_RECORD_ENV: str(value)}
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.dict(os.environ, environment, clear=False), \
+                patch.object(harness, "PowerRecorder",
+                             side_effect=AssertionError("powermetrics must not be spawned")):
+            if value is None:
+                os.environ.pop(harness.NETWORK_TIME_RECORD_ENV, None)
+            args = collect_args(tmp, power=True)
+            session, rows = harness.collect(args, clock=FakeClock(),
+                                            round_runner=fake_round,
+                                            metadata_reader=lambda: {})
+            persisted = json.loads((Path(tmp) / "session.json").read_text())
+            plists = list((Path(tmp) / "raw").rglob("*.plist"))
+            return session, rows, persisted, plists
+
+    def test_absent_unreadable_and_inexact_receipts_each_refuse_the_envelope(self):
+        cases = {}
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            lower = network_time_control(tmp, stdout="setUsingNetworkTime: off\n")
+            cases["lower case stdout"] = str(lower)
+            failed = Path(tmp) / "failed.json"
+            failed.write_text(network_time_control(tmp, exit_code=1).read_text())
+            cases["nonzero exit"] = str(failed)
+            cases["absent variable"] = None
+            cases["unreadable record"] = str(Path(tmp) / "does-not-exist.json")
+            for label, value in cases.items():
+                with self.subTest(case=label):
+                    session, rows, persisted, plists = self.collect(value)
+                    self.assertEqual(rows, [])
+                    self.assertIsNone(session["network_time_provenance"])
+                    self.assertEqual(session["error_class"], harness.NETWORK_TIME_REFUSAL)
+                    self.assertIn("network time provenance not established",
+                                  session["error"])
+                    self.assertEqual(persisted["error"], session["error"])
+                    self.assertFalse(plists)
+
+    def test_the_chain_receipt_becomes_structured_provenance_on_the_session(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            record = network_time_control(tmp)
+            with patch.dict(os.environ,
+                            {harness.NETWORK_TIME_RECORD_ENV: str(record)}), \
+                    tempfile.TemporaryDirectory(dir="/tmp") as out:
+                session, rows = harness.collect(collect_args(out), clock=FakeClock(),
+                                                round_runner=fake_round,
+                                                metadata_reader=lambda: {})
+            provenance = session["network_time_provenance"]
+            self.assertEqual(provenance["state"], "off")
+            self.assertEqual(provenance["method"],
+                             "systemsetup_setusingnetworktime_off_exact_stdout")
+            self.assertEqual(provenance["record"], "network_time_control.json")
+            self.assertEqual(provenance["record_sha256"],
+                             harness.hashlib.sha256(record.read_bytes()).hexdigest())
+            self.assertEqual(provenance["established_epoch_s"], 1000.0)
+            self.assertEqual(session["network_time_provenance_reason"],
+                             "established by the evidence chain before settle")
+            self.assertIsNone(session["error"])
+            self.assertTrue(rows)
+
+    def test_the_command_line_maps_the_refusal_to_its_own_exit_code(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            os.environ.pop(harness.NETWORK_TIME_RECORD_ENV, None)
+            code = harness.main(["collect", "--no-power", "--out", tmp, "--state", "idle",
+                                 "--repeat", "1", "--duration-s", "1",
+                                 "--sample-interval-s", "1"])
+        self.assertEqual(code, harness.NETWORK_TIME_REFUSAL_EXIT)
+        self.assertEqual(code, 3)
