@@ -28,6 +28,7 @@ STEPS = ("clone", "venv", "plan", "wrapper", "render", "complete")
 CENSUS_FIX = "980f8d6452fb6923644bdac1e243ce0a344c881f"
 CANONICAL = "/Users/edr/code/JouleWise"
 SUPERVISOR_STATE = "/Users/edr/night-custody/magistrate/state.json"
+FAST_FORWARD_TIMEOUT_S = 120
 MAGISTRATE = "/Users/edr/night-custody/magistrate"
 DIRECTIVES_ARGV = ("gh", "issue", "list", "--repo", "mpmdw/JouleWise", "--label",
                    "directive", "--state", "open", "--author", "mpmdw", "--json",
@@ -581,9 +582,10 @@ print(json.dumps(s))
     return json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan], cwd=root))
 
 
-def probe_command(argv, *, cwd=None, timeout=None):
+def probe_command(argv, *, cwd=None, timeout=None, env=None):
     return subprocess.run(list(map(str, argv)), cwd=cwd, capture_output=True, text=True,
-                          check=False, timeout=timeout, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+                          check=False, timeout=timeout,
+                          env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", **(env or {})))
 
 
 def observation_record(result):
@@ -609,19 +611,28 @@ def canonical_fast_forward(state, canonical, runner):
     # moved here by a fast-forward-only pull whenever no night agent is loaded;
     # it is never an owner action. A dirty tree, a divergent or unreachable
     # remote, or a pull that still lacks H refuses; nothing is reset or forced.
-    canonical_status(canonical, runner)
+    clean_before = canonical_status(canonical, runner)
     before = runner(["git", "-C", canonical, "rev-parse", "HEAD"])
     if before.returncode:
         raise Refused("cannot read canonical HEAD: " + before.stderr.strip())
-    pull = runner(["git", "-C", canonical, "pull", "--ff-only"])
+    # Bounded and prompt-free: an unreachable remote or a credential prompt must
+    # refuse, never hang the unattended loop (the stall class D-183 removes).
+    try:
+        pull = runner(["git", "-C", canonical, "pull", "--ff-only"], timeout=FAST_FORWARD_TIMEOUT_S,
+                      env={"GIT_TERMINAL_PROMPT": "0"})
+    except subprocess.TimeoutExpired as exc:
+        raise Refused(f"canonical fast-forward failed: timed out after {FAST_FORWARD_TIMEOUT_S} s") from exc
     if pull.returncode:
         raise Refused("canonical fast-forward failed: " + (pull.stderr.strip() or pull.stdout.strip()))
     after = runner(["git", "-C", canonical, "rev-parse", "HEAD"])
     if after.returncode:
         raise Refused("cannot read canonical HEAD after fast-forward: " + after.stderr.strip())
+    moved = dict(before=before.stdout.strip(), after=after.stdout.strip(), pull=observation_record(pull),
+                 clean_before=observation_record(clean_before))
     if not contains_head(canonical, state["head"], "HEAD", runner):
-        raise Refused("canonical checkout still does not contain candidate H after fast-forward")
-    return dict(before=before.stdout.strip(), after=after.stdout.strip(), pull=observation_record(pull))
+        raise Refused("canonical fast-forward failed: HEAD moved " + moved["before"] + " -> " + moved["after"]
+                      + " but still does not contain candidate H")
+    return moved
 
 
 def canonical_check(state, canonical, runner, may_fast_forward=False):
@@ -679,7 +690,8 @@ def supervisor_check(state, canonical, state_path, runner):
     if arrival is None:
         raise Refused("no reflog entry continuously contains H")
     if started <= arrival:
-        raise Refused(f"stale resident supervisor pid {pid}: started {started}, H arrived {arrival}")
+        raise Refused(f"stale resident supervisor pid {pid}: started {started}, H arrived {arrival}; "
+                      "this session cannot arm — commit, push and exit so the watchdog's successor arms (D-183)")
     return dict(evidence, started_epoch_s=started, head_arrived_epoch_s=arrival,
                 continuous_reflog=walked)
 
@@ -881,6 +893,9 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                 reason = checks.get(name, {}).get("reason")
                 if reason:
                     raise Refused(reason)
+            stale = checks.get("supervisor", {}).get("reason", "")
+            if stale.startswith("stale resident supervisor"):
+                raise Refused(stale)
             raise Refused("pre-arm checks failed: " + ", ".join(k for k, v in checks.items() if v["verdict"] != "pass")
                           + "; see " + str(path))
         return record

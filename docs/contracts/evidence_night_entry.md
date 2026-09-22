@@ -190,15 +190,22 @@ with the clone's code. It then writes verdicts and evidence for:
    `git --no-optional-locks status --porcelain -uno`. Untracked canonical
    files do not fail that check; tracked modifications and observation errors do.
    **Self fast-forward (D-183, Ed 2026-09-21):** when the canonical checkout is
-   clean but does not contain H, and item 0 passed (no night agent loaded,
-   no plist present), `check` runs `git -C <canonical> pull --ff-only` itself
-   and records `fast_forward: {before, after, pull}` in the evidence; a dirty
-   tree, a missing or divergent upstream, or a pull that still lacks H refuses
-   (`canonical fast-forward failed: …`). With item 0 failed the pull is not
-   licensed and the check refuses without moving anything. A checkout that
-   already contains H records `fast_forward: null`. The pull may make the
-   resident supervisor stale under item 2; that is the designed hand-off — the
-   session exits and the watchdog's successor arms — never an owner action.
+   clean but does not contain H, and item 0 passed (no night label loaded, no
+   plist or sidecar present, label discovery known), `check` runs
+   `git -C <canonical> pull --ff-only` itself, bounded to 120 s with
+   `GIT_TERMINAL_PROMPT=0` so an unreachable remote or a credential prompt
+   refuses instead of hanging, and records
+   `fast_forward: {before, after, pull, clean_before}` in the evidence. A dirty
+   tree, a missing or divergent upstream, a timeout, or a pull that still lacks
+   H refuses with `canonical fast-forward failed: …`; the still-lacks-H cause
+   names the before and after shas because the tree did move. With item 0
+   failed the pull is not licensed and the check refuses without moving
+   anything. A checkout that already contains H records `fast_forward: null`.
+   The pull may make the resident supervisor stale under item 2; that refusal
+   names the hand-off (`… commit, push and exit so the watchdog's successor
+   arms`) and `check` re-raises that stale case as its own cause (other supervisor
+   causes stay under the generic `pre-arm checks failed` line) — the session exits and the
+   watchdog's successor arms — never an owner action.
 2. `/Users/edr/night-custody/magistrate/state.json` supplies
    `resident_session.supervisor_pid`. Null, an absent PID, or a reused PID
    whose command no longer names `magistrate_watchdog.py` is clear.

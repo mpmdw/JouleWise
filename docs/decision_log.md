@@ -12015,3 +12015,59 @@ stay fail-closed (D-161); the successor passes every gate anew at its own t0,
 including the census (D-181); the refusal that ends a span ends it (no waiting
 inside a refused span beyond the bind window the plan itself seals); no
 frequency bound is added (every bound must be scientific, D-181).
+
+## D-183: No artificial owner stops — an agent satisfies any precondition it can satisfy itself (Ed, 2026-09-21)
+
+**Status:** ratified by Ed, 2026-09-21 ~21:50 PDT, in the interactive session
+a87c3444 (verbatim: "make sure no more idiotic stops artificially, you have gh
+auth for a reason"; "obviously idiotic and should not have a 40h stall, def fix
+stuff like that, the process is meant to prevent bad science not work for 40h").
+Recorded by the session that received the ruling; the first implementation lands
+in the same PR (record
+`docs/process_traces/2026-09-21-interactive-a87c3444/01-d183-canonical-self-fast-forward.md`).
+
+**The rule.** Any precondition that an agent can satisfy with authority it
+already holds is satisfied by the agent and recorded, never queued as an action
+for Ed. The authority an agent already holds is: git operations that cannot lose
+work (a fast-forward-only pull of a clean tree), GitHub operations under the
+existing merge gate (D-072), and launchctl at the documented night-agent
+interfaces. Owner actions are only hardware and sudo (the standing rule since
+2026-08-14) and the notice NO.
+
+**Terms, so the rule can be applied without this session's context.** The
+*canonical checkout* is the repository at `/Users/edr/code/JouleWise`, the one
+the watchdog LaunchAgent imports the census code from on every 300-second run.
+A *fast-forward-only pull* (`git pull --ff-only`) moves a branch forward to its
+upstream only when the upstream already contains every local commit; it can
+never discard a commit and fails instead of merging. A *clean tree* has no
+tracked file modified (`git status --porcelain -uno` prints nothing); untracked
+files do not count. *Loaded* means a `com.joulewise.night*` label is present in
+launchd or its plist is on disk, which is the state between arming a night and
+uninstalling it after the night. *Armed* is the plan-level view of the same
+span: a published plan whose agents are installed.
+
+**Why now.** The census self-match cure merged at 05:10 PDT 09-20 (PR #371), but
+the relaunch prompt read "Perform no git operation in the canonical root", so the
+headless magistrate emailed Ed once and held. The canonical checkout stayed 157
+commits behind until Ed ran the pull at 21:40 PDT 09-21: about 40 hours with
+nothing armed, every PR green, and a clean fast-forward as the only missing step.
+The hold bought no soundness. The one email was one of nine sent that night, and
+the session's Gmail authorisation later expired, so no reminder went out.
+
+**What this changes.** (1) The evidence-night `check` command fast-forwards the
+canonical checkout itself when the tree is clean, nothing is loaded (its item 0
+passed) and the checkout does not yet contain candidate H; it records
+`fast_forward: {before, after, pull}` in its evidence, or `null` when no move was
+needed. A dirty tree, a missing or divergent upstream, or a pull that still
+lacks H refuses. (2) The relaunch prompt licenses exactly that move and requires
+the session to commit, push and exit when the move makes its own resident
+supervisor stale, so the watchdog's successor arms; it no longer holds for an
+owner. (3) Every future "waiting for Ed" line must name the soundness the wait
+buys; a wait that buys none is a defect and is logged as one.
+
+**What this does not change.** No git operation in the canonical root other than
+the fast-forward, and none at all while anything is armed or loaded; no reset,
+force or checkout; the supervisor-freshness rule (activation records 19/21)
+still refuses a supervisor that started before the checkout came to contain H;
+physics, evidence and pre-registration refusals stay fail-closed (D-161); the
+notice NO still stops everything.
