@@ -881,6 +881,40 @@ class TimedLogScannerTests(unittest.TestCase):
                               side_effect=AssertionError("must not query")):
                 self.assertEqual(campaign.attest_network_time(out)["state"], "asserted")
 
+    def test_every_attestation_record_names_what_was_queried_even_when_nothing_was(self):
+        """R4: the skeleton carries `window_argv_epoch_s`, so no reader KeyErrors.
+
+        `window_epoch_s` is the float union window the envelope was placed
+        by; `window_argv_epoch_s` is what the argv strings say, parsed back
+        from those same strings (A269 ruling 10 Q4 i, cold gate #3 Q4).  A
+        record that never got as far as an argv still carries the key, with
+        `null`, rather than omitting it -- the counterfactual at 489b0953 is
+        a `KeyError` on every blocked and every window-unavailable record.
+        """
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp)
+            blocked = campaign.attest_network_time(
+                out, blocked="one supervised group still alive", timeout=5)
+            self.assertEqual(blocked["state"], "asserted")
+            self.assertIsNone(blocked["window_epoch_s"])
+            self.assertIsNone(blocked["window_argv_epoch_s"])
+            # No session record at all, then one with no clock stamps: both
+            # land in the "capture window unavailable" branch.
+            for label, payload in (("no session record", None), ("no clock stamps", "{}")):
+                with self.subTest(case=label):
+                    path = out / "session.json"
+                    path.unlink(missing_ok=True)
+                    if payload is not None:
+                        path.write_text(payload)
+                    with patch.object(campaign.subprocess, "run",
+                                      side_effect=AssertionError("must not query")):
+                        attestation = campaign.attest_network_time(out, timeout=5)
+                    self.assertEqual(attestation["state"], "asserted")
+                    self.assertIn("capture window unavailable", attestation["reason"])
+                    self.assertIsNone(attestation["window_argv_epoch_s"])
+                    # It survives the journal as `null`, not as an absence.
+                    self.assertIsNone(json.loads(json.dumps(attestation))["window_argv_epoch_s"])
+
     def test_the_session_rewrite_is_atomic_and_keeps_the_collector_provenance(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             out = Path(tmp)

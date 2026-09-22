@@ -624,7 +624,8 @@ def attest_network_time(out, blocked=None, timeout=ATTESTATION_TIMEOUT_FLOOR_S):
     """
 
     attestation = {"state": "asserted", "method": TIMED_LOG_ATTESTATION_METHOD,
-                   "window_epoch_s": None, "window_method": ATTESTATION_WINDOW_METHOD,
+                   "window_epoch_s": None, "window_argv_epoch_s": None,
+                   "window_method": ATTESTATION_WINDOW_METHOD,
                    "log": None, "log_sha256": None,
                    "matched_lines": None, "exit_code": None, "argv": None,
                    "attested_epoch_s": time.time()}
