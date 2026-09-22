@@ -1301,11 +1301,15 @@ class EvidenceRegistrationTests(unittest.TestCase):
     def test_ruled_registration_serialization_requires_dated_ruling_amendment(self):
         # 2026-09-19: record 61a S1/S4 + 56x R2 re-pin the frozen pilot.
         # 2026-09-19 (re-audit 64 R1): each entry now names its tracked records.
+        # 2026-09-22 (A269 cold gate 10 Q2(a), synthesis 15): the pilot
+        # registration becomes v2 (slot_pitch_s, start_drift_abort_s and the
+        # two attestation exclusions); v1 stays in the table as ruled history,
+        # keyed by its own literal digest and marked superseded_by v2.
         # Any membership/metadata amendment needs its cold-gate ruling and a
         # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '81c6a189845394a089641d9582e7c278890b9f5afb39b4250addfdfdafb5e5e1')
+                         '17b0965b970028b1fb5962caa2b7627c662b4a30903d8338c86a7bdaeab18c5d')
 
     def test_every_ruled_registration_names_tracked_records_that_exist(self):
         # Ruling 61a S4: prose authority is not enough; each entry's records
@@ -1313,7 +1317,13 @@ class EvidenceRegistrationTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for sha, entry in night_gate.RULED_REGISTRATIONS.items():
             with self.subTest(registration=entry['label']):
-                self.assertEqual(set(entry), {'label', 'ruling', 'binds_chain', 'records'})
+                # 2026-09-22: a superseded entry carries one extra key, the
+                # digest that replaced it; nothing else may appear.
+                self.assertLessEqual(set(entry),
+                                     {'label', 'ruling', 'binds_chain', 'records', 'superseded_by'})
+                self.assertLessEqual({'label', 'ruling', 'binds_chain', 'records'}, set(entry))
+                if 'superseded_by' in entry:
+                    self.assertIn(entry['superseded_by'], night_gate.RULED_REGISTRATIONS)
                 self.assertTrue(entry['records'], 'an entry without records is prose-only authority')
                 for ref in entry['records']:
                     path, _, anchor = ref.partition('#')
@@ -1323,6 +1333,25 @@ class EvidenceRegistrationTests(unittest.TestCase):
                         headings = [line for line in (root / path).read_text().splitlines()
                                     if line.startswith('## ' + anchor + ':')]
                         self.assertTrue(headings, ref)
+
+    def test_the_superseded_v1_registration_is_history_and_never_armable(self):
+        # A269 regression 2 (ruling 10 Q2, refuter 11 on the digest key): v1's
+        # bytes are still a ruled registration, and a night that presents them
+        # is refused BY NAME -- the table is keyed by digest, so without its
+        # own literal the v1 entry would have travelled with the constant.
+        root = Path(__file__).resolve().parents[1]
+        v1 = (root / 'configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json').read_bytes()
+        self.assertEqual(hashlib.sha256(v1).hexdigest(), night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256)
+        self.assertNotEqual(night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256,
+                            night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+        entry = night_gate.RULED_REGISTRATIONS[night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256]
+        self.assertEqual(entry['superseded_by'], night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+        self.assertIsNone(night_gate.armable_registration(night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256))
+        self.assertIsNotNone(night_gate.armable_registration(night_gate.QPE01_PILOT_REGISTRATION_SHA256))
+        receipt = night_gate.evaluate_night(make_plan(), self.source(registration=v1.decode()).probes())
+        self.assertEqual(receipt.refusal.reason, 'night_refused_registration')
+        self.assertIn('superseded by ' + night_gate.QPE01_PILOT_REGISTRATION_SHA256,
+                      receipt.refusal.detail)
 
     def test_unavailable_chain_source_is_probe_error_not_digest_mismatch(self):
         source = self.source()
@@ -1378,7 +1407,9 @@ class EvidenceRegistrationTests(unittest.TestCase):
         c1 = next(row for row in receipt.conditions if row.condition_id == "C1").measured
         c5 = next(row for row in receipt.conditions if row.condition_id == "C5").measured
         self.assertEqual(c1['registration_bound_chain_source_sha256'], c5['chain_source_sha256'])
-        self.assertEqual(c1['registration_ruling'], 'cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b')
+        self.assertEqual(c1['registration_ruling'],
+                         'cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b; '
+                         'A269 cold gate 10 (2026-09-22) Q1(c)/Q2(a)/Q3')
         self.assertNotIn('D-166', c1['detail'])
 
     def test_chain_measurement_not_advisory_sidecar_is_binding(self):

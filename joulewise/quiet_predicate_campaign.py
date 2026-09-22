@@ -73,7 +73,34 @@ def frozen_protocol(raw=None):
     return json.loads(raw)
 
 
+def cadence_fields(protocol):
+    """Refuse a registration that cannot express the ruled cadence.
+
+    Cure 2 (A269 ruling 10 Q1(c)) separates the SCHEDULE PITCH from the
+    CAPTURE LENGTH: each envelope is spawned ``slot_pitch_s`` after the last,
+    captures for ``envelope_s``, and the difference is the gap in which the
+    collector exits, its groups are reaped and the clock attestation runs.  A
+    pitch shorter than the capture would schedule the next spawn inside the
+    running one, which is the defect A269 cures; a spawn whose drift exceeds
+    ``start_drift_abort_s`` aborts the night, so an abort threshold above the
+    exclusion bar ``start_drift_max_s`` would let a night run past the point
+    where every envelope it produced is already excluded.  Both are refused
+    here, fail-closed, before any collector exists.
+    """
+
+    for name in ("slot_pitch_s", "start_drift_abort_s", "envelope_s", "start_drift_max_s"):
+        value = protocol.get(name)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f"frozen pilot protocol needs a positive {name}")
+    if protocol["slot_pitch_s"] < protocol["envelope_s"]:
+        raise ValueError("slot_pitch_s is shorter than envelope_s: the schedule would overlap captures")
+    if protocol["start_drift_abort_s"] > protocol["start_drift_max_s"]:
+        raise ValueError("start_drift_abort_s above start_drift_max_s: the night would run on excluded envelopes")
+    return protocol
+
+
 def validate_protocol(protocol, source_digest):
+    cadence_fields(protocol)
     if protocol != frozen_protocol() or protocol.get("chain_source_sha256") != source_digest:
         raise ValueError("frozen pilot protocol mismatch; CLI overrides are forbidden")
     return protocol

@@ -3,6 +3,12 @@
 Callers provide machine observations through :class:`Probes`. Pack C1/C2
 re-read plan-bound custody records and replay the exact supplied ARM path.
 Result records belong to the driver, which defines and validates ``result.json``.
+
+A ruled registration (``RULED_REGISTRATIONS``) pins PROTOCOL VALUES and, when
+``binds_chain``, the zsh chain source named by ``EVIDENCE_CHAIN_PATH``. It
+pins no Python: the harness modules are pinned per plan by ``measurement_head``
+and the plan's evidence manifest, so a cured executor changes the manifest
+digests, never the registration digest.
 """
 
 from __future__ import annotations
@@ -43,21 +49,62 @@ D166_REGISTRATION_SHA256 = (
 D166_REGISTRATION_PATH = (
     "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
 )
-QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json"
-QPE01_PILOT_REGISTRATION_SHA256 = "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
+# 2026-09-22 (A269 cold gate 10 Q2(a), synthesised in 15): the current pilot
+# registration is v2.  It adds ``slot_pitch_s`` (the schedule pitch the cure-2
+# cadence reads), ``start_drift_abort_s`` (the in-chain abort threshold) and
+# the two attestation exclusion reasons A267 Part 3 emits.  A registration
+# pins PROTOCOL VALUES and the zsh chain source only (``chain_source_sha256``
+# binds EVIDENCE_CHAIN_PATH, never a Python module): the cured Python is
+# pinned per plan by ``measurement_head`` and the plan's evidence manifest
+# (``quiet_predicate_campaign.MANIFEST_PATHS``), not by this digest.
+QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json"
+QPE01_PILOT_REGISTRATION_SHA256 = "2c5392401a7956dfbb30f316a084541e0f53f214a4ce98c7d56d595ddb2779f1"
+# v1's bytes (``pilot_protocol_v1.json``, never modified) stay in the table as
+# ruled history.  The table is KEYED by digest, so re-pointing the constant
+# above would have carried the v1 entry away with it; the v1 digest is
+# therefore repeated as its own literal and its entry carries
+# ``superseded_by``, which the armability readers refuse.
+QPE01_PILOT_REGISTRATION_V1_SHA256 = "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
 EVIDENCE_CHAIN_PATH = "scripts/night_chains/quiet_predicate_evidence.zsh"
 # Amended only by cold-gate ruling; each entry names its authority ("ruling",
 # surfaced in the receipt) and the tracked records that hold it ("records":
 # repo-relative paths, optionally "#<heading id>" inside a decision log;
-# tests/test_night_gate.py asserts each exists — ruling 61a S4).
+# tests/test_night_gate.py asserts each exists — ruling 61a S4).  A superseded
+# entry additionally carries "superseded_by": the digest that replaced it.
+# The A269 gate record itself (docs/process_traces/2026-09-22-activation-e4b4ead6/
+# 03-coldgate-packet-a269-start-drift/10-coldgate-fable-ruling.md) joins v2's
+# records when the magistrate commits that activation's trace; the records
+# below are the tracked ones that exist at this head.
 RULED_REGISTRATIONS = {
     D166_REGISTRATION_SHA256: {"label": "D-166 dominance criterion", "ruling": "D-165/D-166", "binds_chain": False,
         "records": ("docs/decision_log.md#D-165", "docs/decision_log.md#D-166")},
-    QPE01_PILOT_REGISTRATION_SHA256: {"label": "QPE-01 idle-variance pilot protocol v1",
+    QPE01_PILOT_REGISTRATION_V1_SHA256: {"label": "QPE-01 idle-variance pilot protocol v1",
         "ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b", "binds_chain": True,
+        "superseded_by": QPE01_PILOT_REGISTRATION_SHA256,
         "records": ("docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/10-coldgate-fable-ruling.md",
                     "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md")},
+    QPE01_PILOT_REGISTRATION_SHA256: {"label": "QPE-01 idle-variance pilot protocol v2 (A269 gate 2026-09-22)",
+        "ruling": "cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b; "
+                  "A269 cold gate 10 (2026-09-22) Q1(c)/Q2(a)/Q3", "binds_chain": True,
+        "records": ("docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/10-coldgate-fable-ruling.md",
+                    "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md",
+                    "docs/process_traces/2026-09-22-activation-d9990b3c/02-a269-start-drift-diagnosis.md",
+                    "docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/14-coldgate-fable-rebuttal-ruling.md")},
 }
+
+
+def armable_registration(registration_sha256):
+    """The ruled entry for a digest, or None when it can never be armed again.
+
+    A superseded registration stays in the table as history but is refused
+    here: no night may be armed against protocol values a later cold gate
+    replaced (A269 ruling 10 Q2; refuter 11 on the table's digest key).
+    """
+
+    entry = RULED_REGISTRATIONS.get(registration_sha256)
+    if entry is None or entry.get("superseded_by"):
+        return None
+    return entry
 
 
 def chain_literal(text, name):
@@ -1414,10 +1461,14 @@ def _check_registration(plan, probes, rows, evidence):
             "registration_path": plan.registration_path,
             "registration_sha256": registration_sha256,
         }
-        ruled = RULED_REGISTRATIONS.get(registration_sha256)
+        ruled = armable_registration(registration_sha256)
+        superseded = RULED_REGISTRATIONS.get(registration_sha256, {}).get("superseded_by")
         defect = None
         bound = None
-        if ruled is None:
+        if superseded:
+            defect = (f"registration sha256 {registration_sha256} was superseded by "
+                      f"{superseded} and is no longer armable")
+        elif ruled is None:
             defect = f"registration sha256 {registration_sha256} is not a ruled registration"
         elif ruled["binds_chain"]:
             try:
