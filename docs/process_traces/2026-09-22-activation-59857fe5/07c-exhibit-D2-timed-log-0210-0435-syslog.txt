@@ -1,0 +1,191 @@
+Timestamp                       (process)[PID]    
+2026-09-22 02:28:08.226529-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [A328C6A3-54F2-436B-958E-2C2993B1A300 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 02:28:08.287899-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aeeea1.f0f63e4a,t2,ee5cc8a8.46372f79,t3,ee5cc8a8.4637af2e,t4,83aeeea1.f67d5ed0,leap,00,delay,00.00,dispersion,00.0e,
+2026-09-22 02:28:08.287902-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,0,result,0,mach,6980399113159,tv_sec,1790069288,tv_usec,274283,delay,0.021586,dispersion,0.000214,more,1,ip,2620:149:a00:4000::31,port,123,slept,0,use_service_port,1
+2026-09-22 02:28:08.288415-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [98F4D188-0E1E-4A07-B4C8-C623402734FA Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 02:28:08.311007-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aeeea1.f76f4384,t2,ee5cc8a8.4c087c43,t3,ee5cc8a8.4c08fd58,t4,83aeeea1.fc69b0c0,leap,00,delay,00.00,dispersion,00.0d,
+2026-09-22 02:28:08.311009-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,1,result,0,mach,6980399667959,tv_sec,1790069288,tv_usec,297008,delay,0.019439,dispersion,0.000198,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,1
+2026-09-22 02:28:08.311454-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [6D83203B-C590-4925-BCA2-8342C9568AE0 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 02:28:08.333459-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aeeea1.fd3de07a,t2,ee5cc8a8.51c232f3,t3,ee5cc8a8.51c2ac19,t4,83aeeea2.2278dbc,leap,00,delay,00.00,dispersion,00.0e,
+2026-09-22 02:28:08.333461-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,2,result,0,mach,6980400206687,tv_sec,1790069288,tv_usec,319373,delay,0.019183,dispersion,0.000214,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,1
+2026-09-22 02:28:08.333790-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14598637.787901999,unc_s,0.000500000,mach,6980400215126
+2026-09-22 02:28:08.334052-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 02:28:08 2026±0.02 from "NTP"
+2026-09-22 02:28:08.334058-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,NTP,rtc_s,14598637.788011000,rtc_unc_s,0.000000000,t_s,811762088.319373131,unc_s,0.019899206,mach,6980400217742
+2026-09-22 02:28:08.334445-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14598637.788011,utc,811762088.321771,utcUnc,0.017387,sf,0.99999931,sfUnc,0.00000831,utcSfCov,0.00028643,logNoise,-13.555955,timeRtc,14598637.788011,timeUtc,811762088.319373,timeUnc,0.019899,timeSource,NTP,predUtc,811762088.329507,predUtcUnc,0.035745,predSf,1.00000141,predSfUnc,0.00001187,measNumber,2968
+2026-09-22 02:28:08.335185-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14598637.789306000,unc_s,0.000500000,mach,6980400248570
+2026-09-22 02:28:08.335370-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14598637.789474,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14600268.461146
+2026-09-22 02:28:08.335805-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 27.18min. Remaining retry interval: 14.998151min.
+2026-09-22 02:28:08.335805-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 02:28:08.335821-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1630.671671 seconds
+2026-09-22 02:28:08.335838-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,-7764578,freq_scaled,-45002,maxerror_us,17386
+2026-09-22 02:28:08.335858-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,-7764578,freq_scaled,-45002,maxerror_us,17386
+2026-09-22 02:28:08.335917-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14598637.789071666,rtc_unc_s,0.000500005,t_s,811762088.322831392,unc_s,0.017386546,mach,6980400242946,adjust,-0.007764578,success,1,after_m,6980400242954
+2026-09-22 02:28:08.336196-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650533759726,was,1775470650539550000,now,1775470650533752000,success,1
+2026-09-22 02:56:18.995858-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [EB0D8713-0B15-4751-A686-A5B7238EA059 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 02:56:19.052115-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aef53c.b8222be8,t2,ee5ccf43.c0da3b9,t3,ee5ccf43.c0f51bd,t4,83aef53c.bd5f2934,leap,00,delay,00.00,dispersion,00.09,
+2026-09-22 02:56:19.052117-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,0,result,0,mach,7020977758426,tv_sec,1790070979,tv_usec,47095,delay,0.020436,dispersion,0.000137,more,1,ip,2620:149:a0c:4000::1f2,port,123,slept,0,use_service_port,1
+2026-09-22 02:56:19.052740-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [D393DB07-1287-4002-972C-73FA79B75C98 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 02:56:19.084600-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aef53c.be5e7c8d,t2,ee5ccf43.142ec90d,t3,ee5ccf43.142f9007,t4,83aef53c.c5b15f88,leap,00,delay,00.00,dispersion,00.11,
+2026-09-22 02:56:19.084603-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,1,result,0,mach,7020978538675,tv_sec,1790070979,tv_usec,78844,delay,0.028597,dispersion,0.000259,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,1
+2026-09-22 02:56:19.085177-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [89873481-83D7-4715-8D9A-CCB4E06B0389 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 02:56:19.107938-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aef53c.c6995cc8,t2,ee5ccf43.19eed3bb,t3,ee5ccf43.19ef7674,t4,83aef53c.cbac4e15,leap,00,delay,00.00,dispersion,00.11,
+2026-09-22 02:56:19.107939-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,2,result,0,mach,7020979098794,tv_sec,1790070979,tv_usec,101305,delay,0.019811,dispersion,0.000259,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,1
+2026-09-22 02:56:19.108325-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14600328.575134000,unc_s,0.000500000,mach,7020979108563
+2026-09-22 02:56:19.108509-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 02:56:19 2026±0.02 from "NTP"
+2026-09-22 02:56:19.108515-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,NTP,rtc_s,14600328.575241707,rtc_unc_s,0.000000000,t_s,811763779.101305485,unc_s,0.020572275,mach,7020979111148
+2026-09-22 02:56:19.108871-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14600328.575242,utc,811763779.103527,utcUnc,0.016715,sf,0.99999806,sfUnc,0.00000839,utcSfCov,0.00028476,logNoise,-13.555955,timeRtc,14600328.575242,timeUtc,811763779.101305,timeUnc,0.020572,timeSource,NTP,predUtc,811763779.107840,predUtcUnc,0.028670,predSf,0.99999931,predSfUnc,0.00001077,measNumber,2969
+2026-09-22 02:56:19.109575-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14600328.576431,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14601992.849562
+2026-09-22 02:56:19.109699-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14600328.576538000,unc_s,0.000500000,mach,7020979141579
+2026-09-22 02:56:19.109849-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 27.74min. Remaining retry interval: 14.998071min.
+2026-09-22 02:56:19.109850-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 02:56:19.109870-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1664.273130 seconds
+2026-09-22 02:56:19.109907-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,-4294276,freq_scaled,-127056,maxerror_us,16714
+2026-09-22 02:56:19.109937-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,-4294276,freq_scaled,-127056,maxerror_us,16714
+2026-09-22 02:56:19.109984-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14600328.576196916,rtc_unc_s,0.000500007,t_s,811763779.104481697,unc_s,0.016714522,mach,7020979133393,adjust,-0.004294276,success,1,after_m,7020979133405
+2026-09-22 02:56:19.110155-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650528284781,was,1775470650533752000,now,1775470650528259000,success,1
+2026-09-22 03:09:28.298976-0700  localhost timed[381]: [com.apple.timed:text] Command 'TMSetAuthenticatedSourceTime' included mach time when not expected, forcing conversion
+2026-09-22 03:09:28.299344-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14601117.766174000,unc_s,0.000500000,mach,7039919692997
+2026-09-22 03:09:28.299522-0700  localhost timed[381]: [com.apple.timed:data] STF,SynthesizedClock,rtc,14601117.765147,utc,811764568.318795,utcUnc,4.068689,sf,0.99999852,sfUnc,0.00005481,utcSfCov,0.01245958,logNoise,-13.555955,timeRtc,14601117.765147,timeUtc,811764568.291000,timeUnc,35.000500,timeSource,APNS,predUtc,811764568.319176,predUtcUnc,4.096462,predSf,0.99999852,predSfUnc,0.00005499,measNumber,1849
+2026-09-22 03:09:28.302901-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 03:09:28 2026±35.00 from "APNS"
+2026-09-22 03:09:28.302906-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,APNS,rtc_s,14601117.765147291,rtc_unc_s,0.000500021,t_s,811764568.290999889,unc_s,35.000500021,mach,7039919668356
+2026-09-22 03:09:28.303185-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14601117.765147,utc,811764568.291902,utcUnc,0.021348,sf,0.99999806,sfUnc,0.00000961,utcSfCov,0.00038116,logNoise,-13.555955,timeRtc,14601117.765147,timeUtc,811764568.291000,timeUnc,35.000500,timeSource,APNS,predUtc,811764568.291902,predUtcUnc,0.021348,predSf,0.99999806,predSfUnc,0.00000961,measNumber,2970
+2026-09-22 03:09:28.303883-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14601117.770736,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14602550.358746
+2026-09-22 03:09:28.304027-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14601117.770873999,unc_s,0.000500000,mach,7039919805466
+2026-09-22 03:09:28.304159-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 23.88min. Remaining retry interval: 1.844833min.
+2026-09-22 03:09:28.304160-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 03:09:28.304227-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1432.588009 seconds
+2026-09-22 03:09:28.304244-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,5484,freq_scaled,-127056,maxerror_us,21348
+2026-09-22 03:09:28.304258-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,5484,freq_scaled,-127056,maxerror_us,21348
+2026-09-22 03:09:28.304299-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14601117.770467540,rtc_unc_s,0.000500008,t_s,811764568.297222495,unc_s,0.021348167,mach,7039919795711,adjust,0.000005484,success,1,after_m,7039919795716
+2026-09-22 03:09:28.304471-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650526754955,was,1775470650528259000,now,1775470650526733000,success,1
+2026-09-22 03:09:28.346159-0700  localhost timed[381]: [com.apple.timed:text] Command 'TMSetAuthenticatedSourceTime' included mach time when not expected, forcing conversion
+2026-09-22 03:09:28.346420-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14601117.813262001,unc_s,0.000500000,mach,7039920822815
+2026-09-22 03:09:28.346557-0700  localhost timed[381]: [com.apple.timed:data] STF,SynthesizedClock,rtc,14601117.812603,utc,811764568.365888,utcUnc,4.041476,sf,0.99999852,sfUnc,0.00005463,utcSfCov,0.01237624,logNoise,-13.555955,timeRtc,14601117.812603,timeUtc,811764568.339000,timeUnc,35.000500,timeSource,APNS,predUtc,811764568.366251,predUtcUnc,4.068691,predSf,0.99999852,predSfUnc,0.00005481,measNumber,1850
+2026-09-22 03:09:28.348746-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 03:09:28 2026±35.00 from "APNS"
+2026-09-22 03:09:28.348749-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,APNS,rtc_s,14601117.812602792,rtc_unc_s,0.000500013,t_s,811764568.338999987,unc_s,35.000500013,mach,7039920806994
+2026-09-22 03:09:28.349010-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14601117.812603,utc,811764568.339358,utcUnc,0.021348,sf,0.99999806,sfUnc,0.00000961,utcSfCov,0.00038116,logNoise,-13.555955,timeRtc,14601117.812603,timeUtc,811764568.339000,timeUnc,35.000500,timeSource,APNS,predUtc,811764568.339358,predUtcUnc,0.021348,predSf,0.99999806,predSfUnc,0.00000961,measNumber,2971
+2026-09-22 03:09:28.349632-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14601117.816482,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14602550.390252
+2026-09-22 03:09:28.349806-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14601117.816618999,unc_s,0.000500000,mach,7039920903972
+2026-09-22 03:09:28.349960-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 23.88min. Remaining retry interval: 1.844069min.
+2026-09-22 03:09:28.349960-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 03:09:28.349982-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1432.573770 seconds
+2026-09-22 03:09:28.349989-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,-19789,freq_scaled,-127056,maxerror_us,21348
+2026-09-22 03:09:28.350006-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,-19789,freq_scaled,-127056,maxerror_us,21348
+2026-09-22 03:09:28.350012-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14601117.816235334,rtc_unc_s,0.000500008,t_s,811764568.342990160,unc_s,0.021348474,mach,7039920894764,adjust,-0.000019789,success,1,after_m,7039920894770
+2026-09-22 03:09:28.350069-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650526754826,was,1775470650526733000,now,1775470650526733000,success,1
+2026-09-22 03:09:28.404967-0700  localhost timed[381]: [com.apple.timed:text] Command 'TMSetAuthenticatedSourceTime' included mach time when not expected, forcing conversion
+2026-09-22 03:09:28.405202-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14601117.872039000,unc_s,0.000500000,mach,7039922233612
+2026-09-22 03:09:28.405332-0700  localhost timed[381]: [com.apple.timed:data] STF,SynthesizedClock,rtc,14601117.871384,utc,811764568.424317,utcUnc,4.014802,sf,0.99999851,sfUnc,0.00005446,utcSfCov,0.01229456,logNoise,-13.555955,timeRtc,14601117.871384,timeUtc,811764568.398000,timeUnc,35.000500,timeSource,APNS,predUtc,811764568.424668,predUtcUnc,4.041478,predSf,0.99999852,predSfUnc,0.00005463,measNumber,1851
+2026-09-22 03:09:28.407570-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 03:09:28 2026±35.00 from "APNS"
+2026-09-22 03:09:28.407572-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,APNS,rtc_s,14601117.871383792,rtc_unc_s,0.000500013,t_s,811764568.398000002,unc_s,35.000500013,mach,7039922217887
+2026-09-22 03:09:28.407824-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14601117.871384,utc,811764568.398139,utcUnc,0.021349,sf,0.99999806,sfUnc,0.00000961,utcSfCov,0.00038117,logNoise,-13.555955,timeRtc,14601117.871384,timeUtc,811764568.398000,timeUnc,35.000500,timeSource,APNS,predUtc,811764568.398139,predUtcUnc,0.021349,predSf,0.99999806,predSfUnc,0.00000961,measNumber,2972
+2026-09-22 03:09:28.408484-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14601117.875320,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14602550.429230
+2026-09-22 03:09:28.408655-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14601117.875457000,unc_s,0.000500000,mach,7039922316404
+2026-09-22 03:09:28.408810-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 23.88min. Remaining retry interval: 1.843089min.
+2026-09-22 03:09:28.408811-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 03:09:28.408832-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1432.553909 seconds
+2026-09-22 03:09:28.408841-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,-33259,freq_scaled,-127056,maxerror_us,21348
+2026-09-22 03:09:28.408856-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,-33259,freq_scaled,-127056,maxerror_us,21348
+2026-09-22 03:09:28.408862-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14601117.875053043,rtc_unc_s,0.000500008,t_s,811764568.401807785,unc_s,0.021348870,mach,7039922306709,adjust,-0.000033259,success,1,after_m,7039922306712
+2026-09-22 03:09:28.408918-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650526754742,was,1775470650526733000,now,1775470650526733000,success,1
+2026-09-22 03:34:20.912028-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [05293A99-11AD-48A6-8B9A-6644D3629840 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 03:34:20.967786-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aefe26.a1fc37cd,t2,ee5cd82c.f4b992d5,t3,ee5cd82c.f4ba2349,t4,83aefe26.a7ca90f7,leap,00,delay,00.00,dispersion,00.12,
+2026-09-22 03:34:20.967788-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,0,result,0,mach,7075743735064,tv_sec,1790073260,tv_usec,955960,delay,0.022671,dispersion,0.000275,more,1,ip,2620:149:a00:3000::31,port,123,slept,0,use_service_port,1
+2026-09-22 03:34:20.968286-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [C240E013-7AFE-4ADC-9E0E-F773AFFF14DF Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 03:34:20.988571-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aefe26.a8bf811f,t2,ee5cd82c.fa5d97c2,t3,ee5cd82c.fa5e1e18,t4,83aefe26.ad1dc50c,leap,00,delay,00.00,dispersion,00.0e,
+2026-09-22 03:34:20.988573-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,1,result,0,mach,7075744233969,tv_sec,1790073260,tv_usec,977994,delay,0.017055,dispersion,0.000214,more,1,ip,2620:149:a00:4000::31,port,123,slept,0,use_service_port,1
+2026-09-22 03:34:20.989007-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [ECB726AB-9355-445F-AB54-888AD6AE0E86 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 03:34:21.012934-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83aefe26.adf44b2b,t2,ee5cd82d.28e3f9,t3,ee5cd82d.297697,t4,83aefe26.b35bb866,leap,00,delay,00.00,dispersion,00.0e,
+2026-09-22 03:34:21.012935-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,2,result,0,mach,7075744818729,tv_sec,1790073261,tv_usec,628,delay,0.021101,dispersion,0.000214,more,1,ip,2620:149:a00:4000::31,port,123,slept,0,use_service_port,1
+2026-09-22 03:34:21.013228-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14602610.480040999,unc_s,0.000500000,mach,7075744826234
+2026-09-22 03:34:21.013446-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 03:34:20 2026±0.02 from "NTP"
+2026-09-22 03:34:21.013451-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,NTP,rtc_s,14602610.480129749,rtc_unc_s,0.000000000,t_s,811766060.977994442,unc_s,0.017771045,mach,7075744828364
+2026-09-22 03:34:21.013779-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14602610.480130,utc,811766060.983689,utcUnc,0.015705,sf,0.99999240,sfUnc,0.00000809,utcSfCov,0.00026228,logNoise,-13.555955,timeRtc,14602610.480130,timeUtc,811766060.977994,timeUnc,0.017771,timeSource,NTP,predUtc,811766061.003991,predUtcUnc,0.033556,predSf,0.99999806,predSfUnc,0.00001157,measNumber,2973
+2026-09-22 03:34:21.014463-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14602610.481292000,unc_s,0.000500000,mach,7075744855819
+2026-09-22 03:34:21.014596-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14602610.481460,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14604325.249789
+2026-09-22 03:34:21.014840-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 28.58min. Remaining retry interval: 14.998261min.
+2026-09-22 03:34:21.014840-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 03:34:21.014859-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1714.768329 seconds
+2026-09-22 03:34:21.014871-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,-20277977,freq_scaled,-498151,maxerror_us,15704
+2026-09-22 03:34:21.014890-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,-20277977,freq_scaled,-498151,maxerror_us,15704
+2026-09-22 03:34:21.014942-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14602610.481062166,rtc_unc_s,0.000500005,t_s,811766060.984621048,unc_s,0.015704614,mach,7075744850303,adjust,-0.020277977,success,1,after_m,7075744850310
+2026-09-22 03:34:21.015150-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650503558882,was,1775470650526733000,now,1775470650503540000,success,1
+2026-09-22 04:03:55.607537-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [EF84B7B3-77A6-46DB-916E-5652EFEE04E2 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 04:03:55.653049-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83af0515.5a84fd2a,t2,ee5cdf1b.ab76664e,t3,ee5cdf1b.ab775072,t4,83af0515.5fb47143,leap,00,delay,00.00,dispersion,00.09,
+2026-09-22 04:03:55.653051-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,0,result,0,mach,7118336976981,tv_sec,1790075035,tv_usec,669782,delay,0.020241,dispersion,0.000137,more,1,ip,2620:149:a0c:4000::1f2,port,123,slept,0,use_service_port,1
+2026-09-22 04:03:55.653564-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [91309280-1851-4E9F-BBBC-EA8F89C8EBF6 Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 04:03:55.679780-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83af0515.60a0c819,t2,ee5cdf1b.b25dd935,t3,ee5cdf1b.b25e4a70,t4,83af0515.668c5be5,leap,00,delay,00.00,dispersion,00.0c,
+2026-09-22 04:03:55.679831-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,1,result,0,mach,7118337618545,tv_sec,1790075035,tv_usec,696747,delay,0.023119,dispersion,0.000183,more,1,ip,2620:149:a00:4000::31,port,123,slept,0,use_service_port,1
+2026-09-22 04:03:55.680318-0700  localhost timed[381]: (Network) [com.apple.network:path] nw_path_libinfo_path_check [A0ADC2B4-7702-40EB-B656-C977D652787C Hostname#f489e461:123 tcp, legacy-socket, attribution: developer]
+	libinfo check path: <private>
+2026-09-22 04:03:55.702930-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntpPacket,result,0,t1,83af0515.67736d8f,t2,ee5cdf1b.b8176e53,t3,ee5cdf1b.b817f36b,t4,83af0515.6c7b46a1,leap,00,delay,00.00,dispersion,00.0c,
+2026-09-22 04:03:55.702931-0700  localhost timed[381]: [com.apple.timed:data] cmd,fetchTime,num,2,result,0,mach,7118338174227,tv_sec,1790075035,tv_usec,719111,delay,0.019643,dispersion,0.000183,more,1,ip,2620:149:a00:4000::31,port,123,slept,0,use_service_port,1
+2026-09-22 04:03:55.703226-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604385.203186000,unc_s,0.000500000,mach,7118338181726
+2026-09-22 04:03:55.703454-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 04:03:55 2026±0.02 from "NTP"
+2026-09-22 04:03:55.703461-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,NTP,rtc_s,14604385.203274375,rtc_unc_s,0.000000000,t_s,811767835.719111443,unc_s,0.020328119,mach,7118338183847
+2026-09-22 04:03:55.703829-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14604385.203274,utc,811767835.709946,utcUnc,0.016317,sf,0.99999747,sfUnc,0.00000835,utcSfCov,0.00028517,logNoise,-13.555955,timeRtc,14604385.203274,timeUtc,811767835.719111,timeUnc,0.020328,timeSource,NTP,predUtc,811767835.693343,predUtcUnc,0.027360,predSf,0.99999240,predSfUnc,0.00001071,measNumber,2974
+2026-09-22 04:03:55.704611-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604385.204589000,unc_s,0.000500000,mach,7118338214982
+2026-09-22 04:03:55.704778-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14604385.204757,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14606069.335188
+2026-09-22 04:03:55.705067-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 28.07min. Remaining retry interval: 14.998346min.
+2026-09-22 04:03:55.705067-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 04:03:55.705089-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1684.130430 seconds
+2026-09-22 04:03:55.705107-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,16596198,freq_scaled,-165813,maxerror_us,16317
+2026-09-22 04:03:55.705126-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,16596198,freq_scaled,-165813,maxerror_us,16317
+2026-09-22 04:03:55.705183-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14604385.204332333,rtc_unc_s,0.000500005,t_s,811767835.711004257,unc_s,0.016317371,mach,7118338208822,adjust,0.016596198,success,1,after_m,7118338208830
+2026-09-22 04:03:55.705361-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650506671924,was,1775470650503540000,now,1775470650506652000,success,1
+2026-09-22 04:07:36.803625-0700  localhost timed[381]: [com.apple.timed:text] Command 'TMSetAuthenticatedSourceTime' included mach time when not expected, forcing conversion
+2026-09-22 04:07:36.803996-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604606.303985000,unc_s,0.000500000,mach,7123644600277
+2026-09-22 04:07:36.804169-0700  localhost timed[381]: [com.apple.timed:data] STF,SynthesizedClock,rtc,14604606.302982,utc,811768056.850271,utcUnc,4.119623,sf,0.99999851,sfUnc,0.00005515,utcSfCov,0.01262663,logNoise,-13.555955,timeRtc,14604606.302982,timeUtc,811768056.818000,timeUnc,35.000500,timeSource,APNS,predUtc,811768056.850725,predUtcUnc,4.148459,predSf,0.99999851,predSfUnc,0.00005534,measNumber,1852
+2026-09-22 04:07:36.807412-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 04:07:36 2026±35.00 from "APNS"
+2026-09-22 04:07:36.807417-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,APNS,rtc_s,14604606.302981749,rtc_unc_s,0.000500020,t_s,811768056.818000078,unc_s,35.000500020,mach,7123644576199
+2026-09-22 04:07:36.807720-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14604606.302982,utc,811768056.809094,utcUnc,0.017485,sf,0.99999747,sfUnc,0.00000871,utcSfCov,0.00031213,logNoise,-13.555955,timeRtc,14604606.302982,timeUtc,811768056.818000,timeUnc,35.000500,timeSource,APNS,predUtc,811768056.809094,predUtcUnc,0.017485,predSf,0.99999747,predSfUnc,0.00000871,measNumber,2975
+2026-09-22 04:07:36.808409-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14604606.308425,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14606232.050905
+2026-09-22 04:07:36.808540-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604606.308532000,unc_s,0.000500000,mach,7123644709367
+2026-09-22 04:07:36.808636-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 27.10min. Remaining retry interval: 11.313286min.
+2026-09-22 04:07:36.808636-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 04:07:36.808703-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1625.742480 seconds
+2026-09-22 04:07:36.808722-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,15736,freq_scaled,-165813,maxerror_us,17485
+2026-09-22 04:07:36.808737-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,15736,freq_scaled,-165813,maxerror_us,17485
+2026-09-22 04:07:36.808780-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14604606.308164041,rtc_unc_s,0.000500007,t_s,811768056.814276695,unc_s,0.017485074,mach,7123644700536,adjust,0.000015736,success,1,after_m,7123644700541
+2026-09-22 04:07:36.808944-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650506112654,was,1775470650506652000,now,1775470650506103000,success,1
+2026-09-22 04:07:36.850989-0700  localhost timed[381]: [com.apple.timed:text] Command 'TMSetAuthenticatedSourceTime' included mach time when not expected, forcing conversion
+2026-09-22 04:07:36.851254-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604606.351226000,unc_s,0.000500000,mach,7123645734433
+2026-09-22 04:07:36.851393-0700  localhost timed[381]: [com.apple.timed:data] STF,SynthesizedClock,rtc,14604606.350507,utc,811768056.897390,utcUnc,4.091382,sf,0.99999850,sfUnc,0.00005497,utcSfCov,0.01254007,logNoise,-13.555955,timeRtc,14604606.350507,timeUtc,811768056.868000,timeUnc,35.000500,timeSource,APNS,predUtc,811768056.897797,predUtcUnc,4.119625,predSf,0.99999851,predSfUnc,0.00005515,measNumber,1853
+2026-09-22 04:07:36.853476-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 04:07:36 2026±35.00 from "APNS"
+2026-09-22 04:07:36.853478-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,APNS,rtc_s,14604606.350507209,rtc_unc_s,0.000500014,t_s,811768056.868000031,unc_s,35.000500014,mach,7123645717182
+2026-09-22 04:07:36.853729-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14604606.350507,utc,811768056.856620,utcUnc,0.017485,sf,0.99999747,sfUnc,0.00000871,utcSfCov,0.00031213,logNoise,-13.555955,timeRtc,14604606.350507,timeUtc,811768056.868000,timeUnc,35.000500,timeSource,APNS,predUtc,811768056.856620,predUtcUnc,0.017485,predSf,0.99999747,predSfUnc,0.00000871,measNumber,2976
+2026-09-22 04:07:36.854335-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14604606.354354,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14606232.085299
+2026-09-22 04:07:36.854474-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604606.354460999,unc_s,0.000500000,mach,7123645811775
+2026-09-22 04:07:36.854627-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 27.10min. Remaining retry interval: 11.312520min.
+2026-09-22 04:07:36.854627-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 04:07:36.854649-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1625.730945 seconds
+2026-09-22 04:07:36.854656-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,10371,freq_scaled,-165813,maxerror_us,17485
+2026-09-22 04:07:36.854671-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,10371,freq_scaled,-165813,maxerror_us,17485
+2026-09-22 04:07:36.854677-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14604606.354114000,rtc_unc_s,0.000500007,t_s,811768056.860226393,unc_s,0.017485327,mach,7123645803447,adjust,0.000010371,success,1,after_m,7123645803451
+2026-09-22 04:07:36.854717-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650506112393,was,1775470650506103000,now,1775470650506103000,success,1
+2026-09-22 04:07:36.905213-0700  localhost timed[381]: [com.apple.timed:text] Command 'TMSetAuthenticatedSourceTime' included mach time when not expected, forcing conversion
+2026-09-22 04:07:36.905471-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604606.405455999,unc_s,0.000500000,mach,7123647035656
+2026-09-22 04:07:36.905609-0700  localhost timed[381]: [com.apple.timed:data] STF,SynthesizedClock,rtc,14604606.404754,utc,811768056.951237,utcUnc,4.063714,sf,0.99999850,sfUnc,0.00005479,utcSfCov,0.01245527,logNoise,-13.555955,timeRtc,14604606.404754,timeUtc,811768056.922000,timeUnc,35.000500,timeSource,APNS,predUtc,811768056.951637,predUtcUnc,4.091384,predSf,0.99999850,predSfUnc,0.00005497,measNumber,1854
+2026-09-22 04:07:36.908339-0700  localhost timed[381]: [com.apple.timed:text] Received time Tue Sep 22 04:07:36 2026±35.00 from "APNS"
+2026-09-22 04:07:36.908342-0700  localhost timed[381]: [com.apple.timed:data] cmd,T,src,APNS,rtc_s,14604606.404754415,rtc_unc_s,0.000500014,t_s,811768056.921999931,unc_s,35.000500014,mach,7123647018818
+2026-09-22 04:07:36.908826-0700  localhost timed[381]: [com.apple.timed:data] TDTF,SynthesizedClock,rtc,14604606.404754,utc,811768056.910867,utcUnc,0.017486,sf,0.99999747,sfUnc,0.00000871,utcSfCov,0.00031214,logNoise,-13.555955,timeRtc,14604606.404754,timeUtc,811768056.922000,timeUnc,35.000500,timeSource,APNS,predUtc,811768056.910867,predUtcUnc,0.017486,predSf,0.99999747,predSfUnc,0.00000871,measNumber,2977
+2026-09-22 04:07:36.909553-0700  localhost timed[381]: [com.apple.timed:data] cmd,checkActiveTimeSourceRequired,rtc_s,14604606.409530,bb_want_unc_s,inf,want_unc_s,0.050000,bb_want_rtc_s,inf,want_rtc_s,14606232.124542
+2026-09-22 04:07:36.909737-0700  localhost timed[381]: [com.apple.timed:data] cmd,SYNC,rtc_s,14604606.409698000,unc_s,0.000500000,mach,7123647137925
+2026-09-22 04:07:36.909834-0700  localhost timed[381]: [com.apple.timed:text] Want active time in 27.10min. Remaining retry interval: 11.311599min.
+2026-09-22 04:07:36.909834-0700  localhost timed[381]: [com.apple.timed:text] Unscheduling wanted job
+2026-09-22 04:07:36.909889-0700  localhost timed[381]: [com.apple.timed:text] Scheduling wanted job to fire in 1625.715011 seconds
+2026-09-22 04:07:36.909895-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:in,modes,2017,offset_us,-8941,freq_scaled,-165813,maxerror_us,17485
+2026-09-22 04:07:36.909910-0700  localhost timed[381]: [com.apple.timed:data] cmd,ntp_adjtime:out,modes,2017,offset_us,-8941,freq_scaled,-165813,maxerror_us,17485
+2026-09-22 04:07:36.909916-0700  localhost timed[381]: [com.apple.timed:data] cmd,apply,src,adjtime,rtc_s,14604606.409287833,rtc_unc_s,0.000500008,t_s,811768056.915400028,unc_s,0.017485633,mach,7123647128081,adjust,-0.000008941,success,1,after_m,7123647128086
+2026-09-22 04:07:36.909959-0700  localhost timed[381]: [com.apple.timed:data] cmd,rtc_offset,set,1775470650506112195,was,1775470650506103000,now,1775470650506103000,success,1

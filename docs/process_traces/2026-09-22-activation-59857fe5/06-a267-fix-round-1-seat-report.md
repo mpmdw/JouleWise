@@ -1,7 +1,7 @@
 # A267 fix round 1 — implementation seat report
 
 Worktree `/Users/edr/code/JouleWise-wt-a267-d9990b3c`, branch
-`feat/2026-09-22-a267-clock-anchor-v3_1`, base `c5f4f9c6`, head `62412ee6`,
+`feat/2026-09-22-a267-clock-anchor-v3_1`, base `c5f4f9c6`, head `489b0953`,
 tree clean, nothing pushed. All 14 brief items implemented; none skipped.
 `joulewise/uncertainty_evidence.py` is byte-identical to c5f4f9c6
 (sha256 `b583f35a…4ae8` both sides, `git diff` 0 lines). Files touched: exactly
@@ -126,17 +126,38 @@ Ran 224 tests in 55.218s
 OK
 ```
 
+Both commands above were executed at `62412ee6`; the only later commit,
+`489b0953`, is a docstring rewrap. The first command was re-executed at the
+final head `489b0953`: `Ran 224 tests in 55.974s / OK`.
+
 ```
 $ env PYTHONDONTWRITEBYTECODE=1 TMPDIR=/tmp python3 -B -m unittest \
     tests.test_night_gate tests.test_run_night tests.test_gen_evidence_night \
     tests.test_night_agent_install
-SECOND_TAIL
+----------------------------------------------------------------------
+Ran 392 tests in 742.268s
+
+OK
 ```
 
 ## Commits (`git log --oneline c5f4f9c6..HEAD`)
 
 ```
-COMMITS
+489b0953 A267 fix round 1: rewrap the record_attestation docstring after item 6
+62412ee6 A267 fix round 1 item 14 (05a N3, 05a N5, 05b N1, 05b N3): the record says what was queried
+c1bfcdd8 A267 fix round 1 item 13 (05a N4): an unattested envelope never feeds the clean busy-core diagnostic
+5090a722 A267 fix round 1 item 12 (05a N1, 05b N2): integrate takes integer nanoseconds
+e9ea447b A267 fix round 1 item 11 (05a S4): the restore is pinned as the first action of the finally
+0f67e0cf A267 fix round 1 item 10 (05a S3): the OFF toggle's placement before the settle is pinned
+dbe022c0 A267 fix round 1 item 9 (05a S2): the per-rail coverage comparator has its own kill
+a655eecb A267 fix round 1 item 8 (05a S1, and 05a N6): the unresolved v3.1 records carry their identity
+fbe481c2 A267 fix round 1 item 7 (05b S7): the collector-side OFF comparator is pinned to byte equality
+b10e8bd2 A267 fix round 1 item 6 (05b S6): a failed session rewrite asserts the envelope, not the night
+db5d0688 A267 fix round 1 item 5 (05b S4, S5): the restore protects the control record and never raises
+6505220e A267 fix round 1 item 4 (05b S3): an OFF that times out or raises still leaves its receipt
+0bb7bf29 A267 fix round 1 item 3 (05b S2, 05a N2): a refused night returns 2 whatever the restore did
+8ec9234b A267 fix round 1 item 2 (05b S1): an empty log show result is asserted, never authenticated
+d94d51f2 A267 fix round 1 item 1 (05b B1 residual): the clock query is bounded by the gap it runs in
 ```
 
 ## Deviations (all within the dictated shapes; flagged for the magistrate)
