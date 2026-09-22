@@ -1298,6 +1298,15 @@ def execute(plan, protocol, night_dir):
                 outcome, error = "refused", REPLAY_REFUSAL_REASON
         except (OSError, ValueError, KeyError, TypeError) as exc:
             outcome, error = "refused", "pilot summary failed: " + str(exc)
+        # The harvest-side refusal above reads the SESSIONS, so it is silent
+        # when none of them can be read -- a feeder that crashes on a
+        # malformed archive kills every collector before it writes, and the
+        # night then ends `partial`/rc 0 with `recorder_kind: "replay"` as the
+        # only tell (lane contract lens 17a S2).  This point reads the
+        # executor's OWN environment instead: the process that was told to
+        # replay refuses, whatever its children managed to write.
+        if os.environ.get(harness.REPLAY_ENV):
+            outcome, error = "refused", REPLAY_REFUSAL_REASON
         if not cleanup["cleanup_proven"]:
             outcome, error = "refused", error or "final evidence cleanup unproven"
         if outcome == "refused":

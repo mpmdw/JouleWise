@@ -2119,6 +2119,50 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertEqual(outcome["outcome"], "refused")
         self.assertEqual(rc, 2)
 
+    def test_L2_a_replay_night_that_wrote_no_session_still_refuses(self):
+        """Lane contract lens 17a S2: the RUN marker is a refusal point too.
+
+        `pilot_summary`'s refusal reads the session records, so it is silent
+        when none of them can be read: a feeder that crashes on a malformed
+        archive has every collector killed at `envelope_s + 30` before it
+        writes, and the night used to end `partial` with rc 0 -- ordinary
+        INCONCLUSIVE prose in `summary.md` -- with
+        `evidence_outcome.recorder_kind: "replay"` as the only tell.  The
+        executor's own environment now refuses it, independent of what any
+        child managed to write.
+        """
+        from unittest.mock import patch
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            stack.enter_context(patch.dict(
+                module.os.environ, {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}))
+            real = module.pilot_summary
+            def nothing_readable(directory, protocol, envelopes, observer_cpu_s=None):
+                for path in sorted(directory.glob("envelope-*/*.json*")):
+                    path.unlink()
+                for path in sorted(directory.glob("envelope-*/rounds.jsonl")):
+                    path.unlink()
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, "pilot_summary",
+                                             side_effect=nothing_readable))
+
+        rc, summary, outcome, refusals, _calls, _control, sessions = harness.exercise(spy=spy)
+        # Nothing readable, so the SUMMARY cannot see a replay recorder ...
+        self.assertEqual(sessions, [])
+        self.assertEqual(summary["status"], "INCONCLUSIVE")
+        self.assertNotIn("replay_recorder_envelopes", summary)
+        # ... and the night is refused anyway, by the executor's environment.
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(outcome["recorder_kind"], "replay")
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # The drift rows the bench exists for survive the refusal.
+        self.assertEqual([row["index"] for row in harness.envelope_journal],
+                         list(range(1, 13)))
+
     def test_L1_a_real_night_with_a_power_null_envelope_is_not_a_replay(self):
         """Lane contract lens 17a S1: an early refusal is not a replay.
 
