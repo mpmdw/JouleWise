@@ -11,6 +11,22 @@ from joulewise import night_gate
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = json.loads((ROOT / campaign.PROTOCOL_PATH).read_text())
+EXPECTED_OFF = campaign.EXPECTED_NETWORK_TIME_OFF_STDOUT
+
+
+def provenance(state="authenticated", matched=0):
+    """An envelope's network-time provenance as the chain records it.
+
+    After the cold gate every envelope carries the chain's OFF receipt plus a
+    per-envelope attestation from the ``timed`` log; only ``authenticated``
+    envelopes are claim-bearing.
+    """
+    return {"state": "off", "method": "systemsetup_setusingnetworktime_off_exact_stdout",
+            "established_epoch_s": 1000.0, "established_monotonic_s": 10.0,
+            "record": "network_time_control.json", "record_sha256": "0" * 64,
+            "attestation": {"state": state, "method": campaign.TIMED_LOG_ATTESTATION_METHOD,
+                            "window_epoch_s": [1000.0, 1600.0], "log": "timed-log.txt",
+                            "log_sha256": "1" * 64, "matched_lines": matched, "exit_code": 0}}
 
 
 def good_round(busy=0):
@@ -33,6 +49,7 @@ class CampaignTests(unittest.TestCase):
                 out = root / f'envelope-{index:02d}'
                 out.mkdir()
                 session = {'session':'fixture', 'boot_id':'boot', 'os_build':'25G83',
+                    'network_time_provenance': provenance(),
                     'power':{'anchor':{'status':'bounded'}},
                     'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':energy, 'combined_w':energy}}}}
@@ -252,6 +269,7 @@ class CampaignTests(unittest.TestCase):
                 out = root / f'envelope-{index:02d}'
                 out.mkdir()
                 session = {'session':'fixture','boot_id':'boot','os_build':'25G83','power':{'anchor':{'status':'bounded'}},
+                           'network_time_provenance': provenance(),
                            'interior':{'complete_support':True,'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                 row = good_round(100)
                 if index in (3, 7, 11):
@@ -301,7 +319,8 @@ class CampaignTests(unittest.TestCase):
 
 
 class FrozenExecutorTests(unittest.TestCase):
-    def exercise(self, errors=(), cleanup_failures=(), recorder_dead=False):
+    def exercise(self, errors=(), cleanup_failures=(), recorder_dead=False,
+                 off_stdout=None, on_exit=0, timed_log=""):
         from dataclasses import replace
         from types import SimpleNamespace
         from tests.test_night_gate import make_plan
@@ -325,7 +344,11 @@ class FrozenExecutorTests(unittest.TestCase):
                     self.index = index
                     self.end = float(argv[argv.index('--envelope-start-mono-s')+1])+600
                     session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
-                        'power':{'anchor':{'status':'bounded'}},'interior':{'complete_support':True,
+                        'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
+                        'power':{'anchor':{'status':'bounded','clock_stamps':{
+                            'sampling_started':{'epoch_s':1000+self.end-600},
+                            'sampling_stopped':{'epoch_s':1000+self.end}}}},
+                        'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                     (out/'session.json').write_text(json.dumps(session))
                     (out/'rounds.jsonl').write_text(json.dumps(good_round())+'\n')
@@ -348,7 +371,22 @@ class FrozenExecutorTests(unittest.TestCase):
                     result['cleanup_proven'] = False
             return result
         def terminate(pgid, sig): processes[pgid].returncode = -sig
+        # Only the OS boundary is faked: set_network_time, the exact-stdout
+        # comparator, the timed-log argv, the scanner and the atomic session
+        # rewrite all run for real (the fake sudo/log regressions below run
+        # real executables through the same constants).
+        def run(argv, **kwargs):
+            from subprocess import CompletedProcess
+            if argv[0] == campaign.SUDO:
+                state = argv[-1]
+                stdout = (EXPECTED_OFF if off_stdout is None else off_stdout) \
+                    if state == 'off' else 'setUsingNetworkTime: On\n'
+                return CompletedProcess(argv, 0 if state == 'off' else on_exit, stdout, '')
+            if argv[0] == campaign.LOG:
+                return CompletedProcess(argv, 0, timed_log, '')
+            raise AssertionError(f'unexpected command {argv}')
         with tempfile.TemporaryDirectory() as tmp, patch.object(campaign,'time',clock), \
+                patch.object(campaign.subprocess,'run',side_effect=run), \
                 patch.object(campaign.subprocess,'Popen',side_effect=Child), \
                 patch.object(campaign,'group_absent',side_effect=lambda pgid:processes[pgid].returncode is not None), \
                 patch.object(campaign.os,'killpg',side_effect=terminate), \
@@ -360,10 +398,13 @@ class FrozenExecutorTests(unittest.TestCase):
             summary=json.loads((Path(tmp)/'evidence/summary.json').read_text())
             outcome=json.loads((Path(tmp)/'evidence_outcome.json').read_text())
             refusals=list(Path(tmp).glob('refusal*.json'))
-            return rc, summary, outcome, len(refusals), calls
+            control=json.loads((Path(tmp)/campaign.NETWORK_TIME_CONTROL_BASENAME).read_text())
+            sessions=[json.loads(path.read_text())
+                      for path in sorted((Path(tmp)/'evidence').glob('envelope-*/session.json'))]
+            return rc, summary, outcome, len(refusals), calls, control, sessions
 
     def test_twelve_protocol_envelopes_one_recorder_no_load_and_cleanup(self):
-        rc, summary, outcome, refusals, calls = self.exercise()
+        rc, summary, outcome, refusals, calls, *_ = self.exercise()
         self.assertEqual(rc, 0)
         self.assertEqual(summary['retained'],12)
         self.assertEqual(len(summary['adjacent_pairs']),11)
@@ -377,7 +418,7 @@ class FrozenExecutorTests(unittest.TestCase):
             self.assertEqual(cmd[cmd.index('--sample-interval-s')+1],'30')
 
     def test_envelope_three_collect_error_continues_frozen_cadence_retains_eleven(self):
-        rc, summary, outcome, refusals, calls = self.exercise(errors={3})
+        rc, summary, outcome, refusals, calls, *_ = self.exercise(errors={3})
         self.assertEqual(rc, 0)
         self.assertEqual(outcome['envelopes_attempted'], 12)
         self.assertEqual(summary['retained'], 11)
@@ -390,7 +431,7 @@ class FrozenExecutorTests(unittest.TestCase):
     def test_isolated_cleanup_unproven_continues_but_two_consecutive_refuse(self):
         for failures, attempted, retained, refusal_count in (({3}, 12, 11, 0), ({3,5}, 12, 10, 0), ({3,4}, 4, 2, 1)):
             with self.subTest(failures=failures):
-                rc, summary, outcome, refusals, _ = self.exercise(cleanup_failures=failures)
+                rc, summary, outcome, refusals, *_ = self.exercise(cleanup_failures=failures)
                 self.assertEqual(outcome['envelopes_attempted'], attempted)
                 self.assertEqual(summary['retained'], retained)
                 self.assertEqual(summary['envelopes'][2]['excluded'], ['cleanup_unproven'])
@@ -398,7 +439,7 @@ class FrozenExecutorTests(unittest.TestCase):
                 self.assertEqual(rc, 2 if refusal_count else 0)
 
     def test_dead_covariate_recorder_refuses_with_document(self):
-        rc, summary, outcome, refusals, _ = self.exercise(recorder_dead=True)
+        rc, summary, outcome, refusals, *_ = self.exercise(recorder_dead=True)
         self.assertEqual(rc, 2)
         self.assertEqual(outcome['envelopes_attempted'], 1)
         self.assertEqual(refusals, 1)
