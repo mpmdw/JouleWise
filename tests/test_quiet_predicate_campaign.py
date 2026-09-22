@@ -2242,6 +2242,57 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertEqual([row["index"] for row in harness.envelope_journal],
                          list(range(1, 13)))
 
+    def test_D1_a_bench_abort_keeps_its_own_error_beside_the_replay_marker(self):
+        """Delta lenses (execution SHOULD-FIX 1, contract N1): no clobber.
+
+        The bench sets the replay switch on EVERY run, so `execute`'s
+        environment-side refusal overwrote whatever `error` already held.  A
+        night aborted at envelope 02 by `start_drift_abort` -- the exact
+        failure the bench replay exists to detect -- reached
+        `evidence_outcome.json` and `write_refusal` reading `replay_recorder`
+        alone, and the abort text survived only as the journal row's `abort`
+        key.  Both texts now travel together, the specific one first.
+
+        The night is the ruled C3 pitch-603 harness: a 3 s gap against 6 s of
+        floors (teardown 1 s spent by `_spend_the_whole_teardown_budget`,
+        query 5 s spent by `attest_burn`), so envelope 02 -- the first spawn
+        the pitch governs -- is 3 s late against a 2 s abort bar.
+        """
+        from unittest.mock import patch
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+        tight = {**PROTOCOL, 'slot_pitch_s': 603, 'start_drift_abort_s': 2}
+
+        def spy(stack, module):
+            stack.enter_context(patch.dict(
+                module.os.environ, {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}))
+            AttestationBudgetTests._spend_the_whole_teardown_budget(stack, module)
+
+        rc, _summary, outcome, refusals, *_ = harness.exercise(
+            protocol=tight, attest_burn=5, spy=spy)
+        self.assertEqual((rc, refusals), (2, 1))
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(harness.envelope_journal[-1]["abort"], "start_drift_abort")
+        # BOTH, in this order: the diagnostic the bench came for, then the
+        # marker that says no frame here is evidence.
+        self.assertIn("start_drift_abort: envelope 2", outcome["error"])
+        self.assertTrue(outcome["error"].endswith("; " + campaign.REPLAY_REFUSAL_REASON),
+                        outcome["error"])
+        # The counterfactual at 9e7061be, executed on the same helper: an
+        # unconditional assignment keeps only the marker.
+        self.assertEqual(campaign.REPLAY_REFUSAL_REASON, "replay_recorder")
+        self.assertNotEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        # A night with nothing more specific to say still says exactly the
+        # marker (the ruled L2 shape), and a night both refusal points fire
+        # on never says it twice (R5's ordinary bench case).
+        self.assertEqual(campaign.replay_refusal_error(None),
+                         campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(campaign.replay_refusal_error(""),
+                         campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(campaign.replay_refusal_error(campaign.REPLAY_REFUSAL_REASON),
+                         campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(outcome["error"].count(campaign.REPLAY_REFUSAL_REASON), 1)
+
     def test_L1_a_real_night_with_a_power_null_envelope_is_not_a_replay(self):
         """Lane contract lens 17a S1: an early refusal is not a replay.
 

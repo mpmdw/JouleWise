@@ -59,6 +59,26 @@ NETWORK_TIME_UNATTESTED_EXCLUSION = "network_time_unattested"
 # pinned list does not carry is precisely the defect that ruling forbids.
 REPLAY_NEVER_EVIDENCE = "REPLAY_NEVER_EVIDENCE"
 REPLAY_REFUSAL_REASON = "replay_recorder"
+
+
+def replay_refusal_error(error):
+    """The replay refusal, KEEPING whatever more specific error came first.
+
+    Both replay refusal points used to assign `REPLAY_REFUSAL_REASON` over
+    `error`, and on the bench the switch is ALWAYS set, so a night that
+    aborted on `start_drift_abort` -- the exact failure the bench replay
+    exists to detect -- or whose summary crashed reached
+    `evidence_outcome.json` and `write_refusal` reading `replay_recorder`
+    and nothing else (delta lenses: execution SHOULD-FIX 1, contract N1).
+    The specific text leads, the marker is appended, and the marker is never
+    appended twice (a night both points fire on is the ordinary bench case).
+    """
+
+    if not error:
+        return REPLAY_REFUSAL_REASON
+    if REPLAY_REFUSAL_REASON in error:
+        return error
+    return f"{error}; {REPLAY_REFUSAL_REASON}"
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
                   "joulewise/quiet_predicate_campaign.py", "joulewise/night_gate.py",
@@ -1332,7 +1352,7 @@ def execute(plan, protocol, night_dir):
                 # slot's row stays in `evidence_envelopes.jsonl`, appended
                 # inside the loop above, because those rows are the drift
                 # measurement the bench replay exists to take.
-                outcome, error = "refused", REPLAY_REFUSAL_REASON
+                outcome, error = "refused", replay_refusal_error(error)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             outcome, error = "refused", "pilot summary failed: " + str(exc)
         # The harvest-side refusal above reads the SESSIONS, so it is silent
@@ -1343,7 +1363,7 @@ def execute(plan, protocol, night_dir):
         # executor's OWN environment instead: the process that was told to
         # replay refuses, whatever its children managed to write.
         if os.environ.get(harness.REPLAY_ENV):
-            outcome, error = "refused", REPLAY_REFUSAL_REASON
+            outcome, error = "refused", replay_refusal_error(error)
         if not cleanup["cleanup_proven"]:
             outcome, error = "refused", error or "final evidence cleanup unproven"
         if outcome == "refused":
