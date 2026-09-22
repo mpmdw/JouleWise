@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38s — 2026-09-21: RETAINED-ROOT-REFUSAL-CLASS-01 closed under two cold-gate rulings (packets 02 and 06; gate-supplied prose only); A230 retired; A264/A265/A266 registered",
-    "path": "docs/process_traces/2026-09-21-activation-ce7c57a9/05-round3-seats-gate2-and-close.md"
+    "label": "T38t — 2026-09-22: pilot night qpe01-pilot-n1-20260922-0217 harvested (GO, INCONCLUSIVE 2/12; seven clock-anchor refusals traced to timed slews against the v3 anchor's 5 ms absolute caps); agents uninstalled; A267–A269 registered",
+    "path": "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2691,6 +2691,36 @@
       "status_note": "PREWINDOW-REGEX-01 is complete; the agent-free external capture is now dependency-ready.",
       "stop_card": null
     },
+    "ENVELOPE-START-DRIFT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md (§2 table, start drift column; §6 finding 2)",
+          "night/chain.stdout.log and each envelope's session.json start_stamp in the custody root"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ENVELOPE-START-DRIFT-01/acceptance",
+          "label": "ENVELOPE-START-DRIFT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The cause of the start drift is named from executed timing evidence (chain envelope_end to next envelope_start, recorder finalisation duration); either the drift on a 600 s envelope is under 1 s in a bench replay or the interior offset budget is stated in the protocol with the drift's measured upper bound; a test pins whichever was chosen."
+      },
+      "authority": {
+        "label": "2026-09-22 activation 22666c9f, harvest record 01 §8 (registration by the magistrate, not a ruling)",
+        "path": "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Every envelope after the first in pilot night qpe01-pilot-n1-20260922-0217 started its collector 7.6 to 10.2 s after its scheduled monotonic start (session.json start_drift_s; envelope 1: 0.32 s). The 60 s interior offset absorbs it today but the margin is 50 s, not 60 s, and the cause is unrecorded; the likeliest is the previous envelope's finalisation (parsing a 130 MB plist) sitting on the chain's critical path. Name the cause with executed evidence and either remove it from the critical path or size the interior offset budget explicitly.",
+      "id": "ENVELOPE-START-DRIFT-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 269,
+      "status": "queued",
+      "status_note": "2026-09-22: registered by activation 22666c9f from the harvest. Registration, not a ruling.",
+      "stop_card": null
+    },
     "EPOCH-CONTINUATION-01": {
       "acceptance": {
         "evidence": [
@@ -3416,7 +3446,7 @@
       "priority": "p1_phase_gate",
       "rank": 243,
       "status": "queued",
-      "status_note": "2026-09-19 — READY [AGENT] for analysis and investigation; partly [ED-EXTERNAL] if a system-level probe needs administrator privileges. Existing sampler-identity and successor-calibration entries do not own this causal attribution.",
+      "status_note": "2026-09-19 — READY [AGENT] for analysis and investigation; partly [ED-EXTERNAL] if a system-level probe needs administrator privileges. Existing sampler-identity and successor-calibration entries do not own this causal attribution. 2026-09-22 activation 22666c9f: pilot night qpe01-pilot-n1-20260922-0217 measured 2,535 frames in 600 s at the 100 ms setting (envelope 2 plist elapsed_ns count), a mean delivered interval of about 237 ms; see record 01 §6 finding 4 in docs/process_traces/2026-09-22-activation-22666c9f/.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
@@ -4405,6 +4435,47 @@
       "rank": 219,
       "status": "queued",
       "status_note": "2026-09-16 interactive 5239df1e: root cause PROVEN from the unified log (record 01 addendum): tccd prompted 'access to iCloud Drive by python3.13' at 09:45:03.142 (msgID 165.165) and replied at 20:52:04.644 with a Create grant for kTCCServiceFileProviderDomain keyed by the interpreter path; ledger written 20:52:06; owner's session in the census 20:52:13; the download alternative is excluded (no downloads in the iCloud daemon log, all 190 files local); design consult run and ADOPTED (record 02); the e0c58148 record calls this lane NIGHT-RESERVATION-STALL-01; FIRST item for the successor magistrate: implementation seat in a linked worktree under WRITE_SCOPE from record 02's files-and-functions list, distinct-lens refuters, delta re-audit; no re-plan of the equivalence night before this lane is cured.",
+      "stop_card": null
+    },
+    "NIGHT-RESULTS-LARGE-FILES-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md (§5)",
+          "night.log lines 5 and 7 in the custody root (the two push failures)",
+          "git ls-tree -r -l HEAD in results-clone (twelve files above 100 MB)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-RESULTS-LARGE-FILES-01/acceptance",
+          "label": "NIGHT-RESULTS-LARGE-FILES-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed's written choice recorded; this night's results commit published under it and verified with git ls-remote; the driver checks file sizes before its push and either routes oversize raw files per the ruling or writes a named refusal into night.log with the file list; a regression with a synthetic 101 MB file exercises the check; no push of the existing commit is retried before the ruling."
+      },
+      "authority": {
+        "label": "2026-09-22 activation 22666c9f, harvest record 01 §8 (registration by the magistrate, not a ruling)",
+        "path": "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed chooses the destination for raw night evidence files above GitHub's 100 MB limit (Git LFS, exclusion of raw plists from the results branch, or another store)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ED-NIGHT-RESULTS-DESTINATION"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The driver's results push for qpe01-pilot-n1-20260922-0217 failed twice (night.log 04:28:36 and 04:32:34) and the branch night-results/qpe01-pilot-n1-20260922-0217 is absent on origin; the results commit 08c1cc47 in the custody root's results-clone holds twelve powermetrics plists of 130 to 133 MB (600 s at the 100 ms setting), each above GitHub's 100 MB file limit. Publish the night's record once Ed chooses the destination (Git LFS, exclusion of the raw plists from the results branch with the reduced per-envelope records kept, or another store), and make the driver route or refuse before pushing whenever a file exceeds the limit so a night never ends with an unpublished record.",
+      "id": "NIGHT-RESULTS-LARGE-FILES-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 268,
+      "status": "blocked",
+      "status_note": "2026-09-22: registered by activation 22666c9f; BLOCKED on Ed's choice of destination (ED-EXTERNAL decision, agent implementation). The evidence bytes are intact in the custody root and the harvest archive; nothing is lost.",
       "stop_card": null
     },
     "NIGHT-STALL-WALLCLOCK-ABORT-01": {
@@ -5997,6 +6068,37 @@
       "rank": 147,
       "status": "blocked",
       "status_note": "The default composed-member-envelope mean rule may be implemented now. The t95 plus window variant remains proposed and cannot govern _v5 collection until this cold gate rules it.",
+      "stop_card": null
+    },
+    "QPE01-CLOCK-DISCIPLINE-ANCHOR-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md (§6 diagnosis table, timed log correlation, materiality)",
+          "joulewise/uncertainty_evidence.py:35,41,1000-1005,1100,1225-1227 at d45378c6 (the caps and the three refusal details)",
+          "/Users/edr/night-archive/qpe01-pilot-n1-20260922-0217-harvest-20260922 (byte-exact copy, SHA256SUMS 15801 OK)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QPE01-CLOCK-DISCIPLINE-ANCHOR-01/acceptance",
+          "label": "QPE01-CLOCK-DISCIPLINE-ANCHOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cold-gate ruling (fresh Fable judge + Opus contract-lens refuter) on the two 5 ms caps and the span-mismatch tolerance, with the record 01 §6 table and materiality arithmetic in the packet; the ruled option implemented under the twelve-row gate with a regression that replays envelope 07's five host stamps and native seconds (a logged 20.3 ms adjtime slew) and yields a bounded anchor with the slew priced into the error bound, and a counterfactual that a true wall-clock step (settimeofday) still refuses; the pilot night re-run afterwards yields at least eight bounded envelopes or names a new cause."
+      },
+      "authority": {
+        "label": "2026-09-22 activation 22666c9f, harvest record 01 §8 (registration by the magistrate, not a ruling)",
+        "path": "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Seven of twelve 600 s idle envelopes of pilot night qpe01-pilot-n1-20260922-0217 lost their clock anchor (the derived mapping from the power sampler's timestamps onto the host wall clock) because macOS's time daemon slewed the wall clock by 4 to 22 ms at its ~30 min NTP syncs and ran it at up to 7.6 ppm frequency correction between them, while derive_powermetrics_anchor_v3 (joulewise/uncertainty_evidence.py:35, :41) refuses any capture whose wall-minus-monotonic offset span or effective bound exceeds 5 ms absolute regardless of capture length. A 22 ms edge error on a 480 s interior at 0.32 W moves about 7 mJ, two orders below the ~1 J attribution limit and the 1.45 J envelope scatter. Assemble the cold-gate packet (options: caps derived from the energy budget or scaled with capture length; an honest error bound pricing the observed slew into error_bound_j instead of refusing; a shorter anchored sub-interval per envelope) together with the 1 us span_mismatch tolerance that left three bounded envelopes unretained, then implement the ruled option.",
+      "id": "QPE01-CLOCK-DISCIPLINE-ANCHOR-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 267,
+      "status": "queued",
+      "status_note": "2026-09-22: registered by activation 22666c9f from the harvest; the night's summary stands at INCONCLUSIVE, no cutoff qualifies; no next pilot night is prepared on the present caps (record 01 §7). Registration, not a ruling; the caps belong to a cold-review-ratified method (2026-08-18) and change only under a cold gate.",
       "stop_card": null
     },
     "QUIET-GUARD-01": {
@@ -9574,5 +9676,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-21"
+  "updated": "2026-09-22"
 }
