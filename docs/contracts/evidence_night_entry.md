@@ -202,10 +202,15 @@ with the clone's code. It then writes verdicts and evidence for:
    unchanged installer. This checks availability; it never invokes the courier.
 4. Every `<roots_under>/night-custody/*/night_plan.json` is inventoried and
    must be a regular non-symlink file; directories and special files refuse.
-   An existing regular `night/courier.sent` or `night/result.json` classifies
-   its root as retained. Otherwise it is UNKNOWN and refuses. Discovery
-   never removes a root, and has no fixed root count. Retention classification
-   does not certify process liveness or completed delivery.
+   A root whose `night/chain.started` is a regular file without a regular
+   `night/chain.exited` is ACTIVE and refuses. Otherwise an existing regular
+   `night/courier.sent`, `night/result.json`, `night/chain.exited`, or any
+   regular file matched by `run_night._refusal_paths` (`refusal.json`,
+   `refusal-N.json`, `calibration-refusal.json`,
+   `calibration-refusal.json.*.json`) classifies its root as retained; the
+   record lists every marker found. Otherwise it is UNKNOWN and refuses.
+   Discovery never removes a root, and has no fixed root count. Retention
+   classification does not certify process liveness or completed delivery.
 5. The exact raw bracketed `night_gate.AGENT_CENSUS_ARGV` result is retained
    alongside `arm_census.observe_arm_census` and `classify_arm_census` evidence.
    The argv derivation and ancestry classification execute inside the clone's

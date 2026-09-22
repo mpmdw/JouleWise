@@ -717,16 +717,92 @@ class LifecycleTests(unittest.TestCase):
             self.checked("courier")
 
     def test_discovery_retains_every_harvested_root_and_refuses_unknown(self):
-        for i, marker in enumerate(("courier.sent", "result.json", None)):
+        markers = ("courier.sent", "result.json", "chain.exited", "refusal.json", "refusal-2.json",
+                   "calibration-refusal.json", "calibration-refusal.json.1789617139.json", None)
+        for i, marker in enumerate(markers):
             root = self.custody.parent / f"prior-{i}"
             (root / "night").mkdir(parents=True)
             (root / "night_plan.json").write_text("{}")
             if marker:
                 (root / "night" / marker).write_text("{}")
         result = self.checked("retained_roots")["checks"]["retained_roots"]
-        self.assertEqual([r["classification"] for r in result["inventory"]], ["retained", "retained", "UNKNOWN"])
+        self.assertEqual([r["classification"] for r in result["inventory"]],
+                         ["retained"] * (len(markers) - 1) + ["UNKNOWN"])
+        self.assertEqual([len(r["evidence"]) for r in result["inventory"]], [1] * (len(markers) - 1) + [0])
         self.assertTrue((root / "night_plan.json").exists())
         (root / "night/result.json").write_text("{}")
+        self.assertTrue(self.checked()["rehearsal_ready"])
+
+    def test_discovery_refuses_an_open_chain_and_ignores_non_marker_records(self):
+        # A refused night whose chain was killed: refusal.json + chain.started + chain.exited
+        # (the 2026-09-16 root's shape) is retained; the same root before chain.exited is ACTIVE.
+        root = self.custody.parent / "refused"
+        (root / "night").mkdir(parents=True)
+        (root / "night_plan.json").write_text("{}")
+        for name in ("refusal.json", "chain.started", "receipt.json", "censuses.jsonl"):
+            (root / "night" / name).write_text("{}")
+        result = self.checked("retained_roots")["checks"]["retained_roots"]
+        self.assertEqual([r["classification"] for r in result["inventory"]], ["ACTIVE"])
+        (root / "night/chain.exited").write_text('{"exit_code": -15}')
+        result = self.checked()["checks"]["retained_roots"]
+        self.assertEqual([r["classification"] for r in result["inventory"]], ["retained"])
+        self.assertEqual(sorted(Path(p).name for p in result["inventory"][0]["evidence"]),
+                         ["chain.exited", "refusal.json"])
+        # An open chain stays ACTIVE even when a courier marker exists.
+        (root / "night/chain.exited").unlink()
+        (root / "night/courier.sent").write_text("{}")
+        self.assertEqual(self.checked("retained_roots")["checks"]["retained_roots"]["inventory"][0]["classification"], "ACTIVE")
+        # Receipt-only and stray-file roots are unknown.
+        for name in ("courier.sent", "chain.started", "refusal.json"):
+            (root / "night" / name).unlink()
+        self.assertEqual(self.checked("retained_roots")["checks"]["retained_roots"]["inventory"][0]["classification"], "UNKNOWN")
+
+    def test_retained_root_classification_ruled_cases(self):
+        # Cold-gate ruling 2026-09-21 (packet 05, Q4): active is tested before retained.
+        cases = [
+            (("refusal.json",), "retained"), (("chain.exited",), "retained"),
+            (("refusal-3.json",), "retained"), (("calibration-refusal.json.2.json",), "retained"),
+            (("chain.started",), "ACTIVE"),
+            (("chain.started", "calibration-refusal.json"), "ACTIVE"),
+            (("chain.started", "chain.exited"), "retained"),
+            ((), "UNKNOWN"),
+        ]
+        state = {"roots_under": str(self.custody.parent.parent)}
+        for i, (names, expected) in enumerate(cases):
+            root = self.custody.parent / f"case-{i}"
+            (root / "night").mkdir(parents=True)
+            (root / "night_plan.json").write_text("{}")
+            for name in names:
+                (root / "night" / name).write_text("{}")
+        # A refusal record that is a directory does not count.
+        root = self.custody.parent / "case-dir"
+        (root / "night/refusal.json").mkdir(parents=True)
+        (root / "night_plan.json").write_text("{}")
+        result = entry.retained_roots(state)
+        by_name = {Path(r["plan"]).parent.name: r for r in result["inventory"]}
+        for i, (names, expected) in enumerate(cases):
+            with self.subTest(names=names):
+                row = by_name[f"case-{i}"]
+                self.assertEqual(row["classification"], expected)
+                if expected == "retained":
+                    self.assertEqual(sorted(Path(p).name for p in row["evidence"]),
+                                     sorted(n for n in names if n != "chain.started"))
+                elif expected == "UNKNOWN":
+                    self.assertEqual(row["evidence"], [])
+                else:  # ACTIVE: markers found are still listed for the lead
+                    self.assertEqual([Path(p).name for p in row["evidence"]],
+                                     [n for n in names if n != "chain.started"])
+        self.assertEqual(by_name["case-dir"]["classification"], "UNKNOWN")
+        self.assertEqual(by_name["case-dir"]["evidence"], [])
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual(entry.retained_roots({"roots_under": str(self.custody.parent.parent)})["verdict"], "fail")
+        # Through the check: an ACTIVE root refuses naming retained_roots.
+        for name in list(by_name):
+            if name != "case-4":
+                shutil.rmtree(self.custody.parent / name)
+        with self.assertRaisesRegex(entry.Refused, "retained_roots"):
+            entry.check(**self.kw)
+        (self.custody.parent / "case-4/night/chain.exited").write_text("{}")
         self.assertTrue(self.checked()["rehearsal_ready"])
 
     def test_census_foreign_workload_and_unknown_refuse(self):

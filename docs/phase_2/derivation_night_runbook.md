@@ -721,11 +721,26 @@ The night's own driver never discovers anything — launchd hands
 `--plan` argument (its `--plan` is `required=True`), so the driver reads the
 file it was installed with and no other.
 
-Check it, and expect no output:
+Check it. Prior roots may be discoverable; what stops an arm is any root whose
+chain is open, whose span is active, whose night agents are installed, or whose
+records show no terminal state. The executable form is
+`python -m joulewise.evidence_night check --candidate STAGING`, whose
+`night_agents` and `retained_roots` items must both pass with every inventoried
+root classified `retained` (contract item 4: `ACTIVE` and `UNKNOWN` refuse).
+For a manual read:
 
 ```zsh
-print -rl -- /Users/edr/night-custody/*/night_plan.json(N)
+for p in /Users/edr/night-custody/*/night_plan.json(N); do
+  n=${p:h}/night; r=${p:h:t}
+  if [[ -f $n/chain.started && ! -f $n/chain.exited ]]; then print -r -- "$r: ACTIVE"; continue; fi
+  m=($n/courier.sent(N) $n/result.json(N) $n/chain.exited(N) $n/refusal.json(N) $n/refusal-<0-9>*.json(N) $n/calibration-refusal.json(N) $n/calibration-refusal.json.*.json(N))
+  (( $#m )) && print -r -- "$r: retained ${m[1]:t}" || print -r -- "$r: UNKNOWN"
+done
 ```
+
+Every line must read `retained`; an `ACTIVE` or `UNKNOWN` line, or any
+installed night plist, stops the arm. Do not move or edit a root to change its
+line. (Cold-gate ruling 2026-09-21, packet 05 Q2, lane A230.)
 
 ### 0.8 The clone's tree is clean, and the two desk inputs are written
 
