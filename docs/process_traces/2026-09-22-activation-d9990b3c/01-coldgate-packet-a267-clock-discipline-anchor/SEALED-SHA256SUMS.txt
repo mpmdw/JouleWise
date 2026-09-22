@@ -1,3 +1,6 @@
 bbeff5c42f3592f6f7b8c7dee32f1fd4a7ab898d8a760f67d80c7ee62092d0b0  docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/10-coldgate-fable-ruling.md
 d68bac128130c8fa015dd7db17c712091ec6d90e470507e6ef83d488931f3d32  docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/09-convene-script.sh
 26f3fcaad083f1b901358f74e881b2c73c6404c5fc22530b5d65e4a95569a302  docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/12-lead-bench-probe-caps-lifted.md
+85f0437db50d60be48b5b213fca5ad08ad18f04cd8cbbcc6828a75e8628970dd  docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/11-opus-contract-refuter.md
+d920f153a129c2d68583567cd9995628f8c27b03293805cec72d62dccaa6e875  docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/13-rebuttal-round-charge.md
+507c33cb62a55a1bfd23f8d863fc4203959838aac57793f8dff0801da1226ef1  docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/14-coldgate-fable-rebuttal-ruling.md
