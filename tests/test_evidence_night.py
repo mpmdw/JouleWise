@@ -688,11 +688,106 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "tracked").write_text("dirty")
         self.assertFalse(self.checked("canonical")["armable"])
         subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
-        self.checked("canonical")
+        # Behind H with no upstream: the fast-forward attempt refuses, nothing moves.
+        reason = self.checked("canonical")["checks"]["canonical"]["reason"]
+        self.assertIn("fast-forward failed", reason)
+        self.assertEqual(self.canonical_head(), self.old)
         subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.tip], check=True)
         (self.canonical / "untracked").write_text("irrelevant")
         self.assertTrue(self.checked()["rehearsal_ready"])
         self.assertTrue(any(c[-4:] == ["--no-optional-locks", "status", "--porcelain", "-uno"] for c in self.calls))
+
+    def canonical_head(self):
+        return subprocess.check_output(["git", "-C", str(self.canonical), "rev-parse", "HEAD"], text=True).strip()
+
+    def give_canonical_upstream(self):
+        bare = self.base / "upstream.git"
+        subprocess.run(["git", "clone", "-q", "--bare", str(self.canonical), str(bare)], check=True)
+        branch = subprocess.check_output(["git", "-C", str(self.canonical), "rev-parse", "--abbrev-ref", "HEAD"],
+                                         text=True).strip()
+        subprocess.run(["git", "-C", str(self.canonical), "remote", "add", "origin", str(bare)], check=True)
+        subprocess.run(["git", "-C", str(self.canonical), "fetch", "-q", "origin"], check=True)
+        subprocess.run(["git", "-C", str(self.canonical), "branch", "-q", "--set-upstream-to=origin/" + branch],
+                       check=True)
+        return bare
+
+    def test_canonical_fast_forwards_itself_when_nothing_is_loaded(self):
+        # D-183: a clean canonical checkout behind H is moved by check itself.
+        self.give_canonical_upstream()
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        record = self.checked()
+        self.assertTrue(record["rehearsal_ready"])
+        moved = record["checks"]["canonical"]["fast_forward"]
+        self.assertEqual((moved["before"], moved["after"]), (self.old, self.tip))
+        self.assertEqual(moved["pull"]["exit_code"], 0)
+        self.assertEqual(self.canonical_head(), self.tip)
+        self.assertTrue(any(c[-2:] == ["pull", "--ff-only"] and str(self.canonical) in c for c in self.calls))
+        # Already containing H: no pull is attempted.
+        self.calls.clear()
+        self.assertIsNone(self.checked()["checks"]["canonical"]["fast_forward"])
+        self.assertFalse(any("pull" in c for c in self.calls))
+
+    def test_canonical_fast_forward_that_still_lacks_h_refuses_and_keeps_evidence(self):
+        bare = self.give_canonical_upstream()
+        # The upstream branch advances WITHOUT the fix: old -> other.
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        other = self.commit("other", self.arrival + 200)
+        branch = subprocess.check_output(["git", "-C", str(self.canonical), "rev-parse", "--abbrev-ref", "HEAD"],
+                                         text=True).strip()
+        subprocess.run(["git", "-C", str(self.canonical), "push", "-q", "-f", "origin", f"HEAD:{branch}"], check=True)
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        reason = self.checked("canonical")["checks"]["canonical"]["reason"]
+        self.assertIn("canonical fast-forward failed: HEAD moved " + self.old + " -> " + other, reason)
+        self.assertIn("still does not contain candidate H", reason)
+        self.assertEqual(self.canonical_head(), other)
+        self.assertIn(str(bare), subprocess.check_output(["git", "-C", str(self.canonical), "remote", "-v"], text=True))
+
+    def test_canonical_fast_forward_is_bounded_and_prompt_free(self):
+        self.give_canonical_upstream()
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        seen = {}
+
+        def runner(argv, **kwargs):
+            if list(map(str, argv))[-2:] == ["pull", "--ff-only"]:
+                seen.update(kwargs)
+                raise subprocess.TimeoutExpired(argv, kwargs.get("timeout"))
+            return self.runner(argv, **kwargs)
+        with patch.dict(self.kw, runner=runner):
+            record = self.checked("canonical")
+        self.assertEqual(seen, dict(timeout=entry.FAST_FORWARD_TIMEOUT_S, env={"GIT_TERMINAL_PROMPT": "0"}))
+        self.assertEqual(self.canonical_head(), self.old)
+        self.assertIn("timed out", record["checks"]["canonical"]["reason"])
+
+    def test_fast_forward_makes_the_resident_supervisor_stale_and_says_so(self):
+        # Records 19/21 after an in-check move: the session's own supervisor predates
+        # the arrival of H and the refusal names the hand-off (D-183).
+        self.give_canonical_upstream()
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        self.live_supervisor(self.arrival + 50)
+        record = self.checked("stale resident supervisor pid 42")
+        self.assertEqual(self.canonical_head(), self.tip)
+        self.assertEqual(record["checks"]["canonical"]["verdict"], "pass")
+        reason = record["checks"]["supervisor"]["reason"]
+        self.assertIn("exit so the watchdog's successor arms", reason)
+        self.assertGreaterEqual(record["checks"]["supervisor"].get("head_arrived_epoch_s", 0) or 0, 0)
+        # A supervisor started after the move passes.
+        self.live_supervisor(time.time() + 5)
+        self.assertTrue(self.checked()["rehearsal_ready"])
+
+    def test_canonical_fast_forward_refuses_dirty_tree_and_loaded_agents(self):
+        self.give_canonical_upstream()
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        (self.canonical / "tracked").write_text("dirty")
+        self.assertIn("dirty", self.checked("canonical")["checks"]["canonical"]["reason"])
+        self.assertEqual(self.canonical_head(), self.old)
+        subprocess.run(["git", "-C", str(self.canonical), "checkout", "-q", "--", "tracked"], check=True)
+        loaded = dict(self.absent_agents, jobs=[dict(label="com.joulewise.night", liveness="LOADED"),
+                                                dict(label="com.joulewise.night.deadman", liveness="ABSENT")])
+        with patch.object(entry, "night_agents", return_value=loaded):
+            record = self.checked("night agents already loaded")
+        self.assertIn("not licensed while night agents are loaded", record["checks"]["canonical"]["reason"])
+        self.assertEqual(self.canonical_head(), self.old)
+        self.assertFalse(any("pull" in c for c in self.calls))
 
     def test_candidate_must_contain_census_fix(self):
         with patch.object(entry, "CENSUS_FIX", self.tip):
