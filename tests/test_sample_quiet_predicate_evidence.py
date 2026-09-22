@@ -578,9 +578,12 @@ runpy.run_path(script, run_name="__main__")
                     result["status"] = next(pending)
                     result["error"] = "RuntimeError: smoke blew up" if result["status"] == "error" else None
                     return result
-                def collect_for_cli(args):
+                def collect_for_cli(args, *, recorder_factory=harness.PowerRecorder):
+                    # `main` now names the recorder factory explicitly (the
+                    # bench-replay seam); --no-power means it is never used.
                     return real_collect(args, clock=FakeClock(), round_runner=round_runner,
-                                        metadata_reader=lambda: {})
+                                        metadata_reader=lambda: {},
+                                        recorder_factory=recorder_factory)
                 with patch.object(harness, "collect", side_effect=collect_for_cli):
                     self.assertEqual(harness.main(["collect", "--no-power", "--out", tmp,
                         "--state", "idle", "--repeat", "1", "--duration-s", "3",
@@ -1585,3 +1588,4 @@ class IntegerWindowTests(unittest.TestCase):
                                sum(10.0 * 2e-9 for frame in frames
                                    if harness.overlap(start_ns - 1, end_ns + 1,
                                                       frame["start_ns"], frame["end_ns"]) > 0))
+

@@ -61,7 +61,7 @@ class CampaignTests(unittest.TestCase):
                 session = {'session':'fixture', 'boot_id':'boot', 'os_build':'25G83',
                     'network_time_provenance': provenance(
                         *(('slew_attested', 1) if index in slew else ())),
-                    'power':{'anchor':{'status':'bounded'}},
+                    'power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded'}},
                     'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':energy, 'combined_w':energy}}}}
                 row = good_round()
@@ -293,7 +293,7 @@ class CampaignTests(unittest.TestCase):
             for index in range(1, 13):
                 out = root / f'envelope-{index:02d}'
                 out.mkdir()
-                session = {'session':'fixture','boot_id':'boot','os_build':'25G83','power':{'anchor':{'status':'bounded'}},
+                session = {'session':'fixture','boot_id':'boot','os_build':'25G83','power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded'}},
                            'network_time_provenance': provenance(),
                            'interior':{'complete_support':True,'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                 row = good_round(100)
@@ -416,7 +416,7 @@ class FrozenExecutorTests(unittest.TestCase):
                     # reading only, exactly as a clock step would.
                     session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
                         'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
-                        'power':{'anchor':{'status':'bounded','clock_stamps':{
+                        'power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded','clock_stamps':{
                             'sampling_started':{'epoch_s':1000+self.end-envelope_s,
                                                 'monotonic_before_s':self.end-envelope_s},
                             'sampling_stopped':{'epoch_s':1000+self.end+stepped_stop_s,
@@ -874,7 +874,7 @@ class TimedLogScannerTests(unittest.TestCase):
     def test_a_failed_log_query_is_asserted_not_authenticated(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             out = Path(tmp)
-            (out / "session.json").write_text(json.dumps({"power": {"anchor": {"clock_stamps": {
+            (out / "session.json").write_text(json.dumps({"power": {"recorder_kind": "powermetrics", "anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 1000.0, "monotonic_before_s": 50.0},
                 "sampling_stopped": {"epoch_s": 1600.0, "monotonic_before_s": 650.0}}}}}))
             with patch.object(campaign.subprocess, "run",
@@ -1290,7 +1290,7 @@ class LargerDriftTests(unittest.TestCase):
                     'session': 'fixture', 'boot_id': 'boot', 'os_build': '25G83',
                     'start_drift_s': 2.3,  # what the collector measured
                     'network_time_provenance': provenance(),
-                    'power': {'anchor': {'status': 'bounded'}},
+                    'power': {'recorder_kind': 'powermetrics', 'anchor': {'status': 'bounded'}},
                     'interior': {'complete_support': True,
                                  'power': {'energy_j': {'rail_sum_w': 10, 'combined_w': 10}}}}))
                 (out / 'rounds.jsonl').write_text(json.dumps(good_round()) + '\n')
@@ -1348,7 +1348,7 @@ def stamped_envelope(directory, *, started=1000.0, stopped=1600.0):
     """An envelope directory whose session carries a capture window."""
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "session.json").write_text(json.dumps({"power": {"anchor": {"clock_stamps": {
+    (out / "session.json").write_text(json.dumps({"power": {"recorder_kind": "powermetrics", "anchor": {"clock_stamps": {
         "sampling_started": {"epoch_s": started, "monotonic_before_s": 50.0},
         "sampling_stopped": {"epoch_s": stopped, "monotonic_before_s": 650.0}}}}}))
     return out
@@ -1858,7 +1858,7 @@ class AttestationWindowRecordTests(unittest.TestCase):
                 out = Path(tmp) / "envelope-01"
                 out.mkdir()
                 (out / "session.json").write_text(json.dumps(
-                    {"power": {"anchor": {"clock_stamps": {
+                    {"power": {"recorder_kind": "powermetrics", "anchor": {"clock_stamps": {
                         "sampling_started": {"epoch_s": 1000.0, "monotonic_before_s": 50.0},
                         "sampling_stopped": {"epoch_s": stopped,
                                              "monotonic_before_s": 650.0}}}}}))

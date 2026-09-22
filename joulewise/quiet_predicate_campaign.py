@@ -53,6 +53,12 @@ TIMED_LOG_MARKERS = ("cmd,apply,src,", "ntp_adjtime", "settimeofday")
 TIMED_LOG_PREDICATE = 'process == "timed"'
 NETWORK_TIME_SLEW_EXCLUSION = "network_time_slew_attested"
 NETWORK_TIME_UNATTESTED_EXCLUSION = "network_time_unattested"
+# The bench replay's harvest-side verdict (cold gate #3 ruling 10 Q7; brief
+# D6).  It is a SUMMARY STATUS, never an exclusion reason: A269 ruling 10 Q2
+# byte-pins the registration's `exclusions` list, and emitting a reason the
+# pinned list does not carry is precisely the defect that ruling forbids.
+REPLAY_NEVER_EVIDENCE = "REPLAY_NEVER_EVIDENCE"
+REPLAY_REFUSAL_REASON = "replay_recorder"
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
                   "joulewise/quiet_predicate_campaign.py", "joulewise/night_gate.py",
@@ -885,7 +891,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     """Apply ruling 46b to fixed pairs; preserve unfiltered diagnostics."""
     import statistics
     from scripts import sample_quiet_predicate_evidence as harness
-    values, all_rows = [], []
+    values, all_rows, replay_recorders = [], [], []
     journal = directory.parent / protocol["recorder_journal"]
     covariates = [json.loads(line) for line in journal.read_text().splitlines() if line] if journal.exists() else []
     clean_busy = []
@@ -911,6 +917,17 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         except (OSError, ValueError) as exc:
             values.append({**entry, "excluded": excluded + ["incomplete_interior_support"], "error": str(exc), "joules": None})
             continue
+        # HARVEST-side fail-closed point of the bench replay (cold gate #3
+        # ruling 10 Q7; brief D6).  Every session this summary reads must say,
+        # in its own record, that a real `powermetrics` produced its frames.
+        # An absent key is not a claim of production provenance either: the
+        # bench replay writes "replay", and a session predating the key cannot
+        # attest to anything, so both refuse.  The refusal is the SUMMARY's,
+        # not an exclusion reason -- A269 byte-pins the registration's
+        # exclusion list, and a new reason would force a registration v3.
+        recorder_kind = (session.get("power") or {}).get("recorder_kind")
+        if recorder_kind != harness.RECORDER_KIND_PRODUCTION:
+            replay_recorders.append({"index": entry["index"], "recorder_kind": recorder_kind})
         all_rows.extend(rows)
         hard = hard_exclusions(rows)
         excluded.extend(hard)
@@ -1012,7 +1029,31 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         "whole_campaign_observer_cpu_s": observer_cpu_s,
         "observer_definition": "SELF + reaped CHILDREN, including collector, recorder, sampler and census; never subtracted",
         "cutoff_authority": False, "top_up": False}
+    if replay_recorders:
+        # Nothing this night produced is a measurement.  The status, the
+        # retained set and the spread bound are replaced outright rather than
+        # annotated, so no reader can lift a number out of this document: the
+        # per-envelope diagnostics stay because the drift and tail figures the
+        # bench exists to produce are in them.
+        report.update({
+            "status": REPLAY_NEVER_EVIDENCE, "evidence_status": REPLAY_NEVER_EVIDENCE,
+            "retained": [], "s_upper": None,
+            "s_upper_reason": "replay recorder: no envelope of this night is a measurement",
+            "replay_recorder_envelopes": replay_recorders,
+            "replay_recorder_reason": "one or more session.json records do not carry "
+                                      f"power.recorder_kind == {harness.RECORDER_KIND_PRODUCTION!r}"})
     harness.write_json(directory / "summary.json", report)
+    if replay_recorders:
+        (directory / "summary.md").write_text(
+            f"# QPE-01 {REPLAY_NEVER_EVIDENCE}\n\n"
+            f"Status: {REPLAY_NEVER_EVIDENCE}. Envelopes "
+            f"{', '.join(str(r['index']) for r in replay_recorders)} were produced by a recorder "
+            f"that is not `powermetrics`, so this night is a BENCH REPLAY and none of it is a "
+            "measurement: no envelope is retained, no spread bound is computed, and the executor "
+            "refuses the night. The per-envelope schedule, cleanup, attestation and drift "
+            "diagnostics in summary.json remain, because measuring the inter-slot tail is what "
+            "the replay is for.\n")
+        return report
     (directory / "summary.md").write_text(
         "# QPE-01 pilot (PROVISIONAL, descriptive)\n\n" +
         f"Status: {report['status']}. Retained {len(retained)}/{protocol['envelopes']} envelopes; {len(deltas)} disjoint pairs.\n\n" +
@@ -1146,8 +1187,10 @@ def execute(plan, protocol, night_dir):
             # The covariate recorder spans all envelopes. Each collector and
             # its independent sampler/power groups must be reaped between slots.
             # The budget is the gap this registration leaves, never a literal.
+            cleanup_began = time.monotonic()
             cleanup = cleanup_groups(journal, children, budget_s=cleanup_budget_s(protocol),
                                      exclude={recorder.pid})
+            cleanup_wall_s = time.monotonic() - cleanup_began
             # Authenticate this envelope's clock discipline now, while the log
             # store still holds the window (ruling 14 R4); the state joins the
             # envelope's own provenance and the exclusion vocabulary.  It runs
@@ -1168,6 +1211,11 @@ def execute(plan, protocol, night_dir):
             record_attestation(out, attestation)
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
+                              # The teardown's own wall cost, beside the
+                              # attestation's, for the same reason: the gap is
+                              # 20 s and the next night's budget is read off
+                              # these numbers rather than guessed.
+                              "cleanup_wall_s": cleanup_wall_s,
                               "network_time_attestation": attestation["state"],
                               "network_time_attestation_wall_s": attestation_wall_s,
                               "network_time_attestation_matched_lines": attestation["matched_lines"]})
@@ -1188,8 +1236,15 @@ def execute(plan, protocol, night_dir):
         network_time_restored = restore_network_time(night_dir)
         cleanup = cleanup_record(night_dir, children)
         try:
-            pilot_summary(directory, protocol, envelopes,
-                          harness.cpu_total() - cpu_start if cleanup["cleanup_proven"] else None)
+            report = pilot_summary(directory, protocol, envelopes,
+                                   harness.cpu_total() - cpu_start if cleanup["cleanup_proven"] else None)
+            if report.get("status") == REPLAY_NEVER_EVIDENCE:
+                # Brief D6: a night any replay recorder touched is REFUSED
+                # here, at the harvest boundary, with rc 2 -- while every
+                # slot's row stays in `evidence_envelopes.jsonl`, appended
+                # inside the loop above, because those rows are the drift
+                # measurement the bench replay exists to take.
+                outcome, error = "refused", REPLAY_REFUSAL_REASON
         except (OSError, ValueError, KeyError, TypeError) as exc:
             outcome, error = "refused", "pilot summary failed: " + str(exc)
         if not cleanup["cleanup_proven"]:
@@ -1198,6 +1253,11 @@ def execute(plan, protocol, night_dir):
             write_refusal(night_dir, plan, error or "evidence execution aborted")
         harness.write_json(night_dir / "evidence_outcome.json", {"outcome": outcome, "error": error,
             "envelopes_attempted": len(envelopes), "cleanup_proven": cleanup["cleanup_proven"],
+            # RUN-side marker (brief D6): the outcome document names the
+            # recorder the collectors were told to use, so a reader holding
+            # only this file can tell a bench replay from a night.
+            "recorder_kind": harness.RECORDER_KIND_REPLAY if os.environ.get(harness.REPLAY_ENV)
+                             else harness.RECORDER_KIND_PRODUCTION,
             "network_time_restored": network_time_restored})
         for signum, handler in old.items():
             signal.signal(signum, handler)
