@@ -14,6 +14,10 @@ from joulewise import night_gate
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = json.loads((ROOT / campaign.PROTOCOL_PATH).read_text())
 EXPECTED_OFF = campaign.EXPECTED_NETWORK_TIME_OFF_STDOUT
+# What `log show --style syslog` prints before any entry, and prints even
+# when the predicate matched nothing: the first line of the packet's own
+# exhibit D.  A fake log that omits it is a query that did not run.
+TIMED_LOG_HEADER = "Timestamp               Ty Process[PID:TID]\n"
 
 
 def provenance(state="authenticated", matched=0):
@@ -322,7 +326,7 @@ class CampaignTests(unittest.TestCase):
 
 class FrozenExecutorTests(unittest.TestCase):
     def exercise(self, errors=(), cleanup_failures=(), recorder_dead=False,
-                 off_stdout=None, on_exit=0, timed_log="", commands=None,
+                 off_stdout=None, on_exit=0, timed_log=None, commands=None,
                  interrupt_settle=False, protocol=None, burn=0, burn_at=None,
                  settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None,
                  attest_burn=0):
@@ -430,7 +434,8 @@ class FrozenExecutorTests(unittest.TestCase):
                     if state == 'off' else 'setUsingNetworkTime: On\n'
                 return CompletedProcess(argv, 0 if state == 'off' else on_exit, stdout, '')
             if argv[0] == campaign.LOG:
-                return CompletedProcess(argv, 0, timed_log, '')
+                return CompletedProcess(
+                    argv, 0, TIMED_LOG_HEADER if timed_log is None else timed_log, '')
             raise AssertionError(f'unexpected command {argv}')
         real_popen = campaign.subprocess.Popen
         def popen(argv, **kwargs):
@@ -554,14 +559,14 @@ FIXTURES = ROOT / "tests/fixtures/qpe01_pilot_n1_20260922"
 class NetworkTimeControlTests(FrozenExecutorTests):
     """The night establishes OFF, attests every envelope, and restores ON."""
 
-    def fake_commands(self, *, off_stdout=None, off_exit=0, on_exit=0, timed_log=""):
+    def fake_commands(self, *, off_stdout=None, off_exit=0, on_exit=0, timed_log=None):
         import shutil
         import stat
         directory = Path(tempfile.mkdtemp(dir="/tmp"))
         self.addCleanup(shutil.rmtree, directory)
         off = EXPECTED_OFF if off_stdout is None else off_stdout
         log_file = directory / "timed.txt"
-        log_file.write_text(timed_log)
+        log_file.write_text(TIMED_LOG_HEADER if timed_log is None else timed_log)
         # The stdout bytes live in files, so the fake prints them verbatim:
         # a shell escape would be the one thing the exact comparator tests.
         (directory / "off-stdout.txt").write_text(off)
@@ -665,7 +670,8 @@ class NetworkTimeControlTests(FrozenExecutorTests):
             self.assertEqual(attestation["method"], "timed_log_show_predicate_v1")
             self.assertEqual(attestation["matched_lines"], 0)
             self.assertEqual(attestation["log"], "timed-log.txt")
-            self.assertEqual(attestation["log_sha256"], campaign.digest(b""))
+            self.assertEqual(attestation["log_sha256"],
+                             campaign.digest(TIMED_LOG_HEADER.encode()))
             window = attestation["window_epoch_s"]
             self.assertAlmostEqual(window[1] - window[0], 602)
         self.assertEqual(len(self.timed_logs), 12)
@@ -1208,3 +1214,37 @@ class AttestationBudgetTests(FrozenExecutorTests):
         self.assertEqual(starts, [600 + 620 * i for i in range(12)])
         for row in self.envelope_journal:
             self.assertLessEqual(abs(row["start_drift_s"]), .02)
+
+
+class ZeroOutputGuardTests(FrozenExecutorTests):
+    """Item 2 (05b S1): an empty result is not a clean machine."""
+
+    def test_a_body_without_the_syslog_header_is_asserted_never_authenticated(self):
+        # The repo's own evidence says a query that ran emits the header.
+        self.assertTrue(campaign.timed_log_has_header(
+            (FIXTURES / "exhibit-D-timed-log.txt").read_text()))
+        self.assertTrue(campaign.timed_log_has_header(TIMED_LOG_HEADER))
+        for body in ("", "<html>error</html>\n", "\n", "2026-09-22 02:28:08.226 Df timed\n"):
+            self.assertFalse(campaign.timed_log_has_header(body), repr(body))
+        for label, body, state in (
+                ("empty", "", "asserted"),
+                ("an error page", "<html>error</html>\n", "asserted"),
+                ("header only", TIMED_LOG_HEADER, "authenticated")):
+            with self.subTest(case=label):
+                commands = NetworkTimeControlTests.fake_commands(self, timed_log=body)
+                rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+                    commands=commands)
+                self.assertEqual(rc, 0)
+                self.assertEqual(len(sessions), 12)
+                for session in sessions:
+                    attestation = session["network_time_provenance"]["attestation"]
+                    self.assertEqual(attestation["state"], state)
+                    self.assertEqual(attestation["exit_code"], 0)
+                    self.assertEqual(attestation["matched_lines"], 0)
+                    if state == "asserted":
+                        self.assertEqual(attestation["reason"],
+                                         "timed log query returned no header")
+                self.assertEqual([v["excluded"] for v in summary["envelopes"]],
+                                 [[] if state == "authenticated"
+                                  else ["network_time_unattested"]] * 12)
+                self.assertEqual(summary["retained"], 12 if state == "authenticated" else 0)
