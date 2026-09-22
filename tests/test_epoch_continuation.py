@@ -1043,7 +1043,11 @@ class EpochContinuationTests(unittest.TestCase):
         self.assertEqual(bracket.ISSUED_ACCEPTANCE_REGISTRY, before)
         self.assertEqual({key: hashlib.sha256(entry["path"].read_bytes()).hexdigest() for key, entry in before.items()}, hashes)
         self.assertEqual(bracket.load_calibration_acceptance_bound()["derivation_sha256"], derivation)
-        self.assertEqual(hashes[bracket.ACTIVE_ACCEPTANCE_ID], bracket.ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256)
+        # Follows the ACTIVE generation: the D-079 r7 issuance moved
+        # ACTIVE_ACCEPTANCE_ID from r6 to r7, so the frozen bytes this
+        # names are r7's.  r6 stays in the registry as history and its
+        # own row is still checked by the two assertions above.
+        self.assertEqual(hashes[bracket.ACTIVE_ACCEPTANCE_ID], bracket.ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256)
 
 
 if __name__ == "__main__":
