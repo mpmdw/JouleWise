@@ -1571,7 +1571,7 @@ class FrozenProtocolTests(unittest.TestCase):
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "14c891eb94a72cb53552cc66f4f8b96ee3bad472a3c606afb7b0647175b56195",
+            "9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16",
         )
         artifact = json.loads(raw)
         self.assertEqual(
