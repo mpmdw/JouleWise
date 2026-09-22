@@ -27,3 +27,38 @@ session digests below match exhibit C1 of the cold-gate packet
 `exhibit-D-timed-log-0210-0435.txt` (191 lines, sha256
 `70218c4a41b0ee87e20f032790e442451f36d713df49933ccbaba907395797b6`),
 used by the timed-log attestation scanner regression.
+
+## The two `--style syslog` captures (ruling 18 Q3 C6)
+
+`exhibit-D-timed-log.txt` above was captured in `--style compact`, which is
+NOT the style the production argv uses (`timed_log_argv` passes `--style
+syslog`), and whose header line is therefore a different string:
+`Timestamp               Ty Process[PID:TID]` against syslog's
+`Timestamp                       (process)[PID]`.  The header guard
+(`timed_log_has_header`) pins the RULED argv's own output, so the two
+captures below — both taken live on this machine by activation 59857fe5 and
+recorded verbatim as that activation's process-trace records `07c-exhibit-D2`
+and `07c-exhibit-D3` — are the fixtures that carry it.  The compact capture
+is kept as a NEGATIVE fixture and for the marker-count parity check (191
+lines and 30 marker lines in both styles, so marker detection is
+style-independent).
+
+| fixture | lines | sha256 | what was captured |
+| --- | --- | --- | --- |
+| `exhibit-D2-timed-log-0210-0435-syslog.txt` | 191 | `dba7fb7cb92e9179a8e4d09e40290b578bbd68d12f29bb42eb417abcf6a4eb63` | the pilot night's own window, `--start '2026-09-22 02:10:00' --end '2026-09-22 04:35:00'`, 30 applied-correction marker lines |
+| `exhibit-D3-timed-log-zero-match-syslog.txt` | 1 | `da1b28eff7848fc42698579387fb9881a2bd1ceda8151ba16617a3b63550718b` | a ZERO-match minute (`--start '2026-09-22 10:48:40' --end '2026-09-22 10:49:40'`), 50 bytes: the header line alone, and nothing else |
+
+Capture argv shape, both: the module's own
+`timed_log_argv(start_epoch_s, end_epoch_s)` —
+
+    /usr/bin/log show --info --debug --style syslog \
+        --predicate '<TIMED_LOG_PREDICATE>' \
+        --start '<YYYY-MM-DD HH:MM:SS>' --end '<YYYY-MM-DD HH:MM:SS>'
+
+read-only, no sudo, exit 0.  D3's predicate was additionally re-run against a
+process that cannot exist (`process == "no_such_process_zzz"`) over the same
+minute, with byte-identical output: an empty result set still prints the
+header, which is the premise the guard rests on.
+
+Provenance: activation 59857fe5, process-trace record 07c (2026-09-22 11:00
+PDT), `docs/process_traces/2026-09-22-activation-59857fe5/`.

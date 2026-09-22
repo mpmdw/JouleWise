@@ -53,6 +53,32 @@ TIMED_LOG_MARKERS = ("cmd,apply,src,", "ntp_adjtime", "settimeofday")
 TIMED_LOG_PREDICATE = 'process == "timed"'
 NETWORK_TIME_SLEW_EXCLUSION = "network_time_slew_attested"
 NETWORK_TIME_UNATTESTED_EXCLUSION = "network_time_unattested"
+# The bench replay's harvest-side verdict (cold gate #3 ruling 10 Q7; brief
+# D6).  It is a SUMMARY STATUS, never an exclusion reason: A269 ruling 10 Q2
+# byte-pins the registration's `exclusions` list, and emitting a reason the
+# pinned list does not carry is precisely the defect that ruling forbids.
+REPLAY_NEVER_EVIDENCE = "REPLAY_NEVER_EVIDENCE"
+REPLAY_REFUSAL_REASON = "replay_recorder"
+
+
+def replay_refusal_error(error):
+    """The replay refusal, KEEPING whatever more specific error came first.
+
+    Both replay refusal points used to assign `REPLAY_REFUSAL_REASON` over
+    `error`, and on the bench the switch is ALWAYS set, so a night that
+    aborted on `start_drift_abort` -- the exact failure the bench replay
+    exists to detect -- or whose summary crashed reached
+    `evidence_outcome.json` and `write_refusal` reading `replay_recorder`
+    and nothing else (delta lenses: execution SHOULD-FIX 1, contract N1).
+    The specific text leads, the marker is appended, and the marker is never
+    appended twice (a night both points fire on is the ordinary bench case).
+    """
+
+    if not error:
+        return REPLAY_REFUSAL_REASON
+    if REPLAY_REFUSAL_REASON in error:
+        return error
+    return f"{error}; {REPLAY_REFUSAL_REASON}"
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
                   "joulewise/quiet_predicate_campaign.py", "joulewise/night_gate.py",
@@ -475,11 +501,13 @@ def timed_log_window_epoch_s(argv):
     machine's local zone.  On the night the clock goes back an hour at the
     end of daylight saving, one wall-clock hour happens TWICE, so a string
     inside it names two different epochs; Python resolves such a string to
-    the FIRST of the two (the still-daylight-saving one).  `log show` is
-    handed the same strings and has the same choice to make, so the record
-    and the query agree either way; a capture window that straddles the
-    repeated hour is an hour wider or an hour narrower than the envelope
-    intended, and the drift and window pins are what would show it.
+    the FIRST of the two (the still-daylight-saving one).  How `log show`
+    resolves the same fold-ambiguous string is NOT established -- nothing in
+    this project has tested it -- so the record and the query cannot be
+    assumed to agree on which of the two epochs was meant (ruling 18 Q3 C5).
+    A capture window that straddles the repeated hour is an hour wider or an
+    hour narrower than the envelope intended, and the drift and window pins
+    are what would show it.
     """
 
     return [datetime.strptime(argv[argv.index(flag) + 1], "%Y-%m-%d %H:%M:%S").timestamp()
@@ -627,11 +655,25 @@ def attestation_timeout_s(protocol):
     takes ``gap - CLEANUP_BUDGET_RESERVE_S`` and this query takes the 5 s
     that leaves.  Below 6 s the two FLOORS (the teardown's 1 s and this
     function's 5 s) add to 6 and overrun the gap: a teardown and a query that
-    each spend their whole floor push the next spawn late.  That residual is
-    deliberate and visible rather than silent, because the spawn then drifts
-    past ``start_drift_abort_s`` and the night ends REFUSED at a named abort
-    instead of producing envelopes nobody can place on the wall timeline.  No
-    registration this project runs is in that band -- v2's gap is 20 s.
+    each spend their whole floor push the next spawn late by exactly
+    ``6 - gap`` seconds.
+
+    That per-slot lateness does NOT compound.  The schedule is absolute
+    (``first + (i-1) * slot_pitch_s``) and so is the collector's own deadline
+    (``scheduled + duration_s``), so a spawn that is ``6 - gap`` late
+    captures for that much less and still ends at its scheduled end: the next
+    slot inherits the same ``6 - gap`` and no more.  Whether the residual is
+    ever DETECTED therefore depends on one comparison, not on how many slots
+    run.  When ``6 - gap`` exceeds ``start_drift_abort_s`` the night ends
+    REFUSED at the first spawn the pitch governs (envelope 02), at a named
+    abort, instead of producing envelopes nobody can place on the wall
+    timeline.  When it does not, every slot is quietly late by that same
+    constant and only ``start_drift_max_s`` -- the per-envelope exclusion,
+    10 s under v2 -- would ever act on it.  Both halves are executed in
+    ``test_a_gap_under_six_seconds_pushes_every_spawn_late_by_six_minus_gap``
+    (3 s gap: refused at envelope 02; 5 s gap: twelve slots each 1 s late,
+    no abort).  No registration this project runs is in that band -- v2's
+    gap is 20 s.
     """
 
     gap = protocol["slot_pitch_s"] - protocol["envelope_s"]
@@ -750,7 +792,15 @@ def record_attestation(out, attestation):
     try:
         temporary.write_text(json.dumps(session, sort_keys=True, indent=2, allow_nan=False) + "\n")
         os.replace(temporary, path)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
+        # `ValueError` is caught beside `OSError` (ruling 18 C8) for one
+        # pre-existing reason: `json.loads` ACCEPTS the non-standard `NaN`
+        # token and `json.dumps(allow_nan=False)` then refuses to write it
+        # back, so a collector that recorded a NaN anywhere in its session
+        # record used to refuse the whole night from `execute`'s outer
+        # handler.  It is the same class of defect as the unlink above: a
+        # single envelope's annotation failing, costing twelve.
+        #
         # One envelope's annotation must never refuse the NIGHT.  The write is
         # an annotation on a capture that is already complete and already on
         # disk; if it cannot land, the envelope loses its claim-bearing state
@@ -758,14 +808,23 @@ def record_attestation(out, attestation):
         # entry whenever the session record carries no attestation, so the
         # `asserted` state set here is the state the summary sees.
         #
-        # The temporary goes first.  A write that landed and a rename that
-        # did not leaves a COMPLETE `session.json.tmp` beside the record it
-        # failed to replace -- one carrying the `authenticated` state this
-        # branch is about to withdraw -- so a harvester would have two
-        # candidate records for one envelope, the stale one claim-bearing.
-        temporary.unlink(missing_ok=True)
+        # The withdrawal comes FIRST: nothing below may raise before the
+        # envelope has lost its claim-bearing state (cold gate #3 rebuttal
+        # ruling 18 Q1).  Cleaning up before withdrawing meant a cleanup that
+        # itself raised -- an immutable or root-owned `.tmp` raises
+        # `PermissionError`, an `OSError` this handler does not re-enter --
+        # left the state `authenticated` and refused the whole night from
+        # `execute`'s outer handler.
         attestation["state"] = "asserted"
         attestation["reason"] = f"session rewrite failed: {type(exc).__name__}: {exc}"
+        # A landed write and a failed rename leave a COMPLETE session.json.tmp
+        # carrying the state just withdrawn; remove it, and if that fails too,
+        # say so in the reason rather than refuse the night.
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError as unlink_exc:
+            attestation["reason"] += (f"; stale {temporary.name} not removed: "
+                                      f"{type(unlink_exc).__name__}: {unlink_exc}")
         return False
     return True
 
@@ -885,7 +944,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     """Apply ruling 46b to fixed pairs; preserve unfiltered diagnostics."""
     import statistics
     from scripts import sample_quiet_predicate_evidence as harness
-    values, all_rows = [], []
+    values, all_rows, replay_recorders = [], [], []
     journal = directory.parent / protocol["recorder_journal"]
     covariates = [json.loads(line) for line in journal.read_text().splitlines() if line] if journal.exists() else []
     clean_busy = []
@@ -905,11 +964,42 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
                  "busy_cores_samples": len([v for v in busy if harness.number(v) is not None]),
                  "recorder_observer_cpu_s": sum(r.get("observer_cpu_s") or 0 for r in support)}
         out = directory / f"envelope-{entry['index']:02d}"
+        # The session record is read FIRST and kept even when the rest of the
+        # envelope is unreadable, because the replay check below must see
+        # every session that exists.  Reading both inside one `try` meant a
+        # missing or unparseable `rounds.jsonl` skipped the envelope before
+        # the check, and a replay night whose journals were all lost failed
+        # OPEN -- INCONCLUSIVE, `partial`, rc 0 (execution lens 17b S1).
+        session, rows, unreadable = None, None, None
         try:
             session = json.loads((out / "session.json").read_text())
             rows = [json.loads(line) for line in (out / "rounds.jsonl").read_text().splitlines() if line]
         except (OSError, ValueError) as exc:
-            values.append({**entry, "excluded": excluded + ["incomplete_interior_support"], "error": str(exc), "joules": None})
+            unreadable = exc
+        # HARVEST-side fail-closed point of the bench replay (cold gate #3
+        # ruling 10 Q7; brief D6).  Every session this summary reads must say,
+        # in its own record, that a real `powermetrics` produced its frames.
+        # An absent key is not a claim of production provenance either: the
+        # bench replay writes "replay", and a session predating the key cannot
+        # attest to anything, so both refuse.  The refusal is the SUMMARY's,
+        # not an exclusion reason -- A269 byte-pins the registration's
+        # exclusion list, and a new reason would force a registration v3.
+        # `power: null` is NOT a contradicted claim of production provenance:
+        # the collector initialises it to null and only fills it once a
+        # recorder was BUILT, so a null is an envelope that refused before any
+        # recorder existed -- the network-time provenance refusal path, which
+        # excludes itself on its own terms.  Refusing a whole REAL night as a
+        # "replay" because one envelope refused early is a false record, and
+        # it was reachable (lane contract lens 17a S1).  Anything else -- a
+        # power record that exists and does not say `powermetrics` -- refuses.
+        power = session.get("power") if session is not None else None
+        if session is not None and power is not None:
+            recorder_kind = power.get("recorder_kind") if isinstance(power, dict) else None
+            if recorder_kind != harness.RECORDER_KIND_PRODUCTION:
+                replay_recorders.append({"index": entry["index"], "recorder_kind": recorder_kind})
+        if unreadable is not None:
+            values.append({**entry, "excluded": excluded + ["incomplete_interior_support"],
+                           "error": str(unreadable), "joules": None})
             continue
         all_rows.extend(rows)
         hard = hard_exclusions(rows)
@@ -1012,7 +1102,50 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         "whole_campaign_observer_cpu_s": observer_cpu_s,
         "observer_definition": "SELF + reaped CHILDREN, including collector, recorder, sampler and census; never subtracted",
         "cutoff_authority": False, "top_up": False}
+    if replay_recorders:
+        # Nothing this night produced is a measurement.  The status, the
+        # retained set and the spread bound are replaced outright rather than
+        # annotated -- and so is EVERY energy number the document would
+        # otherwise carry: the per-envelope joules and interiors, the sizing
+        # and adjacent pairs, and every spread or drift statistic derived
+        # from them (lane contract lens 17a N2 -- the claim below that no
+        # reader can lift a number was false while `sizing_pairs` and
+        # `envelopes[*].joules` survived the override).  What stays is the
+        # SCHEDULE side: index, scheduled and actual instants, start drift,
+        # collector exit, cleanup, attestation and busy-core covariates --
+        # the figures the bench replay exists to produce, none of which is an
+        # energy.
+        energy_blanked = [{**v, "joules": None, "combined_joules": None, "interior": None}
+                          for v in report["envelopes"]]
+        report.update({
+            "status": REPLAY_NEVER_EVIDENCE, "evidence_status": REPLAY_NEVER_EVIDENCE,
+            "retained": [], "s_upper": None,
+            "s_upper_reason": "replay recorder: no envelope of this night is a measurement",
+            "envelopes": energy_blanked,
+            "sizing_pairs": [], "retained_pairs": 0, "adjacent_pairs": [],
+            "adjacent_pair_sd_j": None, "pair_sd_j": None, "pair_df": None,
+            "s_upper_factor": None, "single_envelope_sd_j": None,
+            "unfiltered_single_envelope_sd_j": None,
+            "first_to_last_retained_drift_j": None, "pairs_above_3_pair_sd": [],
+            "max_abs_delta_j": None, "block_two_pairs": None, "block_two_stop": None,
+            "block_two_pairs_reason": "replay recorder: no sizing, no spread, no energy",
+            "replay_recorder_envelopes": replay_recorders,
+            "replay_recorder_reason": "one or more session.json records do not carry "
+                                      f"power.recorder_kind == {harness.RECORDER_KIND_PRODUCTION!r}"})
     harness.write_json(directory / "summary.json", report)
+    if replay_recorders:
+        (directory / "summary.md").write_text(
+            f"# QPE-01 {REPLAY_NEVER_EVIDENCE}\n\n"
+            f"Status: {REPLAY_NEVER_EVIDENCE}. Envelopes "
+            f"{', '.join(str(r['index']) for r in replay_recorders)} were produced by a recorder "
+            f"that is not `powermetrics`, so this night is a BENCH REPLAY and none of it is a "
+            "measurement: no envelope is retained, no spread bound is computed, and the executor "
+            "refuses the night. Every energy number is blanked with it: no per-envelope "
+            "joules or interior, no sizing or adjacent pairs, no spread or drift statistic "
+            "derived from them. The per-envelope SCHEDULE, cleanup, attestation and "
+            "start-drift diagnostics in summary.json remain, because measuring the "
+            "inter-slot tail is what the replay is for.\n")
+        return report
     (directory / "summary.md").write_text(
         "# QPE-01 pilot (PROVISIONAL, descriptive)\n\n" +
         f"Status: {report['status']}. Retained {len(retained)}/{protocol['envelopes']} envelopes; {len(deltas)} disjoint pairs.\n\n" +
@@ -1146,8 +1279,10 @@ def execute(plan, protocol, night_dir):
             # The covariate recorder spans all envelopes. Each collector and
             # its independent sampler/power groups must be reaped between slots.
             # The budget is the gap this registration leaves, never a literal.
+            cleanup_began = time.monotonic()
             cleanup = cleanup_groups(journal, children, budget_s=cleanup_budget_s(protocol),
                                      exclude={recorder.pid})
+            cleanup_wall_s = time.monotonic() - cleanup_began
             # Authenticate this envelope's clock discipline now, while the log
             # store still holds the window (ruling 14 R4); the state joins the
             # envelope's own provenance and the exclusion vocabulary.  It runs
@@ -1168,7 +1303,20 @@ def execute(plan, protocol, night_dir):
             record_attestation(out, attestation)
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
+                              # The teardown's own wall cost, beside the
+                              # attestation's, for the same reason: the gap is
+                              # 20 s and the next night's budget is read off
+                              # these numbers rather than guessed.
+                              "cleanup_wall_s": cleanup_wall_s,
                               "network_time_attestation": attestation["state"],
+                              # The attestation's own account of itself, on the
+                              # row (ruling 18 C7).  A rewrite that could not
+                              # land leaves `session.json` unannotated, so
+                              # WITHOUT this key the reason -- which names the
+                              # failure that cost the envelope its claim --
+                              # exists only in the executor's memory and dies
+                              # with the process.
+                              "network_time_attestation_reason": attestation.get("reason"),
                               "network_time_attestation_wall_s": attestation_wall_s,
                               "network_time_attestation_matched_lines": attestation["matched_lines"]})
             append_event(night_dir / "evidence_envelopes.jsonl", envelopes[-1])
@@ -1187,17 +1335,47 @@ def execute(plan, protocol, night_dir):
             signal.signal(signum, signal.SIG_IGN)
         network_time_restored = restore_network_time(night_dir)
         cleanup = cleanup_record(night_dir, children)
+        # Read off the SESSIONS as well as the environment (execution lens
+        # 17b NIT): the outcome document's `recorder_kind` was derived from
+        # the executor's own environment alone, and the two can disagree --
+        # a session that says `replay` under an executor that was not told to
+        # replay is the disagreement that matters, and it wins.
+        replay_sessions = False
         try:
-            pilot_summary(directory, protocol, envelopes,
-                          harness.cpu_total() - cpu_start if cleanup["cleanup_proven"] else None)
+            report = pilot_summary(directory, protocol, envelopes,
+                                   harness.cpu_total() - cpu_start if cleanup["cleanup_proven"] else None)
+            replay_sessions = any(row.get("recorder_kind") == harness.RECORDER_KIND_REPLAY
+                                  for row in report.get("replay_recorder_envelopes") or [])
+            if report.get("status") == REPLAY_NEVER_EVIDENCE:
+                # Brief D6: a night any replay recorder touched is REFUSED
+                # here, at the harvest boundary, with rc 2 -- while every
+                # slot's row stays in `evidence_envelopes.jsonl`, appended
+                # inside the loop above, because those rows are the drift
+                # measurement the bench replay exists to take.
+                outcome, error = "refused", replay_refusal_error(error)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             outcome, error = "refused", "pilot summary failed: " + str(exc)
+        # The harvest-side refusal above reads the SESSIONS, so it is silent
+        # when none of them can be read -- a feeder that crashes on a
+        # malformed archive kills every collector before it writes, and the
+        # night then ends `partial`/rc 0 with `recorder_kind: "replay"` as the
+        # only tell (lane contract lens 17a S2).  This point reads the
+        # executor's OWN environment instead: the process that was told to
+        # replay refuses, whatever its children managed to write.
+        if os.environ.get(harness.REPLAY_ENV):
+            outcome, error = "refused", replay_refusal_error(error)
         if not cleanup["cleanup_proven"]:
             outcome, error = "refused", error or "final evidence cleanup unproven"
         if outcome == "refused":
             write_refusal(night_dir, plan, error or "evidence execution aborted")
         harness.write_json(night_dir / "evidence_outcome.json", {"outcome": outcome, "error": error,
             "envelopes_attempted": len(envelopes), "cleanup_proven": cleanup["cleanup_proven"],
+            # RUN-side marker (brief D6): the outcome document names the
+            # recorder the collectors were told to use, so a reader holding
+            # only this file can tell a bench replay from a night.
+            "recorder_kind": harness.RECORDER_KIND_REPLAY
+                             if os.environ.get(harness.REPLAY_ENV) or replay_sessions
+                             else harness.RECORDER_KIND_PRODUCTION,
             "network_time_restored": network_time_restored})
         for signum, handler in old.items():
             signal.signal(signum, handler)
