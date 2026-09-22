@@ -30,6 +30,10 @@ SUDO = "/usr/bin/sudo"
 SYSTEMSETUP = "/usr/sbin/systemsetup"
 LOG = "/usr/bin/log"
 NETWORK_TIME_CONTROL_SCHEMA = "joulewise.network_time_control.v1"
+# One `systemsetup` toggle answers in milliseconds; thirty seconds is the
+# bound past which it is not going to answer at all.  Named here so a
+# regression can shorten it without a fake clock.
+NETWORK_TIME_SET_TIMEOUT_S = 30
 NETWORK_TIME_CONTROL_BASENAME = "network_time_control.json"
 NETWORK_TIME_RECORD_ENV = "EVIDENCE_NETWORK_TIME_RECORD"
 TIMED_LOG_BASENAME = "timed-log.txt"
@@ -300,7 +304,8 @@ def network_time_argv(state):
 def set_network_time(state):
     """Run one set form and return its receipt: argv, code, stdout, both clocks."""
     argv = network_time_argv(state)
-    completed = subprocess.run(list(argv), capture_output=True, text=True, timeout=30)
+    completed = subprocess.run(list(argv), capture_output=True, text=True,
+                               timeout=NETWORK_TIME_SET_TIMEOUT_S)
     return {"argv": list(argv), "exit_code": completed.returncode, "stdout": completed.stdout,
             "epoch_s": time.time(), "monotonic_s": time.monotonic()}
 
@@ -318,7 +323,19 @@ def establish_network_time_off(night_dir):
     """
 
     path = night_dir / NETWORK_TIME_CONTROL_BASENAME
-    off = set_network_time("off")
+    try:
+        off = set_network_time("off")
+    except Exception as exc:  # noqa: BLE001 - every class refuses the night
+        # A toggle that timed out, or could not be run at all, is still an
+        # ATTEMPT that leaves the machine's network-time state unknown.  The
+        # receipt for it is written BEFORE the refusal for the same reason the
+        # exit-1 receipt is: a night that stopped here must say on its own
+        # record what it did to the machine, and `off: null` says nothing.
+        off = {"argv": list(network_time_argv("off")), "exit_code": None, "stdout": None,
+               "error": f"{type(exc).__name__}: {exc}",
+               "epoch_s": time.time(), "monotonic_s": time.monotonic()}
+        write_control_record(path, {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": off, "on": None})
+        raise ValueError("network time OFF not established: " + off["error"]) from exc
     write_control_record(path, {"schema": NETWORK_TIME_CONTROL_SCHEMA, "off": off, "on": None})
     if off["exit_code"] != 0 or off["stdout"] != EXPECTED_NETWORK_TIME_OFF_STDOUT:
         raise ValueError("network time OFF not established: "

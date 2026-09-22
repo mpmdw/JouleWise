@@ -559,7 +559,8 @@ FIXTURES = ROOT / "tests/fixtures/qpe01_pilot_n1_20260922"
 class NetworkTimeControlTests(FrozenExecutorTests):
     """The night establishes OFF, attests every envelope, and restores ON."""
 
-    def fake_commands(self, *, off_stdout=None, off_exit=0, on_exit=0, timed_log=None):
+    def fake_commands(self, *, off_stdout=None, off_exit=0, on_exit=0, timed_log=None,
+                      off_sleep=0):
         import shutil
         import stat
         directory = Path(tempfile.mkdtemp(dir="/tmp"))
@@ -577,7 +578,10 @@ class NetworkTimeControlTests(FrozenExecutorTests):
             f'printf %s "$@" >> "{directory}/sudo-calls.txt"\n'
             f'printf "\\n" >> "{directory}/sudo-calls.txt"\n'
             'if [ "$4" = "off" ]; then\n'
-            f'  cat "{directory}/off-stdout.txt"\n'
+            # ``off_sleep`` outlasts the set form's own timeout: the one way a
+            # toggle leaves without an exit code of its own.
+            + (f'  sleep {off_sleep}\n' if off_sleep else "")
+            + f'  cat "{directory}/off-stdout.txt"\n'
             f"  exit {off_exit}\n"
             "fi\n"
             f'cat "{directory}/on-stdout.txt"\n'
@@ -1281,3 +1285,36 @@ class ExitCodePrecedenceTests(FrozenExecutorTests):
                 self.assertIs(outcome["network_time_restored"], restored)
                 self.assertEqual(refusals, refusal_count)
                 self.assertEqual(rc, code, label)
+
+
+class NetworkTimeReceiptTests(FrozenExecutorTests):
+    """Item 4 (05b S3): a toggle that never answers is still on the record."""
+
+    def test_an_off_that_times_out_writes_its_receipt_before_refusing(self):
+        commands = NetworkTimeControlTests.fake_commands(self, off_sleep=5)
+        def spy(stack, module):
+            # The real bound is 30 s; the seam shortens it so the regression
+            # measures the timeout path, not the wall clock.
+            stack.enter_context(patch.object(module, "NETWORK_TIME_SET_TIMEOUT_S", .5))
+        began = time.monotonic()
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            commands=commands, spy=spy)
+        self.assertLess(time.monotonic() - began, 4)
+        self.assertEqual(campaign.NETWORK_TIME_SET_TIMEOUT_S, 30)
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        self.assertEqual(calls, [])  # no recorder, no collector
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertIn("network time OFF not established", outcome["error"])
+        self.assertIn("TimeoutExpired", outcome["error"])
+        # The attempt is on the record with an exit code it never got.
+        self.assertEqual(control["off"]["argv"][1:],
+                         ["-n", campaign.SYSTEMSETUP, "-setusingnetworktime", "off"])
+        self.assertIsNone(control["off"]["exit_code"])
+        self.assertIsNone(control["off"]["stdout"])
+        self.assertIn("TimeoutExpired", control["off"]["error"])
+        self.assertIsNotNone(control["off"]["epoch_s"])
+        self.assertIsNotNone(control["off"]["monotonic_s"])
+        # ... and the restore ran anyway, on the same refused path.
+        self.assertEqual(control["on"]["exit_code"], 0)
+        self.assertTrue(outcome["network_time_restored"])
