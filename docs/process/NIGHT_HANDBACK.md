@@ -295,18 +295,20 @@ after prepare; relay any mailbox NO into `<staging>/lifecycle/NO` before veto;
 `publish-install` repeats the veto observation and the loaded-jobs probe at the publication boundary and requires a fresh `check` record; the lead re-runs `check` after any change.
 Record 17's script set remains the fallback until the first live use succeeds.
 
-**Before running `check` on a real plan, this session terminates its own idle
-MCP helpers** (cold-gate ruling 2026-09-21, packet 05 Q3; the census classifies
-every process outside the caller's ancestor chain as foreign, and the tracked
-check refuses on any foreign PID). List the children of the session root:
-`pgrep -lP <session-root-pid>`. For every child whose command line contains
-`codex mcp-server`, send SIGTERM to that child and its descendants
-(`pkill -TERM -P <child-pid>`; `kill -TERM <child-pid>`), wait until
-`pgrep -f 'codex mcp-server'` lists no descendant of the session root, and
-record the PIDs terminated in the check record. Terminate nothing outside the
-session root's descendants. Then run `check`. If the census still reports any
-descendant of the own session root as foreign, stop; never relabel it
-"diagnostic".
+Pre-check step, ruled by the cold gate 2026-09-21 (packet 05 Q3): the census
+classifies every process outside the caller's ancestor chain as foreign, and
+the tracked check refuses on any foreign PID, so the session's own MCP helpers
+must be gone first. The ruled text:
+
+Before running `check` on a real plan, this session terminates its own idle
+MCP helpers. List the children of the session root: `pgrep -lP
+<session-root-pid>`. For every child whose command line contains `codex
+mcp-server`, send SIGTERM to that child and its descendants (`pkill -TERM -P
+<child-pid>`; `kill -TERM <child-pid>`), wait until `pgrep -f 'codex
+mcp-server'` lists no descendant of the session root, and record the PIDs
+terminated in the check record. Terminate nothing outside the session root's
+descendants. Then run `check`. If the census still reports any descendant of
+the own session root as foreign, stop; never relabel it "diagnostic".
 
 **Timeline.** The plan's relative boundaries are: install strictly before
 t0 − 600 s (the close is excluded); REQUEST and magistrate exit at

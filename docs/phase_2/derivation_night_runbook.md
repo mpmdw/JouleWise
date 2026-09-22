@@ -696,10 +696,11 @@ interactive session is the `arm_idle_interactive` retry cause under §1.4a once 
 closes; A172 never equates interactive with idle for those classes, and missing evidence
 follows the existing refusal path. A173 alone owns classification and exemption changes.
 
-### 0.7 Nothing else is armed or discoverable
+### 0.7 Nothing else is armed, and every discoverable root is retained
 
 No stand-down, no Ed NO, no unresolved owner-authored `directive` issue, no
-discoverable prior plan root, no active or indeterminate measurement ownership.
+discoverable prior plan root that is ACTIVE or UNKNOWN (a harvested, retained
+root may remain discoverable), no active or indeterminate measurement ownership.
 Remove every `REHEARSAL_STUB` plan root before arming any real plan
 (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Install handoff").
 
@@ -732,15 +733,24 @@ For a manual read:
 ```zsh
 for p in /Users/edr/night-custody/*/night_plan.json(N); do
   n=${p:h}/night; r=${p:h:t}
+  if [[ ! -f $p || -L $p ]]; then print -r -- "$r: REFUSED plan is not a regular file"; continue; fi
   if [[ -f $n/chain.started && ! -f $n/chain.exited ]]; then print -r -- "$r: ACTIVE"; continue; fi
-  m=($n/courier.sent(N) $n/result.json(N) $n/chain.exited(N) $n/refusal.json(N) $n/refusal-<0-9>*.json(N) $n/calibration-refusal.json(N) $n/calibration-refusal.json.*.json(N))
+  m=($n/courier.sent(N.) $n/result.json(N.) $n/chain.exited(N.) $n/refusal.json(N.) $n/refusal-<0-9>*.json(N.) $n/calibration-refusal.json(N.) $n/calibration-refusal.json.*.json(N.))
   (( $#m )) && print -r -- "$r: retained ${m[1]:t}" || print -r -- "$r: UNKNOWN"
 done
 ```
 
 Every line must read `retained`; an `ACTIVE` or `UNKNOWN` line, or any
 installed night plist, stops the arm. Do not move or edit a root to change its
-line. (Cold-gate ruling 2026-09-21, packet 05 Q2, lane A230.)
+line.
+
+Source: cold-gate ruling 2026-09-21 (packet 05 Q2, lane A230). The `(N.)`
+qualifier restricts each glob to regular files, matching contract item 4's
+regular-file rule; it is the one correction to the ruled loop (record 02 of
+activation 29ea94df). The span half of the check above is `retained_roots`'s
+reuse of `scripts/magistrate_watchdog.plan_span_active`; the manual loop reads
+records only, so a root inside its span shows `retained` here and ACTIVE to the
+tracked check, which is the one that binds.
 
 ### 0.8 The clone's tree is clean, and the two desk inputs are written
 

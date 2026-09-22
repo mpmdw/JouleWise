@@ -209,6 +209,11 @@ with the clone's code. It then writes verdicts and evidence for:
    `refusal-N.json`, `calibration-refusal.json`,
    `calibration-refusal.json.*.json`) classifies its root as retained; the
    record lists every marker found. Otherwise it is UNKNOWN and refuses.
+   A retained root whose plan span is still active by the watchdog's rule
+   (`scripts/magistrate_watchdog.plan_span_active`, evaluated on that root's
+   own `night_plan.json` at observation time) is ACTIVE and refuses; a root
+   whose plan does not parse, or whose `custody_root` is not its own
+   directory, is UNKNOWN and refuses. Each row records its reason.
    Discovery never removes a root, and has no fixed root count. Retention
    classification does not certify process liveness or completed delivery.
 5. The exact raw bracketed `night_gate.AGENT_CENSUS_ARGV` result is retained

@@ -635,6 +635,28 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn(entry.CANONICAL, list(map(str, argv)))
         return entry.probe_command(argv, **kwargs)
 
+    def sibling_plan(self, root, *, t0=None, custody_root=None):
+        # A parseable v2 plan for a sibling custody root; ten days old by default,
+        # so the watchdog's span rule reads it as long over.
+        t0 = (int(time.time()) // 60 - 60 * 24 * 10) * 60 if t0 is None else t0
+        return dict(schema="joulewise.night_plan.v2", schema_version=2, plan_id=root.name,
+                    receipt_class="DIAGNOSTIC_NO_PACK", t0_epoch_s=float(t0), window_max_s=9000,
+                    authored_epoch_s=float(t0 - 3600), repo_head=self.head, chain_path="chain.zsh",
+                    chain_sha256_path="chain.zsh.sha256",
+                    custody_root=str(root) if custody_root is None else custody_root,
+                    measurement_head=self.head, measurement_root=str(self.root),
+                    registration_path="docs/registration.md")
+
+    def sibling_root(self, name, *markers, t0=None, custody_root=None, plan_text=None):
+        root = self.custody.parent / name
+        (root / "night").mkdir(parents=True)
+        for marker in markers:
+            (root / "night" / marker).write_text("{}")
+        if plan_text is None:
+            plan_text = json.dumps(self.sibling_plan(root, t0=t0, custody_root=custody_root))
+        (root / "night_plan.json").write_text(plan_text)
+        return root
+
     def checked(self, fail=None):
         if fail:
             with self.assertRaisesRegex(entry.Refused, fail):
@@ -720,15 +742,14 @@ class LifecycleTests(unittest.TestCase):
         markers = ("courier.sent", "result.json", "chain.exited", "refusal.json", "refusal-2.json",
                    "calibration-refusal.json", "calibration-refusal.json.1789617139.json", None)
         for i, marker in enumerate(markers):
-            root = self.custody.parent / f"prior-{i}"
-            (root / "night").mkdir(parents=True)
-            (root / "night_plan.json").write_text("{}")
-            if marker:
-                (root / "night" / marker).write_text("{}")
+            self.sibling_root(f"prior-{i}", *([marker] if marker else []))
         result = self.checked("retained_roots")["checks"]["retained_roots"]
         self.assertEqual([r["classification"] for r in result["inventory"]],
                          ["retained"] * (len(markers) - 1) + ["UNKNOWN"])
-        self.assertEqual([len(r["evidence"]) for r in result["inventory"]], [1] * (len(markers) - 1) + [0])
+        self.assertEqual([r["evidence"] for r in result["inventory"]],
+                         [[str(self.custody.parent / f"prior-{i}/night/{m}")] for i, m in enumerate(markers[:-1])] + [[]])
+        self.assertEqual(result["inventory"][-1]["reason"], "no terminal night record")
+        root = self.custody.parent / f"prior-{len(markers) - 1}"
         self.assertTrue((root / "night_plan.json").exists())
         (root / "night/result.json").write_text("{}")
         self.assertTrue(self.checked()["rehearsal_ready"])
@@ -736,18 +757,15 @@ class LifecycleTests(unittest.TestCase):
     def test_discovery_refuses_an_open_chain_and_ignores_non_marker_records(self):
         # A refused night whose chain was killed: refusal.json + chain.started + chain.exited
         # (the 2026-09-16 root's shape) is retained; the same root before chain.exited is ACTIVE.
-        root = self.custody.parent / "refused"
-        (root / "night").mkdir(parents=True)
-        (root / "night_plan.json").write_text("{}")
-        for name in ("refusal.json", "chain.started", "receipt.json", "censuses.jsonl"):
-            (root / "night" / name).write_text("{}")
+        root = self.sibling_root("refused", "refusal.json", "chain.started", "receipt.json", "censuses.jsonl")
         result = self.checked("retained_roots")["checks"]["retained_roots"]
-        self.assertEqual([r["classification"] for r in result["inventory"]], ["ACTIVE"])
+        self.assertEqual([(r["classification"], r["reason"]) for r in result["inventory"]],
+                         [("ACTIVE", "chain.started without chain.exited")])
         (root / "night/chain.exited").write_text('{"exit_code": -15}')
         result = self.checked()["checks"]["retained_roots"]
         self.assertEqual([r["classification"] for r in result["inventory"]], ["retained"])
-        self.assertEqual(sorted(Path(p).name for p in result["inventory"][0]["evidence"]),
-                         ["chain.exited", "refusal.json"])
+        self.assertEqual(result["inventory"][0]["evidence"],
+                         [str(root / "night/chain.exited"), str(root / "night/refusal.json")])
         # An open chain stays ACTIVE even when a courier marker exists.
         (root / "night/chain.exited").unlink()
         (root / "night/courier.sent").write_text("{}")
@@ -769,41 +787,62 @@ class LifecycleTests(unittest.TestCase):
         ]
         state = {"roots_under": str(self.custody.parent.parent)}
         for i, (names, expected) in enumerate(cases):
-            root = self.custody.parent / f"case-{i}"
-            (root / "night").mkdir(parents=True)
-            (root / "night_plan.json").write_text("{}")
-            for name in names:
-                (root / "night" / name).write_text("{}")
+            self.sibling_root(f"case-{i}", *names)
         # A refusal record that is a directory does not count.
-        root = self.custody.parent / "case-dir"
-        (root / "night/refusal.json").mkdir(parents=True)
-        (root / "night_plan.json").write_text("{}")
+        root = self.sibling_root("case-dir")
+        (root / "night/refusal.json").mkdir()
         result = entry.retained_roots(state)
         by_name = {Path(r["plan"]).parent.name: r for r in result["inventory"]}
         for i, (names, expected) in enumerate(cases):
             with self.subTest(names=names):
                 row = by_name[f"case-{i}"]
                 self.assertEqual(row["classification"], expected)
-                if expected == "retained":
-                    self.assertEqual(sorted(Path(p).name for p in row["evidence"]),
-                                     sorted(n for n in names if n != "chain.started"))
-                elif expected == "UNKNOWN":
-                    self.assertEqual(row["evidence"], [])
-                else:  # ACTIVE: markers found are still listed for the lead
-                    self.assertEqual([Path(p).name for p in row["evidence"]],
-                                     [n for n in names if n != "chain.started"])
-        self.assertEqual(by_name["case-dir"]["classification"], "UNKNOWN")
-        self.assertEqual(by_name["case-dir"]["evidence"], [])
+                self.assertEqual(row["evidence"], [str(self.custody.parent / f"case-{i}/night/{n}")
+                                                   for n in sorted(names) if n != "chain.started"])
+        self.assertEqual((by_name["case-dir"]["classification"], by_name["case-dir"]["evidence"]), ("UNKNOWN", []))
         self.assertEqual(result["verdict"], "fail")
-        self.assertEqual(entry.retained_roots({"roots_under": str(self.custody.parent.parent)})["verdict"], "fail")
-        # Through the check: an ACTIVE root refuses naming retained_roots.
+        # Through the check: an ACTIVE root alone refuses naming retained_roots.
         for name in list(by_name):
             if name != "case-4":
                 shutil.rmtree(self.custody.parent / name)
         with self.assertRaisesRegex(entry.Refused, "retained_roots"):
             entry.check(**self.kw)
-        (self.custody.parent / "case-4/night/chain.exited").write_text("{}")
-        self.assertTrue(self.checked()["rehearsal_ready"])
+        # A refusal-only root alone passes, with the complete evidence path (ruled case 1).
+        shutil.rmtree(self.custody.parent / "case-4")
+        only = self.sibling_root("refusal-only", "refusal.json")
+        record = self.checked()
+        self.assertTrue(record["rehearsal_ready"])
+        self.assertEqual(record["checks"]["retained_roots"]["inventory"],
+                         [dict(plan=str(only / "night_plan.json"), classification="retained", reason=None,
+                               evidence=[str(only / "night/refusal.json")])])
+
+    def test_discovery_span_fence_reuses_the_watchdog_rule(self):
+        from scripts.magistrate_watchdog import COURIER_DEADLINE_S
+        state = {"roots_under": str(self.custody.parent.parent)}
+        t0 = 1_800_000_000
+        root = self.sibling_root("span", "chain.started", "chain.exited", t0=t0)
+        # Inside t0 + window + courier deadline: ACTIVE even though the chain exited.
+        row = entry.retained_roots(state, now_epoch_s=t0 + 600)["inventory"][0]
+        self.assertEqual((row["classification"], row["reason"]),
+                         ("ACTIVE", "plan span active (scripts/magistrate_watchdog.plan_span_active)"))
+        # Still inside the completion interval with courier.sent: the watchdog keeps the span active.
+        (root / "night/courier.sent").write_text("{}")
+        self.assertEqual(entry.retained_roots(state, now_epoch_s=t0 + 9000 + COURIER_DEADLINE_S - 1)["inventory"][0]["classification"], "ACTIVE")
+        # After the completion interval, courier.sent closes the span.
+        self.assertEqual(entry.retained_roots(state, now_epoch_s=t0 + 9000 + COURIER_DEADLINE_S + 1)["inventory"][0]["classification"], "retained")
+        # Without courier.sent the span runs to the dead-man plus the courier-lock freshness window.
+        (root / "night/courier.sent").unlink()
+        self.assertEqual(entry.retained_roots(state, now_epoch_s=t0 + 9000 + COURIER_DEADLINE_S + 1)["inventory"][0]["classification"], "ACTIVE")
+        self.assertEqual(entry.retained_roots(state, now_epoch_s=t0 + 30 * 86400)["inventory"][0]["classification"], "retained")
+        # A plan whose custody_root is not its own directory, or that cannot be parsed, is UNKNOWN.
+        shutil.rmtree(root)
+        self.sibling_root("moved", "courier.sent", custody_root="/Users/nobody/night-custody/moved")
+        row = entry.retained_roots(state)["inventory"][0]
+        self.assertEqual(row["classification"], "UNKNOWN"); self.assertIn("custody_root", row["reason"])
+        shutil.rmtree(self.custody.parent / "moved")
+        self.sibling_root("bare", "courier.sent", plan_text="{}")
+        row = entry.retained_roots(state)["inventory"][0]
+        self.assertEqual(row["classification"], "UNKNOWN"); self.assertTrue(row["reason"].startswith("plan unreadable: PlanError"))
 
     def test_census_foreign_workload_and_unknown_refuse(self):
         from dataclasses import replace
