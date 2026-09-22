@@ -132,8 +132,10 @@ emit(QC, FEATURE_REV, qc_lines,
      f"`execute` inter-slot section",
      note=f"Anchors: first line = the contiguous comment block above the single line "
           f"holding `attestation_began = time.monotonic()` ({attest_line}); last line = "
-          f"the single line holding `append_event(night_dir / \"evidence_envelopes.jsonl\"` "
-          f"({journal_line}). `execute` spans {execute_first}-{execute_last}.")
+          f"the single line at or after {attest_line} holding "
+          f"`append_event(night_dir / \"evidence_envelopes.jsonl\"` ({journal_line}; the other "
+          f"match in `execute` is the A269 Q3 start-drift abort event, before this point). "
+          f"`execute` spans {execute_first}-{execute_last}.")
 base_line = anchor_index(qc_lines, execute_first, execute_last, "base = 0 if outcome in")
 emit(QC, FEATURE_REV, qc_lines,
      with_leading_comment(qc_lines, base_line), execute_last,

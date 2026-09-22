@@ -338,3 +338,258 @@ Generator output. Every extract below is `git show <rev>:<path>` located by `ast
 
 ### Two sections of `execute`
 
+## A — `joulewise/quiet_predicate_campaign.py:1092-1115` at `489b0953` — `execute` inter-slot section
+
+Anchors: first line = the contiguous comment block above the single line holding `attestation_began = time.monotonic()` (1105); last line = the single line at or after 1105 holding `append_event(night_dir / "evidence_envelopes.jsonl"` (1115; the other match in `execute` is the A269 Q3 start-drift abort event, before this point). `execute` spans 1009-1160.
+
+```python
+ 1092              # Authenticate this envelope's clock discipline now, while the log
+ 1093              # store still holds the window (ruling 14 R4); the state joins the
+ 1094              # envelope's own provenance and the exclusion vocabulary.  It runs
+ 1095              # HERE -- after the teardown, before the next slot's sleep -- so
+ 1096              # `log show`'s work inside `logd` can never land in a recorded
+ 1097              # window as unattributable observer energy (A269 ruling 10 Q4 ii).
+ 1098              # If the teardown did not prove every supervised group gone, a
+ 1099              # recorder may still be sampling, and the query is refused rather
+ 1100              # than run beside it: the envelope becomes `asserted`.
+ 1101              # The query's bound is this registration's gap, and its WALL COST
+ 1102              # is journaled: an unmeasured second on the inter-slot path is how
+ 1103              # the drift A269 cures got in, and the next night's budget is read
+ 1104              # off these numbers, not guessed.
+ 1105              attestation_began = time.monotonic()
+ 1106              attestation = attest_network_time(out, blocked=capture_still_live(cleanup),
+ 1107                                                timeout=attestation_timeout_s(protocol))
+ 1108              attestation_wall_s = time.monotonic() - attestation_began
+ 1109              record_attestation(out, attestation)
+ 1110              envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
+ 1111                                "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
+ 1112                                "network_time_attestation": attestation["state"],
+ 1113                                "network_time_attestation_wall_s": attestation_wall_s,
+ 1114                                "network_time_attestation_matched_lines": attestation["matched_lines"]})
+ 1115              append_event(night_dir / "evidence_envelopes.jsonl", envelopes[-1])
+```
+
+## A — `joulewise/quiet_predicate_campaign.py:1147-1160` at `489b0953` — `execute` return-code tail
+
+Anchors: first line = the contiguous comment block above the single line holding `base = 0 if outcome in` (1159); last line = `execute`'s `end_lineno` (1160).
+
+```python
+ 1147      # A failed restore leaves the machine, not the measurement, in the wrong
+ 1148      # state: the captured envelopes were taken under a proven OFF and stay
+ 1149      # valid.  It gets its own code (3, distinct from the refusal 2) so the
+ 1150      # harvester re-attempts the restore and surfaces it.
+ 1151      #
+ 1152      # PRECEDENCE: the refusal wins.  Code 3 means "the envelopes are valid,
+ 1153      # the machine is not", so a harvester acting on that documented meaning
+ 1154      # must never be handed a night that refused and produced no valid
+ 1155      # envelopes -- which is what returning 3 for a refused night whose restore
+ 1156      # also failed did.  The restore's own verdict is on
+ 1157      # `evidence_outcome.json` (`network_time_restored`) on every path, so
+ 1158      # nothing is hidden by giving 2 the precedence.
+ 1159      base = 0 if outcome in {"complete", "partial"} and cleanup["cleanup_proven"] else 2
+ 1160      return 3 if base == 0 and not network_time_restored else base
+```
+
+### Collector: the integer-nanosecond window
+
+## A — `scripts/sample_quiet_predicate_evidence.py:314-329` at `489b0953` — `integrate_seconds`
+
+```python
+  314  def integrate_seconds(frames, start_s, end_s, uncertainty_s=0.0):
+  315      """Float-seconds adapter: map the window ONCE, then integrate in integers.
+  316  
+  317      The round-level reduction in :func:`collect` is the only caller whose
+  318      window exists solely as binary64 seconds (``round_wall_start_s`` /
+  319      ``round_wall_end_s`` off the wall-clock stamps), so the seconds-to-integer
+  320      mapping lives here instead of inside :func:`integrate`.  The endpoints are
+  321      rounded to nearest; the uncertainty is rounded OUTWARD (ceiling) so the
+  322      expanded round is never narrowed by the conversion -- an uncertainty of
+  323      one picosecond still buys a full nanosecond of expansion.
+  324      """
+  325  
+  326      if end_s <= start_s or uncertainty_s < 0:
+  327          raise ValueError("invalid round support or alignment uncertainty")
+  328      return integrate(frames, round(start_s * 1e9), round(end_s * 1e9),
+  329                       math.ceil(uncertainty_s * 1e9))
+```
+
+## A — `scripts/sample_quiet_predicate_evidence.py:332-410` at `489b0953` — `integrate`
+
+```python
+  332  def integrate(frames, start_ns, end_ns, uncertainty_ns=0):
+  333      """Overlap seconds times watts; means divide by each rail's own coverage.
+  334  
+  335      For each averaging interval, moving either boundary by at most epsilon
+  336      changes overlap by <=2*epsilon. Sum P_i*min(dt_i,2*epsilon) over frames
+  337      touching the expanded round. This conservative interval-power bound does
+  338      not shrink with sample count. Unobserved gaps have no finite energy bound.
+  339  
+  340      All interval arithmetic is exact integer nanoseconds (ruling 10 Q3 as
+  341      worded by 14 R5), and the WINDOW ARRIVES AS INTEGERS: ``start_ns``,
+  342      ``end_ns`` and ``uncertainty_ns`` are integer nanoseconds, the frame
+  343      endpoints arrive as integers from ``align_frames``, ``coverage_ns`` and
+  344      the per-rail coverage are integer sums, and the two former ``> 1e-6``
+  345      comparators are exact equality.  They remain live fail-closed gap
+  346      detectors, not dead code: under exact tiling any nonzero mismatch is a
+  347      missing or duplicated frame interval, never rounding.  Seconds appear only
+  348      at the ``P * w`` multiply and in the reported fields.
+  349  
+  350      The signature is integer because the float round trip is NOT the identity:
+  351      mapping an epoch-scale integer to seconds and back is exact only when the
+  352      value sits on the 256 ns float64 lattice at that magnitude.  It happens to
+  353      be exact for the pilot's 480 s, 570 s and 600 s windows, and wrong by up
+  354      to 128 ns for durations such as 12.345 s -- which, against an exact
+  355      completeness gate, turns a fully covered interior into a partial one.
+  356  
+  357      Every caller in the repository: ``reduce_interior`` (which computes the
+  358      interior window's integers itself and passes them straight through) and
+  359      ``integrate_seconds``, the float adapter used by the round-level reduction
+  360      in ``collect``.  There is no other call site.
+  361      """
+  362      if any(type(value) is not int for value in (start_ns, end_ns, uncertainty_ns)):
+  363          raise TypeError("integrate takes integer nanoseconds")
+  364      if end_ns <= start_ns or uncertainty_ns < 0:
+  365          raise ValueError("invalid round support or alignment uncertainty")
+  366      for left, right in zip(frames, frames[1:]):
+  367          if right["start_ns"] < left["end_ns"]:
+  368              raise ValueError("overlapping or unordered native supports")
+  369      weighted = [(f, overlap(start_ns, end_ns, f["start_ns"], f["end_ns"])) for f in frames]
+  370      coverage_ns = sum(w for _, w in weighted)
+  371      energy, rail_coverage, rail_coverage_ns, bounds, power = {}, {}, {}, {}, {}
+  372      for rail in RAILS:
+  373          selected = [(f["power"][rail], w) for f, w in weighted
+  374                      if w > 0 and f["power"][rail] is not None]
+  375          den_ns = sum(w for _, w in selected)
+  376          rail_coverage_ns[rail] = den_ns
+  377          expanded_coverage_ns = sum(overlap(start_ns - uncertainty_ns, end_ns + uncertainty_ns,
+  378              f["start_ns"], f["end_ns"]) for f in frames if f["power"][rail] is not None)
+  379          joules = math.fsum(p * (w / 1e9) for p, w in selected)
+  380          rail_coverage[rail] = den_ns / 1e9
+  381          energy[rail] = joules if den_ns else None
+  382          power[rail] = joules / (den_ns / 1e9) if den_ns else None
+  383          bounds[rail] = (math.fsum(
+  384              f["power"][rail] * (min(f["end_ns"] - f["start_ns"], 2 * uncertainty_ns) / 1e9)
+  385              for f in frames if f["power"][rail] is not None
+  386              and overlap(start_ns - uncertainty_ns, end_ns + uncertainty_ns, f["start_ns"], f["end_ns"]) > 0)
+  387              if expanded_coverage_ns >= end_ns - start_ns + 2 * uncertainty_ns else None)
+  388      power.update(coverage_s=coverage_ns / 1e9, rail_coverage_s=rail_coverage, energy_j=energy)
+  389      def average_entities(kind, id_key, keys):
+  390          ids = sorted({entry[id_key] for f, w in weighted if w > 0
+  391                        for entry in f[kind] if entry[id_key] is not None}, key=str)
+  392          result = []
+  393          for entity in ids:
+  394              row = {id_key: entity, "coverage_s": {}}
+  395              for key in keys:
+  396                  values = [(entry[key], w) for f, w in weighted if w > 0 for entry in f[kind]
+  397                            if entry[id_key] == entity and entry[key] is not None]
+  398                  den = sum(w for _, w in values)  # integer nanoseconds
+  399                  row[key] = math.fsum(v * w for v, w in values) / den if den else None
+  400                  row["coverage_s"][key] = den / 1e9
+  401              result.append(reasons(row))
+  402          return result
+  403      return {
+  404          "power": reasons(power, "no covered native samples for this rail"),
+  405          "clusters": average_entities("clusters", "name", ("active_ratio", "idle_ratio", "down_ratio", "online_ratio", "freq_hz")) or None,
+  406          "cpus": average_entities("cpus", "cpu", ("active_ratio", "freq_hz")) or None,
+  407          "coverage_ns": coverage_ns, "rail_coverage_ns": rail_coverage_ns,
+  408          "span_mismatch": coverage_ns != end_ns - start_ns,
+  409          "error_bound_j": bounds["rail_sum_w"], "rail_error_bound_j": reasons(bounds, "incomplete rail coverage; unobserved energy is unbounded"),
+  410      }
+```
+
+## A — `scripts/sample_quiet_predicate_evidence.py:413-444` at `489b0953` — `reduce_interior`
+
+```python
+  413  def reduce_interior(frames, anchor, start, duration):
+  414      """Integrate native interval supports; never rescale a whole-round mean.
+  415  
+  416      The interior window is mapped to integer nanoseconds ONCE here, and the
+  417      per-rail coverage check is exact integer equality against that window
+  418      (ruling 10 Q3): a rail is complete only when its covered nanoseconds equal
+  419      the window's, so a one-nanosecond hole is a partial interior, not a
+  420      rounding artefact.
+  421  
+  422      Those integers go STRAIGHT to ``integrate``.  Handing them over as float
+  423      seconds and re-rounding them there moved the window's width by up to
+  424      128 ns for any duration off the 256 ns float64 lattice at epoch scale --
+  425      exact for the pilot's 480 s, and enough to report a fully covered 12.345 s
+  426      interior as partial.
+  427      """
+  428      result = {"start_epoch_s": start, "end_epoch_s": start + duration,
+  429                "duration_s": duration, "complete_support": False, "status": "partial",
+  430                "native_samples": 0, "power": None, "reason": "clock anchor unresolved"}
+  431      if anchor.get("status") != "bounded":
+  432          return reasons(result)
+  433      start_ns = round(start * 1e9)
+  434      duration_ns = round(duration * 1e9)
+  435      end_ns = start_ns + duration_ns
+  436      values = integrate(frames, start_ns, end_ns,
+  437                         math.ceil(anchor["effective_clock_anchor_bound_s"] * 1e9))
+  438      complete = (not values["span_mismatch"] and all(
+  439          values["rail_coverage_ns"][rail] == duration_ns
+  440          for rail in ("rail_sum_w", "combined_w")))
+  441      result.update(values, complete_support=complete, status="complete" if complete else "partial",
+  442                    native_samples=sum(overlap(start_ns, end_ns, f["start_ns"], f["end_ns"]) > 0 for f in frames),
+  443                    reason="complete native support" if complete else "incomplete interior support")
+  444      return reasons(result)
+```
+
+## A — r7 scratch delta: `git diff --stat 447fd6bf..e52c7fbc` and the commit list
+
+```
+ .../calibration_acceptance_d079_v2_n17_r7.json     | 642 +++++++++++++++++++++
+ joulewise/arm_readiness.py                         |   1 +
+ joulewise/calibration_bracketing.py                |  24 +-
+ scripts/epoch_equivalence_check.py                 |  10 +-
+ scripts/floor_mint_pinsets/schema_v2.json          |   3 +-
+ tests/test_calibration_bracketing.py               |  33 +-
+ tests/test_calibration_exits.py                    |   8 +-
+ tests/test_capture_pipeline_era.py                 |  18 +-
+ tests/test_powermetrics_fiducial.py                |  10 +-
+ tests/verify_calibration_acceptance_corpus.py      |   3 +
+ 10 files changed, 722 insertions(+), 30 deletions(-)
+
+commits 447fd6bf..e52c7fbc:
+e52c7fbc DRY RUN step 4b (magistrate bench, quick-tier residual): the capture-pipeline-era arm_readiness bracketing test asserts r7 recognised and moves its unissued counterfactual to r8 (r6 stays recognised); kill shown by deleting the r7 allowlist entry
+ab836fe1 DRY RUN step 4a: move the live-generation test pins to r7 (bracketing live-artifact + generation-row counterfactuals with r6 retention assertion, fiducial staleness proof, exits private synthetic repo fixture)
+ea703851 DRY RUN steps 2-3: move the LIVE acceptance pins to r7 (bracketing registry + ACTIVE/DEFAULT, arm_readiness issued-d079 allowlist, floor-mint pinset schema enum, epoch_equivalence_check reference generation) and bank r7 in the neutrality-proof table
+5a86db97 DRY RUN step 1: r7 acceptance candidate bytes as a pure pin delta from r6 (acceptance_id, uncertainty_evidence.py estimator pin, recomputed derivation_sha256)
+commit count: 4
+```
+
+## A — r7 scratch delta: full diff of `joulewise/arm_readiness.py`
+
+```diff
+diff --git a/joulewise/arm_readiness.py b/joulewise/arm_readiness.py
+index 5f89707d..1598e501 100644
+--- a/joulewise/arm_readiness.py
++++ b/joulewise/arm_readiness.py
+@@ -6214,6 +6214,7 @@ def _issued_d079(tree: Mapping[str, Any]) -> bool:
+         "d079_calibration_acceptance_v2_n17_r4",
+         "d079_calibration_acceptance_v2_n17_r5",
+         "d079_calibration_acceptance_v2_n17_r6",
++        "d079_calibration_acceptance_v2_n17_r7",
+     }
+```
+
+## A — r6 → r7 acceptance artifact: recursive field diff at `e52c7fbc`
+
+Both artifacts are read with `git show e52c7fbc:<path>`, flattened to dotted/bracketed leaf paths, and compared leaf by leaf. Equal leaves are counted, not printed; every unequal, added or removed leaf is printed in full.
+
+```
+r6 = configs/calibration/calibration_acceptance_d079_v2_n17_r6.json
+r7 = configs/calibration/calibration_acceptance_d079_v2_n17_r7.json
+leaf fields: r6 428, r7 428; equal 425; differing 3; only-in-r6 0; only-in-r7 0
+
+DIFFERS  acceptance_id
+    r6: "d079_calibration_acceptance_v2_n17_r6"
+    r7: "d079_calibration_acceptance_v2_n17_r7"
+
+DIFFERS  derivation_sha256
+    r6: "18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3"
+    r7: "03d10ab282ad4c0929db86a299463c83b4255255369db7d5b85b83adfb12b9e4"
+
+DIFFERS  prospective_rederivation.estimator_code_sha256.joulewise/uncertainty_evidence.py
+    r6: "257cda08be1b41ec9607e6c8e68a9b583cfeb71355700b4e6793075976112a5f"
+    r7: "b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8"
+```
