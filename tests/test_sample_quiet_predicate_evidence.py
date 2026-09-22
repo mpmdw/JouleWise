@@ -1314,6 +1314,45 @@ class ExactTilingTests(unittest.TestCase):
         self.assertIsNone(interior["error_bound_j"])
         self.assertFalse(interior["complete_support"])
 
+    def test_a_rail_short_by_one_nanosecond_is_partial_though_the_span_tiles(self):
+        """Item 9 (05a S2): the PER-RAIL comparator is exact too.
+
+        The interior gate has two exact comparators: the whole-window span
+        (``coverage_ns`` against the window) and each claim-bearing rail's own
+        covered nanoseconds.  The span one has its own kill; this is the
+        rail one, and a 1 microsecond tolerance on it survived the pre-fix
+        suite because the span always failed first.
+
+        The fixture splits the frame the window opens inside into two tiles
+        that still abut exactly -- so the SPAN is untouched -- and drops
+        ``rail_sum_w`` from the one-nanosecond head.  That rail is then short
+        by exactly one nanosecond of a 480 s window.
+        """
+
+        fixture, aligned, anchor = self.envelope_eleven()
+        epoch = pilot_interior_epoch(fixture)
+        duration = fixture["interior"]["interior_s"]
+        start_ns = round(epoch * 1e9)
+        index = next(i for i, frame in enumerate(aligned)
+                     if frame["start_ns"] <= start_ns < frame["end_ns"])
+        frame = aligned[index]
+        self.assertGreater(frame["end_ns"], start_ns + 1)
+        head = {**frame, "end_ns": start_ns + 1,
+                "elapsed_ns": start_ns + 1 - frame["start_ns"],
+                "power": {**frame["power"], "rail_sum_w": None}}
+        tail = {**frame, "start_ns": start_ns + 1,
+                "elapsed_ns": frame["end_ns"] - start_ns - 1}
+        for tile in (head, tail):
+            tile["start_s"], tile["end_s"] = tile["start_ns"] / 1e9, tile["end_ns"] / 1e9
+        mutated = aligned[:index] + [head, tail] + aligned[index + 1:]
+        interior = harness.reduce_interior(mutated, anchor, epoch, duration)
+        self.assertFalse(interior["span_mismatch"])
+        self.assertEqual(interior["coverage_ns"], 480_000_000_000)
+        self.assertEqual(interior["rail_coverage_ns"]["combined_w"], 480_000_000_000)
+        self.assertEqual(interior["rail_coverage_ns"]["rail_sum_w"], 480_000_000_000 - 1)
+        self.assertFalse(interior["complete_support"])
+        self.assertEqual(interior["status"], "partial")
+
     def test_frames_tile_exactly_and_the_sampler_asks_for_the_v3_1_identity(self):
         from joulewise.uncertainty_evidence import CLOCK_METHOD_V3_1
 
