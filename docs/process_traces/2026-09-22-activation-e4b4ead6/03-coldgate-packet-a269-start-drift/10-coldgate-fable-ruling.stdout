@@ -1,0 +1,2 @@
+Ruling written (15,550 bytes, sha256 37739f68…425b): validator PASS after the typo catch; Q1 AFFIRM (c) with session-level bar and up-front window check; Q2 AFFIRM (a) with exact v2 fields including `start_drift_abort_s: 2`; Q3 AFFIRM (c) amended to abort at every envelope's spawn; Q4 (i)(ii)(iii) AFFIRM with union-window text and an audit sha; Q5 AFFIRM (a) with the addendum sentence; seven regressions; one MATERIAL hygiene defect (B2's R4/R6 extract is empty, sed range off by 100, cured by direct read of the sealed file).
+rc=0

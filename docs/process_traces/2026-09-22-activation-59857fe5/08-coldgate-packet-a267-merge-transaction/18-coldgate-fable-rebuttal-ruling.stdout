@@ -1,0 +1,2 @@
+Ruling 18 written (7.6 KB, under budget, only file touched): Q1 AFFIRM (a) with withdrawal-first handler and guarded unlink; Q2 AFFIRM (a) strengthened to a two-point reserve=10 pin; Q3 C3 AMENDED (overrun accumulates, pin gap 3 under a faked clock), C4–C6 AFFIRMED; MATERIAL ×3, NIT ×5, no BLOCKER; no prior verdict reinterpreted; test run NOT EXECUTED (review checkout at 3e299b85).
+rc=0

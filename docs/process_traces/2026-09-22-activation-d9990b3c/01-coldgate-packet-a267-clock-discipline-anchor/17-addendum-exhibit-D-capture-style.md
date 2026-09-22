@@ -1,0 +1,7 @@
+# 17 — Dated addendum (2026-09-22, activation 59857fe5): exhibit D's capture style
+
+Ordered by cold gate #3 ruling 10 §Q6 (packet `docs/process_traces/2026-09-22-activation-59857fe5/08-coldgate-packet-a267-merge-transaction/`). Sealed files in this directory are untouched; this addendum is additive.
+
+1. Exhibit `exhibit-D-timed-log-0210-0435.txt` (sha256 70218c4a…) was captured with `log show … --style compact`; its first line is `Timestamp               Ty Process[PID:TID]`. The argv ruled by ruling 14 R4 (`timed_log_argv`) uses `--style syslog`, whose first line is `Timestamp                       (process)[PID]`.
+2. The two live syslog captures taken by activation 59857fe5 with the module's own `timed_log_argv` are exhibit D's production-format twins: `07c-exhibit-D2-timed-log-0210-0435-syslog.txt` (same window 02:10:00–04:35:00, 191 lines, 30 marker lines — identical line and marker counts to exhibit D) and `07c-exhibit-D3-timed-log-zero-match-syslog.txt` (a query matching nothing: the header line alone), both under `docs/process_traces/2026-09-22-activation-59857fe5/`.
+3. No sealed A267 finding depends on the header line; the twelve-envelope regression corpus (R3 regression 8) and the marker regression (R3 regression 12) stand on the executed parity. The compact fixture's header line is henceforth a NEGATIVE fixture for the header guard (cold gate #3 ruling 10 §Q2), and the syslog twin becomes a tracked fixture beside it.

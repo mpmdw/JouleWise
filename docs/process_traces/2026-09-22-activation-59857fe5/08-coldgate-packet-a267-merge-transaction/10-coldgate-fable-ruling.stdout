@@ -1,0 +1,2 @@
+Ruling written (16,167 bytes, under 16 KB, sha 9c74b3f1…): validator PASS after the deliberate-mismatch REFUSE; Q1 shape (a) affirmed but r7 not yet issued pending rebase and re-executed neutrality; Q2 BLOCKER affirmed with the exact syslog header constant and fixtures; Q3 option (b) affirmed with five pins; Q4 affirmed plus null-init; Q5 all seven affirmed; Q6 affirmed with an addendum; Q7 REJECTED pending a recorded ≤ 0.5 s bench replay artifact.
+rc=0

@@ -1,3 +1,113 @@
+# Exhibit B — controlling authorities (verbatim extracts at main `ecbc0fac`)
+
+## B1 — `configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json` (complete file; its sha256 is printed in exhibit C1; this is the byte-pinned registration that `night_gate.QPE01_PILOT_REGISTRATION_SHA256` checks — exhibit A, `frozen_protocol`)
+
+```json
+{
+  "block_two": {
+    "authored_after_pilot": true,
+    "contrast": "idle-load-idle bracket",
+    "levels": [
+      0,
+      0.05
+    ],
+    "one_profile": true,
+    "one_qos": true,
+    "smallest_holdable_share": 0.05,
+    "upper_bound": "one-sided 95% paired-contrast upper bound"
+  },
+  "busy_cores_role": "covariate_only",
+  "cadence_exclusion": "start_drift: absolute collector start drift greater than 10 s from the frozen schedule",
+  "chain_source_sha256": "568a2771b28da9d805cd23ff4059bbbc27d6dfad1f8d9603331a412e3751b7ea",
+  "envelope_s": 600,
+  "envelopes": 12,
+  "exclusions": [
+    "census_not_clean_or_unknown",
+    "ac_not_AC_Power_or_probe_error",
+    "CPU_Speed_Limit_below_100_or_thermal_probe_error",
+    "clock_anchor_unresolved",
+    "incomplete_interior_support",
+    "collect_error",
+    "cleanup_unproven",
+    "start_drift"
+  ],
+  "interior_offset_s": 60,
+  "interior_s": 480,
+  "load_generator": false,
+  "minimum_adjacent_pairs": 4,
+  "minimum_retained": 8,
+  "pairing_rule": "disjoint_original_adjacent_pairs_both_retained_no_bridging",
+  "power_interval_ms": 100,
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "recorder_journal": "evidence_busy_cores.jsonl",
+  "ruling": "cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b",
+  "sample_interval_s": 30,
+  "schema": "joulewise.quiet_predicate_pilot.v1",
+  "settle_s": 600,
+  "sizing": {
+    "assumption": "independent normally distributed disjoint pair differences",
+    "chi_square_lower_tail_probability": 0.1,
+    "confidence": 0.9,
+    "delta_j": 1,
+    "formula": "max(3, ceil(8 * s_upper**2 / delta_j**2))",
+    "maximum_pairs": 24,
+    "minimum_pairs": 3,
+    "multiplier": 8,
+    "reference_factors": {
+      "n_4": 2.266,
+      "n_6": 1.762
+    },
+    "s_pair": "sample SD of retained disjoint differences, df = n - 1",
+    "s_upper": "s_pair * sqrt((n - 1) / chi_square_quantile(0.10, n - 1))"
+  },
+  "start_drift_max_s": 10,
+  "stop_branches": {
+    "block_two_upper_bound_above_1_J": "no cutoff qualifies",
+    "observer_floor_above_smallest_holdable_share": "no cutoff qualifies",
+    "sized_pairs_above_24": "no cutoff qualifies"
+  },
+  "summary": [
+    "interior rail-sum and combined joules",
+    "retained disjoint pairs (e1,e2), (e3,e4), ..., (e11,e12); even minus odd interior joules; sample SD and upper 90% bound",
+    "overlapping adjacent differences and SD, maximum absolute difference: diagnostics only, never sizing",
+    "all single-envelope values and SD, first-to-last retained drift: diagnostics only, never sizing",
+    "name every overlapping original adjacent pair with absolute difference above 3 * s_pair; diagnostic only; never exclude by magnitude",
+    "whole-round observer cpu-s, self plus reaped children including recorder; never subtracted",
+    "recorder journal joined by monotonic support: per-envelope busy-core median/max and clean-machine distribution; covariates only",
+    "cadence and native sample counts",
+    "boot_id, os_build, sw_vers, powermetrics identity",
+    "all named exclusions; partial observations retained; PROVISIONAL, no cutoff authority"
+  ],
+  "top_up": false,
+  "window_max_s": 9000
+}
+```
+
+## B2 — sealed cold-gate rebuttal ruling 14 (A267, sha256 507c33cb… per its SEALED-SHA256SUMS), sections R4 and R6 verbatim (`git show ecbc0fac:docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/14-coldgate-fable-rebuttal-ruling.md | sed -n '121,123p;129,131p'`)
+
+```
+```
+
+## B3 — sealed A267 refuter 11 (sha256 85f0437d…), every line mentioning start_drift (`git show ecbc0fac:docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/11-opus-contract-refuter.md | grep -n start_drift`)
+
+```
+172:protocol's own `start_drift_max_s: 10` (A20) removes 06 (10.18 s) and 09 (10.06 s)
+206:  but the prose names only envelopes 03 and 06 as `start_drift` while C1's own
+226:against 8 and 4**, because `start_drift` independently removes envelopes 03, 06 and
+```
+
+## B4 — kernel entry for A269 at ecbc0fac (first object in `docs/process/state_kernel.json` whose string values mention A269 / ENVELOPE-START-DRIFT, `json.dumps`)
+
+```json
+{
+ "label": "T38t \u2014 2026-09-22: pilot night qpe01-pilot-n1-20260922-0217 harvested (GO, INCONCLUSIVE 2/12; seven clock-anchor refusals traced to timed slews against the v3 anchor's 5 ms absolute caps); agents uninstalled; A267\u2013A269 registered",
+ "path": "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md"
+}
+```
+
+## B5 — the previous magistrate activation's A269 diagnosis record 02 (LABELED ARGUMENT, not evidence; its table is reproduced independently in exhibit C2; `git show ecbc0fac:docs/process_traces/2026-09-22-activation-d9990b3c/02-a269-start-drift-diagnosis.md`, complete file)
+
+```
 # 02 — ENVELOPE-START-DRIFT-01 (A269): the cause of the 7.6–10.2 s collector start drift, from primary evidence
 
 Magistrate (activation d9990b3c), 2026-09-22 ~06:05 PDT, read-only over the harvest archive `/Users/edr/night-archive/qpe01-pilot-n1-20260922-0217-harvest-20260922` (byte-exact copy of the night root; SHA256SUMS 15801 OK) and the code at main `9b6b3f0e`. Executed at the bench; no seat. Promoted to the critical path by the A267 cold gate's refuter (record 01, file 11, BLOCKER 3): the pilot protocol's own `start_drift_max_s: 10` exclusion removed envelopes 03, 06 and 09 (drifts 10.23, 10.18, 10.06 s), so no re-run can reach the eight-envelope floor while the drift sits at 78–102 % of its budget.
@@ -34,10 +144,5 @@ A single 600 s envelope therefore costs about 608–610 s of serial wall time ag
 3. **Re-size the drift budget** (`start_drift_max_s` 10 → 20): also a protocol re-registration, and it leaves the harness overrunning its own schedule.
 
 Cure 1 is a harness change under the twelve-row gate; cures 2 and 3 are registration changes. Under the sensible-gates rule the exclusion should be sized to what it protects (interior placement, absorbed by the 60 s offset), which argues for cure 1 with the exclusion left as is.
+```
 
-
-## Addendum (dated; the text above is unchanged)
-
-Addendum 2026-09-22 (A269 cold gate 10, packet b7c37d6d…): on night qpe01-pilot-n1-20260922-0217 the `start_drift` exclusion (envelopes 03/06/09, chain-level 10.11/10.06/9.95 s, session-level 10.23/10.18/10.06 s) removed no envelope not already excluded for `incomplete_interior_support` (03, 06, 09) and `clock_anchor_unresolved` (03, 09); envelopes excluded for `start_drift` alone: none (evidence/summary.json sha256 9121f080…3d04). The as-observed claim that `start_drift` removed 03/06/09 is withdrawn. A269's p1 standing rests on the forward argument: with A267's two exclusion classes cured, `start_drift` alone would leave 9 retained envelopes and 3 disjoint pairs against `minimum_adjacent_pairs: 4`.
-
-Correction 2026-09-22 07:50 PDT (activation e4b4ead6, executed at the bench on the A267 seat head 447fd6bf, file 16b): the forward figure "9 retained / 3 pairs" above assumed A267 cures EVERY clock_anchor_unresolved exclusion. It does not, and must not: replaying the twelve 09-22 fixtures through derive_powermetrics_anchor_v3 under CLOCK_METHOD_V3_1 bounds envelopes 02, 05, 06, 08, 09, 11, 12 (seven) and still refuses 01, 03, 04, 10 (affine_clock_fit_empty: an adjtime slew inside the capture) and 07 (wall_minus_monotonic_span_exceeded: 22.36 ms against the 15 ms backstop). On the 09-22 data the post-A267 set is therefore 7 retained / 3 disjoint pairs ((5,6), (8,9), (11,12)), which start_drift (03, 06, 09) cuts to 5 retained / 1 pair — the figure ruling 14 R6's parenthetical "(5 retained / 1 pair against 8 / 4)" carried, which is thus CORRECT as a forward projection on this night's data and is NOT withdrawn. The "9 retained / 3 pairs" figure is the forward projection for a RE-RUN under the A267 chain (network time OFF, no slews, exact tiling), where start_drift alone would cut 12 to 9 and pairs to 3. Both projections sustain the p1 standing (start_drift costs 2 envelopes and 2 pairs on the observed data; 3 envelopes and 3 pairs on a clean re-run). The withdrawn claim remains only the AS-OBSERVED one: no envelope on 09-22 was excluded for start_drift alone.
