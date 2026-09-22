@@ -1,0 +1,31 @@
+{
+ "acceptance": {
+  "evidence": [
+   "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md (§6 diagnosis table, timed log correlation, materiality)",
+   "joulewise/uncertainty_evidence.py:35,41,1000-1005,1100,1225-1227 at d45378c6 (the caps and the three refusal details)",
+   "/Users/edr/night-archive/qpe01-pilot-n1-20260922-0217-harvest-20260922 (byte-exact copy, SHA256SUMS 15801 OK)"
+  ],
+  "pointer": {
+   "json_pointer": "/tasks/QPE01-CLOCK-DISCIPLINE-ANCHOR-01/acceptance",
+   "label": "QPE01-CLOCK-DISCIPLINE-ANCHOR-01 acceptance",
+   "path": "docs/process/state_kernel.json"
+  },
+  "summary": "A cold-gate ruling (fresh Fable judge + Opus contract-lens refuter) on the two 5 ms caps and the span-mismatch tolerance, with the record 01 §6 table and materiality arithmetic in the packet; the ruled option implemented under the twelve-row gate with a regression that replays envelope 07's five host stamps and native seconds (a logged 20.3 ms adjtime slew) and yields a bounded anchor with the slew priced into the error bound, and a counterfactual that a true wall-clock step (settimeofday) still refuses; the pilot night re-run afterwards yields at least eight bounded envelopes or names a new cause."
+ },
+ "authority": {
+  "label": "2026-09-22 activation 22666c9f, harvest record 01 §8 (registration by the magistrate, not a ruling)",
+  "path": "docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md"
+ },
+ "dependencies": [],
+ "fallback": null,
+ "fences": [],
+ "flags": [],
+ "goal": "Seven of twelve 600 s idle envelopes of pilot night qpe01-pilot-n1-20260922-0217 lost their clock anchor (the derived mapping from the power sampler's timestamps onto the host wall clock) because macOS's time daemon slewed the wall clock by 4 to 22 ms at its ~30 min NTP syncs and ran it at up to 7.6 ppm frequency correction between them, while derive_powermetrics_anchor_v3 (joulewise/uncertainty_evidence.py:35, :41) refuses any capture whose wall-minus-monotonic offset span or effective bound exceeds 5 ms absolute regardless of capture length. A 22 ms edge error on a 480 s interior at 0.32 W moves about 7 mJ, two orders below the ~1 J attribution limit and the 1.45 J envelope scatter. The method's docstring presumes an authenticated network-time-OFF admission that the evidence-night entry point never established (every session.json carries network_time_provenance null), and with NTP off the kernel's residual frequency correction alone (7.6 ppm = 4.5 ms per 600 s) still fails the absolute bound. Assemble the cold-gate packet (options: caps derived from the energy budget or scaled with capture length; an honest error bound pricing the observed slew into error_bound_j instead of refusing; a shorter anchored sub-interval per envelope; and, for the environment half, either an entry-point refusal when network time is ON or Ed's admin action to turn it OFF for windows, noting the residual-frequency point) together with the 1 us span_mismatch tolerance that left three bounded envelopes unretained, then implement the ruled option.",
+ "id": "QPE01-CLOCK-DISCIPLINE-ANCHOR-01",
+ "lane": "agent",
+ "priority": "p1_phase_gate",
+ "rank": 267,
+ "status": "queued",
+ "status_note": "2026-09-22: registered by activation 22666c9f from the harvest; the night's summary stands at INCONCLUSIVE, no cutoff qualifies; no next pilot night is prepared on the present caps (record 01 §7). Registration, not a ruling; the caps belong to a cold-review-ratified method (2026-08-18) and change only under a cold gate. 05:36 PDT: the blind Fable refuter CONFIRMED the diagnosis, corrected the materiality to 140–390× (about 2.5 orders) and added the network-time-OFF precondition finding (record 01 §9).",
+ "stop_card": null
+}
