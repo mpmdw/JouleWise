@@ -209,11 +209,20 @@ def stage_custody(plan, custody_root):
     return plan_path, chain, exports
 
 
-def bench_environment(plan, exports, archive, label_shift):
-    """Exactly what the collectors and the covariate recorder inherit."""
+def bench_environment(plan, exports, night_dir, archive, label_shift):
+    """Exactly what the collectors and the covariate recorder inherit.
+
+    ``NIGHT_DIR`` is here for the same reason the four sealed exports are: the
+    covariate recorder is a subprocess of ``execute`` running
+    ``quiet_predicate_campaign record``, which reads its journal directory
+    from that variable.  Without it the recorder refuses at its first line,
+    ``execute`` sees a dead recorder at the end of slot 01 and ends the night
+    -- which is exactly what the first smoke attempt did.
+    """
+
     return {**exports, "NIGHT_PLAN_ID": plan.plan_id, "MEASUREMENT_ROOT": plan.measurement_root,
-            "MEASUREMENT_HEAD": plan.measurement_head, "PYTHONPATH": str(REPO_ROOT),
-            "PYTHONDONTWRITEBYTECODE": "1",
+            "MEASUREMENT_HEAD": plan.measurement_head, "NIGHT_DIR": str(night_dir),
+            "PYTHONPATH": str(REPO_ROOT), "PYTHONDONTWRITEBYTECODE": "1",
             harness.REPLAY_ENV: str(archive), harness.REPLAY_LABEL_SHIFT_ENV: label_shift}
 
 
@@ -391,7 +400,7 @@ def execute_bench(args):
     plan_path, chain, exports = stage_custody(plan, custody_root)
     night_dir = custody_root / "night"
     machine_start = machine_state()
-    environment = bench_environment(plan, exports, archive, args.label_shift)
+    environment = bench_environment(plan, exports, night_dir, archive, args.label_shift)
     stub = str(REPO_ROOT / STUB)
     started = time.time()
     previous = {key: os.environ.get(key) for key in environment}
