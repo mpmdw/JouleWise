@@ -130,6 +130,17 @@ ANCHOR_V3_R6_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r6"
 ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256 = (
     "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d"
 )
+# D-079 anchor-v3 A267 clock-anchor-deriver reissue.  The member table and
+# D-102 statistics are unchanged; r7 rotates only the one governed estimator
+# pin touched by the ruled A267 deriver change (v3 outputs proven
+# byte-identical on the 38-member corpus replay).
+ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r7.json"
+)
+ANCHOR_V3_R7_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r7"
+ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256 = (
+    "14c891eb94a72cb53552cc66f4f8b96ee3bad472a3c606afb7b0647175b56195"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -172,13 +183,20 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_R7_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
+        ),
+        "file_sha256": ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # Issuance is a later governed transaction. A candidate file never adds an
 # epoch merely by existing on disk; this registry must pin its issued bytes.
 EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -358,6 +376,8 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     ANCHOR_V3_R5_ACCEPTANCE_ID: _D102_N17_DERIVATION,
     # r6 is the science-neutral capture-presentation reissue of r5.
     ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r7 is the science-neutral A267 clock-anchor-deriver reissue of r6.
+    ANCHOR_V3_R7_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
 
 
