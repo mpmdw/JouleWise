@@ -4,6 +4,7 @@ import math
 import os
 from pathlib import Path
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch, Mock
@@ -323,7 +324,8 @@ class FrozenExecutorTests(unittest.TestCase):
     def exercise(self, errors=(), cleanup_failures=(), recorder_dead=False,
                  off_stdout=None, on_exit=0, timed_log="", commands=None,
                  interrupt_settle=False, protocol=None, burn=0, burn_at=None,
-                 settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None):
+                 settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None,
+                 attest_burn=0):
         """Drive the real ``execute`` against a stub collector on a fake clock.
 
         ``burn`` is the seconds the stub collector spends AFTER its capture
@@ -335,6 +337,13 @@ class FrozenExecutorTests(unittest.TestCase):
         delays envelope 01 alone (the slot that follows the settle and tests
         no pitch).  ``timeline`` records each spawn and each attestation in
         order, so the placement of the clock query can be asserted.
+
+        ``attest_burn`` stands in for a clock query that spends its whole
+        bound and times out: the fake clock advances by that many seconds and
+        the query returns the ``asserted`` state a timeout produces, so the
+        cost of the query on the inter-slot path is measurable without any
+        real waiting.  ``self.attestation_kwargs`` keeps what ``execute``
+        passed each query, so the bound itself can be pinned.
         """
         from contextlib import ExitStack
         from dataclasses import replace
@@ -446,13 +455,20 @@ class FrozenExecutorTests(unittest.TestCase):
             enter(patch.object(campaign.os,'killpg',side_effect=terminate))
             enter(patch.object(campaign,'cleanup_groups',side_effect=cleanup))
             real_attest = campaign.attest_network_time
+            self.attestation_kwargs = []
             def attest(out, **kwargs):
                 # Every supervised child of this envelope must already be
                 # reaped when the clock query runs: `log show` beside a live
                 # recorder is observer energy inside a recorded window.
                 live = [c for c in processes.values()
                         if 'collect' in c.argv and c.returncode is None]
-                attestation = real_attest(out, **kwargs)
+                self.attestation_kwargs.append(kwargs)
+                if attest_burn:
+                    clock.now += attest_burn
+                    attestation = {'state': 'asserted', 'matched_lines': None,
+                                   'reason': f'timed log query timed out after {attest_burn:g} s'}
+                else:
+                    attestation = real_attest(out, **kwargs)
                 timeline.append(('attest', int(out.name.split('-')[1]),
                                  [c.pid for c in live], (out/'timed-log.txt').exists()))
                 return attestation
@@ -1120,3 +1136,75 @@ class SessionRewriteAuditTests(unittest.TestCase):
             self.assertIn('os.replace(temporary, path)', source)
             self.assertNotIn('def finalis', source)
             self.assertNotIn('def finaliz', source)
+
+
+# --------------------------------------------------------------------------
+# A267 fix round 1 (magistrate brief 06 over review lenses 05a/05b).  Each
+# test below pins one ruled placement, shape or bound that the implementation
+# already had but no regression held in place -- the class of defect four
+# surviving mutations found in one pass.
+# --------------------------------------------------------------------------
+
+
+def stamped_envelope(directory, *, started=1000.0, stopped=1600.0):
+    """An envelope directory whose session carries a capture window."""
+    out = Path(directory)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "session.json").write_text(json.dumps({"power": {"anchor": {"clock_stamps": {
+        "sampling_started": {"epoch_s": started, "monotonic_before_s": 50.0},
+        "sampling_stopped": {"epoch_s": stopped, "monotonic_before_s": 650.0}}}}}))
+    return out
+
+
+def fake_log(directory, body):
+    """A real executable bound to campaign.LOG; an absolute argv needs one."""
+    import stat
+    path = Path(directory) / "log"
+    path.write_text(body)
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return path
+
+
+class AttestationBudgetTests(FrozenExecutorTests):
+    """Item 1 (05b B1 residual): the clock query is bounded by its gap."""
+
+    def test_a_slow_query_is_abandoned_at_its_bound_and_never_authenticates(self):
+        import shutil
+        directory = Path(tempfile.mkdtemp(dir="/tmp"))
+        self.addCleanup(shutil.rmtree, directory)
+        log = fake_log(directory, "#!/bin/sh\nsleep 5\n")
+        out = stamped_envelope(directory / "envelope-01")
+        with patch.object(campaign, "LOG", str(log)):
+            began = time.monotonic()
+            attestation = campaign.attest_network_time(out, timeout=.5)
+            elapsed = time.monotonic() - began
+        # Abandoned at the bound, not at the child's own five seconds.
+        self.assertLess(elapsed, 3)
+        self.assertEqual(attestation["state"], "asserted")
+        self.assertTrue(attestation["reason"].startswith("timed log query timed out"),
+                        attestation["reason"])
+        self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                         ["network_time_unattested"])
+
+    def test_the_bound_is_the_registrations_gap_and_a_timeout_keeps_the_schedule(self):
+        # 620 - 600 - 5 = 15 s under v2; the floor holds a tiny gap open.
+        self.assertEqual(campaign.attestation_timeout_s(PROTOCOL), 15)
+        self.assertEqual(campaign.attestation_timeout_s(SCALED),
+                         campaign.ATTESTATION_TIMEOUT_FLOOR_S)
+        self.assertEqual(campaign.attestation_timeout_s({**PROTOCOL, 'slot_pitch_s': 700}), 95)
+        self.assertNotIn("timeout=300", (ROOT / 'joulewise/quiet_predicate_campaign.py').read_text())
+        # Every query spends its whole 15 s bound and times out: the night
+        # keeps its cadence, the envelopes lose their claim-bearing state, and
+        # the cost of the query is on the record for the next budget.
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(attest_burn=15)
+        self.assertEqual(rc, 0)
+        self.assertEqual([kwargs["timeout"] for kwargs in self.attestation_kwargs], [15] * 12)
+        self.assertEqual([v["excluded"] for v in summary["envelopes"]],
+                         [["network_time_unattested"]] * 12)
+        self.assertEqual(summary["retained"], 0)
+        self.assertEqual([row["network_time_attestation_wall_s"]
+                          for row in self.envelope_journal], [15] * 12)
+        starts = [float(a[a.index('--envelope-start-mono-s') + 1]) for a in calls if 'collect' in a]
+        self.assertEqual(starts, [600 + 620 * i for i in range(12)])
+        for row in self.envelope_journal:
+            self.assertLessEqual(abs(row["start_drift_s"]), .02)

@@ -477,9 +477,39 @@ def attestation_window(stamps):
 
 
 ATTESTATION_WINDOW_METHOD = "epoch_monotonic_union_v1"
+# The smallest query bound worth attempting.  A `log show` over one envelope's
+# window took 0.70-1.45 s on this machine (A269 gate C4), so five seconds is
+# already generous; it exists only so a registration with a tiny gap asks for a
+# real query rather than one guaranteed to time out.
+ATTESTATION_TIMEOUT_FLOOR_S = 5
 
 
-def attest_network_time(out, blocked=None):
+def attestation_timeout_s(protocol):
+    """Bound the clock query by the GAP it runs in, never by a literal.
+
+    The query runs between the end of one capture and the next spawn, and that
+    inter-slot gap is ``slot_pitch_s - envelope_s`` (20 s under v2).  The
+    retired literal of 300 s was thirty times the 10 s drift exclusion and a
+    hundred and fifty times the 2 s abort bar: one slow `logd` would have
+    pushed every later envelope off its schedule, and nothing measured the
+    cost.  The bound here is the gap less the same
+    ``CLEANUP_BUDGET_RESERVE_S`` the teardown leaves, floored at
+    ``ATTESTATION_TIMEOUT_FLOOR_S``: 15 s under v2.  A timeout is not a
+    failure of the night -- the envelope becomes ``asserted`` and excluded,
+    which is the state a missing query already has.
+
+    A teardown that spends its full 15 s budget AND a query that spends its
+    full 15 s bound still exceed the 20 s gap; that residual is deliberate and
+    visible rather than silent, because the next slot's spawn then drifts past
+    ``start_drift_abort_s`` and the night ends REFUSED at a named abort
+    instead of producing envelopes nobody can place on the wall timeline.
+    """
+
+    gap = protocol["slot_pitch_s"] - protocol["envelope_s"]
+    return max(ATTESTATION_TIMEOUT_FLOOR_S, gap - CLEANUP_BUDGET_RESERVE_S)
+
+
+def attest_network_time(out, blocked=None, timeout=ATTESTATION_TIMEOUT_FLOOR_S):
     """Authenticate one envelope's clock discipline from the ``timed`` log.
 
     A set-command receipt proves an instruction was accepted; it does not
@@ -511,9 +541,14 @@ def attest_network_time(out, blocked=None):
     argv = timed_log_argv(*window)
     attestation.update(window_epoch_s=window, argv=list(argv))
     try:
-        completed = subprocess.run(list(argv), capture_output=True, text=True, timeout=300)
+        completed = subprocess.run(list(argv), capture_output=True, text=True, timeout=timeout)
         path = out / TIMED_LOG_BASENAME
         path.write_text(completed.stdout)
+    except subprocess.TimeoutExpired:
+        # The query is abandoned at the gap's edge, not at 300 s: the envelope
+        # loses its claim-bearing state, the night keeps its schedule.
+        attestation["reason"] = f"timed log query timed out after {timeout:g} s"
+        return attestation
     except (OSError, subprocess.SubprocessError) as exc:
         attestation["reason"] = f"timed log query failed: {type(exc).__name__}: {exc}"
         return attestation
@@ -940,11 +975,19 @@ def execute(plan, protocol, night_dir):
             # If the teardown did not prove every supervised group gone, a
             # recorder may still be sampling, and the query is refused rather
             # than run beside it: the envelope becomes `asserted`.
-            attestation = attest_network_time(out, blocked=capture_still_live(cleanup))
+            # The query's bound is this registration's gap, and its WALL COST
+            # is journaled: an unmeasured second on the inter-slot path is how
+            # the drift A269 cures got in, and the next night's budget is read
+            # off these numbers, not guessed.
+            attestation_began = time.monotonic()
+            attestation = attest_network_time(out, blocked=capture_still_live(cleanup),
+                                              timeout=attestation_timeout_s(protocol))
+            attestation_wall_s = time.monotonic() - attestation_began
             record_attestation(out, attestation)
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
                               "network_time_attestation": attestation["state"],
+                              "network_time_attestation_wall_s": attestation_wall_s,
                               "network_time_attestation_matched_lines": attestation["matched_lines"]})
             append_event(night_dir / "evidence_envelopes.jsonl", envelopes[-1])
             print(f"envelope_end index={index} rc={code} cleanup_proven={cleanup['cleanup_proven']}"
