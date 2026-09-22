@@ -944,12 +944,18 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
                  "busy_cores_samples": len([v for v in busy if harness.number(v) is not None]),
                  "recorder_observer_cpu_s": sum(r.get("observer_cpu_s") or 0 for r in support)}
         out = directory / f"envelope-{entry['index']:02d}"
+        # The session record is read FIRST and kept even when the rest of the
+        # envelope is unreadable, because the replay check below must see
+        # every session that exists.  Reading both inside one `try` meant a
+        # missing or unparseable `rounds.jsonl` skipped the envelope before
+        # the check, and a replay night whose journals were all lost failed
+        # OPEN -- INCONCLUSIVE, `partial`, rc 0 (execution lens 17b S1).
+        session, rows, unreadable = None, None, None
         try:
             session = json.loads((out / "session.json").read_text())
             rows = [json.loads(line) for line in (out / "rounds.jsonl").read_text().splitlines() if line]
         except (OSError, ValueError) as exc:
-            values.append({**entry, "excluded": excluded + ["incomplete_interior_support"], "error": str(exc), "joules": None})
-            continue
+            unreadable = exc
         # HARVEST-side fail-closed point of the bench replay (cold gate #3
         # ruling 10 Q7; brief D6).  Every session this summary reads must say,
         # in its own record, that a real `powermetrics` produced its frames.
@@ -966,11 +972,15 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         # "replay" because one envelope refused early is a false record, and
         # it was reachable (lane contract lens 17a S1).  Anything else -- a
         # power record that exists and does not say `powermetrics` -- refuses.
-        power = session.get("power")
-        if power is not None:
+        power = session.get("power") if session is not None else None
+        if session is not None and power is not None:
             recorder_kind = power.get("recorder_kind") if isinstance(power, dict) else None
             if recorder_kind != harness.RECORDER_KIND_PRODUCTION:
                 replay_recorders.append({"index": entry["index"], "recorder_kind": recorder_kind})
+        if unreadable is not None:
+            values.append({**entry, "excluded": excluded + ["incomplete_interior_support"],
+                           "error": str(unreadable), "joules": None})
+            continue
         all_rows.extend(rows)
         hard = hard_exclusions(rows)
         excluded.extend(hard)

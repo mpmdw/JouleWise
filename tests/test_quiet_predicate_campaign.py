@@ -2146,6 +2146,44 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertEqual(outcome["outcome"], "refused")
         self.assertEqual(rc, 2)
 
+    def test_X3_a_replay_night_whose_journals_are_lost_still_refuses(self):
+        """Execution lens 17b S1: the harvest check failed OPEN on a bad read.
+
+        `recorder_kind` was read AFTER a `try` that `continue`s on any
+        `OSError`/`ValueError` from `session.json` OR `rounds.jsonl`, so
+        twelve sessions each saying `recorder_kind: "replay"` with their
+        `rounds.jsonl` absent produced an ordinary INCONCLUSIVE summary,
+        `evidence_status: "PROVISIONAL"`, no `replay_recorder_envelopes`, and
+        `execute` did not refuse: rc 0.  The replay variable is NOT set here,
+        so the refusal can only come from the summary's own reading.
+        """
+        from unittest.mock import patch
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            real = module.pilot_summary
+            def lose_the_journals(directory, protocol, envelopes, observer_cpu_s=None):
+                for path in sorted(directory.glob("envelope-*/rounds.jsonl")):
+                    path.unlink()
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, "pilot_summary",
+                                             side_effect=lose_the_journals))
+
+        rc, summary, outcome, refusals, _calls, _control, sessions = \
+            harness.exercise(recorder_kind="replay", spy=spy)
+        self.assertEqual([s["power"]["recorder_kind"] for s in sessions], ["replay"] * 12)
+        self.assertEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual(summary["evidence_status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual([row["index"] for row in summary["replay_recorder_envelopes"]],
+                         list(range(1, 13)))
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # Each envelope still reports the read that failed, on its own terms.
+        for v in summary["envelopes"]:
+            self.assertIn("incomplete_interior_support", v["excluded"])
+
     def test_L2_a_replay_night_that_wrote_no_session_still_refuses(self):
         """Lane contract lens 17a S2: the RUN marker is a refusal point too.
 
