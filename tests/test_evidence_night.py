@@ -789,6 +789,99 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(self.canonical_head(), self.old)
         self.assertFalse(any("pull" in c for c in self.calls))
 
+    # A265: the refusal strings of canonical_fast_forward and canonical_status are
+    # contract text (item 1); each test below fails if its string is reworded.
+    def test_canonical_dirty_tree_refusal_string_is_pinned(self):
+        # A tracked modification is caught by canonical_status BEFORE anything moves,
+        # so its cause is the status text, not a "fast-forward failed" text.
+        self.give_canonical_upstream()
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        (self.canonical / "tracked").write_text("dirty")
+        with self.assertRaises(entry.Refused) as raised:
+            entry.check(**self.kw)
+        record = json.loads((self.stage / "lifecycle/check.json").read_text())
+        reason = record["checks"]["canonical"]["reason"]
+        self.assertEqual(reason, "canonical checkout is dirty or unreadable:  M tracked\n")
+        self.assertNotIn("fast-forward failed", reason)
+        # The cause is recorded per check; the process line stays the generic one.
+        self.assertTrue(str(raised.exception).startswith("pre-arm checks failed: canonical"), raised.exception)
+        self.assertEqual(self.canonical_head(), self.old)
+        self.assertFalse(any("pull" in c for c in self.calls))
+
+    def unreadable_head_runner(self, *, after_pull):
+        """Fail `git rev-parse HEAD` on the canonical checkout, before or after the pull."""
+        pulled = []
+
+        def runner(argv, **kwargs):
+            text = list(map(str, argv))
+            if text[-2:] == ["rev-parse", "HEAD"] and bool(pulled) == after_pull:
+                return subprocess.CompletedProcess(text, 128, "", "fatal: bad HEAD\n")
+            if text[-2:] == ["pull", "--ff-only"]:
+                pulled.append(text)
+            return self.runner(argv, **kwargs)
+        return runner
+
+    def test_unreadable_canonical_head_before_the_pull_refusal_string_is_pinned(self):
+        self.give_canonical_upstream()
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        with patch.dict(self.kw, runner=self.unreadable_head_runner(after_pull=False)):
+            record = self.checked("canonical")
+        self.assertEqual(record["checks"]["canonical"]["reason"], "cannot read canonical HEAD: fatal: bad HEAD")
+        self.assertEqual(self.canonical_head(), self.old)
+        self.assertFalse(any("pull" in c for c in self.calls))
+
+    def test_unreadable_canonical_head_after_the_pull_refusal_string_is_pinned(self):
+        self.give_canonical_upstream()
+        subprocess.run(["git", "-C", str(self.canonical), "reset", "--hard", "-q", self.old], check=True)
+        with patch.dict(self.kw, runner=self.unreadable_head_runner(after_pull=True)):
+            record = self.checked("canonical")
+        self.assertEqual(record["checks"]["canonical"]["reason"],
+                         "cannot read canonical HEAD after fast-forward: fatal: bad HEAD")
+        self.assertEqual(self.canonical_head(), self.tip)
+
+    def test_canonical_fast_forward_branch_refusal_strings_are_pinned(self):
+        # One scripted runner per branch of canonical_fast_forward, called directly:
+        # the timeout, both pull-failure texts, the ancestry-probe error, and the
+        # pulled-but-still-lacks-H text with its two shas.
+        ok = subprocess.CompletedProcess([], 0, "", "")
+
+        def scripted(*, pull=ok, merge_base=ok, before="aaa111", after="bbb222"):
+            heads = [subprocess.CompletedProcess([], 0, before + "\n", ""),
+                     subprocess.CompletedProcess([], 0, after + "\n", "")]
+
+            def runner(argv, **kwargs):
+                text = list(map(str, argv))
+                if "status" in text:
+                    return ok
+                if text[-2:] == ["pull", "--ff-only"]:
+                    if isinstance(pull, BaseException):
+                        raise pull
+                    return pull
+                if "merge-base" in text:
+                    return merge_base
+                self.assertEqual(text[-2:], ["rev-parse", "HEAD"])
+                return heads.pop(0)
+            return runner
+
+        def refusal(**scripting):
+            with self.assertRaises(entry.Refused) as raised:
+                entry.canonical_fast_forward({"head": self.head}, self.canonical, scripted(**scripting))
+            return str(raised.exception)
+
+        self.assertEqual(entry.FAST_FORWARD_TIMEOUT_S, 120)  # the bound contract item 1 states
+        self.assertEqual(refusal(pull=subprocess.TimeoutExpired(["git"], entry.FAST_FORWARD_TIMEOUT_S)),
+                         "canonical fast-forward failed: timed out after 120 s")
+        self.assertEqual(refusal(pull=subprocess.CompletedProcess([], 1, "", "fatal: no upstream configured\n")),
+                         "canonical fast-forward failed: fatal: no upstream configured")
+        # stdout is the fallback text when git wrote nothing to stderr
+        self.assertEqual(refusal(pull=subprocess.CompletedProcess([], 1, "hint on stdout\n", "")),
+                         "canonical fast-forward failed: hint on stdout")
+        self.assertEqual(refusal(merge_base=subprocess.CompletedProcess([], 2, "", "fatal: bad object\n")),
+                         "cannot determine canonical ancestry: fatal: bad object")
+        self.assertEqual(refusal(merge_base=subprocess.CompletedProcess([], 1, "", "")),
+                         "canonical fast-forward failed: HEAD moved aaa111 -> bbb222 "
+                         "but still does not contain candidate H")
+
     def test_candidate_must_contain_census_fix(self):
         with patch.object(entry, "CENSUS_FIX", self.tip):
             self.assertIn("census fix", self.checked("canonical")["checks"]["canonical"]["reason"])

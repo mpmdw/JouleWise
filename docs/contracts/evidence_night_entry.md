@@ -195,12 +195,27 @@ with the clone's code. It then writes verdicts and evidence for:
    `git -C <canonical> pull --ff-only` itself, bounded to 120 s with
    `GIT_TERMINAL_PROMPT=0` so an unreachable remote or a credential prompt
    refuses instead of hanging, and records
-   `fast_forward: {before, after, pull, clean_before}` in the evidence. A dirty
-   tree, a missing or divergent upstream, a timeout, or a pull that still lacks
-   H refuses with `canonical fast-forward failed: …`; the still-lacks-H cause
-   names the before and after shas because the tree did move. With item 0
-   failed the pull is not licensed and the check refuses without moving
-   anything. A checkout that already contains H records `fast_forward: null`.
+   `fast_forward: {before, after, pull, clean_before}` in the evidence. Every way
+   the move can fail refuses, and each cause is written as the canonical check's
+   `reason`; the process's own refusal line stays the generic
+   `pre-arm checks failed: …` line, which names every failed check. The causes,
+   in the order the code can reach them, are: a tracked modification or an
+   unreadable `status` probe, checked before anything moves —
+   `canonical checkout is dirty or unreadable: ` followed by that probe's own
+   stdout and stderr; a `git rev-parse HEAD` that fails before the pull —
+   `cannot read canonical HEAD: ` followed by its stderr; the 120 s bound
+   expiring — `canonical fast-forward failed: timed out after 120 s`; a non-zero
+   `pull` (no upstream, a divergent upstream, a refused credential prompt) —
+   `canonical fast-forward failed: ` followed by the pull's stderr, or its stdout
+   when stderr is empty; a `git rev-parse HEAD` that fails after the pull —
+   `cannot read canonical HEAD after fast-forward: ` followed by its stderr; a
+   `git merge-base --is-ancestor` ancestry probe that neither succeeds (exit 0)
+   nor reports "not an ancestor" (exit 1) — `cannot determine canonical
+   ancestry: ` followed by its stderr; and a pull that moved HEAD but still lacks
+   H — `canonical fast-forward failed: HEAD moved <before> -> <after> but still
+   does not contain candidate H`, naming both shas because the tree did move.
+   With item 0 failed the pull is not licensed and the check refuses without
+   moving anything. A checkout that already contains H records `fast_forward: null`.
    The pull may make the resident supervisor stale under item 2; that refusal
    names the hand-off (`… commit, push and exit so the watchdog's successor
    arms`) and `check` re-raises that stale case as its own cause (other supervisor
