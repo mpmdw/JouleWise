@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 import statistics
 from dataclasses import asdict, dataclass
 from fractions import Fraction
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from joulewise.clock import ClockStamp
@@ -15,9 +17,11 @@ from joulewise.clock import ClockStamp
 SCHEMA_VERSION = "p2-038.1"
 SCHEMA_VERSION_V2 = "p2-038.2"
 SCHEMA_VERSION_V3 = "p2-038.3"
+SCHEMA_VERSION_V3_1 = "p2-038.4"
 CLOCK_METHOD = "powermetrics_spawn_ready_wall_monotonic_envelope_v1"
 CLOCK_METHOD_V2 = "powermetrics_native_second_censored_intersection_v1"
 CLOCK_METHOD_V3 = "powermetrics_native_second_rate_aware_set_membership_v1"
+CLOCK_METHOD_V3_1 = "powermetrics_native_second_rate_aware_set_membership_v1.1"
 # Native-anchor method identities are shared by capture, re-derivation, and
 # strict replay.  Keep the registered native set explicit so a future method
 # cannot silently become eligible merely by appearing in one dispatch map.
@@ -30,6 +34,7 @@ SCHEMA_FOR_ANCHOR_METHOD = {
     CLOCK_METHOD: SCHEMA_VERSION,
     CLOCK_METHOD_V2: SCHEMA_VERSION_V2,
     CLOCK_METHOD_V3: SCHEMA_VERSION_V3,
+    CLOCK_METHOD_V3_1: SCHEMA_VERSION_V3_1,
 }
 # D-078 fail-closed limits for the v2 censored-intersection anchor estimator.
 MAX_WALL_MINUS_MONOTONIC_SPAN_S = 0.005
@@ -39,6 +44,45 @@ MAX_CLOCK_RATE_DEVIATION_PPM = 50.0
 MIN_RATE_FIT_BASELINE_S = 60.0
 MIN_NATIVE_ROLLOVERS = 2
 MAX_EFFECTIVE_CLOCK_ANCHOR_BOUND_S = 0.005
+# Anchor admission limits, bound to the method identity that owns them (cold
+# gate 2026-09-22, ruling 10 Q2 as amended by rebuttal ruling 14 R1/R2).  The
+# caps are NOT a caller argument: a caps value that a call site could choose
+# would detach an identity from the constants that define it, so the only way
+# to change them is to name a different method.  Both mappings are read-only.
+#
+# ``CLOCK_METHOD_V3`` ("absolute"): the D-078 v2-era pair of absolute 5 ms
+# caps, one on the wall-minus-monotonic span and one on the emitted bound.
+# ``CLOCK_METHOD_V3_1`` ("rate_and_placement"), for the evidence consumer that
+# prices the anchor bound in joules rather than comparing it to a pulse:
+#   * 25 ppm sustained wall-versus-monotonic RATE.  Network-time-OFF captures
+#     on record ran at 7.24 and 7.60 ppm; 25 ppm is ~3x that and below the
+#     +/-50 ppm projection limit, which refuses rather than clips.
+#   * 5 ms PLACEMENT bound (anchor half-width + stamp resolution + numeric
+#     padding): where the first record's endpoint sits is still capped at the
+#     v3 value; only the drift term is allowed to grow with capture length.
+#   * 15 ms absolute span BACKSTOP.  Derivation: 25 ppm x the 600 s pilot
+#     envelope = 15 ms; a rigid 15 ms shift of the whole trace at the 40 W
+#     loaded bracket edge is 0.6 J, below the ~1 J attribution limit.  The
+#     value is FROZEN here, not computed from a protocol duration at runtime,
+#     so lengthening an envelope cannot silently widen admission.
+V3_CAPS = MappingProxyType(
+    {
+        "form": "absolute",
+        "max_wall_minus_monotonic_span_s": MAX_WALL_MINUS_MONOTONIC_SPAN_S,
+        "max_effective_clock_anchor_bound_s": MAX_EFFECTIVE_CLOCK_ANCHOR_BOUND_S,
+    }
+)
+V3_1_CAPS = MappingProxyType(
+    {
+        "form": "rate_and_placement",
+        "max_sustained_rate_ppm": 25.0,
+        "max_placement_bound_s": 0.005,
+        "max_wall_minus_monotonic_span_s": 0.015,
+    }
+)
+ANCHOR_CAPS_BY_METHOD = MappingProxyType(
+    {CLOCK_METHOD_V3: V3_CAPS, CLOCK_METHOD_V3_1: V3_1_CAPS}
+)
 # Float64 representation pricing (cold science review 2026-08-18, Q1c and
 # condition 2).  The v3 chain is exact rational arithmetic, but its inputs are
 # recorded binary64 values that ``Fraction`` exactifies: an inexact stored value
@@ -701,16 +745,36 @@ def _round_outward_down(value: Fraction) -> float:
     return projected
 
 
+def _anchor_identity_fields(method: str) -> dict[str, Any]:
+    """Identity fields every v3.1 record carries; v3 records carry none.
+
+    Ruling 14 R2: a v3.1 record states its own identity, its schema and the
+    caps it was admitted under, so a stored record can never be read against
+    the wrong limits.  v3 records gain no key at all (review condition 6).
+    """
+
+    if method == CLOCK_METHOD_V3:
+        return {}
+    return {
+        "clock_anchor_method": method,
+        "schema_version": SCHEMA_FOR_ANCHOR_METHOD[method],
+        "caps": dict(ANCHOR_CAPS_BY_METHOD[method]),
+    }
+
+
 def _unresolved_anchor_v3(
     detail: str,
     clock_stamps: Mapping[str, Mapping[str, float]],
     extra: Mapping[str, Any] | None = None,
+    *,
+    method: str = CLOCK_METHOD_V3,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         "status": "unknown",
         "reason": CLOCK_ANCHOR_UNRESOLVED,
         "detail": detail,
-        "method": CLOCK_METHOD_V3,
+        "method": method,
+        **_anchor_identity_fields(method),
         "clock_stamps": dict(clock_stamps),
     }
     if extra:
@@ -815,6 +879,7 @@ def derive_powermetrics_anchor_v3(
     *,
     stamps: Mapping[str, ClockStamp],
     records: Sequence[NativeAnchorRecord],
+    method: str = CLOCK_METHOD_V3,
 ) -> dict[str, Any]:
     """Exact affine-rate set-membership anchor (schema ``p2-038.3``).
 
@@ -866,15 +931,43 @@ def derive_powermetrics_anchor_v3(
     exactifies with ``Fraction``; see that constant's derivation. The guard
     below refuses ``numeric_padding_insufficient`` rather than assuming the
     constant is large enough for the capture's own epoch scale.
+
+    **The v3.1 identity (cold gate 2026-09-22, ruling 10 Q2 as amended by 14
+    R1/R2).** ``method=CLOCK_METHOD_V3_1``
+    (``...set_membership_v1.1``, schema ``p2-038.4``) selects a SECOND
+    identity for the evidence consumer, which prices the anchor bound in
+    joules instead of comparing it to a millisecond-scale pulse. Everything
+    above still holds; only the admission limits differ, and they are read
+    from ``ANCHOR_CAPS_BY_METHOD``, never from a caller argument. Under v3.1
+    the wall-versus-monotonic DRIFT term is not capped at 5 ms: it is priced
+    into ``effective_clock_anchor_bound_s`` in full and consumed downstream by
+    ``integrate()`` as a per-frame conservative bound, the sum over frames of
+    ``P_i * min(dt_i, 2*epsilon)``. Read that consequence exactly: at the
+    pilot's idle draw that sum is ~1.57 J per millisecond of epsilon, and NO
+    pilot exclusion or sizing step reads ``error_bound_j`` at all -- it is
+    recorded, not enforced. Containment of the mapped trace therefore rests on
+    two things that are enforced: the 25 ppm sustained-rate limit and the
+    frozen 15 ms span backstop, which together bound the worst case to a rigid
+    15 ms shift of the whole trace, 0.6 J at the 40 W loaded bracket edge and
+    below the ~1 J attribution limit. All of it remains conditional on the
+    affine model above and on the authenticated network-time-OFF admission of
+    consult I4, which for evidence nights is established by the chain before
+    settle and attested per envelope from the ``timed`` unified log
+    (``joulewise.quiet_predicate_campaign``); a capture without that
+    attestation is validation-only material.
     """
 
+    if method not in ANCHOR_CAPS_BY_METHOD:
+        raise ValueError(f"unregistered anchor method identity: {method!r}")
+    caps = ANCHOR_CAPS_BY_METHOD[method]
+    unresolved_v3 = functools.partial(_unresolved_anchor_v3, method=method)
     serialized_stamps = {
         name: stamp_to_dict(stamps[name])
         for name in STAMP_ORDER
         if name in stamps
     }
     if set(serialized_stamps) != set(STAMP_ORDER):
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "clock_stamp_unavailable", serialized_stamps
         )
     ordered = [stamps[name] for name in STAMP_ORDER]
@@ -882,9 +975,9 @@ def derive_powermetrics_anchor_v3(
         current.monotonic_before_s < previous.monotonic_before_s
         for previous, current in zip(ordered, ordered[1:])
     ):
-        return _unresolved_anchor_v3("clock_stamp_invalid", serialized_stamps)
+        return unresolved_v3("clock_stamp_invalid", serialized_stamps)
     if not records:
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "native_records_unavailable", serialized_stamps
         )
     if any(
@@ -895,7 +988,7 @@ def derive_powermetrics_anchor_v3(
         or not isinstance(record.native_timestamp_ns, int)
         for record in records
     ):
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "native_exact_inputs_unavailable", serialized_stamps
         )
 
@@ -907,7 +1000,7 @@ def derive_powermetrics_anchor_v3(
     exact_elapsed_ns = [int(value) for value in elapsed_ns]
     exact_native_ns = [int(value) for value in native_ns]
     if any(value % 1_000_000_000 != 0 for value in exact_native_ns):
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "native_label_not_whole_second", serialized_stamps
         )
 
@@ -919,15 +1012,15 @@ def derive_powermetrics_anchor_v3(
             or record.elapsed_s <= 0.0
             or not math.isfinite(record.native_timestamp_s)
         ):
-            return _unresolved_anchor_v3(
+            return unresolved_v3(
                 "native_record_malformed", serialized_stamps
             )
         if record.is_delta is not True:
-            return _unresolved_anchor_v3(
+            return unresolved_v3(
                 "native_record_not_delta_aggregate", serialized_stamps
             )
         if record.energy_j is None or not math.isfinite(record.energy_j):
-            return _unresolved_anchor_v3(
+            return unresolved_v3(
                 "native_energy_counter_unavailable", serialized_stamps
             )
         if not math.isfinite(record.power_w) or abs(
@@ -935,7 +1028,7 @@ def derive_powermetrics_anchor_v3(
         ) > ENERGY_CONSISTENCY_ABS_TOL_J + ENERGY_CONSISTENCY_REL_TOL * abs(
             record.energy_j
         ):
-            return _unresolved_anchor_v3(
+            return unresolved_v3(
                 "native_energy_power_inconsistent", serialized_stamps
             )
 
@@ -943,14 +1036,14 @@ def derive_powermetrics_anchor_v3(
         later < earlier
         for earlier, later in zip(exact_native_ns, exact_native_ns[1:])
     ):
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "native_timestamps_non_monotone", serialized_stamps
         )
     for index, (earlier, later) in enumerate(
         zip(exact_native_ns, exact_native_ns[1:]), start=1
     ):
         if later - earlier > exact_elapsed_ns[index] + 1_000_000_000:
-            return _unresolved_anchor_v3(
+            return unresolved_v3(
                 "native_rollover_anomalous", serialized_stamps
             )
     rollovers = sum(
@@ -959,11 +1052,11 @@ def derive_powermetrics_anchor_v3(
         if later > earlier
     )
     if rollovers == 0:
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "no_native_second_rollover", serialized_stamps
         )
     if rollovers < MIN_NATIVE_ROLLOVERS:
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "native_rollover_anomalous",
             serialized_stamps,
             {"native_rollover_count": rollovers},
@@ -975,7 +1068,7 @@ def derive_powermetrics_anchor_v3(
     baseline_ns = cumulative_ns[-1]
     baseline_s = Fraction(baseline_ns, 1_000_000_000)
     if baseline_ns < Fraction(MIN_RATE_FIT_BASELINE_S) * 1_000_000_000:
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "clock_fit_span_insufficient",
             serialized_stamps,
             {"rate_fit_baseline_s": float(baseline_s)},
@@ -988,21 +1081,60 @@ def derive_powermetrics_anchor_v3(
         - Fraction(pre_spawn.monotonic_before_s)
     ) * 1_000_000_000
     if controller_coverage_ns < baseline_ns:
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "clock_fit_span_insufficient",
             serialized_stamps,
             {"rate_fit_baseline_s": float(baseline_s)},
         )
 
     offset_lower_s, offset_upper_s, offset_span_s = _offset_envelope_s(ordered)
+    # Span gate.  Under v3 this is the absolute 5 ms cap.  Under v3.1 it is the
+    # frozen 15 ms BACKSTOP, checked first so that no rate arithmetic can admit
+    # a drift the backstop forbids, followed by the 25 ppm sustained-rate gate
+    # over the same baseline the affine fit uses (``rate_fit_baseline_s``: the
+    # summed native record support, not the controller bracket).
+    rate_fields_v3_1: dict[str, Any] = {}
+    if "max_sustained_rate_ppm" in caps:
+        # Emitted on BOTH rate-aware refusals: when a capture trips the
+        # backstop it is the sustained rate a reader needs to see, and the
+        # backstop firing first must not delete that evidence.
+        rate_fields_v3_1 = {
+            "rate_fit_baseline_s": float(baseline_s),
+            "wall_minus_monotonic_rate_ppm": (
+                offset_span_s / float(baseline_s) * 1e6
+                if math.isfinite(offset_span_s)
+                else offset_span_s
+            ),
+            "max_sustained_rate_ppm": caps["max_sustained_rate_ppm"],
+        }
     if (
         not math.isfinite(offset_span_s)
-        or offset_span_s > MAX_WALL_MINUS_MONOTONIC_SPAN_S
+        or offset_span_s > caps["max_wall_minus_monotonic_span_s"]
     ):
-        return _unresolved_anchor_v3(
+        span_detail: dict[str, Any] = {
+            "wall_minus_monotonic_span_s": offset_span_s
+        }
+        if method != CLOCK_METHOD_V3:
+            span_detail["max_wall_minus_monotonic_span_s"] = caps[
+                "max_wall_minus_monotonic_span_s"
+            ]
+            span_detail.update(rate_fields_v3_1)
+        return unresolved_v3(
             "wall_minus_monotonic_span_exceeded",
             serialized_stamps,
-            {"wall_minus_monotonic_span_s": offset_span_s},
+            span_detail,
+        )
+    if rate_fields_v3_1 and (
+        rate_fields_v3_1["wall_minus_monotonic_rate_ppm"]
+        > caps["max_sustained_rate_ppm"]
+    ):
+        return unresolved_v3(
+            "wall_minus_monotonic_rate_exceeded",
+            serialized_stamps,
+            {
+                "wall_minus_monotonic_span_s": offset_span_s,
+                **rate_fields_v3_1,
+            },
         )
 
     # Price the float64 representation error of the epoch-scale inputs this
@@ -1015,7 +1147,7 @@ def derive_powermetrics_anchor_v3(
         epoch_scale_s
     )
     if Fraction(NUMERIC_PADDING_S) < Fraction(epoch_representation_term_s):
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "numeric_padding_insufficient",
             serialized_stamps,
             {
@@ -1065,7 +1197,7 @@ def derive_powermetrics_anchor_v3(
         - m0
     )
     if k_pre_spawn > k_first_parse:
-        return _unresolved_anchor_v3("clock_stamp_invalid", serialized_stamps)
+        return unresolved_v3("clock_stamp_invalid", serialized_stamps)
 
     stamp_rows, causal_rows = _eliminate_alpha_v3(
         alpha_uppers,
@@ -1092,12 +1224,12 @@ def derive_powermetrics_anchor_v3(
         exact_native_ns, cumulative_ns, departure_ns
     )
     if _lp2(native_rows, "min A", box=box) is None:
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "rate_aware_native_set_empty", serialized_stamps
         )
     native_stamp_rows = [*native_rows, *stamp_rows]
     if _lp2(native_stamp_rows, "min A", box=box) is None:
-        return _unresolved_anchor_v3("affine_clock_fit_empty", serialized_stamps)
+        return unresolved_v3("affine_clock_fit_empty", serialized_stamps)
     joint_rows = [*native_stamp_rows, *causal_rows]
     if _lp2(joint_rows, "min A", box=box) is None:
         relaxed_native_rows = _native_v3_constraints(
@@ -1109,7 +1241,7 @@ def derive_powermetrics_anchor_v3(
             if _lp2(relaxed_joint, "min A", box=box) is not None
             else "admissible_interval_empty"
         )
-        return _unresolved_anchor_v3(detail, serialized_stamps)
+        return unresolved_v3(detail, serialized_stamps)
 
     beta_lower = _lp2(joint_rows, "min beta", box=box)
     beta_upper = _lp2(joint_rows, "max beta", box=box)
@@ -1120,7 +1252,7 @@ def derive_powermetrics_anchor_v3(
         "rate_limit_ppm": MAX_CLOCK_RATE_DEVIATION_PPM,
     }
     if beta_lower == beta_box_lower or beta_upper == beta_box_upper:
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "clock_fit_unbounded", serialized_stamps, rate_fields
         )
     physical_rate_delta = (
@@ -1130,7 +1262,7 @@ def derive_powermetrics_anchor_v3(
         beta_lower < Fraction(1) - physical_rate_delta
         or beta_upper > Fraction(1) + physical_rate_delta
     ):
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "clock_rate_limit_exceeded", serialized_stamps, rate_fields
         )
 
@@ -1154,7 +1286,7 @@ def derive_powermetrics_anchor_v3(
         or first_parse_lag_ns
         > Fraction(MAX_FIRST_PARSE_LAG_S) * ns_per_second
     ):
-        return _unresolved_anchor_v3(
+        return unresolved_v3(
             "first_parse_lag_exceeded",
             serialized_stamps,
             {"first_parse_lag_s": first_parse_lag_s},
@@ -1182,12 +1314,17 @@ def derive_powermetrics_anchor_v3(
         max(stamp.wall_resolution_s, stamp.monotonic_resolution_s)
         for stamp in ordered
     )
-    exact_effective_bound = (
+    # The placement terms say WHERE the first record's endpoint sits on the
+    # wall timeline; the span term prices within-capture drift.  v3 caps their
+    # sum; v3.1 caps the placement terms alone and lets the drift term flow
+    # into the emitted bound uncapped (the span backstop above bounds it).
+    exact_placement_bound = (
         anchor_only_bound
-        + Fraction(offset_span_s)
         + Fraction(stamp_resolution_s)
         + Fraction(NUMERIC_PADDING_S)
     )
+    exact_effective_bound = exact_placement_bound + Fraction(offset_span_s)
+    placement_bound_s = _round_outward_up(exact_placement_bound)
     effective_bound_s = _round_outward_up(exact_effective_bound)
     anchor_lower_s = _round_outward_down(anchor_lower_ns / ns_per_second)
     anchor_upper_s = _round_outward_up(anchor_upper_ns / ns_per_second)
@@ -1196,7 +1333,8 @@ def derive_powermetrics_anchor_v3(
     )
     bounded_record: dict[str, Any] = {
         "status": "bounded",
-        "method": CLOCK_METHOD_V3,
+        "method": method,
+        **_anchor_identity_fields(method),
         "clock_stamps": serialized_stamps,
         "records_checked": len(records),
         "native_rollover_count": rollovers,
@@ -1222,14 +1360,29 @@ def derive_powermetrics_anchor_v3(
         "effective_clock_anchor_bound_s": effective_bound_s,
         "arithmetic": "exact_rational_outward_rounded_v1",
     }
-    if effective_bound_s > MAX_EFFECTIVE_CLOCK_ANCHOR_BOUND_S:
-        return _unresolved_anchor_v3(
+    if method != CLOCK_METHOD_V3:
+        bounded_record["placement_bound_s"] = placement_bound_s
+    exceeded = (
+        effective_bound_s > caps["max_effective_clock_anchor_bound_s"]
+        if "max_effective_clock_anchor_bound_s" in caps
+        else placement_bound_s > caps["max_placement_bound_s"]
+    )
+    if exceeded:
+        return unresolved_v3(
             "effective_clock_anchor_bound_exceeded",
             serialized_stamps,
             {
                 key: value
                 for key, value in bounded_record.items()
-                if key not in {"status", "method", "clock_stamps"}
+                if key
+                not in {
+                    "status",
+                    "method",
+                    "clock_stamps",
+                    "clock_anchor_method",
+                    "schema_version",
+                    "caps",
+                }
             },
         )
     return bounded_record
