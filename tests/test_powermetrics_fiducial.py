@@ -1561,21 +1561,21 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
 
 class FrozenProtocolTests(unittest.TestCase):
     def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
-        # The ACTIVE generation since the capture-presentation reissue.  The
-        # estimator-bearing branch was fail-closed while the issued pin was
+        # The ACTIVE generation since the A267 clock-anchor-deriver reissue.
+        # The estimator-bearing branch was fail-closed while the issued pin was
         # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
         # cures it, so this unit proves the cured state end to end.
         path = Path(
-            "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
         )
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+            "14c891eb94a72cb53552cc66f4f8b96ee3bad472a3c606afb7b0647175b56195",
         )
         artifact = json.loads(raw)
         self.assertEqual(
-            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r6"
+            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r7"
         )
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         derivation = artifact["decimal_derivation"]
