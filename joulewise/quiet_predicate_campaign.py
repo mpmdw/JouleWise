@@ -764,14 +764,23 @@ def record_attestation(out, attestation):
         # entry whenever the session record carries no attestation, so the
         # `asserted` state set here is the state the summary sees.
         #
-        # The temporary goes first.  A write that landed and a rename that
-        # did not leaves a COMPLETE `session.json.tmp` beside the record it
-        # failed to replace -- one carrying the `authenticated` state this
-        # branch is about to withdraw -- so a harvester would have two
-        # candidate records for one envelope, the stale one claim-bearing.
-        temporary.unlink(missing_ok=True)
+        # The withdrawal comes FIRST: nothing below may raise before the
+        # envelope has lost its claim-bearing state (cold gate #3 rebuttal
+        # ruling 18 Q1).  Cleaning up before withdrawing meant a cleanup that
+        # itself raised -- an immutable or root-owned `.tmp` raises
+        # `PermissionError`, an `OSError` this handler does not re-enter --
+        # left the state `authenticated` and refused the whole night from
+        # `execute`'s outer handler.
         attestation["state"] = "asserted"
         attestation["reason"] = f"session rewrite failed: {type(exc).__name__}: {exc}"
+        # A landed write and a failed rename leave a COMPLETE session.json.tmp
+        # carrying the state just withdrawn; remove it, and if that fails too,
+        # say so in the reason rather than refuse the night.
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError as unlink_exc:
+            attestation["reason"] += (f"; stale {temporary.name} not removed: "
+                                      f"{type(unlink_exc).__name__}: {unlink_exc}")
         return False
     return True
 

@@ -1796,6 +1796,36 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
             self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                              ["network_time_unattested"])
 
+    def test_R_C1_a_cleanup_that_raises_never_costs_the_night(self):
+        """Ruling 18 Q1: the withdrawal comes first, the cleanup cannot raise.
+
+        The rename fails and the removal of the complete `.tmp` it left
+        behind fails too (an immutable or root-owned temporary raises
+        `PermissionError`, which is an `OSError` this handler does not
+        re-enter).  Before the cure that second failure escaped
+        `record_attestation` with the state still `authenticated`, and
+        `execute`'s outer handler refused the whole night; now the envelope
+        is `asserted`, both failures are in the reason, and the collector's
+        own bytes are untouched.
+        """
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope-01"
+            out.mkdir()
+            (out / "session.json").write_text(json.dumps({"session": "fixture"}))
+            before = (out / "session.json").read_bytes()
+            attestation = {"state": "authenticated", "matched_lines": 0}
+            with patch.object(campaign.os, "replace", side_effect=OSError("disk full")), \
+                    patch.object(Path, "unlink", side_effect=PermissionError("immutable")):
+                self.assertFalse(campaign.record_attestation(out, attestation))
+            self.assertEqual(attestation["state"], "asserted")
+            self.assertIn("session rewrite failed", attestation["reason"])
+            self.assertIn("OSError: disk full", attestation["reason"])
+            self.assertIn("not removed", attestation["reason"])
+            self.assertIn("PermissionError: immutable", attestation["reason"])
+            self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                             ["network_time_unattested"])
+            self.assertEqual((out / "session.json").read_bytes(), before)
+
     def test_a_night_whose_annotations_cannot_land_still_finishes(self):
         def spy(stack, module):
             stack.enter_context(patch.object(module.os, "replace",
