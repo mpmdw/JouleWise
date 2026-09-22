@@ -1362,6 +1362,15 @@ def derive_powermetrics_anchor_v3(
     }
     if method != CLOCK_METHOD_V3:
         bounded_record["placement_bound_s"] = placement_bound_s
+        # Ruling 14 R5 (NIT): the exact integer-nanosecond form of the same
+        # midpoint the float64 ``first_sample_end_point_epoch_s`` above
+        # carries, so a reader never has to re-round a binary64 value.  The
+        # frame tiler still rounds the float field once (R5's sole-input
+        # sentence); this field is recorded, not consumed.  v3 records gain
+        # no key at all.
+        bounded_record["first_sample_end_point_epoch_ns"] = round(
+            Fraction(anchor_lower_ns + anchor_upper_ns, 2)
+        )
     exceeded = (
         effective_bound_s > caps["max_effective_clock_anchor_bound_s"]
         if "max_effective_clock_anchor_bound_s" in caps
