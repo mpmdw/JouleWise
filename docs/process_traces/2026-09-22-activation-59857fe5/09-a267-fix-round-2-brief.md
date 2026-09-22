@@ -22,3 +22,9 @@ Forbidden: `joulewise/uncertainty_evidence.py` (frozen), `scripts/sample_quiet_p
 ## Exit contract
 
 `env PYTHONDONTWRITEBYTECODE=1 TMPDIR=/tmp python3 -B -m unittest tests.test_uncertainty_evidence tests.test_sample_quiet_predicate_evidence tests.test_quiet_predicate_campaign` green, plus `tests.test_night_gate tests.test_run_night tests.test_gen_evidence_night tests.test_night_agent_install` green (run the install module once, at the end). One commit per numbered item, message naming the ruling section (e.g. "cold gate #3 Q2", "Q5 item 2"). Kills shown for items 1 and 2 as dictated, plus items 4, 5, 6 (mutate → red → restore → green). Do not push. Final report under 1500 words to `~/.claude/jobs/59857fe5/tmp/a267-fixround2-report.md`: per item what/where (file:line at HEAD), regression, kills; the exact tails of both exit-contract commands; `git log --oneline 489b0953..HEAD`; deviations; NEEDS_RULING blocks; unfinished items.
+
+## Dated addendum (11:38 PDT, sent to the seat by message; recorded here per the round-2 contract lens NIT 3)
+
+S1 (item 2 / R3.3). The invariant `attestation_timeout_s(p) + cleanup_budget_s(p) <= gap` holds exactly for gap ≥ ATTESTATION_TIMEOUT_FLOOR_S + 1 (6 s), not "gap > 10 s"; the comment states that domain; R3.3 asserts it over v2, the scaled protocol, a 700 s pitch AND the boundary gap = 6, plus a negative pin at gap = 3 (sum 6 > 3, the drift abort named). `validate_protocol` unchanged.
+S2 (item 8). The same docstring sentence is added to `timed_log_moment`, which discards the `-0700` offset that `--style syslog` supplies.
+S3 (item 1 / R2.5). R2.5 asserts `timed_log_matches == 10` on BOTH fixtures (the ruled regression-12 scanner), alongside the marker-line and state relations.
