@@ -364,6 +364,32 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
     else:
         status = "PASS"
     escalate = status == "ESCALATE"
+    # The SPLIT -- a chain figure at or under its bar beside a session figure
+    # over its own -- reported independently of `status` (delta execution lens
+    # SHOULD-FIX 2).  `escalate_chain_pass_session_fail` is by construction
+    # `status == "ESCALATE"`, so a run that is over the session bar AND has an
+    # inadmissible slot came back FAIL with that flag FALSE and a statement
+    # that never mentioned the session figure: a reader of `slot_defects` plus
+    # that boolean concluded the session-level figure had been fine.
+    # `session_bar_exceeded` is true whenever `session_slots_over_bar` is
+    # non-empty, whatever the status, and the statement says so too.
+    session_bar_exceeded = bool(session_over)
+    if status == "PASS" and chain:
+        statement = (f"max(chain start_drift_s) = {max(chain):.3f} s <= {bar_s} s over "
+                     f"{len(rows)}/{expected} slots")
+    elif status == "ESCALATE":
+        statement = (f"the chain-level bar is met ({max(chain):.3f} s <= {bar_s} s) but the "
+                     f"session-level figure is not (max {max(session):.3f} s > {session_bar_s} s "
+                     f"on slots {session_over}): a split verdict is ESCALATED to the "
+                     "magistrate, never passed")
+    else:
+        statement = (f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
+                     f"recorded={len(rows)}/{expected}"
+                     + "".join(f"; slot {d['index']} {d['field']}={d['value']!r} "
+                               f"(required {d['required']!r})" for d in defects)
+                     + (f"; the session-level bar is exceeded too (max "
+                        f"{max(session):.3f} s > {session_bar_s} s on slots {session_over})"
+                        if session_bar_exceeded else ""))
     return {"bar_s": bar_s, "session_bar_s": session_bar_s, "slots_expected": expected,
             "slots_recorded": len(rows), "slots_missing_chain_drift": missing,
             "max_chain_start_drift_s": max(chain) if chain else None,
@@ -371,17 +397,7 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
             "slots_over_bar": over, "session_slots_over_bar": session_over,
             "slot_defects": defects, "smoke_exempt_fields": list(SMOKE_EXEMPT_FIELDS) if smoke else [],
             "status": status, "escalate_chain_pass_session_fail": escalate,
-            "statement": (
-                f"max(chain start_drift_s) = {max(chain):.3f} s <= {bar_s} s over "
-                f"{len(rows)}/{expected} slots" if status == "PASS" and chain else
-                f"the chain-level bar is met ({max(chain):.3f} s <= {bar_s} s) but the "
-                f"session-level figure is not (max {max(session):.3f} s > {session_bar_s} s "
-                f"on slots {session_over}): a split verdict is ESCALATED to the magistrate, "
-                "never passed" if status == "ESCALATE" else
-                f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
-                f"recorded={len(rows)}/{expected}"
-                + ("".join(f"; slot {d['index']} {d['field']}={d['value']!r} "
-                           f"(required {d['required']!r})" for d in defects)))}
+            "session_bar_exceeded": session_bar_exceeded, "statement": statement}
 
 
 def markdown(report):
@@ -409,8 +425,11 @@ def markdown(report):
                 if v['status'] == "ESCALATE" else []),
               f"max(session `start_drift_s`) = {v['max_session_start_drift_s']} s "
               f"(bar {v['session_bar_s']} s; over: {v['session_slots_over_bar'] or 'none'}).",
-              f"Chain-pass/session-fail split requiring escalation: "
-              f"{v['escalate_chain_pass_session_fail']}.",
+              f"Session bar exceeded (true whatever the status): "
+              f"{v.get('session_bar_exceeded', bool(v['session_slots_over_bar']))}.",
+              f"Chain-pass/session-fail split requiring escalation (this is "
+              f"`status == ESCALATE`; a FAIL over the session bar reads False here "
+              f"and True on the line above): {v['escalate_chain_pass_session_fail']}.",
               f"Inadmissible slots (the finalisation tail did not run): "
               f"{v.get('slot_defects') or 'none'}.",
               *(["A 60 s smoke envelope is too short for the clock fit the anchor needs, so "

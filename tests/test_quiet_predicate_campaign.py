@@ -2601,6 +2601,61 @@ class BenchReplayFailClosedTests(unittest.TestCase):
             self.assertEqual(report["verdict"]["status"], "FAIL")
             self.assertEqual(bench.main(["--archive", tmp]), 1)
 
+    def test_D2_a_fail_that_is_also_over_the_session_bar_reports_the_split(self):
+        """Delta execution lens SHOULD-FIX 2: the split is not a status.
+
+        `escalate_chain_pass_session_fail` is by construction
+        `status == "ESCALATE"`, so a run that is over the session bar AND
+        carries an inadmissible slot came back FAIL with that boolean FALSE
+        and a statement that never mentioned the session figure at all: a
+        reader of `slot_defects` plus that boolean concluded the
+        session-level figure had been fine, on a run launched detached and
+        unattended.  `session_bar_exceeded` is now independent of the status,
+        and the statement names the over-bar session slots whenever there
+        are any.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
+                     session_start_drift_s=0.9 if i == 4 else 0.2) for i in range(1, 13)]
+        rows[6]["collector_exit"] = 1
+        result = bench.verdict(rows, protocol)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["session_slots_over_bar"], [4])
+        self.assertTrue(result["session_bar_exceeded"])
+        # The counterfactual, executed: the flag this run USED to be read
+        # through stays False, because the status is FAIL and not ESCALATE.
+        self.assertFalse(result["escalate_chain_pass_session_fail"])
+        self.assertIn("slot 7 collector_exit=1", result["statement"])
+        self.assertIn("the session-level bar is exceeded too (max 0.900 s > 0.5 s "
+                      "on slots [4])", result["statement"])
+        # The same split on an otherwise clean run is the ESCALATE the
+        # statement already named, and the flag holds there too.
+        clean = bench.verdict([dict(row, collector_exit=0) for row in rows], protocol)
+        self.assertEqual(clean["status"], "ESCALATE")
+        self.assertTrue(clean["session_bar_exceeded"])
+        self.assertTrue(clean["escalate_chain_pass_session_fail"])
+        # A run under both bars sets neither.
+        under = bench.verdict([dict(row, collector_exit=0, session_start_drift_s=0.2)
+                               for row in rows], protocol)
+        self.assertEqual(under["status"], "PASS")
+        self.assertFalse(under["session_bar_exceeded"])
+        # And the artifact a magistrate reads carries the split on its own line.
+        report = {"schema": bench.SCHEMA, "kind": "full", "head": "a" * 40,
+                  "clean_tree": True, "slots": rows, "verdict": result,
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("Session bar exceeded (true whatever the status): True", text)
+        self.assertIn("**FAIL**", text)
+
     def test_X2_a_slot_whose_finalisation_tail_never_ran_is_not_admissible(self):
         """Execution lens 17b B2: the bench times the TAIL, so the tail must run.
 
