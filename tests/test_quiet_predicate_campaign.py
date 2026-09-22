@@ -1439,7 +1439,72 @@ class AttestationBudgetTests(FrozenExecutorTests):
             self.assertEqual(campaign.attestation_timeout_s(PROTOCOL), 10)
             self.assertEqual(campaign.attestation_timeout_s(
                 {**PROTOCOL, 'slot_pitch_s': 603}), 5)
-        self.assertIn("start_drift_abort_s", PROTOCOL)
+
+    @staticmethod
+    def _spend_the_whole_teardown_budget(stack, module):
+        """Make the teardown spend its budget on the harness's fake clock."""
+        real = module.cleanup_groups
+        def spend(*args, **kwargs):
+            result = real(*args, **kwargs)
+            if kwargs.get("exclude"):
+                module.time.now += kwargs["budget_s"]
+            return result
+        stack.enter_context(patch.object(module, "cleanup_groups", side_effect=spend))
+
+    def test_a_gap_under_six_seconds_pushes_every_spawn_late_by_six_minus_gap(self):
+        """Ruling 18 Q3 C3: what the sub-6 s band actually costs, executed.
+
+        Below a 6 s gap the two FLOORS (the teardown's 1 s and the query's
+        5 s) add to 6 and overrun the gap.  Both floors are spent here on the
+        harness's fake clock -- the teardown by `_spend_the_whole_teardown_
+        budget`, the query by `attest_burn=5`, which is what a query that
+        times out at its bound costs -- so the overrun is real work, not an
+        injected number.
+
+        The overrun is ``6 - gap`` per slot and it does NOT compound: the
+        collector's deadline is ABSOLUTE (`sample_quiet_predicate_evidence`
+        `deadline = scheduled + duration_s`), so a spawn that is late by d
+        captures for ``envelope_s - d`` and still ends at its scheduled end,
+        and the next slot inherits the same ``6 - gap`` and no more.  Both
+        halves are pinned below, because "the drift accumulates" and "the
+        drift is a constant per-slot lateness" call for different detectors.
+
+        At a 3 s gap the 3 s overrun is over the scaled 2 s abort bar, so the
+        night ends REFUSED at envelope 2 -- the FIRST eligible spawn
+        (envelope 01 follows the settle and tests no pitch).  At a 5 s gap
+        the 1 s overrun is under the bar, every one of the twelve slots is
+        late by exactly 1 s, and the abort never fires: the residual is then
+        a standing per-slot lateness that `start_drift_max_s` (10 s under v2)
+        is the only thing that would ever exclude.
+        """
+        tight = {**PROTOCOL, 'slot_pitch_s': 603, 'start_drift_abort_s': 2}
+        self.assertEqual(campaign.cleanup_budget_s(tight)
+                         + campaign.attestation_timeout_s(tight), 6)
+        rc, summary, outcome, refusals, calls, *_ = self.exercise(
+            protocol=tight, attest_burn=5, spy=self._spend_the_whole_teardown_budget)
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # Envelope 02 is the first spawn the pitch governs, and it never runs.
+        self.assertEqual(sum('collect' in cmd for cmd in calls), 1)
+        self.assertEqual([row['index'] for row in self.envelope_journal], [1, 2])
+        aborted = self.envelope_journal[-1]
+        self.assertEqual(aborted['abort'], 'start_drift_abort')
+        self.assertAlmostEqual(aborted['start_drift_s'], 6 - 3)
+        self.assertEqual(outcome['outcome'], 'refused')
+        self.assertIn('start_drift_abort: envelope 2', outcome['error'])
+        # A 5 s gap: the same 6 s of floors, a 1 s overrun, no abort, and the
+        # SAME 1 s on every later slot -- the lateness does not compound.
+        loose = {**PROTOCOL, 'slot_pitch_s': 605, 'start_drift_abort_s': 2}
+        self.assertEqual(campaign.cleanup_budget_s(loose)
+                         + campaign.attestation_timeout_s(loose), 6)
+        rc, summary, outcome, refusals, *_ = self.exercise(
+            protocol=loose, attest_burn=5, spy=self._spend_the_whole_teardown_budget)
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome['outcome'], 'complete')
+        self.assertEqual([round(row['start_drift_s'], 6) for row in self.envelope_journal],
+                         [0] + [6 - 5] * 11)
+        self.assertEqual([row.get('abort') for row in self.envelope_journal], [None] * 12)
+        self.assertLess(6 - 5, PROTOCOL['start_drift_max_s'])
 
     def test_the_bound_is_the_registrations_gap_and_a_timeout_keeps_the_schedule(self):
         # 620 - 600 = 20 s of gap, 15 s of it is the teardown's budget, and

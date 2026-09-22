@@ -633,11 +633,25 @@ def attestation_timeout_s(protocol):
     takes ``gap - CLEANUP_BUDGET_RESERVE_S`` and this query takes the 5 s
     that leaves.  Below 6 s the two FLOORS (the teardown's 1 s and this
     function's 5 s) add to 6 and overrun the gap: a teardown and a query that
-    each spend their whole floor push the next spawn late.  That residual is
-    deliberate and visible rather than silent, because the spawn then drifts
-    past ``start_drift_abort_s`` and the night ends REFUSED at a named abort
-    instead of producing envelopes nobody can place on the wall timeline.  No
-    registration this project runs is in that band -- v2's gap is 20 s.
+    each spend their whole floor push the next spawn late by exactly
+    ``6 - gap`` seconds.
+
+    That per-slot lateness does NOT compound.  The schedule is absolute
+    (``first + (i-1) * slot_pitch_s``) and so is the collector's own deadline
+    (``scheduled + duration_s``), so a spawn that is ``6 - gap`` late
+    captures for that much less and still ends at its scheduled end: the next
+    slot inherits the same ``6 - gap`` and no more.  Whether the residual is
+    ever DETECTED therefore depends on one comparison, not on how many slots
+    run.  When ``6 - gap`` exceeds ``start_drift_abort_s`` the night ends
+    REFUSED at the first spawn the pitch governs (envelope 02), at a named
+    abort, instead of producing envelopes nobody can place on the wall
+    timeline.  When it does not, every slot is quietly late by that same
+    constant and only ``start_drift_max_s`` -- the per-envelope exclusion,
+    10 s under v2 -- would ever act on it.  Both halves are executed in
+    ``test_a_gap_under_six_seconds_pushes_every_spawn_late_by_six_minus_gap``
+    (3 s gap: refused at envelope 02; 5 s gap: twelve slots each 1 s late,
+    no abort).  No registration this project runs is in that band -- v2's
+    gap is 20 s.
     """
 
     gap = protocol["slot_pitch_s"] - protocol["envelope_s"]
