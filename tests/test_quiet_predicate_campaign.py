@@ -859,7 +859,6 @@ class TimedLogScannerTests(unittest.TestCase):
         # The zero-match capture is a header and nothing else.
         self.assertEqual(campaign.timed_log_matches(ZERO_MATCH_FIXTURE.read_text()), 0)
         self.assertEqual(campaign.timed_log_marker_lines(ZERO_MATCH_FIXTURE.read_text()), 0)
-        text = COMPACT_FIXTURE.read_text()
         self.assertEqual(campaign.timed_log_matches(""), 0)
         for marker in ("ntp_adjtime", "settimeofday"):
             self.assertEqual(campaign.timed_log_matches(f"a {marker} b"), 1)
@@ -1411,7 +1410,8 @@ class AttestationBudgetTests(FrozenExecutorTests):
         self.assertEqual(campaign.cleanup_budget_s(tight), 1)
         self.assertEqual(campaign.attestation_timeout_s(tight),
                          campaign.ATTESTATION_TIMEOUT_FLOOR_S)
-        self.assertEqual(campaign.attestation_timeout_s(tight) + campaign.cleanup_budget_s(tight), 6)
+        self.assertEqual(campaign.attestation_timeout_s(tight)
+                         + campaign.cleanup_budget_s(tight), 6)
         self.assertGreater(campaign.attestation_timeout_s(tight)
                            + campaign.cleanup_budget_s(tight),
                            tight['slot_pitch_s'] - tight['envelope_s'])
