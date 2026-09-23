@@ -4,9 +4,10 @@ This repository has a project-local Codex MCP server plus an audited script
 bridge. On Ed's configured desktop, the script bridge is also the native
 pet-visible background route.
 
-## Primary Path: Codex MCP
+## MCP Path (pinned legacy CLI): Codex MCP
 
-The tracked `.mcp.json` starts `codex mcp-server`. Claude Code exposes the
+The tracked `.mcp.json` starts `npx -y @openai/codex@0.153.3 mcp-server`
+(gpt-5.6-sol); Sol 6.0 work goes through the exec route below. Claude Code exposes the
 server's two entry points as the `codex` tool (start a session) and
 `codex-reply` (continue the returned thread).
 
@@ -66,8 +67,9 @@ The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
 tooling, not tracked here). It supplies the audited report and D-064 evidence
 path described by the contract. Current model: gpt-6-sol (exec route, CLI
 0.156.1+). The MCP server in `.mcp.json` is pinned to CLI 0.153.3 with
-gpt-5.6-sol because `codex mcp-server` was removed from CLI 0.154 onward and
-the 0.153.3 client cannot use the 6.0 models.
+gpt-5.6-sol because `codex mcp-server` is absent from CLI 0.154.0, 0.155.0 and
+0.156.1 (checked 2026-09-23) and the 0.153.3 client cannot use the 6.0 models.
+The exec route is therefore the primary route for Sol 6.0 work.
 `scripts/codex-run` remains the older
 hardened, timeout-bounded single-call protocol.
 

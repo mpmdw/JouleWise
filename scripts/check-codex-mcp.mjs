@@ -18,7 +18,8 @@ const repoRoot = rootResult.stdout.trim();
 const mcpConfig = JSON.parse(readFileSync(resolve(repoRoot, ".mcp.json"), "utf8"));
 const codexServer = mcpConfig?.mcpServers?.codex;
 // The MCP route is pinned to the last Codex CLI that ships `mcp-server`
-// (0.153.3; removed from 0.154 onward) and to the 5.6 model that CLI may use.
+// (0.153.3; absent in 0.154.0, 0.155.0 and 0.156.1, checked 2026-09-23) and to
+// the 5.6 model that CLI may use.
 // Sol 6.0 (gpt-6-sol) seats run through the exec route (codex-run-v3 /
 // scripts/codex-bridge) on the current CLI.
 const expectedModel = "gpt-5.6-sol";
