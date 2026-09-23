@@ -786,8 +786,16 @@ def machine_quiet_check(observer=None):
     """
 
     from joulewise import night_gate
-    observation = night_gate.production_interval_observation() if observer is None else observer()
-    offender = night_gate.non_observer_offender(observation)
+    # Any failure to observe, or an observation the gate cannot read, is a
+    # REFUSAL recorded in check.json (`armable: false`), never an exception
+    # that escapes `check()` before the record is written (lens S3, fix round
+    # 1).  The t0 gate turns the same failures into `night_probe_error`.
+    try:
+        observation = night_gate.production_interval_observation() if observer is None else observer()
+        offender = night_gate.non_observer_offender(observation)
+    except (night_gate.ProbeError, RuntimeError, subprocess.SubprocessError, OSError,
+            ValueError, TypeError, KeyError) as exc:
+        raise Refused(f"non-observer interval observation failed: {type(exc).__name__}: {exc}") from exc
     interval_s = observation.get("interval_s") if isinstance(observation, dict) else None
     if type(interval_s) not in (int, float) or type(interval_s) is bool:
         raise Refused("non-observer observation carries no interval_s")

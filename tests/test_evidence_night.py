@@ -279,6 +279,59 @@ class PrepareTests(unittest.TestCase):
                 self.assertEqual(record["checks"]["machine_quiet"],
                                  dict(verdict="fail", reason=expected))
 
+    def test_the_arm_check_records_an_unreadable_observation_as_not_armable(self):
+        """Fix round 1 (lens S3): a failed or unreadable observation is a written refusal.
+
+        At 16900e3d these three cases escaped `check()` as exceptions --
+        `night_gate.ProbeError` is a RuntimeError, outside the families
+        `inspect` records -- so check.json was never written and the operator
+        got a traceback instead of `armable: false`.  The t0 gate already
+        turns the same failures into `night_probe_error`.
+        """
+
+        from tests.test_night_gate import interval_observation
+        from tests.test_arm_census import observation, row
+        state = entry.prepare(**self.kw)
+        resident = self.base_dir / "resident.json"
+        entry.saved_json(resident, {"resident_session": None})
+
+        def probes(argv, **kwargs):
+            if Path(str(argv[0])).name == "pgrep":
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return entry.probe_command(argv, **kwargs)
+
+        def sampler_died():
+            raise RuntimeError("top died")
+
+        cases = (
+            ("malformed consumer", lambda: interval_observation(("/usr/libexec/somed", 77, 0.2, "yes")),
+             "non-observer interval observation failed: ProbeError: "
+             "malformed consumer in the non-observer observation"),
+            ("sampler raises", sampler_died,
+             "non-observer interval observation failed: RuntimeError: top died"),
+            ("no metrics", lambda: {"interval_s": 30.4},
+             "non-observer interval observation failed: ProbeError: "
+             "non-observer observation carries no metrics"),
+        )
+        absent = dict(jobs=[], plists=[], listing=dict(exit_code=0))
+        check_json = Path(state["staging"]) / "lifecycle/check.json"
+        for label, observer, expected in cases:
+            with self.subTest(case=label):
+                if check_json.exists():
+                    check_json.unlink()
+                with patch.object(entry, "night_agents", return_value=absent, create=True):
+                    with self.assertRaises(entry.Refused) as refusal:
+                        entry.check(
+                            candidate=state["staging"], canonical=state["measurement_root"],
+                            supervisor_state=resident, runner=probes, caller_pid=90,
+                            census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
+                            quiet_observer=observer, lock_verifier=lambda root: None)
+                self.assertEqual(str(refusal.exception), expected)
+                record = json.loads(check_json.read_text())
+                self.assertFalse(record["armable"])
+                self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "fail")
+                self.assertEqual(record["checks"]["machine_quiet"]["reason"], expected)
+
     def test_b4_prepare_check_prepare(self):
         from tests.test_arm_census import observation, row
         state = entry.prepare(**self.kw)
