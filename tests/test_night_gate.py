@@ -1371,6 +1371,16 @@ class EvidenceRegistrationTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
                          '8b394f8e3e373cf2fd94493b918ea91a29eff863c66231a29d7a9564c6cd8fae')
 
+    def test_the_gate_share_equals_the_registrations_t0_share(self):
+        # Fix round 1 (lens N6): ruling 10 makes the GATE constant binding,
+        # and the registration carries the same number as a field; nothing
+        # else ties the two, so a change to either alone must fail here.
+        root = Path(__file__).resolve().parents[1]
+        registration = json.loads((root / night_gate.QPE01_PILOT_REGISTRATION_PATH).read_text())
+        self.assertEqual(night_gate.T0_NON_OBSERVER_SHARE_MAX,
+                         registration['t0_non_observer_share_max'])
+        self.assertEqual(night_gate.T0_NON_OBSERVER_SHARE_MAX, 0.5)
+
     def test_the_v3_entry_cites_every_adopted_cold_gate_record(self):
         # Fix round 1 (lens N3): the entry's `ruling` names ruling 10 and
         # ruling 31's reporting limbs as adjudicated by synthesis 35, so its
