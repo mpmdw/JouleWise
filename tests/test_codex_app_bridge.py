@@ -152,7 +152,7 @@ class CodexAppBridgeTests(unittest.TestCase):
             "--cwd",
             str(REPO_ROOT),
             "--model",
-            "gpt-5.6-sol",
+            "gpt-6-sol",
             "--effort",
             "high",
             "--sandbox",
@@ -189,7 +189,7 @@ class CodexAppBridgeTests(unittest.TestCase):
         self.assertFalse(self.lock.exists())
         start = next(item for item in router.requests if item["method"] == "thread-follower-start-turn")
         params = start["params"]["turnStartParams"]
-        self.assertEqual(params["model"], "gpt-5.6-sol")
+        self.assertEqual(params["model"], "gpt-6-sol")
         self.assertEqual(params["effort"], "high")
         self.assertEqual(params["serviceTier"], "default")
         self.assertEqual(params["sandboxPolicy"]["type"], "readOnly")

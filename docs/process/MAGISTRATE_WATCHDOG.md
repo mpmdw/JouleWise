@@ -306,7 +306,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    ps -axo pid,ppid,lstart,command | grep -E "claude|codex"
    ```
 
-   Both outputs must show no headless resident (`claude -p` with the resident launch options: `--output-format stream-json --verbose --permission-mode auto --permission-prompts none --model fable --effort high --allowedTools ...`), no resumed twin (`--resume ... --reply-on-resume`), and no daemon, host, or spare. If any is present or the inspection is uncertain, stop and reconcile it; do not remove the lock. Only in this both-unreadable case, after Ed verifies those absences, may Ed remove the corrupt lock by hand from that observer Terminal:
+   Both outputs must show no headless resident (`claude -p` with the resident launch options: `--output-format stream-json --verbose --permission-mode auto --permission-prompts none --model opus --effort high --allowedTools ...`), no resumed twin (`--resume ... --reply-on-resume`), and no daemon, host, or spare. If any is present or the inspection is uncertain, stop and reconcile it; do not remove the lock. Only in this both-unreadable case, after Ed verifies those absences, may Ed remove the corrupt lock by hand from that observer Terminal:
 
    ```zsh
    rm "$HOME/night-custody/magistrate/magistrate.lock"
