@@ -732,3 +732,5 @@ the 15,958 OK / one non-OK checksum result, the uninstall record and its
 aftermath, the results-clone head and its twelve oversized files, the absence
 of the results branch on the remote, and the canonical fast-forward to
 `91f80870`.
+
+**Addendum (2026-09-23, cold gate QPE01-DAEMON-CONTAMINATION-01 round 3, ruling 31 §2 and synthesis 35).** `observer_floor_cores` 0.0528 in this night's `summary.json` used the v2 statistic (the per-round worker/census block only) and omits the 100 ms power recorder; under the corrected whole-envelope accounting over each session's span the apparatus floor is 0.159 cores (per-envelope sd 0.0027), of which ≈ 0.101 is the reaped power recorder, ≈ 0.053 the round block and 0.007 the 30 s load recorder. The v2 stop cause `observer_floor_above_smallest_holdable_share` stands as issued; under the corrected statistic it is also present (0.159 > 0.05). Superseded, not reversed; the archive is not rewritten. Block two's level and apparatus are Ed's decision (synthesis 35 §Decision brief).
