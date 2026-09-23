@@ -203,7 +203,9 @@ def terminal_zero_capture_refusal(result, receipt) -> Decision:
     """Read the shared terminal result and receipt fence before delivery checks.
 
     Live gate receipts do not yet have the harvested C5 zero_capture_evidence
-    block. A positive capture claim in any measured row still vetoes release.
+    block. A bare C5 row is neither evidence nor a veto; the watchdog must
+    establish absence from custody. A positive capture claim in any measured
+    row still vetoes release.
     """
     try:
         reason = result["aborted_reason"]
@@ -217,8 +219,7 @@ def terminal_zero_capture_refusal(result, receipt) -> Decision:
         if result["chain_exit_code"] is not None or result["chain_sha256"] is not None:
             return Decision(False, "chain_may_have_started")
         rows = receipt["conditions"]
-        if not isinstance(rows, list) or not any(
-                isinstance(row, dict) and row.get("condition_id") == "C5" for row in rows):
+        if not isinstance(rows, list):
             return Decision(False, "missing_zero_capture_evidence")
         for row in rows:
             measured = row["measured"]

@@ -466,6 +466,10 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
     def test_zero_capture_successor_requires_delivery_and_no_start(self):
         result, receipt, delivery = self.evidence()
         self.assertTrue(arm_retry.terminal_zero_capture_refusal(result, receipt).allowed)
+        no_c5 = copy.deepcopy(receipt)
+        no_c5['conditions'] = []
+        self.assertTrue(arm_retry.terminal_zero_capture_refusal(result, no_c5).allowed)
+        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, no_c5, delivery).allowed)
         self.assertEqual(arm_retry.ZERO_CAPTURE_MACHINE_REFUSALS, {
             "night_refused_not_quiet", "night_refused_agent_present",
             "night_refused_hid_idle", "night_refused_boot_clock",

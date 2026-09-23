@@ -43,6 +43,8 @@ from joulewise.night_gate import (  # noqa: E402
     PLAN_MAX_AGE_S,
     PlanError,
     agent_census,
+    chain_literal,
+    probe_payload_kind,
 )
 from joulewise.arm_retry import terminal_zero_capture_refusal  # noqa: E402
 from scripts.run_night import (  # noqa: E402
@@ -67,6 +69,7 @@ RETIRED_V1_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "night_plan_v1_retired.j
 STOP_REPOSITORY = "https://github.com/mpmdw/JouleWise.git"
 STOP_REF_GLOB = "refs/heads/ops/stop*"
 POSITIVE_CONTROL_REF = "refs/heads/main"
+DRIVER_PROBE_ARGV = ("/usr/bin/pgrep", "-lf", "[r]un_night\\.py")
 
 # LEAD-MARGIN-01: 2b4476cb / hands-free-week file 15 introduced the resident
 # fence and cooperative/TERM/KILL ladder plus an untouched-idle allowance.
@@ -215,6 +218,7 @@ class Dependencies:
     version_probe: Callable[[Path], str]
     sleep: Callable[[float], None]
     fixture_census: Callable[[], Mapping[str, Any]] | None = None
+    driver_probe: Callable[[], CensusObservation] | None = None
 
 
 class RealProcessTable:
@@ -406,6 +410,16 @@ def production_census() -> CensusObservation:
     )
 
 
+def production_driver_probe() -> CensusObservation:
+    result = _probe_runner(DRIVER_PROBE_ARGV)
+    return CensusObservation(
+        empty=result.exit_code == 1,
+        exit_code=result.exit_code,
+        stdout=result.stdout,
+        stderr=result.stderr,
+    )
+
+
 def remote_stop_probe() -> StopObservation:
     base = (
         "/usr/bin/git",
@@ -490,6 +504,7 @@ def real_dependencies() -> Dependencies:
         wall_now=lambda: dt.datetime.now().astimezone(),
         monotonic=time.monotonic,
         census=production_census,
+        driver_probe=production_driver_probe,
         git_probe=remote_stop_probe,
         processes=RealProcessTable(),
         spawn=real_spawn,
@@ -783,6 +798,65 @@ def _terminal_refusal_result(night: Path, storage: Storage) -> Mapping[str, Any]
     return result if isinstance(result, dict) and result.get("verdict") == "REFUSED" else None
 
 
+def _tree_has_match(root: Path, predicate: Callable[[str], bool]) -> bool:
+    """Inspect all depths; an unreadable descendant prevents release."""
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append(Path(entry.path))
+                    elif predicate(entry.name):
+                        return True
+        except FileNotFoundError:
+            if directory == root:
+                continue
+            raise
+    return False
+
+
+def _reservation_absent(custody: Path, runs_root: Path | None) -> bool:
+    return not any(_tree_has_match(root, lambda name: name.endswith(".consumed.json"))
+                   for root in (custody, runs_root) if root is not None)
+
+
+def _calibration_capture_absent(runs_root: Path) -> bool:
+    return not _tree_has_match(runs_root / "instrument_validation", lambda _name: True)
+
+
+def _evidence_capture_absent(custody: Path) -> bool:
+    if _tree_has_match(custody / "night" / "evidence", lambda _name: True):
+        return False
+    envelope_index = custody / "night" / "evidence_envelopes.jsonl"
+    try:
+        return envelope_index.stat().st_size == 0 and envelope_index.is_file()
+    except FileNotFoundError:
+        return True
+
+
+def _zero_capture_disk_facts(plan: NightPlan, storage: Storage) -> bool:
+    custody = Path(plan.custody_root)
+    if storage.exists(custody / "night" / "chain.started"):
+        return False
+    try:
+        chain_text = storage.read_text(Path(plan.chain_path))
+        kind = probe_payload_kind(chain_text)
+        if kind == "calibration":
+            runs_root = Path(chain_literal(chain_text, "RUNS_ROOT"))
+            if not runs_root.is_absolute():
+                return False
+            return (_reservation_absent(custody, runs_root)
+                    and _calibration_capture_absent(runs_root))
+        if kind == "quiet_predicate_evidence":
+            return (_reservation_absent(custody, None)
+                    and _evidence_capture_absent(custody))
+    except (OSError, UnicodeError, ValueError):
+        return False
+    return False
+
+
 def _delivered_zero_capture_refusal(
     plan: NightPlan, now_epoch_s: float, storage: Storage
 ) -> bool:
@@ -800,11 +874,17 @@ def _delivered_zero_capture_refusal(
         receipt = json.loads(storage.read_text(night / "receipt.json"))
     except (OSError, ValueError, TypeError):
         return False
-    return terminal_zero_capture_refusal(result, receipt).allowed
+    return (terminal_zero_capture_refusal(result, receipt).allowed
+            and _zero_capture_disk_facts(plan, storage))
 
 
-def _release_key(plan: NightPlan) -> str:
-    return f"{plan.plan_id}:{plan.custody_root}"
+def _release_key(plan: NightPlan, storage: Storage) -> str | None:
+    try:
+        digest = hashlib.sha256(storage.read_bytes(
+            Path(plan.custody_root) / "night" / "result.json")).hexdigest()
+    except OSError:
+        return None
+    return f"{plan.plan_id}:{plan.custody_root}:{digest}"
 
 
 def _release_observed(
@@ -818,7 +898,8 @@ def _release_observed(
                          if storage.root == custody else storage)
         state = load_state(state_storage)
     released = state.get("released_zero_capture_refusals", [])
-    return isinstance(released, list) and _release_key(plan) in released
+    key = _release_key(plan, storage)
+    return key is not None and isinstance(released, list) and key in released
 
 
 def plan_span_active(
@@ -858,7 +939,9 @@ def plan_is_armed(
         if not storage.exists(night / "chain.exited"):
             return True
         if _terminal_refusal_result(night, storage) is not None:
-            return now_epoch_s <= plan_completion_epoch(plan)
+            return (now_epoch_s <= plan_completion_epoch(plan)
+                    or (not storage.exists(night / "courier.sent")
+                        and now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S))
     if _delivered_zero_capture_refusal(plan, now_epoch_s, storage):
         return (now_epoch_s <= plan_completion_epoch(plan)
                 and not _release_observed(plan, storage, state))
@@ -1355,7 +1438,8 @@ def transition(
 
 
 def append_census_event(
-    storage: Storage, state: Mapping[str, Any], now: dt.datetime, census: CensusObservation
+    storage: Storage, state: Mapping[str, Any], now: dt.datetime, census: CensusObservation,
+    driver: CensusObservation | None = None,
 ) -> None:
     storage.append_jsonl(
         storage.root / "events.jsonl",
@@ -1368,6 +1452,7 @@ def append_census_event(
             "empty": census.empty,
             "stdout": census.stdout[:4000],
             "stderr": census.stderr[:1000],
+            **({"driver_probe": dataclasses.asdict(driver)} if driver is not None else {}),
         },
     )
 
@@ -1498,7 +1583,7 @@ def decide(
     if snapshot.errors:
         return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
     # Delivery is only a candidate for release. The courier and driver can
-    # both outlive courier.sent; the production census covers both argv shapes.
+    # both outlive courier.sent; each has its own process-table observation.
     try:
         release_candidates = [
             plan for plan in plans
@@ -1513,15 +1598,19 @@ def decide(
     released = state.get("released_zero_capture_refusals", [])
     if not isinstance(released, list):
         released = []
-    loaded = {_release_key(plan) for plan in plans}
+    loaded = {_release_key(plan, storage) for plan in plans}
     released = sorted({key for key in released if isinstance(key, str) and key in loaded})
-    pending = [plan for plan in release_candidates if _release_key(plan) not in released]
+    pending = [(plan, key) for plan in release_candidates
+               if (key := _release_key(plan, storage)) is not None and key not in released]
     release_census: CensusObservation | None = None
+    release_driver: CensusObservation | None = None
     if pending:
         release_census = deps.census()
-        append_census_event(storage, state, wall, release_census)
-        if release_census.empty:
-            released = sorted(set(released) | {_release_key(plan) for plan in pending})
+        release_driver = (deps.driver_probe() if deps.driver_probe is not None else
+                          CensusObservation(False, -1, "", "driver probe unavailable"))
+        append_census_event(storage, state, wall, release_census, release_driver)
+        if release_census.empty and release_driver.empty:
+            released = sorted(set(released) | {key for _plan, key in pending})
     state["released_zero_capture_refusals"] = released
     try:
         armed = armed_plans(plans, wall.timestamp(), storage, state)
@@ -1576,8 +1665,9 @@ def decide(
         census = release_census or deps.census()
         if release_census is None:
             append_census_event(storage, state, wall, census)
-        if release_census is not None and not census.empty:
-            return Decision("HOLD_CENSUS", "production census non-empty after delivered refusal",
+        if release_census is not None and (not census.empty or
+                                           release_driver is not None and not release_driver.empty):
+            return Decision("HOLD_CENSUS", "agent census or driver probe non-empty after delivered refusal",
                             adopt=owner is not None)
         if owner is not None:
             phase = standdown_phase(min(active_plans, key=lambda item: item.t0_epoch_s), wall.timestamp())
