@@ -1,0 +1,2 @@
+Ruling 21 written (10,236 bytes, sha256 8ab780e7…f06a9): Q4 AFFIRM option (a) in shape with two limbs REJECTED (the 0.3125 W "measured, C8" rate is absent from C8 and is a daemon-derived 0.3194 W; the pilot records no per-core rate), ruled as a registered constant with lineage plus a rate-independent 0.10-core ceiling, exact v3 field text, code replacement, five defect-shaped regressions, and same-v3 landing affirmed; validator typo-sha REFUSED then true-sha PASSED; no other file touched.
+rc=0
