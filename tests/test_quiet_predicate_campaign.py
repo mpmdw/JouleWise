@@ -3139,7 +3139,10 @@ class NonObserverProcessTests(unittest.TestCase):
         # The clean night's shape: 6.4 core-seconds, a fifth of the bar.
         self.assertEqual([v["excluded"] for v in clean["envelopes"]], [[]] * 12)
         self.assertEqual(clean["retained"], 12)
-        self.assertNotIn("non_observer_process_busy", clean["envelopes"][0])
+        # One shape for one meaning (fix round 1, lens S2 / Fable N5): the
+        # summary always writes its re-derived list, empty when clean, as the
+        # executor's rows always did.
+        self.assertEqual(clean["envelopes"][0]["non_observer_process_busy"], [])
 
     def test_regression_6_the_integral_catches_the_burst_a_median_would_admit(self):
         # Ruling 10 Q2 MATERIAL: an eight-sample burst at 1.5 busy cores is
@@ -3266,22 +3269,77 @@ class NonObserverAbortTests(FrozenExecutorTests):
         self.assertEqual([v["excluded"] for v in summary["envelopes"]],
                          [["non_observer_process_busy"], [], ["non_observer_process_busy"], []])
 
+    @staticmethod
+    def verdicts(rows, key):
+        return {row["index"]: [(hit["process"], hit["pid"], round(hit["core_seconds"], 6))
+                               for hit in row[key]] for row in rows}
+
     def test_regression_5_the_summary_re_derives_the_executors_own_exclusion_set(self):
         # The executor decides the abort in-chain from the journal; the
         # summary re-derives the same verdict from disk afterwards.  If those
         # two ever disagreed, the night's record would contradict its abort.
+        #
+        # Fix round 1 (lens S2): before, the summary overwrote the executor's
+        # list only when it found an offender, so on a clean envelope the
+        # executor's list passed through and this comparison compared the
+        # executor with itself.  Now the summary ALWAYS writes its own list
+        # under `non_observer_process_busy` and keeps the executor's under
+        # `executor_non_observer_process_busy`; this test reads the two keys.
         rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
             protocol=SCALED, busy_rows=self.busy_rows({1, 3}))
-        executor = {row["index"]: [(hit["process"], hit["pid"], round(hit["core_seconds"], 6))
-                                   for hit in row["non_observer_process_busy"]]
-                    for row in self.envelope_journal}
-        derived = {v["index"]: [(hit["process"], hit["pid"], round(hit["core_seconds"], 6))
-                                for hit in v.get("non_observer_process_busy", [])]
-                   for v in summary["envelopes"]}
-        self.assertEqual(executor, derived)
+        executor = self.verdicts(self.envelope_journal, "non_observer_process_busy")
+        derived = self.verdicts(summary["envelopes"], "non_observer_process_busy")
+        kept = self.verdicts(summary["envelopes"], "executor_non_observer_process_busy")
+        self.assertEqual(kept, executor)
+        self.assertEqual(derived, executor)
         self.assertEqual(executor, {1: [("fseventsd", 341, 36.)], 2: [],
                                     3: [("fseventsd", 341, 36.)], 4: []})
+        # `excluded` follows the SUMMARY's own list, envelope by envelope.
+        self.assertEqual({v["index"]: v["excluded"] for v in summary["envelopes"]},
+                         {index: ["non_observer_process_busy"] if hits else []
+                          for index, hits in derived.items()})
+        self.assertEqual([v["non_observer_verdict_disagreement"] for v in summary["envelopes"]],
+                         [False] * 4)
 
+    def test_regression_5_a_tampered_executor_verdict_is_caught_not_passed_through(self):
+        """The mutation counterfactual for regression 5 (fix round 1, lens S2).
+
+        The executor's stored list for envelope 02 -- a clean envelope -- is
+        tampered to name a fake offender before the summary reads it.  A
+        summary that re-derives from the journal reports envelope 02 clean,
+        keeps the tampered list beside it and flags the disagreement.  The
+        16900e3d summary let the executor's list pass through on a clean
+        envelope, so its row named the fake offender while its `excluded`
+        lacked the reason, and the old regression-5 comparison (the summary's
+        list against the executor's journal) found the two equal.
+        """
+
+        fake = {"process": "fakeoffenderd", "pid": 4242, "start_identity": "x",
+                "core_seconds": 99., "bar_core_seconds": 30}
+        real_summary = campaign.pilot_summary
+
+        def tampered(directory, protocol, envelopes, *args, **kwargs):
+            envelopes = [dict(entry, non_observer_process_busy=[fake]) if entry["index"] == 2 else entry
+                         for entry in envelopes]
+            return real_summary(directory, protocol, envelopes, *args, **kwargs)
+
+        with patch.object(campaign, "pilot_summary", side_effect=tampered):
+            rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+                protocol=SCALED, busy_rows=self.busy_rows({3}))
+        self.assertEqual(rc, 0)
+        derived = self.verdicts(summary["envelopes"], "non_observer_process_busy")
+        kept = self.verdicts(summary["envelopes"], "executor_non_observer_process_busy")
+        # The detection: the summary's own verdict differs from the stored one.
+        self.assertNotEqual(derived, kept)
+        self.assertEqual(derived[2], [])
+        self.assertEqual(kept[2], [("fakeoffenderd", 4242, 99.)])
+        envelope = summary["envelopes"][1]
+        self.assertEqual(envelope["excluded"], [])
+        self.assertIs(envelope["non_observer_verdict_disagreement"], True)
+        # Every other envelope agrees, and envelope 03 is excluded on its own.
+        self.assertEqual([v["non_observer_verdict_disagreement"] for v in summary["envelopes"]],
+                         [False, True, False, False])
+        self.assertEqual(summary["envelopes"][2]["excluded"], ["non_observer_process_busy"])
 
 # The v3 registration's bytes as of fix round 1 (the components text now
 # names the load recorder as a sibling outside whole).  Pinned as a literal

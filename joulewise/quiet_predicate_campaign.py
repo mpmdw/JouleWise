@@ -920,6 +920,27 @@ def non_observer_rule(protocol):
     return rule
 
 
+EXECUTOR_NON_OBSERVER_VERDICT = "executor_non_observer_process_busy"
+NON_OBSERVER_DISAGREEMENT = "non_observer_verdict_disagreement"
+
+
+def non_observer_verdict_key(hits):
+    """What two non-observer verdicts must share to agree.
+
+    Process, pid, start identity and core-seconds (to 1e-6 core-s, so a
+    JSON round trip of the executor's floats never reads as disagreement).
+    Anything that is not a list of hit objects is its own key, so a malformed
+    stored verdict disagrees rather than refusing the whole summary.
+    """
+
+    if not isinstance(hits, list) or not all(isinstance(hit, dict) for hit in hits):
+        return ("unreadable", repr(hits))
+    return sorted((str(hit.get("process")), repr(hit.get("pid")), repr(hit.get("start_identity")),
+                   f"{float(hit['core_seconds']):.6f}"
+                   if type(hit.get("core_seconds")) in (int, float) else repr(hit.get("core_seconds")))
+                  for hit in hits)
+
+
 def non_observer_busy(rule, support):
     """Per non-observer process identity, the busy-core-seconds at or over the bar.
 
@@ -1102,11 +1123,27 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         # non-observer process that held the machine for `bar_core_seconds`
         # costs this envelope its claim, and the offenders are NAMED on the
         # row so the reason can be read without the journal.
+        #
+        # The summary ALWAYS writes its own list, re-derived from the journal
+        # on disk, under `non_observer_process_busy` (empty when there is no
+        # offender).  The executor's in-chain verdict -- the list it decided
+        # the abort on -- is kept beside it under
+        # `executor_non_observer_process_busy`, and the two are compared.
+        # Before fix round 1 (lens S2) the executor's list passed through
+        # whenever the summary found nothing, so a row could name an offender
+        # while its `excluded` lacked the reason, and a test comparing the two
+        # compared the executor with itself.
         if rule is not None:
             offenders = non_observer_busy(rule, support)
             if offenders:
                 excluded.append(NON_OBSERVER_EXCLUSION)
-                entry = {**entry, NON_OBSERVER_EXCLUSION: offenders}
+            executor_verdict = entry.get(NON_OBSERVER_EXCLUSION)
+            entry = {k: v for k, v in entry.items() if k != NON_OBSERVER_EXCLUSION}
+            entry[NON_OBSERVER_EXCLUSION] = offenders
+            if executor_verdict is not None:
+                entry[EXECUTOR_NON_OBSERVER_VERDICT] = executor_verdict
+                entry[NON_OBSERVER_DISAGREEMENT] = (non_observer_verdict_key(offenders)
+                                                    != non_observer_verdict_key(executor_verdict))
         out = directory / f"envelope-{entry['index']:02d}"
         # The session record is read FIRST and kept even when the rest of the
         # envelope is unreadable, because the replay check below must see
