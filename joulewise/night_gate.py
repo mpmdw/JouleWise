@@ -1523,7 +1523,7 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
                 rows["C3"].measured["corecaptured"] = {
                     "status": "measured", "last_10m_spawns": spawns.count,
                     "first_spawn": spawns.first, "last_spawn": spawns.last}
-                if spawns.count > 2:
+                if spawns.count > corecaptured_loop.SPAWNS_MAX:
                     return _finish(plan, probes, rows, Refusal(
                         "night_refused_not_quiet",
                         f"corecaptured: {spawns.count} launchd spawns in last 10 min "

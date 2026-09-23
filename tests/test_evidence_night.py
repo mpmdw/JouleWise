@@ -946,6 +946,20 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(record["checks"]["corecaptured"]["last_10m_spawns"], 3)
         self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
 
+    def test_corecaptured_rehearsal_never_actuates_production_machine(self):
+        # Counter-review S-1: a fixture launchctl decides "nothing loaded" in a
+        # rehearsal, so the production actuator must stay read-only.
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        fake = FakeCorecapturedActuator(raw, raw, now)
+        self.assertNotEqual(self.kw["launchctl_bin"], "launchctl")
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND), \
+                patch.object(entry, "production_corecaptured_actuator", return_value=fake.actuator()):
+            with self.assertRaisesRegex(entry.Refused, "not licensed"):
+                entry.check(**self.kw)
+        self.assertFalse(any(argv[0] in ("/usr/sbin/networksetup", "/usr/bin/sudo")
+                             for argv in fake.commands))
+
     def test_corecaptured_arm_backward_clock_refuses_without_actuation(self):
         now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
         raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()

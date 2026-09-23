@@ -879,13 +879,14 @@ def corecaptured_arm_check(actuator, *, read_only=False):
                   last_spawn=before.last, remediation="none", command_errors=command_errors)
     if read_only:
         result["remediation"] = "not_licensed"
-        if before.count > 2:
+        if before.count > corecaptured_loop.SPAWNS_MAX:
             raise Refused(
                 f"night_refused_not_quiet: corecaptured: {before.count} launchd spawns "
-                "in the last 10 minutes; remediation not licensed because an earlier check failed",
+                "in the last 10 minutes; remediation not licensed (an earlier check failed, "
+                "a night is loaded, or this is a rehearsal)",
                 evidence=result)
         return result
-    if before.count <= 2:
+    if before.count <= corecaptured_loop.SPAWNS_MAX:
         return result
 
     result["remediation"] = "wifi_toggle_attempted"
@@ -895,7 +896,7 @@ def corecaptured_arm_check(actuator, *, read_only=False):
                           timeout=30, action="Wi-Fi off")
             result["wifi_off_exit_code"] = off.returncode
             if not off.returncode:
-                actuator.sleep(8)
+                actuator.sleep(corecaptured_loop.WIFI_OFF_S)
         finally:
             # Restore radio power even when the off command or wait fails.
             on = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "on"),
@@ -912,14 +913,14 @@ def corecaptured_arm_check(actuator, *, read_only=False):
     try:
         completed = actuator.now_epoch_s()
         result["toggle_completed_epoch_s"] = completed
-        actuator.sleep(180)
+        actuator.sleep(corecaptured_loop.POST_TOGGLE_WAIT_S)
         after = observe(after=completed)
     except Exception as exc:
         raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
                       f"post-toggle observation failed: {exc}", evidence=result) from exc
     result.update(post_toggle_spawns=after.count, post_toggle_first_spawn=after.first,
                   post_toggle_last_spawn=after.last)
-    if after.count >= 1:
+    if after.count >= corecaptured_loop.POST_TOGGLE_SPAWNS_MIN:
         try:
             restart = command(("/usr/bin/sudo", "-n", "/usr/local/sbin/joulewise-restart-fseventsd"),
                               timeout=60, action="fseventsd restart")
@@ -1093,7 +1094,13 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             else:
                 if payload_kind == KIND:
                     actuator = corecaptured_actuator or production_corecaptured_actuator()
-                    if nothing_loaded and all(row["verdict"] == "pass" for row in checks.values()):
+                    # A rehearsal decides "nothing loaded" with a fixture
+                    # launchctl, so it never licenses the production radio or
+                    # restart (counter-review S-1); an injected actuator is a fake.
+                    rehearsal_on_real_machine = (record["fake_launchctl"]
+                                                 and corecaptured_actuator is None)
+                    if (nothing_loaded and not rehearsal_on_real_machine
+                            and all(row["verdict"] == "pass" for row in checks.values())):
                         inspect("corecaptured", lambda: corecaptured_arm_check(actuator))
                     else:
                         # A loaded night or any other prior failure removes

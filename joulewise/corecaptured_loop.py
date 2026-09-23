@@ -7,6 +7,14 @@ from datetime import datetime
 import re
 
 
+# Thresholds and waits shared by the t0 gate and the arm check (cold ruling 16
+# Q2/Q3, 2026-09-23). One home, so the two sides cannot drift apart.
+WINDOW_S = 600
+SPAWNS_MAX = 2                  # more than this in WINDOW_S is a respawn loop
+WIFI_OFF_S = 8                  # radio off time in the one licensed cycle
+POST_TOGGLE_WAIT_S = 180        # observation after the cycle
+POST_TOGGLE_SPAWNS_MIN = 1      # this many new spawns after the cycle = persisting
+
 LOG_ARGV = ("/usr/bin/log", "show", "--last", "10m", "--style", "syslog",
             "--predicate", 'process == "launchd" AND eventMessage CONTAINS "corecaptured"')
 SPAWN_LINE = re.compile(
@@ -52,7 +60,7 @@ def count_spawns(log_text: str, now_epoch_s: float, *, after_epoch_s: float | No
         except ValueError as exc:
             raise ValueError("corecaptured log has an invalid timestamp") from exc
         if (SPAWN_LINE.fullmatch(match.group("message"))
-                and now_epoch_s - 600 <= epoch <= (now_epoch_s if until_epoch_s is None else until_epoch_s)
+                and now_epoch_s - WINDOW_S <= epoch <= (now_epoch_s if until_epoch_s is None else until_epoch_s)
                 and (after_epoch_s is None or epoch > after_epoch_s)):
             matched.append(match.group("timestamp"))
     return SpawnObservation(len(matched), matched[0] if matched else None,
