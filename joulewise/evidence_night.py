@@ -313,12 +313,12 @@ def render_notice(state, *, checked=None, check_sha256=None):
              "Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a journal of busy cores (the average number of CPU cores a process kept busy).",
              f'The {span:,}-second program fits inside the {protocol["window_max_s"]:,}-second window; no top-up or automatic repeat.',
              f'A process outside the measurement apparatus (the night\'s own measurement processes) at or above {protocol["t0_non_observer_share_max"]:g} busy cores '
-             'refuses the night at the arm check (the checks run when the night is installed) or at t0, the scheduled start.',
+             'refuses the night at the arm check (the pre-arm checks run before this notice is sent and before the night is installed) or at t0, the scheduled start.',
              f'A process outside the measurement apparatus using {rule["bar_core_seconds"]:g} or more core-seconds '
              '(busy cores multiplied by seconds) '
              'inside an envelope excludes that envelope. '
              f'{count_word(rule["abort_after_consecutive"]).capitalize()} such exclusions in a row end the night.',
-             "At t0, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes.",
+             "At t0 the gate reads launchd's log for the previous ten minutes; when that read succeeds, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes. When the log cannot be read, the count is recorded as not measured and the night continues.",
              "During the night, read-only git show checks run in the measurement clone; successful results publication commits and pushes them from a separate results clone.",
              "Partial observations and refusals are kept. No model, load generator, calibration-ledger session or measurement pack runs.",
              "The scheduler supervises the program and the courier emails the result. Evidence remains PROVISIONAL.",

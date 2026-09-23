@@ -127,6 +127,18 @@ class CampaignTests(unittest.TestCase):
                         "Every exclusion and partial interior is retained in summary.json. "
                         "No top-up, cutoff or activation authority. Block two is not authored by this summary.\n")
 
+    def test_unfiltered_sd_label_is_computed_over_every_readable_envelope(self):
+        # The label at quiet_predicate_campaign.pilot_summary promises "every
+        # envelope with a readable energy value, excluded envelopes included";
+        # this binds the NUMBER to that promise.  Envelope 2 is excluded and
+        # carries the only 12 J value: a retained-only computation gives 0.0 J,
+        # the promised computation gives the sample SD over all twelve.
+        energies = [10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
+        report = self.summarize(energies, excluded=(2,))
+        self.assertEqual(report['retained'], 11)
+        self.assertEqual(report['envelopes'][1]['excluded'], ['census_not_clean_or_unknown'])
+        self.assertAlmostEqual(report['unfiltered_single_envelope_sd_j'], 0.5773502691896257, places=12)
+
     def summarize(self, energies, excluded=(), missing=(), observer_core=None, recorder=False,
                   drift=0, slew=()):
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
