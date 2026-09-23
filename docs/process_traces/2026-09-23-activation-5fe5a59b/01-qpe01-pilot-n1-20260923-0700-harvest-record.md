@@ -15,7 +15,7 @@ processes: the collector, the 100 ms power recorder (`powermetrics`), the agent 
 The *observer floor* is the apparatus's own CPU use as a share of one core, averaged over the night. The *agent
 census* is `pgrep -lf '[c]odex|[c]laude|[t]3'`, run repeatedly to prove no AI-agent process of this project is
 alive during measurement. The *watchdog* is the resident launchd job that starts headless agent sessions
-(*activations*) of the project's supervising agent (the *magistrate*); the *courier* is a separate agent session
+(*activations*) of the project's supervising agent (the *magistrate*); to *arm* a night is to install its two launchd jobs (the driver and a probe) so the machine runs it unattended at t0; to *uninstall* is to remove them, after which nothing is scheduled ("nothing is armed"); the *courier* is a separate agent session
 the night's driver launches at the end to email the result and carry out the "next lane" section of
 `docs/process/NIGHT_HANDBACK.md` (the *handback*, the per-night instruction sheet). The *custody root*
 (called C) is the directory the night wrote into; the *results clone* is a throwaway git clone inside C whose
@@ -98,7 +98,7 @@ after. `off`: `sudo -n /usr/sbin/systemsetup -setusingnetworktime off` at 07:00:
 `on` at 09:14:22.70, exit 0.
 
 **Courier** (`C/night/courier.sent`): `gmail_message_id` `1a0cf11d4855b21a`, `verdict` `GO`, `chain_exit_code` 0,
-`sent_epoch_s` 1790180459 (09:20:59), `courier_pid` 29224 (the same pid as `courier.heartbeat`).
+`sent_epoch_s` 1790180459 (09:20:59), `courier_pid` 29224 (the same pid as `courier.heartbeat`; that is the shell the courier session spawned to write those files, not the `claude -p` process itself, which the watchdog census recorded as pid 29161 (§1)).
 `courier.attempts.jsonl`: one attempt, started 09:16:03, `sent` true.
 
 ### The summary
@@ -114,7 +114,7 @@ descriptive, as its `evidence_status` says:
   pair differences assumed". With only four degrees of freedom the true spread could be larger than the one
   measured, so the method inflates it before sizing.
 - `block_two_pairs` 23 by "ruling 46b: max(3, ceil(8 * s_upper\*\*2 / delta_j\*\*2)); delta_j=1; stop above 24
-  pairs": 8 × 1.6892² = 22.83, rounded up to 23. *Block two* is the planned follow-on experiment that holds a small
+  pairs" (the sizing formula the registration fixed in advance, quoted as summary.json prints it): 8 × 1.6892² = 22.83, rounded up to 23. *Block two* is the planned follow-on experiment that holds a small
   fixed CPU load and measures its energy against idle; this is the number of pairs it would need to resolve 1 J.
   23 is under the 24-pair stop bar, so that branch does not fire.
 - `block_two_stop`: `outcome` "no cutoff qualifies", `causes` `["observer_floor_above_smallest_holdable_share"]`
@@ -308,6 +308,8 @@ what its output needs next.
 
 ## §7 Anomalies found while verifying
 
+Before verification, the magistrate handed this record's writer a numbered list of facts it believed true (the *dictated facts*), taken from its own bench reads at 09:36–09:45. Items 6–9 below are the places where the primary evidence differs from that list; the closing paragraph names what matched. The list itself is not a record; only the verified statements above are.
+
 1. **The archive lacks the courier's final summary.** `A/night/launchd.night.out` is empty; C's copy (2,033 bytes,
    09:25:12) was written after the checksum check at 09:24:37. Nothing in A is corrupt; A is one file behind C.
    Re-harvesting that file is a decision for the magistrate; this record writes nothing outside its own path.
@@ -330,7 +332,7 @@ what its output needs next.
    61.51 core-seconds against the bar of 30) are all correct.
 5. **Six short activations between arm and t0.** `events.jsonl` shows activations spawned at 05:54, 06:04, 06:14,
    06:24, 06:34 and 06:44 (attempts 88–93), each exiting within about one minute with reason "clean activation
-   exit", followed each time by `BACKOFF_USAGE`. The last, `f3b4a769-…`, exited at 06:45:30, before REQUEST
+   exit", followed each time by `BACKOFF_USAGE` (the watchdog's waiting state after an exit it classes as usage exhaustion). The last, `f3b4a769-…`, exited at 06:45:30, before REQUEST
    (06:52:00, the time from which every agent session must be gone), and both watchdog censuses between then and t0 (06:54:41, 06:59:43) were empty. The stored `last_exit_class` `usage_exhausted` sits
    beside a "clean activation exit" transition reason; this record does not diagnose the watchdog.
 6. **Census detail in dictated fact 2.** Dictated: the census rows under sequence 392 name pid 18001. Observed:
