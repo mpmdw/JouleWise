@@ -177,11 +177,101 @@ All agents must still close before the plan span: the unchanged night gate recor
 
 ## Purpose of this night
 
-Plan `qpe01-pilot-n1-20260920` is QPE-01 idle-variance PILOT NIGHT ONE,
-using the evidence executor. Ed's written ruling (c), 10:57 PDT on
-2026-09-19, treats equivalence night two's **FAIL (m = 7)** as the
-instrument's answer: instrument characterisation precedes any further
-derivation night. Authority:
+Plan `qpe01-pilot-n1-20260922-2030` is QPE-01 idle-variance PILOT NIGHT
+ONE, attempt 2, using the evidence executor. QPE-01 asks how much the
+machine's own idle energy draw varies from one ten-minute stretch to the
+next; each measured stretch is an **envelope**, and this night takes
+twelve of them with nothing else running on the machine.
+
+Attempt 1 was plan `qpe01-pilot-n1-20260922-0217`, which ran 02:17–04:27
+PDT earlier today. The gate said GO, the chain captured all twelve
+envelopes, cleanup was proven, and the night was harvested — but the
+pilot summary came out **INCONCLUSIVE**: only 2 of the 12 envelopes
+survived the pre-registered exclusion rules, and two envelopes cannot
+form even one of the adjacent pairs the sizing arithmetic consumes. Its
+full record is the Executed block for that plan id below.
+
+Two separate causes were found, and both were ruled and cured today. The
+records are under `docs/process_traces/2026-09-22-activation-59857fe5/`
+and in the two cold-gate packets cited there.
+
+1. **Seven envelopes lost their clock anchor.** A **clock anchor** is the
+   tie between the power samples' own timestamps and wall-clock time; it
+   is what lets the night state which real seconds an envelope covered.
+   macOS's `timed` service continuously corrects the system clock — this
+   is **clock discipline** — and on that night its corrections exceeded
+   the old anchor's flat 5 ms absolute caps, so no anchor could be
+   established and the envelope was excluded with the reason
+   `clock_anchor_unresolved`. The cure is clock-anchor version 3.1: the
+   cap is now rate-aware, meaning a sustained frequency correction is
+   priced against the envelope's own length instead of being compared to
+   one flat number, under a frozen 15 ms absolute backstop that no rate
+   arithmetic can talk past, with integer-nanosecond tiling so the
+   arithmetic itself contributes no rounding. Version 3.1 also gives
+   every envelope an **attestation**: a statement, read back from the
+   `timed` log in the gap after that envelope's capture, about whether
+   the clock was being corrected during it. Its three states are
+   `authenticated` (the log is provably the output of the ruled query and
+   shows no correction in that envelope's window), `slew_attested` (the
+   log shows a correction) and `asserted` (the log could not be read or
+   parsed, so nothing is established). **Only an `authenticated` envelope
+   is claim-bearing**; the other two states exclude the envelope under
+   the registration's two new reasons, `network_time_slew_attested` and
+   `network_time_unattested`.
+2. **The schedule slipped.** Each envelope was started only once its
+   predecessor had finished writing its files out, so every envelope
+   after the first began 7.6–10.2 s later than the frozen schedule said,
+   and the lateness was inherited down the night. The cure separates the
+   schedule from the capture: envelopes are now started on a fixed **slot
+   pitch** of 620 s — 600 s of capture plus a 20 s gap for the previous
+   collector to finish and for the attestation query — each measured from
+   its own scheduled instant rather than from its predecessor's finish.
+
+Both cures are carried by a new **registration**: the protocol file fixed
+before any data is taken, which the night gate admits only by exact
+digest. It is
+`configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json`,
+sha256
+`2c5392401a7956dfbb30f316a084541e0f53f214a4ce98c7d56d595ddb2779f1`. It
+fixes `settle_s` 600, `envelope_s` 600, `slot_pitch_s` 620, twelve
+envelopes, the two new exclusion reasons, and `start_drift_abort_s` 2.
+That last number is a pre-registered stop, not a data filter: the first
+envelope's actual start sets the reference instant, and if any later
+envelope would begin more than 2 s after its own scheduled instant, the
+chain refuses the whole night there and then — before that capture starts
+— rather than producing a night to be argued over afterwards. The
+programmed span is 600 + 11 × 620 + 600 = 8,020 s, inside the plan's
+`window_max_s` of 9,000 s.
+
+The **D-079 calibration acceptance** — the frozen artifact that pins the
+exact bytes of the code deriving the energy numbers, so a later run can
+be shown to have used the same estimator — was re-issued today as
+generation r7 (PR #380, merge
+`7eb53effc78b8c90995ca8206df67c0e10ff18e5`) as a pure pin delta. In plain
+words: the estimator file that derives the clock anchor changed, so the
+acceptance that pins its bytes was re-issued with identical member
+statistics. No scientific quantity moved.
+
+**Ruled precondition for this arm.** Cold gate #3, ruling 10 §Q7
+(`docs/process_traces/2026-09-22-activation-59857fe5/08-coldgate-packet-a267-merge-transaction/10-coldgate-fable-ruling.md`),
+requires one daytime check before this night may be armed: a **bench
+replay** — the real chain and the real collector, run with an injected
+recorder that replays the archived raw power files of the 02:17 night,
+with no `sudo`, no measurement, and never labelled as evidence — must
+show chain-level start drift of 0.5 s or less on every one of the twelve
+slots. That result is recorded as the tracked artifact
+`docs/process_traces/2026-09-22-activation-59857fe5/24-bench-replay-start-drift.md`,
+with its raw numbers in the sibling `24-bench-replay.json`, and is linked
+from the arm notice; the magistrate fills the measured numbers into that
+notice, not into this file. **The arm happens only if that artifact says
+PASS.** If any slot exceeds 0.5 s there is no arm. The two bars are
+sequential, not alternatives: the 2 s in-chain abort above is the night's
+own backstop and never a substitute for the 0.5 s bench bar.
+
+Ed's written ruling (c), 10:57 PDT on 2026-09-19, still governs the
+scientific order: it treats equivalence night two's **FAIL (m = 7)** as
+the instrument's answer, so instrument characterisation precedes any
+further derivation night. Authority:
 `docs/process_traces/2026-09-19-activation-a743be05/01-ed-ruling-fail-route-c.md`.
 The three-night D-166 derivation is NOT continued from the two 25G83
 equivalence nights. Their arm and harvest records remain in the Executed
@@ -189,29 +279,40 @@ blocks below. This is preparation, not a claim that anything is armed;
 the published plan and arm record establish the night's exact bindings.
 
 This `DIAGNOSTIC_NO_PACK` plan uses `joulewise.night_plan.v2` and the
-plan's `window_max_s = 9000`. t0 is expected shortly after midnight PDT
-on 2026-09-20; the lead selects the next quiet slot at least 40 minutes
-after arm. **The exact t0 is the one in the published plan.** Its
-acquisition end is t0 + 9000 s, its completion / courier boundary is
+plan's `window_max_s = 9000`. t0 is planned for 20:30 PDT on 2026-09-22
+(epoch 1790134200). **The exact t0 is the one in the published plan.**
+Its acquisition end is t0 + 9000 s, its completion / courier boundary is
 t0 + 9300 s, and its daily dead-man is
 `ceil((t0 + 9300 + 3600) / 60) × 60` in epoch seconds, until uninstalled.
 No capture is run by the preparation scripts.
 
 **What the night does.** The authority is cold gate packet 10 → 10a,
 ruling 46b and record 85 in
-`docs/process_traces/2026-09-19-activation-d0b83820/`. The plan-pinned
-wrapper `<custody_root>/chain.zsh`, emitted by
+`docs/process_traces/2026-09-19-activation-d0b83820/`, as amended by the
+A269 cold-gate ruling 10 of 2026-09-22 that issued registration v2. The
+plan-pinned wrapper `<custody_root>/chain.zsh`, emitted by
 `scripts/gen_evidence_night.py`, executes
 `scripts/night_chains/quiet_predicate_evidence.zsh`, which invokes
-`joulewise.quiet_predicate_campaign run`. The plan's frozen protocol
-specifies 600 s settle, then twelve 600 s idle envelopes. Each 480 s
-interior is measured from its SCHEDULED envelope start after a 60 s
-offset. `powermetrics` samples at the 100 ms setting; census, AC, thermal
-and the 30 s busy-cores journal record covariates. The programmed span
-is 7,800 s inside the 9,000 s window. NO model, NO load generator,
-NO calibration-ledger session and NO pack. The chain runs ONE read-only
-`git show` to verify the tracked chain bytes at `measurement_head`
-(ruling 87a F2); it performs no commit, push, checkout or fetch.
+`joulewise.quiet_predicate_campaign run`. The frozen protocol is 600 s of
+settling, then twelve 600 s idle envelopes started on the 620 s slot
+pitch. Each 480 s **interior** — the part of an envelope whose energy is
+actually used, trimmed at both ends so start-up and shutdown effects fall
+outside it — is measured from the SCHEDULED envelope start after a 60 s
+offset. `powermetrics` samples at the 100 ms setting; census, AC power,
+thermal state and the 30 s busy-cores journal are recorded as covariates
+(quantities measured alongside the energy so a later reader can see the
+conditions, never as part of the result). The programmed span is 8,020 s
+inside the 9,000 s window. NO model, NO load generator, NO
+calibration-ledger session and NO pack.
+
+For the night the chain turns macOS network time synchronisation OFF, and
+its final step turns it back ON; both are `systemsetup` commands that an
+administrator rule lets this chain run without a password, and each is
+recorded. In the 20 s gap after each envelope it then reads the `timed`
+log for that envelope's window and writes the attestation described
+above. The chain runs ONE read-only `git show` to verify the tracked
+chain bytes at `measurement_head` (ruling 87a F2); it performs no commit,
+push, checkout or fetch.
 
 **What happens with the result, fixed before the night.** The pilot
 summary uses disjoint adjacent pairs and the chi-square upper confidence
@@ -222,19 +323,27 @@ quiet-admission threshold is activated by this night. Only the lead,
 after a ruling on the pilot summary, may arm block two; the courier has
 no scientific decision authority.
 
-**Pins.** `repo_head = measurement_head = H`, where H is the main head the
-fresh measurement clone is detached at (PR #369, the render-only fix, merged
-and this handback landed); the published plan and the notice record its full
-SHA as both `repo_head` and `measurement_head`. The frozen triple is
-`(qpe01-pilot-n1-20260920, /Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1, H)`.
-The fresh measurement clone is detached at the merge of the render-only
-fix; the lead pins H at the bench before arm, and the plan and notice carry
-its full SHA. The courier reads this handback from
-the clone at the plan's `measurement_head`. The custody root is
-`/Users/edr/night-custody/qpe01-pilot-n1-20260920`. The plan's repo-relative
-`registration_path` is
-`configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json`,
-the ruled registration bound to the tracked chain-source digest.
+**Pins.** A **pin** is a recorded expected value that a later check must
+match exactly. Here `repo_head = measurement_head = H`, where H is the
+main head at which this handback rewrite and the bench-replay artifact
+land: a docs-only commit on top of
+`4dea946b5a2eb150e58eadc91709d3b0ddd09f70`, the merge that landed the
+replay harness. "Docs-only" is not an assertion but a check the lead runs
+at the bench before arming: the measured code is byte-identical to the
+head the replay exercised exactly when
+`git diff --stat 4dea946b5a2eb150e58eadc91709d3b0ddd09f70..H -- joulewise scripts configs`
+prints nothing. If it prints anything, the replay no longer covers the
+code that would run, and there is no arm on it. The published plan and
+the notice record H's full SHA as both `repo_head` and `measurement_head`,
+and the courier reads this handback from the clone at the plan's
+`measurement_head`. The custody root is
+`/Users/edr/night-custody/qpe01-pilot-n1-20260922-2030-…`, whose suffix
+carries t0 and H; the exact directory is the one named in the published
+plan. The plan's repo-relative `registration_path` is
+`configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json`,
+sha256
+`2c5392401a7956dfbb30f316a084541e0f53f214a4ce98c7d56d595ddb2779f1`, the
+ruled registration bound to the tracked chain-source digest.
 No calibration ledger is seeded, and no identity-epoch / t1-bindings desk
 inputs or calibration-plan copy are required for this evidence payload
 (record 85).
@@ -558,7 +667,9 @@ Armed 2026-09-22 02:03 PDT by headless activation dc2237d5 through the tracked e
 
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/qpe01-pilot-n1-20260920`.
+- Custody root: `/Users/edr/night-custody/qpe01-pilot-n1-20260922-2030-…`,
+  the exact directory named in the published plan (its suffix carries t0
+  and the pinned head H).
   Driver records in `night/`: `result.json`, `receipt.json` or
   `refusal.json` as the result directs, `chain.started`, `chain.exited`,
   `censuses.jsonl`, `chain.stdout.log` and `chain.stderr.log`. The result
@@ -568,10 +679,15 @@ Armed 2026-09-22 02:03 PDT by headless activation dc2237d5 through the tracked e
   `evidence_cleanup.json`, `evidence_busy_cores.jsonl`,
   `evidence/summary.json` and `evidence/summary.md`. Envelope directories
   under `night/evidence/` retain `rounds.jsonl`, `session.json` and native
-  power files. The pilot summary reports retained and excluded envelopes,
-  disjoint-pair spread, the chi-square upper bound and δ = 1 J sizing
-  for block two or "no cutoff qualifies"; missing files or an unset bound
-  are limitations to report, and all results remain PROVISIONAL.
+  power files. `evidence_envelopes.jsonl` also carries each envelope's
+  `start_drift_s` against the frozen schedule and its clock-discipline
+  attestation state (`authenticated`, `slew_attested` or `asserted`);
+  report both, and report a `start_drift_abort` row as the pre-registered
+  night-ending refusal it is, not as a data outcome. The pilot summary
+  reports retained and excluded envelopes, disjoint-pair spread, the
+  chi-square upper bound and δ = 1 J sizing for block two or "no cutoff
+  qualifies"; missing files or an unset bound are limitations to report,
+  and all results remain PROVISIONAL.
 - Refusal documents: every path in `result.json.refusal_documents` and
   any later refusal document, following `NIGHT_COURIER_PROMPT.md`.
   Read `evidence_cleanup.json` for proof of collector, recorder and sampler
@@ -580,36 +696,65 @@ Armed 2026-09-22 02:03 PDT by headless activation dc2237d5 through the tracked e
   boundary's diagnostics. Launchd streams: `night/launchd.night.out` and
   `night/launchd.night.err`.
 - Courier records under `<custody_root>/night/`: `courier.sent`,
-  `courier.json` and `courier.heartbeat`. Results branch:
-  `night-results/qpe01-pilot-n1-20260920` on `origin`, if the driver's
-  push succeeded — verify, do not presume.
+  `courier.json` and `courier.heartbeat`. `courier.sent` records the
+  Gmail message id of the result email actually delivered; that id, not
+  an expectation, is what the report names. Results branch:
+  `night-results/qpe01-pilot-n1-20260922-2030` on `origin`, if the
+  driver's push succeeded — verify, do not presume. The 02:17 night's
+  push failed because twelve raw `powermetrics` files each exceeded
+  GitHub's 100 MB per-file limit; the same failure here is a reporting
+  matter, never a reason to treat the custody root as incomplete.
+- After the night, harvest is a byte-exact copy of the whole custody
+  root to `/Users/edr/night-archive/<plan-id>-harvest-<date>`, checked by
+  re-verifying the copy's `SHA256SUMS` against the live root before
+  anything is removed, and then the two scheduled jobs are removed with
+  `python -m joulewise.evidence_night uninstall --candidate <staging>`
+  run from the measurement clone. Record its exit code.
 
 ## Next lane
 
 The successor magistrate rebuilds the coordinates from the frozen triple
-`qpe01-pilot-n1-20260920` /
-`/Users/edr/JouleWise-measurement-20260920-qpe01-pilot-n1` / H (the SHA in the published plan),
-resolved in the published plan and arm record. Harvest after
-`night/courier.sent`, per record 85 step 5 in
+`qpe01-pilot-n1-20260922-2030` / the measurement clone named by the
+plan's `measurement_root` / H (the SHA in the published plan), resolved
+in the published plan and arm record. Harvest after `night/courier.sent`,
+per record 85 step 5 in
 `docs/process_traces/2026-09-19-activation-d0b83820/85-pilot-night-one-arm-recipe.md`,
 respecting the standing process-liveness checks above. Read the result,
 receipt or refusal, evidence outcome, envelope and cleanup records,
 busy-cores journal, pilot summary, `night.log`, launchd streams and
 courier record. Preserve the evidence byte-exact; report attempted and
 retained envelopes, exclusions, incomplete support, spread, covariates,
-missing evidence and whether cleanup was proven.
+per-envelope start drift and attestation state, missing evidence and
+whether cleanup was proven.
 
-After harvest, uninstall both agents FROM the clone and record the exit
-code:
-`scripts/install_night_agent.sh --plan /Users/edr/night-custody/qpe01-pilot-n1-20260920/night_plan.json --uninstall`.
+After harvest, uninstall both scheduled jobs FROM the measurement clone
+with the tracked entry point and record the exit code:
+`python -m joulewise.evidence_night uninstall --candidate <staging>`.
 Retain the clone and custody root if any envelope was captured. Cleanup
 that depends on uninstall waits for exit 0; an uncertain cleanup is
 reported for the lead to resolve.
 
-The pilot summary goes to the lead for a ruling on block two. No courier
-or successor may turn sizing into an arm without that ruling; only the
-lead may arm block two. No quiet-admission threshold is activated, and
-the results remain PROVISIONAL. The next scientific lane is then
+Then the magistrate rules on the pilot summary, and the ruling turns on
+two numbers it reports: how many of the twelve envelopes were retained,
+and how many disjoint adjacent pairs those form. A PASS-shaped summary —
+enough retained envelopes and pairs for the sizing arithmetic to return a
+bound — lets the lead consider block two. An INCONCLUSIVE summary names
+the cause (which exclusion reasons removed which envelopes, and whether
+either of today's two cures failed to hold) and returns the work to the
+diagnosis loop; there is no top-up and no pooling of an aborted night's
+envelopes with a later one. No courier or successor may turn sizing into
+an arm without that ruling; only the lead may arm block two. No
+quiet-admission threshold is activated, and the results remain
+PROVISIONAL.
+
+Two standing items for Ed are recorded in this activation's synthesis and
+are not decided here: a proposed standing rule that a sealed cold-gate
+ruling governs over a later brief that contradicts it, and a proposed
+lane for a live pre-arm check of the `timed` log header, so that an
+attestation query that cannot be read is found at the bench rather than
+at t0.
+
+The next scientific lane after the pilot is
 `INSTRUMENT-CADENCE-25G83-01`, on the doubled `powermetrics` cadence
 (consult 06 in `docs/process_traces/2026-09-19-activation-a743be05/`),
 followed by restore-or-re-characterise, and only then derivation nights.
