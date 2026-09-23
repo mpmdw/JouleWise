@@ -146,41 +146,25 @@ def canonical_reference_v1(raw: str) -> str | None:
     return None
 
 
-def canonical_math_rational(raw: str) -> str | None:
-    """Response parser; deliberately duplicated from pinned reference v1."""
-    if not isinstance(raw, str):
-        return None
-    s = raw.replace(r"\dfrac", r"\frac").replace(r"\tfrac", r"\frac")
-    s = s.replace(r"\$", "").replace("$", "")
-    for token in (r"\!", r"\,", r"\;", r"\:", r"\ ", "~"):
-        s = s.replace(token, "")
-    s = "".join(s.split())
-    for suffix in (r"^\circ", r"^{\circ}", r"\%", "%", r"\degree"):
-        if s.endswith(suffix):
-            s = s[:-len(suffix)]
-            break
-    match = _UNIT.fullmatch(s)
-    if match and match.group(1):
-        s = match.group(1)
-    s = s.replace("{,}", ",")
-    match = _LHS.fullmatch(s)
-    if match:
-        s = match.group(1)
-    try:
-        if _INT.fullmatch(s) or _DEC.fullmatch(s):
-            return str(Fraction(s))
-        if _GROUPED.fullmatch(s):
-            return str(Fraction(s.replace(",", "")))
-        match = _SLASH.fullmatch(s)
-        if match:
-            return str(Fraction(int(match.group(1)), int(match.group(2))))
-        match = _FRAC.fullmatch(s)
-        if match:
-            sign, n1, n2, d1, d2 = match.groups()
-            value = Fraction(int(n1 if n1 is not None else n2), int(d1 if d1 is not None else d2))
-            return str(-value if sign == "-" else value)
-    except (ValueError, ZeroDivisionError):
-        pass
+_STRIPPED_GROUP = re.compile(r"\\(?:text|mbox|textrm|mathrm)\{([^{}0-9]*)\}")
+_DENIED_UNIT_WORDS = frozenset({"hundred", "hundreds", "thousand", "thousands", "million", "millions", "billion", "billions", "trillion", "trillions", "dozen", "dozens", "i"})
+
+
+canonical_math_rational = canonical_reference_v1  # packet A name; one parser, no second body
+
+
+def response_extension_v1(box: str) -> str | None:
+    """Additions-only hook (M5): tried only when canonical_reference_v1 returns None. v1 accepts nothing."""
+    return None
+
+
+def response_hazard_v1(box: str) -> str | None:
+    """Closed list of response-only denials; never applied to references or eligibility."""
+    for group in _STRIPPED_GROUP.findall(box):
+        if any(word.lower() in _DENIED_UNIT_WORDS for word in re.findall(r"[A-Za-z]+", group)):
+            return "denied_unit_word"
+    if re.search(r"i\s*$", box):
+        return "imaginary_unit"
     return None
 
 
@@ -292,19 +276,18 @@ def select_items(rows: Sequence[Mapping[str, Any]], pilot: Sequence[Mapping[str,
 def score_response(response_text: str, expected_answer: str, *, runtime_status: str = "succeeded", enable_thinking: bool = False) -> dict[str, Any]:
     if runtime_status not in {"succeeded", "capped", "malformed", "runtime_failed"} or not isinstance(response_text, str):
         raise ValueError("invalid response or runtime status")
-    reference = canonical_math_rational(expected_answer)
+    reference = canonical_reference_v1(expected_answer)
     if reference is None:
         raise ValueError("expected answer is not rational")
     section = response_text.rsplit("</think>", 1)[1] if enable_thinking and "</think>" in response_text else (None if enable_thinking else response_text)
     box = last_boxed(section) if section is not None else None
-    parsed = canonical_math_rational(box) if box is not None else None
-    # A stripped unit or percent can change the value; keep the parsed value
-    # for audit, but never award correctness for these response-only hazards.
-    unsafe_response = bool(box is not None and (
-        re.search(r"\\(?:text|mathrm)\{\s*(?:thousand|million|billion|trillion|hundred|dozen|i)\s*\}", box, re.IGNORECASE)
-        or re.search(r"i\s*$", box)
-        or ("%" in box) != ("%" in expected_answer)
-    ))
+    parsed = None
+    if box is not None:
+        parsed = canonical_reference_v1(box)
+        if parsed is None:
+            parsed = response_extension_v1(box)
+    hazard = response_hazard_v1(box) if box is not None else None
+    unsafe_response = hazard is not None
     parse_status = "missing_think_close" if section is None else "no_box_or_unbalanced" if box is None else "boxed_noncanonical" if parsed is None else "parsed"
     if runtime_status in {"runtime_failed", "malformed"}:
         outcome = "malformed"
@@ -316,7 +299,7 @@ def score_response(response_text: str, expected_answer: str, *, runtime_status: 
         outcome = "correct"
     else:
         outcome = "incorrect"
-    return {"outcome": outcome, "correct": outcome == "correct", "parsed_answer": parsed, "expected_answer": reference, "parse_status": parse_status, "runtime_status": runtime_status}
+    return {"outcome": outcome, "correct": outcome == "correct", "parsed_answer": parsed, "expected_answer": reference, "parse_status": parse_status, "response_hazard": hazard, "runtime_status": runtime_status}
 
 
 def score_math_outcome_table(response_rows: Sequence[Mapping[str, Any]], manifest: Mapping[str, Any], sidecar: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -547,7 +530,7 @@ def validate_math_annotations(manifest: Mapping[str, Any], sidecar: Mapping[str,
             raise ValueError(f"MATH annotation {index} level/subject mismatch")
         answer = row.get("source_answer")
         expected = row.get("expected_answer")
-        if not isinstance(answer, str) or not isinstance(expected, str) or canonical_math_rational(answer) != expected:
+        if not isinstance(answer, str) or not isinstance(expected, str) or canonical_reference_v1(answer) != expected or str(Fraction(expected)) != expected:
             raise ValueError(f"MATH annotation {index} answer mismatch")
         answer_hash = expected_answer_sha256(item.item_id, expected)
         if row.get("expected_answer_sha256") != answer_hash or item.scoring is None or item.scoring.expected_answer_hash != answer_hash or row.get("scorer_id") != SCORER_ID:
