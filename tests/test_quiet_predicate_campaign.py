@@ -617,7 +617,11 @@ class FrozenExecutorTests(unittest.TestCase):
                 p.name for p in (Path(tmp)/'evidence').glob('envelope-*'))
             self.timed_logs=sorted(
                 p.read_text() for p in (Path(tmp)/'evidence').glob('envelope-*/timed-log.txt'))
-            summary=json.loads((Path(tmp)/'evidence/summary.json').read_text())
+            # A night whose summary itself refused writes no summary.json;
+            # `None` lets the refusal document be asserted rather than the
+            # harness dying on the missing file.
+            summary_path=Path(tmp)/'evidence/summary.json'
+            summary=json.loads(summary_path.read_text()) if summary_path.exists() else None
             outcome=json.loads((Path(tmp)/'evidence_outcome.json').read_text())
             refusals=list(Path(tmp).glob('refusal*.json'))
             # The refusal DOCUMENTS, not just their count: the typed reason is
@@ -3275,6 +3279,61 @@ class NonObserverAbortTests(FrozenExecutorTests):
         self.assertEqual(refusals, 0)
         self.assertEqual([v["excluded"] for v in summary["envelopes"]],
                          [["non_observer_process_busy"], [], ["non_observer_process_busy"], []])
+
+    def test_a_marking_failure_in_chain_is_a_probe_error_never_a_busy_daemon(self):
+        """Fix round 2, delta re-audit D1: the in-chain verdict runs the guard.
+
+        The forcing problem: at 0e5578fb the summary refused a journal whose
+        consumers carry no `observer: true` mark, but the executor's in-chain
+        verdict did not.  With every mark cleared, the in-chain rule counted
+        the unmarked daemon, excluded envelopes 01 and 02, and raised
+        `NonObserverAbort`, so `refusal.json` said `non_observer_process_busy`
+        -- a busy machine -- while its text said the measurement's own marking
+        had failed.  Once lane A270 keys a successor on that reason, a marking
+        failure would license a successor that repeats it.
+
+        Counterfactual input: the regression-3 journal (fseventsd at 6 cores
+        in envelopes 01 and 02) with every observer mark cleared.  The same
+        journal with the power sampler marked must still abort by name.
+        """
+
+        def unmarked(rows_for):
+            def rows(index, scheduled):
+                out = rows_for(index, scheduled)
+                for row in out:
+                    for consumer in row["observation"]["metrics"]["top_consumers"]:
+                        consumer["observer"] = False
+                return out
+            return rows
+
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            protocol=SCALED, busy_rows=unmarked(self.busy_rows({1, 2})))
+        self.assertEqual(rc, 2)
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(refusals, 1)
+        document = self.refusal_documents[0]
+        self.assertEqual(document["refusal"]["reason"], "night_probe_error")
+        self.assertIn(campaign.UNMARKED_JOURNAL, document["refusal"]["detail"])
+        self.assertIn("recorder journal carries no observer-marked consumer; "
+                      "ancestry marking failed", outcome["error"])
+        self.assertNotIn("NonObserverAbort", document["refusal"]["detail"])
+        # The guard fires on the first envelope whose journal names anyone,
+        # before that envelope's row is written, rather than after two
+        # envelopes have been blamed on the daemon.
+        self.assertEqual(self.envelope_directories, ["envelope-01"])
+        # No envelope row names the daemon as an offender: the rule never ran
+        # on a journal whose marking failed.
+        for row in self.envelope_journal + list((summary or {}).get("envelopes") or []):
+            self.assertFalse([hit for hit in row.get("non_observer_process_busy") or []
+                              if hit.get("process") == "fseventsd"], row)
+
+        # The counterfactual: the same journal, marked, still aborts by name.
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            protocol=SCALED, busy_rows=self.busy_rows({1, 2}))
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.refusal_documents[0]["refusal"]["reason"],
+                         "non_observer_process_busy")
+        self.assertIn("fseventsd pid 341 36.0 core-s (bar 30)", outcome["error"])
 
     @staticmethod
     def verdicts(rows, key):

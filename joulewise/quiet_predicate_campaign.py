@@ -1602,8 +1602,17 @@ def execute(plan, protocol, night_dir):
                                 in (journal_path.read_text().splitlines()
                                     if journal_path.exists() else [])
                                 if line]
-                non_observer = non_observer_busy(non_observer_rule(protocol),
-                                                 envelope_support(journal_rows, scheduled, protocol))
+                support = envelope_support(journal_rows, scheduled, protocol)
+                # The summary's evidence-quality guard, run HERE too (fix
+                # round 2, delta re-audit D1): a journal whose consumers carry
+                # no observer mark means the ancestry marking failed, and the
+                # rule below would then count the measurement's own processes
+                # and abort as `non_observer_process_busy` -- a busy-machine
+                # reason for a broken measurement.  The guard raises a plain
+                # ValueError, so the refusal carries `night_probe_error` and
+                # the marking failure's own text.
+                require_observer_marked(support)
+                non_observer = non_observer_busy(non_observer_rule(protocol), support)
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
                               NON_OBSERVER_EXCLUSION: non_observer,
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
