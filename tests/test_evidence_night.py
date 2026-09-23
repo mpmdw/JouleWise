@@ -40,6 +40,49 @@ from joulewise import corecaptured_loop
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class NoticeProtocolTextTests(unittest.TestCase):
+    def state(self, protocol_path):
+        raw = protocol_path.read_bytes()
+        plan = self.addCleanup_path / "plan.json"
+        plan.write_text(json.dumps({"authored_epoch_s": 1, "window_max_s": 9000}))
+        return {
+            "schedule": {"boundaries": {}, "install_spans_today": []},
+            "plan_id": "fixture", "attempt": 1, "prior_candidates": [],
+            "head": "a" * 40, "measurement_root": "/fixture/clone",
+            "custody_root": "/fixture/custody", "plan_path": str(plan), "digests": {},
+            "bindings": {"registration_path": str(protocol_path),
+                         "registration_sha256": entry.digest(protocol_path),
+                         "chain_source_path": "/fixture/chain",
+                         "chain_source_sha256": "b" * 64},
+        }
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory(dir="/tmp")
+        self.addCleanup(temp.cleanup)
+        self.addCleanup_path = Path(temp.name)
+        self.protocols = ROOT / "configs/campaigns/quiet_predicate_evidence_01"
+
+    def test_v3_notice_states_bound_schedule_and_all_refusal_rules(self):
+        protocol_path = self.protocols / "pilot_protocol_v3.json"
+        protocol = json.loads(protocol_path.read_text())
+        text = entry.render_notice(self.state(protocol_path))
+        span = (protocol["settle_s"] + (protocol["envelopes"] - 1)
+                * protocol["slot_pitch_s"] + protocol["envelope_s"])
+        self.assertIn(f"{span:,}-second program", text)
+        self.assertIn(f'{protocol["t0_non_observer_share_max"]} busy cores', text)
+        self.assertIn("arm check or at t0", text)
+        self.assertIn(f'{protocol["non_observer_process_busy"]["bar_core_seconds"]} or more core-seconds', text)
+        self.assertIn("excludes that envelope", text)
+        self.assertIn(f'{protocol["non_observer_process_busy"]["abort_after_consecutive"]} such exclusions in a row end the night', text)
+        self.assertIn("the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes", text)
+        self.assertNotIn("This first idle-variance", text)
+        self.assertNotIn("exactly one read-only git show", text)
+
+    def test_superseded_v2_notice_is_refused(self):
+        with self.assertRaisesRegex(entry.Refused, "superseded"):
+            entry.render_notice(self.state(self.protocols / "pilot_protocol_v2.json"))
+
+
 def quiet_machine():
     """THE shared fake observation every `check()` in this module injects.
 
@@ -2129,7 +2172,9 @@ class LifecycleTests(unittest.TestCase):
         entry.saved_json(self.stage / "prepare.json", self.state)
         self.checked()
         before = (self.stage / "prepare.json").read_bytes()
-        bindings = dict(registration_path="registration", registration_sha256="a" * 64,
+        registration = ROOT / "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json"
+        bindings = dict(registration_path=str(registration),
+                        registration_sha256=entry.digest(registration),
                         chain_source_path="source", chain_source_sha256="b" * 64)
         schedule = dict(self.schedule, install_spans_today=[(self.t0 - 3600, self.t0 - 1800)])
         original = entry.notice
@@ -2157,8 +2202,9 @@ class LifecycleTests(unittest.TestCase):
             original(candidate=self.stage, launchctl_bin="/fixture/launchctl", lock_verifier=lambda root: None)
         self.assertEqual(repeated.getvalue(), draft)
         self.assertEqual(self.journal("notice.txt").read_bytes(), body.encode())
-        for text in (self.state["plan_id"], self.head, "attempt 2", "prior", "a" * 64,
-                     "b" * 64, "REQUEST / exit BEFORE", "install span 1 close EXCLUDED",
+        for text in (self.state["plan_id"], self.head, "attempt 2", "prior",
+                     bindings["registration_sha256"], bindings["chain_source_sha256"],
+                     "REQUEST / exit BEFORE", "install span 1 close EXCLUDED",
                      "To: claude2.glaring610@passmail.net", entry.digest(self.plan)):
             self.assertIn(text, draft)
         self.assertNotIn("obsolete draft", draft)

@@ -274,24 +274,51 @@ def notice_subject(state):
 
 
 def render_notice(state, *, checked=None, check_sha256=None):
+    from joulewise import night_gate
+
+    binding = state["bindings"]
+    registration = Path(binding["registration_path"])
+    if not registration.is_absolute():
+        registration = Path(state["measurement_root"]) / registration
+    raw = registration.read_bytes()
+    registration_sha256 = hashlib.sha256(raw).hexdigest()
+    if registration_sha256 != binding["registration_sha256"]:
+        raise Refused("notice registration differs from sealed binding")
+    if (registration_sha256 != night_gate.QPE01_PILOT_REGISTRATION_SHA256
+            or night_gate.armable_registration(registration_sha256) is None):
+        raise Refused("notice registration is unknown or superseded")
+    protocol = json.loads(raw)
+    rule = protocol["non_observer_process_busy"]
+    span = (protocol["settle_s"] + (protocol["envelopes"] - 1)
+            * protocol["slot_pitch_s"] + protocol["envelope_s"])
+    if span > protocol["window_max_s"]:
+        raise Refused("notice program exceeds registered window")
+    plan = json.loads(Path(state["plan_path"]).read_text())
     s = state["schedule"]
     lines = ["DRAFT — NOT SENT; prerequisites and veto observations are not yet recorded.",
              "To: claude2.glaring610@passmail.net",
              'Subject: ' + notice_subject(state),
              "", "Ed,", "Launch needs no action from you unless you reply NO. Your NO overrides.",
              f'Arm attempt {state["attempt"]}; prior candidates for this date: {", ".join(state["prior_candidates"]) or "none"}.',
-             "This first idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
-             "After 600 seconds settling, twelve 600-second idle envelopes use 480-second interiors after 60-second offsets.",
+             "This idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
+             f'After {protocol["settle_s"]} seconds settling, {protocol["envelopes"]} '
+             f'{protocol["envelope_s"]}-second idle envelopes start {protocol["slot_pitch_s"]} seconds apart '
+             f'and use {protocol["interior_s"]}-second interiors after {protocol["interior_offset_s"]}-second offsets.',
              "Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a busy-cores journal.",
-             "Busy cores remain a descriptive covariate. The 7,800-second program fits inside 9,000 seconds; no top-up or automatic repeat.",
+             f'The {span:,}-second program fits inside the {protocol["window_max_s"]:,}-second window; no top-up or automatic repeat.',
+             f'A process outside the measurement apparatus at or above {protocol["t0_non_observer_share_max"]:g} busy cores '
+             'refuses the night at the arm check or at t0.',
+             f'A process outside the measurement apparatus using {rule["bar_core_seconds"]:g} or more core-seconds '
+             'inside an envelope excludes that envelope. '
+             f'{rule["abort_after_consecutive"]} such exclusions in a row end the night.',
+             "the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes",
              "Partial observations and refusals are kept. No model, load generator, calibration-ledger session or measurement pack runs.",
              "The scheduler supervises the program and the courier emails the result. Evidence remains PROVISIONAL.",
-             "During the night exactly one read-only git show verifies chain bytes in the clone; no commit, push, checkout or fetch (87a F2).",
              "After delivery the lead sizes block two or records 'no cutoff qualifies'.",
              f'plan_id: {state["plan_id"]}', f'repo_head = measurement_head = H: {state["head"]}',
              f'clone: {state["measurement_root"]}', f'custody: {state["custody_root"]}',
              f'runs: {state["custody_root"]}/runs', f'staged plan: {state["plan_path"]}',
-             f'authored_epoch_s: {json.loads(Path(state["plan_path"]).read_text())["authored_epoch_s"]}']
+             f'authored_epoch_s: {plan["authored_epoch_s"]}']
     for name, epoch in s["boundaries"].items():
         lines.append(f"{name}: {datetime.fromtimestamp(epoch).astimezone().isoformat()} "
                      f"{datetime.fromtimestamp(epoch, timezone.utc).isoformat()} epoch {epoch}")

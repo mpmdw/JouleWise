@@ -95,6 +95,26 @@ def good_round(busy=0):
 
 
 class CampaignTests(unittest.TestCase):
+    def test_summary_text_follows_registration_exclusion_rule(self):
+        v2 = json.loads((ROOT / "configs/campaigns/quiet_predicate_evidence_01"
+                         / "pilot_protocol_v2.json").read_text())
+        for protocol in (PROTOCOL, v2):
+            with self.subTest(rule=campaign.non_observer_rule(protocol)), \
+                    tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                root = Path(tmp) / "evidence"
+                root.mkdir()
+                campaign.pilot_summary(root, protocol, [])
+                memo = (root / "summary.md").read_text()
+                # harvest record 5fe5a59b section 7 item 2: the unfiltered SD is labelled as such
+                self.assertIn("unfiltered single-envelope SD (every captured envelope, "
+                              "excluded ones included)", memo)
+                if campaign.non_observer_rule(protocol):
+                    self.assertNotIn("never an exclusion input", memo)
+                    self.assertIn("30 or more core-seconds", memo)
+                    self.assertIn("excludes that envelope", memo)
+                else:
+                    self.assertIn("Busy cores are recorded covariates and never an exclusion input. ", memo)
+
     def summarize(self, energies, excluded=(), missing=(), observer_core=None, recorder=False,
                   drift=0, slew=()):
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
