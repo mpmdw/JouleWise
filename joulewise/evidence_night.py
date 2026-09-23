@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -17,6 +17,9 @@ import subprocess
 import sys
 import time
 import traceback
+from typing import Callable
+
+from joulewise import corecaptured_loop
 
 KIND = "quiet_predicate_evidence"
 REMOTE = "https://github.com/mpmdw/JouleWise"
@@ -833,6 +836,87 @@ def machine_quiet_check(observer=None):
                 bar_busy_cores=night_gate.T0_NON_OBSERVER_SHARE_MAX)
 
 
+@dataclass(frozen=True)
+class CorecapturedActuator:
+    """All clock, log, radio and restart actions for the arm check."""
+
+    run: Callable
+    sleep: Callable[[float], None]
+    now_epoch_s: Callable[[], float]
+
+
+def production_corecaptured_actuator():
+    return CorecapturedActuator(probe_command, time.sleep, time.time)
+
+
+def corecaptured_arm_check(actuator):
+    """Try one Wi-Fi reset, then observe a full post-reset three minutes."""
+    def command(argv):
+        try:
+            return actuator.run(argv)
+        except Exception as exc:
+            raise Refused(f"corecaptured actuator failed: {type(exc).__name__}: {exc}") from exc
+
+    def observe(*, after=None):
+        raw = command(corecaptured_loop.LOG_ARGV)
+        if raw.returncode:
+            raise Refused(f"corecaptured log not measured (exit {raw.returncode}): {raw.stderr.strip()}")
+        try:
+            return corecaptured_loop.count_spawns(
+                raw.stdout, actuator.now_epoch_s(), after_epoch_s=after)
+        except ValueError as exc:
+            raise Refused(f"corecaptured log not measured: {exc}") from exc
+
+    before = observe()
+    result = dict(last_10m_spawns=before.count, first_spawn=before.first,
+                  last_spawn=before.last, remediation="none")
+    if before.count <= 2:
+        return result
+
+    result["remediation"] = "wifi_toggle_attempted"
+    try:
+        try:
+            off = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "off"))
+            result["wifi_off_exit_code"] = off.returncode
+            if not off.returncode:
+                actuator.sleep(8)
+        finally:
+            # Restore radio power even when the off command or wait fails.
+            on = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "on"))
+            result["wifi_on_exit_code"] = on.returncode
+    except Exception as exc:
+        raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
+                      f"Wi-Fi toggle failed: {exc}", evidence=result) from exc
+    if off.returncode or on.returncode:
+        raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
+                      f"Wi-Fi toggle exits off={off.returncode}, on={on.returncode}",
+                      evidence=result)
+    result["remediation"] = "wifi_toggled_once"
+    try:
+        completed = actuator.now_epoch_s()
+        result["toggle_completed_epoch_s"] = completed
+        actuator.sleep(180)
+        after = observe(after=completed)
+    except Exception as exc:
+        raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
+                      f"post-toggle observation failed: {exc}", evidence=result) from exc
+    result.update(post_toggle_spawns=after.count, post_toggle_first_spawn=after.first,
+                  post_toggle_last_spawn=after.last)
+    if after.count >= 2:
+        try:
+            restart = command(("/usr/bin/sudo", "-n", "/usr/local/sbin/joulewise-restart-fseventsd"))
+        except Refused as exc:
+            raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns before "
+                          f"Wi-Fi toggle, {after.count} new spawns after toggle; "
+                          f"fseventsd restart failed: {exc}", evidence=result) from exc
+        result["fseventsd_restart_exit_code"] = restart.returncode
+        raise Refused(
+            f"night_refused_not_quiet: corecaptured: {before.count} spawns before Wi-Fi toggle, "
+            f"{after.count} new spawns after toggle (first {after.first}, last {after.last}); "
+            f"fseventsd restart exit {restart.returncode}", evidence=result)
+    return result
+
+
 def census_check(state, runner, observer, caller_pid):
     argv = clone_census(state, caller_pid, argv_only=True)["argv"]
     raw = runner(argv)
@@ -943,7 +1027,7 @@ print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record 
 
 def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
           runner=probe_command, census_observer=None, caller_pid=None, lock_verifier=verify_lock,
-          launchctl_bin="launchctl", quiet_observer=None):
+          launchctl_bin="launchctl", quiet_observer=None, corecaptured_actuator=None):
     with candidate_lock(candidate):
         state = candidate_state(candidate)
         record = dict(schema="joulewise.evidence_check.v1", started_epoch_s=time.time(),
@@ -990,8 +1074,12 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                     verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
             else:
                 if payload_kind == KIND:
+                    inspect("corecaptured", lambda: corecaptured_arm_check(
+                        corecaptured_actuator or production_corecaptured_actuator()))
                     inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
                 else:
+                    checks["corecaptured"] = dict(verdict="skipped", reason="not an evidence night",
+                                                   payload_kind=payload_kind)
                     checks["machine_quiet"] = dict(verdict="skipped", reason="not an evidence night",
                                                    payload_kind=payload_kind)
         # One predicate decides both the verdict and the refusal text below,
@@ -999,7 +1087,8 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
         # machine_quiet row is not a failure and is never listed as one
         # (fix round 2, delta re-audit N-b).
         failed = [name for name, c in checks.items()
-                  if not (c["verdict"] == "pass" or (name == "machine_quiet" and c["verdict"] == "skipped"))]
+                  if not (c["verdict"] == "pass" or (name in ("machine_quiet", "corecaptured")
+                                                   and c["verdict"] == "skipped"))]
         passed = not failed
         record["armable"] = passed and not record["fake_launchctl"]
         record["rehearsal_ready"] = passed and record["fake_launchctl"]
@@ -1011,7 +1100,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             # text is the whole finding, and burying it behind "pre-arm checks
             # failed" would make the operator open check.json to learn which
             # process held the machine (cold gate 10, 2026-09-23, Q2(i)).
-            for name in ("night_agents", "census", "machine_quiet"):
+            for name in ("night_agents", "census", "corecaptured", "machine_quiet"):
                 row = checks.get(name, {})
                 if row.get("verdict") == "fail" and row.get("reason"):
                     raise Refused(row["reason"])

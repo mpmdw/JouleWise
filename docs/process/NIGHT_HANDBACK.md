@@ -262,6 +262,18 @@ reader, never used to exclude an envelope. Harvest record:
 dated addenda at its end, the 03:10 PDT one by magistrate 7a0f14bd is the
 correction in force for the observer accounting described below).
 
+The loop was caused by `launchd`, macOS's service manager, respawning
+`corecaptured`, the Wi-Fi log-capture helper, about every 95 seconds. Each
+spawn made `fseventsd`, the file-system event daemon, replay its event history
+and burn one processor core. The arm check counts spawn reports in the last
+10 minutes; above two it toggles Wi-Fi once, waits at least three minutes
+after Wi-Fi is back on, and counts only new spawns. If two or more recur, it
+tries the configured `fseventsd` restart once and refuses the arm check with
+`night_refused_not_quiet`. The t0 admission check, at the planned measurement
+start, only reads the log and refuses above two spawns; it never toggles Wi-Fi
+or delays t0. A failed t0 log read is recorded as not measured, while the
+existing processor-use check still guards the machine.
+
 A cold gate, QPE01-DAEMON-CONTAMINATION-01, ruled on that night in three
 rounds; its packet is
 `docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/`.

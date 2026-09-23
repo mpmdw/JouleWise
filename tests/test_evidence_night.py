@@ -35,6 +35,7 @@ def _census_clean_tempdir(**kwargs):
 
 
 from joulewise import evidence_night as entry
+from joulewise import corecaptured_loop
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,6 +67,40 @@ def _production_sampler_forbidden(*args, **kwargs):
 
 
 _SAMPLER_GUARD = None
+_CORE_GUARD = None
+
+
+def quiet_corecaptured_actuator():
+    quiet = (ROOT / "tests/fixtures/corecaptured/quiet-header-only.log").read_text()
+    return entry.CorecapturedActuator(
+        lambda argv: subprocess.CompletedProcess(argv, 0, quiet, ""),
+        lambda seconds: None, time.time)
+
+
+class FakeCorecapturedActuator:
+    def __init__(self, before, after, now, exit_codes=None):
+        self.logs = [before, after]
+        self.now = now
+        self.commands = []
+        self.sleeps = []
+        self.exit_codes = exit_codes or {}
+
+    def run(self, argv):
+        argv = tuple(argv)
+        self.commands.append(argv)
+        if argv == corecaptured_loop.LOG_ARGV:
+            return subprocess.CompletedProcess(argv, 0, self.logs.pop(0), "")
+        return subprocess.CompletedProcess(argv, self.exit_codes.get(argv[-1], 0), "", "")
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    def clock(self):
+        return self.now
+
+    def actuator(self):
+        return entry.CorecapturedActuator(self.run, self.sleep, self.clock)
 
 
 def setUpModule():
@@ -73,15 +108,19 @@ def setUpModule():
     # `top -l 2 -s 30`.  An AssertionError is outside the families
     # `machine_quiet_check` converts into a refusal, so a stray call fails its
     # test loudly rather than sampling the machine or passing quietly.
-    global _SAMPLER_GUARD
+    global _SAMPLER_GUARD, _CORE_GUARD
     from joulewise import night_gate
     _SAMPLER_GUARD = patch.object(night_gate, "production_interval_observation",
                                   _production_sampler_forbidden)
     _SAMPLER_GUARD.start()
+    _CORE_GUARD = patch.object(entry, "production_corecaptured_actuator",
+                               quiet_corecaptured_actuator)
+    _CORE_GUARD.start()
 
 
 def tearDownModule():
     _SAMPLER_GUARD.stop()
+    _CORE_GUARD.stop()
 
 
 class ProductionSamplerGuardTests(unittest.TestCase):
@@ -716,7 +755,7 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
         (self.canonical / "joulewise").mkdir()
         (self.canonical / "joulewise/__init__.py").write_text("")
-        for name in ("night_gate.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
+        for name in ("night_gate.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
@@ -848,6 +887,61 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(before, {p: after[p] for p in before})
         self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
+
+    def test_corecaptured_arm_toggles_once_and_counts_only_post_toggle_spawns(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"  # five real spawn rows
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, before, now)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = record["checks"]["corecaptured"]
+        self.assertEqual(row["last_10m_spawns"], 5)
+        self.assertEqual(row["post_toggle_spawns"], 0)
+        self.assertEqual(row["remediation"], "wifi_toggled_once")
+        self.assertEqual(fake.sleeps, [8, 180])
+        self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
+        self.assertEqual(sum(argv[-1] == "on" for argv in fake.commands), 1)
+        self.assertEqual(fake.commands.count(corecaptured_loop.LOG_ARGV), 2)
+
+    def test_corecaptured_arm_zero_spawns_does_not_toggle(self):
+        quiet = (ROOT / "tests/fixtures/corecaptured/quiet-header-only.log").read_text()
+        fake = FakeCorecapturedActuator(quiet, quiet, time.time())
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        self.assertEqual(record["checks"]["corecaptured"]["last_10m_spawns"], 0)
+        self.assertEqual(fake.commands, [corecaptured_loop.LOG_ARGV])
+        self.assertEqual(fake.sleeps, [])
+
+    def test_corecaptured_arm_persistence_restarts_once_and_refuses(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, raw, now)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "night_refused_not_quiet: corecaptured"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["post_toggle_spawns"], 2)
+        self.assertEqual(row["fseventsd_restart_exit_code"], 0)
+        self.assertEqual(sum("networksetup" in argv[0] and argv[-1] == "off"
+                             for argv in fake.commands), 1)
+        self.assertEqual(sum(argv[0] == "/usr/bin/sudo" for argv in fake.commands), 1)
+
+    def test_corecaptured_arm_restores_wifi_if_off_command_fails(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, before, now, exit_codes={"off": 1})
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "corecaptured: 5 spawns"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["wifi_off_exit_code"], 1)
+        self.assertEqual(row["wifi_on_exit_code"], 0)
+        self.assertEqual(fake.sleeps, [])
+        self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
+        self.assertEqual(sum(argv[-1] == "on" for argv in fake.commands), 1)
         self.assertFalse(any("launchctl" in str(c) for c in self.calls))
 
     def test_sealed_bytes_checked_before_host_probes(self):
