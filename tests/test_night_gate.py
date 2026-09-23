@@ -1363,11 +1363,28 @@ class EvidenceRegistrationTests(unittest.TestCase):
         # v3 digest is re-pinned because the magistrate-authored
         # `observer_floor.components` text now states that the 30 s load
         # recorder is a sibling of the collector, outside whole.
+        # 2026-09-23 (fix round 1, lens N3): the v3 entry's records gain
+        # ruling 31 and synthesis 35, which its `ruling` string already names.
         # Any membership/metadata amendment needs its cold-gate ruling and a
         # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '1499b108886972e73c6e4361d76b455b31f4846a643248dc2a9896a7daed7dbe')
+                         '8b394f8e3e373cf2fd94493b918ea91a29eff863c66231a29d7a9564c6cd8fae')
+
+    def test_the_v3_entry_cites_every_adopted_cold_gate_record(self):
+        # Fix round 1 (lens N3): the entry's `ruling` names ruling 10 and
+        # ruling 31's reporting limbs as adjudicated by synthesis 35, so its
+        # evidence trail must hold those files; ruling 21 was not adopted
+        # (synthesis 25) and is not cited.
+        packet = ("docs/process_traces/2026-09-22-activation-a022aecc/"
+                  "03-coldgate-packet-daemon-contamination/")
+        records = night_gate.RULED_REGISTRATIONS[night_gate.QPE01_PILOT_REGISTRATION_SHA256]['records']
+        for name in ("10-coldgate-fable-ruling.md", "15-magistrate-synthesis.md",
+                     "25-magistrate-synthesis-round-2.md",
+                     "31-coldgate-fable-observer-floor-design-ruling.md",
+                     "35-magistrate-synthesis-round-3.md"):
+            self.assertIn(packet + name, records)
+        self.assertFalse(any("21-coldgate" in ref for ref in records))
 
     def test_every_ruled_registration_names_tracked_records_that_exist(self):
         # Ruling 61a S4: prose authority is not enough; each entry's records

@@ -57,8 +57,8 @@ D166_REGISTRATION_PATH = (
 # binds EVIDENCE_CHAIN_PATH, never a Python module): the cured Python is
 # pinned per plan by ``measurement_head`` and the plan's evidence manifest
 # (``quiet_predicate_campaign.MANIFEST_PATHS``), not by this digest.
-# 2026-09-23 (cold gate QPE01-DAEMON-CONTAMINATION-01, rulings 10/21/31,
-# syntheses 15/25/35): the current pilot registration is v3.  It adds the
+# 2026-09-23 (cold gate QPE01-DAEMON-CONTAMINATION-01, rulings 10 and 31;
+# syntheses 15, 25 and 35): the current pilot registration is v3.  It adds the
 # `non_observer_process_busy` exclusion and its per-envelope integral, the
 # `t0_non_observer_share_max` gate share, and the corrected `observer_floor`
 # (whole-envelope accounting over the collector's own span, with the v2
@@ -112,7 +112,9 @@ RULED_REGISTRATIONS = {
                     "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md",
                     "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/10-coldgate-fable-ruling.md",
                     "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/15-magistrate-synthesis.md",
-                    "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/25-magistrate-synthesis-round-2.md")},
+                    "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/25-magistrate-synthesis-round-2.md",
+                    "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/31-coldgate-fable-observer-floor-design-ruling.md",
+                    "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/35-magistrate-synthesis-round-3.md")},
 }
 
 
