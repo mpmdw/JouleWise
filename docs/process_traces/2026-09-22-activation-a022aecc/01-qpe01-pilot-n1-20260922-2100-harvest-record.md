@@ -279,6 +279,14 @@ The one number that does not belong to the crowd is envelope 1 at 649.69 J
 against 302–348 J for the rest. Its busy-core median is 2.728 against
 1.206–1.250 for the rest. §6 says why.
 
+### Addendum 2026-09-23 00:20 PDT — the ruled label (cold ruling 10, Q1)
+
+Cold-gate ruling 10 (`03-coldgate-packet-daemon-contamination/10-coldgate-fable-ruling.md`, sealed) affirmed option (c) and fixed the label this record and the paper's pilot section carry, verbatim; the stop-branch sentence quoted in §2 and the field `clean_machine_busy_cores` (which means "envelopes passing census, AC and thermal probes", not an idle-machine distribution) may be quoted only immediately followed by it:
+
+> MEASURED ON A NON-IDLE MACHINE. All twelve envelopes were captured while the system daemon `fseventsd` (pid 341) held 0.998–1.000 busy cores in 243 of 243 load-journal samples that carried metrics (2 of 245 rows carried none), in a `scan_old` failure loop logged from 04:49:03 PDT on 2026-09-22, 16 h before t0; `mediaanalysisd` additionally ran at 1.3–1.8 busy cores in ten consecutive 30 s samples and 0.9 in an eleventh (t+243 s to t+547 s of envelope 1). The registered rules (registration v2, sha256 2c539240…) name no exclusion for non-observer processes, so every envelope is retained and the registered summary is reported as computed. This night is NOT used to size block two; the pilot is re-run under registration v3, which adds the non-observer-process rule fixed before that night runs. Both nights are reported side by side.
+
+Two corrections from the same gate: (i) the t0 gate DID apply the legacy load-average predicate (`evaluate_night` → `_check_machine` with `legacy_load=True`, bar 2.0; tonight's 1.03 passed) — it is the arm `check` that omits it; §6's "what the gates could see" should be read with that correction. (ii) The registered stop cause `observer_floor_above_smallest_holdable_share` fired on the clean 02:17 night too (floor 0.0531 > 0.05) and is independent of any daemon; bounded round 2 (charge 20) rules what registration v3 does about it.
+
 ## §3 Harvest
 
 `cp -Rp` of the whole night root, including `results-clone/`, from C to the
