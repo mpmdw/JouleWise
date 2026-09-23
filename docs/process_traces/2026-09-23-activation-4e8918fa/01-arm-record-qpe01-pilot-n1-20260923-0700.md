@@ -45,19 +45,19 @@ All steps ran from `/Users/edr/code/JouleWise` as `python3 -B -m joulewise.evide
 | 0 | `env \| grep EVIDENCE_POWER_RECORDER` | printed nothing (rc 1) |
 | 0 | `launchctl list \| grep joulewise` before the arm | only `com.joulewise.magistrate`; no night plist on disk |
 | 0 | canonical HEAD | `9e816173`, which contains H (`merge-base --is-ancestor` rc 0). Reflog: fast-forwards at 05:13:10 (to H) and 05:26:40 (to `9e816173`), both before this supervisor started. |
-| 1 | staged bytes against record 09 | `shasum -a 256 night_plan.json prepare.json render/*.plist`: all five digests equal `09-staging-sha256.txt`. There was no re-prepare. |
+| 1 | staged bytes against record 09 | `shasum -a 256 night_plan.json prepare.json render/*.plist`: all five digests equal `09-staging-sha256.txt`. There was no re-prepare. `publish-install` later moved `night_plan.json` to the custody root; its digest is unchanged. |
 | 2 | terminate own MCP helpers | ROOT is 14978 (`claude -p`). TERM went to 14993 (`npm exec @openai/codex@0.153.3 mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false`) and its descendants 15022 (`node …/.bin/codex mcp-server …`) and 15023 (the vendor `codex mcp-server` binary). The descendant scan was empty after one poll. Nothing outside ROOT's subtree was touched. 14996 and 15011 are the pdf MCP server, not a Codex helper; they were left alone, and the census classifies them as own descendants. See divergence 1. |
 | 3 | `check --candidate $STAGE` | rc 0, `armable: true`, `fake_launchctl: false`. All nine checks pass: `sealed`, `night_agents`, `canonical` (fast_forward null), `supervisor` (pid 14974 started 1790166863, after H arrived at 1790165590), `machine_quiet` (bar 0.5 busy cores over a 30.4 s interval; the top consumer was this session at 0.019 cores), `courier`, `retained_roots`, `census` (foreign_pids [], diagnostics []), `retry`. Check id `70c510f35ef9`; the check ran 05:35:52 → 05:36:24. |
 | 4 | `notice --candidate $STAGE` | rc 0. `lifecycle/notice.txt` is 5,719 bytes, sha256 `f29633d1b72dcd2b0a1455613abd042fae8c897a8774f90238ff1d3a5f2cb696`. |
-| 4 | send notice | Gmail `1a0ce4522dbdbf03` accepted at 05:37:12 PDT, to one recipient (`claude2.glaring610@passmail.net`), no cc. The subject is the tool's (`NIGHT NOTICE — qpe01-pilot-n1-20260923-0700 (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt 1`). The body is `notice.txt` verbatim plus exactly the one line below. The exact intended body is kept at `/Users/edr/night-custody/magistrate/intended-arm-notice-4e8918fa.txt` (6,345 bytes, sha256 `0c0550bb…c8c8`). The sent message was read back through Gmail (`get_thread`, plain text) and compared line by line against it. |
+| 4 | send notice | Gmail `1a0ce4522dbdbf03` accepted at 05:37:12 PDT, to one recipient (`claude2.glaring610@passmail.net`), no cc. The subject is the tool's (`NIGHT NOTICE — qpe01-pilot-n1-20260923-0700 (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt 1`). The body is `notice.txt` verbatim plus exactly the one line below. The exact intended body is kept at `/Users/edr/night-custody/magistrate/intended-arm-notice-4e8918fa.txt` (6,348 bytes, sha256 `0c0550bb…c8c8`). The sent message was read back through Gmail (`get_thread`, plain text) and compared line by line against it. |
 | 5 | `veto --candidate $STAGE` | rc 0, `clear: true`, `production: true`. NO, STOP, standdown and directives were all clear, `non_owner_directives: []` (05:37:23). |
-| 6 | `publish-install --candidate $STAGE --notice-accepted 1a0ce4522dbdbf03` | rc 0, `outcome: installed`, `phase: complete`. Published at 05:37:32, 72 min before install close. `plan_sha256` = `6193c6b6…b566`; probe receipt sha256 `c21f9ed9…bdc4`; launchd probe ok. `arm-attempts/000001/` holds `plan.json`, `baseline.json`, `install.json` and `veto-at-publication.json`. `notice_verified: false` is the tool's standing statement that it cannot compare sent bytes; the ca45291d arm record says the same. |
+| 6 | `publish-install --candidate $STAGE --notice-accepted 1a0ce4522dbdbf03` | rc 0, `outcome: installed`, `phase: complete`. Published at 05:37:32, 72 min before install close. `plan_sha256` = `6193c6b6…b566`; probe receipt sha256 `c21f9ed9…bdc4`; launchd probe ok. `lifecycle/arm-attempts/000001/` holds `plan.json`, `baseline.json`, `install.json` and `veto-at-publication.json`. `notice_verified: false` is the tool's standing statement that it cannot compare sent bytes; the ca45291d arm record says the same. |
 | 7 | `verify --candidate $STAGE` | rc 0. `com.joulewise.night` is LOADED, its plist sha256 equals the render sha256 `0604c357…5d65`, and its calendar is Month 9 Day 23 Hour 7 Minute 0. `com.joulewise.night.deadman` is LOADED at `d6cd89ff…1a85`, calendar Hour 10 Minute 35. Baseline drift is false. |
 | 7 | `launchctl list \| grep joulewise` after the arm | `com.joulewise.night`, `com.joulewise.magistrate` and `com.joulewise.night.deadman`, all status 0 and not running |
 
 Lifecycle record digests (sha256): `check.json` `70c510f3…6f17`, `veto.json` `fb438855…34ef`, `install.json`
 `90e7940c…4d9c`, and the verify stdout `7b5ffabb…5d3e`. The verify stdout was not written to `lifecycle/`; it
-was held in `/tmp` and is summarised in step 7.
+is kept as `02-verify-stdout.json` in this directory (sha256 `7b5ffabb…5d3e`) and summarised in step 7.
 
 ## The one appended line (record 01 §3 of 4158e658), pasted exactly as sent
 
@@ -65,8 +65,8 @@ was held in `/tmp` and is summarised in step 7.
 Correction appended by the magistrate (arm gate of activation 4158e658, Sol 6.0 finding F1; the generated text is being fixed in lane NOTICE-SUMMARY-V3-TEXT-01): under registration v3 busy cores are not only descriptive — a process outside the measurement apparatus at or above 0.5 busy cores at the arm check or at t0 refuses the night, one that uses 30 or more core-seconds inside an envelope excludes that envelope, and two such envelopes in a row end the night; the programmed span is 8,020 s (600 s settle + 11 × 620 s slot pitch + 600 s), not 7,800 s; this is attempt 3 of pilot night one, not the first evidence night.
 ```
 
-The line was extracted mechanically from the record at `9e816173`, by the first line beginning `Correction
-appended by the magistrate`.
+The line was extracted mechanically from the record at `9e816173`, by the first line that, after leading
+whitespace, begins `Correction appended by the magistrate`.
 
 ## Divergences recorded, not cured
 

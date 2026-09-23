@@ -1,0 +1,80 @@
+{
+  "baseline": {
+    "added": [],
+    "changed": {},
+    "drift": false,
+    "path": "/Users/edr/night-plan-staging/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/lifecycle/arm-attempts/000001/baseline.json",
+    "removed": []
+  },
+  "fake_launchctl": false,
+  "instruction": "Exit every owned agent and helper strictly before REQUEST; this command does not terminate them.",
+  "jobs": [
+    {
+      "calendar": {
+        "Day": 23,
+        "Hour": 7,
+        "Minute": 0,
+        "Month": 9
+      },
+      "exit_code": 0,
+      "label": "com.joulewise.night",
+      "liveness": "LOADED",
+      "plist": "/Users/edr/Library/LaunchAgents/com.joulewise.night.plist",
+      "plist_sha256": "0604c35714a7555068942353beefb07f272a73e97879d86f6f1cbd7dc68d5d65",
+      "render_sha256": "0604c35714a7555068942353beefb07f272a73e97879d86f6f1cbd7dc68d5d65",
+      "rendered_plist": "/Users/edr/night-plan-staging/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/render/com.joulewise.night.plist",
+      "stderr": "",
+      "stdout": "gui/501/com.joulewise.night = {\n\tactive count = 0\n\tpath = /Users/edr/Library/LaunchAgents/com.joulewise.night.plist\n\ttype = LaunchAgent\n\tstate = not running\n\n\tprogram = /Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1/.venv/bin/python\n\targuments = {\n\t\t/Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1/.venv/bin/python\n\t\t/Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1/scripts/run_night.py\n\t\trun\n\t\t--plan\n\t\t/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night_plan.json\n\t\t--courier-bin\n\t\t/Users/edr/.local/share/claude/versions/2.1.280\n\t}\n\n\tworking directory = /Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1\n\n\tstdout path = /Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night/launchd.night.out\n\tstderr path = /Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night/launchd.night.err\n\tinherited environment = {\n\t\tSSH_AUTH_SOCK => /var/run/com.apple.launchd.0wjjIwnQda/Listeners\n\t}\n\n\tdefault environment = {\n\t\tPATH => /usr/bin:/bin:/usr/sbin:/sbin\n\t}\n\n\tenvironment = {\n\t\tOSLogRateLimit => 64\n\t\tPATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n\t\tXPC_SERVICE_NAME => com.joulewise.night\n\t}\n\n\tdomain = gui/501 [100026]\n\tasid = 100026\n\tminimum runtime = 10\n\texit timeout = 5\n\truns = 0\n\tlast exit code = (never exited)\n\n\tevent triggers = {\n\t\tcom.joulewise.night.268435481 => {\n\t\t\tkeepalive = 0\n\t\t\tservice = com.joulewise.night\n\t\t\tstream = com.apple.launchd.calendarinterval\n\t\t\tmonitor = com.apple.UserEventAgent-Aqua\n\t\t\tdescriptor = {\n\t\t\t\t\"Minute\" => 0\n\t\t\t\t\"Hour\" => 7\n\t\t\t\t\"Day\" => 23\n\t\t\t\t\"Month\" => 9\n\t\t\t}\n\t\t}\n\t}\n\n\tevent channels = {\n\t\t\"com.apple.launchd.calendarinterval\" = {\n\t\t\tport = 0x0\n\t\t\tactive = 0\n\t\t\tmanaged = 1\n\t\t\treset = 0\n\t\t\thide = 0\n\t\t\twatching = 1\n\t\t}\n\t}\n\n\tspawn type = daemon (3)\n\tjetsam priority = 40\n\tjetsam memory limit (active) = (unlimited)\n\tjetsam memory limit (inactive) = (unlimited)\n\tjetsamproperties category = daemon\n\tjetsam thread limit = 32\n\tcpumon = default\n\n\tproperties = inferred program\n}\n"
+    },
+    {
+      "calendar": {
+        "Hour": 10,
+        "Minute": 35
+      },
+      "exit_code": 0,
+      "label": "com.joulewise.night.deadman",
+      "liveness": "LOADED",
+      "plist": "/Users/edr/Library/LaunchAgents/com.joulewise.night.deadman.plist",
+      "plist_sha256": "d6cd89ff4b0eecc37a386315fe12fcd278acac8ea6aaaaceb9eb7a9697951a85",
+      "render_sha256": "d6cd89ff4b0eecc37a386315fe12fcd278acac8ea6aaaaceb9eb7a9697951a85",
+      "rendered_plist": "/Users/edr/night-plan-staging/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/render/com.joulewise.night.deadman.plist",
+      "stderr": "",
+      "stdout": "gui/501/com.joulewise.night.deadman = {\n\tactive count = 0\n\tpath = /Users/edr/Library/LaunchAgents/com.joulewise.night.deadman.plist\n\ttype = LaunchAgent\n\tstate = not running\n\n\tprogram = /Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1/.venv/bin/python\n\targuments = {\n\t\t/Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1/.venv/bin/python\n\t\t/Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1/scripts/run_night.py\n\t\tdead-man\n\t\t--plan\n\t\t/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night_plan.json\n\t\t--courier-bin\n\t\t/Users/edr/.local/share/claude/versions/2.1.280\n\t}\n\n\tworking directory = /Users/edr/JouleWise-measurement-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15-qpe01-pilot-n1\n\n\tstdout path = /Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night/launchd.deadman.out\n\tstderr path = /Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-26fb4280b1e2b3ab5b239884a2c1abbd5f9e1f15/night/launchd.deadman.err\n\tinherited environment = {\n\t\tSSH_AUTH_SOCK => /var/run/com.apple.launchd.0wjjIwnQda/Listeners\n\t}\n\n\tdefault environment = {\n\t\tPATH => /usr/bin:/bin:/usr/sbin:/sbin\n\t}\n\n\tenvironment = {\n\t\tOSLogRateLimit => 64\n\t\tPATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n\t\tXPC_SERVICE_NAME => com.joulewise.night.deadman\n\t}\n\n\tdomain = gui/501 [100026]\n\tasid = 100026\n\tminimum runtime = 10\n\texit timeout = 5\n\truns = 0\n\tlast exit code = (never exited)\n\n\tevent triggers = {\n\t\tcom.joulewise.night.deadman.268435482 => {\n\t\t\tkeepalive = 0\n\t\t\tservice = com.joulewise.night.deadman\n\t\t\tstream = com.apple.launchd.calendarinterval\n\t\t\tmonitor = com.apple.UserEventAgent-Aqua\n\t\t\tdescriptor = {\n\t\t\t\t\"Minute\" => 35\n\t\t\t\t\"Hour\" => 10\n\t\t\t}\n\t\t}\n\t}\n\n\tevent channels = {\n\t\t\"com.apple.launchd.calendarinterval\" = {\n\t\t\tport = 0x0\n\t\t\tactive = 0\n\t\t\tmanaged = 1\n\t\t\treset = 0\n\t\t\thide = 0\n\t\t\twatching = 1\n\t\t}\n\t}\n\n\tspawn type = daemon (3)\n\tjetsam priority = 40\n\tjetsam memory limit (active) = (unlimited)\n\tjetsam memory limit (inactive) = (unlimited)\n\tjetsamproperties category = daemon\n\tjetsam thread limit = 32\n\tcpumon = default\n\n\tproperties = inferred program\n}\n"
+    }
+  ],
+  "launchctl_bin": "launchctl",
+  "request_epoch_s": 1790171520.0,
+  "schedule": {
+    "boundaries": {
+      "KILL": 1790171700.0,
+      "REQUEST / exit BEFORE": 1790171520.0,
+      "TERM": 1790171640.0,
+      "completion / courier deadline": 1790181300.0,
+      "daily dead-man": 1790184900.0,
+      "install close EXCLUDED": 1790171400.0,
+      "t0": 1790172000.0,
+      "window end": 1790181000.0
+    },
+    "deadman_calendar": {
+      "Hour": 10,
+      "Minute": 35
+    },
+    "deadman_epoch_s": 1790184900.0,
+    "install_close_epoch_s": 1790171400.0,
+    "install_spans_today": [
+      [
+        1790146800.0,
+        1790233200.0
+      ]
+    ],
+    "night_calendar": {
+      "Day": 23,
+      "Hour": 7,
+      "Minute": 0,
+      "Month": 9
+    },
+    "t0_epoch_s": 1790172000.0
+  },
+  "schema": "joulewise.evidence_verify.v1",
+  "verified_epoch_s": 1790167062.459975
+}
