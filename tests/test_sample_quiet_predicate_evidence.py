@@ -1982,3 +1982,46 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
             stamps["pre_spawn"].monotonic_before_s + elapsed[0] / 1e9,
             stamps["first_parse"].monotonic_after_s,
             "the deriver would call this stream clock_stamp_invalid")
+
+    def test_R7_auto_mode_keeps_the_archived_cadence_after_the_first_wait(self):
+        # The delta lens's mutation B: with the cadence base left at spawn while
+        # frame 1 waits for the shifted wall target (up to a whole second of K
+        # rounding), frames 2..n are already overdue and fire back to back
+        # (0.0002 s apart, measured) while every other test stays green.  The
+        # re-seat of the base to `due - elapsed[0]` is what keeps the archived
+        # cadence, and this pin is what keeps the re-seat.  Tolerance +-0.08 s
+        # against a measured spread of 0.237-0.279 s; never R3's 0.25 s.
+        elapsed = self.archived_elapsed_ns()
+        # Launch phase is what decides whether the defect shows: the feeder
+        # computes K = ceil(now - endpoint) right after spawn (before any
+        # wait), and frame 1 then waits 1 - frac(now - endpoint) seconds for
+        # the shifted wall target when that is later than its causality
+        # floor.  Only a wait longer than elapsed[1] + elapsed[2] (~0.52 s)
+        # leaves frames 2..3 overdue under the mutation.  Spawn when
+        # frac(now - endpoint) has just passed a whole second (0.01-0.04), so
+        # the wait is ~0.95 s: the kill is deterministic, not a coin toss.
+        import time as time_module
+        session = json.loads((self.FIXTURE / "envelope-01" / "session.json").read_text())
+        endpoint = session["power"]["anchor"]["first_sample_end_point_epoch_s"]
+        deadline = time_module.monotonic() + 1.5
+        while not (0.01 <= (time_module.time() - endpoint) % 1.0 <= 0.04):
+            if time_module.monotonic() > deadline:
+                break
+            time_module.sleep(0.002)
+        with tempfile.TemporaryDirectory() as tmp:
+            spawn, arrivals, sidecar = self.feed_watching_arrivals(tmp, "auto", 3)
+            record = json.loads(sidecar.read_text())
+        self.assertEqual(len(arrivals), 3)
+        self.assertGreaterEqual(record["first_write_delay_s"], 0.6,
+                                "launch phase did not produce the long first wait this pin needs")
+        cumulative = 0.0
+        for index, (arrival, elapsed_ns) in enumerate(zip(arrivals, elapsed)):
+            cumulative += elapsed_ns / 1e9
+            self.assertGreaterEqual(arrival - spawn, cumulative - 0.02,
+                                    f"frame {index + 1} arrived before its own accumulation")
+        for index in (1, 2):
+            delta = arrivals[index] - arrivals[index - 1]
+            self.assertAlmostEqual(delta, elapsed[index] / 1e9, delta=0.08,
+                                   msg=f"frame {index + 1} cadence lost under auto")
+        self.assertEqual(record["label_shift"], "auto")
+        self.assertGreaterEqual(record["first_write_delay_s"], record["first_frame_elapsed_s"] - 0.02)
