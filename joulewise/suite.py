@@ -552,6 +552,7 @@ class BenchmarkImport:
     tokenizer_json_sha256: str
     tokenizer_id: str
     rendered_with: BenchmarkRenderedWith
+    source_files: list[dict[str, Any]] | None = None
 
     @classmethod
     def from_mapping(cls, data: Any) -> "BenchmarkImport":
@@ -579,6 +580,7 @@ class BenchmarkImport:
             "tokenizer_json_sha256",
             "tokenizer_id",
             "rendered_with",
+            "source_files",
         }
         _reject_unknown(data, allowed, "benchmark_import")
         selected_item_ids = _require_list(
@@ -615,6 +617,37 @@ class BenchmarkImport:
         enable_thinking = data.get("enable_thinking")
         if not isinstance(enable_thinking, bool):
             raise SchemaError("benchmark_import.enable_thinking must be a boolean")
+        source_files = None
+        if "source_files" in data:
+            raw_files = _require_list(data["source_files"], "benchmark_import.source_files")
+            if not raw_files:
+                raise SchemaError("benchmark_import.source_files must not be empty")
+            source_files = []
+            seen_paths: set[str] = set()
+            for index, raw_file in enumerate(raw_files):
+                field = f"benchmark_import.source_files[{index}]"
+                raw_file = _require_mapping(raw_file, field)
+                _reject_unknown(raw_file, {"path", "sha256", "bytes", "line_count", "git_blob_sha1", "lfs_pointer_blob_sha1", "license_blob_sha1"}, field)
+                path = _require_string(raw_file.get("path"), f"{field}.path")
+                if path in seen_paths:
+                    raise SchemaError(f"{field}.path must be unique")
+                seen_paths.add(path)
+                source_files.append({
+                    "path": path,
+                    "sha256": _require_hex_digest(raw_file.get("sha256"), f"{field}.sha256", 64),
+                    "bytes": _positive_int(raw_file.get("bytes"), f"{field}.bytes"),
+                    "line_count": _positive_int(raw_file.get("line_count"), f"{field}.line_count"),
+                    "git_blob_sha1": _require_hex_digest(raw_file.get("git_blob_sha1"), f"{field}.git_blob_sha1", 40),
+                    "lfs_pointer_blob_sha1": (
+                        None if raw_file.get("lfs_pointer_blob_sha1") is None
+                        else _require_hex_digest(raw_file["lfs_pointer_blob_sha1"], f"{field}.lfs_pointer_blob_sha1", 40)
+                    ),
+                    "license_blob_sha1": _require_hex_digest(raw_file.get("license_blob_sha1"), f"{field}.license_blob_sha1", 40),
+                })
+            primary = source_files[0]
+            for source_field, legacy_field in (("path", "file_path"), ("sha256", "file_sha256"), ("git_blob_sha1", "file_git_blob_sha1"), ("license_blob_sha1", "license_blob_sha1")):
+                if primary[source_field] != data.get(legacy_field):
+                    raise SchemaError(f"benchmark_import.source_files[0].{source_field} must match benchmark_import.{legacy_field}")
         return cls(
             dataset=_require_string(data.get("dataset"), "benchmark_import.dataset"),
             split=_require_string(data.get("split"), "benchmark_import.split"),
@@ -683,10 +716,14 @@ class BenchmarkImport:
             rendered_with=BenchmarkRenderedWith.from_mapping(
                 data.get("rendered_with")
             ),
+            source_files=source_files,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return _plain_dataclass_dict(asdict(self))
+        result = _plain_dataclass_dict(asdict(self))
+        if self.source_files is None:
+            result.pop("source_files")
+        return result
 
 
 @dataclass(frozen=True)

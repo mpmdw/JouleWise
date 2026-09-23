@@ -1,0 +1,4625 @@
+{
+  "population": {
+    "cells": {
+      "1": {
+        "Algebra": 128,
+        "Counting & Probability": 38,
+        "Geometry": 35,
+        "Intermediate Algebra": 32,
+        "Number Theory": 30,
+        "Prealgebra": 83,
+        "Precalculus": 35
+      },
+      "2": {
+        "Algebra": 178,
+        "Counting & Probability": 100,
+        "Geometry": 65,
+        "Intermediate Algebra": 81,
+        "Number Theory": 83,
+        "Prealgebra": 171,
+        "Precalculus": 55
+      },
+      "3": {
+        "Algebra": 229,
+        "Counting & Probability": 99,
+        "Geometry": 75,
+        "Intermediate Algebra": 137,
+        "Number Theory": 109,
+        "Prealgebra": 211,
+        "Precalculus": 64
+      },
+      "4": {
+        "Algebra": 250,
+        "Counting & Probability": 109,
+        "Geometry": 82,
+        "Intermediate Algebra": 174,
+        "Number Theory": 130,
+        "Prealgebra": 172,
+        "Precalculus": 50
+      },
+      "5": {
+        "Algebra": 248,
+        "Counting & Probability": 121,
+        "Geometry": 88,
+        "Intermediate Algebra": 199,
+        "Number Theory": 149,
+        "Prealgebra": 162,
+        "Precalculus": 68
+      }
+    },
+    "eligible": 4040,
+    "excluded": {
+      "duplicate_unique_id": 2,
+      "gold_not_rational": 954,
+      "plain_comma_gold": 5
+    },
+    "levels": {
+      "1": {
+        "eligible": 381,
+        "nonduplicate": 437,
+        "retention": 0.8718535469107551
+      },
+      "2": {
+        "eligible": 733,
+        "nonduplicate": 894,
+        "retention": 0.819910514541387
+      },
+      "3": {
+        "eligible": 924,
+        "nonduplicate": 1130,
+        "retention": 0.8176991150442477
+      },
+      "4": {
+        "eligible": 967,
+        "nonduplicate": 1214,
+        "retention": 0.7965403624382208
+      },
+      "5": {
+        "eligible": 1035,
+        "nonduplicate": 1324,
+        "retention": 0.7817220543806647
+      }
+    },
+    "raw_distinct_ids": 5000,
+    "reference_self_check": "4040/4040",
+    "rows": 5001,
+    "unique_ids": 4999
+  },
+  "schema_version": "math_hash_only_bundle.v1",
+  "set_hashes": {
+    "n128": "1caaf115ac3e775d905be197bbdf63fb2f2b28b92cb7bac5cd46d044dc65aefa",
+    "n64": "face9ab2eae3d9b0abf2d87ae83f4d1264d6951a8d9706ebc6ff7f147de81430",
+    "pilot": "d6a1671839efd2b99a3146f6f67be50d9b2cb57bff89704b630d17f7bd91d17c"
+  },
+  "sets": {
+    "n128": {
+      "commit": "7ecc794703b2877f63226f2477a49b34f9b25163",
+      "dataset": "math",
+      "enable_thinking": false,
+      "items": [
+        {
+          "item_id": "math_test_counting_and_probability_374",
+          "source_sha256": "54a35e01011ef567b628d3d54844563a4661a15bb76e349712482509ebbf4c24"
+        },
+        {
+          "item_id": "math_test_geometry_57",
+          "source_sha256": "3e691b72f808f176dce6015fe1544b077e8499073b22644d87de021a52379415"
+        },
+        {
+          "item_id": "math_test_algebra_1498",
+          "source_sha256": "3ccb79927bfbd542e7c6540140b37f377c71af98c79b540d93b6900e3c8282ec"
+        },
+        {
+          "item_id": "math_test_number_theory_335",
+          "source_sha256": "133ff61f147d70e6f4ed8959f134ebfb587b97c7db2071fc4492dc2f3c666d60"
+        },
+        {
+          "item_id": "math_test_prealgebra_211",
+          "source_sha256": "275742c7ba0a0a40df7992d5ca6a330e4f2a324bde3d74c249839be2c9073a25"
+        },
+        {
+          "item_id": "math_test_precalculus_281",
+          "source_sha256": "3ba51a81d6f1f7dae0e8cda99dc779aec0955886de3038430067e9d165b5458b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_398",
+          "source_sha256": "bc864420ca5ebc6ebcbb20350ec5c275f4c137edcf8d16522b9dc6d204601ad0"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_0",
+          "source_sha256": "87a0acba90961d101ea48588f943cfea05c8dc6d07b582e76937be6e04a86aa2"
+        },
+        {
+          "item_id": "math_test_number_theory_1124",
+          "source_sha256": "f12277829dbfc6fb3476d6e7a079b7406fd3855ef9d4b8bcba4658e88a51fa36"
+        },
+        {
+          "item_id": "math_test_prealgebra_1483",
+          "source_sha256": "06c555f880fb3ba8d82ff573108144d15a1b9605152e7a1c5859ef63dc72a8ee"
+        },
+        {
+          "item_id": "math_test_algebra_478",
+          "source_sha256": "284927d1ff71e90c4d8054dc4250e85be97102c7c5db23922c4ffefcaf54edf3"
+        },
+        {
+          "item_id": "math_test_precalculus_464",
+          "source_sha256": "46afaa5a9c92cc6e4af543b865a0a18002245b8669bcd50e4f29d11ad280140d"
+        },
+        {
+          "item_id": "math_test_geometry_808",
+          "source_sha256": "cdd851588f7693ecb32135f6d1dcb650c0445e269b99b20a2caddee7556a5dfd"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_611",
+          "source_sha256": "9d0ed6814734d726cdb7ecd7a8b001eefb47005f7330e051d339952faf4dda34"
+        },
+        {
+          "item_id": "math_test_prealgebra_768",
+          "source_sha256": "09f20b7fe3533e20a8c44f217be74126ec72a5bd80f62df22ab622c9d3b64164"
+        },
+        {
+          "item_id": "math_test_number_theory_612",
+          "source_sha256": "2ecfd125b0cf9bb28c76f4bfeb0b398128127dd609d6aace66608f5b5d7bbabd"
+        },
+        {
+          "item_id": "math_test_algebra_15",
+          "source_sha256": "7bfd09a5b3b3594e6c6294ec5f160d5ce749e9d17c4185ae7e75f65c5dae3872"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_323",
+          "source_sha256": "a2c4ca921a4b4aefa0f61bc261d1a24b66abf24f41899869ce6e1d2cc2e3c110"
+        },
+        {
+          "item_id": "math_test_geometry_190",
+          "source_sha256": "b15548ffca2da9d04aa92420995f86f444504b5f690cc8f4c31627e9abf77ea8"
+        },
+        {
+          "item_id": "math_test_precalculus_192",
+          "source_sha256": "f4fe952bf73ca1082c54a3d5d313e54c8611171fd84a39d99bbfbfd0b10efa96"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1231",
+          "source_sha256": "5c8d9bada0183434b932285897e44c172f77463dc55e8dc94c48d724894ddaf4"
+        },
+        {
+          "item_id": "math_test_prealgebra_2084",
+          "source_sha256": "1c8c7cc86af1cb9a39dfdef44fd46f12c527853908dd5cdb26f5962e0ab64ea6"
+        },
+        {
+          "item_id": "math_test_algebra_2015",
+          "source_sha256": "bb93e1ff715b50a2c11c6e08fb1322a4c95ed00ef694209b304eef74f019baa2"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_453",
+          "source_sha256": "d09d8a4de358661268007f9d4d87346ce8196beb2df5395c3ee1c38920a9b192"
+        },
+        {
+          "item_id": "math_test_precalculus_1193",
+          "source_sha256": "c8c91e4ccd5d75adb1f6537894e1109c1cdbb79a463b3ed6b1a90d18d71d5bcf"
+        },
+        {
+          "item_id": "math_test_number_theory_132",
+          "source_sha256": "35470aa1a1089f839629277ce60ea0d26ac996c6b043c64309756f5d03ecd41e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1959",
+          "source_sha256": "5104eb8417c2bbc57328d814092d2b724d861af9b1cc199e537414f84bffe89c"
+        },
+        {
+          "item_id": "math_test_geometry_296",
+          "source_sha256": "7d8bc4beed40ecedeef6e854a48458fa91a46874d8e124830d71d0378d9d70d3"
+        },
+        {
+          "item_id": "math_test_prealgebra_1212",
+          "source_sha256": "d4bd5021ef768bbc70d4707069294a28e122d3cff932913436d18b770ea820e3"
+        },
+        {
+          "item_id": "math_test_algebra_104",
+          "source_sha256": "060ba898f5100fab876047e5345d2719a446a604c077d4c36e6f60fcdde251d5"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_114",
+          "source_sha256": "0866754f4a50677d7e77c0995742609169214473d455553cd9ca9f44babcaefa"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_976",
+          "source_sha256": "e703f4b73bd2683c12014e2ba90b89adc758f0714fb2df15fb7a50020d766871"
+        },
+        {
+          "item_id": "math_test_precalculus_19",
+          "source_sha256": "3011e09ef5937d0995c2e333732bff621389fe88e37d97f740794c7e05d12974"
+        },
+        {
+          "item_id": "math_test_number_theory_606",
+          "source_sha256": "f8357e3b0d2a73d21acde6e6401649115a4692ec537e665cd3c70a38fb3260d8"
+        },
+        {
+          "item_id": "math_test_geometry_15",
+          "source_sha256": "dd121ed57ab094d437ab23b72b163aa02cbd9e14b2017284c3e31fe12b6cc47f"
+        },
+        {
+          "item_id": "math_test_prealgebra_946",
+          "source_sha256": "8b16e4dab084c8cd0e33b3b4a1071e12144be04b39010cb1db71f82a67b94ea9"
+        },
+        {
+          "item_id": "math_test_algebra_2082",
+          "source_sha256": "5b0690b405ae56e539c5f5963a83d99919d652d9fb2a4edf922dc10652012d7a"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1076",
+          "source_sha256": "90b9069018b016a063ce397aa75bf99d8542d0ff418b21561443564c10b3d18b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_441",
+          "source_sha256": "764f667fa2f2af3c459d4c535b169299395b1782add130718013d3ba8e75e5ce"
+        },
+        {
+          "item_id": "math_test_geometry_154",
+          "source_sha256": "ef677a64b1e08effaba641d36ae8534b8eb118f18122e80136dbed8ebfb8c8e4"
+        },
+        {
+          "item_id": "math_test_number_theory_293",
+          "source_sha256": "a58f5f574df70e0fd8b19e96e9f07f73b9a74c28347c5e1708f0fa230ff70b85"
+        },
+        {
+          "item_id": "math_test_precalculus_566",
+          "source_sha256": "185e90599e62a31171a8585b500aa0362fbbc0a8ad639dd3c777d09b2e2657f3"
+        },
+        {
+          "item_id": "math_test_prealgebra_1510",
+          "source_sha256": "778b1c86814f6dc38e655fe017d4a2ea980b49d861f0695a32f3277d3c12bf84"
+        },
+        {
+          "item_id": "math_test_algebra_1800",
+          "source_sha256": "f66e9a22dd4570d0cc7a25968c8606c3ab2e47dad123c65ee0b2e01df722261c"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_275",
+          "source_sha256": "fdde2730797d777b8bb0a023d233eaee4425b597b1c92088b6e476cd960caff2"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1269",
+          "source_sha256": "b82c43ec2321c84544b7e8bbfaeeb0ec6dbd4f6af95c6058f46ae1b178d0d337"
+        },
+        {
+          "item_id": "math_test_geometry_713",
+          "source_sha256": "2854d95ca355d66eedca14e55578e0489ee1843e3e368ba169d50150570fb554"
+        },
+        {
+          "item_id": "math_test_number_theory_554",
+          "source_sha256": "ad997836e4b00e75c4d9ab5d99fbffbc52ba5443fc2ea46b0c4fb97fe3e7c6a5"
+        },
+        {
+          "item_id": "math_test_precalculus_30",
+          "source_sha256": "54bb619b505548210d25feb966e0e842ae150e02f23be3ba2e7041066226bb04"
+        },
+        {
+          "item_id": "math_test_prealgebra_1716",
+          "source_sha256": "8244d3c7734649413178895d6763f101ef5d803bed475b722cfbee15806ba480"
+        },
+        {
+          "item_id": "math_test_algebra_171",
+          "source_sha256": "6f5ffa4ce76bf926ba47e77129c844cc6949cf199f7eb7797b0583a978de64b8"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_184",
+          "source_sha256": "95819588cc06621fa837fb6e86ca03b1c7fc811be15ee9f6a6a39f603b6ea798"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1449",
+          "source_sha256": "0eee0a0ce183e52da6603c0a41a2c793331858730e1189695ae6d207936cd22e"
+        },
+        {
+          "item_id": "math_test_geometry_17",
+          "source_sha256": "28aa27ca9cb388f22c6c7d194182e44807f88297a4fd78dad102b09f6e28ac19"
+        },
+        {
+          "item_id": "math_test_number_theory_102",
+          "source_sha256": "a02a628663d139920c6ed94bee9d0a8f05d51b5b258df739167cef5654f88aff"
+        },
+        {
+          "item_id": "math_test_precalculus_1070",
+          "source_sha256": "c6e88406145150225277441bf1fb6beefd8b9012dec9468ad46ce1a0cfb951a4"
+        },
+        {
+          "item_id": "math_test_prealgebra_1048",
+          "source_sha256": "3ce5718b926d3d4be6cd3cb805c7bb6de5c6c27c3a478ada3c502a91933cfee2"
+        },
+        {
+          "item_id": "math_test_algebra_969",
+          "source_sha256": "ce5feabad8f57e25893b8fc5216f00010eefe1ad849139ef5fcea219a52fc931"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_176",
+          "source_sha256": "5fea184e2dd34e7688882dd9f58561afbe14efb4997dbb13df67a4959bf194e9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_174",
+          "source_sha256": "eb6d604480b3b189ab8fe81c3400e280631cdee8a7aa39cb7df1de321be84767"
+        },
+        {
+          "item_id": "math_test_number_theory_640",
+          "source_sha256": "ba8192b3da3059fbcec450b734d3daf58b6e0293b31f01478210e47757bb7d15"
+        },
+        {
+          "item_id": "math_test_precalculus_423",
+          "source_sha256": "eec5367eacf34ef62f9fb61102b156a38698603a29db537de9c580fa0022a0be"
+        },
+        {
+          "item_id": "math_test_geometry_83",
+          "source_sha256": "50deb57179d383a5159072c39b0a40c72f0d36effe1d799607b51633fa25aff5"
+        },
+        {
+          "item_id": "math_test_prealgebra_1639",
+          "source_sha256": "5a9964494f7e7c3f637526c262d1de6437d0d981ecbefef7393371ca6927abeb"
+        },
+        {
+          "item_id": "math_test_algebra_1904",
+          "source_sha256": "1887e49e827f00114b44262cecc5f553c27cb7715407e227c49addd6d5535117"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_409",
+          "source_sha256": "d907d89a8b29879cc63499ce6c0e7e499be1f24bb8e4bba256b1cbd578dbaae1"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_472",
+          "source_sha256": "e12a93170bc00f83238910ae7f8e6e313c363312dc9438197dfde17bcbaa94ca"
+        },
+        {
+          "item_id": "math_test_number_theory_299",
+          "source_sha256": "f6fda19245d86e5caa94122332e67d1506bfa911707987690b61e54bc3bbf6b5"
+        },
+        {
+          "item_id": "math_test_geometry_421",
+          "source_sha256": "8761da118deaf29234c8d70fcca9e67b87a94840f468d08e43ddd058b1521e81"
+        },
+        {
+          "item_id": "math_test_precalculus_1282",
+          "source_sha256": "d1def491e47bc98c8c21225295ba3dde0efb81c4e6dde699d6f9e796c184e1b3"
+        },
+        {
+          "item_id": "math_test_prealgebra_1536",
+          "source_sha256": "8c90037f5239ca06d73833c5bb3588fa687ff5bfb07147e805a6288b52f7dc64"
+        },
+        {
+          "item_id": "math_test_algebra_1982",
+          "source_sha256": "3500b41efba264cb07f15e663aa29f13bc57002af639e5c361a4ec4f52792686"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_726",
+          "source_sha256": "e5a5254e5381641fed68b14b538f72108d34e914c34a97f73cf3f293d4c38ea2"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_999",
+          "source_sha256": "34cbee6b49dbaa6c339569e812a8e43a1b9e025812b48611822513bcf7154cf6"
+        },
+        {
+          "item_id": "math_test_geometry_823",
+          "source_sha256": "7704cf8fd3f46f3bae21d00197551758839971e4ead4b0198b75a25658c72cec"
+        },
+        {
+          "item_id": "math_test_precalculus_126",
+          "source_sha256": "54ff419222f2fa7db5790ae385efaa7ccba5466c5c55309cb6802606ee431073"
+        },
+        {
+          "item_id": "math_test_number_theory_185",
+          "source_sha256": "26d6fb9ecee5db0d10aa2b9c434340cb3090c9b7043c7ee76c7bbd7c0c026b56"
+        },
+        {
+          "item_id": "math_test_algebra_651",
+          "source_sha256": "95959645e81b564b109c5fcb3b311e2032832be86dc5e8699ef68f3b53206b49"
+        },
+        {
+          "item_id": "math_test_prealgebra_1122",
+          "source_sha256": "cec0f0013c1627707e231eed25e120427c7e96d9754ed11af7a98e15eab6b383"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_497",
+          "source_sha256": "d52c87ecd7451aba0b6b049891c39128da43b69e3d6c1566006aae160cef03fa"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_247",
+          "source_sha256": "4e7af51bce67a4394f2925f682e8b9769be4682ff13814232b174b73078ed67c"
+        },
+        {
+          "item_id": "math_test_precalculus_623",
+          "source_sha256": "79b8315ab5d742eca5af8b2706a55dce71f03fbe8d7d5a4299b102c8f2da4585"
+        },
+        {
+          "item_id": "math_test_geometry_310",
+          "source_sha256": "a513f748b177fdcb20d869acb183b41b33365450ace4c6424eb28c3190227018"
+        },
+        {
+          "item_id": "math_test_number_theory_1222",
+          "source_sha256": "cf0f7e2b4704130e4b7d024b5879270f3699b646dd17ea2c3d15c63d5dcad2d7"
+        },
+        {
+          "item_id": "math_test_algebra_419",
+          "source_sha256": "9d4ffe8d0581267f0a23ab057110667c1ebc399404a0d5b77c56efb4b7c52d37"
+        },
+        {
+          "item_id": "math_test_prealgebra_1796",
+          "source_sha256": "885b9dd80a6d42ce715b33683ba51b74625f976e8b2da0ce4841a92fd065f514"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_246",
+          "source_sha256": "b0847060b8e31a986c37737e9ab639083553da58d69c830dec4a4eae2e91bbe5"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_804",
+          "source_sha256": "4a239c6580d56b1975ec311067e78af915ff270137c9e47cbd0bb7e1f8299781"
+        },
+        {
+          "item_id": "math_test_geometry_195",
+          "source_sha256": "87bf87e0f42ecc73b55e3eee8b8d6016f5e60436fe06e37bb3634a1d0573f453"
+        },
+        {
+          "item_id": "math_test_number_theory_696",
+          "source_sha256": "ccb47d192714cebec037b986e1dd48e9dee4878a0a44aa8616455f723b073f95"
+        },
+        {
+          "item_id": "math_test_precalculus_300",
+          "source_sha256": "bcedcb84a2ee87e99d049569f287c4b3b43f98fd41175693ec877ceec0782623"
+        },
+        {
+          "item_id": "math_test_algebra_2100",
+          "source_sha256": "65f4d92f5152774e10b8c8a6eabc50792117b01b50d071506d4f4a79a83f8dc2"
+        },
+        {
+          "item_id": "math_test_prealgebra_1448",
+          "source_sha256": "6da106e54c3e92e012d2577bc11375acc4fbb8375dda27a8253ce82165ed9df7"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1069",
+          "source_sha256": "b8a19f7c084f33ec163d0547c99d4faede790eb781cac1aa622a029e06351362"
+        },
+        {
+          "item_id": "math_test_geometry_134",
+          "source_sha256": "b66a343dc6a871baf73fd2702e23fff96db466cbdc974b2e49d17dfca3202255"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_596",
+          "source_sha256": "104e68cd56fb77d908843a401c9a79b97154f1acd96e3000bbe810fb7aa35375"
+        },
+        {
+          "item_id": "math_test_number_theory_342",
+          "source_sha256": "523ca9ee6568632f3222aba557785b56d3e13b75a8894ed19f5b6cf8489e7187"
+        },
+        {
+          "item_id": "math_test_precalculus_1142",
+          "source_sha256": "d09694e4613af3a32987d27a48f777166f85b20a3e24c5c6bf557c8ea957c862"
+        },
+        {
+          "item_id": "math_test_algebra_1214",
+          "source_sha256": "0f03d8b8237284db7c0e171ab623c045fa92a85d3de2f6ae285063cf49dcbbf4"
+        },
+        {
+          "item_id": "math_test_prealgebra_1747",
+          "source_sha256": "b25d8bead5dd50b02aa251af99126814876dae20895ca4a38200bf3f9ee717ea"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_709",
+          "source_sha256": "ca42f8ea54683042b5f2b11739e5e69d9cf68cae2c3af12e1ad3fd6f2d49c035"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_14",
+          "source_sha256": "3bbe7c98aab5494b270f40df31ad31d2eda962507fa73390626f38d2c0d49851"
+        },
+        {
+          "item_id": "math_test_geometry_95",
+          "source_sha256": "763af9988d17368fb21364329b9a55697c13af1b92e47501ede06092b4f79c24"
+        },
+        {
+          "item_id": "math_test_precalculus_833",
+          "source_sha256": "eb995c3a16da2a221e52af9386adc173a37e776cdf5a0678c83343734b20bd5c"
+        },
+        {
+          "item_id": "math_test_number_theory_5",
+          "source_sha256": "86dc2d6ff021af1f6bdf3e53e27014ccc806559d9e891c2ed0bc2a55f169daaf"
+        },
+        {
+          "item_id": "math_test_algebra_1375",
+          "source_sha256": "2a7c037029bcff1496539786ddade164eee56bc90d976eb1bf9a15cd4f0d6194"
+        },
+        {
+          "item_id": "math_test_prealgebra_1792",
+          "source_sha256": "1a9db2d8630828836a24357df4c9093821d584faa4315ef381ab29ab7db826a3"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1897",
+          "source_sha256": "962cf23c2e16efa353ecdaf5ad0c06d3f292d39b819be66525ba4e98a4e1cea5"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_474",
+          "source_sha256": "ca83a4e746da95ab89c18d7ad8d354cc1bcbd8b93471489e6155a00f996ceecc"
+        },
+        {
+          "item_id": "math_test_geometry_645",
+          "source_sha256": "bf5d6ca5cf0af5cd3ec6b3f9d035b0030959e363341fed63a4c0bf2abeec8c66"
+        },
+        {
+          "item_id": "math_test_precalculus_56",
+          "source_sha256": "ce8871ad44e9e12574d22ae333e484650032b4fc9dde934ad94c3cc4639c155c"
+        },
+        {
+          "item_id": "math_test_number_theory_254",
+          "source_sha256": "7ad1067e6750d106063645c0ba69a5835453ee2c042af7e58065bb362414ba01"
+        },
+        {
+          "item_id": "math_test_algebra_1422",
+          "source_sha256": "564f1f6ceb5503a49ebbc84964972d5600bfd6f8f2201dd09c70d466206cbb51"
+        },
+        {
+          "item_id": "math_test_prealgebra_1829",
+          "source_sha256": "d61de81cf94f62e30e5293c325bd7cb96ecf9e63405799d5f3035e826c7f3e25"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_134",
+          "source_sha256": "8908fea7448e1d11827ebe5c37cb4343c2f11d2107e1f364fcaa0c26cb6bc1be"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_182",
+          "source_sha256": "2a03c66c16a986781d86521f805bbd50ebad3901b0bdd63a89dfeb985f31c804"
+        },
+        {
+          "item_id": "math_test_geometry_574",
+          "source_sha256": "49fe1c1bd15951c036f62ae511e6e4630f5262f9b69c880bb65aab65e4959695"
+        },
+        {
+          "item_id": "math_test_precalculus_508",
+          "source_sha256": "83d981f4465ae8f4a10d18bd937c054516a0b6d10549a1d892a65a02fb218b92"
+        },
+        {
+          "item_id": "math_test_number_theory_622",
+          "source_sha256": "5610bfab54dc013f125823bda7f1217bf177fe1c8ec47a44301ef2af51c7b864"
+        },
+        {
+          "item_id": "math_test_algebra_852",
+          "source_sha256": "b1e802e57518c9b9e6b69a18f69feb6312a37727597d1de4a12023bd5c06b637"
+        },
+        {
+          "item_id": "math_test_prealgebra_379",
+          "source_sha256": "0adbb11098bc68581290c79f536a709caadd87c066d81791691a47bfd357c9d6"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_337",
+          "source_sha256": "56442dc85c96743821f4f26603abdb42aeabc72d5ee0cd3ebe4e8c5d2cf222bd"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_289",
+          "source_sha256": "ea3e6b8cc91d33f53b4858948ae66b00d19359dd7163463cff3d53b6588fc0a7"
+        },
+        {
+          "item_id": "math_test_geometry_484",
+          "source_sha256": "7ee036d6a3328ce9896424afdea39de60bdedf974807148cfa6eeb0d05fab069"
+        },
+        {
+          "item_id": "math_test_precalculus_1289",
+          "source_sha256": "89e393bd398e9efc5f11641892bdc774a360fda1a7c49079b27b93beec889635"
+        },
+        {
+          "item_id": "math_test_number_theory_81",
+          "source_sha256": "628dfbee56bcc9e3125f81acf818fc40d0ca2b52e9ab50ff7cfd7d2d838456c7"
+        },
+        {
+          "item_id": "math_test_algebra_2235",
+          "source_sha256": "838cfe885e2f62f449e6c3e86af7a9a91ed313293b586a638fd06fa659a87e3f"
+        },
+        {
+          "item_id": "math_test_prealgebra_1928",
+          "source_sha256": "f202d6a4cd48791f45dee77d1984d200c2235e84dd80c04dc94858eeec0a1c8e"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_624",
+          "source_sha256": "718f7169ab403e7991fd305f59d4fb032927ab5490f12d2bcea31a126f2539c4"
+        },
+        {
+          "item_id": "math_test_geometry_254",
+          "source_sha256": "649f6dedea739c54d5618b3f4ab904f04241b5af9bf295275571e4f4edbdd70d"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_897",
+          "source_sha256": "bb8a28325857f036564ff318c0db8f90910a5e8a69c481735b4c7f1e3f4a7b2c"
+        },
+        {
+          "item_id": "math_test_algebra_523",
+          "source_sha256": "85b0669be3121ceabbe1257f68ebd6f3d3bba808da16caa65901afe0d7519e3d"
+        },
+        {
+          "item_id": "math_test_prealgebra_968",
+          "source_sha256": "c7cfafae03f37d186336317ffe17b0d02fc1713dc3b7e07f693ccc41851ae4fe"
+        },
+        {
+          "item_id": "math_test_number_theory_226",
+          "source_sha256": "b9a4b107f3c7d2e5d22d03f3c1a9be84bce530dbaad3d37e9b007423f1564389"
+        },
+        {
+          "item_id": "math_test_precalculus_565",
+          "source_sha256": "14e9a771d2052296e0c91629eae1c463928cf3b9a1249a28f0e777cb749b6516"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_684",
+          "source_sha256": "52b80bbf7236372837b4cbc216af8cf1266255d1f2950be7d581068f6807897a"
+        },
+        {
+          "item_id": "math_test_prealgebra_1725",
+          "source_sha256": "17e4a4c63a1e50a5cf20267c0305e2babad69cfc7bb6f1f9d3b5cd05380a79a9"
+        },
+        {
+          "item_id": "math_test_algebra_486",
+          "source_sha256": "b6c906d5a98e045b9dabf73b1dd47e443a3711b658a5d2b8c7e033f1dfe40202"
+        },
+        {
+          "item_id": "math_test_geometry_360",
+          "source_sha256": "cc32ab534fffccb1ce3bc38b3aa62f370e7ad27c80000d16e2cef4418658dd6f"
+        },
+        {
+          "item_id": "math_test_number_theory_35",
+          "source_sha256": "3856249b80a58de76571df04acab18e2b728b95433123885573c172da075e32f"
+        },
+        {
+          "item_id": "math_test_precalculus_652",
+          "source_sha256": "6a08a7ae173cb8fda3fd2eb3bcf780512c9a02ac310732c8bae6c1d50946ea8c"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1572",
+          "source_sha256": "e6778d59569f791b11e907a60d96e5b5a36cc75279c066061a7e9c8ade764af0"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1088",
+          "source_sha256": "e487b72f6644d231fc9975e39995776297e8c6ca6436906f60bb91b382048695"
+        },
+        {
+          "item_id": "math_test_prealgebra_1091",
+          "source_sha256": "29dfdf02b12b755e7cd276fb7846c8d856f95109250114ce87a7c485d63fdb43"
+        },
+        {
+          "item_id": "math_test_algebra_2157",
+          "source_sha256": "a9f17db4a53c480e9d78db8141f768e9fc5a987e3a93a4668a391bc43b74db63"
+        },
+        {
+          "item_id": "math_test_number_theory_1252",
+          "source_sha256": "eac88fe87397dc3dd35518bbe0fa9fdae7223e93ded8b79362c184a50b9a5d9f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1622",
+          "source_sha256": "b73da60113aa695545bb17488b0bc8992efc898a5d58bf2a45d8c3493f751524"
+        },
+        {
+          "item_id": "math_test_precalculus_138",
+          "source_sha256": "211b348d5adb90aab27e0b1f50f3857b68a9abbcef6c17325e08d36f499845f2"
+        },
+        {
+          "item_id": "math_test_geometry_192",
+          "source_sha256": "b460e5d95fcd1f5da41fa569f8efcff2c7cfe810a7d48301c20a01d731bc7a93"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_852",
+          "source_sha256": "5de36b7b0d1b9741d43977ab8090941e8ba5f75530dbcb3f485478950097cddf"
+        },
+        {
+          "item_id": "math_test_algebra_1443",
+          "source_sha256": "4a83f99f496730cb993117e4d2d1951b85fcc2bb9b919a35242516f677bf5369"
+        },
+        {
+          "item_id": "math_test_prealgebra_2045",
+          "source_sha256": "fca4e221d52d8b654d8346c08a783dfd825c988f56d81265d26cedee502f6b25"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_991",
+          "source_sha256": "80174d078596190879ed645691f570741b180822e2a40617c18d0046e5d4576f"
+        },
+        {
+          "item_id": "math_test_precalculus_122",
+          "source_sha256": "d122f37541138c161ea13905e370cf16aa23d47df95020ff0d75f069fb069ab6"
+        },
+        {
+          "item_id": "math_test_number_theory_981",
+          "source_sha256": "682d76b86493d31d7b5fa42437696e086de7cbf541b7421360616d40933a052a"
+        },
+        {
+          "item_id": "math_test_geometry_64",
+          "source_sha256": "9e4dd28e1120883cef024845201976bdee022718cd5272ef08afdb9e5c2558c0"
+        },
+        {
+          "item_id": "math_test_algebra_2838",
+          "source_sha256": "ac2c74fe9baae00bec92683d059d518035eb87f715869758bc6edb4357f15301"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_996",
+          "source_sha256": "0ed207ec73a6e0e961f936c2448e45c13f2e2bb3797517891aa04f9cdb18b4df"
+        },
+        {
+          "item_id": "math_test_prealgebra_2002",
+          "source_sha256": "c5fb423447b13f3ee43d9b24d5ab81317a976ca530fd493a57621f48fa463d34"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1602",
+          "source_sha256": "2c8d75778c4eeaa484560c44576af4662b26682a880b7c7463ea45da45e81d6d"
+        },
+        {
+          "item_id": "math_test_number_theory_441",
+          "source_sha256": "d6d111ac8f294fd5bddf83d3ab2ad1529cdef0e24acfce5672fa9d8eb3d1d3a0"
+        },
+        {
+          "item_id": "math_test_geometry_846",
+          "source_sha256": "d713336b59d105c9a07b2aa40431247e75c785dcb60f6092b6b4dd5424bd0414"
+        },
+        {
+          "item_id": "math_test_precalculus_925",
+          "source_sha256": "93309349d9486f21e0651743be271a71c45cb2ded5de446a03b8b3124e1d6095"
+        },
+        {
+          "item_id": "math_test_prealgebra_1330",
+          "source_sha256": "9477afdd4b8ee45b87feb697f774e56f6d29bd20fb60e04e849e27e8136957b3"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_662",
+          "source_sha256": "6660c8e55c9199fe97d0a6a2dd5525c5505d460feaad9359ea0922ac25168775"
+        },
+        {
+          "item_id": "math_test_algebra_80",
+          "source_sha256": "8a898c312c2fe750ef3b44f7ec7664b7aca30ba0fe55e0e3b6b0052f9e4628b0"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1542",
+          "source_sha256": "36a545dc9a370ce5ab293524da1872d4af59573d1d4366b1bf02e61e5d23717f"
+        },
+        {
+          "item_id": "math_test_number_theory_65",
+          "source_sha256": "d4596078da68b936bf76832714f8595984a458bd0ab3784142bb502ec5d01ad4"
+        },
+        {
+          "item_id": "math_test_geometry_740",
+          "source_sha256": "0193838e4a11c55607858cfc3f81250624e79a8be1c6f85ed5a48111c2900c79"
+        },
+        {
+          "item_id": "math_test_precalculus_724",
+          "source_sha256": "7a80dcd8da36a14452d1aae359332fb08617b7332e1c2f2f6ea6ae4a8b9ff005"
+        },
+        {
+          "item_id": "math_test_prealgebra_1247",
+          "source_sha256": "ecafc3500a6aa04ead1773f03e44ea29474831ab8cb6c084b1370100139379ae"
+        },
+        {
+          "item_id": "math_test_algebra_2261",
+          "source_sha256": "7960ac9a940b91630c964c16f4dd2397ac0f771041a7e1ec889ff9b65e9453db"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_30",
+          "source_sha256": "012a6aa87cd5bf0c3f7222b21cda7f4fdf8a0ee644487b14f3b028e3f8f37046"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1717",
+          "source_sha256": "da8bec07dd3cb2c4f954dd748c881de138ddad642fdf2795bee9b060a1d2b7b5"
+        },
+        {
+          "item_id": "math_test_number_theory_686",
+          "source_sha256": "e454947272e64fa9308addbb8492aaa34524e4dcec7e8305aa74a80af206972c"
+        },
+        {
+          "item_id": "math_test_geometry_733",
+          "source_sha256": "5a5f4b0cdd9976eb8ba2224b06eee869f2261c8a44a8bc2d6ec4a625a77da64e"
+        },
+        {
+          "item_id": "math_test_precalculus_470",
+          "source_sha256": "6b54c1ec53f9c7e0fe99ac5595ef15ad8617418d39625304a89d51316a0b8aef"
+        },
+        {
+          "item_id": "math_test_prealgebra_1699",
+          "source_sha256": "15bb37173850ef0a441f8db309f55cfb95a8bda4962d1d1c565e2a649dbe8636"
+        },
+        {
+          "item_id": "math_test_algebra_2278",
+          "source_sha256": "ca6a146661d8ac5c5383d26dbaf1bd606ad91f05d3392fd2d5a77e135914d3e3"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_158",
+          "source_sha256": "107858787e09d25739850527c455b0175796d6c220a31c3589f7b19b09802ce9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_508",
+          "source_sha256": "1d7802bad73bdb2a444a3f46a2e74187cc689f8756469034f3b9e7356507afd8"
+        },
+        {
+          "item_id": "math_test_number_theory_29",
+          "source_sha256": "58e7a6159602b9c9a096e7094159d29f48116fefe5da1968832a738425b864bf"
+        },
+        {
+          "item_id": "math_test_geometry_462",
+          "source_sha256": "f2d4ba1e04f007e0b49101ded6479056744b907dff963f894c183a713048a484"
+        },
+        {
+          "item_id": "math_test_precalculus_282",
+          "source_sha256": "dae4c9cc3b435150485ac7de410a66c39d8eddb12f5a25a6ba70d652db843205"
+        },
+        {
+          "item_id": "math_test_algebra_1185",
+          "source_sha256": "ebf66860d0cfbab5aaf02f5a1c8954e30e9d4886afb4f75fe972565a086dc346"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_785",
+          "source_sha256": "840ecc742d24c1e4dad98f42debefa60fa0c3e4e76fb951cdea05237cfc27108"
+        },
+        {
+          "item_id": "math_test_prealgebra_740",
+          "source_sha256": "9d151efe626837636a4715282e50d2fe24733b33ff647221afc55fdb8eec12e3"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_867",
+          "source_sha256": "8992159d541565ee6e4418e3a111a4b6316b5abe3e381020859190a7196f1f45"
+        },
+        {
+          "item_id": "math_test_number_theory_59",
+          "source_sha256": "190525abaf36eae1876e5e78a8db79d032e7341553dbaae3a251f93dcfc77b8d"
+        },
+        {
+          "item_id": "math_test_geometry_248",
+          "source_sha256": "692f23b9a25c2770f0764264459b6c059513beb05e019fdca0378b1dfb844a00"
+        },
+        {
+          "item_id": "math_test_precalculus_77",
+          "source_sha256": "c001a3ba4a88e506c31c2f8e1c7855b5314fb47c2d1cd65adc38ff5035dc3c3c"
+        },
+        {
+          "item_id": "math_test_algebra_2576",
+          "source_sha256": "7b91b3598bb0bd0fd047e5be1e607327b4f3c6f0b6ce363ecd91ad0613ba6b1a"
+        },
+        {
+          "item_id": "math_test_prealgebra_1491",
+          "source_sha256": "cb8d28cf528ebfc30105440f977617ff9d8873f9ba3a5137286d8e1b9e408956"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_547",
+          "source_sha256": "b57d6fe026fa7f08a2c389e9ce53de2a96b0395be097c4d7aee408024cf10492"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_313",
+          "source_sha256": "75038a32137caf12241fcabe2d74acd7b13458428a4b887211f3885ef1371170"
+        },
+        {
+          "item_id": "math_test_geometry_81",
+          "source_sha256": "7607dfff03f41983b1ee9538439ab68ba28f624d6ce928fb9c3f336fdc4aa479"
+        },
+        {
+          "item_id": "math_test_number_theory_326",
+          "source_sha256": "4fe67736e8b4e40aef6576d40f821a2224376b796be2d7ef0e92aa884cceac9d"
+        },
+        {
+          "item_id": "math_test_precalculus_742",
+          "source_sha256": "981408c105fcfcd5a402c3316643110a78bbb1887592782af62ccdb6ff068abe"
+        },
+        {
+          "item_id": "math_test_algebra_506",
+          "source_sha256": "a1eb7173fd51bf8ac5968f54911893299e095cd5c2581b108602b9a8f9badc8c"
+        },
+        {
+          "item_id": "math_test_prealgebra_1300",
+          "source_sha256": "dcf8299ede74eb3dabca717d3567ac60848d6b86a4cfc67c62dad80a32f1a825"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_215",
+          "source_sha256": "e3af7d9b2141595b70e12ca44922de66b22e26783bdb015a3636d639ec36e7a0"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_712",
+          "source_sha256": "7517a5db88749cbe2889bf77fb1e7d52100ce25ae5c7e8d1b886ee43bc8b5b8f"
+        },
+        {
+          "item_id": "math_test_geometry_29",
+          "source_sha256": "80ffe419f4d5b22234709545ed1042cda2eacc937e206c6f2942dd3f0a37be80"
+        },
+        {
+          "item_id": "math_test_number_theory_931",
+          "source_sha256": "1bbd31c8fe763bad15d1ed9122fba689859351c5aadb4e25b49a4646b368fd99"
+        },
+        {
+          "item_id": "math_test_precalculus_1252",
+          "source_sha256": "8dc36584475633b5cb3a7376048d02dc5f2e9498fe6471659c29fee653e115b2"
+        },
+        {
+          "item_id": "math_test_algebra_129",
+          "source_sha256": "47b430e4c4a914af2b7a42dbcc044b5c94ee59f33e97158c03ef3dae9400eafb"
+        },
+        {
+          "item_id": "math_test_prealgebra_1181",
+          "source_sha256": "49146bac6875ea776a5832ec4f4a17cc09293895bbf9e27179011b658634295d"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_228",
+          "source_sha256": "8e6a186436363671b44a27b3746bfe9690e6b5c877ed34a1a5677cbb24a7b54c"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_142",
+          "source_sha256": "653d4042ff11d1cc31ca86ea45c9100177d5e10314a8f4b8849fe0ff1ee9911e"
+        },
+        {
+          "item_id": "math_test_geometry_0",
+          "source_sha256": "a2f023a23d59869794443741696de4d9ea6ccc88cfa6a20a0c9ea614a9613cca"
+        },
+        {
+          "item_id": "math_test_number_theory_699",
+          "source_sha256": "07c534a10e7b37925a5a817d06ce21045ca7b40a4b6eff92527a523538a2dbae"
+        },
+        {
+          "item_id": "math_test_precalculus_97",
+          "source_sha256": "0439bad290851fe2c37f80bfe9e1dcc0c4886f2708f4d6b17f67998d93853a60"
+        },
+        {
+          "item_id": "math_test_prealgebra_1040",
+          "source_sha256": "acc7f9b6aed312dc4587e734a5974577ea4a6bb736d217661d6412bff4adab31"
+        },
+        {
+          "item_id": "math_test_algebra_882",
+          "source_sha256": "7c657128d6b5cbe25010dfb0bb98dfd8ba8af3cf51d6644cee5f96c7c144dba5"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_916",
+          "source_sha256": "538f88b244a4eeca5949f1f4be67dd9be7fa4969f19e39d282d0373c65ac509c"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_222",
+          "source_sha256": "0164b00f3142ccd81da35a27bd628d18d5ba16298700534d5a205afb56b686cc"
+        },
+        {
+          "item_id": "math_test_geometry_901",
+          "source_sha256": "fc9b71a0e5cad88761280cacc35efecb6b9658c43185ab20d5a7219b7c0725fc"
+        },
+        {
+          "item_id": "math_test_number_theory_133",
+          "source_sha256": "d147970d278cd9a3eda8dac7ffe130abc3e7c27ffb6f1124b389b61672d6a408"
+        },
+        {
+          "item_id": "math_test_precalculus_45",
+          "source_sha256": "ffa68465bfaa9164c6b78c5e15e04175bc033906e88dd59d927cc46ecb957bf3"
+        },
+        {
+          "item_id": "math_test_algebra_1302",
+          "source_sha256": "90fec0e6e365a63f4191b5564fabb72d13cf883f849c9a964f9742bac68f1d6a"
+        },
+        {
+          "item_id": "math_test_prealgebra_1349",
+          "source_sha256": "01b5ce8c3a6832f5456347a83792cdf346c041f1a1dbb95d729024925c8bc2dc"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_482",
+          "source_sha256": "efc159fb004907b1f6919cf9d662bbfb1ad2cf0d065e66eb2dd17420bcc4c7a7"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_898",
+          "source_sha256": "6ae2a82d08eeda2a96e44e06254f66caace56a0131e8fb446d84a163b73870ba"
+        },
+        {
+          "item_id": "math_test_geometry_1038",
+          "source_sha256": "8a04bde728275c6409cb34fc2ff58e1e92bebccb7222131cadbf91ff1d569ac8"
+        },
+        {
+          "item_id": "math_test_number_theory_84",
+          "source_sha256": "ea3abe8e904d33991448fb85c8dd11661d0cf1bdb16716237b5144a183a34a4b"
+        },
+        {
+          "item_id": "math_test_precalculus_302",
+          "source_sha256": "ae5646efedc5bc64ef0389268cc9251229276f9777dd4f1df64776885f53017e"
+        },
+        {
+          "item_id": "math_test_algebra_922",
+          "source_sha256": "eb3ee548d960e606a8c10b7b0a057b0bca685a37097c086cbc466f283beeb3f5"
+        },
+        {
+          "item_id": "math_test_prealgebra_339",
+          "source_sha256": "a20b706515536ac63ab0e50236d3df1e7c0e3b1007cf0927689fe6d8428ff57f"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_496",
+          "source_sha256": "70a024a7c311f044b8045371d935794b9271ec237505313b8544f8d1df895657"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_536",
+          "source_sha256": "2b3aa81e562b27d77d8645841d98272cb12785ef65b46dcd94b88b569c7b747b"
+        },
+        {
+          "item_id": "math_test_geometry_210",
+          "source_sha256": "28dc240ab804c2f5d8dcdc383eab0babfdd3afdc708b9adcbef3cfff262f7e71"
+        },
+        {
+          "item_id": "math_test_number_theory_252",
+          "source_sha256": "d2b5d6b5b87d99b9ff01761961e50c85f6a7c955d31335cf4281963f13ef280a"
+        },
+        {
+          "item_id": "math_test_precalculus_495",
+          "source_sha256": "7d21b89973f2bb8c4106bd3c631ae97bbd002634293ef8ca97e6f1369994b538"
+        },
+        {
+          "item_id": "math_test_prealgebra_1182",
+          "source_sha256": "1e979747ccf13b47204eb697433f40f8ffd76a7e94e72116b105c19bb859e1c7"
+        },
+        {
+          "item_id": "math_test_algebra_2604",
+          "source_sha256": "e039421c53bdbde3cd73f228e2c7f1b010ab0b5e1476f46f17c85bbdca9ff5b9"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_13",
+          "source_sha256": "25f9fc0bdc46b533496c23998277fb5254d1cef2c94026b2474f693f49d3adce"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_155",
+          "source_sha256": "3ae61a8c1a8a14f138911f4bf6df64bbbf91ec5ad8840fdc110343f2223ad609"
+        },
+        {
+          "item_id": "math_test_geometry_300",
+          "source_sha256": "1d02656d348918601cf62179c2eeb5515552ff80d07f97b4dee061ce871f775f"
+        },
+        {
+          "item_id": "math_test_number_theory_370",
+          "source_sha256": "7551dcab50d2db65152ad66b92b3413af2238d09d7b05a690220e954ec47fad2"
+        },
+        {
+          "item_id": "math_test_precalculus_34",
+          "source_sha256": "b3ac49db1be99188342fb4b9b1823020e4fe772aeb55e03c7c8888ba75f8e24f"
+        },
+        {
+          "item_id": "math_test_algebra_1781",
+          "source_sha256": "e8b7b9df63be007a5807ea858bcb4c644b2b027dc918acfd62661b7e168d307b"
+        },
+        {
+          "item_id": "math_test_prealgebra_1596",
+          "source_sha256": "d6d23d2b3fbe03b35a5e734ee80c8c98e7f3fa55ea3fbfffd5cdf8e85998c6cf"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_922",
+          "source_sha256": "fb2d644d4e179f161c6e340f41d1318c2031c67e6f9d174ca36370b6cf53ee09"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1332",
+          "source_sha256": "802f592f9fe0c88424ec4c04ae2dd2f7976d1802982475db0a16ac641ec9c932"
+        },
+        {
+          "item_id": "math_test_geometry_975",
+          "source_sha256": "a6a7eecbb1ffe03c1de201243dfcf41299a03500e2545a11582835f99acf06a7"
+        },
+        {
+          "item_id": "math_test_number_theory_600",
+          "source_sha256": "cd3d02f861440b65815e103002b97212c75fddc5df56e6621767d52b8711444f"
+        },
+        {
+          "item_id": "math_test_precalculus_725",
+          "source_sha256": "0c2d6541b8893be5cedea3a2c7041e0252b225df63237698556e6192c734d5cf"
+        },
+        {
+          "item_id": "math_test_prealgebra_1523",
+          "source_sha256": "2602c8f98b34787fce478d81d4c98665f3768bd4ded213cdea5a33e773a85dad"
+        },
+        {
+          "item_id": "math_test_algebra_2728",
+          "source_sha256": "1458fcb4dc1532b0a8020d45181119351d9e5933e0127cc399746fcfc4a00aba"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_391",
+          "source_sha256": "5d2b272d1228a74054cae657122ea26a9a394cdebe9e3f91a84f2a50367d3c23"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_334",
+          "source_sha256": "4eef67973efa7122bbd932da06898167635a6fc9b880fccbf426c98c76355b10"
+        },
+        {
+          "item_id": "math_test_geometry_316",
+          "source_sha256": "1782bfcd2361019dc2fada034f110b8d22f22402473c54a6aa2ac48239944e08"
+        },
+        {
+          "item_id": "math_test_number_theory_987",
+          "source_sha256": "d3f097edc419de2e7b46cd06dfae3a07526cc0a4de4a6830337a345b824a68b9"
+        },
+        {
+          "item_id": "math_test_precalculus_1183",
+          "source_sha256": "9c20fa76bae027b104f59234af9557419a209b593c9b35d2482a82551620aad9"
+        },
+        {
+          "item_id": "math_test_prealgebra_1173",
+          "source_sha256": "e59ecc2e543f8538c5f0eca641fe303660738e349df55fe90dea210164dfe7c9"
+        },
+        {
+          "item_id": "math_test_algebra_2675",
+          "source_sha256": "f29f73e1769c43549cab5c3f3f2e2b3187b3754e1cdbac486481191b50c40e25"
+        },
+        {
+          "item_id": "math_test_algebra_2437",
+          "source_sha256": "854c98e500b9a1278cefede8ece303f3aa8f076971f355bb1242071c91269ced"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1071",
+          "source_sha256": "b444e96e936051c633df329d46927e6d3eadd1bde4331f8b0b720e60140621a8"
+        },
+        {
+          "item_id": "math_test_precalculus_144",
+          "source_sha256": "14135581e555ea2c6077b267c516ebf1c137640d050468aafa0d579da53d9763"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1870",
+          "source_sha256": "f74fd33a2e7e871646e9d716dad5991ca66a7d042579dd91dc31865d071e650a"
+        },
+        {
+          "item_id": "math_test_prealgebra_1805",
+          "source_sha256": "a5aa80690e85a2a890e40fa2d14827eec2d30d420ac7070fe664beec59652f19"
+        },
+        {
+          "item_id": "math_test_number_theory_92",
+          "source_sha256": "4f27dc7496d189450f8991531f807ee005eaf08c71b19cb955851b1dd76d68ef"
+        },
+        {
+          "item_id": "math_test_geometry_41",
+          "source_sha256": "7b799d175bf11135f559fc7ab96896f839fbdb7a6b66e6f3e56b49c44ad4cf87"
+        },
+        {
+          "item_id": "math_test_algebra_2159",
+          "source_sha256": "53feb992f4667accf5f96f6e521e6d7e28ad262cb56ec22ab92744baf644621e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_495",
+          "source_sha256": "485ff500a522ddb712eaf87669a3b62c57b7e43321b7187a3d1df357544fca59"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_725",
+          "source_sha256": "08bf056103b0fb39b429e1905844cbb75c030dab0563d8f623d666ebfaa058b6"
+        },
+        {
+          "item_id": "math_test_precalculus_249",
+          "source_sha256": "99e5ab6de76279f7710cad9a2616169d87126f210600ef491bf6a9cd24e896b0"
+        },
+        {
+          "item_id": "math_test_prealgebra_1189",
+          "source_sha256": "013288dbafa7ecbf5413185f375642c32fb986fa57e508e8d66e9e7557c4d113"
+        },
+        {
+          "item_id": "math_test_geometry_514",
+          "source_sha256": "d3e3809627dcbc66bbc0693fbc7a09e7d542ab8c392133dbb49e259f7959b26a"
+        },
+        {
+          "item_id": "math_test_number_theory_73",
+          "source_sha256": "fb418e99ea33d642f93f454e879f2391745e89993a10ff6369cccc37580b0b56"
+        },
+        {
+          "item_id": "math_test_algebra_1905",
+          "source_sha256": "586b3f27a9e9f7cf4b7eb6fa683387eda51dac6e198a523aad95bdb65925e509"
+        },
+        {
+          "item_id": "math_test_prealgebra_794",
+          "source_sha256": "b116b569d2c1a22f20f9184f8bf31244dea8573e8af141e3181a30eed07cfb53"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1123",
+          "source_sha256": "8343ff4edaaea875ff40fc016685fb9dde27d684946a716f6d8165ab99eced2e"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_418",
+          "source_sha256": "d88615d57746474fb9143fff8acb7f2ceafa81d29eb88472cd77561781a6dc7f"
+        },
+        {
+          "item_id": "math_test_geometry_59",
+          "source_sha256": "ff5661869ab64f9de8e83a5a2145fb7a9121a5eb084ff9ff2bb95dde04d17b9e"
+        },
+        {
+          "item_id": "math_test_number_theory_269",
+          "source_sha256": "ceec430c5b21d5944e797284e6fd00264ea9253c5d60d60c4a28bc7942d94d0b"
+        },
+        {
+          "item_id": "math_test_precalculus_48",
+          "source_sha256": "f893dc19a0d08a50cc8945ea8375217bca5f683a1591f2854ded61ad62d0e4b1"
+        },
+        {
+          "item_id": "math_test_algebra_435",
+          "source_sha256": "47c958a35f2d2374f05a2d5b21f42a11936113c8ad7599206b009c960c04768f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1507",
+          "source_sha256": "8b826fa630d85a107b93790c343001a7986c21b28dc8bb0d46c07a0f3713af47"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_359",
+          "source_sha256": "a50587d3b8d197d6592a268bb88b74b48e91c3d06a70162383d1534c12f3d6ec"
+        },
+        {
+          "item_id": "math_test_prealgebra_1959",
+          "source_sha256": "435302af25c26b2bbf813d424f6b0062b6cdcfe5d41e3d864eb6a43ef6e76d68"
+        },
+        {
+          "item_id": "math_test_geometry_761",
+          "source_sha256": "545b2cecda76d1f90d5707ca06f8c5605e21ae6183a82facafc5bf66e108c2fe"
+        },
+        {
+          "item_id": "math_test_number_theory_946",
+          "source_sha256": "f324e267870dd0f6eb7de77d3fd754511f48c22957c4eeba0a4758293ef668ba"
+        },
+        {
+          "item_id": "math_test_precalculus_318",
+          "source_sha256": "8f2710eaa310cd7fe51dd8c638c50d090ef19c1db3db97b10cc8526ae08434a3"
+        },
+        {
+          "item_id": "math_test_algebra_657",
+          "source_sha256": "db3d3fbe634b8a35ec17c95be2028bbb2ba7936a3abc1819c7488f6c22cee9f1"
+        },
+        {
+          "item_id": "math_test_prealgebra_1440",
+          "source_sha256": "33e8863fc0cb0e5a0adf25c80bd13c4318309001b847badae455e6345db96bf4"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_858",
+          "source_sha256": "3cc070450be1b5452dcfc820d2b1bd6c1372854485afb6d83c15f62004bee525"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_65",
+          "source_sha256": "f10a37db9c4ae0cae6abd338be5b60391faf4410b20cb262644c18db01b7206e"
+        },
+        {
+          "item_id": "math_test_geometry_641",
+          "source_sha256": "a6766823ab1d579063875f54412548b03c29068487d88243c0777d156a1f085b"
+        },
+        {
+          "item_id": "math_test_number_theory_45",
+          "source_sha256": "92b6bd83ce92d1844de10f8469f476d1ec76f48c83bfe753d5634976d1ceae2a"
+        },
+        {
+          "item_id": "math_test_precalculus_661",
+          "source_sha256": "755392d08e714359912beddb307b65a9678fed7f6afbc5d81606a3b9c8cf5e2c"
+        },
+        {
+          "item_id": "math_test_algebra_1129",
+          "source_sha256": "1a90d3b265d0dffae04761677dbf3db2a34b8e7eb1132eb4817ba11d4acf6822"
+        },
+        {
+          "item_id": "math_test_prealgebra_1754",
+          "source_sha256": "efd7a1499fb15e04ba88e2b34a2eed393a54f644bea77f262b812172c0707468"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_76",
+          "source_sha256": "ed51931b4351a1dbf70c952f1c82f64380c2b21aa66acd57aceae1a8b5ee94c7"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_450",
+          "source_sha256": "cb401c034d99bdd6496e33520c770c98138c01c3fb61a2bc62005db0b1c85906"
+        },
+        {
+          "item_id": "math_test_number_theory_704",
+          "source_sha256": "b7f8f0bbc242eff66138a2e1f6725ec1360ee19dc8de77e24548fda79f7987ef"
+        },
+        {
+          "item_id": "math_test_geometry_577",
+          "source_sha256": "182229d1fbb4903aa55419b07324dcb5f97d6b8213385bf21c087a8c396b6128"
+        },
+        {
+          "item_id": "math_test_precalculus_1082",
+          "source_sha256": "eed0fac9da0d5a57528c55c457e25fcd5b605fe792c2e794cb20a0b9243ec6b6"
+        },
+        {
+          "item_id": "math_test_algebra_996",
+          "source_sha256": "b98a6078e2bb253b6248ee4391a55e364e62ca7013b147c183ceef5b8d8363d1"
+        },
+        {
+          "item_id": "math_test_prealgebra_1063",
+          "source_sha256": "e187d7d29971ca7f598d9785a604ca9a55d6abcc06ffbebc22c00a4d49f9bdbd"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_519",
+          "source_sha256": "63b4fce0352489fda9b5ad9e35859d08a2bdc0166d6e0615f69bd433a7461147"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_940",
+          "source_sha256": "7b5e4b604f08f951fa7661e9239b7c6823022fc145aeb726f6a1ef7c8c486c35"
+        },
+        {
+          "item_id": "math_test_geometry_24",
+          "source_sha256": "3c7d583a1551658ae4f615524e1d30f7694da475ae717e64ea3a42b4bb891558"
+        },
+        {
+          "item_id": "math_test_number_theory_1046",
+          "source_sha256": "16e91f0fc0c43e2a7b563859b5780861e51e779f635378e35d66674a2330833c"
+        },
+        {
+          "item_id": "math_test_precalculus_843",
+          "source_sha256": "b1d05c89b5da6d9170d65c441a0f37a7cc46058c72d3b049031832c005e5b73f"
+        },
+        {
+          "item_id": "math_test_algebra_438",
+          "source_sha256": "db44583083a4debed4d594c38d63deb70bdc49de4a839ed12e7a366cbb8e26fc"
+        },
+        {
+          "item_id": "math_test_prealgebra_1030",
+          "source_sha256": "688883ada46a092f0be2cc4a99e13f02a697b16b1fe0f39460207d7c1b953307"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_884",
+          "source_sha256": "9965bf35b12aa68621ea43a8ab52be0a897e7d77ecfd2a5b57441296150eb6ba"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1072",
+          "source_sha256": "f6c128053843169ce6c977e410a904cb601770fb39bd9e0cf6cd3c6c2a7a1800"
+        },
+        {
+          "item_id": "math_test_number_theory_22",
+          "source_sha256": "49329fc9c9d2feef1d2070280d58e7107d7f08729b854a60323cab8462d07b83"
+        },
+        {
+          "item_id": "math_test_geometry_1125",
+          "source_sha256": "5233549b8b4ee040cd0c171ef00d5088072e8eed7ba4049a32ac796a382c24b9"
+        },
+        {
+          "item_id": "math_test_precalculus_803",
+          "source_sha256": "b6e260ccc1c361a0c5b75f143dc0d79dbbe689c0d39d924fc0856e8390eba90e"
+        },
+        {
+          "item_id": "math_test_algebra_750",
+          "source_sha256": "c48b0a5e58da5aa986bb60354f13beba06c497839a1d906e2446c857da243fff"
+        },
+        {
+          "item_id": "math_test_prealgebra_2074",
+          "source_sha256": "2b13179c458067f753b557c47019fcdd5d9b14218a7c3c3351517af26dcf954c"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1990",
+          "source_sha256": "feec4d2cea7fcbe5661697eb6d46b18e355d71094d1f8ec00ab5cfcc531be023"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_846",
+          "source_sha256": "bf3d40f8753605b88c75669d472098b0390fa93e7c55d76fede7b921c965e376"
+        },
+        {
+          "item_id": "math_test_geometry_143",
+          "source_sha256": "cf711db2ff2e3c2996b42e46e14c26a6e89ed276e6e919d38181acaed8e3a69f"
+        },
+        {
+          "item_id": "math_test_number_theory_660",
+          "source_sha256": "5b21bdf353b0fc0c38db3cc9cc80576f0b34c49ba1a4b7bd8a2277c9edc07035"
+        },
+        {
+          "item_id": "math_test_precalculus_395",
+          "source_sha256": "a8d32442720b14f4db9807e2c3ce589d2c06e8801606c52806b2a65a94c760ca"
+        },
+        {
+          "item_id": "math_test_algebra_1115",
+          "source_sha256": "0aedf23af1f04450cb46a378a99c23099e1b185e680b9c26251fa4c400a212b6"
+        },
+        {
+          "item_id": "math_test_prealgebra_684",
+          "source_sha256": "a4b6f124c34b922793c938654f18179e4a5429a7ef4949b15822de18d8b92d66"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1600",
+          "source_sha256": "99b039ed0f88fd29daa2981797cf3035aed2f15503692d6d958c0fb459a3e333"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_795",
+          "source_sha256": "adbda38f27c381271450b1423819922f0ec5aeeab059174c1e36ab39149372ad"
+        },
+        {
+          "item_id": "math_test_number_theory_1201",
+          "source_sha256": "52ac68250cc35a3370073554df5f3407fd1a5862a2deea05a30606740f82b41c"
+        },
+        {
+          "item_id": "math_test_geometry_242",
+          "source_sha256": "606f75a8c6219d0385d6bd44655dcc8188f39d1bd9b0b20694dddd82bf60e2fb"
+        },
+        {
+          "item_id": "math_test_precalculus_577",
+          "source_sha256": "6e99d60c202a985ec49f89bd4aaf9031fc30be75b4dc01c71f518b28acded1e9"
+        },
+        {
+          "item_id": "math_test_algebra_1586",
+          "source_sha256": "608a609f4fe0e39b08a3e3566f7cd2217f7545048a38c131296af662d22ae1b6"
+        },
+        {
+          "item_id": "math_test_prealgebra_805",
+          "source_sha256": "a184d648152c5a0c54debdb6d63ebf4da3586538fedbf3540c4fc6191092e4c6"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_489",
+          "source_sha256": "d2d8594b6692c56f20de599a3279d30482b9007cb864e8062395fe7c267b5e2c"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_115",
+          "source_sha256": "e370596b3ea90e22fc7879e28822c7ba8057844089689418faffd309bd42a9f3"
+        },
+        {
+          "item_id": "math_test_number_theory_382",
+          "source_sha256": "5c1ef7a921c4e5b3094ca9f7fff40f729cce27190f8e92e469b2b66fc0e7bd61"
+        },
+        {
+          "item_id": "math_test_geometry_581",
+          "source_sha256": "2684b6667053ea5d1a442f5e0ac7aa4767477a22c8a3e37707522f65dffdbd3c"
+        },
+        {
+          "item_id": "math_test_precalculus_1256",
+          "source_sha256": "df85cdb4dd8b77f6e68a9a8c818846319a6f21676c9ae0f7a9b31e770250874a"
+        },
+        {
+          "item_id": "math_test_algebra_919",
+          "source_sha256": "08fb4225ae6fb7ad4f039fc1c692e2ce57bb3f4f6c9395dcaccc66e0cb9f56c3"
+        },
+        {
+          "item_id": "math_test_prealgebra_1990",
+          "source_sha256": "259f298e7f3901ea6a42c24e399bfffc243d2c0d928d3e16d531ffb64277e9b6"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_678",
+          "source_sha256": "18681898826286ef1699239e349d878fff85dedfef22d1d0890e1754e7ff127d"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1042",
+          "source_sha256": "a5e9358ea3c489ade5da1bcba02b936d72c58dd37250de1ef9e542852645702e"
+        },
+        {
+          "item_id": "math_test_number_theory_1102",
+          "source_sha256": "da9702d734df3cc7388b08976eaf595a2e56b89eb81d9db78e2ba2c425d2a986"
+        },
+        {
+          "item_id": "math_test_geometry_21",
+          "source_sha256": "3e260fe29b79cc2d543f605189f489e68ac978511117f8976ea4cba102b9aa9a"
+        },
+        {
+          "item_id": "math_test_precalculus_1176",
+          "source_sha256": "df995d2598cf983789a091fa7722e0555ad8094f088c54c23913beb09723d38f"
+        },
+        {
+          "item_id": "math_test_algebra_1993",
+          "source_sha256": "3ff66ef458d1043a64c0a3a81853f79e658912671e36e4ac9ccbdb745ede1e5c"
+        },
+        {
+          "item_id": "math_test_prealgebra_1439",
+          "source_sha256": "359e7629979ead3338912f2188b2785fbb2b521f7cb2d06df28b7d0d4551e8c6"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1485",
+          "source_sha256": "d6c9923d10e9c090e565504007a56444d68ae63edfdf82851810d3c708455974"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_286",
+          "source_sha256": "fe4b1705f04e23c0052dee1bd7e390457d6d559c77a1689a90bf0b017262df01"
+        },
+        {
+          "item_id": "math_test_number_theory_787",
+          "source_sha256": "3e152e5d804ff775c2dbd68312ea9e900c5a7b1ad57e00cbdc6f1674a2ee750d"
+        },
+        {
+          "item_id": "math_test_geometry_116",
+          "source_sha256": "7ead6dae996bafc4b8c9530fd97eed321e5a07944d43124be932f2f8f434779d"
+        },
+        {
+          "item_id": "math_test_precalculus_38",
+          "source_sha256": "ad163c3ae2745c4f41fa2285c06b13f6c0d727bcca6042b4be581f7f9e1474af"
+        },
+        {
+          "item_id": "math_test_algebra_935",
+          "source_sha256": "78a6d9d95142a0c83c6ddb4a21a259880bea61ffe3803e87aac2fcca94c59c5a"
+        },
+        {
+          "item_id": "math_test_prealgebra_1521",
+          "source_sha256": "db56e2036bf202a0fab43987f2f19a686c017c07f93e4fb49e679a3b6ea32e61"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1093",
+          "source_sha256": "82a269052391b93a23bf3982c960ec91ead06a9f291016e8783cb77c5bbd85e2"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_991",
+          "source_sha256": "2f91b4bc16964c604eb8a58d7a48ec578ec04d70f570899b430946bb5bbe7058"
+        },
+        {
+          "item_id": "math_test_number_theory_85",
+          "source_sha256": "0c831a937afebebd5ee7876ee5a3df2e5b409435828cf55db0ab85bb4f135d1e"
+        },
+        {
+          "item_id": "math_test_geometry_551",
+          "source_sha256": "866be1cd8f8440cdef68e2998357c4023c36a989df52ba2e90ac8bbeb5bbe16f"
+        },
+        {
+          "item_id": "math_test_precalculus_912",
+          "source_sha256": "1b072abbf666b1c08e2858112b7eb1fbca1481735093b758a317c5d1b9ccba84"
+        },
+        {
+          "item_id": "math_test_algebra_1069",
+          "source_sha256": "d3091598d9965767f71a9423499107dbf8a863b10b7f6ec8a744040939a8d0ca"
+        },
+        {
+          "item_id": "math_test_prealgebra_1303",
+          "source_sha256": "9e1d0d12a19f71551dc6288886374c1c59bc678a08a233177af68b48fbbce3be"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_376",
+          "source_sha256": "0a029633bbd1b061905386c90c790355d3fd0f78ad9f469be1e7df6572c78306"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_690",
+          "source_sha256": "0eab510ad54bc069d70de05fafd2748e288d5b2aa89e1c5e857d84dff12d97d6"
+        },
+        {
+          "item_id": "math_test_number_theory_805",
+          "source_sha256": "f7603e4c716d6cd7e10a001f34cad111dab8f07cecc4086c0ed967e9064671a0"
+        },
+        {
+          "item_id": "math_test_geometry_24536",
+          "source_sha256": "7dfbdfa29e78d60b3fa95c9bfb3c72371a9d5ad1f505f2315aea82ffdf9b9703"
+        },
+        {
+          "item_id": "math_test_precalculus_156",
+          "source_sha256": "35e1c616410cd3bb98c41f136a3c6efd47b40f77846c7381dc3a36ef07084c11"
+        },
+        {
+          "item_id": "math_test_algebra_2822",
+          "source_sha256": "831dbac65a3659097cda7bd17983c08b119e1c47856a0f791b1eba63f4f83b18"
+        },
+        {
+          "item_id": "math_test_prealgebra_1326",
+          "source_sha256": "dbb9628ca3aea4a4f0761fc646f5252d5d8561586c905e31c49c6dfb5c52f56f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1890",
+          "source_sha256": "f174cb0e086b0993b50dca772b84bd7c04b0a0d27f378ef957e188624b86da39"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_71",
+          "source_sha256": "deaead5c9416ed70e26672bda09d3b82485b855f2318cae2215bae7dd4e09835"
+        },
+        {
+          "item_id": "math_test_number_theory_183",
+          "source_sha256": "25585178cbea1ddaf5f862c688c88a7d025e9ef345863d69a13de9a4517ee252"
+        },
+        {
+          "item_id": "math_test_geometry_188",
+          "source_sha256": "49c085339fda65fab0043b40a6092e092524cd13486c62df78e36cbd9958c0b2"
+        },
+        {
+          "item_id": "math_test_precalculus_596",
+          "source_sha256": "bd8ac5ffa328024905f844f22417aecb2e41b2fe8b4ec016af20e704bab0639c"
+        },
+        {
+          "item_id": "math_test_algebra_594",
+          "source_sha256": "ae699a1a31a06fb2df668621d95799d3ac829ecbc3ce4988341009a7e63ffca8"
+        },
+        {
+          "item_id": "math_test_prealgebra_488",
+          "source_sha256": "08c2a0b30a093f848fd172dbf9acca5eb739122514475af66221fb5054fad08f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2073",
+          "source_sha256": "b18552dd5b92486531397e5b894e3a84c1e787aeed90f7598f9708525da80c11"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_924",
+          "source_sha256": "551c813954f37c2078ae200c05735161eccded99c4327173fa62ff3b62e12922"
+        },
+        {
+          "item_id": "math_test_number_theory_445",
+          "source_sha256": "bb86fa671f68affbd72cd9f465a6c3d8799497badb6645b72414ced97191bfba"
+        },
+        {
+          "item_id": "math_test_geometry_221",
+          "source_sha256": "bebf8bc1cb45523207460bc1d50a5abedb5cfc90843e3c1b038212abc626d0f9"
+        },
+        {
+          "item_id": "math_test_precalculus_597",
+          "source_sha256": "7efa1ec7edeb4cfeb55e9acf7f710a2505db501fde37a2af369f6f03f0a09cae"
+        },
+        {
+          "item_id": "math_test_algebra_672",
+          "source_sha256": "0f6fc5c20933df4a45c9ff339b9e5c7bee925a82e58a9b359fbb12361aa0ba5d"
+        },
+        {
+          "item_id": "math_test_prealgebra_1947",
+          "source_sha256": "4b870adc02e944c920b7cd7856b94605528995b3b09b708380510f77523953b6"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_908",
+          "source_sha256": "89319705f7ff6becbae1d6c1c82189ff67dc9797f613cd7f3e9e4c613b2dab13"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_844",
+          "source_sha256": "a5b28cc1188f8361691054333b090061c6421119c66a04d29eca68dd18d05328"
+        },
+        {
+          "item_id": "math_test_number_theory_572",
+          "source_sha256": "4e53d419a3cfcb78b0bdbe7a366cd9f743778afb1b92d6e0584cad4b11942dc4"
+        },
+        {
+          "item_id": "math_test_geometry_260",
+          "source_sha256": "408c4c8d07d55f243bc65668b19e05b4a91c249d0d8495125d1855887a439529"
+        },
+        {
+          "item_id": "math_test_precalculus_1181",
+          "source_sha256": "adc7d689e726803560275e0c8850294eaebf4694b6eae44b370ef01dcbffb91a"
+        },
+        {
+          "item_id": "math_test_algebra_1971",
+          "source_sha256": "d3bb5571650338a922b2eb0b4579937bf8afc8dffed1e3e09b337267f3f65993"
+        },
+        {
+          "item_id": "math_test_prealgebra_1995",
+          "source_sha256": "470c67799a6df7bb600a85ddafe743f5b4093fc1389a56d0346e6e564c15c85f"
+        },
+        {
+          "item_id": "math_test_number_theory_566",
+          "source_sha256": "bd1e155d4de8937b4aacc8a8149450792729c24099839ef60c063d53efa49189"
+        },
+        {
+          "item_id": "math_test_precalculus_895",
+          "source_sha256": "e87f7e3c759c0d0e9de6caf861e2eee6c3533e9325ce12499819c10a68888ec4"
+        },
+        {
+          "item_id": "math_test_prealgebra_2086",
+          "source_sha256": "d12b126c902527334ae3be159b55e6e524ba46d251ac8d6ac8c19d420dd1ef3c"
+        },
+        {
+          "item_id": "math_test_algebra_1890",
+          "source_sha256": "5cea732d4ae2f219e6de4c0f4575398b09ff8d41f2b74d4f72c9849cb8fe0b21"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_998",
+          "source_sha256": "ffeade0c55c550877c5de29156420a3c88fa537d72e23bdd76cf4d19f330ba11"
+        },
+        {
+          "item_id": "math_test_geometry_383",
+          "source_sha256": "fa3952dcdf0cc74654d1423231d698e4d91366cb695f1d086359fe68e3239903"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_175",
+          "source_sha256": "471368119b0b893646a5033daf10be2ab709f338e5821bc6dce742fc362949f0"
+        },
+        {
+          "item_id": "math_test_number_theory_1",
+          "source_sha256": "eddb406fef535474ddeb911d02c5f47d77a52532f58c17ed8d093b5113c95403"
+        },
+        {
+          "item_id": "math_test_precalculus_1146",
+          "source_sha256": "6e43d49daccb804d255f616e6c652ba5cda224c4faa6a1e91136b89f03a05e0e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_60",
+          "source_sha256": "d0b4225d1c79a831f79bc69beccf5ca9546bcea340984295b3e476e4ba20a284"
+        },
+        {
+          "item_id": "math_test_algebra_502",
+          "source_sha256": "340b324354cbec04ebd915049e020ff71bee95a7692d071ff67c390c45ca63cb"
+        },
+        {
+          "item_id": "math_test_prealgebra_874",
+          "source_sha256": "5f43098d9cd933637855de6a6a06b76570e1c1b21d17ec6cf2898432c83d66a0"
+        },
+        {
+          "item_id": "math_test_geometry_633",
+          "source_sha256": "80efb36baddef7c1cb286acf3552694dd10f452c4dd174a6af5f0b9df1a4cc85"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_770",
+          "source_sha256": "b31caa002961753667a962f7e1721c425fd37bef05e33710e5472f6fc886a30b"
+        },
+        {
+          "item_id": "math_test_number_theory_1004",
+          "source_sha256": "23895302da02843e54c8142119e1592191c331a50fea0084e3086e31b645acaf"
+        },
+        {
+          "item_id": "math_test_precalculus_310",
+          "source_sha256": "1dbb5274ec4878d1bcaf2ce217c67f329c508f83e509ddab0d0acd6e60d9e56b"
+        },
+        {
+          "item_id": "math_test_algebra_338",
+          "source_sha256": "967b6a60a4f12bed895a6cbfd09cb62ea9452b89b0bb44fc111e40388ab05ffe"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2078",
+          "source_sha256": "775843339bc9b4a8e162a45a0109e15c60058f4a123a42d3a5969fb7bef3d1a6"
+        },
+        {
+          "item_id": "math_test_prealgebra_960",
+          "source_sha256": "83a826cd0b4ef18f7050a0853c68b3446dd47f618cb18cfc6c75e4175780e67b"
+        },
+        {
+          "item_id": "math_test_geometry_615",
+          "source_sha256": "5ecb99e4546e49e71cda085b59cdf4dd062fa5d3cd482c9781c72ea491f6093f"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_994",
+          "source_sha256": "fdd8d0b9874cde1264fc6008e0d57257d7647014b85b04c5436458115ab7e7de"
+        },
+        {
+          "item_id": "math_test_number_theory_1043",
+          "source_sha256": "dcc6ac61ea69f84c20421cd727b1f331328d14bae5194dbf80f9990f0495721c"
+        },
+        {
+          "item_id": "math_test_algebra_185",
+          "source_sha256": "613ffe070529efb97fbbaf009a775717a016dd739b8ffd3339cd014807d35d89"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1241",
+          "source_sha256": "5538dc10840384e8cbf73422fba747c2749f8ae08fa5c2049bbdd46ebaa182ba"
+        },
+        {
+          "item_id": "math_test_prealgebra_660",
+          "source_sha256": "f0686ed5ad8d5ea802d2b4ae0a12242330cf0870684a3b12724a58446cea12da"
+        },
+        {
+          "item_id": "math_test_precalculus_1128",
+          "source_sha256": "c72f1095148c3817f8f53ad57b78085ac28b7ad0c29ee615a6af0b3965a9673b"
+        },
+        {
+          "item_id": "math_test_geometry_949",
+          "source_sha256": "75b066b2ff32bf7a40fe4216222e78fc60554fa739d13be5c65465dcedfadcd2"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_10",
+          "source_sha256": "9e263bfd7cffb7e1f2b47d268a78dc6ffc960961864f1f69afc717f45c813480"
+        },
+        {
+          "item_id": "math_test_number_theory_1144",
+          "source_sha256": "9223ec3a821e54ef32460e12ae7882bce0bc9f99f34169fa9d4f722ed91e6534"
+        },
+        {
+          "item_id": "math_test_algebra_640",
+          "source_sha256": "8f812a8f9fe322cae164839e943a5313d878f38a6b5e687a476cccfb4ded511b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_85",
+          "source_sha256": "b5327f2d3385e1f7f98cbbfbf3188b1a2ba928e0cec6fd17bf4c40da6f14bf37"
+        },
+        {
+          "item_id": "math_test_precalculus_1124",
+          "source_sha256": "fbc96332d51b2390cd0c16ea57e5494ae1bba900f9169eeaaeb06af5cc0ab329"
+        },
+        {
+          "item_id": "math_test_prealgebra_1180",
+          "source_sha256": "764991d992b7e361d53b3f80c25e2136f3fc5cd688e1f206c044c6239b3e7c81"
+        },
+        {
+          "item_id": "math_test_geometry_483",
+          "source_sha256": "7a6b19d34c873b93a1943cd40f8c3bc21a1307aee817b7f32d970f88649bbb95"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_394",
+          "source_sha256": "3c6d5e104778fb4708315514385ecbc85ec575176c021354ad58e9dc6b9a7932"
+        },
+        {
+          "item_id": "math_test_number_theory_1248",
+          "source_sha256": "c63579f9f56ca201619ec9a7b152a9e5cdb8a38a99279277cc23c4ad93b05382"
+        },
+        {
+          "item_id": "math_test_algebra_1918",
+          "source_sha256": "b508166f63525a79f94b59e19159c8a305009672571f989461094c516f00403f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1499",
+          "source_sha256": "d362a90767ed3923547b84c2918b5dc80a50196d5587a6996f7abc1415e4b9a1"
+        },
+        {
+          "item_id": "math_test_prealgebra_378",
+          "source_sha256": "1dab8f6495627f42ef8c1fbdffb4643a42519da644643d5ea93a2aaa15983102"
+        },
+        {
+          "item_id": "math_test_precalculus_1298",
+          "source_sha256": "4a1678fa9216841e41fbd958715503488d5584c791cbbee7cc326c15fbd18fb5"
+        },
+        {
+          "item_id": "math_test_geometry_54",
+          "source_sha256": "a3002e16d57be2c8cc87200bbfae69e7064f2b2075b0958eb299842075d30cbf"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_271",
+          "source_sha256": "a1efca1454ad81f7da21aa93f323896476c4cd383fe91a4b49ede6cd7478e517"
+        },
+        {
+          "item_id": "math_test_number_theory_1233",
+          "source_sha256": "83e254cf5f4516984a0619e445fc4c54684b32a6b6fdda479e70dfff3fdc3105"
+        },
+        {
+          "item_id": "math_test_algebra_1190",
+          "source_sha256": "0cea6b526bb19fb459340949713de3b2e76cb2b6886eb66dddde042aedf1315e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2109",
+          "source_sha256": "c2f06f440bc375d088a2b17e3777816c9837f98d808f7dbccbf8018590584ef5"
+        },
+        {
+          "item_id": "math_test_prealgebra_1680",
+          "source_sha256": "8fb18f120df137258bb5a51d749a104ebbebf21097e173f599c5fd22bcde5d08"
+        },
+        {
+          "item_id": "math_test_precalculus_893",
+          "source_sha256": "dffe3077a0468c60011556fe085d65c2b25d55d493106d4ec46ac78c244e8682"
+        },
+        {
+          "item_id": "math_test_geometry_777",
+          "source_sha256": "0e0f4c7cc3a295265229657c3112aa0c363531aeb3a2f9cdcd513b0cb6160522"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_519",
+          "source_sha256": "c16bf1cfec62c84e2446ec39c5727f115c48b4fca475c7d057d0ca4581bc407e"
+        },
+        {
+          "item_id": "math_test_algebra_1815",
+          "source_sha256": "d02c0f5459cd969f2849de8987840ae1e853a559aa9c729ee6d2a5ffeea2e69b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1071",
+          "source_sha256": "5e47881e123fafffd8fd15256dccfabdea79ac5c797c68001f3ee94143335a62"
+        },
+        {
+          "item_id": "math_test_number_theory_1123",
+          "source_sha256": "39d76f8fa9826067c7eb2adcda1b596a34981829dff2723ee7a91a273060e6f6"
+        },
+        {
+          "item_id": "math_test_prealgebra_1572",
+          "source_sha256": "aa7cf7db38f7680d9c66ea5e7739bfea552ab297a84003381f8a52da5f5e4fe5"
+        },
+        {
+          "item_id": "math_test_geometry_594",
+          "source_sha256": "c53d067e1bc30a24f562bed77ebb5f6bb230af495154c3df124d7b75a0402cda"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_886",
+          "source_sha256": "098015e0933788b13e08bb06a63d842ca0e017d91aaa963a7689c5e39a869a43"
+        },
+        {
+          "item_id": "math_test_precalculus_927",
+          "source_sha256": "c92d05a9ece43757be93f21f2b11da00151996b38f31fda67e498319f3542ec0"
+        },
+        {
+          "item_id": "math_test_algebra_805",
+          "source_sha256": "2107b1bb42dc7ecdf9db3abec3f8a8137778b3d622aa7226ed37e5ba77ec4892"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2058",
+          "source_sha256": "c93964558f889d0105883eda55ed4dd8f315d5b4992bdf25373040c9ca32879c"
+        },
+        {
+          "item_id": "math_test_number_theory_109",
+          "source_sha256": "a7b8340a38ce9be7a2f58b6e5ce3743bc362bc54dae4ea625f56062fa8fca8e2"
+        },
+        {
+          "item_id": "math_test_prealgebra_1524",
+          "source_sha256": "5e5f229b2050fc36d11b32423ff8ede5e603aba3fd73957056c8bd8865a06857"
+        },
+        {
+          "item_id": "math_test_geometry_389",
+          "source_sha256": "c9d6708a20c9996cf0fed9abca9acc52f8559669996b27affb8d9688e314435a"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_342",
+          "source_sha256": "574e27bb3f4d988e37cf6a2ebf1802ccd219b1a9a3cc09cc5f9607d9a0a0644e"
+        },
+        {
+          "item_id": "math_test_precalculus_1060",
+          "source_sha256": "01d5e5a99493a41a9916edb31ac4bcf50a404b4e6d5a8d0e97ae2be246284980"
+        },
+        {
+          "item_id": "math_test_algebra_702",
+          "source_sha256": "36b575c2fba8fac39529e6ba4a5c8331c15fe664b6b12c1f68fdccbcd36508f1"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1873",
+          "source_sha256": "790df8457aa29906b241f661739869baca2fa7fb7565e3f206d5839b8e6136f2"
+        },
+        {
+          "item_id": "math_test_number_theory_266",
+          "source_sha256": "ee6b9a96c715fdbbae84c1e69a084c7a88d714536bcc5c9a250b964fb1d81fe5"
+        },
+        {
+          "item_id": "math_test_prealgebra_1084",
+          "source_sha256": "c84ada845a5a7e9869effbcda944ea644be8a190dca940ce7f49982caa7eb804"
+        },
+        {
+          "item_id": "math_test_geometry_261",
+          "source_sha256": "bc375c5bae333bcba4c781b5704cd7d9cd26d6a73a7767c511075dde5f7df515"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_901",
+          "source_sha256": "02109963c5a3f3af52e486859a96d4eeaea33ed59770acd0a475677e03c3d1e1"
+        },
+        {
+          "item_id": "math_test_precalculus_616",
+          "source_sha256": "6162ddc9d2ca22a4d8be9bb08340b097d1a32356752fc0e1de2d737bacfb5bed"
+        },
+        {
+          "item_id": "math_test_algebra_1213",
+          "source_sha256": "d7df0a516e25991deb5904e315741c6235d5968d58e73fdba2d12316712a13a9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_488",
+          "source_sha256": "349ad27e8fba75df9cae31047dc37021b94fc38c3e2e536d8c3ae75efdcae07d"
+        },
+        {
+          "item_id": "math_test_number_theory_23",
+          "source_sha256": "b448d50da7c0170ccc51f653cb8cc33e6565ad5500e02c972a3e33c6b255c3d3"
+        },
+        {
+          "item_id": "math_test_prealgebra_1421",
+          "source_sha256": "7b229dbff42566aeef2cd413761d88094a65b8bd9ce55145c61430e59e3a7b4b"
+        },
+        {
+          "item_id": "math_test_geometry_107",
+          "source_sha256": "4b60b0f46752a7609928a283fc2db6c589a05b7270fc5a2008b6f4c36c348741"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1108",
+          "source_sha256": "a58ed57f55704684c3601fccb61df60aea956ff4e953916c17e4ca55aa35964e"
+        },
+        {
+          "item_id": "math_test_precalculus_798",
+          "source_sha256": "52d6dcb32f7b2f593196bf3aa7e9b75dd7cd55ed667ae07bc8ec7aba55c02370"
+        },
+        {
+          "item_id": "math_test_algebra_662",
+          "source_sha256": "2350204b271354508ffbee64e334cf5298518214326731927e50fae762b7ba10"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1793",
+          "source_sha256": "9ffc780b8629d26b4f16fb857ce8920ef85576d7dd7118c853ca109895904705"
+        },
+        {
+          "item_id": "math_test_number_theory_430",
+          "source_sha256": "a7bc9e7c8b0ec72382401e5b1069753602f5f2af85fe3838b4f9154a20050924"
+        },
+        {
+          "item_id": "math_test_prealgebra_1101",
+          "source_sha256": "39d512727fd443918a26363f6ce1c5e4f3b3fb3f167e25b40ea9b53fe72e3ef5"
+        },
+        {
+          "item_id": "math_test_geometry_150",
+          "source_sha256": "99ac04c02885d29926fee9f8bf0cf8634fabe9e9ea50568182ca59bed5865a1a"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_686",
+          "source_sha256": "9667819b985f844968b7a7c9475585d6609881800d6265d8ab71194720740313"
+        },
+        {
+          "item_id": "math_test_precalculus_186",
+          "source_sha256": "bd630ab99b6f8042e4ea557406cedeeca113545c3c5908fedf77301cbfebae88"
+        },
+        {
+          "item_id": "math_test_algebra_2530",
+          "source_sha256": "8d5e397410d90d74151eace05ab445c0fc84fd484be3ec174d47bf53620e1907"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_109",
+          "source_sha256": "d6e7d0d8ca4d03dc45e5b831042af608614be1f8a3a45f8e38d8f08b3fa9a032"
+        },
+        {
+          "item_id": "math_test_number_theory_978",
+          "source_sha256": "f34aca9c0fbcec0d6ed87a83ac9bc4c2f3a6c198abe8409d98faef1a3b4c62f0"
+        },
+        {
+          "item_id": "math_test_prealgebra_942",
+          "source_sha256": "92e6b17f1a8c39bbcc5161ca379a6af48ee0c14ec12fee527c1478e3a3ddc6e9"
+        },
+        {
+          "item_id": "math_test_geometry_1047",
+          "source_sha256": "d9c81f8f0e4dd4605acfe65d5cf0d8034febe06a738c3679e23a2cc8c0a4aa36"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_435",
+          "source_sha256": "a9897dc92836fa323012a8b53938a4e05115bca6a0a48aee370c4d0d467b2c34"
+        },
+        {
+          "item_id": "math_test_precalculus_219",
+          "source_sha256": "183f7cbe15891b4e44fe6c866958f593180888a76b53e93308ab3fdf71c129d4"
+        },
+        {
+          "item_id": "math_test_algebra_1791",
+          "source_sha256": "3d9e501b716b3465c7315bc3df30aabc181349e05d7adf573a509969d2171887"
+        },
+        {
+          "item_id": "math_test_number_theory_558",
+          "source_sha256": "e97e71c014d482d87aa13ab999da6ed51324b12756185f26df66a96dada6b561"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1948",
+          "source_sha256": "a1efbac3126b4f254d085d2e3cea52444d47aa51a867bf8544a03e685048cce9"
+        },
+        {
+          "item_id": "math_test_prealgebra_1697",
+          "source_sha256": "5c8096f5d8735cede9b534376e27568b8eb9a0c0fb621d65045b00aa4e16927f"
+        },
+        {
+          "item_id": "math_test_geometry_449",
+          "source_sha256": "4e035f7f2d2f1842b55896a3b3accbb13547a2fd19d191d8dd74634176da9fcc"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_803",
+          "source_sha256": "db874ea55e518495c5f1d7af4eebb77bbcdf4d9ffd2440103f0471ee791469f4"
+        },
+        {
+          "item_id": "math_test_precalculus_182",
+          "source_sha256": "6e06d47cffc74f7b17425c21311165e52946281c1944d36eb6fc67672e2261f4"
+        },
+        {
+          "item_id": "math_test_algebra_392",
+          "source_sha256": "a94583e4593b2fe7621bf0200dc773a642f8fe10eead32c201a03b6c1a0899c3"
+        },
+        {
+          "item_id": "math_test_number_theory_1098",
+          "source_sha256": "987b4bd69d9300aab8fa11cb8f467e6b48ad3a80b2486b1c25c6f33971184692"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_817",
+          "source_sha256": "396e0b94ca0f7b191af4a8fe876d6d8b83b4865fad2765990d76c9b28ae696f5"
+        },
+        {
+          "item_id": "math_test_prealgebra_1230",
+          "source_sha256": "6d56ee47484848f331a3e6e8cf08b880c72ef2cf408f147396fa6b4ea24e65ad"
+        },
+        {
+          "item_id": "math_test_geometry_243",
+          "source_sha256": "e5b797dd11ec3dabba14e130501cc0bcfac5843eda97831383565f0cd2208b42"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_128",
+          "source_sha256": "aba07675b965bce41f039e4f3345456d64c4ca1e37ad435f3b568074da7d10f3"
+        },
+        {
+          "item_id": "math_test_precalculus_585",
+          "source_sha256": "eaee5aa25a8da569621f693238fef8e520043b6b8f196b4cfbec4208b7e3ec61"
+        },
+        {
+          "item_id": "math_test_algebra_11",
+          "source_sha256": "e2583e1f0a1583998ac24c2afed9d09b696b680886eac43a5792a8151f8e21fc"
+        },
+        {
+          "item_id": "math_test_number_theory_1136",
+          "source_sha256": "3ad15fd2d26687edd194d312ffaefa5902c4469b213c0c8d2bbe93f83a1ff1ed"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_237",
+          "source_sha256": "68d103546499931c504a4affa7d22067f803b4a05e84c4553b477bfe11995198"
+        },
+        {
+          "item_id": "math_test_prealgebra_1625",
+          "source_sha256": "0140b4e5d5cf0d22739be2ee62ec013ac6a33447f66270b8e185ca7c05029e60"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1092",
+          "source_sha256": "664b38d7f62b3303851d105ee3ac38241789479eb2bed65d843d8e13faf13b4e"
+        },
+        {
+          "item_id": "math_test_geometry_697",
+          "source_sha256": "72288ee9e90df42af800969ec62d9a4c0136d85c4cbdf642bcdbf6fae70b135c"
+        },
+        {
+          "item_id": "math_test_precalculus_307",
+          "source_sha256": "57464f2a2f7212eff97c4a555105f9e5ffe0f345221b43d58b0b197ad9224128"
+        },
+        {
+          "item_id": "math_test_algebra_1811",
+          "source_sha256": "fd5abdb42087d2045c1056774bb991af2a5ad92d106b757c2b190fed578f108c"
+        },
+        {
+          "item_id": "math_test_number_theory_967",
+          "source_sha256": "698a8e9799bad0a59ab486b51e4d582f51cb8d2f8ff0b0d4d3e753815fe29008"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2059",
+          "source_sha256": "842ebcae2fe45b62ee6c05f0c1d463dd1db61832dbe9719b49e6bafbceeed779"
+        },
+        {
+          "item_id": "math_test_prealgebra_1095",
+          "source_sha256": "3bd2bef3d3e9034f2a83e098c3a1ed08da12c275340a021bb1c5e48b7c217808"
+        },
+        {
+          "item_id": "math_test_geometry_486",
+          "source_sha256": "aca7730a8e647a98ef561cc3c965194ad6e1170a414b984224dc9d7a1a668445"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_355",
+          "source_sha256": "cc82a8f364191fb1fbf9dbbb3ddcd5e01a5e49c67ba0d395c95e02decf57a928"
+        },
+        {
+          "item_id": "math_test_precalculus_1140",
+          "source_sha256": "d2068ace88135f9d29de6af4e08dd6aa788be9d3f9302d6d1dc7059e0d3bdae0"
+        },
+        {
+          "item_id": "math_test_algebra_1592",
+          "source_sha256": "66238b3b4a6c6c7342acc9f0f2784da1d5f6ca6610094eb12b29b3738b584513"
+        },
+        {
+          "item_id": "math_test_number_theory_928",
+          "source_sha256": "a2756be4976413b35d2ca0c574e5064e64632e532a2ad84ca06d89207f3c819f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1758",
+          "source_sha256": "ef3e60de427b9cbe040f0aa056f46a85cc20414f6a6b003ec39f2d63d7127a0c"
+        },
+        {
+          "item_id": "math_test_prealgebra_881",
+          "source_sha256": "a8859fb03fc97b5670b3c8367a9a4cfb1eaf78f96f285b1396573f26e5f4f3c2"
+        },
+        {
+          "item_id": "math_test_geometry_87",
+          "source_sha256": "3232c7b0572ff911f53a3274f479dfd39db2d7325aa364240ef415f11128c617"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_653",
+          "source_sha256": "74df0b97f0089cc33f8cc3de38c52351fedf3c2ab275f4cbeefc657fa94f5712"
+        },
+        {
+          "item_id": "math_test_precalculus_995",
+          "source_sha256": "edb07076f49166711712349ec4a50436c1eda989b50f5b0d1287c948df192952"
+        },
+        {
+          "item_id": "math_test_algebra_1855",
+          "source_sha256": "46b5048026dfba7beee1fe1f1796b84f50f0e3b05e81c96710ed8f4d5d0c9512"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1801",
+          "source_sha256": "182bac3cd7c89b7a14e47fd800f6ed608b163dc5f6c706b8a26a9db60222b379"
+        },
+        {
+          "item_id": "math_test_precalculus_1278",
+          "source_sha256": "319badaae28be5ce5aa7d508f439a561e5f3c15297b2cd19905c7a952d56d973"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1067",
+          "source_sha256": "f895145440458f9a052937f6e2be92ff40baa3f9b03f8f95f47dff87df074fd3"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_386",
+          "source_sha256": "550972d21b7971c8440747437fed6b0b919c5cfb77fdd244eb47f37355766705"
+        },
+        {
+          "item_id": "math_test_number_theory_878",
+          "source_sha256": "bca0a14c27b8b5b2e9326f716dff0edcaf91ae11052146de700c8edefbf2460f"
+        },
+        {
+          "item_id": "math_test_algebra_1227",
+          "source_sha256": "70b395cbd77eb5b1ed0f54bc1f439fecdffa531721a8f768cd83f9a980db6b63"
+        },
+        {
+          "item_id": "math_test_geometry_119",
+          "source_sha256": "23513d3a13b51eb05249c225d304b0fd72c627dfaa86e936d52d72dd68b4024f"
+        },
+        {
+          "item_id": "math_test_prealgebra_2048",
+          "source_sha256": "e409ade3843a2b38427acebea2d10a2637eafc2e0d94a75a538860a9a50bb86c"
+        },
+        {
+          "item_id": "math_test_number_theory_303",
+          "source_sha256": "4e78b7f48d35bc6ab6b1ce74886792debfc54c974a99a14450e046265b3489d4"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_867",
+          "source_sha256": "b182b2a07d26c1552c34d57fd3ad604483d7406863f71d074a2f636e7a7d7e8e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_24256",
+          "source_sha256": "70a0156cf2bc20f6d66fd96c1f10ba033a1bf787eb725a802f37792f9d253e42"
+        },
+        {
+          "item_id": "math_test_geometry_1044",
+          "source_sha256": "e2f774d87f6fdb0d9e4deed23830049c07779496d6613090bb131abe32c663b0"
+        },
+        {
+          "item_id": "math_test_prealgebra_1245",
+          "source_sha256": "77ce4d0033bd3fd9e9c4a766f2f32d7c37f947eaa248381c58bc09ca48b41815"
+        },
+        {
+          "item_id": "math_test_algebra_220",
+          "source_sha256": "2dbab1264cdb8f87668f3630fa147390c7f3fe1ffd50055efd36880ef367a9db"
+        },
+        {
+          "item_id": "math_test_precalculus_1240",
+          "source_sha256": "527c8753319308240c8e7b19a69a06003e2663b3573df37950d86fc4fd567728"
+        },
+        {
+          "item_id": "math_test_number_theory_821",
+          "source_sha256": "853f6b865b868be601d5ed6da98108f30d1f5f7f73ea36945a4f2606daa65685"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1120",
+          "source_sha256": "e389c9be9e0351216e5b2b288da4e569357b31e5f18056f5f0d7b0e6ad247a1d"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1125",
+          "source_sha256": "ed1a3ff9ce21cf2e93923f1e216cf72341bc8abe12c9b4b7874dd27e3bf9ebc0"
+        },
+        {
+          "item_id": "math_test_geometry_179",
+          "source_sha256": "fdc6701a38f5e9f220dd13c71ea6bf167cc51204b8f42df13fa4e80679310576"
+        },
+        {
+          "item_id": "math_test_prealgebra_1426",
+          "source_sha256": "6e8f0b765890a68fcf10d5fcac6a2b805df6da09e8be12400eab042fd27ebb25"
+        },
+        {
+          "item_id": "math_test_algebra_141",
+          "source_sha256": "855326cb5f2d123f2da728e2e552da16139340d62f4affdec0ff7232f58e6d49"
+        },
+        {
+          "item_id": "math_test_precalculus_919",
+          "source_sha256": "2eb1206d08582d1a76633830364e7e9b6cc68394231e5601e57835175af38b35"
+        },
+        {
+          "item_id": "math_test_number_theory_1000",
+          "source_sha256": "9cd743174ab9758c2390e00e4fd62aeaf1476b204dc4f358a99f60fb6ee9ed34"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_933",
+          "source_sha256": "2819752d9eab50c1ab5ef8ed5a39b72a04bc324ce32ca8206d908aafa35eef94"
+        },
+        {
+          "item_id": "math_test_algebra_2088",
+          "source_sha256": "d4127a09ce5817539559f47f064afc7f9d952b2c2dce9bb4dc6f191e42715e33"
+        },
+        {
+          "item_id": "math_test_geometry_1056",
+          "source_sha256": "f61ef03fc346fcc501c4103cfa6cda207646ef1222d605850871908728a38eef"
+        },
+        {
+          "item_id": "math_test_prealgebra_1069",
+          "source_sha256": "16a970f58bb31ee9df543800782d7266362f65f839637d9ae631963be7389a7a"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_862",
+          "source_sha256": "1984536d38b3d832f0812c44a6d091cf1e5d3b6da36943bdd80a94dacb4adddb"
+        },
+        {
+          "item_id": "math_test_precalculus_1002",
+          "source_sha256": "5012e95135d3197c70a62c1a6a42506575a2a84aa8280e52caa23034b80a829e"
+        },
+        {
+          "item_id": "math_test_number_theory_114",
+          "source_sha256": "7e1785d64e1408a9e1349fd46952d6df9a7a676f4eff540e8725b94d68e820cd"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2116",
+          "source_sha256": "b5c25fd073d2327d18f7f08349e67422f72bd53b6b9ece811b6e6267db10cdf4"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_367",
+          "source_sha256": "da7abcc7381a8cfe4b37bc7ff256f5e5911ec7b44a2ca7f40322e04f8089d298"
+        },
+        {
+          "item_id": "math_test_geometry_172",
+          "source_sha256": "d5ef7d9b7c035366366547b31f2d24861571a99010d1ffb5683fb1fdbd616809"
+        },
+        {
+          "item_id": "math_test_algebra_2683",
+          "source_sha256": "0ea69cccd034f37bd988e263b0f5a434de2594245121cfb922a27b8634290be0"
+        },
+        {
+          "item_id": "math_test_prealgebra_1758",
+          "source_sha256": "f879ae505f57a8533517fadd45c76d8d3fcda17c75a722f4c93c1567e8d589e6"
+        },
+        {
+          "item_id": "math_test_precalculus_1215",
+          "source_sha256": "50dd80e2cc6167bf7facceccf63cef8602a30c84656e5bfc95f464bb06960ff6"
+        },
+        {
+          "item_id": "math_test_number_theory_818",
+          "source_sha256": "9a967b0e5e565c47b318d34674283d784ff18c7ead61978bdec2cac5d901cdeb"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1625",
+          "source_sha256": "b3e1cea3d549d9ee0d3bd2cbcad8158b24162c1d19a34ba3e82d2fbddd81454e"
+        },
+        {
+          "item_id": "math_test_algebra_1558",
+          "source_sha256": "ce3625aad5c7589c2c98631a642dbbdedee83667c041113bb083ac0654a970de"
+        },
+        {
+          "item_id": "math_test_prealgebra_1362",
+          "source_sha256": "6450fdefa9a33610b157f44c82d94401d8a6be25702367663604a834aa1d8d96"
+        },
+        {
+          "item_id": "math_test_geometry_812",
+          "source_sha256": "3131ffcc50813e0a49bebee64b266e2ec7f61b033d1ebfc8c38574a095419339"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_870",
+          "source_sha256": "2f4d8ab35c25c1aebedbcfbadd9e7e323d1b80ed05a08244bd15b80958b8c165"
+        },
+        {
+          "item_id": "math_test_precalculus_139",
+          "source_sha256": "d7e3c30245c2b92ff8c76a27b64180b8415c4ac356d8331b03e910b268f21556"
+        },
+        {
+          "item_id": "math_test_number_theory_505",
+          "source_sha256": "435235bd5da441aa968bdf07bf3d23065e3e7d1015a2742c2b98cbf2d11031d9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_966",
+          "source_sha256": "7078e8cc81888654453e46c964115981a0f6be633f2d7d492aed84effb3da5fe"
+        },
+        {
+          "item_id": "math_test_algebra_26016",
+          "source_sha256": "718e23f8bc2939a88d8f414cc1526ce407ed93b384d5c60bbf8de5f6d6cdb013"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_697",
+          "source_sha256": "edb16d8b5f14de821d3942e0e0dd4504d7b0715f4982ca5b636635bc4567029f"
+        },
+        {
+          "item_id": "math_test_geometry_145",
+          "source_sha256": "827c2b09789e59836cf41a467a2fd2d3c0da3c0620e07e4c7b5d94e7fa652b06"
+        },
+        {
+          "item_id": "math_test_prealgebra_1609",
+          "source_sha256": "b1792657242954b93cee84827d473490f16daaaa4d33777d01ec4a5de9f9456d"
+        },
+        {
+          "item_id": "math_test_precalculus_1081",
+          "source_sha256": "ffa6a20aea72e7e33264554b57a1c152a3d69effb50875dcb8ed11ff111f5563"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_259",
+          "source_sha256": "78e34ac0b4599e29dc581feae636f286cbc896b4f79a8fbe9468095202fbd25a"
+        },
+        {
+          "item_id": "math_test_number_theory_340",
+          "source_sha256": "53e94787b758b9b36f3e866688377568b263afe65f6d30ebe92dfeede24f1ba2"
+        },
+        {
+          "item_id": "math_test_algebra_1233",
+          "source_sha256": "6fb325a1e4ce3a0eaac68861923b74661f8d5342a1efb5458f08a0f58f48d854"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_614",
+          "source_sha256": "c54c2a5521e06c9b4fbb8962bf0cfbb31c4fc870a5878df7c06b6384f1e29785"
+        },
+        {
+          "item_id": "math_test_prealgebra_1387",
+          "source_sha256": "ff4202fa7958e39c9ee5ba3a2af6a95be8cf201a89aa3c02ccb2316a7f1e35f1"
+        },
+        {
+          "item_id": "math_test_geometry_780",
+          "source_sha256": "df2a2030def0955921224da9ef05195f181fe0de2ca17d1ea8435ecb58ba2407"
+        },
+        {
+          "item_id": "math_test_precalculus_992",
+          "source_sha256": "697fb082c790778131fb2bc3b931097bb77b07e81854f8ab1126ae11412f0c06"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_812",
+          "source_sha256": "0e90170f36b09c1a0af78aa26c1ae65a2e35880a660276391fa39df638572e67"
+        },
+        {
+          "item_id": "math_test_number_theory_227",
+          "source_sha256": "d2f7e33330eec149f978a961cd35285e00feda50a44181edb1fff939a8b919bc"
+        },
+        {
+          "item_id": "math_test_algebra_2421",
+          "source_sha256": "fcc0c6da1d85b20f50032ccd27427cc853a70bdbb1e47be26a317a68347fb49f"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_732",
+          "source_sha256": "079472196fa008f8dd14941ad78a35bd09ed50e012cdf8e914ccc3487a59d140"
+        },
+        {
+          "item_id": "math_test_geometry_458",
+          "source_sha256": "930391d44a5af1eb6e6f61f234673002358f6fc6e09b959f82246ae730cd6c6d"
+        },
+        {
+          "item_id": "math_test_prealgebra_1531",
+          "source_sha256": "cb66ba4721171c2ccdd04d20530aca3324a12185ae6d863ddfe78c5fc7e2d052"
+        },
+        {
+          "item_id": "math_test_precalculus_1241",
+          "source_sha256": "8573decf8e6b236480539f7aba6ada6e1f1299dfcf47b6d70756cd524346a853"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_875",
+          "source_sha256": "d83b3d018ac1b4e7703f0ac3f6dfbb392d1ff11e8866294cff90dafe3baa93f8"
+        },
+        {
+          "item_id": "math_test_number_theory_494",
+          "source_sha256": "97573a48677ca145508c6b03a6edc0d6eafc33b61073d0eb1343ebf73313dc2b"
+        },
+        {
+          "item_id": "math_test_algebra_1282",
+          "source_sha256": "305776fe25edbbab0330b368fe0926d431bef88b6ee84c1fa231c8c09d438575"
+        },
+        {
+          "item_id": "math_test_geometry_454",
+          "source_sha256": "8cc9fa9fa924771c8d116f4b869702131457a2c90ba6e57f6bc1392e38cb135d"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_671",
+          "source_sha256": "7cffd3ca93295c1b017d2aaa1eb60ebc364879853e6ed87ded49927888efd69c"
+        },
+        {
+          "item_id": "math_test_prealgebra_1353",
+          "source_sha256": "d12364c9ca016932ac7f0d3aef33b0edd0869dc8a3ab9d93d055fa6b35e480a8"
+        },
+        {
+          "item_id": "math_test_precalculus_90",
+          "source_sha256": "2111db313eb673089f12a257b22578461da9d1e198a7b4da5f2011ffefdbe1f8"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2089",
+          "source_sha256": "0ffab6a2809755a3dec70e37dcfa80052c0a3bd12bd73a2c4c1a3ae1801e2652"
+        },
+        {
+          "item_id": "math_test_number_theory_76",
+          "source_sha256": "447c4aaf14b002a5f43d861f5665900665a4a60622a8c2e8ec1a61accd44c2c3"
+        },
+        {
+          "item_id": "math_test_algebra_1535",
+          "source_sha256": "e6744f81559d6ba85542507d7b1be89d2345f8d46518b756e974732c443ae14c"
+        },
+        {
+          "item_id": "math_test_geometry_1083",
+          "source_sha256": "e7b479e241f738b6cd5e0f89166fd0cccfb9a159f59899a66a9d08c9c449114d"
+        },
+        {
+          "item_id": "math_test_prealgebra_493",
+          "source_sha256": "52d5a38367d78f78cb5b665092d42eb4567275d9ea602e30250469c505f6a2cb"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_528",
+          "source_sha256": "f19b8ca52f0b76acc73a8d8a071ad7f1ca5dd43a6d30f081a40430e2c2e0f15d"
+        },
+        {
+          "item_id": "math_test_precalculus_1161",
+          "source_sha256": "9da1a55bc5216e1629c127de5423eb2c542ee45f46868de71f832874113ab7e2"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_522",
+          "source_sha256": "47d0b411b978a2e7e83dc845b1f9c267c7d8fddcb92606d4aece8f001ab4adb7"
+        },
+        {
+          "item_id": "math_test_number_theory_1186",
+          "source_sha256": "b0b1980d878bfc9fff423c4332db17b0bec8b8748bce9c55220b444258335c78"
+        },
+        {
+          "item_id": "math_test_algebra_753",
+          "source_sha256": "14244276f3a9a3a6c121f8d9d35e76db1a5a9cab51e3e0de7b92b8d0290c4ea0"
+        },
+        {
+          "item_id": "math_test_geometry_115",
+          "source_sha256": "775359469d4d3a94763dcae5628e570e75ac93f0beeed9a84c247d609b249ee4"
+        },
+        {
+          "item_id": "math_test_prealgebra_1057",
+          "source_sha256": "dc5f2752a417f5c3659b034e6e3b4ba1d6017b4556f41ed36a8d453bcceaeac5"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_206",
+          "source_sha256": "b5c4cfeea8cdc363507128210dddccbcc474b9fd8a384357f5b1904688319988"
+        },
+        {
+          "item_id": "math_test_precalculus_428",
+          "source_sha256": "f185220dde1c77e843a32495274f2b5a5fb6fc91af7e256d52e9b7dd4d16de5a"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1930",
+          "source_sha256": "2d686330983ef9a80288e409dc9c949715960a3253e0462d8d823b63eef5a333"
+        },
+        {
+          "item_id": "math_test_number_theory_329",
+          "source_sha256": "d5c7d7bb6d80dbf934a75e7463a6c10bbc21cd4300d696aa87f5f41db316f862"
+        },
+        {
+          "item_id": "math_test_algebra_1208",
+          "source_sha256": "620e4273aadc62be9b720d897ca3d0027a25f6fb92f343518f4a29e7bf6125de"
+        },
+        {
+          "item_id": "math_test_geometry_507",
+          "source_sha256": "86d5efd8023066bddddae4e4ee33d917a35f209577ba35eeabd045304d3011cd"
+        },
+        {
+          "item_id": "math_test_prealgebra_2053",
+          "source_sha256": "e7cb4e1a06e614d6283043cd3fbe9956d9ebf7bd5dadfc44d9ca3d1048a47bec"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_670",
+          "source_sha256": "519c81fa49020055eedf9ba3e983d9842ace8c0a7564bab7c9a3409ebb194415"
+        },
+        {
+          "item_id": "math_test_precalculus_551",
+          "source_sha256": "75de783d7fe2f6cd64d33a7518dde5c8cb313e1a34e6c387801ff339e0cb4195"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_964",
+          "source_sha256": "880f9e082e061b3484027a99440c0ca250553c2d9d7bdfaa8a9507f588a51396"
+        },
+        {
+          "item_id": "math_test_number_theory_403",
+          "source_sha256": "acf4be4218ce9620c775b57a81aca38f1227418b4cb6174fd1a5a46efe553a37"
+        },
+        {
+          "item_id": "math_test_algebra_2539",
+          "source_sha256": "5f30faec75a9fbe2b920379b4e29b54139d81f6ed954868980e031c03c72be81"
+        },
+        {
+          "item_id": "math_test_geometry_1050",
+          "source_sha256": "1263962e4f22bffd5d5aff1a6b139dbd25bbafa639f3258507a38fcf1d1a1bce"
+        },
+        {
+          "item_id": "math_test_prealgebra_1749",
+          "source_sha256": "ed15ab5e0b09937a8ac7be4fbb3e7f85a48ab1b4583071c54dc4965d05ed7e32"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_952",
+          "source_sha256": "d202f16d19ba3af72879571b84abbd46dfcf673aaa873b9eab67a32da567581d"
+        },
+        {
+          "item_id": "math_test_precalculus_866",
+          "source_sha256": "96b448ae37bcb606818893706cf61023d295b33effa7bf78ddab3fd7aff58a61"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_37",
+          "source_sha256": "4cdc9cb0f0a3fea8331ba31f1ae430d1a8b034857f37d64819153bd714bd72a2"
+        },
+        {
+          "item_id": "math_test_number_theory_1024",
+          "source_sha256": "5e0e85867154524dd1c9fad1e583fbc813ace683db90d9ab3f4475e0cfbd1509"
+        },
+        {
+          "item_id": "math_test_algebra_2237",
+          "source_sha256": "f74ba311dc9b83f7212a89b1ad170b13613c4610f51c95643dabb06c29fd1113"
+        },
+        {
+          "item_id": "math_test_prealgebra_1934",
+          "source_sha256": "ba265c6f256319e49c326f20d8867cfac349a7d84529e1ab37ebc9a1931af802"
+        },
+        {
+          "item_id": "math_test_geometry_947",
+          "source_sha256": "b943486ee5781ad911fb7a80fe63de9a101608123ddf4341df23195dbff31286"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_419",
+          "source_sha256": "f3ac10c31989c9b2e285e29b8de9cd5d351dec915b02ce247a09242282e6e040"
+        },
+        {
+          "item_id": "math_test_precalculus_628",
+          "source_sha256": "1a3127d671186e1cda83780f41d00c55886a1c730b30ceb6fc2a39b160141001"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1961",
+          "source_sha256": "6d55d9e869614476ad8a9533d21a29689cf6b89d5b79475c7fa4edcc14310b12"
+        },
+        {
+          "item_id": "math_test_number_theory_451",
+          "source_sha256": "d4f20091a4f1afb7f77df04d1f653132f9cb120c05e22960b2262feaae2a2edb"
+        },
+        {
+          "item_id": "math_test_algebra_2672",
+          "source_sha256": "33c950aebe99475cd9ee61dd4cbb77b31f11f7b8d001728c82d53b433138bb00"
+        },
+        {
+          "item_id": "math_test_prealgebra_845",
+          "source_sha256": "f6699027a99448389b5bf9f7b5852aaa39d473e27821c15956524542ccbb5b55"
+        },
+        {
+          "item_id": "math_test_geometry_943",
+          "source_sha256": "13565ec1a10225a65542e44987c25e81b1d003f448ce5749680662fbfac9ff3f"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_559",
+          "source_sha256": "43e913c44a166ff9c04b3b1cff495da5404f7ea2bef582e3458df6531da8efe3"
+        },
+        {
+          "item_id": "math_test_precalculus_1227",
+          "source_sha256": "911fd675309ff877777370ac878c1a08f0f629c6d7d1e37d77e4d9f8b14ce66d"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2020",
+          "source_sha256": "c3750c713400e7521ff75fa03445162333535323b793a6e801e9ce362ce9cf7f"
+        },
+        {
+          "item_id": "math_test_number_theory_910",
+          "source_sha256": "f932613c1419b056090d1806ae1f84c44aab0aea5db3cc896dc52067b55ebeca"
+        },
+        {
+          "item_id": "math_test_algebra_21",
+          "source_sha256": "1695110305ed13afa571645fdeeb4df556ae3a410686b7a9f7d3398d6c41d533"
+        },
+        {
+          "item_id": "math_test_prealgebra_1876",
+          "source_sha256": "41fcd575d5496408d7fb1ca4655be027a8fbe782a73601d674bdd03dd0bc10d7"
+        },
+        {
+          "item_id": "math_test_geometry_1103",
+          "source_sha256": "e29f390ccb2c882eca862ebd3067bfba8a73c1fc5f498cf4712ac1ae4fff0068"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_152",
+          "source_sha256": "78abc8cf2b4ce89416cb450e9a11b2a2d823683b6a6f056f545262e50d5df47d"
+        },
+        {
+          "item_id": "math_test_precalculus_1115",
+          "source_sha256": "4178bda7394333fb31e0dca64ae3c3ec90b3a302b2dd7cb7df3a02c06ba754eb"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1187",
+          "source_sha256": "27eadd82f387e456d8ceeff3b3fc3901e2a5fb0808c2022728281ae6c199a5e6"
+        },
+        {
+          "item_id": "math_test_number_theory_765",
+          "source_sha256": "0e980fb2080f137e382f5393a152049cfff964945ab00358f6be3c9693fc8280"
+        },
+        {
+          "item_id": "math_test_algebra_1306",
+          "source_sha256": "cd55b57628e8096237e02cb27d49efcc7958c334c83e58c38472435900594481"
+        },
+        {
+          "item_id": "math_test_prealgebra_1732",
+          "source_sha256": "886a0f657b4bf48bceeee035c333a40eff79050390f4baa5576fdfde8e817e05"
+        },
+        {
+          "item_id": "math_test_geometry_879",
+          "source_sha256": "a69df09c9289d063a500d57aa70159a0254ad39185918427cbc430db9e18b7dc"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_762",
+          "source_sha256": "aaf94848fde8a79a5f2a1cfbe23f16e2409e6e457a8cbc16431fb2db8f9418c9"
+        },
+        {
+          "item_id": "math_test_precalculus_1033",
+          "source_sha256": "751ba2f201ffd2cda633210103fd92b1d4d23a735bb75b96d91314ab43f1baa0"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2158",
+          "source_sha256": "2050315379e06a115325aba336f710f824e3c8ed77e6aaaaa890e12e9a009818"
+        },
+        {
+          "item_id": "math_test_number_theory_1191",
+          "source_sha256": "21f8be87ba6bd928ef4e1045a838de3c6bd2787bcab7f650b9b619911ffeb214"
+        }
+      ],
+      "n_per_level": 128,
+      "pilot_item_ids_sha256": "d6a1671839efd2b99a3146f6f67be50d9b2cb57bff89704b630d17f7bd91d17c",
+      "population": {
+        "cells": {
+          "1": {
+            "Algebra": 128,
+            "Counting & Probability": 38,
+            "Geometry": 35,
+            "Intermediate Algebra": 32,
+            "Number Theory": 30,
+            "Prealgebra": 83,
+            "Precalculus": 35
+          },
+          "2": {
+            "Algebra": 178,
+            "Counting & Probability": 100,
+            "Geometry": 65,
+            "Intermediate Algebra": 81,
+            "Number Theory": 83,
+            "Prealgebra": 171,
+            "Precalculus": 55
+          },
+          "3": {
+            "Algebra": 229,
+            "Counting & Probability": 99,
+            "Geometry": 75,
+            "Intermediate Algebra": 137,
+            "Number Theory": 109,
+            "Prealgebra": 211,
+            "Precalculus": 64
+          },
+          "4": {
+            "Algebra": 250,
+            "Counting & Probability": 109,
+            "Geometry": 82,
+            "Intermediate Algebra": 174,
+            "Number Theory": 130,
+            "Prealgebra": 172,
+            "Precalculus": 50
+          },
+          "5": {
+            "Algebra": 248,
+            "Counting & Probability": 121,
+            "Geometry": 88,
+            "Intermediate Algebra": 199,
+            "Number Theory": 149,
+            "Prealgebra": 162,
+            "Precalculus": 68
+          }
+        },
+        "eligible": 4040,
+        "excluded": {
+          "duplicate_unique_id": 2,
+          "gold_not_rational": 954,
+          "plain_comma_gold": 5
+        },
+        "levels": {
+          "1": {
+            "eligible": 381,
+            "nonduplicate": 437,
+            "retention": 0.8718535469107551
+          },
+          "2": {
+            "eligible": 733,
+            "nonduplicate": 894,
+            "retention": 0.819910514541387
+          },
+          "3": {
+            "eligible": 924,
+            "nonduplicate": 1130,
+            "retention": 0.8176991150442477
+          },
+          "4": {
+            "eligible": 967,
+            "nonduplicate": 1214,
+            "retention": 0.7965403624382208
+          },
+          "5": {
+            "eligible": 1035,
+            "nonduplicate": 1324,
+            "retention": 0.7817220543806647
+          }
+        },
+        "raw_distinct_ids": 5000,
+        "reference_self_check": "4040/4040",
+        "rows": 5001,
+        "unique_ids": 4999
+      },
+      "prompt_template_sha256": "1a0796c08f1175730c3dde6a9e7d38312904f985853cb2ad46d594a90dd2319d",
+      "schema_version": "math_hash_only_manifest.v1",
+      "selected_item_ids_sha256": "1caaf115ac3e775d905be197bbdf63fb2f2b28b92cb7bac5cd46d044dc65aefa",
+      "set": "test",
+      "source_files": {
+        "test.jsonl": {
+          "bytes": 446564,
+          "git_blob_sha1": "2376b9a194b46c0790e197c91b7249e5f88ac09b",
+          "lfs_pointer_blob_sha1": "8837efbfa7fb7ad8a9a66b280a8cd86be3cd70bd",
+          "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+          "line_count": 500,
+          "sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132"
+        },
+        "train.jsonl": {
+          "bytes": 10896985,
+          "git_blob_sha1": "3a9d774ba092769cce4b93133bf3c97f2b8ea20c",
+          "lfs_pointer_blob_sha1": "fabbf3962afc8d64618406adde7f012bf0ba3c20",
+          "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+          "line_count": 12000,
+          "sha256": "90d96daeac3fe343ebb1e22ce93dd99690f75983e957f88de42f87cffe1e8076"
+        }
+      }
+    },
+    "n64": {
+      "commit": "7ecc794703b2877f63226f2477a49b34f9b25163",
+      "dataset": "math",
+      "enable_thinking": false,
+      "items": [
+        {
+          "item_id": "math_test_counting_and_probability_374",
+          "source_sha256": "54a35e01011ef567b628d3d54844563a4661a15bb76e349712482509ebbf4c24"
+        },
+        {
+          "item_id": "math_test_geometry_57",
+          "source_sha256": "3e691b72f808f176dce6015fe1544b077e8499073b22644d87de021a52379415"
+        },
+        {
+          "item_id": "math_test_algebra_1498",
+          "source_sha256": "3ccb79927bfbd542e7c6540140b37f377c71af98c79b540d93b6900e3c8282ec"
+        },
+        {
+          "item_id": "math_test_number_theory_335",
+          "source_sha256": "133ff61f147d70e6f4ed8959f134ebfb587b97c7db2071fc4492dc2f3c666d60"
+        },
+        {
+          "item_id": "math_test_prealgebra_211",
+          "source_sha256": "275742c7ba0a0a40df7992d5ca6a330e4f2a324bde3d74c249839be2c9073a25"
+        },
+        {
+          "item_id": "math_test_precalculus_281",
+          "source_sha256": "3ba51a81d6f1f7dae0e8cda99dc779aec0955886de3038430067e9d165b5458b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_398",
+          "source_sha256": "bc864420ca5ebc6ebcbb20350ec5c275f4c137edcf8d16522b9dc6d204601ad0"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_0",
+          "source_sha256": "87a0acba90961d101ea48588f943cfea05c8dc6d07b582e76937be6e04a86aa2"
+        },
+        {
+          "item_id": "math_test_number_theory_1124",
+          "source_sha256": "f12277829dbfc6fb3476d6e7a079b7406fd3855ef9d4b8bcba4658e88a51fa36"
+        },
+        {
+          "item_id": "math_test_prealgebra_1483",
+          "source_sha256": "06c555f880fb3ba8d82ff573108144d15a1b9605152e7a1c5859ef63dc72a8ee"
+        },
+        {
+          "item_id": "math_test_algebra_478",
+          "source_sha256": "284927d1ff71e90c4d8054dc4250e85be97102c7c5db23922c4ffefcaf54edf3"
+        },
+        {
+          "item_id": "math_test_precalculus_464",
+          "source_sha256": "46afaa5a9c92cc6e4af543b865a0a18002245b8669bcd50e4f29d11ad280140d"
+        },
+        {
+          "item_id": "math_test_geometry_808",
+          "source_sha256": "cdd851588f7693ecb32135f6d1dcb650c0445e269b99b20a2caddee7556a5dfd"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_611",
+          "source_sha256": "9d0ed6814734d726cdb7ecd7a8b001eefb47005f7330e051d339952faf4dda34"
+        },
+        {
+          "item_id": "math_test_prealgebra_768",
+          "source_sha256": "09f20b7fe3533e20a8c44f217be74126ec72a5bd80f62df22ab622c9d3b64164"
+        },
+        {
+          "item_id": "math_test_number_theory_612",
+          "source_sha256": "2ecfd125b0cf9bb28c76f4bfeb0b398128127dd609d6aace66608f5b5d7bbabd"
+        },
+        {
+          "item_id": "math_test_algebra_15",
+          "source_sha256": "7bfd09a5b3b3594e6c6294ec5f160d5ce749e9d17c4185ae7e75f65c5dae3872"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_323",
+          "source_sha256": "a2c4ca921a4b4aefa0f61bc261d1a24b66abf24f41899869ce6e1d2cc2e3c110"
+        },
+        {
+          "item_id": "math_test_geometry_190",
+          "source_sha256": "b15548ffca2da9d04aa92420995f86f444504b5f690cc8f4c31627e9abf77ea8"
+        },
+        {
+          "item_id": "math_test_precalculus_192",
+          "source_sha256": "f4fe952bf73ca1082c54a3d5d313e54c8611171fd84a39d99bbfbfd0b10efa96"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1231",
+          "source_sha256": "5c8d9bada0183434b932285897e44c172f77463dc55e8dc94c48d724894ddaf4"
+        },
+        {
+          "item_id": "math_test_prealgebra_2084",
+          "source_sha256": "1c8c7cc86af1cb9a39dfdef44fd46f12c527853908dd5cdb26f5962e0ab64ea6"
+        },
+        {
+          "item_id": "math_test_algebra_2015",
+          "source_sha256": "bb93e1ff715b50a2c11c6e08fb1322a4c95ed00ef694209b304eef74f019baa2"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_453",
+          "source_sha256": "d09d8a4de358661268007f9d4d87346ce8196beb2df5395c3ee1c38920a9b192"
+        },
+        {
+          "item_id": "math_test_precalculus_1193",
+          "source_sha256": "c8c91e4ccd5d75adb1f6537894e1109c1cdbb79a463b3ed6b1a90d18d71d5bcf"
+        },
+        {
+          "item_id": "math_test_number_theory_132",
+          "source_sha256": "35470aa1a1089f839629277ce60ea0d26ac996c6b043c64309756f5d03ecd41e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1959",
+          "source_sha256": "5104eb8417c2bbc57328d814092d2b724d861af9b1cc199e537414f84bffe89c"
+        },
+        {
+          "item_id": "math_test_geometry_296",
+          "source_sha256": "7d8bc4beed40ecedeef6e854a48458fa91a46874d8e124830d71d0378d9d70d3"
+        },
+        {
+          "item_id": "math_test_prealgebra_1212",
+          "source_sha256": "d4bd5021ef768bbc70d4707069294a28e122d3cff932913436d18b770ea820e3"
+        },
+        {
+          "item_id": "math_test_algebra_104",
+          "source_sha256": "060ba898f5100fab876047e5345d2719a446a604c077d4c36e6f60fcdde251d5"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_114",
+          "source_sha256": "0866754f4a50677d7e77c0995742609169214473d455553cd9ca9f44babcaefa"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_976",
+          "source_sha256": "e703f4b73bd2683c12014e2ba90b89adc758f0714fb2df15fb7a50020d766871"
+        },
+        {
+          "item_id": "math_test_precalculus_19",
+          "source_sha256": "3011e09ef5937d0995c2e333732bff621389fe88e37d97f740794c7e05d12974"
+        },
+        {
+          "item_id": "math_test_number_theory_606",
+          "source_sha256": "f8357e3b0d2a73d21acde6e6401649115a4692ec537e665cd3c70a38fb3260d8"
+        },
+        {
+          "item_id": "math_test_geometry_15",
+          "source_sha256": "dd121ed57ab094d437ab23b72b163aa02cbd9e14b2017284c3e31fe12b6cc47f"
+        },
+        {
+          "item_id": "math_test_prealgebra_946",
+          "source_sha256": "8b16e4dab084c8cd0e33b3b4a1071e12144be04b39010cb1db71f82a67b94ea9"
+        },
+        {
+          "item_id": "math_test_algebra_2082",
+          "source_sha256": "5b0690b405ae56e539c5f5963a83d99919d652d9fb2a4edf922dc10652012d7a"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1076",
+          "source_sha256": "90b9069018b016a063ce397aa75bf99d8542d0ff418b21561443564c10b3d18b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_441",
+          "source_sha256": "764f667fa2f2af3c459d4c535b169299395b1782add130718013d3ba8e75e5ce"
+        },
+        {
+          "item_id": "math_test_geometry_154",
+          "source_sha256": "ef677a64b1e08effaba641d36ae8534b8eb118f18122e80136dbed8ebfb8c8e4"
+        },
+        {
+          "item_id": "math_test_number_theory_293",
+          "source_sha256": "a58f5f574df70e0fd8b19e96e9f07f73b9a74c28347c5e1708f0fa230ff70b85"
+        },
+        {
+          "item_id": "math_test_precalculus_566",
+          "source_sha256": "185e90599e62a31171a8585b500aa0362fbbc0a8ad639dd3c777d09b2e2657f3"
+        },
+        {
+          "item_id": "math_test_prealgebra_1510",
+          "source_sha256": "778b1c86814f6dc38e655fe017d4a2ea980b49d861f0695a32f3277d3c12bf84"
+        },
+        {
+          "item_id": "math_test_algebra_1800",
+          "source_sha256": "f66e9a22dd4570d0cc7a25968c8606c3ab2e47dad123c65ee0b2e01df722261c"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_275",
+          "source_sha256": "fdde2730797d777b8bb0a023d233eaee4425b597b1c92088b6e476cd960caff2"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1269",
+          "source_sha256": "b82c43ec2321c84544b7e8bbfaeeb0ec6dbd4f6af95c6058f46ae1b178d0d337"
+        },
+        {
+          "item_id": "math_test_geometry_713",
+          "source_sha256": "2854d95ca355d66eedca14e55578e0489ee1843e3e368ba169d50150570fb554"
+        },
+        {
+          "item_id": "math_test_number_theory_554",
+          "source_sha256": "ad997836e4b00e75c4d9ab5d99fbffbc52ba5443fc2ea46b0c4fb97fe3e7c6a5"
+        },
+        {
+          "item_id": "math_test_precalculus_30",
+          "source_sha256": "54bb619b505548210d25feb966e0e842ae150e02f23be3ba2e7041066226bb04"
+        },
+        {
+          "item_id": "math_test_prealgebra_1716",
+          "source_sha256": "8244d3c7734649413178895d6763f101ef5d803bed475b722cfbee15806ba480"
+        },
+        {
+          "item_id": "math_test_algebra_171",
+          "source_sha256": "6f5ffa4ce76bf926ba47e77129c844cc6949cf199f7eb7797b0583a978de64b8"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_184",
+          "source_sha256": "95819588cc06621fa837fb6e86ca03b1c7fc811be15ee9f6a6a39f603b6ea798"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1449",
+          "source_sha256": "0eee0a0ce183e52da6603c0a41a2c793331858730e1189695ae6d207936cd22e"
+        },
+        {
+          "item_id": "math_test_geometry_17",
+          "source_sha256": "28aa27ca9cb388f22c6c7d194182e44807f88297a4fd78dad102b09f6e28ac19"
+        },
+        {
+          "item_id": "math_test_number_theory_102",
+          "source_sha256": "a02a628663d139920c6ed94bee9d0a8f05d51b5b258df739167cef5654f88aff"
+        },
+        {
+          "item_id": "math_test_precalculus_1070",
+          "source_sha256": "c6e88406145150225277441bf1fb6beefd8b9012dec9468ad46ce1a0cfb951a4"
+        },
+        {
+          "item_id": "math_test_prealgebra_1048",
+          "source_sha256": "3ce5718b926d3d4be6cd3cb805c7bb6de5c6c27c3a478ada3c502a91933cfee2"
+        },
+        {
+          "item_id": "math_test_algebra_969",
+          "source_sha256": "ce5feabad8f57e25893b8fc5216f00010eefe1ad849139ef5fcea219a52fc931"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_176",
+          "source_sha256": "5fea184e2dd34e7688882dd9f58561afbe14efb4997dbb13df67a4959bf194e9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_174",
+          "source_sha256": "eb6d604480b3b189ab8fe81c3400e280631cdee8a7aa39cb7df1de321be84767"
+        },
+        {
+          "item_id": "math_test_number_theory_640",
+          "source_sha256": "ba8192b3da3059fbcec450b734d3daf58b6e0293b31f01478210e47757bb7d15"
+        },
+        {
+          "item_id": "math_test_precalculus_423",
+          "source_sha256": "eec5367eacf34ef62f9fb61102b156a38698603a29db537de9c580fa0022a0be"
+        },
+        {
+          "item_id": "math_test_geometry_83",
+          "source_sha256": "50deb57179d383a5159072c39b0a40c72f0d36effe1d799607b51633fa25aff5"
+        },
+        {
+          "item_id": "math_test_prealgebra_1639",
+          "source_sha256": "5a9964494f7e7c3f637526c262d1de6437d0d981ecbefef7393371ca6927abeb"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_624",
+          "source_sha256": "718f7169ab403e7991fd305f59d4fb032927ab5490f12d2bcea31a126f2539c4"
+        },
+        {
+          "item_id": "math_test_geometry_254",
+          "source_sha256": "649f6dedea739c54d5618b3f4ab904f04241b5af9bf295275571e4f4edbdd70d"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_897",
+          "source_sha256": "bb8a28325857f036564ff318c0db8f90910a5e8a69c481735b4c7f1e3f4a7b2c"
+        },
+        {
+          "item_id": "math_test_algebra_523",
+          "source_sha256": "85b0669be3121ceabbe1257f68ebd6f3d3bba808da16caa65901afe0d7519e3d"
+        },
+        {
+          "item_id": "math_test_prealgebra_968",
+          "source_sha256": "c7cfafae03f37d186336317ffe17b0d02fc1713dc3b7e07f693ccc41851ae4fe"
+        },
+        {
+          "item_id": "math_test_number_theory_226",
+          "source_sha256": "b9a4b107f3c7d2e5d22d03f3c1a9be84bce530dbaad3d37e9b007423f1564389"
+        },
+        {
+          "item_id": "math_test_precalculus_565",
+          "source_sha256": "14e9a771d2052296e0c91629eae1c463928cf3b9a1249a28f0e777cb749b6516"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_684",
+          "source_sha256": "52b80bbf7236372837b4cbc216af8cf1266255d1f2950be7d581068f6807897a"
+        },
+        {
+          "item_id": "math_test_prealgebra_1725",
+          "source_sha256": "17e4a4c63a1e50a5cf20267c0305e2babad69cfc7bb6f1f9d3b5cd05380a79a9"
+        },
+        {
+          "item_id": "math_test_algebra_486",
+          "source_sha256": "b6c906d5a98e045b9dabf73b1dd47e443a3711b658a5d2b8c7e033f1dfe40202"
+        },
+        {
+          "item_id": "math_test_geometry_360",
+          "source_sha256": "cc32ab534fffccb1ce3bc38b3aa62f370e7ad27c80000d16e2cef4418658dd6f"
+        },
+        {
+          "item_id": "math_test_number_theory_35",
+          "source_sha256": "3856249b80a58de76571df04acab18e2b728b95433123885573c172da075e32f"
+        },
+        {
+          "item_id": "math_test_precalculus_652",
+          "source_sha256": "6a08a7ae173cb8fda3fd2eb3bcf780512c9a02ac310732c8bae6c1d50946ea8c"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1572",
+          "source_sha256": "e6778d59569f791b11e907a60d96e5b5a36cc75279c066061a7e9c8ade764af0"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1088",
+          "source_sha256": "e487b72f6644d231fc9975e39995776297e8c6ca6436906f60bb91b382048695"
+        },
+        {
+          "item_id": "math_test_prealgebra_1091",
+          "source_sha256": "29dfdf02b12b755e7cd276fb7846c8d856f95109250114ce87a7c485d63fdb43"
+        },
+        {
+          "item_id": "math_test_algebra_2157",
+          "source_sha256": "a9f17db4a53c480e9d78db8141f768e9fc5a987e3a93a4668a391bc43b74db63"
+        },
+        {
+          "item_id": "math_test_number_theory_1252",
+          "source_sha256": "eac88fe87397dc3dd35518bbe0fa9fdae7223e93ded8b79362c184a50b9a5d9f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1622",
+          "source_sha256": "b73da60113aa695545bb17488b0bc8992efc898a5d58bf2a45d8c3493f751524"
+        },
+        {
+          "item_id": "math_test_precalculus_138",
+          "source_sha256": "211b348d5adb90aab27e0b1f50f3857b68a9abbcef6c17325e08d36f499845f2"
+        },
+        {
+          "item_id": "math_test_geometry_192",
+          "source_sha256": "b460e5d95fcd1f5da41fa569f8efcff2c7cfe810a7d48301c20a01d731bc7a93"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_852",
+          "source_sha256": "5de36b7b0d1b9741d43977ab8090941e8ba5f75530dbcb3f485478950097cddf"
+        },
+        {
+          "item_id": "math_test_algebra_1443",
+          "source_sha256": "4a83f99f496730cb993117e4d2d1951b85fcc2bb9b919a35242516f677bf5369"
+        },
+        {
+          "item_id": "math_test_prealgebra_2045",
+          "source_sha256": "fca4e221d52d8b654d8346c08a783dfd825c988f56d81265d26cedee502f6b25"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_991",
+          "source_sha256": "80174d078596190879ed645691f570741b180822e2a40617c18d0046e5d4576f"
+        },
+        {
+          "item_id": "math_test_precalculus_122",
+          "source_sha256": "d122f37541138c161ea13905e370cf16aa23d47df95020ff0d75f069fb069ab6"
+        },
+        {
+          "item_id": "math_test_number_theory_981",
+          "source_sha256": "682d76b86493d31d7b5fa42437696e086de7cbf541b7421360616d40933a052a"
+        },
+        {
+          "item_id": "math_test_geometry_64",
+          "source_sha256": "9e4dd28e1120883cef024845201976bdee022718cd5272ef08afdb9e5c2558c0"
+        },
+        {
+          "item_id": "math_test_algebra_2838",
+          "source_sha256": "ac2c74fe9baae00bec92683d059d518035eb87f715869758bc6edb4357f15301"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_996",
+          "source_sha256": "0ed207ec73a6e0e961f936c2448e45c13f2e2bb3797517891aa04f9cdb18b4df"
+        },
+        {
+          "item_id": "math_test_prealgebra_2002",
+          "source_sha256": "c5fb423447b13f3ee43d9b24d5ab81317a976ca530fd493a57621f48fa463d34"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1602",
+          "source_sha256": "2c8d75778c4eeaa484560c44576af4662b26682a880b7c7463ea45da45e81d6d"
+        },
+        {
+          "item_id": "math_test_number_theory_441",
+          "source_sha256": "d6d111ac8f294fd5bddf83d3ab2ad1529cdef0e24acfce5672fa9d8eb3d1d3a0"
+        },
+        {
+          "item_id": "math_test_geometry_846",
+          "source_sha256": "d713336b59d105c9a07b2aa40431247e75c785dcb60f6092b6b4dd5424bd0414"
+        },
+        {
+          "item_id": "math_test_precalculus_925",
+          "source_sha256": "93309349d9486f21e0651743be271a71c45cb2ded5de446a03b8b3124e1d6095"
+        },
+        {
+          "item_id": "math_test_prealgebra_1330",
+          "source_sha256": "9477afdd4b8ee45b87feb697f774e56f6d29bd20fb60e04e849e27e8136957b3"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_662",
+          "source_sha256": "6660c8e55c9199fe97d0a6a2dd5525c5505d460feaad9359ea0922ac25168775"
+        },
+        {
+          "item_id": "math_test_algebra_80",
+          "source_sha256": "8a898c312c2fe750ef3b44f7ec7664b7aca30ba0fe55e0e3b6b0052f9e4628b0"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1542",
+          "source_sha256": "36a545dc9a370ce5ab293524da1872d4af59573d1d4366b1bf02e61e5d23717f"
+        },
+        {
+          "item_id": "math_test_number_theory_65",
+          "source_sha256": "d4596078da68b936bf76832714f8595984a458bd0ab3784142bb502ec5d01ad4"
+        },
+        {
+          "item_id": "math_test_geometry_740",
+          "source_sha256": "0193838e4a11c55607858cfc3f81250624e79a8be1c6f85ed5a48111c2900c79"
+        },
+        {
+          "item_id": "math_test_precalculus_724",
+          "source_sha256": "7a80dcd8da36a14452d1aae359332fb08617b7332e1c2f2f6ea6ae4a8b9ff005"
+        },
+        {
+          "item_id": "math_test_prealgebra_1247",
+          "source_sha256": "ecafc3500a6aa04ead1773f03e44ea29474831ab8cb6c084b1370100139379ae"
+        },
+        {
+          "item_id": "math_test_algebra_2261",
+          "source_sha256": "7960ac9a940b91630c964c16f4dd2397ac0f771041a7e1ec889ff9b65e9453db"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_30",
+          "source_sha256": "012a6aa87cd5bf0c3f7222b21cda7f4fdf8a0ee644487b14f3b028e3f8f37046"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1717",
+          "source_sha256": "da8bec07dd3cb2c4f954dd748c881de138ddad642fdf2795bee9b060a1d2b7b5"
+        },
+        {
+          "item_id": "math_test_number_theory_686",
+          "source_sha256": "e454947272e64fa9308addbb8492aaa34524e4dcec7e8305aa74a80af206972c"
+        },
+        {
+          "item_id": "math_test_geometry_733",
+          "source_sha256": "5a5f4b0cdd9976eb8ba2224b06eee869f2261c8a44a8bc2d6ec4a625a77da64e"
+        },
+        {
+          "item_id": "math_test_precalculus_470",
+          "source_sha256": "6b54c1ec53f9c7e0fe99ac5595ef15ad8617418d39625304a89d51316a0b8aef"
+        },
+        {
+          "item_id": "math_test_prealgebra_1699",
+          "source_sha256": "15bb37173850ef0a441f8db309f55cfb95a8bda4962d1d1c565e2a649dbe8636"
+        },
+        {
+          "item_id": "math_test_algebra_2278",
+          "source_sha256": "ca6a146661d8ac5c5383d26dbaf1bd606ad91f05d3392fd2d5a77e135914d3e3"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_158",
+          "source_sha256": "107858787e09d25739850527c455b0175796d6c220a31c3589f7b19b09802ce9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_508",
+          "source_sha256": "1d7802bad73bdb2a444a3f46a2e74187cc689f8756469034f3b9e7356507afd8"
+        },
+        {
+          "item_id": "math_test_number_theory_29",
+          "source_sha256": "58e7a6159602b9c9a096e7094159d29f48116fefe5da1968832a738425b864bf"
+        },
+        {
+          "item_id": "math_test_geometry_462",
+          "source_sha256": "f2d4ba1e04f007e0b49101ded6479056744b907dff963f894c183a713048a484"
+        },
+        {
+          "item_id": "math_test_precalculus_282",
+          "source_sha256": "dae4c9cc3b435150485ac7de410a66c39d8eddb12f5a25a6ba70d652db843205"
+        },
+        {
+          "item_id": "math_test_algebra_1185",
+          "source_sha256": "ebf66860d0cfbab5aaf02f5a1c8954e30e9d4886afb4f75fe972565a086dc346"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_785",
+          "source_sha256": "840ecc742d24c1e4dad98f42debefa60fa0c3e4e76fb951cdea05237cfc27108"
+        },
+        {
+          "item_id": "math_test_prealgebra_740",
+          "source_sha256": "9d151efe626837636a4715282e50d2fe24733b33ff647221afc55fdb8eec12e3"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_867",
+          "source_sha256": "8992159d541565ee6e4418e3a111a4b6316b5abe3e381020859190a7196f1f45"
+        },
+        {
+          "item_id": "math_test_number_theory_59",
+          "source_sha256": "190525abaf36eae1876e5e78a8db79d032e7341553dbaae3a251f93dcfc77b8d"
+        },
+        {
+          "item_id": "math_test_geometry_248",
+          "source_sha256": "692f23b9a25c2770f0764264459b6c059513beb05e019fdca0378b1dfb844a00"
+        },
+        {
+          "item_id": "math_test_precalculus_77",
+          "source_sha256": "c001a3ba4a88e506c31c2f8e1c7855b5314fb47c2d1cd65adc38ff5035dc3c3c"
+        },
+        {
+          "item_id": "math_test_algebra_2576",
+          "source_sha256": "7b91b3598bb0bd0fd047e5be1e607327b4f3c6f0b6ce363ecd91ad0613ba6b1a"
+        },
+        {
+          "item_id": "math_test_algebra_2437",
+          "source_sha256": "854c98e500b9a1278cefede8ece303f3aa8f076971f355bb1242071c91269ced"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1071",
+          "source_sha256": "b444e96e936051c633df329d46927e6d3eadd1bde4331f8b0b720e60140621a8"
+        },
+        {
+          "item_id": "math_test_precalculus_144",
+          "source_sha256": "14135581e555ea2c6077b267c516ebf1c137640d050468aafa0d579da53d9763"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1870",
+          "source_sha256": "f74fd33a2e7e871646e9d716dad5991ca66a7d042579dd91dc31865d071e650a"
+        },
+        {
+          "item_id": "math_test_prealgebra_1805",
+          "source_sha256": "a5aa80690e85a2a890e40fa2d14827eec2d30d420ac7070fe664beec59652f19"
+        },
+        {
+          "item_id": "math_test_number_theory_92",
+          "source_sha256": "4f27dc7496d189450f8991531f807ee005eaf08c71b19cb955851b1dd76d68ef"
+        },
+        {
+          "item_id": "math_test_geometry_41",
+          "source_sha256": "7b799d175bf11135f559fc7ab96896f839fbdb7a6b66e6f3e56b49c44ad4cf87"
+        },
+        {
+          "item_id": "math_test_algebra_2159",
+          "source_sha256": "53feb992f4667accf5f96f6e521e6d7e28ad262cb56ec22ab92744baf644621e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_495",
+          "source_sha256": "485ff500a522ddb712eaf87669a3b62c57b7e43321b7187a3d1df357544fca59"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_725",
+          "source_sha256": "08bf056103b0fb39b429e1905844cbb75c030dab0563d8f623d666ebfaa058b6"
+        },
+        {
+          "item_id": "math_test_precalculus_249",
+          "source_sha256": "99e5ab6de76279f7710cad9a2616169d87126f210600ef491bf6a9cd24e896b0"
+        },
+        {
+          "item_id": "math_test_prealgebra_1189",
+          "source_sha256": "013288dbafa7ecbf5413185f375642c32fb986fa57e508e8d66e9e7557c4d113"
+        },
+        {
+          "item_id": "math_test_geometry_514",
+          "source_sha256": "d3e3809627dcbc66bbc0693fbc7a09e7d542ab8c392133dbb49e259f7959b26a"
+        },
+        {
+          "item_id": "math_test_number_theory_73",
+          "source_sha256": "fb418e99ea33d642f93f454e879f2391745e89993a10ff6369cccc37580b0b56"
+        },
+        {
+          "item_id": "math_test_algebra_1905",
+          "source_sha256": "586b3f27a9e9f7cf4b7eb6fa683387eda51dac6e198a523aad95bdb65925e509"
+        },
+        {
+          "item_id": "math_test_prealgebra_794",
+          "source_sha256": "b116b569d2c1a22f20f9184f8bf31244dea8573e8af141e3181a30eed07cfb53"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1123",
+          "source_sha256": "8343ff4edaaea875ff40fc016685fb9dde27d684946a716f6d8165ab99eced2e"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_418",
+          "source_sha256": "d88615d57746474fb9143fff8acb7f2ceafa81d29eb88472cd77561781a6dc7f"
+        },
+        {
+          "item_id": "math_test_geometry_59",
+          "source_sha256": "ff5661869ab64f9de8e83a5a2145fb7a9121a5eb084ff9ff2bb95dde04d17b9e"
+        },
+        {
+          "item_id": "math_test_number_theory_269",
+          "source_sha256": "ceec430c5b21d5944e797284e6fd00264ea9253c5d60d60c4a28bc7942d94d0b"
+        },
+        {
+          "item_id": "math_test_precalculus_48",
+          "source_sha256": "f893dc19a0d08a50cc8945ea8375217bca5f683a1591f2854ded61ad62d0e4b1"
+        },
+        {
+          "item_id": "math_test_algebra_435",
+          "source_sha256": "47c958a35f2d2374f05a2d5b21f42a11936113c8ad7599206b009c960c04768f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1507",
+          "source_sha256": "8b826fa630d85a107b93790c343001a7986c21b28dc8bb0d46c07a0f3713af47"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_359",
+          "source_sha256": "a50587d3b8d197d6592a268bb88b74b48e91c3d06a70162383d1534c12f3d6ec"
+        },
+        {
+          "item_id": "math_test_prealgebra_1959",
+          "source_sha256": "435302af25c26b2bbf813d424f6b0062b6cdcfe5d41e3d864eb6a43ef6e76d68"
+        },
+        {
+          "item_id": "math_test_geometry_761",
+          "source_sha256": "545b2cecda76d1f90d5707ca06f8c5605e21ae6183a82facafc5bf66e108c2fe"
+        },
+        {
+          "item_id": "math_test_number_theory_946",
+          "source_sha256": "f324e267870dd0f6eb7de77d3fd754511f48c22957c4eeba0a4758293ef668ba"
+        },
+        {
+          "item_id": "math_test_precalculus_318",
+          "source_sha256": "8f2710eaa310cd7fe51dd8c638c50d090ef19c1db3db97b10cc8526ae08434a3"
+        },
+        {
+          "item_id": "math_test_algebra_657",
+          "source_sha256": "db3d3fbe634b8a35ec17c95be2028bbb2ba7936a3abc1819c7488f6c22cee9f1"
+        },
+        {
+          "item_id": "math_test_prealgebra_1440",
+          "source_sha256": "33e8863fc0cb0e5a0adf25c80bd13c4318309001b847badae455e6345db96bf4"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_858",
+          "source_sha256": "3cc070450be1b5452dcfc820d2b1bd6c1372854485afb6d83c15f62004bee525"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_65",
+          "source_sha256": "f10a37db9c4ae0cae6abd338be5b60391faf4410b20cb262644c18db01b7206e"
+        },
+        {
+          "item_id": "math_test_geometry_641",
+          "source_sha256": "a6766823ab1d579063875f54412548b03c29068487d88243c0777d156a1f085b"
+        },
+        {
+          "item_id": "math_test_number_theory_45",
+          "source_sha256": "92b6bd83ce92d1844de10f8469f476d1ec76f48c83bfe753d5634976d1ceae2a"
+        },
+        {
+          "item_id": "math_test_precalculus_661",
+          "source_sha256": "755392d08e714359912beddb307b65a9678fed7f6afbc5d81606a3b9c8cf5e2c"
+        },
+        {
+          "item_id": "math_test_algebra_1129",
+          "source_sha256": "1a90d3b265d0dffae04761677dbf3db2a34b8e7eb1132eb4817ba11d4acf6822"
+        },
+        {
+          "item_id": "math_test_prealgebra_1754",
+          "source_sha256": "efd7a1499fb15e04ba88e2b34a2eed393a54f644bea77f262b812172c0707468"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_76",
+          "source_sha256": "ed51931b4351a1dbf70c952f1c82f64380c2b21aa66acd57aceae1a8b5ee94c7"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_450",
+          "source_sha256": "cb401c034d99bdd6496e33520c770c98138c01c3fb61a2bc62005db0b1c85906"
+        },
+        {
+          "item_id": "math_test_number_theory_704",
+          "source_sha256": "b7f8f0bbc242eff66138a2e1f6725ec1360ee19dc8de77e24548fda79f7987ef"
+        },
+        {
+          "item_id": "math_test_geometry_577",
+          "source_sha256": "182229d1fbb4903aa55419b07324dcb5f97d6b8213385bf21c087a8c396b6128"
+        },
+        {
+          "item_id": "math_test_precalculus_1082",
+          "source_sha256": "eed0fac9da0d5a57528c55c457e25fcd5b605fe792c2e794cb20a0b9243ec6b6"
+        },
+        {
+          "item_id": "math_test_algebra_996",
+          "source_sha256": "b98a6078e2bb253b6248ee4391a55e364e62ca7013b147c183ceef5b8d8363d1"
+        },
+        {
+          "item_id": "math_test_prealgebra_1063",
+          "source_sha256": "e187d7d29971ca7f598d9785a604ca9a55d6abcc06ffbebc22c00a4d49f9bdbd"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_519",
+          "source_sha256": "63b4fce0352489fda9b5ad9e35859d08a2bdc0166d6e0615f69bd433a7461147"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_940",
+          "source_sha256": "7b5e4b604f08f951fa7661e9239b7c6823022fc145aeb726f6a1ef7c8c486c35"
+        },
+        {
+          "item_id": "math_test_geometry_24",
+          "source_sha256": "3c7d583a1551658ae4f615524e1d30f7694da475ae717e64ea3a42b4bb891558"
+        },
+        {
+          "item_id": "math_test_number_theory_1046",
+          "source_sha256": "16e91f0fc0c43e2a7b563859b5780861e51e779f635378e35d66674a2330833c"
+        },
+        {
+          "item_id": "math_test_precalculus_843",
+          "source_sha256": "b1d05c89b5da6d9170d65c441a0f37a7cc46058c72d3b049031832c005e5b73f"
+        },
+        {
+          "item_id": "math_test_algebra_438",
+          "source_sha256": "db44583083a4debed4d594c38d63deb70bdc49de4a839ed12e7a366cbb8e26fc"
+        },
+        {
+          "item_id": "math_test_prealgebra_1030",
+          "source_sha256": "688883ada46a092f0be2cc4a99e13f02a697b16b1fe0f39460207d7c1b953307"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_884",
+          "source_sha256": "9965bf35b12aa68621ea43a8ab52be0a897e7d77ecfd2a5b57441296150eb6ba"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1072",
+          "source_sha256": "f6c128053843169ce6c977e410a904cb601770fb39bd9e0cf6cd3c6c2a7a1800"
+        },
+        {
+          "item_id": "math_test_number_theory_22",
+          "source_sha256": "49329fc9c9d2feef1d2070280d58e7107d7f08729b854a60323cab8462d07b83"
+        },
+        {
+          "item_id": "math_test_geometry_1125",
+          "source_sha256": "5233549b8b4ee040cd0c171ef00d5088072e8eed7ba4049a32ac796a382c24b9"
+        },
+        {
+          "item_id": "math_test_precalculus_803",
+          "source_sha256": "b6e260ccc1c361a0c5b75f143dc0d79dbbe689c0d39d924fc0856e8390eba90e"
+        },
+        {
+          "item_id": "math_test_algebra_750",
+          "source_sha256": "c48b0a5e58da5aa986bb60354f13beba06c497839a1d906e2446c857da243fff"
+        },
+        {
+          "item_id": "math_test_prealgebra_2074",
+          "source_sha256": "2b13179c458067f753b557c47019fcdd5d9b14218a7c3c3351517af26dcf954c"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1990",
+          "source_sha256": "feec4d2cea7fcbe5661697eb6d46b18e355d71094d1f8ec00ab5cfcc531be023"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_846",
+          "source_sha256": "bf3d40f8753605b88c75669d472098b0390fa93e7c55d76fede7b921c965e376"
+        },
+        {
+          "item_id": "math_test_geometry_143",
+          "source_sha256": "cf711db2ff2e3c2996b42e46e14c26a6e89ed276e6e919d38181acaed8e3a69f"
+        },
+        {
+          "item_id": "math_test_number_theory_660",
+          "source_sha256": "5b21bdf353b0fc0c38db3cc9cc80576f0b34c49ba1a4b7bd8a2277c9edc07035"
+        },
+        {
+          "item_id": "math_test_precalculus_395",
+          "source_sha256": "a8d32442720b14f4db9807e2c3ce589d2c06e8801606c52806b2a65a94c760ca"
+        },
+        {
+          "item_id": "math_test_algebra_1115",
+          "source_sha256": "0aedf23af1f04450cb46a378a99c23099e1b185e680b9c26251fa4c400a212b6"
+        },
+        {
+          "item_id": "math_test_number_theory_566",
+          "source_sha256": "bd1e155d4de8937b4aacc8a8149450792729c24099839ef60c063d53efa49189"
+        },
+        {
+          "item_id": "math_test_precalculus_895",
+          "source_sha256": "e87f7e3c759c0d0e9de6caf861e2eee6c3533e9325ce12499819c10a68888ec4"
+        },
+        {
+          "item_id": "math_test_prealgebra_2086",
+          "source_sha256": "d12b126c902527334ae3be159b55e6e524ba46d251ac8d6ac8c19d420dd1ef3c"
+        },
+        {
+          "item_id": "math_test_algebra_1890",
+          "source_sha256": "5cea732d4ae2f219e6de4c0f4575398b09ff8d41f2b74d4f72c9849cb8fe0b21"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_998",
+          "source_sha256": "ffeade0c55c550877c5de29156420a3c88fa537d72e23bdd76cf4d19f330ba11"
+        },
+        {
+          "item_id": "math_test_geometry_383",
+          "source_sha256": "fa3952dcdf0cc74654d1423231d698e4d91366cb695f1d086359fe68e3239903"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_175",
+          "source_sha256": "471368119b0b893646a5033daf10be2ab709f338e5821bc6dce742fc362949f0"
+        },
+        {
+          "item_id": "math_test_number_theory_1",
+          "source_sha256": "eddb406fef535474ddeb911d02c5f47d77a52532f58c17ed8d093b5113c95403"
+        },
+        {
+          "item_id": "math_test_precalculus_1146",
+          "source_sha256": "6e43d49daccb804d255f616e6c652ba5cda224c4faa6a1e91136b89f03a05e0e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_60",
+          "source_sha256": "d0b4225d1c79a831f79bc69beccf5ca9546bcea340984295b3e476e4ba20a284"
+        },
+        {
+          "item_id": "math_test_algebra_502",
+          "source_sha256": "340b324354cbec04ebd915049e020ff71bee95a7692d071ff67c390c45ca63cb"
+        },
+        {
+          "item_id": "math_test_prealgebra_874",
+          "source_sha256": "5f43098d9cd933637855de6a6a06b76570e1c1b21d17ec6cf2898432c83d66a0"
+        },
+        {
+          "item_id": "math_test_geometry_633",
+          "source_sha256": "80efb36baddef7c1cb286acf3552694dd10f452c4dd174a6af5f0b9df1a4cc85"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_770",
+          "source_sha256": "b31caa002961753667a962f7e1721c425fd37bef05e33710e5472f6fc886a30b"
+        },
+        {
+          "item_id": "math_test_number_theory_1004",
+          "source_sha256": "23895302da02843e54c8142119e1592191c331a50fea0084e3086e31b645acaf"
+        },
+        {
+          "item_id": "math_test_precalculus_310",
+          "source_sha256": "1dbb5274ec4878d1bcaf2ce217c67f329c508f83e509ddab0d0acd6e60d9e56b"
+        },
+        {
+          "item_id": "math_test_algebra_338",
+          "source_sha256": "967b6a60a4f12bed895a6cbfd09cb62ea9452b89b0bb44fc111e40388ab05ffe"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2078",
+          "source_sha256": "775843339bc9b4a8e162a45a0109e15c60058f4a123a42d3a5969fb7bef3d1a6"
+        },
+        {
+          "item_id": "math_test_prealgebra_960",
+          "source_sha256": "83a826cd0b4ef18f7050a0853c68b3446dd47f618cb18cfc6c75e4175780e67b"
+        },
+        {
+          "item_id": "math_test_geometry_615",
+          "source_sha256": "5ecb99e4546e49e71cda085b59cdf4dd062fa5d3cd482c9781c72ea491f6093f"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_994",
+          "source_sha256": "fdd8d0b9874cde1264fc6008e0d57257d7647014b85b04c5436458115ab7e7de"
+        },
+        {
+          "item_id": "math_test_number_theory_1043",
+          "source_sha256": "dcc6ac61ea69f84c20421cd727b1f331328d14bae5194dbf80f9990f0495721c"
+        },
+        {
+          "item_id": "math_test_algebra_185",
+          "source_sha256": "613ffe070529efb97fbbaf009a775717a016dd739b8ffd3339cd014807d35d89"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1241",
+          "source_sha256": "5538dc10840384e8cbf73422fba747c2749f8ae08fa5c2049bbdd46ebaa182ba"
+        },
+        {
+          "item_id": "math_test_prealgebra_660",
+          "source_sha256": "f0686ed5ad8d5ea802d2b4ae0a12242330cf0870684a3b12724a58446cea12da"
+        },
+        {
+          "item_id": "math_test_precalculus_1128",
+          "source_sha256": "c72f1095148c3817f8f53ad57b78085ac28b7ad0c29ee615a6af0b3965a9673b"
+        },
+        {
+          "item_id": "math_test_geometry_949",
+          "source_sha256": "75b066b2ff32bf7a40fe4216222e78fc60554fa739d13be5c65465dcedfadcd2"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_10",
+          "source_sha256": "9e263bfd7cffb7e1f2b47d268a78dc6ffc960961864f1f69afc717f45c813480"
+        },
+        {
+          "item_id": "math_test_number_theory_1144",
+          "source_sha256": "9223ec3a821e54ef32460e12ae7882bce0bc9f99f34169fa9d4f722ed91e6534"
+        },
+        {
+          "item_id": "math_test_algebra_640",
+          "source_sha256": "8f812a8f9fe322cae164839e943a5313d878f38a6b5e687a476cccfb4ded511b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_85",
+          "source_sha256": "b5327f2d3385e1f7f98cbbfbf3188b1a2ba928e0cec6fd17bf4c40da6f14bf37"
+        },
+        {
+          "item_id": "math_test_precalculus_1124",
+          "source_sha256": "fbc96332d51b2390cd0c16ea57e5494ae1bba900f9169eeaaeb06af5cc0ab329"
+        },
+        {
+          "item_id": "math_test_prealgebra_1180",
+          "source_sha256": "764991d992b7e361d53b3f80c25e2136f3fc5cd688e1f206c044c6239b3e7c81"
+        },
+        {
+          "item_id": "math_test_geometry_483",
+          "source_sha256": "7a6b19d34c873b93a1943cd40f8c3bc21a1307aee817b7f32d970f88649bbb95"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_394",
+          "source_sha256": "3c6d5e104778fb4708315514385ecbc85ec575176c021354ad58e9dc6b9a7932"
+        },
+        {
+          "item_id": "math_test_number_theory_1248",
+          "source_sha256": "c63579f9f56ca201619ec9a7b152a9e5cdb8a38a99279277cc23c4ad93b05382"
+        },
+        {
+          "item_id": "math_test_algebra_1918",
+          "source_sha256": "b508166f63525a79f94b59e19159c8a305009672571f989461094c516f00403f"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1499",
+          "source_sha256": "d362a90767ed3923547b84c2918b5dc80a50196d5587a6996f7abc1415e4b9a1"
+        },
+        {
+          "item_id": "math_test_prealgebra_378",
+          "source_sha256": "1dab8f6495627f42ef8c1fbdffb4643a42519da644643d5ea93a2aaa15983102"
+        },
+        {
+          "item_id": "math_test_precalculus_1298",
+          "source_sha256": "4a1678fa9216841e41fbd958715503488d5584c791cbbee7cc326c15fbd18fb5"
+        },
+        {
+          "item_id": "math_test_geometry_54",
+          "source_sha256": "a3002e16d57be2c8cc87200bbfae69e7064f2b2075b0958eb299842075d30cbf"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_271",
+          "source_sha256": "a1efca1454ad81f7da21aa93f323896476c4cd383fe91a4b49ede6cd7478e517"
+        },
+        {
+          "item_id": "math_test_number_theory_1233",
+          "source_sha256": "83e254cf5f4516984a0619e445fc4c54684b32a6b6fdda479e70dfff3fdc3105"
+        },
+        {
+          "item_id": "math_test_algebra_1190",
+          "source_sha256": "0cea6b526bb19fb459340949713de3b2e76cb2b6886eb66dddde042aedf1315e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2109",
+          "source_sha256": "c2f06f440bc375d088a2b17e3777816c9837f98d808f7dbccbf8018590584ef5"
+        },
+        {
+          "item_id": "math_test_prealgebra_1680",
+          "source_sha256": "8fb18f120df137258bb5a51d749a104ebbebf21097e173f599c5fd22bcde5d08"
+        },
+        {
+          "item_id": "math_test_precalculus_893",
+          "source_sha256": "dffe3077a0468c60011556fe085d65c2b25d55d493106d4ec46ac78c244e8682"
+        },
+        {
+          "item_id": "math_test_geometry_777",
+          "source_sha256": "0e0f4c7cc3a295265229657c3112aa0c363531aeb3a2f9cdcd513b0cb6160522"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_519",
+          "source_sha256": "c16bf1cfec62c84e2446ec39c5727f115c48b4fca475c7d057d0ca4581bc407e"
+        },
+        {
+          "item_id": "math_test_algebra_1815",
+          "source_sha256": "d02c0f5459cd969f2849de8987840ae1e853a559aa9c729ee6d2a5ffeea2e69b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1071",
+          "source_sha256": "5e47881e123fafffd8fd15256dccfabdea79ac5c797c68001f3ee94143335a62"
+        },
+        {
+          "item_id": "math_test_number_theory_1123",
+          "source_sha256": "39d76f8fa9826067c7eb2adcda1b596a34981829dff2723ee7a91a273060e6f6"
+        },
+        {
+          "item_id": "math_test_prealgebra_1572",
+          "source_sha256": "aa7cf7db38f7680d9c66ea5e7739bfea552ab297a84003381f8a52da5f5e4fe5"
+        },
+        {
+          "item_id": "math_test_geometry_594",
+          "source_sha256": "c53d067e1bc30a24f562bed77ebb5f6bb230af495154c3df124d7b75a0402cda"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_886",
+          "source_sha256": "098015e0933788b13e08bb06a63d842ca0e017d91aaa963a7689c5e39a869a43"
+        },
+        {
+          "item_id": "math_test_precalculus_927",
+          "source_sha256": "c92d05a9ece43757be93f21f2b11da00151996b38f31fda67e498319f3542ec0"
+        },
+        {
+          "item_id": "math_test_algebra_805",
+          "source_sha256": "2107b1bb42dc7ecdf9db3abec3f8a8137778b3d622aa7226ed37e5ba77ec4892"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2058",
+          "source_sha256": "c93964558f889d0105883eda55ed4dd8f315d5b4992bdf25373040c9ca32879c"
+        },
+        {
+          "item_id": "math_test_number_theory_109",
+          "source_sha256": "a7b8340a38ce9be7a2f58b6e5ce3743bc362bc54dae4ea625f56062fa8fca8e2"
+        },
+        {
+          "item_id": "math_test_prealgebra_1524",
+          "source_sha256": "5e5f229b2050fc36d11b32423ff8ede5e603aba3fd73957056c8bd8865a06857"
+        },
+        {
+          "item_id": "math_test_geometry_389",
+          "source_sha256": "c9d6708a20c9996cf0fed9abca9acc52f8559669996b27affb8d9688e314435a"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_342",
+          "source_sha256": "574e27bb3f4d988e37cf6a2ebf1802ccd219b1a9a3cc09cc5f9607d9a0a0644e"
+        },
+        {
+          "item_id": "math_test_precalculus_1060",
+          "source_sha256": "01d5e5a99493a41a9916edb31ac4bcf50a404b4e6d5a8d0e97ae2be246284980"
+        },
+        {
+          "item_id": "math_test_algebra_702",
+          "source_sha256": "36b575c2fba8fac39529e6ba4a5c8331c15fe664b6b12c1f68fdccbcd36508f1"
+        },
+        {
+          "item_id": "math_test_precalculus_1278",
+          "source_sha256": "319badaae28be5ce5aa7d508f439a561e5f3c15297b2cd19905c7a952d56d973"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1067",
+          "source_sha256": "f895145440458f9a052937f6e2be92ff40baa3f9b03f8f95f47dff87df074fd3"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_386",
+          "source_sha256": "550972d21b7971c8440747437fed6b0b919c5cfb77fdd244eb47f37355766705"
+        },
+        {
+          "item_id": "math_test_number_theory_878",
+          "source_sha256": "bca0a14c27b8b5b2e9326f716dff0edcaf91ae11052146de700c8edefbf2460f"
+        },
+        {
+          "item_id": "math_test_algebra_1227",
+          "source_sha256": "70b395cbd77eb5b1ed0f54bc1f439fecdffa531721a8f768cd83f9a980db6b63"
+        },
+        {
+          "item_id": "math_test_geometry_119",
+          "source_sha256": "23513d3a13b51eb05249c225d304b0fd72c627dfaa86e936d52d72dd68b4024f"
+        },
+        {
+          "item_id": "math_test_prealgebra_2048",
+          "source_sha256": "e409ade3843a2b38427acebea2d10a2637eafc2e0d94a75a538860a9a50bb86c"
+        },
+        {
+          "item_id": "math_test_number_theory_303",
+          "source_sha256": "4e78b7f48d35bc6ab6b1ce74886792debfc54c974a99a14450e046265b3489d4"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_867",
+          "source_sha256": "b182b2a07d26c1552c34d57fd3ad604483d7406863f71d074a2f636e7a7d7e8e"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_24256",
+          "source_sha256": "70a0156cf2bc20f6d66fd96c1f10ba033a1bf787eb725a802f37792f9d253e42"
+        },
+        {
+          "item_id": "math_test_geometry_1044",
+          "source_sha256": "e2f774d87f6fdb0d9e4deed23830049c07779496d6613090bb131abe32c663b0"
+        },
+        {
+          "item_id": "math_test_prealgebra_1245",
+          "source_sha256": "77ce4d0033bd3fd9e9c4a766f2f32d7c37f947eaa248381c58bc09ca48b41815"
+        },
+        {
+          "item_id": "math_test_algebra_220",
+          "source_sha256": "2dbab1264cdb8f87668f3630fa147390c7f3fe1ffd50055efd36880ef367a9db"
+        },
+        {
+          "item_id": "math_test_precalculus_1240",
+          "source_sha256": "527c8753319308240c8e7b19a69a06003e2663b3573df37950d86fc4fd567728"
+        },
+        {
+          "item_id": "math_test_number_theory_821",
+          "source_sha256": "853f6b865b868be601d5ed6da98108f30d1f5f7f73ea36945a4f2606daa65685"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1120",
+          "source_sha256": "e389c9be9e0351216e5b2b288da4e569357b31e5f18056f5f0d7b0e6ad247a1d"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1125",
+          "source_sha256": "ed1a3ff9ce21cf2e93923f1e216cf72341bc8abe12c9b4b7874dd27e3bf9ebc0"
+        },
+        {
+          "item_id": "math_test_geometry_179",
+          "source_sha256": "fdc6701a38f5e9f220dd13c71ea6bf167cc51204b8f42df13fa4e80679310576"
+        },
+        {
+          "item_id": "math_test_prealgebra_1426",
+          "source_sha256": "6e8f0b765890a68fcf10d5fcac6a2b805df6da09e8be12400eab042fd27ebb25"
+        },
+        {
+          "item_id": "math_test_algebra_141",
+          "source_sha256": "855326cb5f2d123f2da728e2e552da16139340d62f4affdec0ff7232f58e6d49"
+        },
+        {
+          "item_id": "math_test_precalculus_919",
+          "source_sha256": "2eb1206d08582d1a76633830364e7e9b6cc68394231e5601e57835175af38b35"
+        },
+        {
+          "item_id": "math_test_number_theory_1000",
+          "source_sha256": "9cd743174ab9758c2390e00e4fd62aeaf1476b204dc4f358a99f60fb6ee9ed34"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_933",
+          "source_sha256": "2819752d9eab50c1ab5ef8ed5a39b72a04bc324ce32ca8206d908aafa35eef94"
+        },
+        {
+          "item_id": "math_test_algebra_2088",
+          "source_sha256": "d4127a09ce5817539559f47f064afc7f9d952b2c2dce9bb4dc6f191e42715e33"
+        },
+        {
+          "item_id": "math_test_geometry_1056",
+          "source_sha256": "f61ef03fc346fcc501c4103cfa6cda207646ef1222d605850871908728a38eef"
+        },
+        {
+          "item_id": "math_test_prealgebra_1069",
+          "source_sha256": "16a970f58bb31ee9df543800782d7266362f65f839637d9ae631963be7389a7a"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_862",
+          "source_sha256": "1984536d38b3d832f0812c44a6d091cf1e5d3b6da36943bdd80a94dacb4adddb"
+        },
+        {
+          "item_id": "math_test_precalculus_1002",
+          "source_sha256": "5012e95135d3197c70a62c1a6a42506575a2a84aa8280e52caa23034b80a829e"
+        },
+        {
+          "item_id": "math_test_number_theory_114",
+          "source_sha256": "7e1785d64e1408a9e1349fd46952d6df9a7a676f4eff540e8725b94d68e820cd"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_2116",
+          "source_sha256": "b5c25fd073d2327d18f7f08349e67422f72bd53b6b9ece811b6e6267db10cdf4"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_367",
+          "source_sha256": "da7abcc7381a8cfe4b37bc7ff256f5e5911ec7b44a2ca7f40322e04f8089d298"
+        },
+        {
+          "item_id": "math_test_geometry_172",
+          "source_sha256": "d5ef7d9b7c035366366547b31f2d24861571a99010d1ffb5683fb1fdbd616809"
+        },
+        {
+          "item_id": "math_test_algebra_2683",
+          "source_sha256": "0ea69cccd034f37bd988e263b0f5a434de2594245121cfb922a27b8634290be0"
+        },
+        {
+          "item_id": "math_test_prealgebra_1758",
+          "source_sha256": "f879ae505f57a8533517fadd45c76d8d3fcda17c75a722f4c93c1567e8d589e6"
+        },
+        {
+          "item_id": "math_test_precalculus_1215",
+          "source_sha256": "50dd80e2cc6167bf7facceccf63cef8602a30c84656e5bfc95f464bb06960ff6"
+        },
+        {
+          "item_id": "math_test_number_theory_818",
+          "source_sha256": "9a967b0e5e565c47b318d34674283d784ff18c7ead61978bdec2cac5d901cdeb"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1625",
+          "source_sha256": "b3e1cea3d549d9ee0d3bd2cbcad8158b24162c1d19a34ba3e82d2fbddd81454e"
+        },
+        {
+          "item_id": "math_test_algebra_1558",
+          "source_sha256": "ce3625aad5c7589c2c98631a642dbbdedee83667c041113bb083ac0654a970de"
+        },
+        {
+          "item_id": "math_test_prealgebra_1362",
+          "source_sha256": "6450fdefa9a33610b157f44c82d94401d8a6be25702367663604a834aa1d8d96"
+        },
+        {
+          "item_id": "math_test_geometry_812",
+          "source_sha256": "3131ffcc50813e0a49bebee64b266e2ec7f61b033d1ebfc8c38574a095419339"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_870",
+          "source_sha256": "2f4d8ab35c25c1aebedbcfbadd9e7e323d1b80ed05a08244bd15b80958b8c165"
+        },
+        {
+          "item_id": "math_test_precalculus_139",
+          "source_sha256": "d7e3c30245c2b92ff8c76a27b64180b8415c4ac356d8331b03e910b268f21556"
+        },
+        {
+          "item_id": "math_test_number_theory_505",
+          "source_sha256": "435235bd5da441aa968bdf07bf3d23065e3e7d1015a2742c2b98cbf2d11031d9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_966",
+          "source_sha256": "7078e8cc81888654453e46c964115981a0f6be633f2d7d492aed84effb3da5fe"
+        },
+        {
+          "item_id": "math_test_algebra_26016",
+          "source_sha256": "718e23f8bc2939a88d8f414cc1526ce407ed93b384d5c60bbf8de5f6d6cdb013"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_697",
+          "source_sha256": "edb16d8b5f14de821d3942e0e0dd4504d7b0715f4982ca5b636635bc4567029f"
+        },
+        {
+          "item_id": "math_test_geometry_145",
+          "source_sha256": "827c2b09789e59836cf41a467a2fd2d3c0da3c0620e07e4c7b5d94e7fa652b06"
+        },
+        {
+          "item_id": "math_test_prealgebra_1609",
+          "source_sha256": "b1792657242954b93cee84827d473490f16daaaa4d33777d01ec4a5de9f9456d"
+        },
+        {
+          "item_id": "math_test_precalculus_1081",
+          "source_sha256": "ffa6a20aea72e7e33264554b57a1c152a3d69effb50875dcb8ed11ff111f5563"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_259",
+          "source_sha256": "78e34ac0b4599e29dc581feae636f286cbc896b4f79a8fbe9468095202fbd25a"
+        },
+        {
+          "item_id": "math_test_number_theory_340",
+          "source_sha256": "53e94787b758b9b36f3e866688377568b263afe65f6d30ebe92dfeede24f1ba2"
+        },
+        {
+          "item_id": "math_test_algebra_1233",
+          "source_sha256": "6fb325a1e4ce3a0eaac68861923b74661f8d5342a1efb5458f08a0f58f48d854"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_614",
+          "source_sha256": "c54c2a5521e06c9b4fbb8962bf0cfbb31c4fc870a5878df7c06b6384f1e29785"
+        },
+        {
+          "item_id": "math_test_prealgebra_1387",
+          "source_sha256": "ff4202fa7958e39c9ee5ba3a2af6a95be8cf201a89aa3c02ccb2316a7f1e35f1"
+        },
+        {
+          "item_id": "math_test_geometry_780",
+          "source_sha256": "df2a2030def0955921224da9ef05195f181fe0de2ca17d1ea8435ecb58ba2407"
+        },
+        {
+          "item_id": "math_test_precalculus_992",
+          "source_sha256": "697fb082c790778131fb2bc3b931097bb77b07e81854f8ab1126ae11412f0c06"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_812",
+          "source_sha256": "0e90170f36b09c1a0af78aa26c1ae65a2e35880a660276391fa39df638572e67"
+        },
+        {
+          "item_id": "math_test_number_theory_227",
+          "source_sha256": "d2f7e33330eec149f978a961cd35285e00feda50a44181edb1fff939a8b919bc"
+        },
+        {
+          "item_id": "math_test_algebra_2421",
+          "source_sha256": "fcc0c6da1d85b20f50032ccd27427cc853a70bdbb1e47be26a317a68347fb49f"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_732",
+          "source_sha256": "079472196fa008f8dd14941ad78a35bd09ed50e012cdf8e914ccc3487a59d140"
+        },
+        {
+          "item_id": "math_test_geometry_458",
+          "source_sha256": "930391d44a5af1eb6e6f61f234673002358f6fc6e09b959f82246ae730cd6c6d"
+        },
+        {
+          "item_id": "math_test_prealgebra_1531",
+          "source_sha256": "cb66ba4721171c2ccdd04d20530aca3324a12185ae6d863ddfe78c5fc7e2d052"
+        },
+        {
+          "item_id": "math_test_precalculus_1241",
+          "source_sha256": "8573decf8e6b236480539f7aba6ada6e1f1299dfcf47b6d70756cd524346a853"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_875",
+          "source_sha256": "d83b3d018ac1b4e7703f0ac3f6dfbb392d1ff11e8866294cff90dafe3baa93f8"
+        }
+      ],
+      "n_per_level": 64,
+      "pilot_item_ids_sha256": "d6a1671839efd2b99a3146f6f67be50d9b2cb57bff89704b630d17f7bd91d17c",
+      "population": {
+        "cells": {
+          "1": {
+            "Algebra": 128,
+            "Counting & Probability": 38,
+            "Geometry": 35,
+            "Intermediate Algebra": 32,
+            "Number Theory": 30,
+            "Prealgebra": 83,
+            "Precalculus": 35
+          },
+          "2": {
+            "Algebra": 178,
+            "Counting & Probability": 100,
+            "Geometry": 65,
+            "Intermediate Algebra": 81,
+            "Number Theory": 83,
+            "Prealgebra": 171,
+            "Precalculus": 55
+          },
+          "3": {
+            "Algebra": 229,
+            "Counting & Probability": 99,
+            "Geometry": 75,
+            "Intermediate Algebra": 137,
+            "Number Theory": 109,
+            "Prealgebra": 211,
+            "Precalculus": 64
+          },
+          "4": {
+            "Algebra": 250,
+            "Counting & Probability": 109,
+            "Geometry": 82,
+            "Intermediate Algebra": 174,
+            "Number Theory": 130,
+            "Prealgebra": 172,
+            "Precalculus": 50
+          },
+          "5": {
+            "Algebra": 248,
+            "Counting & Probability": 121,
+            "Geometry": 88,
+            "Intermediate Algebra": 199,
+            "Number Theory": 149,
+            "Prealgebra": 162,
+            "Precalculus": 68
+          }
+        },
+        "eligible": 4040,
+        "excluded": {
+          "duplicate_unique_id": 2,
+          "gold_not_rational": 954,
+          "plain_comma_gold": 5
+        },
+        "levels": {
+          "1": {
+            "eligible": 381,
+            "nonduplicate": 437,
+            "retention": 0.8718535469107551
+          },
+          "2": {
+            "eligible": 733,
+            "nonduplicate": 894,
+            "retention": 0.819910514541387
+          },
+          "3": {
+            "eligible": 924,
+            "nonduplicate": 1130,
+            "retention": 0.8176991150442477
+          },
+          "4": {
+            "eligible": 967,
+            "nonduplicate": 1214,
+            "retention": 0.7965403624382208
+          },
+          "5": {
+            "eligible": 1035,
+            "nonduplicate": 1324,
+            "retention": 0.7817220543806647
+          }
+        },
+        "raw_distinct_ids": 5000,
+        "reference_self_check": "4040/4040",
+        "rows": 5001,
+        "unique_ids": 4999
+      },
+      "prompt_template_sha256": "1a0796c08f1175730c3dde6a9e7d38312904f985853cb2ad46d594a90dd2319d",
+      "schema_version": "math_hash_only_manifest.v1",
+      "selected_item_ids_sha256": "face9ab2eae3d9b0abf2d87ae83f4d1264d6951a8d9706ebc6ff7f147de81430",
+      "set": "test",
+      "source_files": {
+        "test.jsonl": {
+          "bytes": 446564,
+          "git_blob_sha1": "2376b9a194b46c0790e197c91b7249e5f88ac09b",
+          "lfs_pointer_blob_sha1": "8837efbfa7fb7ad8a9a66b280a8cd86be3cd70bd",
+          "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+          "line_count": 500,
+          "sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132"
+        },
+        "train.jsonl": {
+          "bytes": 10896985,
+          "git_blob_sha1": "3a9d774ba092769cce4b93133bf3c97f2b8ea20c",
+          "lfs_pointer_blob_sha1": "fabbf3962afc8d64618406adde7f012bf0ba3c20",
+          "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+          "line_count": 12000,
+          "sha256": "90d96daeac3fe343ebb1e22ce93dd99690f75983e957f88de42f87cffe1e8076"
+        }
+      }
+    },
+    "pilot": {
+      "commit": "7ecc794703b2877f63226f2477a49b34f9b25163",
+      "dataset": "math",
+      "enable_thinking": false,
+      "items": [
+        {
+          "item_id": "math_test_algebra_539",
+          "source_sha256": "dcec57f7f1d4730066c1c3533b13d6f551d4fb278a48c12c709f127e68f78e82"
+        },
+        {
+          "item_id": "math_test_number_theory_103",
+          "source_sha256": "e3c922458a65bd2af869b5f31444e98ff794eb6fe518c48bb6785863ac0bf274"
+        },
+        {
+          "item_id": "math_test_prealgebra_579",
+          "source_sha256": "0d0322530f7391e62be9530d21dea1e9705cfd1c6f66c97a51afd3a739c487af"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_190",
+          "source_sha256": "58112040e68d54521821d8a272060e818cbaab0b1ebe1f6ff3ffb93253361140"
+        },
+        {
+          "item_id": "math_test_algebra_2788",
+          "source_sha256": "6fbeef4f9356baa585a17da43c0b5bc179c486f07f17d856c0ad53823fdb43a8"
+        },
+        {
+          "item_id": "math_test_algebra_2193",
+          "source_sha256": "3caf2c572a1cc30a288a4557f7e715d793988912d79a8e2bf41c0536dd14c1ad"
+        },
+        {
+          "item_id": "math_test_precalculus_700",
+          "source_sha256": "ab9d66c93db42ec33daf8c95053437e13bf7cf3f5644f71a88a28fc31cf34402"
+        },
+        {
+          "item_id": "math_test_algebra_2298",
+          "source_sha256": "5abfa2122bdcf17ea2e4bdc05ee4d404374c673ddb4dd839ee0ec53a5a45b8c3"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_388",
+          "source_sha256": "9fedfbe6214707b1573e47c349254add6c7937c2baa3c5ca8ce711f57c1de0a8"
+        },
+        {
+          "item_id": "math_test_algebra_2741",
+          "source_sha256": "150b63eff7e38da08870ac2b3fd52d1aa1960ac907e4cb4d2b8e75bbcf857721"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1064",
+          "source_sha256": "603a8439fcb7446d760599d72bd763e0ffd24291279e9f5564987d366881c360"
+        },
+        {
+          "item_id": "math_test_algebra_1856",
+          "source_sha256": "9a1a8d5f85b1755db86d8c0a42ab340f02edb2aef6780e65083a68f0d61ced21"
+        },
+        {
+          "item_id": "math_test_prealgebra_1243",
+          "source_sha256": "0d890073d106a6e7c3de68ecda844f9fd40b4f920cb3b4e657dd03652bd539ec"
+        },
+        {
+          "item_id": "math_test_geometry_43",
+          "source_sha256": "aced774ae2216b707ccb02dedfd4e635ff76ce535a6df5e3f0a1ed4d628177f0"
+        },
+        {
+          "item_id": "math_test_algebra_547",
+          "source_sha256": "5360a70e1cbf818094824f6d05c07ef413221db148f54f2a0b9a2f743fcd95aa"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1551",
+          "source_sha256": "841c2fc091a0cbbd5ca5d0e476b6a4ec3258bc0fb41f270ed2424f748a06be06"
+        },
+        {
+          "item_id": "math_test_algebra_803",
+          "source_sha256": "37596a84b51c0953e9b3c67a3a182f6d49398902a123f60d5bcc828e116c8402"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1009",
+          "source_sha256": "163c31132559dab1ae4ea459506429a1b06a343f8c75b30318610145a15eea15"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_412",
+          "source_sha256": "aff3c7f49a98bd9535779e899cb94ad35426a3e3979a46c05d770191cef6e4d8"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_686",
+          "source_sha256": "9db49bf7651ba4725aaab4809423deeea6914084caf5bc56f3dcfea0b67a0de4"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_829",
+          "source_sha256": "78298cab8aeca0322332aa525b016ae82351e2f7ff2090a6b71c700d5565a079"
+        },
+        {
+          "item_id": "math_test_geometry_1084",
+          "source_sha256": "f302a9834b677129039eb4d0d4b0927ad8ddbfb97d50d028470ebc92effeb1a6"
+        },
+        {
+          "item_id": "math_test_algebra_140",
+          "source_sha256": "4fc0f6d8f91ba410d37e124b6e2eafeaf46e6d93e6dc264433c71c1d44216c1a"
+        },
+        {
+          "item_id": "math_test_algebra_1678",
+          "source_sha256": "8fcc875a5811c157edbb7a89204d439edf74619899365d119cae75e1bbae1eae"
+        },
+        {
+          "item_id": "math_test_prealgebra_1133",
+          "source_sha256": "27466570e1fefb3ac980165174f45907987e72ee721a3173902443808b068d6a"
+        },
+        {
+          "item_id": "math_test_geometry_164",
+          "source_sha256": "7571010508cc92f0deb99550bd66df6081832e97d062ce7140f20dc52f031697"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1885",
+          "source_sha256": "22cea9cd1cd8e2821e7da0fcf944fcde7df76d882769ab262a4de8001fd9fe49"
+        },
+        {
+          "item_id": "math_test_number_theory_1254",
+          "source_sha256": "2a4df49647aefc264f99c31fd46cc1d38b054d3f1ce66f68fe8d9c82af9ded43"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_262",
+          "source_sha256": "d5793752f74e7f31b837c2ac4214160348de4df07455bf7d3ca473e51909f71a"
+        },
+        {
+          "item_id": "math_test_prealgebra_838",
+          "source_sha256": "7849c2fffc81e4fcec524a02daba8cd07f00342534f79b1a032e6d16bd355711"
+        },
+        {
+          "item_id": "math_test_number_theory_629",
+          "source_sha256": "98c5a4d4897f65d0b99cd21b4d7f9e315233e612d7f61e75a6143d6d5bacdaa5"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_677",
+          "source_sha256": "5c30249e01beab5fba10461aef219cbc280dd96c443547643e3fe6d64bb4fa79"
+        },
+        {
+          "item_id": "math_test_prealgebra_862",
+          "source_sha256": "ee7e629f54873fd39242e78def04aad2e412fc31d3a79ee802fd4164fa4f64a9"
+        },
+        {
+          "item_id": "math_test_algebra_1994",
+          "source_sha256": "2d3dab1165dae80da4c2d49e905b2114f31c47591c82910327c3e2d49dbcaf55"
+        },
+        {
+          "item_id": "math_test_geometry_434",
+          "source_sha256": "7308dcc3ffd037490a35da07bf9b7dacd6547c52bcbd159da40e65a9b214383a"
+        },
+        {
+          "item_id": "math_test_algebra_174",
+          "source_sha256": "7f663b0f7475a590119bce6c2adde612ad4ca58eab4b68652ce53c4086db4f23"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_119",
+          "source_sha256": "89d4fe2f9cdfaf31cbad96caadf0a46f96b7dbbb079bbb3df6e46e2d68512a5e"
+        },
+        {
+          "item_id": "math_test_algebra_410",
+          "source_sha256": "6eee460b739a267c254b9e99d53cfd5d2d91fb008d11eeffaeb9c402cbef55cc"
+        },
+        {
+          "item_id": "math_test_prealgebra_953",
+          "source_sha256": "ec9cffc4b1a7fd2cab205cdd2b0dc50518c285ffbd693ebb0bd8e13dada3e2c6"
+        },
+        {
+          "item_id": "math_test_precalculus_929",
+          "source_sha256": "f31e0c3b69f1d057bfd1beb732cf8e3fc281a996d1f9fdb6ab315b9270498779"
+        },
+        {
+          "item_id": "math_test_precalculus_516",
+          "source_sha256": "3c844642595937c3a479dda9d5b2e7c93b820b744bdfaf60c53f0228b6b04240"
+        },
+        {
+          "item_id": "math_test_prealgebra_69",
+          "source_sha256": "bb06efc2af0ae899e207d53fb703b831d685cdcf3ab2ce37dc82be8c28e6ede5"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_1907",
+          "source_sha256": "513c4cf56a6e57ce809c54838118d2bedb5edd8a9917b8c4b52043f477370f3c"
+        },
+        {
+          "item_id": "math_test_algebra_2606",
+          "source_sha256": "597d69dcd6c1cba9ce00a58e7a8b8314851afac0c7929c653d0de2f91e8d2336"
+        },
+        {
+          "item_id": "math_test_prealgebra_2034",
+          "source_sha256": "c7ba96a3d3aee6352a50ae25a69c789024af1a0fe6f65f14d9b6fe2f4c1b7ca3"
+        },
+        {
+          "item_id": "math_test_number_theory_709",
+          "source_sha256": "0411846ba01942d8cb2d029ba33095e531f0c5378d6c0cd36d3b7ae380d143c1"
+        },
+        {
+          "item_id": "math_test_number_theory_1287",
+          "source_sha256": "8be3945bf2fcd2ebf862582d727b09367dc68ba1e770bc650112f29b7ac879ab"
+        },
+        {
+          "item_id": "math_test_geometry_942",
+          "source_sha256": "5f2f3fca38f499a49152f1176d7a7b24a3e6350cc8bafdd3a18248881d61d5c4"
+        },
+        {
+          "item_id": "math_test_number_theory_927",
+          "source_sha256": "df3138ca0d14a0410369e8e345085de04e72464b4e9a7977ae25d276d2a06c20"
+        },
+        {
+          "item_id": "math_test_algebra_2332",
+          "source_sha256": "8786a5e3482da91bb0e6d705aaf87fe7ee831e99b1d7bd67f999f4c905aa630b"
+        },
+        {
+          "item_id": "math_test_prealgebra_1291",
+          "source_sha256": "3a7c8977e15b20ef87a3b5aa5e2d7447c54d88f5c1156b0fc70bf3db539b130b"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_327",
+          "source_sha256": "fc716a907130f38d99a49a5f477c83a9094b3ffd4d6479f35f085030b00dd8d5"
+        },
+        {
+          "item_id": "math_test_algebra_2195",
+          "source_sha256": "26bcfc9c91a468a5fd365274ba033bb03e590f2a8cecce74f49f5ff36789c60a"
+        },
+        {
+          "item_id": "math_test_algebra_2596",
+          "source_sha256": "cb5f6026c611bd2d526409181c4d835a7c6faea01586ffb7428d66381b1789d6"
+        },
+        {
+          "item_id": "math_test_prealgebra_2089",
+          "source_sha256": "af6d4f3128d4cbdcb911764d58bb614de729ca05f8a95a1da3439d23fffc5d37"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_956",
+          "source_sha256": "bf139262134acf0b8aefed8b00c50c64ebf6d36301b728c8ab30c240e3d2fbe9"
+        },
+        {
+          "item_id": "math_test_intermediate_algebra_430",
+          "source_sha256": "ee5653b2769638e85b96fe8cf27ffc3c10e5207e415e97375d0d15e67b312e42"
+        },
+        {
+          "item_id": "math_test_algebra_2670",
+          "source_sha256": "c0c13209845bfae6032d5d7ea2935a28ddce23381b5dd74434e80d75a3bc1b1f"
+        },
+        {
+          "item_id": "math_test_geometry_453",
+          "source_sha256": "30173a086aaeed8abfef5193301c7c5a152bfe240d1f2478ef974dd237583e77"
+        },
+        {
+          "item_id": "math_test_algebra_412",
+          "source_sha256": "6df98d2b4e9314dc838f5724ae6d00b493267a3b4b7d705520f35f9a53bb07e7"
+        },
+        {
+          "item_id": "math_test_prealgebra_969",
+          "source_sha256": "24354f12dc83533e4ded62a5425394f31d1190319bfa590b83ac39ebdeb91cfd"
+        },
+        {
+          "item_id": "math_test_algebra_2756",
+          "source_sha256": "a6d67524ebe0c9049014e4b44b81e93b9c5fbb5854fd86cea7c77ab84fc757a2"
+        },
+        {
+          "item_id": "math_test_prealgebra_826",
+          "source_sha256": "e25985c88d3d3ff91d74d3f1cb0cc4c534abb93987eb9910a8fca2c7db20be6f"
+        },
+        {
+          "item_id": "math_test_algebra_2240",
+          "source_sha256": "67408929c50b98a51db3c64d4daf77733dd6bfd081ee647aa4b7783c36f12d72"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_536",
+          "source_sha256": "b86b27bc0d196d76bf537d003e35c2ab19c30dc85b384195f7ec7239b15bca1d"
+        },
+        {
+          "item_id": "math_test_geometry_930",
+          "source_sha256": "5566e4d0b62e6d70cd1f01218d6bb45386375aca16ef436ab0471949c41b743c"
+        },
+        {
+          "item_id": "math_test_prealgebra_1669",
+          "source_sha256": "7808c62c038546fadf9d838aa03f9bde68ec036c2c47f3f35a91ea6c2ac3e8fe"
+        },
+        {
+          "item_id": "math_test_algebra_142",
+          "source_sha256": "08519c0d29a5d2d4f27dc2d467380fb46c883e4c56217b2ea2e43f2576963700"
+        },
+        {
+          "item_id": "math_test_algebra_267",
+          "source_sha256": "5cc3a3af96da9a46a8e225d8d31c23a065ac001172b80fda78edee3fe10d6ef5"
+        },
+        {
+          "item_id": "math_test_prealgebra_1700",
+          "source_sha256": "c971e726d3c8f0829560ff1776dfce0eb7b7fa8b2684c654459b143bb509ce4d"
+        },
+        {
+          "item_id": "math_test_algebra_1084",
+          "source_sha256": "86b9b0c15f666af2f6f200dc6a9d9d02c0b167f03ee1950c708fe184a8a0bed5"
+        },
+        {
+          "item_id": "math_test_number_theory_542",
+          "source_sha256": "c3bc0a63300bd2353163c257038e03c8ee00c1b3041ef065e9a5af7e4e938124"
+        },
+        {
+          "item_id": "math_test_prealgebra_1192",
+          "source_sha256": "6635b475ed48691fc22eae9242c19925cf53af3435daefef3dacc90d0a671470"
+        },
+        {
+          "item_id": "math_test_prealgebra_1000",
+          "source_sha256": "208ffc36264d5f6238e137434660556884cb3fa757ef49621908ddc58723475d"
+        },
+        {
+          "item_id": "math_test_algebra_979",
+          "source_sha256": "c44382c95ec39c05d83d7967494901b4d4e88da506d78c83e252863ebb49f6e0"
+        },
+        {
+          "item_id": "math_test_counting_and_probability_1081",
+          "source_sha256": "cf0f423c0b52b7cb01e8668be1ea4a88cbb53ea2b695d0feea05332119967cb1"
+        },
+        {
+          "item_id": "math_test_prealgebra_865",
+          "source_sha256": "5f4dc44b0b188bed636a24a81c782bf1f316ef349331d04822ec0f4ce05343ea"
+        },
+        {
+          "item_id": "math_test_algebra_2823",
+          "source_sha256": "d84d2fc70f4f5b9d0fe33925e9043dd1d3d8554e15bc2c03a8b5d226f7b28899"
+        },
+        {
+          "item_id": "math_test_precalculus_441",
+          "source_sha256": "80fa1453ec20ef90d5a0bce25cb95ed50b38f11647597dc9408607f74a173208"
+        },
+        {
+          "item_id": "math_test_algebra_484",
+          "source_sha256": "756500a54520ccfa29ee9f5f00254700be21f72a2bdbf207e09fc38ae74fa9be"
+        }
+      ],
+      "n_per_level": 16,
+      "pilot_item_ids_sha256": "d6a1671839efd2b99a3146f6f67be50d9b2cb57bff89704b630d17f7bd91d17c",
+      "population": {
+        "cells": {
+          "1": {
+            "Algebra": 128,
+            "Counting & Probability": 38,
+            "Geometry": 35,
+            "Intermediate Algebra": 32,
+            "Number Theory": 30,
+            "Prealgebra": 83,
+            "Precalculus": 35
+          },
+          "2": {
+            "Algebra": 178,
+            "Counting & Probability": 100,
+            "Geometry": 65,
+            "Intermediate Algebra": 81,
+            "Number Theory": 83,
+            "Prealgebra": 171,
+            "Precalculus": 55
+          },
+          "3": {
+            "Algebra": 229,
+            "Counting & Probability": 99,
+            "Geometry": 75,
+            "Intermediate Algebra": 137,
+            "Number Theory": 109,
+            "Prealgebra": 211,
+            "Precalculus": 64
+          },
+          "4": {
+            "Algebra": 250,
+            "Counting & Probability": 109,
+            "Geometry": 82,
+            "Intermediate Algebra": 174,
+            "Number Theory": 130,
+            "Prealgebra": 172,
+            "Precalculus": 50
+          },
+          "5": {
+            "Algebra": 248,
+            "Counting & Probability": 121,
+            "Geometry": 88,
+            "Intermediate Algebra": 199,
+            "Number Theory": 149,
+            "Prealgebra": 162,
+            "Precalculus": 68
+          }
+        },
+        "eligible": 4040,
+        "excluded": {
+          "duplicate_unique_id": 2,
+          "gold_not_rational": 954,
+          "plain_comma_gold": 5
+        },
+        "levels": {
+          "1": {
+            "eligible": 381,
+            "nonduplicate": 437,
+            "retention": 0.8718535469107551
+          },
+          "2": {
+            "eligible": 733,
+            "nonduplicate": 894,
+            "retention": 0.819910514541387
+          },
+          "3": {
+            "eligible": 924,
+            "nonduplicate": 1130,
+            "retention": 0.8176991150442477
+          },
+          "4": {
+            "eligible": 967,
+            "nonduplicate": 1214,
+            "retention": 0.7965403624382208
+          },
+          "5": {
+            "eligible": 1035,
+            "nonduplicate": 1324,
+            "retention": 0.7817220543806647
+          }
+        },
+        "raw_distinct_ids": 5000,
+        "reference_self_check": "4040/4040",
+        "rows": 5001,
+        "unique_ids": 4999
+      },
+      "prompt_template_sha256": "1a0796c08f1175730c3dde6a9e7d38312904f985853cb2ad46d594a90dd2319d",
+      "schema_version": "math_hash_only_manifest.v1",
+      "selected_item_ids_sha256": "d6a1671839efd2b99a3146f6f67be50d9b2cb57bff89704b630d17f7bd91d17c",
+      "set": "pilot",
+      "source_files": {
+        "test.jsonl": {
+          "bytes": 446564,
+          "git_blob_sha1": "2376b9a194b46c0790e197c91b7249e5f88ac09b",
+          "lfs_pointer_blob_sha1": "8837efbfa7fb7ad8a9a66b280a8cd86be3cd70bd",
+          "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+          "line_count": 500,
+          "sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132"
+        },
+        "train.jsonl": {
+          "bytes": 10896985,
+          "git_blob_sha1": "3a9d774ba092769cce4b93133bf3c97f2b8ea20c",
+          "lfs_pointer_blob_sha1": "fabbf3962afc8d64618406adde7f012bf0ba3c20",
+          "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+          "line_count": 12000,
+          "sha256": "90d96daeac3fe343ebb1e22ce93dd99690f75983e957f88de42f87cffe1e8076"
+        }
+      }
+    }
+  },
+  "source_files": {
+    "test.jsonl": {
+      "bytes": 446564,
+      "git_blob_sha1": "2376b9a194b46c0790e197c91b7249e5f88ac09b",
+      "lfs_pointer_blob_sha1": "8837efbfa7fb7ad8a9a66b280a8cd86be3cd70bd",
+      "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+      "line_count": 500,
+      "sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132"
+    },
+    "train.jsonl": {
+      "bytes": 10896985,
+      "git_blob_sha1": "3a9d774ba092769cce4b93133bf3c97f2b8ea20c",
+      "lfs_pointer_blob_sha1": "fabbf3962afc8d64618406adde7f012bf0ba3c20",
+      "license_blob_sha1": "4ccc7f8dba5cb9f5dc77f14778602ef4c0a585b2",
+      "line_count": 12000,
+      "sha256": "90d96daeac3fe343ebb1e22ce93dd99690f75983e957f88de42f87cffe1e8076"
+    }
+  }
+}
