@@ -6,7 +6,7 @@ choose or activate a limit. All results are **PROVISIONAL**. Stage B and a
 separate cold-gate ruling remain necessary before activation.
 
 The frozen registration is `pilot_protocol_v3.json`, SHA-256
-`9491bc370b515c7d56d21f87e0c6721be8cb2b6501b430b9dce75a93f59a6f0a`. It keeps
+`69321c693b3370b949b0a4a1b8548e35dd081a36165ba8f6799a387c2d813616`. It keeps
 every value of v1 (cold gate 10 Q1/Q2 of 2026-09-19, adjudication 10a and
 sizing ruling 46b) and v2 (the A269 gate of 2026-09-22), and adds the rules of
 cold gate QPE01-DAEMON-CONTAMINATION-01 of 2026-09-23: ruling 10 (the

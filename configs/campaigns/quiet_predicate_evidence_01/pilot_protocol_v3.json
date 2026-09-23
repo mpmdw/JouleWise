@@ -35,19 +35,19 @@
   "minimum_adjacent_pairs": 4,
   "minimum_retained": 8,
   "non_observer_process_busy": {
-    "statistic": "per non-observer process identity: sum over journal rows joined to the envelope of busy_cores * interval_s",
-    "bar_core_seconds": 30,
+    "abort_after_consecutive": 2,
     "bar_basis": "0.05 core (block_two.smallest_holdable_share) * 600 s; ~7.7 J per 480 s interior at 0.3194 W per busy core (exhibit C8, night 20260922-2100; synthesis 25 withdrew the 0.3125 W figure ruling 10 quoted), above the 5 J claim bar",
+    "bar_core_seconds": 30,
     "observer": "top_consumers[].observer == true (recorder run with observer_pid = chain root pid)",
-    "abort_after_consecutive": 2
+    "statistic": "per non-observer process identity: sum over journal rows joined to the envelope of busy_cores * interval_s"
   },
   "observer_floor": {
-    "statistic": "per envelope: session.whole_envelope_observer_cpu_s / (end_stamp.monotonic_before_s - start_stamp.monotonic_before_s); campaign value = sum of whole_envelope_observer_cpu_s over all readable envelopes / sum of their spans",
-    "definition": "SELF + all reaped CHILDREN, including collector, power recorder, load recorder and census; never subtracted",
     "components": "reported per envelope, each component with its cpu_s and a boolean inside_whole: round_block (sampler worker/census block; inside_whole true) and power_recorder_residue (whole_envelope_observer_cpu_s minus round_block; the 100 ms power recorder's cost, unattributed by PID at this revision; inside_whole true) sum to whole_envelope_observer_cpu_s; load_recorder (30 s covariate recorder; inside_whole false) is a sibling process of the collector, launched by the executor, so its CPU is outside whole_envelope_observer_cpu_s and outside observer_floor_cores; observer_floor_including_load_recorder_cores = (sum of whole_envelope_observer_cpu_s + sum of load_recorder) / sum of spans over the same readable envelopes, REPORTED, never a stop input",
-    "variation": "observer_variation_cores = sample SD over all readable envelopes of the per-envelope share, df = n - 1, cores; REPORTED, not a stop",
+    "definition": "SELF + all reaped CHILDREN, including collector, power recorder, load recorder and census; never subtracted",
+    "limitation_sentence": "Block two measures the marginal energy of the level on top of this observer, not on an idle machine.",
+    "statistic": "per envelope: session.whole_envelope_observer_cpu_s / (end_stamp.monotonic_before_s - start_stamp.monotonic_before_s); campaign value = sum of whole_envelope_observer_cpu_s over all readable envelopes / sum of their spans",
     "supersedes": "v2 observer_floor_cores summed per-round observer_cpu_s (worker/census block only) and omitted the power recorder; v2 reported 0.0531 (20260922-0217) and 0.0528 (20260922-2100); corrected whole-envelope values 0.176 and 0.159 cores",
-    "limitation_sentence": "Block two measures the marginal energy of the level on top of this observer, not on an idle machine."
+    "variation": "observer_variation_cores = sample SD over all readable envelopes of the per-envelope share, df = n - 1, cores; REPORTED, not a stop"
   },
   "pairing_rule": "disjoint_original_adjacent_pairs_both_retained_no_bridging",
   "power_interval_ms": 100,

@@ -1365,11 +1365,13 @@ class EvidenceRegistrationTests(unittest.TestCase):
         # recorder is a sibling of the collector, outside whole.
         # 2026-09-23 (fix round 1, lens N3): the v3 entry's records gain
         # ruling 31 and synthesis 35, which its `ruling` string already names.
+        # 2026-09-23 (fix round 1, Fable lens N1): v3 re-serialised in the
+        # canonical form v2 uses (sorted keys, indent 2); digest re-pinned.
         # Any membership/metadata amendment needs its cold-gate ruling and a
         # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '8b394f8e3e373cf2fd94493b918ea91a29eff863c66231a29d7a9564c6cd8fae')
+                         '9ad277ce180bc5289e2e29391c20312a95a0847f72ba09bfeb32ade841e851a6')
 
     def test_the_gate_share_equals_the_registrations_t0_share(self):
         # Fix round 1 (lens N6): ruling 10 makes the GATE constant binding,

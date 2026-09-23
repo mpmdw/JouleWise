@@ -1168,6 +1168,11 @@ class StartDriftCadenceTests(FrozenExecutorTests):
         # `observer_floor` (cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10
         # Q2; ruling 31's reporting limbs as adjudicated by synthesis 35).
         second, third = json.loads(v2), json.loads(v3)
+        # Both registrations are in ONE canonical form, sorted keys and a
+        # two-space indent plus a final newline, so re-serialising either can
+        # never change its digest (fix round 1, Fable lens N1: v3 was not).
+        for raw, parsed in ((v2, second), (v3, third)):
+            self.assertEqual(raw, (json.dumps(parsed, sort_keys=True, indent=2) + '\n').encode())
         self.assertEqual({k for k in set(second) | set(third) if second.get(k) != third.get(k)},
                          {'exclusions', 'ruling', 'non_observer_process_busy',
                           't0_non_observer_share_max', 'observer_floor'})
@@ -3344,9 +3349,10 @@ class NonObserverAbortTests(FrozenExecutorTests):
         self.assertEqual(summary["envelopes"][2]["excluded"], ["non_observer_process_busy"])
 
 # The v3 registration's bytes as of fix round 1 (the components text now
-# names the load recorder as a sibling outside whole).  Pinned as a literal
-# here AND as `night_gate.QPE01_PILOT_REGISTRATION_SHA256`.
-V3_REGISTRATION_SHA256 = "9491bc370b515c7d56d21f87e0c6721be8cb2b6501b430b9dce75a93f59a6f0a"
+# names the load recorder as a sibling outside whole, and the file is in the
+# canonical form v2 uses).  Pinned as a literal here AND as
+# `night_gate.QPE01_PILOT_REGISTRATION_SHA256`.
+V3_REGISTRATION_SHA256 = "69321c693b3370b949b0a4a1b8548e35dd081a36165ba8f6799a387c2d813616"
 V2_PROTOCOL = json.loads((ROOT / "configs/campaigns/quiet_predicate_evidence_01"
                           / "pilot_protocol_v2.json").read_text())
 
