@@ -39,6 +39,59 @@ from joulewise import evidence_night as entry
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def quiet_machine():
+    """THE shared fake observation every `check()` in this module injects.
+
+    A clean 30.4 s observation: `launchd` at 0.008 cores (non-observer) and
+    the measurement's own `powermetrics` at 0.114 cores, marked
+    `observer: true`.  `check` otherwise spends thirty real seconds watching
+    THIS machine, and its verdict would then depend on whatever else happens
+    to be running (fix round 1, F12: at 16900e3d eighteen LifecycleTests
+    checks did exactly that).
+    """
+
+    from tests.test_night_gate import QUIET_OBSERVATION
+
+    return dict(QUIET_OBSERVATION)
+
+
+class ProductionSamplerInvoked(AssertionError):
+    """The production 30 s sampler was reached from this test module."""
+
+
+def _production_sampler_forbidden(*args, **kwargs):
+    raise ProductionSamplerInvoked(
+        "night_gate.production_interval_observation was called from tests/test_evidence_night.py; "
+        "inject quiet_observer=quiet_machine (or another fake) instead")
+
+
+_SAMPLER_GUARD = None
+
+
+def setUpModule():
+    # For the whole module the production sampler RAISES instead of running
+    # `top -l 2 -s 30`.  An AssertionError is outside the families
+    # `machine_quiet_check` converts into a refusal, so a stray call fails its
+    # test loudly rather than sampling the machine or passing quietly.
+    global _SAMPLER_GUARD
+    from joulewise import night_gate
+    _SAMPLER_GUARD = patch.object(night_gate, "production_interval_observation",
+                                  _production_sampler_forbidden)
+    _SAMPLER_GUARD.start()
+
+
+def tearDownModule():
+    _SAMPLER_GUARD.stop()
+
+
+class ProductionSamplerGuardTests(unittest.TestCase):
+    def test_the_production_sampler_is_never_reached_from_this_module(self):
+        # F12 (fix round 1): the module-level guard is in force for every
+        # test here; the default observer path raises instead of sampling.
+        with self.assertRaises(ProductionSamplerInvoked):
+            entry.machine_quiet_check()
+
+
 class ArgumentsTests(unittest.TestCase):
     def test_e3_boundary_check_documentation_agrees(self):
         clause = ("`publish-install` repeats the veto observation and the loaded-jobs probe "
@@ -211,6 +264,124 @@ class PrepareTests(unittest.TestCase):
         with self.assertRaisesRegex(entry.Refused, "published, invoked"):
             entry.prepare(**self.kw)
 
+    def test_the_arm_check_refuses_a_busy_non_observer_with_the_gates_own_text(self):
+        """QPE01-DAEMON-CONTAMINATION-01 regression 2, arm-check half.
+
+        The 2026-09-22 arm passed every pre-arm check while `fseventsd` had
+        already been at a full core for sixteen hours, because no check looked
+        at what was running.  An arm that passes a machine t0 would refuse
+        spends the whole three-hour span to learn it.  The bar, the text and
+        the observation are the gate's, so the two can never drift apart.
+        """
+
+        from joulewise import night_gate
+        from tests.test_night_gate import interval_observation
+        from tests.test_arm_census import observation, row
+        state = entry.prepare(**self.kw)
+        resident = self.base_dir / "resident.json"
+        entry.saved_json(resident, {"resident_session": None})
+
+        def probes(argv, **kwargs):
+            if Path(str(argv[0])).name == "pgrep":
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return entry.probe_command(argv, **kwargs)
+
+        daemon = ("/System/Library/Frameworks/CoreServices.framework/Versions/A/"
+                  "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd", 341, 0.998)
+        expected = ("non-observer process busy: fseventsd pid 341 at 0.998 busy cores "
+                    "over 30.4 s (bar 0.5); observation in top_consumers_at_decision")
+        absent = dict(jobs=[], plists=[], listing=dict(exit_code=0))
+        for label, marked in (("the machine", False), ("the measurement itself", True)):
+            with self.subTest(busy=label):
+                busy = lambda: interval_observation(daemon + (marked,), interval_s=30.4)
+                with patch.object(entry, "night_agents", return_value=absent, create=True):
+                    if marked:
+                        record = entry.check(
+                            candidate=state["staging"], canonical=state["measurement_root"],
+                            supervisor_state=resident, runner=probes, caller_pid=90,
+                            census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
+                            quiet_observer=busy, lock_verifier=lambda root: None)
+                        self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "pass")
+                        self.assertEqual(
+                            record["checks"]["machine_quiet"]["bar_busy_cores"],
+                            night_gate.T0_NON_OBSERVER_SHARE_MAX)
+                        continue
+                    with self.assertRaises(entry.Refused) as refusal:
+                        entry.check(
+                            candidate=state["staging"], canonical=state["measurement_root"],
+                            supervisor_state=resident, runner=probes, caller_pid=90,
+                            census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
+                            quiet_observer=busy, lock_verifier=lambda root: None)
+                # The operator sees the finding itself, not "pre-arm checks failed".
+                self.assertEqual(str(refusal.exception), expected)
+                record = json.loads((Path(state["staging"]) / "lifecycle/check.json").read_text())
+                self.assertFalse(record["armable"])
+                self.assertFalse(record["rehearsal_ready"])
+                # Fix round 1 (lens S4): the refusal text points at
+                # top_consumers_at_decision, so the failing row carries it --
+                # the observation the arm was refused on, naming the offender.
+                failing = record["checks"]["machine_quiet"]
+                self.assertEqual((failing["verdict"], failing["reason"]), ("fail", expected))
+                self.assertEqual(failing["interval_s"], 30.4)
+                self.assertEqual(failing["bar_busy_cores"], night_gate.T0_NON_OBSERVER_SHARE_MAX)
+                self.assertEqual([(c["pid"], c["busy_cores"], c["observer"])
+                                  for c in failing["top_consumers_at_decision"]],
+                                 [(341, 0.998, False)])
+                self.assertTrue(failing["top_consumers_at_decision"][0]["command"].endswith("/fseventsd"))
+
+    def test_the_arm_check_records_an_unreadable_observation_as_not_armable(self):
+        """Fix round 1 (lens S3): a failed or unreadable observation is a written refusal.
+
+        At 16900e3d these three cases escaped `check()` as exceptions --
+        `night_gate.ProbeError` is a RuntimeError, outside the families
+        `inspect` records -- so check.json was never written and the operator
+        got a traceback instead of `armable: false`.  The t0 gate already
+        turns the same failures into `night_probe_error`.
+        """
+
+        from tests.test_night_gate import interval_observation
+        from tests.test_arm_census import observation, row
+        state = entry.prepare(**self.kw)
+        resident = self.base_dir / "resident.json"
+        entry.saved_json(resident, {"resident_session": None})
+
+        def probes(argv, **kwargs):
+            if Path(str(argv[0])).name == "pgrep":
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return entry.probe_command(argv, **kwargs)
+
+        def sampler_died():
+            raise RuntimeError("top died")
+
+        cases = (
+            ("malformed consumer", lambda: interval_observation(("/usr/libexec/somed", 77, 0.2, "yes")),
+             "non-observer interval observation failed: ProbeError: "
+             "malformed consumer in the non-observer observation"),
+            ("sampler raises", sampler_died,
+             "non-observer interval observation failed: RuntimeError: top died"),
+            ("no metrics", lambda: {"interval_s": 30.4},
+             "non-observer interval observation failed: ProbeError: "
+             "non-observer observation carries no metrics"),
+        )
+        absent = dict(jobs=[], plists=[], listing=dict(exit_code=0))
+        check_json = Path(state["staging"]) / "lifecycle/check.json"
+        for label, observer, expected in cases:
+            with self.subTest(case=label):
+                if check_json.exists():
+                    check_json.unlink()
+                with patch.object(entry, "night_agents", return_value=absent, create=True):
+                    with self.assertRaises(entry.Refused) as refusal:
+                        entry.check(
+                            candidate=state["staging"], canonical=state["measurement_root"],
+                            supervisor_state=resident, runner=probes, caller_pid=90,
+                            census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
+                            quiet_observer=observer, lock_verifier=lambda root: None)
+                self.assertEqual(str(refusal.exception), expected)
+                record = json.loads(check_json.read_text())
+                self.assertFalse(record["armable"])
+                self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "fail")
+                self.assertEqual(record["checks"]["machine_quiet"]["reason"], expected)
+
     def test_b4_prepare_check_prepare(self):
         from tests.test_arm_census import observation, row
         state = entry.prepare(**self.kw)
@@ -225,7 +396,7 @@ class PrepareTests(unittest.TestCase):
             entry.check(candidate=state["staging"], canonical=state["measurement_root"],
                 supervisor_state=resident, runner=probes, caller_pid=90,
                 census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
-                lock_verifier=lambda root: None)
+                quiet_observer=quiet_machine, lock_verifier=lambda root: None)
         self.assertEqual(entry.prepare(**self.kw), state)
         self.assertTrue((Path(state["staging"]) / "lifecycle/check.json").is_file())
 
@@ -606,7 +777,8 @@ class LifecycleTests(unittest.TestCase):
         self.raw = subprocess.CompletedProcess([], 1, "", "")
         self.kw = dict(candidate=self.stage, canonical=self.canonical, supervisor_state=self.resident,
                        runner=self.runner, caller_pid=90, census_observer=lambda **kw: self.fixture,
-                       lock_verifier=lambda root: None, launchctl_bin="/fixture/launchctl")
+                       lock_verifier=lambda root: None, launchctl_bin="/fixture/launchctl",
+                       quiet_observer=quiet_machine)
         self.schedule = dict(install_close_epoch_s=self.t0 - 1800,
                              boundaries={"REQUEST / exit BEFORE": self.t0 - 900})
         for p in (patch.object(entry, "CENSUS_FIX", self.head),
@@ -912,6 +1084,114 @@ class LifecycleTests(unittest.TestCase):
                          [dict(plan=str(only / "night_plan.json"), classification="retained",
                                reason="terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)",
                                evidence=[str(only / "night/refusal.json")])])
+
+    def test_a_root_recorded_under_the_superseded_v2_registration_stays_retained(self):
+        """Brief 04 regression 4, third limb -- a GUARD, not defect-shaped.
+
+        Superseding v2 by v3 must not orphan the nights already recorded
+        under v2: their custody roots must still classify `retained`, or the
+        next arm check would refuse on history.  This holds by construction
+        today (`retained_roots` reads terminal markers, the custody path and
+        the plan span, never the registration digest), so the test cannot
+        fail on 16900e3d; it exists so a future change that makes retention
+        read the registration cannot land silently (lens S6, fix round 1).
+        """
+
+        import hashlib
+        from joulewise import night_gate
+        state = {"roots_under": str(self.custody.parent.parent)}
+        v2 = (ROOT / "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json").read_bytes()
+        self.assertEqual(hashlib.sha256(v2).hexdigest(), night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256)
+        self.assertIsNone(night_gate.armable_registration(night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256))
+        root = self.custody.parent / "under-v2"
+        (root / "night").mkdir(parents=True)
+        (root / "registration.json").write_bytes(v2)
+        plan = dict(self.sibling_plan(root), registration_path=str(root / "registration.json"))
+        (root / "night_plan.json").write_text(json.dumps(plan))
+        for marker in ("chain.started", "chain.exited", "refusal.json"):
+            (root / "night" / marker).write_text("{}")
+        (root / "night/receipt.json").write_text(json.dumps({"rows": [{"id": "C1", "measured": {
+            "registration_sha256": night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256}}]}))
+        row = entry.retained_roots(state)["inventory"][0]
+        self.assertEqual((row["plan"], row["classification"]),
+                         (str(root / "night_plan.json"), "retained"))
+        record = entry.check(**dict(self.kw, quiet_observer=quiet_machine))
+        self.assertEqual(record["checks"]["retained_roots"]["verdict"], "pass")
+        self.assertEqual([r["classification"] for r in record["checks"]["retained_roots"]["inventory"]],
+                         ["retained"])
+
+    def evidence_chain(self, text="#!/bin/zsh\nexport NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n"):
+        """Re-seal the fixture's custody chain with `text` (digest updated)."""
+
+        chain = self.custody / "chain.zsh"
+        chain.write_text(text)
+        self.state["digests"][str(chain)] = entry.digest(chain)
+        entry.saved_json(self.stage / "prepare.json", self.state)
+
+    def test_the_arm_check_spends_the_predicate_only_on_an_evidence_chain(self):
+        """F12 (fix round 1): the arm check's scope mirrors the t0 gate's.
+
+        The gate spends the 30 s observation only when the chain's payload
+        kind is `quiet_predicate_evidence` (night_gate, the C5 payload_kind
+        condition).  At 16900e3d the arm check spent it for every candidate.
+        The fixture's sealed chain declares no payload kind, which the gate
+        reads as calibration.
+        """
+
+        calls = []
+
+        def spy():
+            calls.append("observed")
+            return quiet_machine()
+
+        record = entry.check(**dict(self.kw, quiet_observer=spy))
+        self.assertEqual(calls, [])
+        self.assertEqual(record["checks"]["machine_quiet"],
+                         dict(verdict="skipped", reason="not an evidence night", payload_kind="calibration"))
+        self.assertTrue(record["rehearsal_ready"])
+        written = json.loads((self.stage / "lifecycle/check.json").read_text())
+        self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "skipped")
+        # The same candidate with an evidence chain: the observer is spent once.
+        self.evidence_chain()
+        record = entry.check(**dict(self.kw, quiet_observer=spy))
+        self.assertEqual(calls, ["observed"])
+        self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "pass")
+        self.assertTrue(record["rehearsal_ready"])
+        # The module guard: with no injected observer, the check reaches the
+        # production sampler, which raises here instead of sampling.
+        with self.assertRaises(ProductionSamplerInvoked):
+            entry.check(**{k: v for k, v in self.kw.items() if k != "quiet_observer"})
+
+    def test_the_generic_refusal_names_only_failed_checks_never_a_skipped_one(self):
+        """Fix round 2, delta re-audit N-b.
+
+        A candidate whose chain is not an evidence night records
+        `machine_quiet: skipped`, which `passed` already treats as no
+        failure.  At 0e5578fb the generic refusal text listed every check
+        whose verdict was not "pass", so when the courier failed the operator
+        read "pre-arm checks failed: courier, machine_quiet" -- naming a check
+        that never ran as failed.  Counterfactual: courier fails, machine
+        quiet is skipped; the text must name the courier alone.
+        """
+
+        with patch.object(entry.shutil, "which", return_value=None):
+            with self.assertRaises(entry.Refused) as refused:
+                entry.check(**self.kw)
+        written = json.loads((self.stage / "lifecycle/check.json").read_text())
+        self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "skipped")
+        self.assertEqual(written["checks"]["courier"]["verdict"], "fail")
+        message = str(refused.exception)
+        self.assertTrue(message.startswith("pre-arm checks failed: courier; see "), message)
+        self.assertNotIn("machine_quiet", message)
+
+    def test_an_unreadable_payload_kind_fails_the_arm_check_closed(self):
+        # Two declarations: the gate's probe calls the kind ambiguous; the
+        # arm check refuses rather than guessing either scope.
+        self.evidence_chain("export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n"
+                            "export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n")
+        record = self.checked("payload kind unreadable")
+        self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "fail")
+        self.assertFalse(record["armable"])
 
     def test_discovery_span_fence_reuses_the_watchdog_rule(self):
         from scripts.magistrate_watchdog import COURIER_DEADLINE_S
@@ -2047,7 +2327,7 @@ os.execv(sys.executable,[sys.executable,*args])
             checked = entry.check(candidate=stage, canonical=canonical, supervisor_state=resident,
                 launchctl_bin=str(fake.executable), runner=probes, caller_pid=90, census_observer=lambda **kw: observation(
                     row(20, 1, "/bin/claude"), row(90, 20, "/bin/python3"), hits=(20,)),
-                lock_verifier=lambda root: None)
+                quiet_observer=quiet_machine, lock_verifier=lambda root: None)
             self.assertFalse(checked["armable"])
             self.assertTrue(checked["rehearsal_ready"])
             self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))

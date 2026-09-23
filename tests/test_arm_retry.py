@@ -31,6 +31,12 @@ COLD = {
     "night_courier_running", "night_courier_unavailable",
     "night_plan_overruns_deadman", "night_record_exists",
     "night_calibration_refused", "night_window_exceeded",
+    # Cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2 (2026-09-23): the
+    # two-consecutive-envelope machine-state abort.  It keeps the
+    # registration's exclusion spelling so the refusal document and the
+    # excluded envelopes name the same cause; `classify_abort` already
+    # defaulted it to cold_gate, so nothing about retry policy moves.
+    "non_observer_process_busy",
 }
 INSTALLER = {
     "install_span_closed", "install_outside_span", "plan_t0_in_the_past",

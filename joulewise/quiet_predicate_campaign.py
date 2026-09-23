@@ -321,10 +321,19 @@ def cleanup_record(night_dir, children=()):
         return json.loads(path.read_text())
 
 
-def write_refusal(night_dir, plan, detail):
+def write_refusal(night_dir, plan, detail, reason="night_probe_error"):
+    """One typed refusal document.  `reason` is a REGISTERED code, never free text.
+
+    The non-observer abort writes `non_observer_process_busy` (cold gate 10,
+    2026-09-23, Q2) rather than the generic probe error, so a reader of
+    `refusal.json` alone can tell the machine-state abort from a failed probe.
+    """
+
     from scripts.run_night import _write_driver_refusal
+    if reason not in night_gate.NIGHT_DRIVER_REASON_CODES | night_gate.NIGHT_GATE_REASON_CODES:
+        raise ValueError("evidence refusal reason is not registered: " + str(reason))
     night_dir.mkdir(parents=True, exist_ok=True)
-    return _write_driver_refusal(night_dir / "refusal.json", plan, "night_probe_error",
+    return _write_driver_refusal(night_dir / "refusal.json", plan, reason,
                                  "evidence chain refused: " + detail)
 
 
@@ -838,9 +847,25 @@ def attestation_exclusions(state):
     return [NETWORK_TIME_UNATTESTED_EXCLUSION]
 
 
-def record_covariates(protocol, night_dir):
+def record_covariates(protocol, night_dir, observer_pid=None):
+    """Journal one interval observation per sample, MARKING the observer tree.
+
+    ``observer_pid`` is the chain root -- the executor's own pid, handed down
+    by ``execute`` (cold gate 10 QPE01-DAEMON-CONTAMINATION-01, 2026-09-23,
+    Q2 BLOCKER).  Without it ``sample_interval`` defaults the observer root to
+    the RECORDER's pid, and the recorder is a SIBLING of the collector, so
+    `powermetrics`, `top`, `sudo` and the census -- every process the
+    measurement itself runs -- were journalled as non-observer consumers:
+    every row of both archived nights reads ``observer: false``, and the clean
+    night's own power sampler reads 0.111-0.115 busy cores as if it were the
+    machine.  With the chain root, ancestry marks the whole tree.
+    """
+
     from joulewise.quiet_admission import sample_interval
     from scripts.sample_quiet_predicate_evidence import cpu_total
+    if type(observer_pid) is not int or observer_pid <= 0:
+        raise ValueError("record_covariates needs the chain root pid; an unmarked "
+                         "observer tree journals the measurement as the machine")
     stop = False
     def stopping(_signum, _frame):
         nonlocal stop
@@ -850,7 +875,7 @@ def record_covariates(protocol, night_dir):
     while not stop:
         cpu, began = cpu_total(), time.monotonic()
         try:
-            value = sample_interval(protocol["sample_interval_s"])
+            value = sample_interval(protocol["sample_interval_s"], observer_pid=observer_pid)
             row = {"observation": value, "error": None}
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             row = {"observation": None, "error": str(exc)}
@@ -858,6 +883,174 @@ def record_covariates(protocol, night_dir):
                    observer_cpu_s=cpu_total() - cpu, monotonic_start=began, monotonic_end=time.monotonic())
         append_event(journal, row)
     return 0
+
+
+NON_OBSERVER_EXCLUSION = night_gate.NON_OBSERVER_EXCLUSION
+
+
+class NonObserverAbort(ValueError):
+    """Two consecutive envelopes lost to a busy non-observer process.
+
+    Its own type so the executor's refusal document can carry the RULED reason
+    (`non_observer_process_busy`) instead of the generic probe error every
+    other in-chain abort writes.
+    """
+
+
+def non_observer_rule(protocol):
+    """The registration's per-envelope rule, or None when it does not carry one.
+
+    v2 has no such rule and `exclusions` is byte-pinned, so a v2 night must
+    never emit the reason (the defect A269 ruling 10 Q2 forbids).  When the
+    rule IS present it must be complete: a half-written rule is a registration
+    defect, and refusing here is cheaper than discovering it at envelope 12.
+    """
+
+    rule = protocol.get("non_observer_process_busy")
+    if rule is None:
+        return None
+    bar = rule.get("bar_core_seconds") if isinstance(rule, dict) else None
+    consecutive = rule.get("abort_after_consecutive") if isinstance(rule, dict) else None
+    if (type(bar) not in (int, float) or type(bar) is bool or not math.isfinite(bar) or bar <= 0
+            or type(consecutive) is not int or consecutive < 1):
+        raise ValueError("non_observer_process_busy needs a positive bar_core_seconds "
+                         "and an integer abort_after_consecutive")
+    if NON_OBSERVER_EXCLUSION not in protocol["exclusions"]:
+        raise ValueError("non_observer_process_busy rule without its exclusion reason")
+    return rule
+
+
+# The summary's `observer_definition` (fix round 1, lens N5): registration
+# v3's ruled `observer_floor.definition` sentence, verbatim, followed by the
+# sibling fact.  The ruled sentence's "including ... load recorder" is left as
+# ruled; the magistrate holds its inaccuracy for the block-two consult.
+OBSERVER_DEFINITION = ("SELF + all reaped CHILDREN, including collector, power recorder, load recorder "
+                       "and census; never subtracted, with the 30 s load recorder a sibling process "
+                       "reported beside it (see observer_floor_components_role)")
+EXECUTOR_NON_OBSERVER_VERDICT = "executor_non_observer_process_busy"
+NON_OBSERVER_DISAGREEMENT = "non_observer_verdict_disagreement"
+
+
+def non_observer_verdict_key(hits):
+    """What two non-observer verdicts must share to agree.
+
+    Process, pid, start identity and core-seconds (to 1e-6 core-s, so a
+    JSON round trip of the executor's floats never reads as disagreement).
+    Anything that is not a list of hit objects is its own key, so a malformed
+    stored verdict disagrees rather than refusing the whole summary.
+    """
+
+    if not isinstance(hits, list) or not all(isinstance(hit, dict) for hit in hits):
+        return ("unreadable", repr(hits))
+    return sorted((str(hit.get("process")), repr(hit.get("pid")), repr(hit.get("start_identity")),
+                   f"{float(hit['core_seconds']):.6f}"
+                   if type(hit.get("core_seconds")) in (int, float) else repr(hit.get("core_seconds")))
+                  for hit in hits)
+
+
+UNMARKED_JOURNAL = ("recorder journal carries no observer-marked consumer; "
+                    "ancestry marking failed")
+
+
+def require_observer_marked(support):
+    """Refuse a v3 envelope whose journal rows name processes but mark none.
+
+    Under registration v3 the recorder runs with the chain root's pid, so the
+    measurement's own processes -- at least `powermetrics`, a full-time
+    consumer -- carry `observer: true` in every envelope.  Rows that name
+    consumers yet mark none mean the ancestry marking failed, and the
+    per-envelope rule would then exclude every envelope while blaming the
+    power sampler, hiding the real cause (Fable lens N8, adopted by the
+    magistrate as an evidence-quality guard in fix round 1).  Rows with no
+    consumers at all say nothing either way and pass.
+    """
+
+    named = False
+    for row in support:
+        metrics = (row.get("observation") or {}).get("metrics")
+        consumers = metrics.get("top_consumers") if isinstance(metrics, dict) else None
+        if isinstance(consumers, list) and consumers:
+            named = True
+            if any(isinstance(c, dict) and c.get("observer") is True for c in consumers):
+                return
+    if named:
+        raise ValueError(UNMARKED_JOURNAL)
+
+
+def non_observer_busy(rule, support):
+    """Per non-observer process identity, the busy-core-seconds at or over the bar.
+
+    The statistic is an INTEGRAL, not a median (cold gate 10, 2026-09-23, Q2
+    MATERIAL): an eight-sample burst at 1.5 busy cores costs about 270 J and
+    passes a twenty-sample median, while 30 core-seconds -- the registered
+    `smallest_holdable_share` 0.05 held for the whole 600 s envelope -- is
+    about 7.7 J of the 480 s interior, above the 5 J claim bar.  Identity is
+    (pid, start identity), so a recycled pid is a different process.
+
+    `support` is the envelope's journal rows, already joined by the
+    registration's own monotonic-support rule.  A row whose observation failed
+    carries no consumers at all and is skipped; a row that HAS metrics and no
+    readable `top_consumers` is a corrupt journal, and refuses.
+    """
+
+    totals, names = {}, {}
+    for row in support:
+        observation = row.get("observation")
+        metrics = (observation or {}).get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        interval_s = observation.get("interval_s")
+        consumers = metrics.get("top_consumers")
+        if (not isinstance(consumers, list) or type(interval_s) not in (int, float)
+                or type(interval_s) is bool or not math.isfinite(interval_s) or interval_s <= 0):
+            raise ValueError("recorder journal row carries metrics without usable "
+                             "top_consumers and interval_s")
+        for consumer in consumers:
+            if (not isinstance(consumer, dict) or type(consumer.get("observer")) is not bool
+                    or type(consumer.get("pid")) is not int or type(consumer.get("pid")) is bool
+                    or not isinstance(consumer.get("command"), str)
+                    or type(consumer.get("busy_cores")) not in (int, float)
+                    or type(consumer.get("busy_cores")) is bool
+                    or not math.isfinite(consumer["busy_cores"]) or consumer["busy_cores"] < 0):
+                raise ValueError("malformed recorder journal consumer")
+            if consumer["observer"]:
+                continue
+            identity = (consumer["pid"], consumer.get("start_identity"))
+            totals[identity] = totals.get(identity, 0.0) + consumer["busy_cores"] * interval_s
+            names[identity] = consumer["command"]
+    hits = [{"process": os.path.basename(names[identity]), "pid": identity[0],
+             "start_identity": identity[1], "core_seconds": total,
+             "bar_core_seconds": rule["bar_core_seconds"]}
+            for identity, total in totals.items() if total >= rule["bar_core_seconds"]]
+    return sorted(hits, key=lambda hit: (-hit["core_seconds"], hit["pid"]))
+
+
+def envelope_support(covariates, scheduled, protocol):
+    """The registration's join: recorder intervals fully inside the envelope."""
+
+    if scheduled is None:
+        return []
+    return [row for row in covariates
+            if row.get("monotonic_start") is not None and row.get("monotonic_end") is not None
+            and row["monotonic_start"] >= scheduled
+            and row["monotonic_end"] <= scheduled + protocol["envelope_s"]]
+
+
+def envelope_span_s(session):
+    """The collector's own monotonic span, from its two clock stamps.
+
+    Returns None when either stamp is missing, so the caller can refuse by
+    name with the envelope index rather than raise a KeyError here.
+    """
+
+    stamps = [session.get("start_stamp"), session.get("end_stamp")]
+    if any(not isinstance(stamp, dict) for stamp in stamps):
+        return None
+    start, end = (stamp.get("monotonic_before_s") for stamp in stamps)
+    if any(type(value) not in (int, float) or type(value) is bool or not math.isfinite(value)
+           for value in (start, end)):
+        return None
+    return end - start
 
 
 def hard_exclusions(rows):
@@ -948,6 +1141,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     journal = directory.parent / protocol["recorder_journal"]
     covariates = [json.loads(line) for line in journal.read_text().splitlines() if line] if journal.exists() else []
     clean_busy = []
+    rule = non_observer_rule(protocol)
     for entry in envelopes:
         excluded = []
         if entry.get("collector_exit", 0) != 0:
@@ -955,14 +1149,38 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         if entry.get("cleanup", {}).get("cleanup_proven") is False:
             excluded.append("cleanup_unproven")
         scheduled = entry.get("scheduled_mono_s")
-        support = [r for r in covariates if scheduled is not None and
-                   r["monotonic_start"] >= scheduled and
-                   r["monotonic_end"] <= scheduled + protocol["envelope_s"]]
+        support = envelope_support(covariates, scheduled, protocol)
         busy = [(r.get("observation") or {}).get("metrics", {}).get("busy_cores") for r in support]
         distribution = harness.quantiles(busy)
         entry = {**entry, "busy_cores": {**distribution, "median": distribution["p50"]},
                  "busy_cores_samples": len([v for v in busy if harness.number(v) is not None]),
                  "recorder_observer_cpu_s": sum(r.get("observer_cpu_s") or 0 for r in support)}
+        # The registered per-envelope rule (cold gate 10, 2026-09-23, Q2): a
+        # non-observer process that held the machine for `bar_core_seconds`
+        # costs this envelope its claim, and the offenders are NAMED on the
+        # row so the reason can be read without the journal.
+        #
+        # The summary ALWAYS writes its own list, re-derived from the journal
+        # on disk, under `non_observer_process_busy` (empty when there is no
+        # offender).  The executor's in-chain verdict -- the list it decided
+        # the abort on -- is kept beside it under
+        # `executor_non_observer_process_busy`, and the two are compared.
+        # Before fix round 1 (lens S2) the executor's list passed through
+        # whenever the summary found nothing, so a row could name an offender
+        # while its `excluded` lacked the reason, and a test comparing the two
+        # compared the executor with itself.
+        if rule is not None:
+            require_observer_marked(support)
+            offenders = non_observer_busy(rule, support)
+            if offenders:
+                excluded.append(NON_OBSERVER_EXCLUSION)
+            executor_verdict = entry.get(NON_OBSERVER_EXCLUSION)
+            entry = {k: v for k, v in entry.items() if k != NON_OBSERVER_EXCLUSION}
+            entry[NON_OBSERVER_EXCLUSION] = offenders
+            if executor_verdict is not None:
+                entry[EXECUTOR_NON_OBSERVER_VERDICT] = executor_verdict
+                entry[NON_OBSERVER_DISAGREEMENT] = (non_observer_verdict_key(offenders)
+                                                    != non_observer_verdict_key(executor_verdict))
         out = directory / f"envelope-{entry['index']:02d}"
         # The session record is read FIRST and kept even when the rest of the
         # envelope is unreadable, because the replay check below must see
@@ -1042,6 +1260,12 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
                        "boot_id": session.get("boot_id"), "os_build": session.get("os_build"),
                        "sw_vers": session.get("sw_vers"), "powermetrics_identity": session.get("powermetrics_identity"),
                        "whole_envelope_observer_cpu_s": session.get("whole_envelope_observer_cpu_s"),
+                       # The accounting window of `whole_envelope_observer_cpu_s`:
+                       # the collector's own monotonic span, not the nominal 600 s
+                       # and not the recorder's support (cold gate round 3,
+                       # ruling 31 MATERIAL -- dividing by either of those two is
+                       # what the round-2 charge and exhibit G each got wrong).
+                       "envelope_span_s": envelope_span_s(session),
                        "observer_cpu_s": sum(row.get("observer_cpu_s") or 0 for row in rows),
                        "censuses": [{"round": r["round"], "clean": r.get("census_clean")} for r in rows]})
     retained = [v for v in values if not v["excluded"] and v["joules"] is not None]
@@ -1062,14 +1286,60 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     df = len(deltas) - 1 if len(deltas) >= 2 else None
     factor = math.sqrt(df / chi_square_lower_decile(df)) if sufficient else None
     s_upper = pair_sd * factor if sufficient else None
-    # Whole-round measured cost, including rejected envelopes; never subtract
-    # it from energy or use it as an envelope retention input.
-    observer_rows = [r for r in all_rows if harness.number(r.get("observer_cpu_s")) is not None
-                     and harness.number(r.get("round_mono_start_s")) is not None
-                     and harness.number(r.get("round_mono_end_s")) is not None
-                     and r["round_mono_end_s"] > r["round_mono_start_s"]]
-    observer_support_s = sum(r["round_mono_end_s"] - r["round_mono_start_s"] for r in observer_rows)
-    observer_floor = sum(r["observer_cpu_s"] for r in observer_rows) / observer_support_s if observer_support_s else None
+    # WHOLE-ENVELOPE observer cost, including rejected envelopes; never
+    # subtracted from energy, never a retention input (cold gate round 3,
+    # synthesis 35, adopting ruling 31's reporting limbs).
+    #
+    # What this replaces and why: until 2026-09-23 the floor summed each
+    # ROUND's `observer_cpu_s` -- the sampler's worker/census block only --
+    # over the rounds' own support, and never read the
+    # `whole_envelope_observer_cpu_s` the session had already recorded two
+    # lines above.  The 100 ms power recorder is reaped by the collector
+    # AFTER the round block ends, so two thirds of the apparatus was missing:
+    # both archived nights reported ~0.053 cores where the whole envelope
+    # costs 0.176 and 0.159.
+    #
+    # What "whole" holds, and what it does not (magistrate ruling on lens S1,
+    # fix round 1, 2026-09-23): `whole_envelope_observer_cpu_s` is the
+    # COLLECTOR's own CPU plus the CPU of every child the collector reaped
+    # (RUSAGE_SELF + RUSAGE_CHILDREN, scripts/sample_quiet_predicate_evidence.py
+    # `cpu_total`).  The 30 s load recorder is launched by the EXECUTOR, as a
+    # sibling of the collector, and journals its own CPU per row; it is
+    # therefore NOT inside whole.  So the components split in two:
+    #   - inside whole: `round_block` (the sampler's worker/census block) and
+    #     `power_recorder_residue` = whole - round_block, which is everything
+    #     else the collector reaped -- the 100 ms power recorder, unattributed
+    #     by PID at this revision.  These two sum to whole by definition.
+    #   - outside whole: `load_recorder`, the sibling's own journaled CPU.
+    # The ruled floor stays sum(whole) / sum(span).  The companion
+    # `observer_floor_including_load_recorder_cores` adds the sibling back
+    # ((sum(whole) + sum(load_recorder)) / sum(span)); it is REPORTED only and
+    # never feeds a stop.
+    readable = [v for v in values if v.get("error") is None]
+    shares = []
+    for value in readable:
+        whole, span = value.get("whole_envelope_observer_cpu_s"), value.get("envelope_span_s")
+        if harness.number(whole) is None or harness.number(span) is None or span <= 0:
+            raise ValueError(f"envelope {value['index']}: whole_envelope_observer_cpu_s or "
+                             "envelope span missing; absent evidence is never a pass")
+        shares.append(whole / span)
+        round_block = value.get("observer_cpu_s")
+        value["observer_floor_components"] = {
+            "round_block": {"cpu_s": round_block, "inside_whole": True},
+            "power_recorder_residue": {"cpu_s": whole - (round_block or 0), "inside_whole": True},
+            "load_recorder": {"cpu_s": value.get("recorder_observer_cpu_s"), "inside_whole": False},
+            "whole_envelope_observer_cpu_s": whole, "envelope_span_s": span}
+    observer_support_s = sum(v["envelope_span_s"] for v in readable)
+    observer_whole_s = sum(v["whole_envelope_observer_cpu_s"] for v in readable)
+    observer_floor = observer_whole_s / observer_support_s if observer_support_s else None
+    observer_floor_including_load_recorder = (
+        (observer_whole_s + sum(v.get("recorder_observer_cpu_s") or 0 for v in readable))
+        / observer_support_s if observer_support_s else None)
+    observer_variation = statistics.stdev(shares) if len(shares) >= 2 else None
+    # The stop branch keeps its v2 FORM and cause name (synthesis 35 §3): it is
+    # now fed the corrected statistic, and a clean pilot is EXPECTED to stop on
+    # it (0.16-0.18 cores of apparatus against a 0.05-core smallest level).
+    # That is the honest registered result, not a defect to soften.
     stop = stop_branch(s_upper=s_upper, observer_floor=observer_floor, protocol=protocol)
     unfiltered = [v["joules"] for v in values if v["joules"] is not None]
     large_pairs = [d for d in overlapping if pair_sd is not None and abs(d["delta_j"]) > 3 * pair_sd]
@@ -1092,6 +1362,18 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         "clean_machine_busy_cores": harness.quantiles(clean_busy),
         "clean_machine_definition": "envelopes passing census, AC and thermal hard probes; independent of energy retention",
         "observer_floor_cores": observer_floor, "observer_support_s": observer_support_s,
+        "observer_variation_cores": observer_variation,
+        "observer_floor_including_load_recorder_cores": observer_floor_including_load_recorder,
+        "observer_floor_components_role": "per envelope, on envelopes[*].observer_floor_components, "
+            "each component with its cpu_s and an explicit inside_whole flag: round_block (the "
+            "sampler's worker/census block) and power_recorder_residue (whole_envelope_observer_cpu_s "
+            "minus round_block: everything else the collector reaped, the 100 ms power recorder's "
+            "cost, unattributed by PID at this revision) are inside whole_envelope_observer_cpu_s and "
+            "sum to it; load_recorder (the 30 s covariate recorder) is a sibling process of the "
+            "collector, launched by the executor, so its CPU is outside whole_envelope_observer_cpu_s "
+            "and outside observer_floor_cores; observer_floor_including_load_recorder_cores = "
+            "(sum of whole_envelope_observer_cpu_s + sum of load_recorder) / sum of spans over the "
+            "same readable envelopes, reported only, never a stop input",
         "s_upper": s_upper,
         "s_upper_reason": "one-sided upper 90% chi-square bound; independent normal pair differences assumed"
             if sufficient else "fewer than four retained disjoint pairs or eight retained envelopes; no top-up",
@@ -1100,7 +1382,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             f"; delta_j={protocol['sizing']['delta_j']}; stop above {protocol['sizing']['maximum_pairs']} pairs"
             if sufficient else "INCONCLUSIVE; no sizing",
         "whole_campaign_observer_cpu_s": observer_cpu_s,
-        "observer_definition": "SELF + reaped CHILDREN, including collector, recorder, sampler and census; never subtracted",
+        "observer_definition": OBSERVER_DEFINITION,
         "cutoff_authority": False, "top_up": False}
     if replay_recorders:
         # Nothing this night produced is a measurement.  The status, the
@@ -1209,6 +1491,8 @@ def execute(plan, protocol, night_dir):
     env = {**os.environ, "EVIDENCE_PROCESS_JOURNAL": str(journal)}
     children, envelopes = [], []
     consecutive_cleanup_failures = 0
+    consecutive_non_observer = 0
+    refusal_reason = "night_probe_error"
     outcome, error = "refused", None
     cpu_start = harness.cpu_total()
     go = time.monotonic()
@@ -1239,7 +1523,8 @@ def execute(plan, protocol, night_dir):
         print(f"evidence_settle seconds={protocol['settle_s']}", flush=True)
         time.sleep(protocol["settle_s"])
         first = go + protocol["settle_s"]
-        recorder = launch("recorder", [sys.executable, "-B", "-m", "joulewise.quiet_predicate_campaign", "record"])
+        recorder = launch("recorder", [sys.executable, "-B", "-m", "joulewise.quiet_predicate_campaign",
+                                       "record", "--observer-pid", str(os.getpid())])
         for index in range(1, protocol["envelopes"] + 1):
             # The SCHEDULE runs on the pitch; the CAPTURE keeps its own length.
             # Every slot therefore starts from a quiet machine like envelope 01
@@ -1301,7 +1586,35 @@ def execute(plan, protocol, night_dir):
                                               timeout=attestation_timeout_s(protocol))
             attestation_wall_s = time.monotonic() - attestation_began
             record_attestation(out, attestation)
+            # This envelope's registered non-observer verdict, taken from the
+            # recorder journal as it stands now -- the same rows, the same
+            # join and the same integral the summary re-derives from disk
+            # (cold gate 10, 2026-09-23, Q2).  It is computed HERE because the
+            # abort is in-chain: two consecutive envelopes lost to a busy
+            # non-observer process end the night about 31 minutes after t0
+            # rather than three hours later.
+            non_observer = []
+            if non_observer_rule(protocol) is not None:
+                # The recorder writes this file on its first sample, so it may
+                # not exist yet when envelope 01 ends; no rows is no exclusion.
+                journal_path = night_dir / protocol["recorder_journal"]
+                journal_rows = [json.loads(line) for line
+                                in (journal_path.read_text().splitlines()
+                                    if journal_path.exists() else [])
+                                if line]
+                support = envelope_support(journal_rows, scheduled, protocol)
+                # The summary's evidence-quality guard, run HERE too (fix
+                # round 2, delta re-audit D1): a journal whose consumers carry
+                # no observer mark means the ancestry marking failed, and the
+                # rule below would then count the measurement's own processes
+                # and abort as `non_observer_process_busy` -- a busy-machine
+                # reason for a broken measurement.  The guard raises a plain
+                # ValueError, so the refusal carries `night_probe_error` and
+                # the marking failure's own text.
+                require_observer_marked(support)
+                non_observer = non_observer_busy(non_observer_rule(protocol), support)
             envelopes.append({"index": index, "scheduled_mono_s": scheduled, "actual_mono_s": actual,
+                              NON_OBSERVER_EXCLUSION: non_observer,
                               "start_drift_s": actual - scheduled, "collector_exit": code, "cleanup": cleanup,
                               # The teardown's own wall cost, beside the
                               # attestation's, for the same reason: the gap is
@@ -1325,11 +1638,22 @@ def execute(plan, protocol, night_dir):
             consecutive_cleanup_failures = 0 if cleanup["cleanup_proven"] else consecutive_cleanup_failures + 1
             if consecutive_cleanup_failures >= 2:
                 raise ValueError("two consecutive cleanup_unproven envelopes")
+            consecutive_non_observer = consecutive_non_observer + 1 if non_observer else 0
+            rule = non_observer_rule(protocol)
+            if rule is not None and consecutive_non_observer >= rule["abort_after_consecutive"]:
+                raise NonObserverAbort(
+                    f"{consecutive_non_observer} consecutive envelopes excluded "
+                    f"{NON_OBSERVER_EXCLUSION}; last: "
+                    + ", ".join(f"{hit['process']} pid {hit['pid']} "
+                                f"{hit['core_seconds']:.1f} core-s "
+                                f"(bar {hit['bar_core_seconds']})" for hit in non_observer))
             if recorder.poll() is not None:
                 raise ValueError("evidence covariate recorder exited early")
         outcome = "partial" if any(e["collector_exit"] != 0 or not e["cleanup"]["cleanup_proven"] for e in envelopes) else "complete"
     except (OSError, ValueError, KeyboardInterrupt, subprocess.SubprocessError) as exc:
         error = f"{type(exc).__name__}: {exc}"
+        if isinstance(exc, NonObserverAbort):
+            refusal_reason = NON_OBSERVER_EXCLUSION
     finally:
         for signum in old:
             signal.signal(signum, signal.SIG_IGN)
@@ -1367,7 +1691,8 @@ def execute(plan, protocol, night_dir):
         if not cleanup["cleanup_proven"]:
             outcome, error = "refused", error or "final evidence cleanup unproven"
         if outcome == "refused":
-            write_refusal(night_dir, plan, error or "evidence execution aborted")
+            write_refusal(night_dir, plan, error or "evidence execution aborted",
+                          reason=refusal_reason)
         harness.write_json(night_dir / "evidence_outcome.json", {"outcome": outcome, "error": error,
             "envelopes_attempted": len(envelopes), "cleanup_proven": cleanup["cleanup_proven"],
             # RUN-side marker (brief D6): the outcome document names the
@@ -1401,6 +1726,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("verify", "run", "record", "refuse"))
     parser.add_argument("--reason", default="evidence wrapper refused before execution")
+    # The chain root, handed to `record` by `execute`; see `record_covariates`.
+    parser.add_argument("--observer-pid", type=int)
     args = parser.parse_args(argv)
     try:
         if args.command == "refuse":
@@ -1416,7 +1743,8 @@ def main(argv=None):
             raise ValueError("protocol changed after manifest verification")
         protocol = validate_protocol(frozen_protocol(raw), manifest["files"][CHAIN_PATH])
         if args.command == "record":
-            return record_covariates(protocol, Path(os.environ["NIGHT_DIR"]))
+            return record_covariates(protocol, Path(os.environ["NIGHT_DIR"]),
+                                     observer_pid=args.observer_pid)
         return execute(plan, protocol, Path(os.environ["NIGHT_DIR"]))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
         if args.command != "verify":

@@ -36,7 +36,17 @@ DIRECTIVES_ARGV = ("gh", "issue", "list", "--repo", "mpmdw/JouleWise", "--label"
 
 
 class Refused(Exception):
-    """A preparation cannot safely advance."""
+    """A preparation cannot safely advance.
+
+    `evidence` is an optional mapping of the observation the refusal rests on.
+    `check()` merges it into the failing check's row, so a refusal whose text
+    points at a field (for example "observation in top_consumers_at_decision")
+    leaves that field in check.json (lens S4, fix round 1).
+    """
+
+    def __init__(self, *args, evidence=None):
+        super().__init__(*args)
+        self.evidence = dict(evidence or {})
 
 
 def run(argv, *, cwd=None, input=None):
@@ -773,6 +783,56 @@ print(json.dumps(result))
     return json.loads(run([root / ".venv/bin/python", "-B", "-c", code], cwd=root, input=json.dumps(request)))
 
 
+def candidate_payload_kind(state):
+    """The sealed chain's payload kind, read the way the t0 gate reads it.
+
+    The t0 gate spends its 30 s non-observer observation only when
+    `probe_payload_kind` of the plan's chain says `quiet_predicate_evidence`
+    (night_gate, the C5 `payload_kind` condition).  The arm check mirrors that
+    scope on the same bytes: the custody `chain.zsh` the `sealed` check has
+    just verified against its digest.
+    """
+
+    from joulewise import night_gate
+    chain = safe_path(Path(state["custody_root"]) / "chain.zsh")
+    return night_gate.probe_payload_kind(chain.read_text(encoding="utf-8"))
+
+
+def machine_quiet_check(observer=None):
+    """The arm check refuses on the SAME predicate as t0 (cold gate 10, Q2(i)).
+
+    An arm that passes a check a busy machine would fail at t0 spends the
+    whole span -- settle plus twelve slots -- to learn what thirty seconds at
+    the check would have said.  The bar, the observation and the refusal text
+    are the gate's, imported rather than restated, so the two can never drift.
+
+    `observer` exists for tests and for a caller that already holds an
+    observation; None spends the real thirty seconds.
+    """
+
+    from joulewise import night_gate
+    # Any failure to observe, or an observation the gate cannot read, is a
+    # REFUSAL recorded in check.json (`armable: false`), never an exception
+    # that escapes `check()` before the record is written (lens S3, fix round
+    # 1).  The t0 gate turns the same failures into `night_probe_error`.
+    try:
+        observation = night_gate.production_interval_observation() if observer is None else observer()
+        offender = night_gate.non_observer_offender(observation)
+    except (night_gate.ProbeError, RuntimeError, subprocess.SubprocessError, OSError,
+            ValueError, TypeError, KeyError) as exc:
+        raise Refused(f"non-observer interval observation failed: {type(exc).__name__}: {exc}") from exc
+    interval_s = observation.get("interval_s") if isinstance(observation, dict) else None
+    if type(interval_s) not in (int, float) or type(interval_s) is bool:
+        raise Refused("non-observer observation carries no interval_s")
+    consumers = (observation.get("metrics") or {}).get("top_consumers") or []
+    if offender is not None:
+        raise Refused(night_gate.non_observer_refusal_detail(offender, interval_s),
+                      evidence=dict(top_consumers_at_decision=list(consumers), interval_s=interval_s,
+                                    bar_busy_cores=night_gate.T0_NON_OBSERVER_SHARE_MAX))
+    return dict(top_consumers_at_decision=list(consumers), interval_s=interval_s,
+                bar_busy_cores=night_gate.T0_NON_OBSERVER_SHARE_MAX)
+
+
 def census_check(state, runner, observer, caller_pid):
     argv = clone_census(state, caller_pid, argv_only=True)["argv"]
     raw = runner(argv)
@@ -883,7 +943,7 @@ print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record 
 
 def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
           runner=probe_command, census_observer=None, caller_pid=None, lock_verifier=verify_lock,
-          launchctl_bin="launchctl"):
+          launchctl_bin="launchctl", quiet_observer=None):
     with candidate_lock(candidate):
         state = candidate_state(candidate)
         record = dict(schema="joulewise.evidence_check.v1", started_epoch_s=time.time(),
@@ -897,7 +957,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                 checks[name] = dict(verdict="pass")
                 checks[name].update(evidence)
             except (Refused, OSError, ValueError, KeyError, TypeError) as exc:
-                checks[name] = dict(verdict="fail", reason=str(exc))
+                checks[name] = {**getattr(exc, "evidence", {}), "verdict": "fail", "reason": str(exc)}
             return checks[name]["verdict"] == "pass"
 
         def seal():
@@ -919,22 +979,46 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
-        passed = all(c["verdict"] == "pass" for c in checks.values())
+            # Scoped like the t0 gate (F12, fix round 1): the predicate is spent
+            # only on a quiet_predicate_evidence chain.  Any other chain records
+            # the decision as `skipped`, so check.json still shows it; a chain
+            # whose kind cannot be read fails closed.
+            try:
+                payload_kind = candidate_payload_kind(state)
+            except (Refused, OSError, ValueError) as exc:
+                checks["machine_quiet"] = dict(
+                    verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
+            else:
+                if payload_kind == KIND:
+                    inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
+                else:
+                    checks["machine_quiet"] = dict(verdict="skipped", reason="not an evidence night",
+                                                   payload_kind=payload_kind)
+        # One predicate decides both the verdict and the refusal text below,
+        # so the text names exactly the checks that failed: a `skipped`
+        # machine_quiet row is not a failure and is never listed as one
+        # (fix round 2, delta re-audit N-b).
+        failed = [name for name, c in checks.items()
+                  if not (c["verdict"] == "pass" or (name == "machine_quiet" and c["verdict"] == "skipped"))]
+        passed = not failed
         record["armable"] = passed and not record["fake_launchctl"]
         record["rehearsal_ready"] = passed and record["fake_launchctl"]
         record["finished_epoch_s"] = time.time()
         path = lifecycle_dir(candidate) / "check.json"
         saved_json(path, record)
         if not passed:
-            for name in ("night_agents", "census"):
-                reason = checks.get(name, {}).get("reason")
-                if reason:
-                    raise Refused(reason)
+            # These three name the machine, not the paperwork: their reason
+            # text is the whole finding, and burying it behind "pre-arm checks
+            # failed" would make the operator open check.json to learn which
+            # process held the machine (cold gate 10, 2026-09-23, Q2(i)).
+            for name in ("night_agents", "census", "machine_quiet"):
+                row = checks.get(name, {})
+                if row.get("verdict") == "fail" and row.get("reason"):
+                    raise Refused(row["reason"])
             stale = checks.get("supervisor", {}).get("reason", "")
             if stale.startswith("stale resident supervisor"):
                 raise Refused(stale)
-            raise Refused("pre-arm checks failed: " + ", ".join(k for k, v in checks.items() if v["verdict"] != "pass")
-                          + "; see " + str(path))
+            raise Refused("pre-arm checks failed: " + ", ".join(failed) + "; see " + str(path))
         return record
 
 
