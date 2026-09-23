@@ -3002,20 +3002,33 @@ FSEVENTSD = ("/System/Library/Frameworks/CoreServices.framework/Versions/A/"
              "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd")
 
 
-def archive_summary(night, protocol):
+def archive_summary(night, protocol, observer_basenames=None):
     """Re-derive one archived night's summary under the given registration.
 
     The envelope entries are the executor's own rows from
     `evidence_envelopes.jsonl`, and the journal is the night's own; nothing is
     synthesised, so the numbers here are the night's numbers under new rules.
+
+    `observer_basenames`, when given, marks `observer: true` on every consumer
+    whose command basename is in the set, in the /tmp COPY of the journal only
+    (the archive is never written).  It stands in for the ancestry marks the
+    archived journals lack; every other byte of each row is the night's own.
     """
 
     entries = [json.loads(line) for line in
                (night / "evidence_envelopes.jsonl").read_text().splitlines() if line]
     with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
         root = Path(tmp)
-        (root / protocol["recorder_journal"]).write_bytes(
-            (night / protocol["recorder_journal"]).read_bytes())
+        raw = (night / protocol["recorder_journal"]).read_bytes()
+        if observer_basenames is not None:
+            rows = [json.loads(line) for line in raw.decode().splitlines() if line]
+            for row in rows:
+                metrics = (row.get("observation") or {}).get("metrics") or {}
+                for consumer in metrics.get("top_consumers") or []:
+                    if os.path.basename(consumer["command"]) in observer_basenames:
+                        consumer["observer"] = True
+            raw = "".join(json.dumps(row) + "\n" for row in rows).encode()
+        (root / protocol["recorder_journal"]).write_bytes(raw)
         evidence = root / "evidence"
         shutil.copytree(night / "evidence", evidence,
                         ignore=shutil.ignore_patterns("summary.json", "summary.md"))
@@ -3675,6 +3688,57 @@ class ObserverFloorTests(unittest.TestCase):
             with self.subTest(night=night.parent.name):
                 with self.assertRaisesRegex(ValueError, "no observer-marked consumer; ancestry marking failed"):
                     archive_summary(night, PROTOCOL)
+
+    @unittest.skipUnless(CLEAN.is_dir() and CONTAMINATED.is_dir(),
+                         "the 2026-09-22 harvest archives are not on this machine")
+    def test_ruling_10_regression_1_on_marked_copies_of_both_archived_journals(self):
+        """Ruling 10 §5 regression 1, through PRODUCTION `pilot_summary` (fix round 2, delta D2).
+
+        Neither archived journal carries an ancestry mark: both nights ran
+        before the cure, so every consumer reads `observer: false`.  This test
+        marks, in a /tmp copy of each journal, every consumer whose command
+        basename is in {powermetrics, Python, top, sudo, ps, pgrep, sysctl}.
+        That basename set is ruling 10 §4's EXPLICIT DIAGNOSTIC ASSUMPTION --
+        the measurement's own processes on those nights, named by basename --
+        standing in for the ancestry marks the archives lack.  It is not the
+        registered rule; the registered rule is pid ancestry (regression 0).
+
+        Expected, from the ruling: the 21:00 night loses all twelve envelopes
+        to `non_observer_process_busy` naming `fseventsd` (about 545-576
+        core-seconds, against a 30 core-second bar), and envelope 01 also
+        names `mediaanalysisd`; the 02:17 night, same code, loses none to it.
+        Each night's guard state is asserted too, so neither half can pass
+        vacuously (fix round 1 F15): 02:17 predates `power.recorder_kind` and
+        re-derives as REPLAY_NEVER_EVIDENCE.
+        """
+
+        basenames = {"powermetrics", "Python", "top", "sudo", "ps", "pgrep", "sysctl"}
+        contaminated = archive_summary(CONTAMINATED, PROTOCOL, observer_basenames=basenames)
+        clean = archive_summary(CLEAN, PROTOCOL, observer_basenames=basenames)
+
+        self.assertEqual(contaminated["status"], "INCONCLUSIVE")
+        self.assertEqual(clean["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual(len(contaminated["envelopes"]), 12)
+        self.assertEqual(len(clean["envelopes"]), 12)
+
+        for envelope in contaminated["envelopes"]:
+            with self.subTest(night="2100", envelope=envelope["index"]):
+                self.assertIn("non_observer_process_busy", envelope["excluded"])
+                hits = {hit["process"]: hit for hit in envelope["non_observer_process_busy"]}
+                self.assertIn("fseventsd", hits)
+                self.assertGreaterEqual(hits["fseventsd"]["core_seconds"], 540.)
+                self.assertLessEqual(hits["fseventsd"]["core_seconds"], 610.)
+                self.assertEqual(hits["fseventsd"]["pid"], 341)
+                # The measurement's own processes are never named.
+                self.assertFalse(set(hits) & basenames)
+        self.assertIn("mediaanalysisd",
+                      {hit["process"] for hit in contaminated["envelopes"][0]["non_observer_process_busy"]})
+        self.assertEqual(sum("non_observer_process_busy" in v["excluded"]
+                             for v in contaminated["envelopes"]), 12)
+
+        self.assertEqual(sum("non_observer_process_busy" in v["excluded"]
+                             for v in clean["envelopes"]), 0)
+        self.assertEqual([v["non_observer_process_busy"] for v in clean["envelopes"]], [[]] * 12)
 
     def test_a_marked_journal_is_summarised_and_an_unmarked_one_refuses(self):
         # The guard's counterfactual pair on one fixture: the SAME rows with
