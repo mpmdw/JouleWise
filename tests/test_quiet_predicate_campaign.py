@@ -1162,9 +1162,11 @@ class StartDriftCadenceTests(FrozenExecutorTests):
         for superseded in (v1, v2):
             with self.assertRaisesRegex(ValueError, 'not the ruled pilot registration'):
                 campaign.frozen_protocol(superseded)
-        # v3 differs from v2 in exactly the four ruled fields and nothing else
-        # (cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2; ruling 31's
-        # reporting limbs as adjudicated by synthesis 35).
+        # v3 differs from v2 in exactly five top-level keys and nothing else:
+        # `exclusions` and `ruling` (amended) and three new keys,
+        # `non_observer_process_busy`, `t0_non_observer_share_max` and
+        # `observer_floor` (cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10
+        # Q2; ruling 31's reporting limbs as adjudicated by synthesis 35).
         second, third = json.loads(v2), json.loads(v3)
         self.assertEqual({k for k in set(second) | set(third) if second.get(k) != third.get(k)},
                          {'exclusions', 'ruling', 'non_observer_process_busy',
@@ -3382,7 +3384,12 @@ class ObserverFloorTests(unittest.TestCase):
                 for key in drop:
                     session.pop(key, None)
                 (out / "session.json").write_text(json.dumps(session))
-                row = dict(good_round(), observer_cpu_s=rounds)
+                # The round's own clock support, so the v2 statistic (round
+                # observer CPU over round support) computes a NUMBER on this
+                # fixture instead of None -- the counterfactual the floor
+                # test below states (fix round 1, lens N8).
+                row = dict(good_round(), observer_cpu_s=rounds,
+                           round_mono_start_s=1000., round_mono_end_s=1000. + span)
                 (out / "rounds.jsonl").write_text(json.dumps(row) + "\n")
                 entries.append({"index": index, "scheduled_mono_s": index * 600, "start_drift_s": 0})
                 campaign.append_event(root.parent / PROTOCOL["recorder_journal"],
@@ -3391,11 +3398,13 @@ class ObserverFloorTests(unittest.TestCase):
             return json.loads((root / "summary.json").read_text())
 
     def test_the_floor_is_the_whole_envelope_over_the_collectors_own_span(self):
-        # Counterfactual input: twelve envelopes whose ROUND block is 1 s but
-        # whose whole envelope cost 105 s -- the archived shape, where the
-        # round block is a third of the apparatus.  Under the v2 statistic
-        # this reads 1/600 = 0.0017 cores and passes; the whole envelope over
-        # the span is 0.175 and fires the branch.
+        # Counterfactual input: twelve envelopes whose ROUND block is 1 s over
+        # a 600 s round support but whose whole envelope cost 105 s -- the
+        # archived shape, where the round block is a fraction of the
+        # apparatus.  Under the v2 statistic (main at 3b921fe1) this reads
+        # 12 x 1 / (12 x 600) = 0.0017 cores and the assertion below fails on
+        # the number; the whole envelope over the span is 0.175 and fires the
+        # branch.
         report = self.summarize([105.] * 12)
         self.assertAlmostEqual(report["observer_floor_cores"], .175)
         self.assertEqual(report["observer_support_s"], 7200.)
