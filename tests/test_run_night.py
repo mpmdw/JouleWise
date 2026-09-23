@@ -3850,11 +3850,27 @@ class WindowDeadlineTests(unittest.TestCase):
 
     def test_a_grandchild_that_ignores_sigterm_is_killed_and_still_proven(self) -> None:
         grandchild = self.root / "grandchild.pid"
+        ready = self.root / "grandchild.ready"
         self._arm(
-            "/bin/zsh -c 'trap \"\" TERM; exec /bin/sleep 25' &\n"
+            f"/bin/zsh -c 'trap \"\" TERM; : > {ready}; exec /bin/sleep 25' &\n"
             f"echo $! > {grandchild}\n/bin/sleep 20\n")
+        # The two-second scaled deadline can fire before the grandchild has
+        # installed its TERM trap; the census then proves the group gone with
+        # TERM alone and the escalation under test never runs (CI, 09-23,
+        # every run after c741678b). Hold the chain start until the trap is
+        # in place and the grandchild is a member of the chain's group.
+        complete_start = self.driver._complete_chain_start
+
+        def complete_after_ready(descriptor, process, night_dir):
+            pgid = complete_start(descriptor, process, night_dir)
+            self._await(ready, timeout_s=10)
+            self._await(grandchild, timeout_s=10)
+            self.assertEqual(pgid, os.getpgid(int(grandchild.read_text().strip())))
+            return pgid
+
         sent, patch = self._signal_spy()
-        with patch:
+        with mock.patch.object(self.driver, "_complete_chain_start",
+                               side_effect=complete_after_ready), patch:
             exit_code = self.driver.run_night(self.plan_path)
         pid = int(grandchild.read_text().strip())
         self.assertEqual(self.driver.EXIT_ABORTED, exit_code)
