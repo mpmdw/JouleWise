@@ -753,6 +753,36 @@
       "status_note": "2026-09-18 headless activation f0b608b7: record 19 confirmed the production `--request` argv is the only production payload that can hit the kernel argument limit; the test-fixture argv defect is separate (lane 238) and its fix does not touch this seam.",
       "stop_card": null
     },
+    "BIND-SUPERVISION-RECV-STALL-FLAKE-01": {
+      "acceptance": {
+        "evidence": [
+          "PR #393 body, row 9: one full eight-worker replay failure at 45889885, then class 3/3 and module 231/231 on rerun; branch untouched."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BIND-SUPERVISION-RECV-STALL-FLAKE-01/acceptance",
+          "label": "BIND-SUPERVISION-RECV-STALL-FLAKE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "If the stall recurs in any replay or CI run, root-cause the timing margin. Otherwise retire after five clean full replays, recording their identities and results."
+      },
+      "authority": {
+        "anchor": "verdict",
+        "label": "PR #393 body row 9, as supplied in the registration charge; related final pass record 25",
+        "path": "docs/process_traces/2026-09-23-activation-f2d6899b/25-cold-fable-final-pass-45889885.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Watch the intermittent BindSupervisionProcessTests.test_header_plus_one_byte_never_blocks_recv stall seen once in the full eight-worker local replay at 45889885 under heavy concurrent load: fault ACK missing: recv_stall sample-4. It passed on rerun, class 3/3 and module 231/231; the PR #393 branch did not touch this test.",
+      "id": "BIND-SUPERVISION-RECV-STALL-FLAKE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 279,
+      "status": "queued",
+      "status_note": "2026-09-23 activation f2d6899b: WATCH [AGENT], P3. Recurrence in replay or CI triggers timing-margin investigation; five clean full replays trigger retirement.",
+      "stop_card": null
+    },
     "BLOCK-TWO-DESIGN-01": {
       "acceptance": {
         "evidence": [
@@ -3018,37 +3048,6 @@
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
       "stop_card": null
     },
-    "FSEVENTSD-CORECAPTURED-PREDICATE-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md section 2 (root cause, the 01:41 toggle cure, the passwordless kill route, the lane text)",
-          "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/10-coldgate-fable-ruling.md section 1 (the scan_old loop from 04:49:03 PDT 2026-09-22)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FSEVENTSD-CORECAPTURED-PREDICATE-01/acceptance",
-          "label": "FSEVENTSD-CORECAPTURED-PREDICATE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Regressions at the production call sites (the arm check and night_gate's t0 machine predicate), each failing before the change: a fixture log with 5 corecaptured spawn lines in the last 10 min triggers the single Wi-Fi toggle path, then the re-sample; a fixture with 0 spawn lines does not toggle; a condition that persists after the toggle and the 3 min wait refuses with night_refused_not_quiet naming the process; the toggle runs at most once per check; the exact spawn-line text is pinned from a real /usr/bin/log capture, not from the record's abbreviation; lands under the twelve-row gate."
-      },
-      "authority": {
-        "anchor": "2-fseventsd-runaway--root-cause-and-cures-bench-verified",
-        "label": "2026-09-23 interactive session 7ec32e8b, owner session record section 2 (Ed at the machine; registration by the magistrate, not a ruling)",
-        "path": "docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "On 2026-09-22 the file-system event daemon fseventsd sat at one full busy core for about 20 h and contaminated a whole pilot night. Root cause, bench-verified at 01:41 PDT 2026-09-23: launchd respawned corecaptured (the Wi-Fi log-capture helper) about every 95 s for a stuck Wi-Fi capture session, and each spawn made fseventsd replay and abandon its event history (13 corecaptured spawns against 14 scan_old log lines in 30 min). Add to the arm check and the t0 predicate (the admission check at the planned start instant): count the unified-log lines in which launchd reports spawning corecaptured over the last 10 min (read with /usr/bin/log show; the zsh builtin log shadows it). If more than 2, toggle Wi-Fi once with networksetup (bench cure: networksetup -setairportpower en0 off; sleep 8; networksetup -setairportpower en0 on), wait at least 3 min, re-sample fseventsd's busy cores and the spawn count, and only if the condition persists refuse with night_refused_not_quiet naming the process. Fallback if the toggle does not clear it: the passwordless kill route Ed installed, sudo -n /usr/local/sbin/joulewise-restart-fseventsd (runs pkill -x fseventsd; launchd respawns it).",
-      "id": "FSEVENTSD-CORECAPTURED-PREDICATE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 271,
-      "status": "queued",
-      "status_note": "2026-09-23: registered by activation 7a0f14bd from the owner session record of interactive session 7ec32e8b (registration, not a ruling).",
-      "stop_card": null
-    },
     "G2A-FIRST-WINDOW-01": {
       "acceptance": {
         "evidence": [
@@ -4716,7 +4715,7 @@
       "priority": "p2_next_slice",
       "rank": 276,
       "status": "queued",
-      "status_note": "2026-09-23 activation 4158e658: registered from the arm gate; the 07:00 v3 pilot is staged to be armed with a one-line correction appended to the notice instead of a new head.",
+      "status_note": "2026-09-23 activation 4158e658: registered from the arm gate; the 07:00 v3 pilot is staged to be armed with a one-line correction appended to the notice instead of a new head. 2026-09-23 activation f2d6899b, record 32 §4: the arm notice must also say \"the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes\". Until A276 lands, the magistrate appends that sentence by hand.",
       "stop_card": null
     },
     "NOTICE-TRANSPORT-FALLBACK-01": {
@@ -6316,6 +6315,48 @@
       "status_note": "2026-09-22: registered by activation 22666c9f from the harvest; the night's summary stands at INCONCLUSIVE, no cutoff qualifies; no next pilot night is prepared on the present caps (record 01 §7). Registration, not a ruling; the caps belong to a cold-review-ratified method (2026-08-18) and change only under a cold gate. 05:36 PDT: the blind Fable refuter CONFIRMED the diagnosis, corrected the materiality to 140–390× (about 2.5 orders) and added the network-time-OFF precondition finding (record 01 §9). 2026-09-22 06:20 PDT (activation d9990b3c): cold gate held — Fable ruling 10 AFFIRMED Q1(a)/Q2(c)/Q3(a)/Q4; Opus refuter 11 sustained on sufficiency; rebuttal ruling 14 amended (15 ms backstop, method selector, corpus replay, timed-log attestation, A269 precondition); synthesis 15, no override. Acceptance replaced accordingly; implementation brief docs/process_traces/2026-09-22-activation-d9990b3c/03-a267-implementation-brief.md. 2026-09-22 07:30 PDT (activation e4b4ead6): Part 1 WIP preserved (c74162be); Opus seat implementing Parts 2–4 on feat/2026-09-22-a267-clock-anchor-v3_1; A269 cold gate 10 Q4 amended the attestation mechanics (epoch/monotonic union window, never concurrent with a capture, session_sha256_before on the atomic rewrite) and replaced the R6 clause in this acceptance; registration v2 (Q2) lands in the same PR.",
       "stop_card": null
     },
+    "QPE01-REGISTRATION-V4-CORECAPTURED-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-23-activation-f2d6899b/32-cold-fable-final-pass-665d3bd7.md §4 ACCEPT reinterpretation and verbatim ruling text.",
+          "docs/process_traces/2026-09-23-activation-f2d6899b/33-cold-fable-delta-pass-def22d1b.md VERDICT, non-blocking residuals.",
+          "docs/process_traces/2026-09-23-activation-f2d6899b/16-coldgate-fable-ruling.md Q2(b) upholds record 05: t0 is detection-only."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QPE01-REGISTRATION-V4-CORECAPTURED-01/acceptance",
+          "label": "QPE01-REGISTRATION-V4-CORECAPTURED-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A reviewed new registration version contains t0_corecaptured_spawns_max: 2 and cold ruling 16’s id in ruling; v3 bytes remain identical; sealed-candidate and future-plan consumers use the new version; the record 33 end-of-pass follow-ups are disposed, including a 1 s window-edge regression."
+      },
+      "authority": {
+        "anchor": "4-reinterpretation-ruling--ruling-16-q2a-first-condition-vs-the-registration-immutability-convention",
+        "label": "Cold final pass record 32 §4, ACCEPT reinterpretation",
+        "path": "docs/process_traces/2026-09-23-activation-f2d6899b/32-cold-fable-final-pass-665d3bd7.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "The next registration change begins: block two or the next pilot re-run, whichever comes first.",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "QPE01-NEXT-REGISTRATION-CHANGE"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "At the next registration change (block two or the next pilot re-run, whichever comes first), create a new registration version with t0_corecaptured_spawns_max: 2 and cold ruling 16’s id appended to its ruling string. Preserve every byte of v3: the registration table in joulewise/night_gate.py:55–75 is digest-keyed. Carry the non-blocking record 33 follow-ups: exact WINDOW_S edge tests at 600 and 601 seconds, reconcile LOG_ARGV --last 10m with WINDOW_S, fix document-level first use of “arm check”, and gloss “rehearsal” and “fixture launchctl” in the handback paragraph.",
+      "id": "QPE01-REGISTRATION-V4-CORECAPTURED-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 278,
+      "status": "blocked",
+      "status_note": "2026-09-23 activation f2d6899b: BLOCKED on the next registration change, block two or next pilot re-run, whichever first. A271 (PR #394, merge c741678b) is landed; its t0 check is detection-only per lead ruling record 05, upheld by cold ruling 16 Q2(b); v4 recording is deferred by final pass record 32 §4. Record 32 §4 ACCEPT text, verbatim: Ruling 16 Q2(a), first condition, is reinterpreted as follows. \"Record it where the precedent recorded the 0.5-busy-core rule\" is satisfied for A271 by (i) the threshold as a named code constant in the t0 and arm-check paths, and (ii) the `night_refused_not_quiet` policy text in `joulewise/arm_retry.py` (rendered into `NIGHT_HANDBACK.md` and the runbook) and the campaign README citing cold ruling 16 Q2 (2026-09-23). The `pilot_protocol_v3.json` bytes are not edited: the registration table is digest-keyed and prior versions are kept byte-identical as ruled history, so an in-place edit would orphan the v3 entry used by the 2026-09-23 07:00 pilot records or force a re-pin the convention forbids. The v4 recording (`t0_corecaptured_spawns_max: 2` and ruling 16's id appended to the `ruling` string) is a follow-up lane, landed with the next registration change (block two or the next pilot re-run, whichever comes first). Until v4 lands, the next arm notice names the new refusal in plain words (\"the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes\"), so the owner's standing veto covers it.",
+      "stop_card": null
+    },
     "QUIET-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -6593,64 +6634,6 @@
       "rank": 114,
       "status": "queued",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-13 of the ruled-not-installed sweep (status C, cure RUNBOOK). Compounds with TRANSACTION-RULED-ARTIFACTS-01: two separate rulings point at the same absent section 11 step.",
-      "stop_card": null
-    },
-    "REFUSAL-FAST-RETRY-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-15-activation-08ca8197/06-refusal-fast-retry-lane-registration.md (registration record: Ed's remark as relayed verbatim by the interactive session b0ae8462 at ~00:05 PDT 2026-09-16 over the cross-session channel, not a directive issue; facts below re-read by this activation from main at 45f88f55)",
-          "scripts/magistrate_watchdog.py:718 (plan span end = t0_epoch_s + window_max_s + COURIER_DEADLINE_S) and :721 (plan_span_active), :817 and :1411 (the launch predicate and the active-plan filter that keep the magistrate away for the whole span, refused or not) at main 45f88f55",
-          "joulewise/night_gate.py:103-109 (refusal codes night_refused_agent_present, night_refused_class_unbuilt, night_refused_hid_idle, night_refused_not_quiet, night_refused_boot_clock, night_refused_registration) at main 45f88f55",
-          "docs/process_traces/2026-09-15-activation-1acf2aee/01-equivalence-night-20260915-harvest-record.md (the 09-15 night REFUSED at t0 on load alone with zero captures, then the full-span wait, harvest, uninstall and re-plan: the cost this lane removes)",
-          "docs/process_traces/2026-09-15-activation-08ca8197/06-refusal-fast-retry-lane-registration.md (Amendment 00:40 PDT 2026-09-16: Ed's 00:35 ruling quoted verbatim as relayed)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/REFUSAL-FAST-RETRY-01/acceptance",
-          "label": "REFUSAL-FAST-RETRY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Three parts, landing together as one PR after the two dependencies. (a) Watchdog span accounting: when the night's custody root holds a refusal record and NO capture ever started (refusal.json present, no chain.started record and no receipt with a capture), plan_span_active ends the span at the refusal record's time instead of t0 + window_max_s + COURIER_DEADLINE_S, so the resident magistrate relaunches on the next tick; a refusal after a chain started does NOT shorten the span (counterfactual test). (b) Retry classification, RULED: a zero-capture t0 refusal on machine state (night_refused_not_quiet, night_refused_agent_present, night_refused_hid_idle, night_refused_boot_clock) becomes a pre-authorized RETRY in the ARM-RETRY-CLASS-01 shape (at least 60 s spacing, bounded by the install_close of a fresh plan, every observed NO stops), on the reasoning that no data was taken and the same gate re-checks at the next t0; night_refused_registration and night_refused_class_unbuilt and every refusal after a capture started stay on the cold-gate path (the D-161 evidence fence is untouched). Part (b) is RULED (Ed, 2026-09-16 00:35 PDT, verbatim as relayed by the interactive session b0ae8462: \"unless there's a scientific reason that's an unsound decision absolutely reduce the hours to 20 min\"): a zero-capture t0 refusal on machine state, with refusal.json present and no receipt and no chain.started, is a pre-authorized retry in the ARM-RETRY-CLASS-01 shape; registration and class refusals and any refusal after a capture started stay on the cold-gate path. The only refusal-side exception the ruling admits is a scientific reason that the retry is unsound, which the seat must state if it finds one. The lane installs the ruling as a dated decision-log addendum quoting it and writes NIGHT_HANDBACK and runbook section 1.4a in plain words. (c) Tests: span-closed-at-refusal in the watchdog; the retry classification for exactly the four zero-capture codes in the retry classifier once ARM-RETRY-CLASS-01 lands; the counterfactual that a refusal WITH a started chain keeps the full span and is not retried. Every t0 gate itself is unchanged: a refusal still refuses; only what happens afterwards is faster. Expected effect: the cost of a refused t0 drops from about three hours (full span, harvest, re-plan, arm lead) to about 15 to 20 minutes."
-      },
-      "authority": {
-        "label": "2026-09-16 ~00:05 PDT: Ed's remark on the cost of a t0 refusal, and 00:35 PDT Ed's ruling that the retry is authorized unless a scientific reason makes it unsound, both relayed verbatim by the interactive session b0ae8462; registered and amended by activation 08ca8197 (registration, not a ruling of its own)",
-        "path": "docs/process_traces/2026-09-15-activation-08ca8197/06-refusal-fast-retry-lane-registration.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "PR #342 merge cb70e97f; ARM-RETRY-CLASS-01 implementation and fix-round record 03j",
-            "path": "docs/process_traces/2026-09-15-interactive-b0ae8462/03j-a172-fix-round-3-report.md"
-          },
-          "kind": "task",
-          "required": "part (b) classifies the zero-capture refusal codes inside the retry class that lane builds; the classifier must exist first",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "ARM-RETRY-CLASS-01"
-        },
-        {
-          "evidence": {
-            "label": "PR #341 merge 2944a45d; terminal read 08n and live smoke PASS record 08k",
-            "path": "docs/process_traces/2026-09-15-interactive-b0ae8462/08n-row12-terminal-read-d5ec18bb.md"
-          },
-          "kind": "task",
-          "required": "the install and span rules this lane edits land with the transactional installer; one home for the constants",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "INSTALL-WINDOWS-MULTI-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Make a refused t0 cheap. Today a t0 refusal (night_refused_not_quiet, night_refused_agent_present, night_refused_hid_idle, night_refused_boot_clock) writes the refusal record, but the watchdog keeps the magistrate away for the full plan span, t0 + window_max_s (9000 s) + COURIER_DEADLINE_S, as if the night had run (scripts/magistrate_watchdog.py:718-721); then come harvest, section 2.5, a fresh plan and the arm lead, about three hours per refusal. Ed, 2026-09-16 ~00:05 PDT, verbatim as relayed: \"how have we not made this a lower cost to pay\". The lane ends the span at the refusal when no capture started, and, under Ed's ruling of 00:35 PDT 2026-09-16 (quoted in the acceptance), treats a zero-capture machine-state refusal as a pre-authorized retry in the ARM-RETRY-CLASS-01 shape. P1 right after LEAD-MARGIN-01: together they set how many quiet windows a day can actually yield.",
-      "id": "REFUSAL-FAST-RETRY-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 212,
-      "status": "queued",
-      "status_note": "2026-09-16 (interactive session b0ae8462, merge wave): QUEUED; ARM-RETRY-CLASS-01 (PR #342, merge cb70e97f) and INSTALL-WINDOWS-MULTI-01 (PR #341, merge 2944a45d) are merged; both hard start dependencies are satisfied. Rank unchanged. Historical registration follows. 2026-09-16 activation 08ca8197: registered from Ed's remark as relayed by the interactive session b0ae8462; AMENDED 00:40 PDT with Ed's ruling of 00:35 (Ed, 2026-09-16 00:35 PDT, verbatim as relayed by the interactive session b0ae8462: \"unless there's a scientific reason that's an unsound decision absolutely reduce the hours to 20 min\"): part (b) is ruled, not ruling-gated; the ruling arrived by relay, not by directive issue, and the lane's decision-log addendum is where it is recorded for the doctrine. Registration only, nothing changed. Status blocked until ARM-RETRY-CLASS-01 and INSTALL-WINDOWS-MULTI-01 land (hard start dependencies). The D-161 evidence fence and every t0 gate are untouched. 2026-09-17 interactive 5c919872: the desk-side reconciliation of this ruling with the bind-window design is stage D7 of NIGHT-GATE-QUIET-ADMISSION-01 (arm_retry.py successor route, NIGHT_HANDBACK R1 sentence); the watchdog half is WATCHDOG-EARLY-REFUSAL-RELEASE-01.",
       "stop_card": null
     },
     "REGISTRATION-NIGHT-COUNT-RULING-01": {
@@ -9468,36 +9451,6 @@
       "status_note": "2026-09-20 activation 21752427 — queued [AGENT], p3_tooling. Registered from refuter 10 F2 and record 01 §1; separate from the concurrent-pgrep cure delivered by PR #371 (980f8d64). Census-safe courier configuration is the cure direction; no output filtering.",
       "stop_card": null
     },
-    "WATCHDOG-EARLY-REFUSAL-RELEASE-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-17-interactive-45a0774c/01-gate-redesign-consult.md (section 2, Retry reconciliation)",
-          "scripts/magistrate_watchdog.py:771–790 on a90ab4e8 (plan_completion_epoch and plan_span_active; hold through nominal completion before courier.sent check)",
-          "docs/process_traces/2026-09-17-activation-8789ee70/01-n1-20260917-harvest-record.md (launch 18:09 after the 15:30 refusal)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/WATCHDOG-EARLY-REFUSAL-RELEASE-01/acceptance",
-          "label": "WATCHDOG-EARLY-REFUSAL-RELEASE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "a regression where a refusal result plus `courier.sent` releases the hold before nominal completion, a second where a refusal file WITHOUT `courier.sent` keeps the hold, and a third where a started night keeps the hold through completion; the watchdog's existing armed-span, clock and reboot tests unchanged; lands under the twelve-row gate after NIGHT-GATE-QUIET-ADMISSION-01 (it consumes that lane's successor predicate)."
-      },
-      "authority": {
-        "label": "2026-09-17 interactive session 5c919872 (registration by the magistrate, not a ruling).",
-        "path": "docs/process_traces/2026-09-17-interactive-5c919872/03-brief-lanes-registration-seat.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "The magistrate watchdog, the scheduler that relaunches the headless lead agent (`scripts/magistrate_watchdog.py:771–790` on `a90ab4e8`), uses a census hold (keeping that agent absent from the scan for active AI-agent processes) and holds the headless magistrate out of the machine for the whole armed span through nominal completion even when the night gate, the pre-measurement admission check, has already refused at t0 (the planned start instant) with zero capture; on 2026-09-17 that hold cost about 2.5 h of idle machine after a 15:30 refusal (harvest at 18:09). The consult (section 2, \"Retry reconciliation\") names this as the second half of the zero-capture successor route: once the driver has written its terminal refusal and the courier (the process that delivers the night's result) has delivered (`courier.sent`), the hold has nothing left to protect. Release the hold on positive terminal evidence, proof that the night has finished refusing (terminal refusal result + delivery handoff complete + no start claim), never on the mere existence of a refusal file, so that the successor activation can harvest and re-plan within minutes (the refusal fast-retry ruling A212 (REFUSAL-FAST-RETRY-01)'s ~20 min target).",
-      "id": "WATCHDOG-EARLY-REFUSAL-RELEASE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 234,
-      "status": "queued",
-      "stop_card": null
-    },
     "WATCHDOG-INSTALLER-VERIFIED-BOOTOUT-01": {
       "acceptance": {
         "evidence": [
@@ -9918,6 +9871,38 @@
       "rank": 206,
       "status": "queued",
       "status_note": "2026-09-15 activation 08ca8197: registered at the request of the interactive session b0ae8462 (Ed at the machine) from the restart census; not started; registration only, no worktree was removed. The deletion step is gated on a cold-gate ruling or Ed's YES on the manifest because it is irreversible. Sibling lanes TEMP-HYGIENE-IW-TMP-01 and FIXTURE-ORPHAN-SENTINEL-01 cover the other two churn sources from the same restart. 2026-09-17 interactive 5c919872 inventory: 122 linked worktrees under /Users/edr/code/JouleWise-wt-*, 23 GB, none prunable by git; 58 carry uncommitted files (mostly one untracked seat artefact), 12 carry commits not on origin/main (feat/2026-09-04-fan-* and two design branches); 37 are detached cold-gate/consult trees. Deletion is irreversible and is Ed's call (rule 11); the inventory file is in the session's scratch, regenerate with `git worktree list --porcelain` plus per-tree `git status --porcelain` and `git rev-list --count origin/main..<branch>`.",
+      "stop_card": null
+    },
+    "ZERO-CAPTURE-EVIDENCE-WRITER-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-23-activation-f2d6899b/16-coldgate-fable-ruling.md Q1, “A finding for the lead” (missing writer and missing_zero_capture_evidence).",
+          "docs/process_traces/2026-09-23-activation-f2d6899b/25-cold-fable-final-pass-45889885.md §1–2 (A234 release uses disk facts).",
+          "Required future verification: D-182 one-successor route at the production successor call site, under the twelve-row gate."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ZERO-CAPTURE-EVIDENCE-WRITER-01/acceptance",
+          "label": "ZERO-CAPTURE-EVIDENCE-WRITER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Production successor call-site regressions, each failing before the change, show a live-shaped delivered zero-capture refusal licenses exactly one successor, a bare C5 row never licenses, and any capture or reservation fact on disk blocks. Land under the twelve-row gate."
+      },
+      "authority": {
+        "anchor": "q1-a234-fix-round-2--is-the-census-backed-latched-design-sound",
+        "label": "Cold ruling 16 Q1, “A finding for the lead”",
+        "path": "docs/process_traces/2026-09-23-activation-f2d6899b/16-coldgate-fable-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Cure the production successor eligibility gap found by cold ruling 16 Q1: nothing writes the harvested zero_capture_evidence C5 block, so joulewise/arm_retry.py zero_capture_successor_allowed rejects every live receipt with missing_zero_capture_evidence and D-182 cannot deliver its one successor. The implementer should consult on two options: make harvest write the block, or rebase eligibility on the on-disk facts established by scripts/magistrate_watchdog.py _zero_capture_disk_facts. A234 releases the hold but does not itself deliver the ~20-minute successor.",
+      "id": "ZERO-CAPTURE-EVIDENCE-WRITER-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 277,
+      "status": "queued",
+      "status_note": "2026-09-23 activation f2d6899b: READY [AGENT], P1 phase gate. Registered after PR #393 merge ea4995d5; the release half landed, while the production successor remains blocked on missing_zero_capture_evidence.",
       "stop_card": null
     }
   },
