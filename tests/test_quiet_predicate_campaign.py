@@ -2071,6 +2071,31 @@ class BenchReplayFailClosedTests(unittest.TestCase):
             "recorder_kind": "replay", "label_shift": "auto", "label_shift_s": 36497,
             "frames_written": 253, "source_plist_sha256": "0" * 64,
             "written_stream_sha256": "0" * 64}
+    # Cold ruling 21 rule (6) budgets the worst measured tail plus the
+    # archive's worst SKIPPED tail against the protocol's own inter-slot gap
+    # (`slot_pitch_s - envelope_s`), so a protocol stating neither figure
+    # fails that rule rather than skipping it.  The full protocol's gap is
+    # 20 s; `SLOT`'s `tail_s` is 1.0 s, so the budget is 3.3 s.
+    PROTOCOL = {"envelopes": 12, "slot_pitch_s": 620, "envelope_s": 600}
+
+    def bench_slot(self, index, **overrides):
+        """A bench row whose anchor CLASS is the ARCHIVED night's for that slot.
+
+        Cold ruling 21 rule (4) compares each replayed slot's anchor class
+        against `ARCHIVED_V31_BOUNDED`, and a slot resolving where the
+        archive did not VOIDS the run.  A fixture that made every slot
+        `bounded` would therefore be five admitting-direction mismatches, not
+        a clean run; these rows are the faithful replay the rule expects.
+        """
+
+        from scripts import bench_replay_start_drift as bench
+        bounded = index in bench.ARCHIVED_V31_BOUNDED
+        row = dict(self.SLOT, index=index,
+                   anchor_status="bounded" if bounded else "unknown",
+                   anchor_detail=None if bounded else "affine_clock_fit_empty",
+                   interior_complete_support=bounded)
+        row.update(overrides)
+        return row
 
     def test_R5_a_replay_recorder_refuses_the_whole_night_at_the_summary(self):
         from unittest.mock import patch
@@ -2522,9 +2547,9 @@ class BenchReplayFailClosedTests(unittest.TestCase):
 
     def test_R7_the_bench_verdict_fails_on_a_single_slot_over_the_bar(self):
         from scripts import bench_replay_start_drift as bench
-        protocol = {"envelopes": 12}
-        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.12 + i * 0.001,
-                     session_start_drift_s=0.26 + i * 0.001) for i in range(1, 13)]
+        protocol = self.PROTOCOL
+        rows = [self.bench_slot(i, chain_start_drift_s=0.12 + i * 0.001,
+                                session_start_drift_s=0.26 + i * 0.001) for i in range(1, 13)]
         passing = bench.verdict(rows, protocol)
         self.assertEqual(passing["status"], "PASS")
         self.assertLessEqual(passing["max_chain_start_drift_s"], bench.START_DRIFT_BAR_S)
@@ -2544,7 +2569,7 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertEqual(bench.verdict(over, protocol, bar_s=2)["status"], "PASS")
         self.assertEqual(bench.START_DRIFT_BAR_S, 0.5)
 
-    def test_X1_a_chain_pass_with_a_session_figure_over_the_bar_escalates(self):
+    def test_X1_a_chain_pass_with_a_session_figure_over_the_night_rule_escalates(self):
         """Execution lens 17b B1: a split is a THIRD status, and exits 3.
 
         A269 ruling 10 A1: the session-level figure runs ~0.12-0.16 s above
@@ -2554,20 +2579,36 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         it -- chain max 0.479 s under the bar, session max 0.734 s over it,
         exit 0 -- on a run that is launched detached and unattended, where
         the exit code and the headline are what a magistrate reads.
+
+        The status survives cold ruling 21 unchanged; the BAR it splits
+        against does not.  Ruling 21 Q1 held the 0.5 s bench bar to be
+        chain-level only, so the figure a session excess is measured against
+        is now the night's ruled 2 s rule (`SESSION_BAR_S = 2.0`), and the
+        0.6-0.7 s figures the old convention escalated on now pass.
         """
         from types import SimpleNamespace
         from unittest.mock import patch
         from scripts import bench_replay_start_drift as bench
-        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.4,
-                     session_start_drift_s=0.7 if i in (1, 3) else 0.3)
+        rows = [self.bench_slot(i, chain_start_drift_s=0.4,
+                                session_start_drift_s=2.4 if i in (1, 3) else 0.3)
                 for i in range(1, 13)]
-        result = bench.verdict(rows, {"envelopes": 12})
+        result = bench.verdict(rows, self.PROTOCOL)
         self.assertEqual(result["status"], "ESCALATE")
         self.assertTrue(result["escalate_chain_pass_session_fail"])
         self.assertEqual(result["session_slots_over_bar"], [1, 3])
         self.assertEqual(result["max_chain_start_drift_s"], 0.4)
-        self.assertEqual(result["max_session_start_drift_s"], 0.7)
+        self.assertEqual(result["max_session_start_drift_s"], 2.4)
         self.assertIn("ESCALATED to the magistrate", result["statement"])
+        # The convention ruling 21 struck out, executed: the SAME rows with
+        # slot 1 at 0.608 s -- the executed 2026-09-22 replay's own figure --
+        # exited ESCALATE rc 3 under the old 0.5 s session bar and PASS now.
+        ruled = bench.verdict(
+            [self.bench_slot(i, chain_start_drift_s=0.4,
+                             session_start_drift_s=0.608 if i == 1 else 0.3)
+             for i in range(1, 13)], self.PROTOCOL)
+        self.assertEqual(ruled["status"], "PASS")
+        self.assertEqual(ruled["session_slots_over_bar"], [])
+        self.assertEqual(bench.SESSION_BAR_S, 2.0)
         # The headline a reader sees.
         report = {"schema": bench.SCHEMA, "kind": "full", "head": "a" * 40,
                   "clean_tree": True, "slots": rows, "verdict": result,
@@ -2592,12 +2633,12 @@ class BenchReplayFailClosedTests(unittest.TestCase):
             # The counterfactual, executed: the same run with both figures
             # under the bar exits 0, and one chain figure over it exits 1.
             report["verdict"] = bench.verdict(
-                [dict(row, session_start_drift_s=0.3) for row in rows], {"envelopes": 12})
+                [dict(row, session_start_drift_s=0.3) for row in rows], self.PROTOCOL)
             self.assertEqual(report["verdict"]["status"], "PASS")
             self.assertEqual(bench.main(["--archive", tmp]), 0)
             report["verdict"] = bench.verdict(
                 [dict(row, chain_start_drift_s=0.9, session_start_drift_s=0.3)
-                 for row in rows], {"envelopes": 12})
+                 for row in rows], self.PROTOCOL)
             self.assertEqual(report["verdict"]["status"], "FAIL")
             self.assertEqual(bench.main(["--archive", tmp]), 1)
 
@@ -2615,9 +2656,10 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         are any.
         """
         from scripts import bench_replay_start_drift as bench
-        protocol = {"envelopes": 12}
-        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
-                     session_start_drift_s=0.9 if i == 4 else 0.2) for i in range(1, 13)]
+        protocol = self.PROTOCOL
+        rows = [self.bench_slot(i, chain_start_drift_s=0.1,
+                                session_start_drift_s=2.9 if i == 4 else 0.2)
+                for i in range(1, 13)]
         rows[6]["collector_exit"] = 1
         result = bench.verdict(rows, protocol)
         self.assertEqual(result["status"], "FAIL")
@@ -2627,7 +2669,7 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         # through stays False, because the status is FAIL and not ESCALATE.
         self.assertFalse(result["escalate_chain_pass_session_fail"])
         self.assertIn("slot 7 collector_exit=1", result["statement"])
-        self.assertIn("the session-level bar is exceeded too (max 0.900 s > 0.5 s "
+        self.assertIn("the night's session-level rule is exceeded too (max 2.900 s > 2.0 s "
                       "on slots [4])", result["statement"])
         # The same split on an otherwise clean run is the ESCALATE the
         # statement already named, and the flag holds there too.
@@ -2656,8 +2698,8 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertIn("Session bar exceeded (true whatever the status): True", text)
         self.assertIn("**FAIL**", text)
 
-    def test_X2_a_slot_whose_finalisation_tail_never_ran_is_not_admissible(self):
-        """Execution lens 17b B2: the bench times the TAIL, so the tail must run.
+    def test_X2_a_run_whose_finalisation_tail_never_ran_is_not_admissible(self):
+        """Execution lens 17b B2 as AMENDED by cold ruling 21 Q2.
 
         `verdict` read only the two drift figures.  In all three slots of the
         lens's live smoke the anchor was `unknown`
@@ -2665,44 +2707,62 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         False -- `align_frames` returned nothing, so the per-round
         integration and the interior reduction, the expensive part of the
         tail the bench exists to time, did not run -- and the bench returned
-        PASS.  A slot is now admissible only with `collector_exit == 0`,
-        `cleanup_proven`, `anchor_status == "bounded"` and
-        `interior_complete_support`; the smoke, whose 60 s envelope cannot
-        resolve an anchor at all, is exempt from the last two and says so.
+        PASS.  The lens's cure demanded `bounded` with complete interior
+        support on EVERY slot (the lead's convention "X2"); ruling 21 Q2
+        struck that, because the archived night itself left five of its
+        twelve envelopes unresolved, so a FAITHFUL replay fails X2 by
+        construction.  A slot is now admissible on `collector_exit == 0` and
+        `cleanup_proven`, and the lens's own defect is caught instead by the
+        ruled FLOOR (rule 5) -- at least one slot `bounded` with complete
+        interior support -- which the all-unknown run below still fails, at
+        the run level, exactly as the lens intended.
         """
         from scripts import bench_replay_start_drift as bench
-        protocol = {"envelopes": 12}
-        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
-                     session_start_drift_s=0.2) for i in range(1, 13)]
+        protocol = self.PROTOCOL
+        rows = [self.bench_slot(i, chain_start_drift_s=0.1,
+                                session_start_drift_s=0.2) for i in range(1, 13)]
         self.assertEqual(bench.verdict(rows, protocol)["status"], "PASS")
         broken = [dict(row) for row in rows]
         broken[4]["collector_exit"] = 1
         broken[5]["cleanup_proven"] = False
-        broken[6]["anchor_status"] = "unknown"
-        broken[7]["interior_complete_support"] = False
+        broken[6]["collector_exit"] = 3
+        broken[7]["cleanup_proven"] = False
         result = bench.verdict(broken, protocol)
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual([(d["index"], d["field"], d["value"]) for d in result["slot_defects"]],
                          [(5, "collector_exit", 1), (6, "cleanup_proven", False),
-                          (7, "anchor_status", "unknown"),
-                          (8, "interior_complete_support", False)])
+                          (7, "collector_exit", 3), (8, "cleanup_proven", False)])
         for fragment in ("slot 5 collector_exit=1", "slot 6 cleanup_proven=False",
-                         "slot 7 anchor_status='unknown'"):
+                         "slot 7 collector_exit=3"):
             self.assertIn(fragment, result["statement"])
         # Four defective slots is one over the cap the statement spells out,
         # so the fourth is summarised rather than named (fix round 2 item 3,
         # delta execution lens NIT 1); `slot_defects` above still carries it.
         self.assertIn("… and 1 more", result["statement"])
-        self.assertNotIn("slot 8 interior_complete_support=False", result["statement"])
-        # The smoke is exempt from the two fields a 60 s envelope cannot
-        # produce -- and from nothing else.
-        smoke = bench.verdict(broken, protocol, smoke=True)
-        self.assertEqual([(d["index"], d["field"]) for d in smoke["slot_defects"]],
-                         [(5, "collector_exit"), (6, "cleanup_proven")])
+        self.assertNotIn("slot 8 cleanup_proven=False", result["statement"])
+        # The two anchor fields are no longer PER-SLOT admissibility input,
+        # so one unresolved slot in an otherwise faithful run is not a defect
+        # at all: it is a refusing-direction mismatch, reported and
+        # admissible (ruling 21 rule 4).
+        one_refusing = [dict(row) for row in rows]
+        one_refusing[1].update(anchor_status="unknown",
+                               anchor_detail="affine_clock_residual_exceeded",
+                               interior_complete_support=False)
+        refusing = bench.verdict(one_refusing, protocol)
+        self.assertEqual(refusing["status"], "PASS")
+        self.assertEqual(refusing["slot_defects"], [])
+        self.assertEqual(refusing["refusing_direction_slots"], [2])
+        # And a run with NO tail anywhere still fails, on the floor, under
+        # the full protocol -- while the smoke, whose 60 s envelope cannot
+        # resolve an anchor at all, is exempt from rules (4) and (5).
         unresolved = [dict(row, anchor_status="unknown", interior_complete_support=False)
                       for row in rows]
         self.assertEqual(bench.verdict(unresolved, protocol, smoke=True)["status"], "PASS")
-        self.assertEqual(bench.verdict(unresolved, protocol)["status"], "FAIL")
+        failed = bench.verdict(unresolved, protocol)
+        self.assertEqual(failed["status"], "FAIL")
+        self.assertFalse(failed["bounded_interior_floor_met"])
+        self.assertTrue(failed["statement"].startswith(
+            "no slot is 'bounded' with complete interior support"), failed["statement"])
         # And the smoke's artifact says why it was allowed to.
         report = {"schema": bench.SCHEMA, "kind": "smoke", "head": "a" * 40,
                   "clean_tree": True, "slots": unresolved,
@@ -2718,8 +2778,12 @@ class BenchReplayFailClosedTests(unittest.TestCase):
                   "machine_end": {"uptime": "", "pgrep_claude": 0}}
         text = bench.markdown(report)
         self.assertIn("`anchor_status` CANNOT resolve at this envelope length", text)
+        self.assertIn("NOT APPLIED under `--smoke`", text)
         report["kind"] = "full"
-        self.assertNotIn("CANNOT resolve at this envelope length", bench.markdown(report))
+        report["verdict"] = bench.verdict(unresolved, protocol)
+        full = bench.markdown(report)
+        self.assertNotIn("CANNOT resolve at this envelope length", full)
+        self.assertIn("## Anchor fidelity vs the archived v3.1 class", full)
 
     def test_D3_an_admissibility_only_fail_opens_with_the_defect_and_stays_short(self):
         """Delta execution lens NIT 1: the leading clause is the real defect.
@@ -2733,9 +2797,14 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         both print.
         """
         from scripts import bench_replay_start_drift as bench
-        protocol = {"envelopes": 12}
-        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1, session_start_drift_s=0.2,
-                     anchor_status="unknown", interior_complete_support=False)
+        protocol = self.PROTOCOL
+        # Two defects on every slot: the collector did not exit and the group
+        # teardown was not proven.  (Before cold ruling 21 the twenty-four
+        # clauses came from the two anchor fields, which are no longer
+        # per-slot admissibility input; the statement shape under test is the
+        # same one.)
+        rows = [self.bench_slot(i, chain_start_drift_s=0.1, session_start_drift_s=0.2,
+                                collector_exit=1, cleanup_proven=False)
                 for i in range(1, 13)]
         result = bench.verdict(rows, protocol)
         self.assertEqual(result["status"], "FAIL")
@@ -2745,6 +2814,11 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertNotIn("NOT shown", statement)
         self.assertIn("… and 21 more", statement)
         self.assertLess(len(statement), 600)
+        # The ruled rules that can also lead a FAIL do not, because none of
+        # them fired: this run is faithful, has its floor and fits the gap.
+        self.assertEqual(result["admitting_direction_slots"], [])
+        self.assertTrue(result["bounded_interior_floor_met"])
+        self.assertTrue(result["tail_budget"]["fits"])
         # The counterfactual, executed: the same rows with ONE chain figure
         # over the bar keep the drift-first opening, because then the bar
         # really was not met.
@@ -2754,8 +2828,7 @@ class BenchReplayFailClosedTests(unittest.TestCase):
             "max <= 0.5 s NOT shown: over=[3]"))
         # Three defective slots is at the cap: all of them are named, nothing
         # is summarised.
-        few = [dict(row, anchor_status="bounded", interior_complete_support=True)
-               for row in rows]
+        few = [dict(row, collector_exit=0, cleanup_proven=True) for row in rows]
         for i in (0, 1, 2):
             few[i]["cleanup_proven"] = False
         statement = bench.verdict(few, protocol)["statement"]
@@ -2775,10 +2848,10 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         a defect: the query did not run, so its cost was not measured.
         """
         from scripts import bench_replay_start_drift as bench
-        protocol = {"envelopes": 12}
-        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
-                     session_start_drift_s=0.2,
-                     attestation_state="slew_attested" if i == 2 else "authenticated")
+        protocol = self.PROTOCOL
+        rows = [self.bench_slot(i, chain_start_drift_s=0.1, session_start_drift_s=0.2,
+                                attestation_state="slew_attested" if i == 2
+                                else "authenticated")
                 for i in range(1, 13)]
         passing = bench.verdict(rows, protocol)
         self.assertEqual(passing["status"], "PASS")
@@ -2817,8 +2890,8 @@ class BenchReplayFailClosedTests(unittest.TestCase):
 
     def test_R7_a_journal_short_of_the_registered_slot_count_never_passes(self):
         from scripts import bench_replay_start_drift as bench
-        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1, session_start_drift_s=0.2)
+        rows = [self.bench_slot(i, chain_start_drift_s=0.1, session_start_drift_s=0.2)
                 for i in range(1, 12)]
-        result = bench.verdict(rows, {"envelopes": 12})
+        result = bench.verdict(rows, self.PROTOCOL)
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(result["slots_recorded"], 11)
