@@ -948,6 +948,35 @@ def non_observer_verdict_key(hits):
                   for hit in hits)
 
 
+UNMARKED_JOURNAL = ("recorder journal carries no observer-marked consumer; "
+                    "ancestry marking failed")
+
+
+def require_observer_marked(support):
+    """Refuse a v3 envelope whose journal rows name processes but mark none.
+
+    Under registration v3 the recorder runs with the chain root's pid, so the
+    measurement's own processes -- at least `powermetrics`, a full-time
+    consumer -- carry `observer: true` in every envelope.  Rows that name
+    consumers yet mark none mean the ancestry marking failed, and the
+    per-envelope rule would then exclude every envelope while blaming the
+    power sampler, hiding the real cause (Fable lens N8, adopted by the
+    magistrate as an evidence-quality guard in fix round 1).  Rows with no
+    consumers at all say nothing either way and pass.
+    """
+
+    named = False
+    for row in support:
+        metrics = (row.get("observation") or {}).get("metrics")
+        consumers = metrics.get("top_consumers") if isinstance(metrics, dict) else None
+        if isinstance(consumers, list) and consumers:
+            named = True
+            if any(isinstance(c, dict) and c.get("observer") is True for c in consumers):
+                return
+    if named:
+        raise ValueError(UNMARKED_JOURNAL)
+
+
 def non_observer_busy(rule, support):
     """Per non-observer process identity, the busy-core-seconds at or over the bar.
 
@@ -1141,6 +1170,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         # while its `excluded` lacked the reason, and a test comparing the two
         # compared the executor with itself.
         if rule is not None:
+            require_observer_marked(support)
             offenders = non_observer_busy(rule, support)
             if offenders:
                 excluded.append(NON_OBSERVER_EXCLUSION)

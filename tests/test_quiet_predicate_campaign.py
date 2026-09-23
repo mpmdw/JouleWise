@@ -3596,24 +3596,58 @@ class ObserverFloorTests(unittest.TestCase):
 
     @unittest.skipUnless(CLEAN.is_dir() and CONTAMINATED.is_dir(),
                          "the 2026-09-22 harvest archives are not on this machine")
-    def test_the_contaminated_night_loses_every_envelope_under_v3(self):
-        # Regression 1 on the night's own bytes.  Both archived journals were
-        # written before the observer-marking cure, so every row reads
-        # `observer: false` -- including the measurement's own `powermetrics`,
-        # which is why the production rule names it here beside the daemon and
-        # why the diagnostic re-analysis must state an explicit observer set.
-        report = archive_summary(CONTAMINATED, PROTOCOL)
-        self.assertEqual([v["excluded"] for v in report["envelopes"]],
+    def test_the_unmarked_archives_refuse_under_v3_rather_than_blame_the_sampler(self):
+        """Both archived journals predate the observer-marking cure.
+
+        Every row reads `observer: false`, including the measurement's own
+        `powermetrics`.  Until fix round 1 this test re-derived the 21:00 night
+        under v3 and expected twelve exclusions naming `fseventsd`,
+        `mediaanalysisd` AND `powermetrics` -- the rule blaming the power
+        sampler because marking had failed, and the 02:17 night (no daemon)
+        losing all twelve envelopes to its own sampler.  The evidence-quality
+        guard (Fable lens N8, adopted by the magistrate) now refuses such a
+        journal outright and names the real cause.  The 12/12 result stays on
+        record as the labelled DIAGNOSTIC re-analysis
+        (05-nonobserver-predicate-seat/diagnostic_reanalysis.py), which states
+        an explicit observer basename set in place of the missing marks.
+        """
+
+        for night in (CONTAMINATED, CLEAN):
+            with self.subTest(night=night.parent.name):
+                with self.assertRaisesRegex(ValueError, "no observer-marked consumer; ancestry marking failed"):
+                    archive_summary(night, PROTOCOL)
+
+    def test_a_marked_journal_is_summarised_and_an_unmarked_one_refuses(self):
+        # The guard's counterfactual pair on one fixture: the SAME rows with
+        # the power sampler marked are summarised normally (the daemon is
+        # excluded by name); with every mark cleared they refuse.
+        def rows(index):
+            return [journal_row(index, (FSEVENTSD, 341, .9995), offset=30 * k + 1, span=29)
+                    for k in range(19)]
+
+        marked = NonObserverProcessTests.summarize_rows(self, rows)
+        self.assertEqual([v["excluded"] for v in marked["envelopes"]],
                          [["non_observer_process_busy"]] * 12)
-        self.assertEqual(report["retained"], 0)
-        named = {hit["process"] for value in report["envelopes"]
-                 for hit in value["non_observer_process_busy"]}
-        self.assertEqual(named, {"fseventsd", "mediaanalysisd", "powermetrics"})
-        daemon = next(hit for hit in report["envelopes"][0]["non_observer_process_busy"]
-                      if hit["process"] == "fseventsd")
-        self.assertAlmostEqual(daemon["core_seconds"], 575.6, places=0)
-        # The clean night has no daemon at all: its only named consumer is the
-        # unmarked power sampler, at a third of the daemon's cost.
-        clean = archive_summary(CLEAN, PROTOCOL)
-        self.assertEqual({hit["process"] for value in clean["envelopes"]
-                          for hit in value["non_observer_process_busy"]}, {"powermetrics"})
+        self.assertEqual({hit["process"] for v in marked["envelopes"]
+                          for hit in v["non_observer_process_busy"]}, {"fseventsd"})
+
+        def unmarked(index):
+            out = rows(index)
+            for row in out:
+                for consumer in row["observation"]["metrics"]["top_consumers"]:
+                    consumer["observer"] = False
+            return out
+
+        with self.assertRaisesRegex(ValueError, "no observer-marked consumer; ancestry marking failed"):
+            NonObserverProcessTests.summarize_rows(self, unmarked)
+
+        # Rows that name no consumer at all say nothing about marking: they
+        # neither refuse nor exclude.
+        def silent(index):
+            out = rows(index)
+            for row in out:
+                row["observation"]["metrics"]["top_consumers"] = []
+            return out
+
+        quiet = NonObserverProcessTests.summarize_rows(self, silent)
+        self.assertEqual([v["excluded"] for v in quiet["envelopes"]], [[]] * 12)
