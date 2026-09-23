@@ -205,13 +205,90 @@ class FenceTests(WatchdogTestCase):
             (night / "chain.started").write_text("{}", encoding="utf-8")
         return night
 
+    def test_delivered_refusal_live_census_holds_decide(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan)
+        self.harness.census = wd.CensusObservation(False, 0, "18001 driver; 29161 claude -p", "")
+        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("HOLD_CENSUS", decision.state)
+        self.assertEqual(1, self.harness.census_calls)
+
+    def test_delivered_refusal_live_census_preserves_owned_adoption(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan)
+        self.write_live_lock()
+        self.harness.processes.rows = [wd.ProcessInfo(100, 99, "token-a", "session")]
+        self.harness.census = wd.CensusObservation(False, 0, "18001 driver", "")
+        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("HOLD_CENSUS", decision.state)
+        self.assertTrue(decision.adopt)
+
+    def test_delivered_refusal_empty_census_releases_decide(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan)
+        state = wd.initial_state()
+        decision = wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertEqual("LAUNCHING", decision.state)
+        self.assertEqual(1, self.harness.census_calls)
+        self.assertEqual([["__canonical_repo__", str(wd.CANONICAL_REPO), None]],
+                         state["fenced_checkouts"])
+
+    def test_delivered_refusal_release_is_one_way(self) -> None:
+        # After the observed release the watchdog launches a magistrate, and
+        # that magistrate is itself a census match. A later non-empty census
+        # must not re-arm the plan, re-fence the checkout or hold the session.
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan)
+        state = wd.initial_state()
+        self.assertEqual("LAUNCHING", wd.decide(
+            self.harness.storage, self.harness.deps, state).state)
+        self.assertEqual(1, self.harness.census_calls)
+        self.harness.census = wd.CensusObservation(False, 0, "85802 claude -p magistrate", "")
+        decision = wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertNotEqual("HOLD_CENSUS", decision.state)
+        self.assertEqual("LAUNCHING", decision.state)
+        self.assertEqual(1, self.harness.census_calls)
+        self.assertFalse(wd.plan_is_armed(plan, self.base.timestamp(), self.harness.storage, state))
+        self.assertEqual([["__canonical_repo__", str(wd.CANONICAL_REPO), None]],
+                         state["fenced_checkouts"])
+
+    def test_delivered_refusal_armed_until_empty_census_observed(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan)
+        now = self.base.timestamp()
+        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
+        state = wd.initial_state()
+        self.assertEqual("LAUNCHING", wd.decide(
+            self.harness.storage, self.harness.deps, state).state)
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
+        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
+
+    def test_noneligible_delivered_refusal_preserves_base_disarm(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan, reason="night_refused_registration")
+        now = self.base.timestamp()
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
+
     def test_delivered_zero_capture_refusal_releases_both_holds_early(self) -> None:
         plan = self.make_plan(t0=self.base.timestamp() - 60,
                               authored_epoch_s=self.base.timestamp() - 3600)
         self.write_terminal_refusal(plan)
         now = self.base.timestamp()
         self.assertLess(now, wd.plan_completion_epoch(plan))
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
+        state = wd.initial_state()
+        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
         self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
+        self.assertFalse(wd.plan_span_active(plan, now, wd.Storage(Path(plan.custody_root))))
         self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
 
     def test_refusal_without_courier_holds_until_delivery(self) -> None:
@@ -222,6 +299,10 @@ class FenceTests(WatchdogTestCase):
         self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
         self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
         (night / "courier.sent").write_text("sent\n", encoding="utf-8")
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        state = wd.initial_state()
+        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
         self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
 
     def test_started_chain_refusal_keeps_full_span(self) -> None:
@@ -236,6 +317,10 @@ class FenceTests(WatchdogTestCase):
         self.assertFalse(wd.plan_span_active(plan, wd.plan_completion_epoch(plan) + 1,
                                              self.harness.storage))
         (night / "chain.started").unlink()
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        state = wd.initial_state()
+        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
         self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
 
     def test_registration_refusal_and_receipt_capture_keep_hold(self) -> None:
@@ -244,7 +329,7 @@ class FenceTests(WatchdogTestCase):
         night = self.write_terminal_refusal(plan, reason="night_refused_registration")
         now = self.base.timestamp()
         self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
-        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
+        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
         self.write_terminal_refusal(plan, reason="night_refused_class_unbuilt")
         self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
         self.write_terminal_refusal(plan, capture_in_receipt=True)
@@ -252,6 +337,10 @@ class FenceTests(WatchdogTestCase):
         (night / "result.json").unlink()
         self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
         self.write_terminal_refusal(plan)
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        state = wd.initial_state()
+        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
         self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
 
     def test_early_release_reaches_standdown_and_launch_filter(self) -> None:
@@ -259,15 +348,19 @@ class FenceTests(WatchdogTestCase):
                               authored_epoch_s=self.base.timestamp() - 3600)
         self.write_terminal_refusal(plan)
         now = self.base.timestamp()
-        self.assertIsNone(wd.relevant_standdown_plan([plan], now, self.harness.storage))
+        self.assertIsNotNone(wd.relevant_standdown_plan([plan], now, self.harness.storage))
         directory = wd.Path.home() / "Library/LaunchAgents"
         directory.mkdir(parents=True)
         (directory / "com.joulewise.night.plist").write_bytes(plistlib.dumps({
             "ProgramArguments": ["--plan", str(Path(plan.custody_root) / "night_plan.json")],
         }))
-        self.assertIsNone(wd.installed_agent_fence(self.base, self.harness.storage))
-        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertIsNotNone(wd.installed_agent_fence(self.base, self.harness.storage))
+        state = wd.initial_state()
+        decision = wd.decide(self.harness.storage, self.harness.deps, state)
         self.assertEqual("LAUNCHING", decision.state)
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
+        self.assertIsNone(wd.relevant_standdown_plan([plan], now, self.harness.storage))
+        self.assertIsNone(wd.installed_agent_fence(self.base, self.harness.storage))
 
     def test_retired_v1_is_ignored_once_and_only_v2_plan_sets_span(self) -> None:
         valid = self.make_plan(t0=self.base.timestamp() + wd.PLAN_LEAD_S, name="valid-v2")

@@ -731,7 +731,8 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
 
 
 def installed_agent_fence(
-    now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None
+    now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None,
+    state: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Read installed agents independently of custody discovery; fail closed."""
     directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
@@ -762,7 +763,7 @@ def installed_agent_fence(
             if plan.authored_epoch_s > now.timestamp():
                 raise ValueError("installed plan authored_epoch_s is in the future")
             deadman_epoch(plan)
-            if plan_span_active(plan, now.timestamp(), storage):
+            if plan_span_active(plan, now.timestamp(), storage, state):
                 reasons.append(f"installed_plan:{plan.plan_id}")
         except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
                 plistlib.InvalidFileException, ExpatError) as exc:
@@ -802,7 +803,28 @@ def _delivered_zero_capture_refusal(
     return terminal_zero_capture_refusal(result, receipt).allowed
 
 
-def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool:
+def _release_key(plan: NightPlan) -> str:
+    return f"{plan.plan_id}:{plan.custody_root}"
+
+
+def _release_observed(
+    plan: NightPlan, storage: Storage, state: Mapping[str, Any] | None
+) -> bool:
+    if state is None:
+        # evidence_night passes Storage(plan custody root); the watchdog state
+        # is a sibling under the same night-custody parent.
+        custody = Path(plan.custody_root).expanduser().resolve(strict=False)
+        state_storage = (Storage(custody.parent / "magistrate")
+                         if storage.root == custody else storage)
+        state = load_state(state_storage)
+    released = state.get("released_zero_capture_refusals", [])
+    return isinstance(released, list) and _release_key(plan) in released
+
+
+def plan_span_active(
+    plan: NightPlan, now_epoch_s: float, storage: Storage,
+    state: Mapping[str, Any] | None = None,
+) -> bool:
     """File 15 row 3, including completion, courier, dead-man, and chain rules."""
 
     if now_epoch_s < plan.t0_epoch_s - PLAN_LEAD_S:
@@ -813,7 +835,8 @@ def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> b
     )
     if chain_open:
         return True
-    if _delivered_zero_capture_refusal(plan, now_epoch_s, storage):
+    if (_delivered_zero_capture_refusal(plan, now_epoch_s, storage)
+            and _release_observed(plan, storage, state)):
         return False
     if now_epoch_s <= plan_completion_epoch(plan):
         return True
@@ -822,28 +845,34 @@ def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> b
     return now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S
 
 
-def plan_is_armed(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool:
+def plan_is_armed(
+    plan: NightPlan, now_epoch_s: float, storage: Storage,
+    state: Mapping[str, Any] | None = None,
+) -> bool:
     """An authored plan remains armed until its durable completion or final bound."""
 
     if plan.authored_epoch_s > now_epoch_s:
         return False
     night = Path(plan.custody_root) / "night"
-    if storage.exists(night / "chain.started") and not storage.exists(night / "chain.exited"):
-        return True
-    if _delivered_zero_capture_refusal(plan, now_epoch_s, storage):
-        return False
-    if storage.exists(night / "courier.sent"):
+    if storage.exists(night / "chain.started"):
+        if not storage.exists(night / "chain.exited"):
+            return True
         if _terminal_refusal_result(night, storage) is not None:
             return now_epoch_s <= plan_completion_epoch(plan)
+    if _delivered_zero_capture_refusal(plan, now_epoch_s, storage):
+        return (now_epoch_s <= plan_completion_epoch(plan)
+                and not _release_observed(plan, storage, state))
+    if storage.exists(night / "courier.sent"):
         return False
     return now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S
 
 
 def armed_plans(
-    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage
+    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage,
+    state: Mapping[str, Any] | None = None,
 ) -> list[NightPlan]:
     return sorted(
-        (plan for plan in plans if plan_is_armed(plan, now_epoch_s, storage)),
+        (plan for plan in plans if plan_is_armed(plan, now_epoch_s, storage, state)),
         key=lambda plan: (plan.plan_id, plan.measurement_root, plan.measurement_head),
     )
 
@@ -898,13 +927,14 @@ def fenced_checkout_rows(plans: Sequence[NightPlan]) -> list[list[str | None]]:
 
 
 def relevant_standdown_plan(
-    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage
+    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage,
+    state: Mapping[str, Any] | None = None,
 ) -> NightPlan | None:
     candidates = [
         plan
         for plan in plans
         if now_epoch_s >= plan.t0_epoch_s - REQUEST_LEAD_S
-        and plan_span_active(plan, now_epoch_s, storage)
+        and plan_span_active(plan, now_epoch_s, storage, state)
     ]
     return min(candidates, key=lambda plan: plan.t0_epoch_s, default=None)
 
@@ -1465,14 +1495,40 @@ def decide(
 
     snapshot = plan_snapshot or load_plans(storage, now_epoch_s=wall.timestamp())
     plans = list(snapshot.plans)
+    if snapshot.errors:
+        return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+    # Delivery is only a candidate for release. The courier and driver can
+    # both outlive courier.sent; the production census covers both argv shapes.
     try:
-        armed = armed_plans(plans, wall.timestamp(), storage)
+        release_candidates = [
+            plan for plan in plans
+            if plan.t0_epoch_s - PLAN_LEAD_S <= wall.timestamp() <= plan_completion_epoch(plan)
+            and _delivered_zero_capture_refusal(plan, wall.timestamp(), storage)
+        ]
+    except (OverflowError, ValueError) as exc:
+        return Decision("HOLD_UNSAFE", f"night_plan_malformed: t0_epoch_s/window_max_s: {exc}")
+    # The release is one-way. Once an empty census has been observed after
+    # delivery, the next magistrate is itself a census match, so a later
+    # non-empty census must not re-arm the plan and re-fence the checkout.
+    released = state.get("released_zero_capture_refusals", [])
+    if not isinstance(released, list):
+        released = []
+    loaded = {_release_key(plan) for plan in plans}
+    released = sorted({key for key in released if isinstance(key, str) and key in loaded})
+    pending = [plan for plan in release_candidates if _release_key(plan) not in released]
+    release_census: CensusObservation | None = None
+    if pending:
+        release_census = deps.census()
+        append_census_event(storage, state, wall, release_census)
+        if release_census.empty:
+            released = sorted(set(released) | {_release_key(plan) for plan in pending})
+    state["released_zero_capture_refusals"] = released
+    try:
+        armed = armed_plans(plans, wall.timestamp(), storage, state)
         conflicts = plan_conflicts(armed)
     except (OverflowError, ValueError) as exc:
         return Decision("HOLD_UNSAFE", f"night_plan_malformed: t0_epoch_s/window_max_s: {exc}")
     state["fenced_checkouts"] = fenced_checkout_rows(armed)
-    if snapshot.errors:
-        return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
     if conflicts:
         return Decision("HOLD_UNSAFE", "plan_conflict: " + "; ".join(conflicts))
 
@@ -1501,10 +1557,10 @@ def decide(
             lock = None
 
     try:
-        installed = installed_agent_fence(wall, storage)
+        installed = installed_agent_fence(wall, storage, state=state)
     except (OSError, ValueError, OverflowError) as exc:
         return Decision("HOLD_UNSAFE", f"installed_agent_fence: {exc}")
-    active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage)]
+    active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage, state)]
     try:
         stop = deps.git_probe()
     except Exception as exc:
@@ -1517,8 +1573,12 @@ def decide(
     if storage.exists(storage.root / "STOP"):
         stop = StopObservation("STOPPED", "local STOP file present")
     if active_plans:
-        census = deps.census()
-        append_census_event(storage, state, wall, census)
+        census = release_census or deps.census()
+        if release_census is None:
+            append_census_event(storage, state, wall, census)
+        if release_census is not None and not census.empty:
+            return Decision("HOLD_CENSUS", "production census non-empty after delivered refusal",
+                            adopt=owner is not None)
         if owner is not None:
             phase = standdown_phase(min(active_plans, key=lambda item: item.t0_epoch_s), wall.timestamp())
             return Decision(
