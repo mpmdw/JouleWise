@@ -1502,8 +1502,12 @@ def execute(plan, protocol, night_dir):
             # rather than three hours later.
             non_observer = []
             if non_observer_rule(protocol) is not None:
+                # The recorder writes this file on its first sample, so it may
+                # not exist yet when envelope 01 ends; no rows is no exclusion.
+                journal_path = night_dir / protocol["recorder_journal"]
                 journal_rows = [json.loads(line) for line
-                                in (night_dir / protocol["recorder_journal"]).read_text().splitlines()
+                                in (journal_path.read_text().splitlines()
+                                    if journal_path.exists() else [])
                                 if line]
                 non_observer = non_observer_busy(non_observer_rule(protocol),
                                                  envelope_support(journal_rows, scheduled, protocol))

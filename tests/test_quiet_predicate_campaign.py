@@ -3,6 +3,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
@@ -39,6 +40,52 @@ def provenance(state="authenticated", matched=0):
                             "log_sha256": "1" * 64, "matched_lines": matched, "exit_code": 0}}
 
 
+def consumers(*rows, observer_command="/usr/bin/powermetrics", observer_busy=.114):
+    """`top_consumers` as a v3 recorder journals them.
+
+    `rows` are (command, pid, busy_cores) for NON-observer processes; the
+    observer's own power sampler is always present and always marked, because
+    under registration v3 the recorder runs with the chain root as its
+    observer pid and every process the measurement started is its descendant.
+    """
+
+    marked = [{"command": observer_command, "pid": 900, "busy_cores": observer_busy,
+               "start_identity": "Tue Sep 22 21:10:02 2026", "observer": True}]
+    return marked + [{"command": command, "pid": pid, "busy_cores": busy,
+                      "start_identity": "Fri Sep 18 17:41:17 2026", "observer": False}
+                     for command, pid, busy in rows]
+
+
+def journal_row(index, *rows, interval_s=30.0, observer_cpu_s=.2, offset=0, span=30,
+                observer_busy=.114, busy_cores=None):
+    """One recorder journal row joined to envelope `index`'s support.
+
+    `observer_busy` is the measurement's own power sampler, marked; it never
+    enters the per-envelope exclusion, which reads named NON-observer
+    processes only.
+    """
+
+    start = index * 600 + offset
+    total = observer_busy + sum(row[2] for row in rows) if busy_cores is None else busy_cores
+    return {"monotonic_start": start, "monotonic_end": start + span,
+            "observer_cpu_s": observer_cpu_s,
+            "observation": {"interval_s": interval_s,
+                            "metrics": {"busy_cores": total,
+                                        "top_consumers": consumers(*rows, observer_busy=observer_busy)}}}
+
+
+def stamps(span_s=600.0, observer_cpu_s=12.0):
+    """The collector's own clock stamps and whole-envelope observer cost.
+
+    Registration v3's observer floor is `whole_envelope_observer_cpu_s` over
+    this span, so a session fixture without them is refused by name.
+    """
+
+    return {"start_stamp": {"monotonic_before_s": 1000.0},
+            "end_stamp": {"monotonic_before_s": 1000.0 + span_s},
+            "whole_envelope_observer_cpu_s": observer_cpu_s}
+
+
 def good_round(busy=0):
     return {"round":1, "session":"fixture", "os_build":"25G83", "os_build_valid":True,
             "census_clean":True, "observer_cpu_s":1,
@@ -60,6 +107,7 @@ class CampaignTests(unittest.TestCase):
                 out = root / f'envelope-{index:02d}'
                 out.mkdir()
                 session = {'session':'fixture', 'boot_id':'boot', 'os_build':'25G83',
+                    **stamps(),
                     'network_time_provenance': provenance(
                         *(('slew_attested', 1) if index in slew else ())),
                     'power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded'}},
@@ -67,6 +115,9 @@ class CampaignTests(unittest.TestCase):
                         'power':{'energy_j':{'rail_sum_w':energy, 'combined_w':energy}}}}
                 row = good_round()
                 if observer_core is not None:
+                    # v3's floor is the WHOLE envelope's observer cost over the
+                    # collector's own span, not the round block's (synthesis 35).
+                    session.update(stamps(observer_cpu_s=600 * observer_core))
                     row.update(observer_cpu_s=30 * observer_core, round_mono_start_s=index*600, round_mono_end_s=index*600+30)
                 if index in excluded:
                     row['census_clean'] = False
@@ -74,9 +125,13 @@ class CampaignTests(unittest.TestCase):
                 (out / 'rounds.jsonl').write_text(json.dumps(row) + '\n')
                 entries.append({'index':index, 'scheduled_mono_s':index*600, 'start_drift_s':drift})
                 if recorder:
-                    campaign.append_event(root.parent / PROTOCOL['recorder_journal'], {
-                        'monotonic_start':index*600, 'monotonic_end':index*600+30,
-                        'observation':{'metrics':{'busy_cores':99 if index == 5 else .01}}, 'observer_cpu_s':.2})
+                    # The excursion is the measurement's OWN power sampler:
+                    # busy cores stay a covariate under v3, and only a named
+                    # NON-observer process can cost an envelope its claim.
+                    excursion = 99 if index == 5 else .01
+                    campaign.append_event(root.parent / PROTOCOL['recorder_journal'],
+                                          journal_row(index, observer_busy=excursion,
+                                                      busy_cores=excursion))
             campaign.pilot_summary(root, PROTOCOL, entries)
             memo = (root / 'summary.md').read_text()
             self.assertIn('normally distributed', memo)
@@ -295,7 +350,7 @@ class CampaignTests(unittest.TestCase):
                 out = root / f'envelope-{index:02d}'
                 out.mkdir()
                 session = {'session':'fixture','boot_id':'boot','os_build':'25G83','power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded'}},
-                           'network_time_provenance': provenance(),
+                           **stamps(), 'network_time_provenance': provenance(),
                            'interior':{'complete_support':True,'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                 row = good_round(100)
                 if index in (3, 7, 11):
@@ -350,7 +405,7 @@ class FrozenExecutorTests(unittest.TestCase):
                  interrupt_settle=False, protocol=None, burn=0, burn_at=None,
                  settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None,
                  attest_burn=0, tolerate_raise=False, final_cleanup_unproven=False,
-                 recorder_kind='powermetrics'):
+                 recorder_kind='powermetrics', busy_rows=None):
         """Drive the real ``execute`` against a stub collector on a fake clock.
 
         ``burn`` is the seconds the stub collector spends AFTER its capture
@@ -431,12 +486,21 @@ class FrozenExecutorTests(unittest.TestCase):
                     if recorder_kind is not None:
                         power['recorder_kind'] = recorder_kind
                     session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
+                        **stamps(),
                         'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
                         'power':power,
                         'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                     (out/'session.json').write_text(json.dumps(session))
                     (out/'rounds.jsonl').write_text(json.dumps(good_round())+'\n')
+                    # The covariate recorder is a stub here, so a regression
+                    # that needs journal rows inside this envelope's support
+                    # supplies them: `busy_rows(index, scheduled)` returns the
+                    # rows the real recorder would have appended by now.
+                    if busy_rows is not None:
+                        for journalled in busy_rows(index, self.end - envelope_s):
+                            campaign.append_event(
+                                out.parent.parent / protocol['recorder_journal'], journalled)
             def poll(self):
                 if recorder_dead and 'record' in self.argv:
                     self.returncode = 1
@@ -556,6 +620,9 @@ class FrozenExecutorTests(unittest.TestCase):
             summary=json.loads((Path(tmp)/'evidence/summary.json').read_text())
             outcome=json.loads((Path(tmp)/'evidence_outcome.json').read_text())
             refusals=list(Path(tmp).glob('refusal*.json'))
+            # The refusal DOCUMENTS, not just their count: the typed reason is
+            # what distinguishes a machine-state abort from a failed probe.
+            self.refusal_documents=[json.loads(path.read_text()) for path in sorted(refusals)]
             # The control record's BYTES are kept too: a test that corrupts it
             # asserts they survived the restore, and an unparsable record must
             # not break the harness before the assertion runs.
@@ -1082,15 +1149,34 @@ class StartDriftCadenceTests(FrozenExecutorTests):
         with self.assertRaises(ValueError):
             campaign.validate_protocol({**PROTOCOL, 'envelope_s': 1}, sha)
 
-    def test_regression_2_frozen_protocol_takes_v2_and_refuses_v1(self):
+    def test_regression_2_frozen_protocol_takes_v3_and_refuses_v1_and_v2(self):
         directory = ROOT / 'configs/campaigns/quiet_predicate_evidence_01'
+        v3 = (directory / 'pilot_protocol_v3.json').read_bytes()
         v2 = (directory / 'pilot_protocol_v2.json').read_bytes()
         v1 = (directory / 'pilot_protocol_v1.json').read_bytes()
         self.assertEqual(campaign.PROTOCOL_PATH,
-                         'configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json')
-        self.assertEqual(campaign.frozen_protocol(v2)['slot_pitch_s'], 620)
-        with self.assertRaisesRegex(ValueError, 'not the ruled pilot registration'):
-            campaign.frozen_protocol(v1)
+                         'configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json')
+        self.assertEqual(campaign.frozen_protocol(v3)['slot_pitch_s'], 620)
+        # Both superseded registrations are refused BY THE SAME CHECK: the
+        # executor runs the bytes the gate pinned, never a predecessor's.
+        for superseded in (v1, v2):
+            with self.assertRaisesRegex(ValueError, 'not the ruled pilot registration'):
+                campaign.frozen_protocol(superseded)
+        # v3 differs from v2 in exactly the four ruled fields and nothing else
+        # (cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2; ruling 31's
+        # reporting limbs as adjudicated by synthesis 35).
+        second, third = json.loads(v2), json.loads(v3)
+        self.assertEqual({k for k in set(second) | set(third) if second.get(k) != third.get(k)},
+                         {'exclusions', 'ruling', 'non_observer_process_busy',
+                          't0_non_observer_share_max', 'observer_floor'})
+        self.assertEqual(third['exclusions'], second['exclusions'] + ['non_observer_process_busy'])
+        self.assertEqual(third['chain_source_sha256'], second['chain_source_sha256'])
+        self.assertEqual(third['non_observer_process_busy']['bar_core_seconds'], 30)
+        self.assertEqual(third['non_observer_process_busy']['abort_after_consecutive'], 2)
+        self.assertEqual(third['t0_non_observer_share_max'], .5)
+        self.assertNotIn('observer_floor_tolerance', third['block_two'])
+        self.assertNotIn('observer_variation', third)
+        self.assertEqual(third['stop_branches'], second['stop_branches'])
         # v1 differs from v2 in exactly the four ruled fields and nothing else.
         first, second = json.loads(v1), json.loads(v2)
         differing = {k for k in set(first) | set(second) if first.get(k) != second.get(k)}
@@ -1311,6 +1397,7 @@ class LargerDriftTests(unittest.TestCase):
                 out.mkdir()
                 (out / 'session.json').write_text(json.dumps({
                     'session': 'fixture', 'boot_id': 'boot', 'os_build': '25G83',
+                    **stamps(),
                     'start_drift_s': 2.3,  # what the collector measured
                     'network_time_provenance': provenance(),
                     'power': {'recorder_kind': 'powermetrics', 'anchor': {'status': 'bounded'}},
@@ -2895,3 +2982,450 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         result = bench.verdict(rows, self.PROTOCOL)
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(result["slots_recorded"], 11)
+
+
+ARCHIVE = Path.home() / "night-archive"
+CONTAMINATED = ARCHIVE / "qpe01-pilot-n1-20260922-2100-harvest-20260922" / "night"
+CLEAN = ARCHIVE / "qpe01-pilot-n1-20260922-0217-harvest-20260922" / "night"
+FSEVENTSD = ("/System/Library/Frameworks/CoreServices.framework/Versions/A/"
+             "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd")
+
+
+def archive_summary(night, protocol):
+    """Re-derive one archived night's summary under the given registration.
+
+    The envelope entries are the executor's own rows from
+    `evidence_envelopes.jsonl`, and the journal is the night's own; nothing is
+    synthesised, so the numbers here are the night's numbers under new rules.
+    """
+
+    entries = [json.loads(line) for line in
+               (night / "evidence_envelopes.jsonl").read_text().splitlines() if line]
+    with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+        root = Path(tmp)
+        (root / protocol["recorder_journal"]).write_bytes(
+            (night / protocol["recorder_journal"]).read_bytes())
+        evidence = root / "evidence"
+        shutil.copytree(night / "evidence", evidence,
+                        ignore=shutil.ignore_patterns("summary.json", "summary.md"))
+        return campaign.pilot_summary(evidence, protocol, entries)
+
+
+class NonObserverProcessTests(unittest.TestCase):
+    """Cold gate QPE01-DAEMON-CONTAMINATION-01 (2026-09-23), ruling 10 §5.
+
+    The forcing problem: on 2026-09-22 21:00 the pilot captured twelve
+    envelopes while the system daemon `fseventsd` held a full busy core in
+    every one of 243 samples, 16 h into a logged failure loop, and every rule
+    the registration carried admitted the night -- because no rule read a
+    named process's share, and because no journal row the chain has ever
+    written carried `observer: true`, so the measurement's own power sampler
+    was indistinguishable from the machine.
+    """
+
+    def ps_row(self, pid, ppid, command, cpu):
+        return {"pid": pid, "ppid": ppid, "start_identity": "Tue Sep 22 21:00:00 2026",
+                "start_epoch_s": 0., "command": command, "cumulative_cpu_seconds": cpu}
+
+    def chain_table(self, cpu=0.):
+        """The night's real process shape: recorder and collector are SIBLINGS.
+
+        1000 is the executor (the chain root); it spawns the covariate
+        recorder 1003 and, separately, each collector 1001.  `powermetrics`
+        1002 is the COLLECTOR's child, so it is a cousin of the recorder, not
+        a descendant -- which is the whole defect.
+        """
+
+        return {(row["pid"], row["start_identity"]): row for row in (
+            self.ps_row(1, 0, "/sbin/launchd", 0.),
+            self.ps_row(1000, 1, "/usr/bin/python3 -m joulewise.quiet_predicate_campaign run", cpu),
+            self.ps_row(1001, 1000, "/usr/bin/python3 sample_quiet_predicate_evidence.py collect", cpu),
+            self.ps_row(1002, 1001, "/usr/bin/powermetrics", 3 * cpu),
+            self.ps_row(1003, 1000, "/usr/bin/python3 -m joulewise.quiet_predicate_campaign record", cpu),
+            self.ps_row(1004, 1003, "/usr/bin/top", cpu),
+            self.ps_row(341, 1, FSEVENTSD, 30 * cpu))}
+
+    def test_regression_0_the_chain_root_marks_the_power_sampler_the_recorder_pid_does_not(self):
+        from joulewise.quiet_admission import interval_metrics
+        before, after = self.chain_table(0.), self.chain_table(1.)
+        marked = {}
+        for label, observer_pid in (("chain root", 1000), ("recorder only", 1003)):
+            metrics = interval_metrics(before, after, interval_s=30., idle_fraction=.9,
+                                       logical_cpu=16, observer_pid=observer_pid, wall_start=-1)
+            marked[label] = {consumer["pid"]: consumer["observer"]
+                             for consumer in metrics["top_consumers"]}
+        # The cure: every process the measurement started is marked.
+        self.assertEqual(marked["chain root"],
+                         {1: False, 341: False, 1000: True, 1001: True,
+                          1002: True, 1003: True, 1004: True})
+        # The defect, reproduced: with the recorder as the observer root the
+        # power sampler reads as a non-observer consumer -- which is why the
+        # clean night's `powermetrics` sat at 0.111-0.115 "machine" cores.
+        self.assertEqual(marked["recorder only"][1002], False)
+        self.assertEqual(marked["recorder only"][1003], True)
+
+    def test_regression_0_the_recorder_refuses_to_run_without_a_chain_root(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            with self.assertRaisesRegex(ValueError, "chain root pid"):
+                campaign.record_covariates(PROTOCOL, Path(tmp))
+            for bad in (0, -1, "1000", 1000.0):
+                with self.assertRaisesRegex(ValueError, "chain root pid"):
+                    campaign.record_covariates(PROTOCOL, Path(tmp), observer_pid=bad)
+
+    def test_regression_0_record_covariates_hands_the_pid_to_every_observation(self):
+        import signal as signal_module
+        seen = []
+
+        def one_sample(interval_s, observer_pid=None):
+            seen.append((interval_s, observer_pid))
+            os.kill(os.getpid(), signal_module.SIGTERM)  # the executor's own stop signal
+            return {"metrics": {"busy_cores": 0}}
+
+        previous = signal_module.getsignal(signal_module.SIGTERM)
+        try:
+            with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                with patch("joulewise.quiet_admission.sample_interval", one_sample):
+                    self.assertEqual(campaign.record_covariates(PROTOCOL, Path(tmp),
+                                                                observer_pid=4242), 0)
+                rows = [json.loads(line) for line in
+                        (Path(tmp) / PROTOCOL["recorder_journal"]).read_text().splitlines() if line]
+        finally:
+            signal_module.signal(signal_module.SIGTERM, previous)
+        self.assertEqual(seen, [(PROTOCOL["sample_interval_s"], 4242)])
+        self.assertEqual(len(rows), 1)
+
+    def test_regression_0_the_executor_launches_the_recorder_with_its_own_pid(self):
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise_scaled()
+        recorder = next(argv for argv in calls if "record" in argv)
+        self.assertIn("--observer-pid", recorder)
+        self.assertEqual(recorder[recorder.index("--observer-pid") + 1], str(os.getpid()))
+
+    def exercise_scaled(self, **kwargs):
+        return FrozenExecutorTests.exercise(self, protocol=SCALED, **kwargs)
+
+    def test_regression_1_a_full_core_daemon_excludes_every_envelope_it_ran_in(self):
+        """The 2026-09-22 21:00 shape, at the archive's own magnitudes.
+
+        Counterfactual input: twenty 30.355 s rows per envelope carrying
+        `fseventsd` at 0.9995 busy cores (the archive's median) -- 606
+        core-seconds, twenty times the registered 30 core-second bar -- and,
+        in envelope 01 only, `mediaanalysisd` at 1.6 cores for eleven samples.
+        The clean night's largest non-observer integral was 6.3 core-seconds,
+        so the same code excludes nothing there.
+        """
+
+        contaminated = self.summarize_rows(lambda index: [
+            journal_row(index, (FSEVENTSD, 341, .9995),
+                        *(((("/System/Library/PrivateFrameworks/MediaAnalysis.framework/"
+                             "Versions/A/Support/mediaanalysisd"), 763, 1.6),)
+                          if index == 1 and sample < 11 else ()),
+                        interval_s=30.355, offset=sample * 30, span=30)
+            for sample in range(20)])
+        clean = self.summarize_rows(lambda index: [
+            journal_row(index, ("/usr/libexec/WindowServer", 411, .0105),
+                        interval_s=30.355, offset=sample * 30, span=30)
+            for sample in range(20)])
+        self.assertEqual([v["excluded"] for v in contaminated["envelopes"]],
+                         [["non_observer_process_busy"]] * 12)
+        self.assertEqual(contaminated["retained"], 0)
+        first = contaminated["envelopes"][0]["non_observer_process_busy"]
+        self.assertEqual([(hit["process"], hit["pid"]) for hit in first],
+                         [("fseventsd", 341), ("mediaanalysisd", 763)])
+        self.assertAlmostEqual(first[0]["core_seconds"], 20 * .9995 * 30.355, places=3)
+        self.assertAlmostEqual(first[1]["core_seconds"], 11 * 1.6 * 30.355, places=3)
+        for envelope in contaminated["envelopes"][1:]:
+            self.assertEqual([hit["process"] for hit in envelope["non_observer_process_busy"]],
+                             ["fseventsd"])
+        # The clean night's shape: 6.4 core-seconds, a fifth of the bar.
+        self.assertEqual([v["excluded"] for v in clean["envelopes"]], [[]] * 12)
+        self.assertEqual(clean["retained"], 12)
+        self.assertNotIn("non_observer_process_busy", clean["envelopes"][0])
+
+    def test_regression_6_the_integral_catches_the_burst_a_median_would_admit(self):
+        # Ruling 10 Q2 MATERIAL: an eight-sample burst at 1.5 busy cores is
+        # 360 core-seconds and about 270 J, and it passes a twenty-sample
+        # median (twelve zeroes carry the middle).  The same eight samples at
+        # 0.09 cores are 21.6 core-seconds, under the bar, and stay as idle
+        # variance by design.
+        for busy, excluded, core_seconds in ((1.5, True, 360.), (.09, False, 21.6)):
+            with self.subTest(busy_cores=busy):
+                report = self.summarize_rows(lambda index: [
+                    journal_row(index, ("/usr/sbin/mediaanalysisd", 763,
+                                        busy if sample < 8 else 0.),
+                                interval_s=30., offset=sample * 30, span=30,
+                                observer_busy=0.)
+                    for sample in range(20)])
+                envelope = report["envelopes"][0]
+                median = envelope["busy_cores"]["median"]
+                self.assertEqual(envelope["excluded"],
+                                 ["non_observer_process_busy"] if excluded else [])
+                if excluded:
+                    self.assertAlmostEqual(
+                        envelope["non_observer_process_busy"][0]["core_seconds"], core_seconds)
+                    # The median the ruling rejected would have admitted it.
+                    self.assertLess(median, .10)
+
+    def summarize_rows(self, rows_for):
+        """Twelve identical envelopes, with `rows_for(index)` as the journal."""
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp) / "evidence"
+            root.mkdir()
+            entries = []
+            for index in range(1, 13):
+                out = root / f"envelope-{index:02d}"
+                out.mkdir()
+                (out / "session.json").write_text(json.dumps({
+                    "session": "fixture", "boot_id": "boot", "os_build": "25G83", **stamps(),
+                    "network_time_provenance": provenance(),
+                    "power": {"recorder_kind": "powermetrics", "anchor": {"status": "bounded"}},
+                    "interior": {"complete_support": True,
+                                 "power": {"energy_j": {"rail_sum_w": index, "combined_w": index}}}}))
+                (out / "rounds.jsonl").write_text(json.dumps(good_round()) + "\n")
+                entries.append({"index": index, "scheduled_mono_s": index * 600, "start_drift_s": 0})
+                for row in rows_for(index):
+                    campaign.append_event(root.parent / PROTOCOL["recorder_journal"], row)
+            campaign.pilot_summary(root, PROTOCOL, entries)
+            return json.loads((root / "summary.json").read_text())
+
+    def test_a_v2_night_never_emits_a_reason_its_registration_does_not_carry(self):
+        # A269 ruling 10 Q2 byte-pins `exclusions`.  v2 has no such rule, so
+        # the same journal that costs a v3 night every envelope costs a v2
+        # night nothing -- the rule arrives with its registration.
+        v2 = json.loads((ROOT / "configs/campaigns/quiet_predicate_evidence_01"
+                         / "pilot_protocol_v2.json").read_text())
+        self.assertIsNone(campaign.non_observer_rule(v2))
+        self.assertIsNotNone(campaign.non_observer_rule(PROTOCOL))
+        for missing in ({}, {"bar_core_seconds": 0, "abort_after_consecutive": 2},
+                        {"bar_core_seconds": 30, "abort_after_consecutive": 0},
+                        {"bar_core_seconds": "30", "abort_after_consecutive": 2}):
+            with self.assertRaises(ValueError):
+                campaign.non_observer_rule({**PROTOCOL, "non_observer_process_busy": missing})
+        # A rule without its exclusion reason is a registration defect too.
+        with self.assertRaisesRegex(ValueError, "without its exclusion reason"):
+            campaign.non_observer_rule({**PROTOCOL, "exclusions": v2["exclusions"]})
+
+
+class NonObserverAbortTests(FrozenExecutorTests):
+    """Ruling 10 Q2: two consecutive excluded envelopes end the chain.
+
+    The forcing problem is arithmetic: on 2026-09-22 the night ran its full
+    three hours and produced twelve envelopes no rule could use.  Under the
+    registered abort it would have ended about 31 minutes after t0 (600 s
+    settle + 2 x 620 s), with the machine free for a re-arm the same night.
+    """
+
+    def busy_rows(self, busy_envelopes, busy_cores=6.):
+        """A journal in which the named envelopes carry a daemon over the bar.
+
+        At `SCALED`'s six-second envelopes one row of 6 busy cores over 6 s is
+        36 core-seconds, past the registered 30; a clean envelope's row is
+        0.01 cores, 0.06 core-seconds.
+        """
+
+        def rows(index, scheduled):
+            busy = busy_cores if index in busy_envelopes else .01
+            return [{"monotonic_start": scheduled, "monotonic_end": scheduled + 6,
+                     "observer_cpu_s": .1,
+                     "observation": {"interval_s": 6.,
+                                     "metrics": {"busy_cores": busy,
+                                                 "top_consumers": consumers(
+                                                     (FSEVENTSD, 341, busy))}}}]
+        return rows
+
+    def test_regression_3_two_consecutive_exclusions_abort_the_chain_by_name(self):
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            protocol=SCALED, busy_rows=self.busy_rows({1, 2}))
+        self.assertEqual(rc, 2)
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(outcome["envelopes_attempted"], 2)
+        self.assertIn("2 consecutive envelopes excluded non_observer_process_busy",
+                      outcome["error"])
+        self.assertIn("fseventsd pid 341 36.0 core-s (bar 30)", outcome["error"])
+        # The typed document: a reader holding only refusal.json can tell a
+        # machine-state abort from a probe that failed.
+        self.assertEqual(refusals, 1)
+        document = self.refusal_documents[0]
+        self.assertEqual(document["refusal"]["reason"], "non_observer_process_busy")
+        self.assertEqual(document["verdict"], "REFUSED")
+        self.assertIn("evidence chain refused: NonObserverAbort",
+                      document["refusal"]["detail"])
+        # No successor is arranged here: the D-182 addendum is Ed's to ratify.
+        self.assertEqual(self.envelope_directories, ["envelope-01", "envelope-02"])
+
+    def test_regression_3_one_exclusion_then_a_clean_envelope_never_aborts(self):
+        # The counterfactual that decides the rule's shape: envelope 01 of the
+        # 2026-09-22 night carried `mediaanalysisd` as well as the daemon, and
+        # one such envelope in an otherwise clean night must not end it.
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            protocol=SCALED, busy_rows=self.busy_rows({1, 3}))
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome["outcome"], "complete")
+        self.assertEqual(outcome["envelopes_attempted"], SCALED["envelopes"])
+        self.assertEqual(refusals, 0)
+        self.assertEqual([v["excluded"] for v in summary["envelopes"]],
+                         [["non_observer_process_busy"], [], ["non_observer_process_busy"], []])
+
+    def test_regression_5_the_summary_re_derives_the_executors_own_exclusion_set(self):
+        # The executor decides the abort in-chain from the journal; the
+        # summary re-derives the same verdict from disk afterwards.  If those
+        # two ever disagreed, the night's record would contradict its abort.
+        rc, summary, outcome, refusals, calls, control, sessions = self.exercise(
+            protocol=SCALED, busy_rows=self.busy_rows({1, 3}))
+        executor = {row["index"]: [(hit["process"], hit["pid"], round(hit["core_seconds"], 6))
+                                   for hit in row["non_observer_process_busy"]]
+                    for row in self.envelope_journal}
+        derived = {v["index"]: [(hit["process"], hit["pid"], round(hit["core_seconds"], 6))
+                                for hit in v.get("non_observer_process_busy", [])]
+                   for v in summary["envelopes"]}
+        self.assertEqual(executor, derived)
+        self.assertEqual(executor, {1: [("fseventsd", 341, 36.)], 2: [],
+                                    3: [("fseventsd", 341, 36.)], 4: []})
+
+
+V2_PROTOCOL = json.loads((ROOT / "configs/campaigns/quiet_predicate_evidence_01"
+                          / "pilot_protocol_v2.json").read_text())
+
+
+class ObserverFloorTests(unittest.TestCase):
+    """Cold gate round 3 (ruling 31's reporting limbs, synthesis 35 §3).
+
+    The forcing problem: `observer_floor_cores` summed each ROUND's
+    `observer_cpu_s` -- the sampler's worker/census block -- and never read the
+    `whole_envelope_observer_cpu_s` the session already recorded.  The 100 ms
+    power recorder is reaped by the collector after the round block ends, so
+    two thirds of the apparatus was missing: both archived nights reported
+    ~0.053 cores where the whole envelope costs 0.16-0.18.  The corrected
+    number is EXPECTED to fire the registered stop branch (0.16-0.18 > the
+    0.05 smallest level); that is the honest registered result, not a defect.
+    """
+
+    def summarize(self, whole, spans=None, rounds=1.0, recorder=.2, drop=()):
+        spans = [600.] * len(whole) if spans is None else spans
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp) / "evidence"
+            root.mkdir()
+            entries = []
+            for index, (cpu, span) in enumerate(zip(whole, spans), 1):
+                out = root / f"envelope-{index:02d}"
+                out.mkdir()
+                session = {"session": "fixture", "boot_id": "boot", "os_build": "25G83",
+                           "start_stamp": {"monotonic_before_s": 1000.},
+                           "end_stamp": {"monotonic_before_s": 1000. + span},
+                           "whole_envelope_observer_cpu_s": cpu,
+                           "network_time_provenance": provenance(),
+                           "power": {"recorder_kind": "powermetrics", "anchor": {"status": "bounded"}},
+                           "interior": {"complete_support": True,
+                                        "power": {"energy_j": {"rail_sum_w": 10, "combined_w": 10}}}}
+                for key in drop:
+                    session.pop(key, None)
+                (out / "session.json").write_text(json.dumps(session))
+                row = dict(good_round(), observer_cpu_s=rounds)
+                (out / "rounds.jsonl").write_text(json.dumps(row) + "\n")
+                entries.append({"index": index, "scheduled_mono_s": index * 600, "start_drift_s": 0})
+                campaign.append_event(root.parent / PROTOCOL["recorder_journal"],
+                                      journal_row(index, observer_cpu_s=recorder))
+            campaign.pilot_summary(root, PROTOCOL, entries)
+            return json.loads((root / "summary.json").read_text())
+
+    def test_the_floor_is_the_whole_envelope_over_the_collectors_own_span(self):
+        # Counterfactual input: twelve envelopes whose ROUND block is 1 s but
+        # whose whole envelope cost 105 s -- the archived shape, where the
+        # round block is a third of the apparatus.  Under the v2 statistic
+        # this reads 1/600 = 0.0017 cores and passes; the whole envelope over
+        # the span is 0.175 and fires the branch.
+        report = self.summarize([105.] * 12)
+        self.assertAlmostEqual(report["observer_floor_cores"], .175)
+        self.assertEqual(report["observer_support_s"], 7200.)
+        self.assertEqual(report["observer_variation_cores"], 0.)
+        self.assertEqual(report["block_two_stop"]["causes"],
+                         ["observer_floor_above_smallest_holdable_share"])
+        self.assertEqual(report["block_two_stop"]["outcome"], "no cutoff qualifies")
+        components = report["envelopes"][0]["observer_floor_components"]
+        self.assertEqual(components["round_block"], 1.)
+        self.assertEqual(components["load_recorder"], .2)
+        self.assertAlmostEqual(components["power_recorder_residue"], 103.8)
+        self.assertAlmostEqual(components["round_block"] + components["load_recorder"]
+                               + components["power_recorder_residue"],
+                               components["whole_envelope_observer_cpu_s"], delta=1e-9)
+
+    def test_the_variation_is_the_sample_sd_of_the_per_envelope_shares(self):
+        import statistics
+        whole = [105. + (2. if index % 2 else -2.) for index in range(12)]
+        report = self.summarize(whole)
+        self.assertAlmostEqual(report["observer_variation_cores"],
+                               statistics.stdev(cpu / 600 for cpu in whole))
+        # A span that differs per envelope is honoured, not rounded to 600.
+        uneven = self.summarize([105.] * 12, spans=[597. + index for index in range(12)])
+        self.assertAlmostEqual(uneven["observer_floor_cores"],
+                               12 * 105. / sum(597. + index for index in range(12)))
+
+    def test_a_session_without_the_whole_envelope_cost_or_span_refuses(self):
+        for missing in ("whole_envelope_observer_cpu_s", "start_stamp", "end_stamp"):
+            with self.subTest(missing=missing):
+                with self.assertRaisesRegex(ValueError, "absent evidence is never a pass"):
+                    self.summarize([105.] * 12, drop=(missing,))
+
+    @unittest.skipUnless(CLEAN.is_dir() and CONTAMINATED.is_dir(),
+                         "the 2026-09-22 harvest archives are not on this machine")
+    def test_both_archived_nights_re_derive_to_the_corrected_floor(self):
+        # The two nights' own bytes, under the corrected statistic, with the
+        # v2 retention rules so nothing but the floor changes (exhibit G and
+        # ruling 31 §1 recompute the same numbers independently).
+        for night, floor, variation in ((CLEAN, .17572, .00214), (CONTAMINATED, .15909, .00267)):
+            with self.subTest(night=night.parent.name):
+                archived = json.loads((night / "evidence/summary.json").read_text())
+                report = archive_summary(night, V2_PROTOCOL)
+                self.assertAlmostEqual(report["observer_floor_cores"], floor, places=3)
+                self.assertAlmostEqual(report["observer_variation_cores"], variation, places=4)
+                # The registered stop branch, unchanged in form, on the
+                # corrected input.  It is read from `stop_branch` directly for
+                # the 02:17 night: that night predates `power.recorder_kind`,
+                # so re-deriving it with TODAY's code trips the bench-replay
+                # guard and blanks every energy field -- an artefact of the
+                # re-derivation, not of this change, and the reason its
+                # energies are compared only where the guard did not fire.
+                self.assertEqual(campaign.stop_branch(observer_floor=report["observer_floor_cores"],
+                                                      protocol=V2_PROTOCOL)["causes"],
+                                 ["observer_floor_above_smallest_holdable_share"])
+                # The v2 numbers these supersede, for the record.
+                self.assertLess(archived["observer_floor_cores"], .054)
+                # Every component sums to the whole, and nothing else moved.
+                for value in report["envelopes"]:
+                    components = value["observer_floor_components"]
+                    self.assertAlmostEqual(
+                        components["round_block"] + components["load_recorder"]
+                        + components["power_recorder_residue"],
+                        components["whole_envelope_observer_cpu_s"], delta=1e-6)
+                if report["status"] != campaign.REPLAY_NEVER_EVIDENCE:
+                    self.assertEqual([v["joules"] for v in report["envelopes"]],
+                                     [v["joules"] for v in archived["envelopes"]])
+                    self.assertEqual(report["pair_sd_j"], archived["pair_sd_j"])
+                    self.assertEqual(report["s_upper"], archived["s_upper"])
+                    self.assertEqual(report["retained"], archived["retained"])
+                    self.assertEqual([v["excluded"] for v in report["envelopes"]],
+                                     [v["excluded"] for v in archived["envelopes"]])
+
+    @unittest.skipUnless(CLEAN.is_dir() and CONTAMINATED.is_dir(),
+                         "the 2026-09-22 harvest archives are not on this machine")
+    def test_the_contaminated_night_loses_every_envelope_under_v3(self):
+        # Regression 1 on the night's own bytes.  Both archived journals were
+        # written before the observer-marking cure, so every row reads
+        # `observer: false` -- including the measurement's own `powermetrics`,
+        # which is why the production rule names it here beside the daemon and
+        # why the diagnostic re-analysis must state an explicit observer set.
+        report = archive_summary(CONTAMINATED, PROTOCOL)
+        self.assertEqual([v["excluded"] for v in report["envelopes"]],
+                         [["non_observer_process_busy"]] * 12)
+        self.assertEqual(report["retained"], 0)
+        named = {hit["process"] for value in report["envelopes"]
+                 for hit in value["non_observer_process_busy"]}
+        self.assertEqual(named, {"fseventsd", "mediaanalysisd", "powermetrics"})
+        daemon = next(hit for hit in report["envelopes"][0]["non_observer_process_busy"]
+                      if hit["process"] == "fseventsd")
+        self.assertAlmostEqual(daemon["core_seconds"], 575.6, places=0)
+        # The clean night has no daemon at all: its only named consumer is the
+        # unmarked power sampler, at a third of the daemon's cost.
+        clean = archive_summary(CLEAN, PROTOCOL)
+        self.assertEqual({hit["process"] for value in clean["envelopes"]
+                          for hit in value["non_observer_process_busy"]}, {"powermetrics"})

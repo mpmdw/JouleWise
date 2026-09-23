@@ -1,0 +1,251 @@
+{
+  "bar_core_seconds": 30,
+  "join": "observation.monotonic_start in [scheduled, scheduled + 600)",
+  "label": "DIAGNOSTIC ONLY \u2014 registration v3 rule applied after the fact to night 20260922-2100 under an explicit observer basename set; not a registered result, sizes nothing.",
+  "nights": {
+    "qpe01-pilot-n1-20260922-0217-harvest-20260922": {
+      "envelopes": [
+        {
+          "excluded": [],
+          "index": 1,
+          "largest_non_observer_core_seconds": 5.5,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 2,
+          "largest_non_observer_core_seconds": 6.3,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 3,
+          "largest_non_observer_core_seconds": 5.5,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 4,
+          "largest_non_observer_core_seconds": 5.3,
+          "support_rows": 19
+        },
+        {
+          "excluded": [],
+          "index": 5,
+          "largest_non_observer_core_seconds": 5.6,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 6,
+          "largest_non_observer_core_seconds": 5.6,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 7,
+          "largest_non_observer_core_seconds": 5.6,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 8,
+          "largest_non_observer_core_seconds": 5.4,
+          "support_rows": 19
+        },
+        {
+          "excluded": [],
+          "index": 9,
+          "largest_non_observer_core_seconds": 5.6,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 10,
+          "largest_non_observer_core_seconds": 5.6,
+          "support_rows": 20
+        },
+        {
+          "excluded": [],
+          "index": 11,
+          "largest_non_observer_core_seconds": 5.2,
+          "support_rows": 19
+        },
+        {
+          "excluded": [],
+          "index": 12,
+          "largest_non_observer_core_seconds": 5.2,
+          "support_rows": 19
+        }
+      ],
+      "excluded_envelopes": 0,
+      "rows": 238,
+      "rows_carrying_observer_true": 0
+    },
+    "qpe01-pilot-n1-20260922-2100-harvest-20260922": {
+      "envelopes": [
+        {
+          "excluded": [
+            {
+              "core_seconds": 605.8,
+              "pid": 341,
+              "process": "fseventsd"
+            },
+            {
+              "core_seconds": 528.1,
+              "pid": 763,
+              "process": "mediaanalysisd"
+            }
+          ],
+          "index": 1,
+          "largest_non_observer_core_seconds": 605.8,
+          "support_rows": 20
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 605.8,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 2,
+          "largest_non_observer_core_seconds": 605.8,
+          "support_rows": 20
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 605.6,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 3,
+          "largest_non_observer_core_seconds": 605.6,
+          "support_rows": 20
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 575.0,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 4,
+          "largest_non_observer_core_seconds": 575.0,
+          "support_rows": 19
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 605.5,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 5,
+          "largest_non_observer_core_seconds": 605.5,
+          "support_rows": 20
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 575.2,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 6,
+          "largest_non_observer_core_seconds": 575.2,
+          "support_rows": 19
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 605.7,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 7,
+          "largest_non_observer_core_seconds": 605.7,
+          "support_rows": 20
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 575.2,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 8,
+          "largest_non_observer_core_seconds": 575.2,
+          "support_rows": 19
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 574.7,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 9,
+          "largest_non_observer_core_seconds": 574.7,
+          "support_rows": 19
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 605.4,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 10,
+          "largest_non_observer_core_seconds": 605.4,
+          "support_rows": 20
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 575.2,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 11,
+          "largest_non_observer_core_seconds": 575.2,
+          "support_rows": 19
+        },
+        {
+          "excluded": [
+            {
+              "core_seconds": 575.3,
+              "pid": 341,
+              "process": "fseventsd"
+            }
+          ],
+          "index": 12,
+          "largest_non_observer_core_seconds": 575.3,
+          "support_rows": 19
+        }
+      ],
+      "excluded_envelopes": 12,
+      "rows": 245,
+      "rows_carrying_observer_true": 0
+    }
+  },
+  "observer_basenames": [
+    "Python",
+    "pgrep",
+    "powermetrics",
+    "ps",
+    "sudo",
+    "sysctl",
+    "top"
+  ]
+}

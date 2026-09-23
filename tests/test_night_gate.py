@@ -1354,11 +1354,16 @@ class EvidenceRegistrationTests(unittest.TestCase):
         # registration becomes v2 (slot_pitch_s, start_drift_abort_s and the
         # two attestation exclusions); v1 stays in the table as ruled history,
         # keyed by its own literal digest and marked superseded_by v2.
+        # 2026-09-23 (cold gate QPE01-DAEMON-CONTAMINATION-01, rulings 10/31,
+        # syntheses 15/25/35): the pilot registration becomes v3 (the
+        # `non_observer_process_busy` exclusion and its integral, the t0
+        # share, the corrected `observer_floor`); v2 joins v1 as ruled
+        # history, keyed by its own literal and superseded_by v3.
         # Any membership/metadata amendment needs its cold-gate ruling and a
         # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '17b0965b970028b1fb5962caa2b7627c662b4a30903d8338c86a7bdaeab18c5d')
+                         'c91f6898f0cb2e484c4c0c11a63172a9af0184edec1ff1cbec675d6c0a68c717')
 
     def test_every_ruled_registration_names_tracked_records_that_exist(self):
         # Ruling 61a S4: prose authority is not enough; each entry's records
@@ -1383,24 +1388,112 @@ class EvidenceRegistrationTests(unittest.TestCase):
                                     if line.startswith('## ' + anchor + ':')]
                         self.assertTrue(headings, ref)
 
-    def test_the_superseded_v1_registration_is_history_and_never_armable(self):
-        # A269 regression 2 (ruling 10 Q2, refuter 11 on the digest key): v1's
-        # bytes are still a ruled registration, and a night that presents them
-        # is refused BY NAME -- the table is keyed by digest, so without its
-        # own literal the v1 entry would have travelled with the constant.
+    def test_every_superseded_registration_is_history_and_never_armable(self):
+        # A269 regression 2 (ruling 10 Q2, refuter 11 on the digest key), now
+        # a CHAIN: v1's and v2's bytes are still ruled registrations, and a
+        # night that presents either is refused BY NAME -- the table is keyed
+        # by digest, so without its own literal each superseded entry would
+        # have travelled with the constant when the constant moved on.
+        #
+        # QPE01-DAEMON-CONTAMINATION-01 regression 4 (2026-09-23): a NEW plan
+        # pinned to v2's digest refuses; v3's digest is the armable one.
         root = Path(__file__).resolve().parents[1]
-        v1 = (root / 'configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v1.json').read_bytes()
-        self.assertEqual(hashlib.sha256(v1).hexdigest(), night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256)
-        self.assertNotEqual(night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256,
-                            night_gate.QPE01_PILOT_REGISTRATION_SHA256)
-        entry = night_gate.RULED_REGISTRATIONS[night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256]
-        self.assertEqual(entry['superseded_by'], night_gate.QPE01_PILOT_REGISTRATION_SHA256)
-        self.assertIsNone(night_gate.armable_registration(night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256))
+        directory = root / 'configs/campaigns/quiet_predicate_evidence_01'
+        for name, constant, successor in (
+                ('pilot_protocol_v1.json', night_gate.QPE01_PILOT_REGISTRATION_V1_SHA256,
+                 night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256),
+                ('pilot_protocol_v2.json', night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256,
+                 night_gate.QPE01_PILOT_REGISTRATION_SHA256)):
+            with self.subTest(registration=name):
+                raw = (directory / name).read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), constant)
+                self.assertNotEqual(constant, night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+                entry = night_gate.RULED_REGISTRATIONS[constant]
+                self.assertEqual(entry['superseded_by'], successor)
+                self.assertIsNone(night_gate.armable_registration(constant))
+                receipt = night_gate.evaluate_night(
+                    make_plan(), self.source(registration=raw.decode()).probes())
+                self.assertEqual(receipt.refusal.reason, 'night_refused_registration')
+                self.assertIn('superseded by ' + successor, receipt.refusal.detail)
         self.assertIsNotNone(night_gate.armable_registration(night_gate.QPE01_PILOT_REGISTRATION_SHA256))
-        receipt = night_gate.evaluate_night(make_plan(), self.source(registration=v1.decode()).probes())
-        self.assertEqual(receipt.refusal.reason, 'night_refused_registration')
-        self.assertIn('superseded by ' + night_gate.QPE01_PILOT_REGISTRATION_SHA256,
-                      receipt.refusal.detail)
+        self.assertEqual(hashlib.sha256((directory / 'pilot_protocol_v3.json').read_bytes()).hexdigest(),
+                         night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+
+    def test_a_busy_non_observer_process_refuses_at_t0_and_at_the_arm_check(self):
+        """QPE01-DAEMON-CONTAMINATION-01 regression 2 (ruling 10 Q2(i)).
+
+        The 2026-09-22 21:00 night was admitted at t0 with `fseventsd` holding
+        a full busy core, because the only CPU predicate was a host-wide
+        one-minute load average (1.03, under LOAD_MAX 2.0) that cannot name a
+        process.  The counterfactual input is one interval observation whose
+        top consumers carry that process at 0.6 busy cores; the same consumer
+        MARKED as the observer is the measurement's own work and is admitted.
+        """
+
+        from dataclasses import replace
+        from tests.test_quiet_admission import POLICY
+
+        def v4_plan():
+            return replace(make_plan(), window_max_s=9600, quiet_admission=dict(POLICY))
+
+        for legacy_load, evaluate in (
+                (True, lambda source: night_gate.evaluate_night(make_plan(), source.probes())),
+                (False, lambda source: night_gate.evaluate_dynamic_hard(
+                    v4_plan(), source.probes(),
+                    night_gate.evaluate_static(v4_plan(), source.probes())))):
+            busy = ("/System/Library/Frameworks/CoreServices.framework/Versions/A/"
+                    "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd", 341, 0.6)
+            with self.subTest(legacy_load=legacy_load, machine="busy"):
+                source = self.source()
+                source.observation = interval_observation(busy + (False,), interval_s=30.4)
+                receipt = evaluate(source)
+                self.assertEqual(receipt.refusal.reason, "night_refused_not_quiet")
+                self.assertEqual(
+                    receipt.refusal.detail,
+                    "non-observer process busy: fseventsd pid 341 at 0.600 busy cores "
+                    "over 30.4 s (bar 0.5); observation in top_consumers_at_decision")
+                c3 = next(row for row in receipt.conditions if row.condition_id == "C3").measured
+                self.assertEqual([c["pid"] for c in c3["top_consumers_at_decision"]], [341])
+                self.assertEqual(c3["non_observer_interval_s"], 30.4)
+            with self.subTest(legacy_load=legacy_load, machine="observer"):
+                source = self.source()
+                source.observation = interval_observation(busy + (True,), interval_s=30.4)
+                receipt = evaluate(source)
+                self.assertIsNone(receipt.refusal)
+                c3 = next(row for row in receipt.conditions if row.condition_id == "C3").measured
+                self.assertEqual(c3["top_consumers_at_decision"][0]["observer"], True)
+
+    def test_the_non_observer_predicate_is_spent_only_on_an_evidence_night(self):
+        # It costs thirty seconds of real machine time, and the ruling scopes
+        # it to the pilot's own nights (v2 and v3 plans alike).  A calibration
+        # or rehearsal payload never reaches the sampler at all.
+        source = FakeProbeSource()
+        self.assertEqual(night_gate.evaluate_night(make_plan(), source.probes()).verdict, "GO")
+        self.assertEqual(source.observation_calls, 0)
+        evidence = self.source()
+        night_gate.evaluate_night(make_plan(), evidence.probes())
+        self.assertEqual(evidence.observation_calls, 1)
+
+    def test_an_unreadable_or_unmarked_observation_is_a_probe_error_never_a_pass(self):
+        # Absent evidence is never a pass: a sampler that raises, an
+        # observation with no consumers, and a consumer with no `observer`
+        # flag -- the exact shape of every row both archived nights wrote --
+        # all refuse rather than admit.
+        cases = {
+            "sampler raised": (None, OSError("top: no such process")),
+            "no metrics": ({"interval_s": 30.0}, None),
+            "no interval": (interval_observation(("/sbin/launchd", 1, 0.01, False)), None),
+            "unflagged consumer": ({"interval_s": 30.0, "metrics": {"top_consumers": [
+                {"command": "/sbin/launchd", "pid": 1, "busy_cores": 0.01}]}}, None),
+        }
+        for label, (observation, error) in cases.items():
+            with self.subTest(case=label):
+                source = self.source()
+                if label == "no interval":
+                    observation = {k: v for k, v in observation.items() if k != "interval_s"}
+                source.observation, source.observation_error = observation, error
+                receipt = night_gate.evaluate_night(make_plan(), source.probes())
+                self.assertEqual(receipt.refusal.reason, "night_probe_error")
 
     def test_unavailable_chain_source_is_probe_error_not_digest_mismatch(self):
         source = self.source()
@@ -1458,7 +1551,9 @@ class EvidenceRegistrationTests(unittest.TestCase):
         self.assertEqual(c1['registration_bound_chain_source_sha256'], c5['chain_source_sha256'])
         self.assertEqual(c1['registration_ruling'],
                          'cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b; '
-                         'A269 cold gate 10 (2026-09-22) Q1(c)/Q2(a)/Q3')
+                         'A269 cold gate 10 (2026-09-22) Q1(c)/Q2(a)/Q3; '
+                         'QPE01-DAEMON-CONTAMINATION-01 ruling 10 (2026-09-23) Q1(c)/Q2/Q3(a), '
+                         'ruling 31 reporting limbs as adjudicated by synthesis 35')
         self.assertNotIn('D-166', c1['detail'])
 
     def test_chain_measurement_not_advisory_sidecar_is_binding(self):

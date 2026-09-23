@@ -28,7 +28,7 @@ RETRY_CAUSES = {
 # Explicit assignments are intentional: registry additions must force review.
 COLD_GATE_CODES = {
     "night_refused_agent_present": "Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182.",
-    "night_refused_not_quiet": "One-shot load refusal for v2, or a terminal power/thermal predicate failure. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182.",
+    "night_refused_not_quiet": "One-shot load refusal for v2, a terminal power/thermal predicate failure, or one named non-observer process at or above 0.5 busy cores over a single 30 s observation at t0 or at the arm check (registration v3; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). The detail names the process, its pid and its share, and the receipt's C3 row carries top_consumers_at_decision. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182.",
     "night_refused_bind_expired": "Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182.",
     "night_refused_hid_idle": "Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182.",
     "night_refused_boot_clock": "Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182.",
@@ -52,6 +52,7 @@ COLD_GATE_CODES = {
     "night_record_exists": "A write-once night record proves invocation already occurred.",
     "night_calibration_refused": "The chain's calibration ledger refused (custody timeout, strict pre-reserve, or invalid custody); the document names the exact code; never an auto-retry cause.",
     "night_window_exceeded": "The chain ran past the exclusive window end and was terminated by the driver; reservation or capture intent may have been written and the session may need desk recovery; never an auto-retry cause.",
+    "non_observer_process_busy": "Two CONSECUTIVE envelopes were excluded because one non-observer process held at least 30 busy-core-seconds inside each (registration v3's per-envelope integral; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). The chain ends about 31 minutes after t0 with a typed refusal naming the process, its pid and its core-seconds. This is a machine-state abort AFTER capture, so D-182's zero-capture successor route does NOT apply and no successor is arranged; the captured envelopes stay in the archive. One such envelope followed by a clean one never aborts; never an auto-retry cause.",
 }
 INSTALLER_REFUSALS = {
     "install_span_closed": "The selected transaction ended; never switch spans mid-install or bypass the plan cutoff.",

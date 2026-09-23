@@ -223,6 +223,62 @@ class PrepareTests(unittest.TestCase):
         with self.assertRaisesRegex(entry.Refused, "published, invoked"):
             entry.prepare(**self.kw)
 
+    def test_the_arm_check_refuses_a_busy_non_observer_with_the_gates_own_text(self):
+        """QPE01-DAEMON-CONTAMINATION-01 regression 2, arm-check half.
+
+        The 2026-09-22 arm passed every pre-arm check while `fseventsd` had
+        already been at a full core for sixteen hours, because no check looked
+        at what was running.  An arm that passes a machine t0 would refuse
+        spends the whole three-hour span to learn it.  The bar, the text and
+        the observation are the gate's, so the two can never drift apart.
+        """
+
+        from joulewise import night_gate
+        from tests.test_night_gate import interval_observation
+        from tests.test_arm_census import observation, row
+        state = entry.prepare(**self.kw)
+        resident = self.base_dir / "resident.json"
+        entry.saved_json(resident, {"resident_session": None})
+
+        def probes(argv, **kwargs):
+            if Path(str(argv[0])).name == "pgrep":
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return entry.probe_command(argv, **kwargs)
+
+        daemon = ("/System/Library/Frameworks/CoreServices.framework/Versions/A/"
+                  "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd", 341, 0.998)
+        expected = ("non-observer process busy: fseventsd pid 341 at 0.998 busy cores "
+                    "over 30.4 s (bar 0.5); observation in top_consumers_at_decision")
+        absent = dict(jobs=[], plists=[], listing=dict(exit_code=0))
+        for label, marked in (("the machine", False), ("the measurement itself", True)):
+            with self.subTest(busy=label):
+                busy = lambda: interval_observation(daemon + (marked,), interval_s=30.4)
+                with patch.object(entry, "night_agents", return_value=absent, create=True):
+                    if marked:
+                        record = entry.check(
+                            candidate=state["staging"], canonical=state["measurement_root"],
+                            supervisor_state=resident, runner=probes, caller_pid=90,
+                            census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
+                            quiet_observer=busy, lock_verifier=lambda root: None)
+                        self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "pass")
+                        self.assertEqual(
+                            record["checks"]["machine_quiet"]["bar_busy_cores"],
+                            night_gate.T0_NON_OBSERVER_SHARE_MAX)
+                        continue
+                    with self.assertRaises(entry.Refused) as refusal:
+                        entry.check(
+                            candidate=state["staging"], canonical=state["measurement_root"],
+                            supervisor_state=resident, runner=probes, caller_pid=90,
+                            census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
+                            quiet_observer=busy, lock_verifier=lambda root: None)
+                # The operator sees the finding itself, not "pre-arm checks failed".
+                self.assertEqual(str(refusal.exception), expected)
+                record = json.loads((Path(state["staging"]) / "lifecycle/check.json").read_text())
+                self.assertFalse(record["armable"])
+                self.assertFalse(record["rehearsal_ready"])
+                self.assertEqual(record["checks"]["machine_quiet"],
+                                 dict(verdict="fail", reason=expected))
+
     def test_b4_prepare_check_prepare(self):
         from tests.test_arm_census import observation, row
         state = entry.prepare(**self.kw)
