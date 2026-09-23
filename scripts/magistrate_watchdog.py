@@ -799,7 +799,18 @@ def _terminal_refusal_result(night: Path, storage: Storage) -> Mapping[str, Any]
 
 
 def _tree_has_match(root: Path, predicate: Callable[[str], bool]) -> bool:
-    """Inspect all depths; an unreadable descendant prevents release."""
+    """Inspect all depths; an unreadable descendant prevents release.
+
+    Only a root that does not exist at all counts as empty. A root that is a
+    file, or a symlink (broken or not), counts as a match, so a dangling link
+    can never stand in for absent capture.
+    """
+    try:
+        root_mode = os.lstat(root).st_mode
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(root_mode):
+        return True
     pending = [root]
     while pending:
         directory = pending.pop()
@@ -831,9 +842,10 @@ def _evidence_capture_absent(custody: Path) -> bool:
         return False
     envelope_index = custody / "night" / "evidence_envelopes.jsonl"
     try:
-        return envelope_index.stat().st_size == 0 and envelope_index.is_file()
+        index = os.lstat(envelope_index)
     except FileNotFoundError:
         return True
+    return stat.S_ISREG(index.st_mode) and index.st_size == 0
 
 
 def _zero_capture_disk_facts(plan: NightPlan, storage: Storage) -> bool:

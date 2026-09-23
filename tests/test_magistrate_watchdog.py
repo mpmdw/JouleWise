@@ -263,6 +263,28 @@ class FenceTests(WatchdogTestCase):
         capture.write_text("{}", encoding="utf-8")
         self.assert_no_f3_release()
 
+    def test_f3_broken_symlinks_never_stand_in_for_absent_capture(self) -> None:
+        # Delta re-audit F1: a dangling link at a capture location raised
+        # FileNotFoundError and was read as "absent", licensing release.
+        for location in ("evidence_dir", "evidence_index", "calibration_dir"):
+            with self.subTest(location=location):
+                self.tearDown()
+                self.setUp()
+                plan = self.make_plan(t0=self.base.timestamp() - 60,
+                                      authored_epoch_s=self.base.timestamp() - 3600)
+                if location == "calibration_dir":
+                    runs_root = self.temp / "external-runs"
+                    self.write_terminal_refusal(plan, bare_c5=True, runs_root=runs_root)
+                    runs_root.mkdir(parents=True, exist_ok=True)
+                    link = runs_root / "instrument_validation"
+                else:
+                    night = self.write_terminal_refusal(plan, bare_c5=True, evidence=True)
+                    link = night / ("evidence" if location == "evidence_dir"
+                                    else "evidence_envelopes.jsonl")
+                link.symlink_to(self.temp / "missing-target")
+                self.assertFalse(link.exists())
+                self.assert_no_f3_release()
+
     def test_f3_evidence_index_vetoes_release(self) -> None:
         plan = self.make_plan(t0=self.base.timestamp() - 60,
                               authored_epoch_s=self.base.timestamp() - 3600)
