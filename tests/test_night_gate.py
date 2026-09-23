@@ -373,7 +373,7 @@ class NightGateTests(unittest.TestCase):
         source = EvidenceRegistrationTests().source()
         source.now_value = now
         raw = "Timestamp                       (process)[PID]\n"
-        for i, offset in enumerate((-590, -300, -1), 1):
+        for i, offset in enumerate((-590, -300, 10), 1):
             stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
             raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
                     f"Successfully spawned corecaptured[{i}] because xpc event\n")
@@ -390,6 +390,31 @@ class NightGateTests(unittest.TestCase):
         c3 = next(row for row in receipt.conditions if row.condition_id == "C3")
         self.assertEqual(c3.measured["corecaptured"]["last_10m_spawns"], 3)
         self.assertEqual(receipt.refusal.reason, "night_refused_not_quiet")
+
+    def test_corecaptured_t0_backward_clock_is_not_measured(self):
+        # Delta re-audit A271 F1: a clock stepped back during the read must
+        # not yield a measured false zero.
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        source = EvidenceRegistrationTests().source()
+        source.now_value = now
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, -1), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+        source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV, stdout=raw)
+        original_run = source.run
+
+        def backward_run(argv):
+            if argv == corecaptured_loop.LOG_ARGV:
+                source.now_value -= 3600
+            return original_run(argv)
+
+        source.run = backward_run
+        receipt = self.evaluate(make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100), source)
+        c3 = next(row for row in receipt.conditions if row.condition_id == "C3")
+        self.assertEqual(c3.measured["corecaptured"]["status"], "not_measured")
+        self.assertIn("backward", c3.measured["corecaptured"]["reason"])
 
     def test_corecaptured_t0_threshold_is_three_spawns(self):
         now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()

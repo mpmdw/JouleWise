@@ -936,7 +936,7 @@ class LifecycleTests(unittest.TestCase):
     def test_corecaptured_arm_window_anchors_before_slow_log_read(self):
         now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
         raw = "Timestamp                       (process)[PID]\n"
-        for i, offset in enumerate((-590, -300, -1), 1):
+        for i, offset in enumerate((-590, -300, 10), 1):
             stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
             raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
                     f"Successfully spawned corecaptured[{i}] because xpc event\n")
@@ -945,6 +945,38 @@ class LifecycleTests(unittest.TestCase):
             record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
         self.assertEqual(record["checks"]["corecaptured"]["last_10m_spawns"], 3)
         self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
+
+    def test_corecaptured_arm_backward_clock_refuses_without_actuation(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        fake = FakeCorecapturedActuator(raw, raw, now, log_delay_s=-3600)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "backward"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        self.assertFalse(any(argv[0] in ("/usr/sbin/networksetup", "/usr/bin/sudo")
+                             for argv in fake.commands))
+
+    def test_corecaptured_timed_out_move_is_recorded_without_exit_code(self):
+        # Delta re-audit A271 F2: a move that raised has no exit code; the
+        # attempted command and its exception must still be on the record.
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator("\n".join(raw.splitlines()[:11]) + "\n", raw, now)
+        original = fake.run
+
+        def timeout_off(argv, *, timeout=None):
+            if argv[-1] == "off":
+                fake.commands.append(tuple(argv))
+                raise subprocess.TimeoutExpired(argv, timeout)
+            return original(argv, timeout=timeout)
+
+        fake.run = timeout_off
+        with self.assertRaises(entry.Refused) as caught:
+            entry.corecaptured_arm_check(fake.actuator())
+        errors = caught.exception.evidence["command_errors"]
+        self.assertIn("TimeoutExpired", errors["Wi-Fi off"])
+        self.assertNotIn("wifi_off_exit_code", caught.exception.evidence)
+        self.assertEqual(caught.exception.evidence["wifi_on_exit_code"], 0)
 
     def test_corecaptured_arm_off_timeout_restores_wifi_and_refuses(self):
         raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()

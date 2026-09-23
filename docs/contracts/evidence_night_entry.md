@@ -172,7 +172,7 @@ refusal prints one `REFUSED:` line and exits 2; an unexpected defect prints
 captured return codes and output in the attempt journal. A nonblocking flock
 on `<staging_under>/.locks/<candidate-name>.lock` serializes both preparation
 and lifecycle operations for a candidate (one lock domain).
-No command repairs a checkout. `check` makes at most three machine moves, each at most once per invocation and each only after item 0 and every earlier row passed: (1) the fast-forward-only pull of the canonical checkout (item 1 below, D-183); (2) one Wi-Fi power off/on cycle (`networksetup -setairportpower en0 off`, 8 s, `on`) when more than two `corecaptured` spawns were counted in the last ten minutes; (3) one `sudo -n /usr/local/sbin/joulewise-restart-fseventsd` when new spawns persist 180 s after that cycle. Every move and its exit code is recorded in `check.json` (cold ruling 16 Q3, 2026-09-23, activation f2d6899b). No other command makes a machine move.
+No command repairs a checkout. `check` makes at most three machine moves, each at most once per invocation and each only after item 0 and every earlier row passed: (1) the fast-forward-only pull of the canonical checkout (item 1 below, D-183); (2) one Wi-Fi power off/on cycle (`networksetup -setairportpower en0 off`, 8 s, `on`) when more than two `corecaptured` spawns were counted in the last ten minutes; (3) one `sudo -n /usr/local/sbin/joulewise-restart-fseventsd` when new spawns persist 180 s after that cycle. Every move is recorded in `check.json` with its exit code, or, when it produced none (a timeout, for example), with the exception it raised (cold ruling 16 Q3, 2026-09-23, activation f2d6899b). No other command makes a machine move.
 
 `check` first verifies all sealed digests, render inventory, detached clean H,
 locked environment, interpreter identity and the clone's wrapper/manifest/
@@ -290,7 +290,8 @@ with the clone's code. It then writes verdicts and evidence for:
    spawns, it makes moves (2) and (3) above at most once each: one Wi-Fi
    off/on cycle, a 180 s wait, a recount of spawns after the cycle, and the
    fseventsd restart if at least one new spawn appears, after which it fails.
-   `check.json` records the counts, the remediation and every exit code.
+   `check.json` records the counts, the remediation, every exit code and, for a
+   command that raised instead of exiting, its exception (`command_errors`).
 
 Lifecycle artifacts are under `<staging>/lifecycle/`: `check.json`,
 `install.json`, `uninstall.json`, `attempts.json`, and `arm-attempts/`.

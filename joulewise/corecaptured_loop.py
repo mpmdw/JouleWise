@@ -35,6 +35,10 @@ def count_spawns(log_text: str, now_epoch_s: float, *, after_epoch_s: float | No
     ValueError for a missing header or a malformed nonblank record;
     callers decide whether an unavailable observation is a refusal.
     """
+    if until_epoch_s is not None and until_epoch_s < now_epoch_s:
+        # A wall clock stepped backward during the read would shrink the
+        # window and could report a false zero; the read is not measured.
+        raise ValueError("clock moved backward during the corecaptured log read")
     lines = [line for line in log_text.splitlines() if line.strip()]
     if not lines or not lines[0].startswith("Timestamp "):
         raise ValueError("corecaptured log has no syslog header")

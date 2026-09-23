@@ -851,10 +851,15 @@ def production_corecaptured_actuator():
 
 def corecaptured_arm_check(actuator, *, read_only=False):
     """Count spawns; on armable checks, try one bounded Wi-Fi reset if needed."""
+    # A command that raises (a timeout, for example) has no exit code; its
+    # exception is recorded here so check.json still shows the attempted move.
+    command_errors = {}
+
     def command(argv, *, timeout, action):
         try:
             return actuator.run(argv, timeout=timeout)
         except Exception as exc:
+            command_errors[action] = f"{type(exc).__name__}: {exc}"
             raise Refused(f"corecaptured {action} failed: {type(exc).__name__}: {exc}") from exc
 
     def observe(*, after=None):
@@ -871,7 +876,7 @@ def corecaptured_arm_check(actuator, *, read_only=False):
 
     before = observe()
     result = dict(last_10m_spawns=before.count, first_spawn=before.first,
-                  last_spawn=before.last, remediation="none")
+                  last_spawn=before.last, remediation="none", command_errors=command_errors)
     if read_only:
         result["remediation"] = "not_licensed"
         if before.count > 2:
