@@ -4716,7 +4716,7 @@
       "priority": "p2_next_slice",
       "rank": 276,
       "status": "queued",
-      "status_note": "2026-09-23 activation 4158e658: registered from the arm gate; the 07:00 v3 pilot is armed with a one-line correction appended to the notice instead of a new head.",
+      "status_note": "2026-09-23 activation 4158e658: registered from the arm gate; the 07:00 v3 pilot is staged to be armed with a one-line correction appended to the notice instead of a new head.",
       "stop_card": null
     },
     "NOTICE-TRANSPORT-FALLBACK-01": {

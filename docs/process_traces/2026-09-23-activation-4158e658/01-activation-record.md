@@ -80,7 +80,7 @@ All commands run from `/Users/edr/code/JouleWise` as `python3 -B -m joulewise.ev
 
 0. Write the heartbeat, send the launch email, write `notice.ack`. Run `env | grep EVIDENCE_POWER_RECORDER`; it
    must print nothing. Confirm with `launchctl list | grep joulewise` that no night label is loaded. Read Gmail and
-   the directives for NO. Confirm canonical HEAD contains `26fb4280`.
+   the directives for NO, and write any observed mailbox NO to `$STAGE/lifecycle/NO` before `veto`. Confirm canonical HEAD contains `26fb4280`.
 1. Do not re-prepare. Verify that the staged bytes still match record 09:
    `cd $STAGE && shasum -a 256 night_plan.json prepare.json render/*.plist`.
 2. Terminate only your own `codex mcp-server` helpers. Follow the procedure in NIGHT_HANDBACK §Purpose ("Before
@@ -119,3 +119,25 @@ BLOCK-TWO-DESIGN-01 once the pilot result is in, and A270. No agent work on the 
   fix round and confirmed every fix.
 - Arm gate: Fable and Opus agree (ARM, notice nits). Sol 6.0 alone found the `summary.md` sentence (F2) and the
   notice's "first evidence night" and "one git show" claims. That is a unique catch by the cross-family seat.
+
+## 10. Cold Fable final pass on this close (head 53ee687c), verbatim
+
+```
+**Verdict: APPROVE WITH CURES** (one cure, outside the arm path).
+
+**(1) Facts.** Record 01 and the RUN_STATE block hold against records 02–09, the code and the staging. I recomputed all five digests in the staging directory named in record 01. They match record 09 byte for byte. The plan binds H for both heads, the v3 path and ruled digest, t0 1790172000, window 9000, and the named roots. The boundaries in prepare.json match the table. The tool's attempt counter reads 1 with no prior candidates, as record 01 says. The CLI takes `--candidate` on every post-prepare command, `--notice-accepted` only on publish-install, and notice writes `lifecycle/notice.txt`. The supervisor refusal text quoted in §2 is verbatim from supervisor_check. Verdict lines in records 02, 04, 06, 07, 08 are as summarised. gen_state check rc 0, test_gen_state 44 OK.
+
+One false clause: the kernel status_note for A276 says the 07:00 pilot "is armed". It is staged, not armed. RUN_STATE says NOTHING ARMED.
+
+**(2) Procedure.** §3 steps 0–8 follow the tracked order in NIGHT_HANDBACK §Purpose and the ca45291d record step for step, including helper termination, notice verbatim plus one appended line, and the bookkeeping branch. Nothing missing that check or publish-install refuses on. Notice.txt will be newer than check.json because check precedes notice. Nit: the handback says to relay any mailbox NO into `<staging>/lifecycle/NO` before veto. §3 step 0 reads Gmail but does not name that file.
+
+**(3) Correction line.** True in every clause. Gate constant 0.5 applies at check and t0 with a greater-or-equal test. The campaign excludes at a total of 30 or more core-seconds and aborts at 2 consecutive. The fit rule computes 600 + 11 × 620 + 600 = 8020. Attempt 3 is established in the handback. One caveat, not a falsehood: v3 still carries `busy_cores_role: covariate_only` for the aggregate statistic. The line's per-process qualifier makes it accurate.
+
+**(4) Synthesis.** Sound. Sol's cures need a new head and window. The defects are prose only, and the appended-line precedent is exact. Fable's verdict prevailing follows the existing topology. A276 is registration only. No rule is ratified or amended.
+
+**Cures:**
+- In state_kernel.json, A276 status_note: change "is armed with" to "is staged to be armed with", regenerate, and re-run the gen_state check.
+- Optional: add "write any mailbox NO to `$STAGE/lifecycle/NO`" to §3 step 0.
+```
+
+Both cures applied in the next commit (A276 status note "staged to be armed"; §3 step 0 names `$STAGE/lifecycle/NO`).
