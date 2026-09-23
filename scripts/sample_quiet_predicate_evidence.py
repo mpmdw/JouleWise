@@ -87,6 +87,33 @@ NETWORK_TIME_REFUSAL = "network_time_provenance"
 NETWORK_TIME_REFUSAL_EXIT = 3
 NETWORK_TIME_PROVENANCE_METHOD = "systemsetup_setusingnetworktime_off_exact_stdout"
 NETWORK_TIME_PROVENANCE_REASON = "established by the evidence chain before settle"
+# BENCH REPLAY (cold gate #3 ruling 10 Q7; A269 ruling 10 Q3 replacement R6).
+# The ruled daytime bench replay runs the real chain and the real collector
+# with an injected recorder that replays an ARCHIVED plist instead of spawning
+# `powermetrics`.  What it measures is the inter-slot tail -- collector reap,
+# group census, `log show` attestation -- against the registration's 20 s gap.
+# It is never evidence: `recorder_kind` below is written into every
+# `session.json`, and `pilot_summary` refuses any night one of these
+# recorders touched.
+#
+# The variable names the ARCHIVE ROOT and exists in exactly one process tree:
+# the bench driver sets it in its own environment, `execute` copies that
+# environment into the collectors it launches, and no armed night can carry it
+# (`run_night._chain_environment` RAISES on it).  Absent, not one byte of this
+# module's behaviour changes -- `main()`'s `collect` branch chooses
+# `PowerRecorder` -- which is what regressions R1/R2 pin.
+REPLAY_ENV = "EVIDENCE_POWER_RECORDER_REPLAY"
+# `none` emits the archived frame bytes verbatim; `auto` shifts every `<date>`
+# label by ONE constant whole-second count K so the first frame's endpoint
+# lands inside the live spawn/first-parse bracket and the production anchor
+# resolves.  Without the shift the anchor is `rate_aware_native_set_empty`,
+# `align_frames` returns no frames, the per-round integration and the interior
+# reduction never run, and the replay under-measures the very tail it exists
+# to measure.  Nothing else in a frame is ever rewritten.
+REPLAY_LABEL_SHIFT_ENV = "EVIDENCE_POWER_RECORDER_REPLAY_LABEL_SHIFT"
+REPLAY_FEEDER = "scripts/replay_powermetrics_frames.py"
+RECORDER_KIND_PRODUCTION = "powermetrics"
+RECORDER_KIND_REPLAY = "replay"
 ALIGNMENT_MODEL = "affine wall clock; production rate-aware bound; PROVISIONAL"
 RAILS = ("cpu_w", "gpu_w", "ane_w", "rail_sum_w", "combined_w", "dram_w")
 ROUND_KEYS = (
@@ -700,8 +727,14 @@ class PowerRecorder:
         self.timer = None
         self.kill_timer = None
         self.stop_lock = threading.Lock()
+        # `recorder_kind` is the RUN-side fail-closed marker of the bench
+        # replay (cold gate #3 Q7): every `session.json` says, in one field,
+        # which recorder produced its frames, and `pilot_summary` admits only
+        # "powermetrics".  A session without the key is not admitted either --
+        # an absent marker is not a claim of production provenance.
         self.metadata = {"argv": self.argv, "identity": None, "processes": None, "cleanup": None,
-                         "term_sent": False, "kill_sent": False}
+                         "term_sent": False, "kill_sent": False,
+                         "recorder_kind": RECORDER_KIND_PRODUCTION}
 
     def start(self):
         self.stamps["pre_spawn"] = self.clock.stamp()
@@ -799,6 +832,149 @@ class PowerRecorder:
         self.metadata.update(stamps={k: asdict(v) for k, v in self.stamps.items()},
                              anchor=anchor, dropped_final_frame=dropped)
         return aligned, anchor
+
+
+def stream_sha256(path, chunk=1 << 20):
+    """Digest a file without ever holding it in memory (the plists are ~130 MB)."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        while data := stream.read(chunk):
+            digest.update(data)
+    return digest.hexdigest()
+
+
+def replay_envelope_index(path):
+    """Slot i replays ARCHIVED ENVELOPE i (brief D5), read off the output name.
+
+    The collector names its recorder output ``powermetrics-<state>-<repeat>``
+    and ``--repeat`` is the executor's envelope index, so the output path the
+    recorder was handed already carries the slot number.  Nothing new is
+    threaded through `collect()` to obtain it.
+    """
+
+    tail = Path(path).stem.rsplit("-", 1)[-1]
+    if not tail.isdigit():
+        raise ValueError(f"replay recorder cannot read an envelope index from {path.name!r}")
+    return int(tail)
+
+
+def replay_source_dir(root, index):
+    """Resolve archive root + slot index to the archived envelope directory.
+
+    Two layouts are accepted, in this order: a HARVEST root (the shape of
+    ``~/night-archive/<night>-harvest-<date>/``, which holds
+    ``night/evidence/envelope-NN``) and an ``evidence`` directory holding the
+    ``envelope-NN`` directories directly.  Neither is ever written to.
+    """
+
+    name = f"envelope-{index:02d}"
+    candidates = [Path(root) / "night" / "evidence" / name, Path(root) / "evidence" / name,
+                  Path(root) / name]
+    for candidate in candidates:
+        if (candidate / "session.json").exists():
+            return candidate
+    raise ValueError(f"replay archive has no {name} with a session.json under {root}")
+
+
+def replay_source_plist(source_dir):
+    plists = sorted(p for p in (source_dir / "raw").glob("powermetrics-*.plist"))
+    if len(plists) != 1:
+        raise ValueError(f"replay source {source_dir} must hold exactly one recorder plist")
+    return plists[0]
+
+
+class ReplayRecorder(PowerRecorder):
+    """`PowerRecorder` with one difference that matters: what argv it spawns.
+
+    TWO methods are overridden, and only two (brief D1; delta lenses:
+    execution NIT 2, contract N2 -- this paragraph used to say "only
+    ``__init__``", which the `finish` override below had already made
+    false):
+
+    * ``__init__`` builds the feeder's argv in place of `powermetrics`' and
+      records the replay provenance the bench artifact quotes per slot.
+    * ``finish`` calls ``super().finish()`` and then reads the shift K and
+      its basis back from the feeder's sidecar.  It has to be ``finish``:
+      under ``--label-shift auto`` the FEEDER derives K at its own spawn
+      instant and writes the sidecar only when it stops, so the file does
+      not exist while ``__init__`` runs, and ``super().finish()`` is the
+      point at which the feeder is guaranteed to have exited.  The
+      annotation is best-effort -- an unreadable sidecar leaves the field
+      null with a reason and does not disturb the night's finalisation.
+
+    Everything else is inherited and runs the production lines -- ``start``
+    (Popen, process journal, the first-complete-frame wait, the ps identity
+    and the owned-process tree), the deadline ``threading.Timer``,
+    ``request_stop``'s SIGTERM, the 5 s kill timer, and the parse/anchor
+    derivation inside ``PowerRecorder.finish`` itself.  That is the point:
+    the bench replay is supposed to measure the real finalisation tail, and
+    only a real recorder subprocess replaced by a real feeder subprocess
+    does that.
+    """
+
+    def __init__(self, path, interval_ms, clock, deadline):
+        super().__init__(path, interval_ms, clock, deadline)
+        root = os.environ[REPLAY_ENV]
+        mode = os.environ.get(REPLAY_LABEL_SHIFT_ENV, "none")
+        if mode not in ("none", "auto"):
+            raise ValueError(f"{REPLAY_LABEL_SHIFT_ENV} must be none or auto, not {mode!r}")
+        source_dir = replay_source_dir(root, replay_envelope_index(path))
+        source_plist = replay_source_plist(source_dir)
+        session = source_dir / "session.json"
+        # The feeder writes this sidecar when it stops: the mode it ran in, the
+        # shift K it applied, how many frames it wrote and the digest of the
+        # stream it produced.  The bench artifact quotes it per slot (D8).
+        self.replay_sidecar = Path(str(path) + ".replay.json")
+        self.argv = [sys.executable, "-B", str(REPO_ROOT / REPLAY_FEEDER),
+                     "--source", str(source_plist), "--session", str(session),
+                     "--out", str(path), "--interval-ms", str(interval_ms),
+                     "--label-shift", mode, "--sidecar", str(self.replay_sidecar)]
+        self.metadata["argv"] = self.argv
+        self.metadata["recorder_kind"] = RECORDER_KIND_REPLAY
+        self.metadata["replay"] = {
+            "source": str(source_plist), "source_session": str(session),
+            "source_plist_sha256": stream_sha256(source_plist),
+            "source_session_sha256": stream_sha256(session),
+            "label_shift": mode, "label_shift_s": 0 if mode == "none" else None,
+            "sidecar": str(self.replay_sidecar)}
+        if mode == "auto":
+            # `reasons()` would supply a generic sibling; say the specific thing.
+            self.metadata["replay"]["label_shift_s_reason"] = (
+                "the feeder derives K from the archived anchor at spawn time; "
+                "the applied value is read back from the sidecar in finish()")
+
+    def finish(self):
+        """Inherited finish, plus the one thing only the feeder can report.
+
+        Under ``auto`` the shift K is derived by the FEEDER at its own spawn
+        instant, so `__init__` cannot know it and left
+        ``replay.label_shift_s`` null -- while the plist the feeder wrote
+        carries live-looking dates (lane contract lens 17a N1/N4).  A reader
+        holding only `session.json` then had no way to tell how far those
+        labels had been moved.  The sidecar has K by the time the feeder has
+        exited, which `super().finish()` guarantees, so it is read back here
+        and joined to the session record.  Nothing else is overridden, and a
+        sidecar that is missing or unreadable costs the annotation only: the
+        field stays null with a reason, and the night's finalisation is not
+        disturbed.
+        """
+
+        try:
+            return super().finish()
+        finally:
+            replay = self.metadata["replay"]
+            if replay["label_shift"] == "auto":
+                try:
+                    sidecar = json.loads(Path(self.replay_sidecar).read_text())
+                    replay["label_shift_s"] = sidecar["label_shift_s"]
+                    replay["label_shift_basis"] = sidecar.get("label_shift_basis")
+                    replay["label_shift_s_reason"] = (
+                        "K derived by the feeder at spawn and read back from "
+                        f"{Path(self.replay_sidecar).name}")
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    replay["label_shift_s_reason"] = (
+                        "the feeder's sidecar could not be read back: "
+                        f"{type(exc).__name__}: {exc}")
 
 
 def census_condition(censuses, errors=()):
@@ -1499,8 +1675,12 @@ def main(argv=None):
             def terminate(_number, _frame):
                 raise KeyboardInterrupt("collector termination requested")
             previous = signal.signal(signal.SIGTERM, terminate)
+            # The ONE selection point of the bench replay (brief D1).  With
+            # the variable absent this is `PowerRecorder` and the collector is
+            # byte-for-byte the production collector.
+            factory = ReplayRecorder if os.environ.get(REPLAY_ENV) else PowerRecorder
             try:
-                session, _ = collect(args)
+                session, _ = collect(args, recorder_factory=factory)
             finally:
                 signal.signal(signal.SIGTERM, previous)
             if session.get("error_class") == NETWORK_TIME_REFUSAL:

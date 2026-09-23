@@ -63,6 +63,13 @@ RESULT_SCHEMA = "joulewise.unattended_night_result.v1"
 REFUSAL_SCHEMA = "joulewise.night_refusal.v1"
 PROBE_TIMEOUT_S = 30
 CENSUS_INTERVAL_S = 30
+# The bench replay's recorder switch, named here as a LITERAL rather than
+# imported: the sampler that owns it imports this module, so importing it back
+# at module scope would close a cycle.  A regression pins the two spellings
+# equal (`sample_quiet_predicate_evidence.REPLAY_ENV`), which is the property
+# that actually matters -- a drifted spelling would silently disarm the
+# refusal in `_chain_environment`.
+REPLAY_RECORDER_ENV = "EVIDENCE_POWER_RECORDER_REPLAY"
 # R-7: min(600, max(3 * (5303 ms / 1000), 300)) from cold_start.json.
 COURIER_DEADLINE_S = 300
 # Separate shutdown allowance for the chain's bounded end-of-window abort (one
@@ -572,6 +579,21 @@ def _complete_chain_launch_failure(descriptor: int, error: OSError) -> str:
 
 
 def _chain_environment(plan: NightPlan, night_dir: Path) -> dict[str, str]:
+    # ARM-side fail-closed point of the bench replay (cold gate #3 ruling 10
+    # Q7; brief D6).  The bench driver sets EVIDENCE_POWER_RECORDER_REPLAY in
+    # its own process so that `execute`'s collectors replay ARCHIVED frames
+    # instead of spawning `powermetrics`.  An armed night that inherited that
+    # variable from a desk shell would capture replayed frames and call them a
+    # measurement, so this RAISES rather than popping: a pop is a silent
+    # repair, and the fact worth surfacing is that the shell the night was
+    # armed from was carrying it at all.  The switches popped below have
+    # wrong values that merely degrade a night; this one would falsify it.
+    if REPLAY_RECORDER_ENV in os.environ:
+        raise ValueError(
+            f"{REPLAY_RECORDER_ENV} is set in this environment: it selects the bench "
+            "replay's frame feeder in place of powermetrics, and a night launched "
+            "under it would record replayed frames as a measurement. The evidence "
+            "chain never runs a replay recorder; clear the variable and re-arm.")
     environment = os.environ.copy()
     environment.update({
         "NIGHT_PLAN_ID": plan.plan_id,

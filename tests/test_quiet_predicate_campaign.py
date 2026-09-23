@@ -3,6 +3,7 @@ import json
 import math
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import time
 from types import SimpleNamespace
@@ -61,7 +62,7 @@ class CampaignTests(unittest.TestCase):
                 session = {'session':'fixture', 'boot_id':'boot', 'os_build':'25G83',
                     'network_time_provenance': provenance(
                         *(('slew_attested', 1) if index in slew else ())),
-                    'power':{'anchor':{'status':'bounded'}},
+                    'power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded'}},
                     'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':energy, 'combined_w':energy}}}}
                 row = good_round()
@@ -293,7 +294,7 @@ class CampaignTests(unittest.TestCase):
             for index in range(1, 13):
                 out = root / f'envelope-{index:02d}'
                 out.mkdir()
-                session = {'session':'fixture','boot_id':'boot','os_build':'25G83','power':{'anchor':{'status':'bounded'}},
+                session = {'session':'fixture','boot_id':'boot','os_build':'25G83','power':{'recorder_kind':'powermetrics','anchor':{'status':'bounded'}},
                            'network_time_provenance': provenance(),
                            'interior':{'complete_support':True,'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                 row = good_round(100)
@@ -348,7 +349,8 @@ class FrozenExecutorTests(unittest.TestCase):
                  off_stdout=None, on_exit=0, timed_log=None, commands=None,
                  interrupt_settle=False, protocol=None, burn=0, burn_at=None,
                  settle_overshoot=0, stepped_stop_s=0, window_max_s=9000, spy=None,
-                 attest_burn=0, tolerate_raise=False, final_cleanup_unproven=False):
+                 attest_burn=0, tolerate_raise=False, final_cleanup_unproven=False,
+                 recorder_kind='powermetrics'):
         """Drive the real ``execute`` against a stub collector on a fake clock.
 
         ``burn`` is the seconds the stub collector spends AFTER its capture
@@ -381,6 +383,9 @@ class FrozenExecutorTests(unittest.TestCase):
         envelope_s = protocol['envelope_s']
         burn_at = burn_at or {}
         calls, processes = [], {}
+        # Every environment the executor hands a child, so a regression can
+        # prove the bench replay's switch is in none of them (R9).
+        self.popen_envs = popen_envs = []
         self.timeline = timeline = []
         class Clock:
             now = 0.
@@ -401,6 +406,7 @@ class FrozenExecutorTests(unittest.TestCase):
                 self.pid = 8000000+len(calls)
                 self.argv, self.returncode = argv, None
                 calls.append(argv)
+                popen_envs.append(dict(kwargs.get('env') or {}))
                 processes[self.pid] = self
                 if 'collect' in argv:
                     timeline.append(('spawn', int(argv[argv.index('--repeat')+1])))
@@ -414,13 +420,19 @@ class FrozenExecutorTests(unittest.TestCase):
                     # what the union window (ruling 10 Q4 i) reads.
                     # ``stepped_stop_s`` displaces the stop stamp's WALL
                     # reading only, exactly as a clock step would.
-                    session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
-                        'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
-                        'power':{'anchor':{'status':'bounded','clock_stamps':{
+                    power={'anchor':{'status':'bounded','clock_stamps':{
                             'sampling_started':{'epoch_s':1000+self.end-envelope_s,
                                                 'monotonic_before_s':self.end-envelope_s},
                             'sampling_stopped':{'epoch_s':1000+self.end+stepped_stop_s,
-                                                'monotonic_before_s':self.end}}}},
+                                                'monotonic_before_s':self.end}}}}
+                    # ``recorder_kind=None`` writes NO key at all: a session
+                    # that never said which recorder produced its frames is
+                    # not a claim of production provenance either (R5).
+                    if recorder_kind is not None:
+                        power['recorder_kind'] = recorder_kind
+                    session={'session':'fixture','os_build':'25G83','boot_id':'boot','start_drift_s':0,
+                        'network_time_provenance':{k:v for k,v in provenance().items() if k!='attestation'},
+                        'power':power,
                         'interior':{'complete_support':True,
                         'power':{'energy_j':{'rail_sum_w':index,'combined_w':index}}}}
                     (out/'session.json').write_text(json.dumps(session))
@@ -506,6 +518,17 @@ class FrozenExecutorTests(unittest.TestCase):
                                  [c.pid for c in live], (out/'timed-log.txt').exists()))
                 return attestation
             enter(patch.object(campaign,'attest_network_time',side_effect=attest))
+            # The executor reads the bench replay's switch from its OWN
+            # environment (the harvest refusal `execute` takes on it), so
+            # every night driven here runs under a SCRUBBED copy of this
+            # shell's environment rather than the shell itself: a desk shell
+            # that happens to carry the switch must not decide what these
+            # tests prove (execution lens 17b S4).  A spy that wants the
+            # variable sets it on top, and R9 puts it back deliberately.
+            from scripts.sample_quiet_predicate_evidence import REPLAY_ENV as _replay_env
+            enter(patch.dict(campaign.os.environ,
+                             {k: v for k, v in os.environ.items() if k != _replay_env},
+                             clear=True))
             if spy is not None:
                 spy(stack, campaign)
             plan=replace(make_plan(),t0_epoch_s=1000,window_max_s=window_max_s)
@@ -874,7 +897,7 @@ class TimedLogScannerTests(unittest.TestCase):
     def test_a_failed_log_query_is_asserted_not_authenticated(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             out = Path(tmp)
-            (out / "session.json").write_text(json.dumps({"power": {"anchor": {"clock_stamps": {
+            (out / "session.json").write_text(json.dumps({"power": {"recorder_kind": "powermetrics", "anchor": {"clock_stamps": {
                 "sampling_started": {"epoch_s": 1000.0, "monotonic_before_s": 50.0},
                 "sampling_stopped": {"epoch_s": 1600.0, "monotonic_before_s": 650.0}}}}}))
             with patch.object(campaign.subprocess, "run",
@@ -1290,7 +1313,7 @@ class LargerDriftTests(unittest.TestCase):
                     'session': 'fixture', 'boot_id': 'boot', 'os_build': '25G83',
                     'start_drift_s': 2.3,  # what the collector measured
                     'network_time_provenance': provenance(),
-                    'power': {'anchor': {'status': 'bounded'}},
+                    'power': {'recorder_kind': 'powermetrics', 'anchor': {'status': 'bounded'}},
                     'interior': {'complete_support': True,
                                  'power': {'energy_j': {'rail_sum_w': 10, 'combined_w': 10}}}}))
                 (out / 'rounds.jsonl').write_text(json.dumps(good_round()) + '\n')
@@ -1348,7 +1371,7 @@ def stamped_envelope(directory, *, started=1000.0, stopped=1600.0):
     """An envelope directory whose session carries a capture window."""
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "session.json").write_text(json.dumps({"power": {"anchor": {"clock_stamps": {
+    (out / "session.json").write_text(json.dumps({"power": {"recorder_kind": "powermetrics", "anchor": {"clock_stamps": {
         "sampling_started": {"epoch_s": started, "monotonic_before_s": 50.0},
         "sampling_stopped": {"epoch_s": stopped, "monotonic_before_s": 650.0}}}}}))
     return out
@@ -1415,7 +1438,84 @@ class AttestationBudgetTests(FrozenExecutorTests):
         self.assertGreater(campaign.attestation_timeout_s(tight)
                            + campaign.cleanup_budget_s(tight),
                            tight['slot_pitch_s'] - tight['envelope_s'])
-        self.assertIn("start_drift_abort_s", PROTOCOL)
+        # Ruling 18 Q2: a TWO-POINT pin, because a one-point one (20 s gap
+        # only) is killed by `return ATTESTATION_TIMEOUT_FLOOR_S` and by
+        # nothing else.  `cleanup_budget_s` reads the module global at call
+        # time, so moving the reserve to 10 moves what the query is left:
+        # 10 s at the 20 s gap, and still the 5 s FLOOR at the 3 s gap.  The
+        # pair additionally kills `return CLEANUP_BUDGET_RESERVE_S`,
+        # `return max(FLOOR, RESERVE)` and the unfloored `gap -
+        # cleanup_budget_s` (which gives 2 at the 3 s gap).
+        with patch.object(campaign, "CLEANUP_BUDGET_RESERVE_S", 10):
+            self.assertEqual(campaign.attestation_timeout_s(PROTOCOL), 10)
+            self.assertEqual(campaign.attestation_timeout_s(
+                {**PROTOCOL, 'slot_pitch_s': 603}), 5)
+
+    @staticmethod
+    def _spend_the_whole_teardown_budget(stack, module):
+        """Make the teardown spend its budget on the harness's fake clock."""
+        real = module.cleanup_groups
+        def spend(*args, **kwargs):
+            result = real(*args, **kwargs)
+            if kwargs.get("exclude"):
+                module.time.now += kwargs["budget_s"]
+            return result
+        stack.enter_context(patch.object(module, "cleanup_groups", side_effect=spend))
+
+    def test_a_gap_under_six_seconds_pushes_every_spawn_late_by_six_minus_gap(self):
+        """Ruling 18 Q3 C3: what the sub-6 s band actually costs, executed.
+
+        Below a 6 s gap the two FLOORS (the teardown's 1 s and the query's
+        5 s) add to 6 and overrun the gap.  Both floors are spent here on the
+        harness's fake clock -- the teardown by `_spend_the_whole_teardown_
+        budget`, the query by `attest_burn=5`, which is what a query that
+        times out at its bound costs -- so the overrun is real work, not an
+        injected number.
+
+        The overrun is ``6 - gap`` per slot and it does NOT compound: the
+        collector's deadline is ABSOLUTE (`sample_quiet_predicate_evidence`
+        `deadline = scheduled + duration_s`), so a spawn that is late by d
+        captures for ``envelope_s - d`` and still ends at its scheduled end,
+        and the next slot inherits the same ``6 - gap`` and no more.  Both
+        halves are pinned below, because "the drift accumulates" and "the
+        drift is a constant per-slot lateness" call for different detectors.
+
+        At a 3 s gap the 3 s overrun is over the scaled 2 s abort bar, so the
+        night ends REFUSED at envelope 2 -- the FIRST eligible spawn
+        (envelope 01 follows the settle and tests no pitch).  At a 5 s gap
+        the 1 s overrun is under the bar, every one of the twelve slots is
+        late by exactly 1 s, and the abort never fires: the residual is then
+        a standing per-slot lateness that `start_drift_max_s` (10 s under v2)
+        is the only thing that would ever exclude.
+        """
+        tight = {**PROTOCOL, 'slot_pitch_s': 603, 'start_drift_abort_s': 2}
+        self.assertEqual(campaign.cleanup_budget_s(tight)
+                         + campaign.attestation_timeout_s(tight), 6)
+        rc, summary, outcome, refusals, calls, *_ = self.exercise(
+            protocol=tight, attest_burn=5, spy=self._spend_the_whole_teardown_budget)
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # Envelope 02 is the first spawn the pitch governs, and it never runs.
+        self.assertEqual(sum('collect' in cmd for cmd in calls), 1)
+        self.assertEqual([row['index'] for row in self.envelope_journal], [1, 2])
+        aborted = self.envelope_journal[-1]
+        self.assertEqual(aborted['abort'], 'start_drift_abort')
+        self.assertAlmostEqual(aborted['start_drift_s'], 6 - 3)
+        self.assertEqual(outcome['outcome'], 'refused')
+        self.assertIn('start_drift_abort: envelope 2', outcome['error'])
+        # A 5 s gap: the same 6 s of floors, a 1 s overrun, no abort, and the
+        # SAME 1 s on every later slot -- the lateness does not compound.
+        loose = {**PROTOCOL, 'slot_pitch_s': 605, 'start_drift_abort_s': 2}
+        self.assertEqual(campaign.cleanup_budget_s(loose)
+                         + campaign.attestation_timeout_s(loose), 6)
+        rc, summary, outcome, refusals, *_ = self.exercise(
+            protocol=loose, attest_burn=5, spy=self._spend_the_whole_teardown_budget)
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome['outcome'], 'complete')
+        self.assertEqual([round(row['start_drift_s'], 6) for row in self.envelope_journal],
+                         [0] + [6 - 5] * 11)
+        self.assertEqual([row.get('abort') for row in self.envelope_journal], [None] * 12)
+        self.assertLess(6 - 5, PROTOCOL['start_drift_max_s'])
 
     def test_the_bound_is_the_registrations_gap_and_a_timeout_keeps_the_schedule(self):
         # 620 - 600 = 20 s of gap, 15 s of it is the teardown's budget, and
@@ -1541,10 +1641,20 @@ class UnreadableSessionRecordTests(FrozenExecutorTests):
         self.assertEqual(sessions, [])
         self.assertEqual([row["network_time_attestation"] for row in self.envelope_journal],
                          ["asserted"] * 12)
-        # Nothing is retained.  With no session record the summary also loses
-        # the interior support, so the exclusion IT prints is that one; the
-        # attestation's own verdict is read off the journal row above.
-        self.assertTrue(all(v["excluded"] for v in summary["envelopes"]))
+        # Nothing is retained.  DEVIATION from ruling 18 Q3 C4, executed:
+        # the ruling dictates `assertIn("network_time_unattested",
+        # v["excluded"])`, and that assertion is RED here --
+        # `AssertionError: 'network_time_unattested' not found in
+        # ['incomplete_interior_support']`.  With the session record gone,
+        # `pilot_summary` fails its own read at the `try` and `continue`s
+        # with the interior exclusion BEFORE it ever reaches the attestation
+        # state, so the exclusion it prints is exactly that one and no other.
+        # The vacuous `assertTrue(all(...))` the ruling was right to reject
+        # is replaced by the specific list, and the attestation's own verdict
+        # is pinned on the journal row above (`asserted` x 12).
+        for v in summary["envelopes"]:
+            self.assertEqual(v["excluded"], ["incomplete_interior_support"])
+            self.assertIsNone(v["joules"])
         self.assertEqual(summary["retained"], 0)
 
 
@@ -1784,6 +1894,66 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
             self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                              ["network_time_unattested"])
 
+    def test_C8_a_NaN_in_the_session_record_asserts_the_envelope_not_the_night(self):
+        """Ruling 18 C8 (pre-existing): `json.loads` takes NaN, `dumps` will not.
+
+        A collector that wrote `NaN` anywhere in `session.json` produced a
+        record that parses and then cannot be written back under
+        `allow_nan=False`.  The `ValueError` that raises is not an `OSError`,
+        so it escaped `record_attestation` and `execute`'s outer handler
+        refused the NIGHT -- twelve envelopes lost to one envelope's
+        annotation.  Now it is the same withdrawal every other failed
+        rewrite gets.
+        """
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope-01"
+            out.mkdir()
+            (out / "session.json").write_text(
+                '{"session": "fixture", "interior": {"power": {"energy_j": NaN}}}')
+            before = (out / "session.json").read_bytes()
+            self.assertTrue(math.isnan(
+                json.loads(before)["interior"]["power"]["energy_j"]))
+            attestation = {"state": "authenticated", "matched_lines": 0}
+            self.assertFalse(campaign.record_attestation(out, attestation))
+            self.assertEqual(attestation["state"], "asserted")
+            self.assertTrue(attestation["reason"].startswith(
+                "session rewrite failed: ValueError: "), attestation["reason"])
+            self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                             ["network_time_unattested"])
+            # The collector's own bytes are kept, and no temporary survives.
+            self.assertEqual((out / "session.json").read_bytes(), before)
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["session.json"])
+
+    def test_R_C1_a_cleanup_that_raises_never_costs_the_night(self):
+        """Ruling 18 Q1: the withdrawal comes first, the cleanup cannot raise.
+
+        The rename fails and the removal of the complete `.tmp` it left
+        behind fails too (an immutable or root-owned temporary raises
+        `PermissionError`, which is an `OSError` this handler does not
+        re-enter).  Before the cure that second failure escaped
+        `record_attestation` with the state still `authenticated`, and
+        `execute`'s outer handler refused the whole night; now the envelope
+        is `asserted`, both failures are in the reason, and the collector's
+        own bytes are untouched.
+        """
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope-01"
+            out.mkdir()
+            (out / "session.json").write_text(json.dumps({"session": "fixture"}))
+            before = (out / "session.json").read_bytes()
+            attestation = {"state": "authenticated", "matched_lines": 0}
+            with patch.object(campaign.os, "replace", side_effect=OSError("disk full")), \
+                    patch.object(Path, "unlink", side_effect=PermissionError("immutable")):
+                self.assertFalse(campaign.record_attestation(out, attestation))
+            self.assertEqual(attestation["state"], "asserted")
+            self.assertIn("session rewrite failed", attestation["reason"])
+            self.assertIn("OSError: disk full", attestation["reason"])
+            self.assertIn("not removed", attestation["reason"])
+            self.assertIn("PermissionError: immutable", attestation["reason"])
+            self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
+                             ["network_time_unattested"])
+            self.assertEqual((out / "session.json").read_bytes(), before)
+
     def test_a_night_whose_annotations_cannot_land_still_finishes(self):
         def spy(stack, module):
             stack.enter_context(patch.object(module.os, "replace",
@@ -1798,6 +1968,12 @@ class SessionRewriteFailureTests(FrozenExecutorTests):
             self.assertNotIn("attestation", session["network_time_provenance"])
         self.assertEqual([row["network_time_attestation"] for row in self.envelope_journal],
                          ["asserted"] * 12)
+        # Ruling 18 C7: the reason is DURABLE.  `session.json` keeps the
+        # collector's unannotated bytes on this path, so the journal row is
+        # the only place a harvester can read why the envelope was withdrawn.
+        for row in self.envelope_journal:
+            self.assertIn("session rewrite failed: PermissionError: read-only envelope",
+                          row["network_time_attestation_reason"])
         self.assertEqual([v["excluded"] for v in summary["envelopes"]],
                          [["network_time_unattested"]] * 12)
         self.assertEqual(summary["retained"], 0)
@@ -1858,7 +2034,7 @@ class AttestationWindowRecordTests(unittest.TestCase):
                 out = Path(tmp) / "envelope-01"
                 out.mkdir()
                 (out / "session.json").write_text(json.dumps(
-                    {"power": {"anchor": {"clock_stamps": {
+                    {"power": {"recorder_kind": "powermetrics", "anchor": {"clock_stamps": {
                         "sampling_started": {"epoch_s": 1000.0, "monotonic_before_s": 50.0},
                         "sampling_stopped": {"epoch_s": stopped,
                                              "monotonic_before_s": 650.0}}}}}))
@@ -1870,3 +2046,779 @@ class AttestationWindowRecordTests(unittest.TestCase):
                 self.assertIsNone(attestation["window_epoch_s"])
                 self.assertEqual(campaign.attestation_exclusions(attestation["state"]),
                                  ["network_time_unattested"])
+
+
+class BenchReplayFailClosedTests(unittest.TestCase):
+    """R5-R7, R9: the bench replay can never be labelled evidence.
+
+    Cold gate #3 ruling 10 Q7; brief D6.  Three independent refusal points
+    exist (arm, run, harvest); the arm one lives in `run_night` and is pinned
+    in that module's tests.  These are the run and harvest ones, plus the
+    driver's own verdict and the proof that an ordinary night's children never
+    see the switch.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+    STUB = ROOT / "scripts/bench_replay_systemsetup_stub.py"
+    # A slot whose finalisation tail really ran: the fields `verdict` admits
+    # a slot on (execution lens 17b B2/S3).  Drift figures are per-test.
+    SLOT = {"collector_exit": 0, "cleanup_proven": True, "anchor_status": "bounded",
+            "interior_complete_support": True, "attestation_state": "authenticated",
+            # The rest is what `markdown()` prints; none of it is admissible
+            # input, and every value here is inert.
+            "scheduled_mono_s": 0.0, "actual_mono_s": 0.0, "cleanup_wall_s": 0.02,
+            "network_time_attestation_wall_s": 0.8, "tail_s": 1.0,
+            "recorder_kind": "replay", "label_shift": "auto", "label_shift_s": 36497,
+            "frames_written": 253, "source_plist_sha256": "0" * 64,
+            "written_stream_sha256": "0" * 64}
+
+    def test_R5_a_replay_recorder_refuses_the_whole_night_at_the_summary(self):
+        from unittest.mock import patch
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            # The executor reads the variable to stamp the outcome document;
+            # the bench driver is what sets it in the real run.
+            stack.enter_context(patch.dict(
+                module.os.environ, {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}))
+
+        rc, summary, outcome, refusals, _calls, _control, sessions = \
+            harness.exercise(recorder_kind="replay", spy=spy)
+        # HARVEST: the summary is replaced outright, not annotated.
+        self.assertEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual(summary["evidence_status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual(summary["retained"], [])
+        self.assertIsNone(summary["s_upper"])
+        self.assertEqual([row["index"] for row in summary["replay_recorder_envelopes"]],
+                         list(range(1, 13)))
+        # RUN: the outcome document names the recorder, the night is refused,
+        # and the process exits 2.
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(outcome["error"], "replay_recorder")
+        self.assertEqual(outcome["recorder_kind"], "replay")
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # And the drift measurement -- the only thing the bench is for --
+        # survives the refusal intact, because the rows are appended inside
+        # the slot loop, before anything the refusal touches.
+        self.assertEqual([row["index"] for row in harness.envelope_journal], list(range(1, 13)))
+        for row in harness.envelope_journal:
+            self.assertIn("start_drift_s", row)
+            self.assertIn("cleanup_wall_s", row)
+            self.assertIn("network_time_attestation_wall_s", row)
+        self.assertEqual([s["power"]["recorder_kind"] for s in sessions], ["replay"] * 12)
+        # L3 (17a N2): and no ENERGY survives the override, so the document's
+        # own claim that no number can be lifted from it is true.  The
+        # schedule-side diagnostics the bench exists for are what remain.
+        self.assertEqual(summary["sizing_pairs"], [])
+        self.assertEqual(summary["adjacent_pairs"], [])
+        self.assertIsNone(summary["pair_sd_j"])
+        self.assertIsNone(summary["single_envelope_sd_j"])
+        self.assertIsNone(summary["unfiltered_single_envelope_sd_j"])
+        self.assertIsNone(summary["max_abs_delta_j"])
+        self.assertIsNone(summary["block_two_stop"])
+        for v in summary["envelopes"]:
+            self.assertIsNone(v["joules"])
+            self.assertIsNone(v["combined_joules"])
+            self.assertIsNone(v["interior"])
+            self.assertIn("start_drift_s", v)
+            self.assertIn("busy_cores", v)
+
+    def test_R5_counterfactual_the_same_night_under_powermetrics_completes(self):
+        # The kill.  One field changes and the night is a night again: rc 0,
+        # outcome complete, twelve retained, a real spread status.
+        rc, summary, outcome, refusals, *_ = FrozenExecutorTests().exercise(
+            recorder_kind="powermetrics")
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome["outcome"], "complete")
+        self.assertEqual(outcome["recorder_kind"], "powermetrics")
+        self.assertEqual(summary["status"], "SPREAD_RECORDED")
+        self.assertEqual(summary["retained"], 12)
+        self.assertEqual(refusals, 0)
+        self.assertNotIn("replay_recorder_envelopes", summary)
+
+    def test_R5_a_session_with_no_recorder_kind_at_all_also_refuses(self):
+        # Fail-closed: an absent marker is not a claim of production
+        # provenance.  A session that never said what recorded it cannot be
+        # admitted on the strength of not having said "replay".
+        rc, summary, outcome, _refusals, _calls, _control, sessions = \
+            FrozenExecutorTests().exercise(recorder_kind=None)
+        # The variant is a power RECORD that omits the key -- a recorder was
+        # built and did not say what it was -- never `power: null`, which is
+        # the early-refusal path L1 exempts.
+        for session in sessions:
+            self.assertIsInstance(session["power"], dict)
+            self.assertNotIn("recorder_kind", session["power"])
+        self.assertEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual([row["recorder_kind"] for row in summary["replay_recorder_envelopes"]],
+                         [None] * 12)
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(rc, 2)
+
+    def test_X3_a_replay_night_whose_journals_are_lost_still_refuses(self):
+        """Execution lens 17b S1: the harvest check failed OPEN on a bad read.
+
+        `recorder_kind` was read AFTER a `try` that `continue`s on any
+        `OSError`/`ValueError` from `session.json` OR `rounds.jsonl`, so
+        twelve sessions each saying `recorder_kind: "replay"` with their
+        `rounds.jsonl` absent produced an ordinary INCONCLUSIVE summary,
+        `evidence_status: "PROVISIONAL"`, no `replay_recorder_envelopes`, and
+        `execute` did not refuse: rc 0.  The replay variable is NOT set here,
+        so the refusal can only come from the summary's own reading.
+        """
+        from unittest.mock import patch
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            real = module.pilot_summary
+            def lose_the_journals(directory, protocol, envelopes, observer_cpu_s=None):
+                for path in sorted(directory.glob("envelope-*/rounds.jsonl")):
+                    path.unlink()
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, "pilot_summary",
+                                             side_effect=lose_the_journals))
+
+        rc, summary, outcome, refusals, _calls, _control, sessions = \
+            harness.exercise(recorder_kind="replay", spy=spy)
+        self.assertEqual([s["power"]["recorder_kind"] for s in sessions], ["replay"] * 12)
+        self.assertEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual(summary["evidence_status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertEqual([row["index"] for row in summary["replay_recorder_envelopes"]],
+                         list(range(1, 13)))
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        # X7: the outcome document reads the SESSIONS too, so it says `replay`
+        # even though this executor's environment never carried the switch.
+        self.assertEqual(outcome["recorder_kind"], "replay")
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # Each envelope still reports the read that failed, on its own terms.
+        for v in summary["envelopes"]:
+            self.assertIn("incomplete_interior_support", v["excluded"])
+
+    def test_L2_a_replay_night_that_wrote_no_session_still_refuses(self):
+        """Lane contract lens 17a S2: the RUN marker is a refusal point too.
+
+        `pilot_summary`'s refusal reads the session records, so it is silent
+        when none of them can be read: a feeder that crashes on a malformed
+        archive has every collector killed at `envelope_s + 30` before it
+        writes, and the night used to end `partial` with rc 0 -- ordinary
+        INCONCLUSIVE prose in `summary.md` -- with
+        `evidence_outcome.recorder_kind: "replay"` as the only tell.  The
+        executor's own environment now refuses it, independent of what any
+        child managed to write.
+        """
+        from unittest.mock import patch
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            stack.enter_context(patch.dict(
+                module.os.environ, {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}))
+            real = module.pilot_summary
+            def nothing_readable(directory, protocol, envelopes, observer_cpu_s=None):
+                for path in sorted(directory.glob("envelope-*/*.json*")):
+                    path.unlink()
+                for path in sorted(directory.glob("envelope-*/rounds.jsonl")):
+                    path.unlink()
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, "pilot_summary",
+                                             side_effect=nothing_readable))
+
+        rc, summary, outcome, refusals, _calls, _control, sessions = harness.exercise(spy=spy)
+        # Nothing readable, so the SUMMARY cannot see a replay recorder ...
+        self.assertEqual(sessions, [])
+        self.assertEqual(summary["status"], "INCONCLUSIVE")
+        self.assertNotIn("replay_recorder_envelopes", summary)
+        # ... and the night is refused anyway, by the executor's environment.
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(outcome["recorder_kind"], "replay")
+        self.assertEqual(rc, 2)
+        self.assertEqual(refusals, 1)
+        # The drift rows the bench exists for survive the refusal.
+        self.assertEqual([row["index"] for row in harness.envelope_journal],
+                         list(range(1, 13)))
+
+    def test_D1_a_bench_abort_keeps_its_own_error_beside_the_replay_marker(self):
+        """Delta lenses (execution SHOULD-FIX 1, contract N1): no clobber.
+
+        The bench sets the replay switch on EVERY run, so `execute`'s
+        environment-side refusal overwrote whatever `error` already held.  A
+        night aborted at envelope 02 by `start_drift_abort` -- the exact
+        failure the bench replay exists to detect -- reached
+        `evidence_outcome.json` and `write_refusal` reading `replay_recorder`
+        alone, and the abort text survived only as the journal row's `abort`
+        key.  Both texts now travel together, the specific one first.
+
+        The night is the ruled C3 pitch-603 harness: a 3 s gap against 6 s of
+        floors (teardown 1 s spent by `_spend_the_whole_teardown_budget`,
+        query 5 s spent by `attest_burn`), so envelope 02 -- the first spawn
+        the pitch governs -- is 3 s late against a 2 s abort bar.
+        """
+        from unittest.mock import patch
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+        tight = {**PROTOCOL, 'slot_pitch_s': 603, 'start_drift_abort_s': 2}
+
+        def spy(stack, module):
+            stack.enter_context(patch.dict(
+                module.os.environ, {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}))
+            AttestationBudgetTests._spend_the_whole_teardown_budget(stack, module)
+
+        rc, _summary, outcome, refusals, *_ = harness.exercise(
+            protocol=tight, attest_burn=5, spy=spy)
+        self.assertEqual((rc, refusals), (2, 1))
+        self.assertEqual(outcome["outcome"], "refused")
+        self.assertEqual(harness.envelope_journal[-1]["abort"], "start_drift_abort")
+        # BOTH, in this order: the diagnostic the bench came for, then the
+        # marker that says no frame here is evidence.
+        self.assertIn("start_drift_abort: envelope 2", outcome["error"])
+        self.assertTrue(outcome["error"].endswith("; " + campaign.REPLAY_REFUSAL_REASON),
+                        outcome["error"])
+        # The counterfactual at 9e7061be, executed on the same helper: an
+        # unconditional assignment keeps only the marker.
+        self.assertEqual(campaign.REPLAY_REFUSAL_REASON, "replay_recorder")
+        self.assertNotEqual(outcome["error"], campaign.REPLAY_REFUSAL_REASON)
+        # A night with nothing more specific to say still says exactly the
+        # marker (the ruled L2 shape), and a night both refusal points fire
+        # on never says it twice (R5's ordinary bench case).
+        self.assertEqual(campaign.replay_refusal_error(None),
+                         campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(campaign.replay_refusal_error(""),
+                         campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(campaign.replay_refusal_error(campaign.REPLAY_REFUSAL_REASON),
+                         campaign.REPLAY_REFUSAL_REASON)
+        self.assertEqual(outcome["error"].count(campaign.REPLAY_REFUSAL_REASON), 1)
+
+    def test_L1_a_real_night_with_a_power_null_envelope_is_not_a_replay(self):
+        """Lane contract lens 17a S1: an early refusal is not a replay.
+
+        `collect` initialises `session["power"] = None` and only replaces it
+        with the recorder's metadata once a recorder was BUILT, so an
+        envelope that refused on the network-time provenance path -- before
+        any recorder existed -- writes `power: null`.  Reading
+        `(session.get("power") or {}).get("recorder_kind")` turned that null
+        into "does not say powermetrics" and discarded the WHOLE night as a
+        bench replay: twelve envelopes, `retained: []`, rc 2, under a reason
+        that is false.  The night here is a real one (the replay variable is
+        absent) whose envelope 07 refused early; it keeps its own exclusion
+        and the other eleven keep their verdict.
+        """
+        from unittest.mock import patch
+        harness = FrozenExecutorTests()
+
+        def spy(stack, module):
+            real = module.pilot_summary
+            def refuse_envelope_seven(directory, protocol, envelopes, observer_cpu_s=None):
+                path = directory / "envelope-07" / "session.json"
+                session = json.loads(path.read_text())
+                session["power"] = None
+                path.write_text(json.dumps(session))
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, "pilot_summary",
+                                             side_effect=refuse_envelope_seven))
+
+        rc, summary, outcome, refusals, _calls, _control, _sessions = harness.exercise(spy=spy)
+        self.assertNotEqual(summary["status"], campaign.REPLAY_NEVER_EVIDENCE)
+        self.assertNotIn("replay_recorder_envelopes", summary)
+        self.assertEqual(summary["evidence_status"], "PROVISIONAL")
+        self.assertEqual(rc, 0)
+        self.assertEqual(outcome["outcome"], "complete")
+        self.assertEqual(outcome["recorder_kind"], "powermetrics")
+        self.assertEqual(refusals, 0)
+        # Envelope 07 is excluded on its OWN terms and nothing else is.
+        by_index = {v["index"]: v for v in summary["envelopes"]}
+        self.assertIn("clock_anchor_unresolved", by_index[7]["excluded"])
+        self.assertEqual([v["index"] for v in summary["envelopes"] if v["excluded"]], [7])
+        self.assertEqual(summary["retained"], 11)
+
+    def test_R9_no_child_of_an_ordinary_night_ever_sees_the_replay_switch(self):
+        """R9, rebuilt to construct its own condition (execution lens 17b S4).
+
+        The test used to run an ordinary night and assert the switch was in
+        none of its thirteen child environments -- true only because the
+        shell it ran in happened to be clean.  Run from a shell carrying the
+        variable the whole module went red (`env
+        EVIDENCE_POWER_RECORDER_REPLAY=… python3 -m unittest …` ->
+        "unexpectedly found"), so it could only ever fail for the wrong
+        reason.  Both halves are now built from environment COPIES:
+
+        (a) the ARM side, with the variable PRESENT: the driver's own
+            child-environment derivation raises rather than popping, so no
+            night can be armed from a shell carrying it -- which is why (b)
+            is a property of nights and not of this machine;
+        (b) the RUN side, under a SCRUBBED copy: every one of the thirteen
+            children of an ordinary night lacks the key.
+        """
+        from unittest.mock import patch
+        from scripts import sample_quiet_predicate_evidence as sampler
+        from tests.test_night_gate import make_plan
+        from tests.test_run_night import _load_driver
+        driver = _load_driver()
+        self.assertEqual(driver.REPLAY_RECORDER_ENV, sampler.REPLAY_ENV)
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            # (a) present -> the arm refuses, whatever this shell carries.
+            with patch.dict(os.environ,
+                            {sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"}):
+                with self.assertRaises(ValueError) as caught:
+                    driver._chain_environment(make_plan(), Path(tmp) / "night")
+            self.assertIn("never runs a replay recorder", str(caught.exception))
+
+        # (b) scrubbed -> the night runs and no child sees the key.  The copy
+        # is built by removing the key from whatever this shell has, so the
+        # assertion holds from a carrying shell too.
+        scrubbed = {k: v for k, v in os.environ.items() if k != sampler.REPLAY_ENV}
+        with patch.dict(os.environ, scrubbed, clear=True):
+            self.assertNotIn(sampler.REPLAY_ENV, os.environ)
+            harness = FrozenExecutorTests()
+            rc, *_ = harness.exercise()
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(harness.popen_envs), 13)
+        for environment in harness.popen_envs:
+            self.assertNotIn(sampler.REPLAY_ENV, environment)
+            self.assertIn(campaign.NETWORK_TIME_RECORD_ENV, environment)
+
+    def test_R6_the_systemsetup_stub_refuses_without_the_variable(self):
+        from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
+        from scripts import sample_quiet_predicate_evidence as sampler
+        argv = [str(self.STUB), "-n", str(self.STUB), "-setusingnetworktime", "off"]
+        bare = {k: v for k, v in os.environ.items() if k != sampler.REPLAY_ENV}
+        without = subprocess.run(argv, capture_output=True, text=True, env=bare, timeout=30)
+        # The exact shape of a toggle that did not happen.
+        self.assertEqual(without.returncode, 2)
+        self.assertEqual(without.stdout, "")
+        # The kill: the guard is what produces that shape.  With the variable
+        # set, the very same argv prints the line the chain's imported
+        # comparator demands and exits 0.
+        with_variable = subprocess.run(
+            argv, capture_output=True, text=True, timeout=30,
+            env={**bare, sampler.REPLAY_ENV: "/Users/edr/night-archive/pilot"})
+        self.assertEqual(with_variable.returncode, 0)
+        self.assertEqual(with_variable.stdout, EXPECTED_NETWORK_TIME_OFF_STDOUT)
+        # And a refused toggle refuses the NIGHT: `establish_network_time_off`
+        # is the production function, run here with both executable constants
+        # rebound to the stub, exactly as the bench driver rebinds them.
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(campaign, "SUDO", str(self.STUB)), \
+                patch.object(campaign, "SYSTEMSETUP", str(self.STUB)), \
+                patch.dict(os.environ, bare, clear=True):
+            with self.assertRaises(ValueError) as caught:
+                campaign.establish_network_time_off(Path(tmp))
+            record = json.loads((Path(tmp) / campaign.NETWORK_TIME_CONTROL_BASENAME).read_text())
+        self.assertIn("network time OFF not established", str(caught.exception))
+        self.assertEqual(record["off"]["exit_code"], 2)
+        self.assertEqual(record["off"]["stdout"], "")
+
+    def test_L4_the_drivers_own_guards_each_refuse_what_they_name(self):
+        """Lane contract lens 17a N3: the four refusals ahead of the night.
+
+        `verdict` was the only part of the driver with a regression.  These
+        are the guards that run BEFORE any collector is spawned, each driven
+        through its own seam: no real `launchctl`, no real `git`, no night.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import bench_replay_start_drift as bench
+
+        # 1. A loaded night agent.  The bench never runs beside one, and a
+        # census that could not be taken is not a claim that none is loaded.
+        loaded = "-\t0\tcom.joulewise.night.qpe01-pilot-n1-20260922-0217\n12\t0\tcom.apple.Finder\n"
+        with patch.object(bench, "run_text", return_value=(0, loaded)):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_no_night_agent()
+        self.assertIn("com.joulewise.night.qpe01-pilot-n1-20260922-0217", str(caught.exception))
+        with patch.object(bench, "run_text", return_value=(1, "")):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_no_night_agent()
+        self.assertIn("cannot prove no night agent is loaded", str(caught.exception))
+        # The counterfactual: an ordinary machine passes the same guard.
+        with patch.object(bench, "run_text", return_value=(0, "12\t0\tcom.apple.Finder\n")):
+            self.assertEqual(bench.require_no_night_agent(), [])
+
+        # 2. A dirty tree, and a HEAD that is not the sha the replay is pinned
+        # to: either way the run's sha would not name the bytes it ran.
+        def fake_git(dirty, head):
+            def git(*arguments):
+                if arguments[0] == "status":
+                    return " M joulewise/quiet_predicate_campaign.py\n" if dirty else ""
+                return head + "\n"
+            return git
+        with patch.object(bench, "git", fake_git(True, "a" * 40)):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_clean_head()
+        self.assertIn("working tree is not clean", str(caught.exception))
+        with patch.object(bench, "git", fake_git(False, "a" * 40)):
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.require_clean_head("b" * 8)
+            self.assertEqual(bench.require_clean_head("a" * 8), "a" * 40)
+        self.assertIn("not the expected", str(caught.exception))
+
+        # 3. A smoke may never be filed under the ruled artifact's name: the
+        # bar comes from the 20 s gap and the smoke scales the gap away.
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            report = {"kind": "smoke", "night_dir": str(Path(tmp) / "night")}
+            ruled = Path(tmp) / f"2026-09-22{bench.RULED_ARTIFACT_SUFFIX}"
+            args = SimpleNamespace(raw=None, artifact=str(ruled))
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.write_outputs(report, args)
+            self.assertIn("a smoke never writes the ruled artifact name",
+                          str(caught.exception))
+            self.assertFalse(ruled.exists())
+            # The counterfactual: the same smoke under any other name writes.
+            args.artifact = str(Path(tmp) / "bench-replay-smoke.md")
+            report["slots"], report["verdict"] = [], {"status": "FAIL", "statement": "none",
+                "max_session_start_drift_s": None, "session_bar_s": 0.5,
+                "session_slots_over_bar": [], "escalate_chain_pass_session_fail": False}
+            report.update({"head": "a" * 40, "clean_tree": True, "schema": bench.SCHEMA,
+                           "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s",
+                                                       "settle_s", "envelopes")},
+                           "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                           "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                           "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                           "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                           "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                           "custody_root": tmp, "machine_start": {"uptime": "", "pgrep_claude": 0},
+                           "machine_end": {"uptime": "", "pgrep_claude": 0}})
+            raw, artifact = bench.write_outputs(report, args)
+            self.assertTrue(artifact.exists())
+
+        # 4. The plan id carries the ruled prefix and the root is the bench
+        # root -- never the night custody root, which has its own refusal.
+        self.assertEqual(bench.PLAN_ID_PREFIX, "bench-replay-")
+        self.assertEqual(bench.BENCH_ROOT, Path.home() / "night-bench")
+        self.assertEqual(bench.CUSTODY_ROOT_FORBIDDEN, Path.home() / "night-custody")
+        seen = {}
+        def stop_at_build_plan(plan_id, head, custody_root):
+            seen.update(plan_id=plan_id, custody_root=custody_root)
+            raise bench.BenchRefusal("stopped before staging")
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.object(bench, "require_clean_head", return_value="a" * 40), \
+                patch.object(bench, "require_no_night_agent", return_value=[]), \
+                patch.object(bench, "BENCH_ROOT", Path(tmp) / "night-bench"), \
+                patch.object(bench, "build_plan", side_effect=stop_at_build_plan):
+            args = SimpleNamespace(archive=tmp, smoke=True, label_shift="none",
+                                   expect_sha=None, transaction_merge=None)
+            with self.assertRaises(bench.BenchRefusal):
+                bench.execute_bench(args)
+        self.assertTrue(seen["plan_id"].startswith("bench-replay-"))
+        self.assertEqual(seen["custody_root"].parent.name, "night-bench")
+        # And with the bench root moved ONTO the custody root, the run refuses
+        # before it builds a plan at all.
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.object(bench, "require_clean_head", return_value="a" * 40), \
+                patch.object(bench, "require_no_night_agent", return_value=[]), \
+                patch.object(bench, "BENCH_ROOT", bench.CUSTODY_ROOT_FORBIDDEN), \
+                patch.object(bench, "build_plan", side_effect=stop_at_build_plan):
+            args = SimpleNamespace(archive=tmp, smoke=True, label_shift="none",
+                                   expect_sha=None, transaction_merge=None)
+            with self.assertRaises(bench.BenchRefusal) as caught:
+                bench.execute_bench(args)
+        self.assertIn("never writes under the night custody root", str(caught.exception))
+
+    def test_R7_the_bench_verdict_fails_on_a_single_slot_over_the_bar(self):
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.12 + i * 0.001,
+                     session_start_drift_s=0.26 + i * 0.001) for i in range(1, 13)]
+        passing = bench.verdict(rows, protocol)
+        self.assertEqual(passing["status"], "PASS")
+        self.assertLessEqual(passing["max_chain_start_drift_s"], bench.START_DRIFT_BAR_S)
+        self.assertFalse(passing["escalate_chain_pass_session_fail"])
+        # One slot at 0.6 s -- inside the night's 2 s in-chain abort, over the
+        # ruled 0.5 s bench bar.  The two bars are sequential, not
+        # alternatives, so this FAILS.
+        over = [dict(row) for row in rows]
+        over[6]["chain_start_drift_s"] = 0.6
+        failing = bench.verdict(over, protocol)
+        self.assertEqual(failing["status"], "FAIL")
+        self.assertEqual(failing["slots_over_bar"], [7])
+        self.assertIn("NOT shown", failing["statement"])
+        # The counterfactual, executed: compare the SAME journal against the
+        # 2 s abort threshold instead of the ruled bar and it passes -- which
+        # is the mistake this regression exists to kill.
+        self.assertEqual(bench.verdict(over, protocol, bar_s=2)["status"], "PASS")
+        self.assertEqual(bench.START_DRIFT_BAR_S, 0.5)
+
+    def test_X1_a_chain_pass_with_a_session_figure_over_the_bar_escalates(self):
+        """Execution lens 17b B1: a split is a THIRD status, and exits 3.
+
+        A269 ruling 10 A1: the session-level figure runs ~0.12-0.16 s above
+        the chain-level one, and a split verdict is escalated, never passed.
+        It used to be a boolean beside `status: "PASS"`: the headline printed
+        `**PASS**` and `main()` returned 0.  The lens's own live smoke hit
+        it -- chain max 0.479 s under the bar, session max 0.734 s over it,
+        exit 0 -- on a run that is launched detached and unattended, where
+        the exit code and the headline are what a magistrate reads.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import bench_replay_start_drift as bench
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.4,
+                     session_start_drift_s=0.7 if i in (1, 3) else 0.3)
+                for i in range(1, 13)]
+        result = bench.verdict(rows, {"envelopes": 12})
+        self.assertEqual(result["status"], "ESCALATE")
+        self.assertTrue(result["escalate_chain_pass_session_fail"])
+        self.assertEqual(result["session_slots_over_bar"], [1, 3])
+        self.assertEqual(result["max_chain_start_drift_s"], 0.4)
+        self.assertEqual(result["max_session_start_drift_s"], 0.7)
+        self.assertIn("ESCALATED to the magistrate", result["statement"])
+        # The headline a reader sees.
+        report = {"schema": bench.SCHEMA, "kind": "full", "head": "a" * 40,
+                  "clean_tree": True, "slots": rows, "verdict": result,
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("**ESCALATE**", text)
+        self.assertNotIn("**PASS**", text)
+        # And the exit code the unattended run leaves behind.
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp, \
+                patch.object(bench, "execute_bench", return_value=report), \
+                patch.object(bench, "write_outputs",
+                             return_value=(Path(tmp) / "raw.json", Path(tmp) / "a.md")):
+            self.assertEqual(bench.main(["--archive", tmp]), 3)
+            # The counterfactual, executed: the same run with both figures
+            # under the bar exits 0, and one chain figure over it exits 1.
+            report["verdict"] = bench.verdict(
+                [dict(row, session_start_drift_s=0.3) for row in rows], {"envelopes": 12})
+            self.assertEqual(report["verdict"]["status"], "PASS")
+            self.assertEqual(bench.main(["--archive", tmp]), 0)
+            report["verdict"] = bench.verdict(
+                [dict(row, chain_start_drift_s=0.9, session_start_drift_s=0.3)
+                 for row in rows], {"envelopes": 12})
+            self.assertEqual(report["verdict"]["status"], "FAIL")
+            self.assertEqual(bench.main(["--archive", tmp]), 1)
+
+    def test_D2_a_fail_that_is_also_over_the_session_bar_reports_the_split(self):
+        """Delta execution lens SHOULD-FIX 2: the split is not a status.
+
+        `escalate_chain_pass_session_fail` is by construction
+        `status == "ESCALATE"`, so a run that is over the session bar AND
+        carries an inadmissible slot came back FAIL with that boolean FALSE
+        and a statement that never mentioned the session figure at all: a
+        reader of `slot_defects` plus that boolean concluded the
+        session-level figure had been fine, on a run launched detached and
+        unattended.  `session_bar_exceeded` is now independent of the status,
+        and the statement names the over-bar session slots whenever there
+        are any.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
+                     session_start_drift_s=0.9 if i == 4 else 0.2) for i in range(1, 13)]
+        rows[6]["collector_exit"] = 1
+        result = bench.verdict(rows, protocol)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["session_slots_over_bar"], [4])
+        self.assertTrue(result["session_bar_exceeded"])
+        # The counterfactual, executed: the flag this run USED to be read
+        # through stays False, because the status is FAIL and not ESCALATE.
+        self.assertFalse(result["escalate_chain_pass_session_fail"])
+        self.assertIn("slot 7 collector_exit=1", result["statement"])
+        self.assertIn("the session-level bar is exceeded too (max 0.900 s > 0.5 s "
+                      "on slots [4])", result["statement"])
+        # The same split on an otherwise clean run is the ESCALATE the
+        # statement already named, and the flag holds there too.
+        clean = bench.verdict([dict(row, collector_exit=0) for row in rows], protocol)
+        self.assertEqual(clean["status"], "ESCALATE")
+        self.assertTrue(clean["session_bar_exceeded"])
+        self.assertTrue(clean["escalate_chain_pass_session_fail"])
+        # A run under both bars sets neither.
+        under = bench.verdict([dict(row, collector_exit=0, session_start_drift_s=0.2)
+                               for row in rows], protocol)
+        self.assertEqual(under["status"], "PASS")
+        self.assertFalse(under["session_bar_exceeded"])
+        # And the artifact a magistrate reads carries the split on its own line.
+        report = {"schema": bench.SCHEMA, "kind": "full", "head": "a" * 40,
+                  "clean_tree": True, "slots": rows, "verdict": result,
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("Session bar exceeded (true whatever the status): True", text)
+        self.assertIn("**FAIL**", text)
+
+    def test_X2_a_slot_whose_finalisation_tail_never_ran_is_not_admissible(self):
+        """Execution lens 17b B2: the bench times the TAIL, so the tail must run.
+
+        `verdict` read only the two drift figures.  In all three slots of the
+        lens's live smoke the anchor was `unknown`
+        (`clock_fit_span_insufficient`) and `interior_complete_support` was
+        False -- `align_frames` returned nothing, so the per-round
+        integration and the interior reduction, the expensive part of the
+        tail the bench exists to time, did not run -- and the bench returned
+        PASS.  A slot is now admissible only with `collector_exit == 0`,
+        `cleanup_proven`, `anchor_status == "bounded"` and
+        `interior_complete_support`; the smoke, whose 60 s envelope cannot
+        resolve an anchor at all, is exempt from the last two and says so.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
+                     session_start_drift_s=0.2) for i in range(1, 13)]
+        self.assertEqual(bench.verdict(rows, protocol)["status"], "PASS")
+        broken = [dict(row) for row in rows]
+        broken[4]["collector_exit"] = 1
+        broken[5]["cleanup_proven"] = False
+        broken[6]["anchor_status"] = "unknown"
+        broken[7]["interior_complete_support"] = False
+        result = bench.verdict(broken, protocol)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual([(d["index"], d["field"], d["value"]) for d in result["slot_defects"]],
+                         [(5, "collector_exit", 1), (6, "cleanup_proven", False),
+                          (7, "anchor_status", "unknown"),
+                          (8, "interior_complete_support", False)])
+        for fragment in ("slot 5 collector_exit=1", "slot 6 cleanup_proven=False",
+                         "slot 7 anchor_status='unknown'"):
+            self.assertIn(fragment, result["statement"])
+        # Four defective slots is one over the cap the statement spells out,
+        # so the fourth is summarised rather than named (fix round 2 item 3,
+        # delta execution lens NIT 1); `slot_defects` above still carries it.
+        self.assertIn("… and 1 more", result["statement"])
+        self.assertNotIn("slot 8 interior_complete_support=False", result["statement"])
+        # The smoke is exempt from the two fields a 60 s envelope cannot
+        # produce -- and from nothing else.
+        smoke = bench.verdict(broken, protocol, smoke=True)
+        self.assertEqual([(d["index"], d["field"]) for d in smoke["slot_defects"]],
+                         [(5, "collector_exit"), (6, "cleanup_proven")])
+        unresolved = [dict(row, anchor_status="unknown", interior_complete_support=False)
+                      for row in rows]
+        self.assertEqual(bench.verdict(unresolved, protocol, smoke=True)["status"], "PASS")
+        self.assertEqual(bench.verdict(unresolved, protocol)["status"], "FAIL")
+        # And the smoke's artifact says why it was allowed to.
+        report = {"schema": bench.SCHEMA, "kind": "smoke", "head": "a" * 40,
+                  "clean_tree": True, "slots": unresolved,
+                  "verdict": bench.verdict(unresolved, protocol, smoke=True),
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("`anchor_status` CANNOT resolve at this envelope length", text)
+        report["kind"] = "full"
+        self.assertNotIn("CANNOT resolve at this envelope length", bench.markdown(report))
+
+    def test_D3_an_admissibility_only_fail_opens_with_the_defect_and_stays_short(self):
+        """Delta execution lens NIT 1: the leading clause is the real defect.
+
+        An admissibility-only FAIL -- every chain figure under the bar, the
+        journal complete, the tails that did not run -- opened with "max <=
+        0.5 s NOT shown: over=[] missing=[] recorded=12/12", which reports
+        the bar as unmet when it was met and hides the defect behind three
+        empty fields; twelve unresolved slots then appended 24 clauses to
+        that one line, which is what the artifact headline and the terminal
+        both print.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1, session_start_drift_s=0.2,
+                     anchor_status="unknown", interior_complete_support=False)
+                for i in range(1, 13)]
+        result = bench.verdict(rows, protocol)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(len(result["slot_defects"]), 24)
+        statement = result["statement"]
+        self.assertTrue(statement.startswith("12/12 slots NOT admissible"), statement)
+        self.assertNotIn("NOT shown", statement)
+        self.assertIn("… and 21 more", statement)
+        self.assertLess(len(statement), 600)
+        # The counterfactual, executed: the same rows with ONE chain figure
+        # over the bar keep the drift-first opening, because then the bar
+        # really was not met.
+        over = [dict(row) for row in rows]
+        over[2]["chain_start_drift_s"] = 0.9
+        self.assertTrue(bench.verdict(over, protocol)["statement"].startswith(
+            "max <= 0.5 s NOT shown: over=[3]"))
+        # Three defective slots is at the cap: all of them are named, nothing
+        # is summarised.
+        few = [dict(row, anchor_status="bounded", interior_complete_support=True)
+               for row in rows]
+        for i in (0, 1, 2):
+            few[i]["cleanup_proven"] = False
+        statement = bench.verdict(few, protocol)["statement"]
+        self.assertTrue(statement.startswith("3/12 slots NOT admissible"), statement)
+        self.assertNotIn("more", statement.split("under the bar")[0])
+        for index in (1, 2, 3):
+            self.assertIn(f"slot {index} cleanup_proven=False", statement)
+
+    def test_X5_a_slewed_slot_is_expected_on_the_bench_an_asserted_one_is_not(self):
+        """Execution lens 17b S3: the bench never turns network time off.
+
+        The `systemsetup` stub toggles nothing, so `timed` keeps applying
+        corrections for the whole run; the lens's slot 2 came back
+        `slew_attested` on a real, live slew.  On a night that is an
+        exclusion; on the bench it is the expected state, and the attestation
+        walls the bench reports are live-log-with-slews costs.  `asserted` is
+        a defect: the query did not run, so its cost was not measured.
+        """
+        from scripts import bench_replay_start_drift as bench
+        protocol = {"envelopes": 12}
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1,
+                     session_start_drift_s=0.2,
+                     attestation_state="slew_attested" if i == 2 else "authenticated")
+                for i in range(1, 13)]
+        passing = bench.verdict(rows, protocol)
+        self.assertEqual(passing["status"], "PASS")
+        self.assertEqual(passing["slot_defects"], [])
+        for state in ("asserted", None, "unknown"):
+            with self.subTest(state=state):
+                broken = [dict(row) for row in rows]
+                broken[3]["attestation_state"] = state
+                result = bench.verdict(broken, protocol)
+                self.assertEqual(result["status"], "FAIL")
+                self.assertEqual(result["slot_defects"],
+                                 [{"index": 4, "field": "attestation_state", "value": state,
+                                   "required": "authenticated or slew_attested"}])
+                self.assertIn(f"slot 4 attestation_state={state!r}", result["statement"])
+        # The smoke does not exempt it either: a query that did not run is a
+        # query whose cost was not measured, at any envelope length.
+        broken = [dict(row) for row in rows]
+        broken[3]["attestation_state"] = "asserted"
+        self.assertEqual(bench.verdict(broken, protocol, smoke=True)["status"], "FAIL")
+        # And the artifact says why a slew is not a failure here.
+        report = {"schema": bench.SCHEMA, "kind": "full", "head": "a" * 40,
+                  "clean_tree": True, "slots": rows, "verdict": passing,
+                  "protocol": {k: 0 for k in ("envelope_s", "slot_pitch_s", "settle_s",
+                                              "envelopes")},
+                  "cleanup_budget_s": 15, "attestation_timeout_s": 5,
+                  "registration_sha256": "0" * 64, "bench_script_sha256": "0" * 64,
+                  "archive": "/dev/null", "outcome": "refused", "returncode": 2,
+                  "summary_status": campaign.REPLAY_NEVER_EVIDENCE,
+                  "outcome_recorder_kind": "replay", "plan_id": "bench-replay-x",
+                  "custody_root": "/tmp", "machine_start": {"uptime": "", "pgrep_claude": 0},
+                  "machine_end": {"uptime": "", "pgrep_claude": 0}}
+        text = bench.markdown(report)
+        self.assertIn("The bench NEVER turns network time off", text)
+        self.assertIn("`slew_attested` and `authenticated` alike", text)
+        self.assertIn("Only `asserted`", text)
+
+    def test_R7_a_journal_short_of_the_registered_slot_count_never_passes(self):
+        from scripts import bench_replay_start_drift as bench
+        rows = [dict(self.SLOT, index=i, chain_start_drift_s=0.1, session_start_drift_s=0.2)
+                for i in range(1, 12)]
+        result = bench.verdict(rows, {"envelopes": 12})
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["slots_recorded"], 11)
