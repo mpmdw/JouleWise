@@ -16,6 +16,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import math
 import os
 import plistlib
 import re
@@ -43,6 +44,7 @@ from joulewise.night_gate import (  # noqa: E402
     PlanError,
     agent_census,
 )
+from joulewise.arm_retry import terminal_zero_capture_refusal  # noqa: E402
 from scripts.run_night import (  # noqa: E402
     COURIER_DEADLINE_S,
     COURIER_LOCK_FRESH_S,
@@ -772,6 +774,34 @@ def plan_completion_epoch(plan: NightPlan) -> float:
     return plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S
 
 
+def _terminal_refusal_result(night: Path, storage: Storage) -> Mapping[str, Any] | None:
+    try:
+        result = json.loads(storage.read_text(night / "result.json"))
+    except (OSError, ValueError, TypeError):
+        return None
+    return result if isinstance(result, dict) and result.get("verdict") == "REFUSED" else None
+
+
+def _delivered_zero_capture_refusal(
+    plan: NightPlan, now_epoch_s: float, storage: Storage
+) -> bool:
+    night = Path(plan.custody_root) / "night"
+    if not storage.exists(night / "courier.sent") or storage.exists(night / "chain.started"):
+        return False
+    result = _terminal_refusal_result(night, storage)
+    if result is None or result.get("plan_id") != plan.plan_id:
+        return False
+    ended = result.get("ended_epoch_s")
+    if (not isinstance(ended, (int, float)) or isinstance(ended, bool)
+            or not math.isfinite(ended) or ended > now_epoch_s):
+        return False
+    try:
+        receipt = json.loads(storage.read_text(night / "receipt.json"))
+    except (OSError, ValueError, TypeError):
+        return False
+    return terminal_zero_capture_refusal(result, receipt).allowed
+
+
 def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool:
     """File 15 row 3, including completion, courier, dead-man, and chain rules."""
 
@@ -783,6 +813,8 @@ def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> b
     )
     if chain_open:
         return True
+    if _delivered_zero_capture_refusal(plan, now_epoch_s, storage):
+        return False
     if now_epoch_s <= plan_completion_epoch(plan):
         return True
     if storage.exists(night / "courier.sent"):
@@ -798,7 +830,11 @@ def plan_is_armed(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool
     night = Path(plan.custody_root) / "night"
     if storage.exists(night / "chain.started") and not storage.exists(night / "chain.exited"):
         return True
+    if _delivered_zero_capture_refusal(plan, now_epoch_s, storage):
+        return False
     if storage.exists(night / "courier.sent"):
+        if _terminal_refusal_result(night, storage) is not None:
+            return now_epoch_s <= plan_completion_epoch(plan)
         return False
     return now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S
 

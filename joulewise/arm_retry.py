@@ -18,6 +18,11 @@ RETRY_INTERVAL_S = 60
 # interval beyond ordering. R1 repeats that lead on EVERY attempt.
 NOTICE_LEAD_S = 0
 UNCERTAIN_STATES = ("CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN")
+ZERO_CAPTURE_MACHINE_REFUSALS = frozenset({
+    "night_refused_not_quiet", "night_refused_bind_expired",
+    "night_refused_agent_present", "night_refused_hid_idle",
+    "night_refused_boot_clock",
+})
 RETRY_CAUSES = {
     "arm_idle_interactive": "Only an otherwise idle interactive agent session blocked the arm-time census. Its complete descendant process tree must establish no test, measurement or capture work; unknown activity is not idle. Repeat the unchanged census after the session closes; never signal a foreign process. A173 alone owns any future stub exemption.",
     "arm_notice_mismatch": "The notice fingerprint or reviewed head differs from the approved candidate. Recheck preserved candidate bytes and all fixed inputs, then send a new notice. Changed science, custody or unexplained candidate bytes are evidence drift, not a notice-only fault.",
@@ -194,6 +199,50 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
         return Decision(False, "malformed_evidence")
 
 
+def terminal_zero_capture_refusal(result, receipt) -> Decision:
+    """Read the shared terminal result and receipt fence before delivery checks.
+
+    Live gate receipts do not yet have the harvested C5 zero_capture_evidence
+    block. A positive capture claim in any measured row still vetoes release.
+    """
+    try:
+        reason = result["aborted_reason"]
+        if (result["verdict"] != "REFUSED" or receipt["verdict"] != "REFUSED"
+                or reason not in ZERO_CAPTURE_MACHINE_REFUSALS
+                or receipt["refusal"]["reason"] != reason):
+            return Decision(False, "not_zero_capture_machine_refusal")
+        plan_id = result["plan_id"]
+        if not isinstance(plan_id, str) or not plan_id or receipt["plan_id"] != plan_id:
+            return Decision(False, "handoff_plan_mismatch")
+        if result["chain_exit_code"] is not None or result["chain_sha256"] is not None:
+            return Decision(False, "chain_may_have_started")
+        rows = receipt["conditions"]
+        if not isinstance(rows, list) or not any(
+                isinstance(row, dict) and row.get("condition_id") == "C5" for row in rows):
+            return Decision(False, "missing_zero_capture_evidence")
+        for row in rows:
+            measured = row["measured"]
+            if not isinstance(measured, dict):
+                return Decision(False, "missing_zero_capture_evidence")
+            for evidence in (measured, measured.get("zero_capture_evidence", {})):
+                if not isinstance(evidence, dict):
+                    return Decision(False, "missing_zero_capture_evidence")
+                if (("chain_started_absent" in evidence
+                     and evidence["chain_started_absent"] is not True)
+                        or ("reservation_absent" in evidence
+                            and evidence["reservation_absent"] is not True)
+                        or evidence.get("session_id") is not None
+                        or ("capture_writer_ran" in evidence
+                            and evidence["capture_writer_ran"] is not False)
+                        or ("instrument_validation_empty" in evidence
+                            and evidence["instrument_validation_empty"] is not True)
+                        or evidence.get("captured_envelopes", 0) != 0):
+                    return Decision(False, "start_reservation_or_capture_not_absent")
+        return Decision(True, "terminal_zero_capture_refusal")
+    except (KeyError, TypeError, ValueError):
+        return Decision(False, "missing_zero_capture_evidence")
+
+
 def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
     """D-182 eligibility for ONE new plan, never authority to re-arm old bytes.
 
@@ -207,19 +256,13 @@ def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
     from the terminal write, install close and every observed NO.
     retry_allowed retains its same-candidate semantics.
     """
-    eligible = {"night_refused_not_quiet", "night_refused_bind_expired", "night_refused_agent_present",
-                "night_refused_hid_idle", "night_refused_boot_clock"}
+    terminal = terminal_zero_capture_refusal(result, receipt)
+    if not terminal.allowed:
+        return terminal
     try:
-        reason = result["aborted_reason"]
-        if (result["verdict"] != "REFUSED" or receipt["verdict"] != "REFUSED"
-                or reason not in eligible or receipt["refusal"]["reason"] != reason):
-            return Decision(False, "not_zero_capture_machine_refusal")
         plan_id = result["plan_id"]
-        if (not isinstance(plan_id, str) or not plan_id
-                or receipt["plan_id"] != plan_id or delivery["plan_id"] != plan_id):
+        if delivery["plan_id"] != plan_id:
             return Decision(False, "handoff_plan_mismatch")
-        if (result["chain_exit_code"] is not None or result["chain_sha256"] is not None):
-            return Decision(False, "chain_may_have_started")
         rows = [row for row in receipt["conditions"] if row["condition_id"] == "C5"]
         if len(rows) != 1:
             return Decision(False, "missing_zero_capture_evidence")

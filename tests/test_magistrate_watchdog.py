@@ -180,6 +180,95 @@ class WatchdogTestCase(unittest.TestCase):
 
 
 class FenceTests(WatchdogTestCase):
+    def write_terminal_refusal(self, plan: wd.NightPlan, *,
+                               reason: str = "night_refused_not_quiet",
+                               delivered: bool = True,
+                               started: bool = False,
+                               capture_in_receipt: bool = False) -> Path:
+        night = Path(plan.custody_root) / "night"
+        night.mkdir(exist_ok=True)
+        (night / "result.json").write_text(json.dumps({
+            "plan_id": plan.plan_id, "verdict": "REFUSED", "aborted_reason": reason,
+            "chain_exit_code": None, "chain_sha256": None,
+            "ended_epoch_s": plan.t0_epoch_s + 1,
+        }), encoding="utf-8")
+        (night / "receipt.json").write_text(json.dumps({
+            "plan_id": plan.plan_id, "verdict": "REFUSED",
+            "refusal": {"reason": reason},
+            "conditions": [{"condition_id": "C5", "measured":
+                            {"capture_writer_ran": capture_in_receipt}}],
+        }), encoding="utf-8")
+        (night / "refusal.json").write_text("{}", encoding="utf-8")
+        if delivered:
+            (night / "courier.sent").write_text("sent\n", encoding="utf-8")
+        if started:
+            (night / "chain.started").write_text("{}", encoding="utf-8")
+        return night
+
+    def test_delivered_zero_capture_refusal_releases_both_holds_early(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan)
+        now = self.base.timestamp()
+        self.assertLess(now, wd.plan_completion_epoch(plan))
+        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
+        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
+
+    def test_refusal_without_courier_holds_until_delivery(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        night = self.write_terminal_refusal(plan, delivered=False)
+        now = self.base.timestamp()
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
+        (night / "courier.sent").write_text("sent\n", encoding="utf-8")
+        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
+
+    def test_started_chain_refusal_keeps_full_span(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        night = self.write_terminal_refusal(plan, started=True)
+        (night / "chain.exited").write_text("{}", encoding="utf-8")
+        now = self.base.timestamp()
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        self.assertTrue(wd.plan_span_active(plan, wd.plan_completion_epoch(plan), self.harness.storage))
+        self.assertTrue(wd.plan_is_armed(plan, wd.plan_completion_epoch(plan), self.harness.storage))
+        self.assertFalse(wd.plan_span_active(plan, wd.plan_completion_epoch(plan) + 1,
+                                             self.harness.storage))
+        (night / "chain.started").unlink()
+        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
+
+    def test_registration_refusal_and_receipt_capture_keep_hold(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        night = self.write_terminal_refusal(plan, reason="night_refused_registration")
+        now = self.base.timestamp()
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
+        self.write_terminal_refusal(plan, reason="night_refused_class_unbuilt")
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        self.write_terminal_refusal(plan, capture_in_receipt=True)
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        (night / "result.json").unlink()
+        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
+        self.write_terminal_refusal(plan)
+        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
+
+    def test_early_release_reaches_standdown_and_launch_filter(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan)
+        now = self.base.timestamp()
+        self.assertIsNone(wd.relevant_standdown_plan([plan], now, self.harness.storage))
+        directory = wd.Path.home() / "Library/LaunchAgents"
+        directory.mkdir(parents=True)
+        (directory / "com.joulewise.night.plist").write_bytes(plistlib.dumps({
+            "ProgramArguments": ["--plan", str(Path(plan.custody_root) / "night_plan.json")],
+        }))
+        self.assertIsNone(wd.installed_agent_fence(self.base, self.harness.storage))
+        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("LAUNCHING", decision.state)
+
     def test_retired_v1_is_ignored_once_and_only_v2_plan_sets_span(self) -> None:
         valid = self.make_plan(t0=self.base.timestamp() + wd.PLAN_LEAD_S, name="valid-v2")
         retired_root = self.temp / "retired-v1"
