@@ -260,3 +260,130 @@ route**; only 2100's are compared byte for byte with its archive.
   per the magistrate's ruling it is left as ruled and held for the block-two
   consult. The summary's `observer_definition` and `observer_floor_components_role`
   state the sibling fact beside it.
+
+## Fix round 2
+
+Written by the fix-round-2 seat (Opus 5.5, 2026-09-23), branch
+`feat/2026-09-23-qpe01-v3-round2`, linked worktree `JouleWise-wt-v3r2-7a0f14bd`,
+starting from 0e5578fb (the head the delta re-audit reviewed). The items are the
+delta re-audit's D1, D2, D3 and N-b
+(`/Users/edr/.claude/jobs/7a0f14bd/tmp/lens-opus-delta-round1.md`). Files
+touched: `joulewise/quiet_predicate_campaign.py`, `joulewise/evidence_night.py`,
+`tests/test_quiet_predicate_campaign.py`, `tests/test_evidence_night.py` and
+this file; nothing else.
+
+Two words used below: a **mutation** is a deliberate re-break of the code,
+applied only in a throwaway copy, to see whether a test notices; the test
+**kills** it if it fails. The **in-chain verdict** is the executor's
+per-envelope decision taken while the night runs; the **summary** is
+`pilot_summary`, re-derived from disk afterwards.
+
+| Item | Commit | What changed |
+|---|---|---|
+| R1 (D1) | 0fd965fe | The in-chain verdict runs `require_observer_marked` on the envelope's joined journal rows BEFORE `non_observer_busy`. A journal whose consumers carry no observer mark now raises a plain `ValueError` ("recorder journal carries no observer-marked consumer; ancestry marking failed"), so the refusal document's reason is `night_probe_error`, never `non_observer_process_busy`. |
+| R2 (D2) | 1226e8d9 | New test `ObserverFloorTests.test_ruling_10_regression_1_on_marked_copies_of_both_archived_journals`: ruling 10 §5 regression 1 on both archived nights through production `pilot_summary` under v3, with consumers whose command basename is in {powermetrics, Python, top, sudo, ps, pgrep, sysctl} marked in a /tmp copy of each journal (ruling 10 §4's explicit diagnostic assumption, standing in for the ancestry marks the archives lack). `archive_summary` gained the optional basename argument. |
+| R3 (D3) | fac33045 | New test `ObserverFloorTests.test_the_companion_above_the_smallest_share_is_never_a_stop_cause`: whole 29.9 s and load recorder 0.5 s per 600 s envelope, so the ruled floor (0.04983 cores) is below the 0.05-core `smallest_holdable_share` and the reported companion (0.05067) is above it; `block_two_stop` must carry no `observer_floor_above_smallest_holdable_share` cause. |
+| R4 (N-b) | 308f24ac | `evidence_night.check` builds one list of failing checks with the same test that decides `passed`, and the generic refusal text lists only that list, so a `machine_quiet: skipped` row is never named as failed. |
+
+### Counterfactual evidence
+
+**R1.** The new test `NonObserverAbortTests.test_a_marking_failure_in_chain_is_a_probe_error_never_a_busy_daemon`
+takes the regression-3 journal (fseventsd at 6 busy cores in envelopes 01 and
+02 of the six-second scaled protocol) with every `observer` mark cleared. It
+asserts: `refusal.json` reason `night_probe_error`; the refusal detail and the
+outcome error carry the marking-failure text; the detail does not name
+`NonObserverAbort`; no envelope row, executor or summary, names `fseventsd` as
+an offender; the chain stops at `envelope-01`. Its second half is the
+counterfactual pair: the same journal WITH the power sampler marked still
+aborts with reason `non_observer_process_busy` naming "fseventsd pid 341 36.0
+core-s (bar 30)".
+
+Run at 0e5578fb (test added, production code not yet changed):
+```
+AssertionError: 'non_observer_process_busy' != 'night_probe_error'
+Ran 1 test in 0.472s
+FAILED (failures=1)
+```
+After the change, the same scenario (probe through the test harness):
+```
+PROBE rc 2 summary present True envelope rows 0
+PROBE refusal night_probe_error | evidence chain refused: ValueError: recorder journal carries no observer-marked consumer; ancestry marking failed
+PROBE outcome error ValueError: recorder journal carries no observer-marked consumer; ancestry marking failed
+```
+The test harness (`FrozenExecutorTests.exercise`) now returns `summary = None`
+when a night writes no `summary.json`, so a night whose summary itself refused
+fails on the refusal assertion rather than on a missing file.
+
+**R2.** Output of production `pilot_summary` under v3 on the marked /tmp
+copies (the numbers the test pins):
+```
+2100 INCONCLUSIVE retained 0
+  1 ['non_observer_process_busy'] [('fseventsd', 575.6), ('mediaanalysisd', 528.1)]
+  2..12 ['non_observer_process_busy'] fseventsd only, 544.7 .. 575.5 core-s
+0217 REPLAY_NEVER_EVIDENCE; non_observer_process_busy on 0 of 12 envelopes
+```
+The test asserts each night's status (21:00 `INCONCLUSIVE`, 02:17
+`REPLAY_NEVER_EVIDENCE`) so neither half can pass vacuously, keeping fix round
+1's F15 guard-status assertions (unchanged in
+`test_both_archived_nights_re_derive_to_the_corrected_floor`). It is skipped by
+name ("the 2026-09-22 harvest archives are not on this machine") when either
+archive is absent. Mutation probes, each patched in for one run of this test
+only:
+```
+PROBE rule excludes nothing -> KILLED (status no longer INCONCLUSIVE)
+PROBE observer mark ignored (every consumer counted) -> KILLED AssertionError: {'powermetrics'} is not false
+```
+
+**R3.** Mutation M9 (the delta re-audit's: the companion fed to `stop_branch`
+at `quiet_predicate_campaign.py:1343`) applied in a scratch copy of HEAD at
+`/tmp/r2-7a0f14bd-m9`:
+```
+1343:    stop = stop_branch(s_upper=s_upper, observer_floor=observer_floor_including_load_recorder, protocol=protocol)
+AssertionError: 'observer_floor_above_smallest_holdable_share' unexpectedly found in ['observer_floor_above_smallest_holdable_share']
+Ran 2 tests in 0.167s
+FAILED (failures=1)
+```
+The failure is the new test's; the older sibling test still passes under M9,
+as the delta re-audit found. The new test also asserts that its fixture
+straddles the share (floor below 0.05, companion above), so it cannot become
+vacuous by a fixture edit.
+
+**R4.** New test `LifecycleTests.test_the_generic_refusal_names_only_failed_checks_never_a_skipped_one`:
+courier absent from PATH, chain not an evidence night. Run at 0e5578fb (test
+added, production code not yet changed):
+```
+AssertionError: False is not true : pre-arm checks failed: courier, machine_quiet; see /private/tmp/lifecycle-…/lifecycle/check.json
+Ran 1 test in 1.422s
+FAILED (failures=1)
+```
+After: the text reads "pre-arm checks failed: courier; see …".
+
+### Deviations and observations
+
+1. **R4 wording.** The brief asks for the text to list checks whose verdict is
+   "fail". The code lists the checks that fail the same test `passed` uses
+   (verdict "pass", or `machine_quiet` "skipped"). The check vocabulary today
+   is exactly pass / fail / skipped, and only `machine_quiet` is ever skipped,
+   so the two lists are identical now; the shared test also guarantees that
+   any future verdict that blocks arming is named rather than producing an
+   empty list.
+2. **R1 envelope row.** The guard raises before envelope 01's row is appended
+   to `evidence_envelopes.jsonl`, so on a marking failure that journal is
+   empty (the envelope directory and its session remain). Nothing is admitted
+   either way; the refusal document and the outcome error both carry the
+   cause. Recorded so a reader of that file on such a night is not surprised.
+3. The seat report's §7 open question "F16 in the chain" is closed by R1.
+
+### Test tail
+
+```
+$ python3 -B -m unittest tests.test_quiet_predicate_campaign tests.test_evidence_night
+...
+evidence_end outcome=complete cleanup_proven=True network_time_restored=True
+...............................................................................................................
+----------------------------------------------------------------------
+Ran 265 tests in 315.778s
+
+OK
+```
+No test was skipped: both harvest archives are on this machine.
