@@ -5373,7 +5373,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-22). Latest report: [T38t — 2026-09-22: pilot night qpe01-pilot-n1-20260922-0217 harvested (GO, INCONCLUSIVE 2/12; seven clock-anchor refusals traced to timed slews against the v3 anchor's 5 ms absolute caps); agents uninstalled; A267–A269 registered](docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-23). Latest report: [T38t — 2026-09-22: pilot night qpe01-pilot-n1-20260922-0217 harvested (GO, INCONCLUSIVE 2/12; seven clock-anchor refusals traced to timed slews against the v3 anchor's 5 ms absolute caps); agents uninstalled; A267–A269 registered](docs/process_traces/2026-09-22-activation-22666c9f/01-qpe01-pilot-n1-20260922-0217-harvest-record.md).
 
 ### [ED-EXTERNAL]
 
