@@ -1867,3 +1867,161 @@ class BenchReplayRecorderSeamTests(unittest.TestCase):
             # first endpoint is thousands of seconds from now, so the live
             # bracket the deriver intersects with cannot contain it.
             self.assertGreater(abs(labels(source.read_bytes())[0].timestamp() - time_module.time()), 2)
+
+    def archived_elapsed_ns(self):
+        """The fixture's three archived ``elapsed_ns``, read off its bytes."""
+        import re
+        data = (self.FIXTURE / "envelope-01" / "raw"
+                / "powermetrics-idle-1.plist").read_bytes()
+        return [int(m) for m in re.findall(
+            rb"<key>elapsed_ns</key><integer>(\d+)</integer>", data)]
+
+    def feed_watching_arrivals(self, tmp, label_shift, wanted, patience_s=6.0):
+        """Run the feeder for real and time when each frame becomes VISIBLE.
+
+        Returns ``(spawn_monotonic, [arrival monotonic per frame], sidecar)``.
+        A frame has arrived when its terminating NUL is in the output file:
+        that is the same event the collector's own first-complete-frame poll
+        waits on.  Timed on the PARENT's monotonic clock, which on macOS
+        shares the child's epoch (both are mach_absolute_time); the 20 ms
+        tolerance the assertions carry covers process-start skew.
+        """
+        import signal as signal_module
+        import time as time_module
+        out = Path(tmp) / "raw" / "powermetrics-idle-1.plist"
+        sidecar = Path(str(out) + ".replay.json")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        source = self.FIXTURE / "envelope-01" / "raw" / "powermetrics-idle-1.plist"
+        argv = [sys.executable, "-B", str(self.FEEDER), "--source", str(source),
+                "--session", str(self.FIXTURE / "envelope-01" / "session.json"),
+                "--out", str(out), "--interval-ms", "100",
+                "--label-shift", label_shift, "--sidecar", str(sidecar)]
+        arrivals = []
+        spawn = time_module.monotonic()
+        process = subprocess.Popen(argv, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        try:
+            deadline = spawn + patience_s
+            while len(arrivals) < wanted and time_module.monotonic() < deadline:
+                seen = out.read_bytes().count(b"\0") if out.exists() else 0
+                now = time_module.monotonic()
+                while len(arrivals) < min(seen, wanted):
+                    arrivals.append(now)
+                if len(arrivals) < wanted:
+                    time_module.sleep(0.002)
+        finally:
+            process.send_signal(signal_module.SIGTERM)
+            self.assertEqual(process.wait(timeout=30), 0)
+        return spawn, arrivals, sidecar
+
+    def test_R7_no_frame_is_written_before_its_own_accumulation_has_elapsed(self):
+        """The defect: frame 1 written at the digest pre-pass, not at 257 ms.
+
+        A powermetrics frame carries the span it accumulated over, and the
+        production anchor deriver enforces the matching causality -- the
+        collector's pre-spawn stamp plus the first frame's ``elapsed_ns`` may
+        not fall after its first-parse stamp, or the anchor comes back
+        ``unresolved`` with ``clock_stamp_invalid``
+        (`joulewise/uncertainty_evidence.py`, ``k_pre_spawn`` vs
+        ``k_first_parse``).  The feeder wrote frame 1 the instant its digest
+        pre-pass ended (~55 ms), so on a QUIET machine the collector parsed a
+        frame claiming 257 ms of accumulation 165 ms after spawn, and the
+        first two slots of the full bench replay both failed that way.  Under
+        load the parse was slow enough to pass by accident, which is why no
+        lens saw it.
+
+        Kill (executed): delete the first frame's wait -- pace frames 2..n
+        from the first write as before -- and the first assertion goes red.
+        """
+        elapsed = self.archived_elapsed_ns()
+        self.assertEqual(len(elapsed), 3)
+        with tempfile.TemporaryDirectory() as tmp:
+            spawn, arrivals, sidecar = self.feed_watching_arrivals(tmp, "none", 2)
+            self.assertEqual(len(arrivals), 2, "the first two frames never arrived")
+            # Frame 1 is not visible before its OWN elapsed_ns has passed.
+            self.assertGreaterEqual(arrivals[0] - spawn, elapsed[0] / 1e9 - 0.02)
+            # And frame 2 not before frames 1+2 have, i.e. the cadence is
+            # paced from spawn, not from whenever frame 1 happened to land.
+            self.assertGreaterEqual(arrivals[1] - spawn,
+                                    (elapsed[0] + elapsed[1]) / 1e9 - 0.02)
+            record = json.loads(sidecar.read_text())
+            # The feeder's own clock says the same thing, with no skew in it.
+            self.assertEqual(record["first_frame_elapsed_s"], elapsed[0] / 1e9)
+            self.assertGreaterEqual(record["first_write_delay_s"],
+                                    record["first_frame_elapsed_s"])
+            self.assertEqual(record["first_write_delay_s"],
+                             record["first_write_monotonic_s"] - record["spawn_monotonic_s"])
+            # A pre-pass slower than the first interval is recorded, not
+            # refused; on this machine it is ~55 ms against 257 ms, so zero.
+            self.assertGreaterEqual(record["first_write_late_s"], 0.0)
+
+    def test_R7_the_live_recorder_stamps_satisfy_the_deriver_causality(self):
+        """The same inequality, in the production deriver's own terms.
+
+        Not the feeder's sidecar this time but the collector's stamps: a real
+        `ReplayRecorder` spawns the feeder, waits for the first complete frame
+        exactly as it does on a night, and the pair of stamps the anchor
+        deriver reads must satisfy
+        ``pre_spawn.monotonic_before_s + elapsed_ns[0]/1e9 <=
+        first_parse.monotonic_after_s``.  Before the fix, on a quiet machine,
+        it did not.
+        """
+        import time as time_module
+        elapsed = self.archived_elapsed_ns()
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+                os.environ, {harness.REPLAY_ENV: str(self.FIXTURE)}, clear=False):
+            os.environ.pop(harness.REPLAY_LABEL_SHIFT_ENV, None)
+            clock = harness.Clock()
+            recorder = harness.ReplayRecorder(
+                Path(tmp) / "powermetrics-idle-1.plist", 100, clock,
+                clock.monotonic() + 30)
+            recorder.start()
+            time_module.sleep(1.0)
+            recorder.finish()
+        stamps = recorder.stamps
+        self.assertLessEqual(
+            stamps["pre_spawn"].monotonic_before_s + elapsed[0] / 1e9,
+            stamps["first_parse"].monotonic_after_s,
+            "the deriver would call this stream clock_stamp_invalid")
+
+    def test_R7_auto_mode_keeps_the_archived_cadence_after_the_first_wait(self):
+        # The delta lens's mutation B: with the cadence base left at spawn while
+        # frame 1 waits for the shifted wall target (up to a whole second of K
+        # rounding), frames 2..n are already overdue and fire back to back
+        # (0.0002 s apart, measured) while every other test stays green.  The
+        # re-seat of the base to `due - elapsed[0]` is what keeps the archived
+        # cadence, and this pin is what keeps the re-seat.  Tolerance +-0.08 s
+        # against a measured spread of 0.237-0.279 s; never R3's 0.25 s.
+        elapsed = self.archived_elapsed_ns()
+        # Launch phase is what decides whether the defect shows: the feeder
+        # computes K = ceil(now - endpoint) right after spawn (before any
+        # wait), and frame 1 then waits 1 - frac(now - endpoint) seconds for
+        # the shifted wall target when that is later than its causality
+        # floor.  Only a wait longer than elapsed[1] + elapsed[2] (~0.52 s)
+        # leaves frames 2..3 overdue under the mutation.  Spawn when
+        # frac(now - endpoint) has just passed a whole second (0.01-0.04), so
+        # the wait is ~0.95 s: the kill is deterministic, not a coin toss.
+        import time as time_module
+        session = json.loads((self.FIXTURE / "envelope-01" / "session.json").read_text())
+        endpoint = session["power"]["anchor"]["first_sample_end_point_epoch_s"]
+        deadline = time_module.monotonic() + 1.5
+        while not (0.01 <= (time_module.time() - endpoint) % 1.0 <= 0.04):
+            if time_module.monotonic() > deadline:
+                break
+            time_module.sleep(0.002)
+        with tempfile.TemporaryDirectory() as tmp:
+            spawn, arrivals, sidecar = self.feed_watching_arrivals(tmp, "auto", 3)
+            record = json.loads(sidecar.read_text())
+        self.assertEqual(len(arrivals), 3)
+        self.assertGreaterEqual(record["first_write_delay_s"], 0.6,
+                                "launch phase did not produce the long first wait this pin needs")
+        cumulative = 0.0
+        for index, (arrival, elapsed_ns) in enumerate(zip(arrivals, elapsed)):
+            cumulative += elapsed_ns / 1e9
+            self.assertGreaterEqual(arrival - spawn, cumulative - 0.02,
+                                    f"frame {index + 1} arrived before its own accumulation")
+        for index in (1, 2):
+            delta = arrivals[index] - arrivals[index - 1]
+            self.assertAlmostEqual(delta, elapsed[index] / 1e9, delta=0.08,
+                                   msg=f"frame {index + 1} cadence lost under auto")
+        self.assertEqual(record["label_shift"], "auto")
+        self.assertGreaterEqual(record["first_write_delay_s"], record["first_frame_elapsed_s"] - 0.02)

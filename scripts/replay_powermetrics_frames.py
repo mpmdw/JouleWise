@@ -13,10 +13,25 @@ XML plist documents separated by NUL bytes; each document carries an integer
 ``elapsed_ns`` (that frame's own interval) and a whole-second UTC ``<date>``
 timestamp.  This feeder reads the source ONE CHUNK AT A TIME -- the archived
 plists are ~130 MB each and are read-only inputs that are never copied whole
-into memory -- splits the chunks on NUL, and writes frame *i* to ``--out`` at
-the instant ``first_write + (cumulative elapsed_ns of frames 2..i)``, flushing
-after every frame so the collector's first-complete-frame poll and its final
-parse see exactly the byte stream a live recorder would have produced.
+into memory -- splits the chunks on NUL, and writes frame *i* to ``--out`` at the instant
+``spawn + (cumulative elapsed_ns of frames 1..i)`` -- where ``spawn`` is the
+feeder's own start instant on its own monotonic clock -- flushing after every
+frame so the collector's first-complete-frame poll and its final parse see
+exactly the byte stream a live recorder would have produced.
+
+The FIRST frame is paced too, and that is not a nicety.  A powermetrics frame
+carries its own ``elapsed_ns`` -- the span it accumulated over -- and a real
+recorder cannot emit such a frame before that span has actually passed since
+it was spawned.  The production anchor deriver enforces exactly that causality
+(`joulewise/uncertainty_evidence.py`, ``k_pre_spawn`` vs ``k_first_parse``):
+the collector's pre-spawn stamp plus the first frame's ``elapsed_ns`` must not
+lie after the collector's first-parse stamp, or the anchor is `unresolved`
+with ``clock_stamp_invalid``.  This feeder used to write frame 1 the moment
+its digest pre-pass finished (~55 ms), so on a quiet machine the collector
+parsed a frame claiming 257 ms of accumulation 165 ms after spawn, and the
+first two slots of the full bench replay both came back `clock_stamp_invalid`.
+Waiting ``elapsed_ns[0]`` before the first write, and pacing everything after
+it from ``spawn`` rather than from that first write, is the cure.
 
 Two label modes (brief D4):
 
@@ -66,9 +81,9 @@ ELAPSED_PATTERN = re.compile(rb"<key>elapsed_ns</key><integer>(\d+)</integer>")
 DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 CHUNK_BYTES = 1 << 20
 # Two poll quanta.  WRITE_POLL_S bounds how late a frame can be written: the
-# target instant is recomputed from the FIRST write on every iteration, so the
-# error is one quantum, not a sum of them, and 5 ms against a ~260 ms archived
-# interval is under 2 %.  HOLD_POLL_S is the coarser quantum used only after
+# target instant is recomputed from the SPAWN instant on every iteration, so
+# the error is one quantum, not a sum of them, and 5 ms against a ~260 ms
+# archived interval is under 2 %.  HOLD_POLL_S is the coarser quantum used only after
 # the source is exhausted, where nothing is being paced and the only question
 # is how promptly SIGTERM is honoured against a teardown budget in seconds.
 WRITE_POLL_S = 0.005
@@ -181,7 +196,11 @@ def write_sidecar(path, payload):
     Path(path).write_text(json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n")
 
 
-def run(args):
+def run(args, spawn_monotonic_s=None):
+    # ``spawn_monotonic_s`` is the feeder's OWN start instant, taken by
+    # ``main`` before any work at all (the digest pre-pass included), because
+    # every frame's due instant is measured from it.
+    spawn_monotonic_s = time.monotonic() if spawn_monotonic_s is None else spawn_monotonic_s
     stop = [False]
 
     def stopping(_signum, _frame):
@@ -195,16 +214,32 @@ def run(args):
     out_digest = hashlib.sha256()
     interval_ns = int(round(args.interval_ms * 1e6))
     frames = source_frames(args.source)
-    written, writes, labels, since_first_ns = 0, [], [], 0
+    written, writes, labels, cumulative_ns, first_due = 0, [], [], 0, None
+    # Frame i is due ``pacing_base + (cumulative elapsed_ns of frames 1..i)``.
+    # The base is the spawn instant, and is re-seated exactly once, when the
+    # `auto` wall target pushes frame 1 later than causality alone required --
+    # otherwise frames 2..n, whose due instants would already be in the past,
+    # would all fire back to back and the archived cadence would be lost.
+    pacing_base = spawn_monotonic_s
     shift_s, shift_basis, endpoint = 0, None, None
     exit_reason = "source_exhausted_then_term"
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    started_epoch_s, started_monotonic_s, first_write = None, None, None
+    started_epoch_s, started_monotonic_s = None, None
     with out.open("wb") as stream:
         try:
             for frame in frames:
                 elapsed_ns = parse_elapsed_ns(frame, interval_ns)
+                # Frame i is due once the feeder's own clock has run as long
+                # as the accumulation frames 1..i claim: a frame that says it
+                # covered 257 ms cannot be visible 165 ms after spawn, and the
+                # production anchor deriver refuses such a stream outright
+                # (``clock_stamp_invalid``).  Measuring from SPAWN, not from
+                # the previous write or from the first write, keeps a slow
+                # write from accumulating into the replayed cadence AND keeps
+                # frame 1 itself honest.
+                cumulative_ns += elapsed_ns
+                due = pacing_base + cumulative_ns / 1e9
                 if written == 0:
                     if args.label_shift == "auto":
                         endpoint, shift_basis = archived_endpoint_epoch_s(args.session, frame)
@@ -212,16 +247,20 @@ def run(args):
                         # rewrite the label's SECONDS field into something the
                         # archived stream never contained.
                         shift_s = int(math.ceil(time.time() - endpoint))
-                        # Sleep to the wall instant the shifted endpoint names,
-                        # so the live first-parse stamp brackets it.
+                        # The wall instant the shifted endpoint names, so the
+                        # live first-parse stamp brackets it.  Whichever of
+                        # the two constraints is LATER governs: neither may be
+                        # violated, and under `auto` this one usually is the
+                        # later of the pair (K rounds up to a whole second).
                         target = endpoint + shift_s
-                        sleep_until(time.monotonic() + max(0.0, target - time.time()), stop)
-                else:
-                    # Frame i is due its own ``elapsed_ns`` after frame i-1,
-                    # measured from the FIRST write, so a slow write never
-                    # accumulates into the replayed cadence.
-                    since_first_ns += elapsed_ns
-                    sleep_until(first_write + since_first_ns / 1e9, stop)
+                        due = max(due, time.monotonic() + max(0.0, target - time.time()))
+                    # Re-seat the base so the archived spacing is kept from
+                    # whichever constraint governed frame 1 (no-op when that
+                    # was the causality floor itself).  The base never moves
+                    # EARLIER than spawn, so every later frame still satisfies
+                    # ``spawn + cumulative elapsed_ns``.
+                    pacing_base, first_due = due - elapsed_ns / 1e9, due
+                sleep_until(due, stop)
                 payload = shift_frame(frame, shift_s) + b"\0"
                 stream.write(payload)
                 stream.flush()
@@ -230,12 +269,6 @@ def run(args):
                 writes.append(elapsed_ns)
                 labels.append(time.monotonic())
                 if written == 1:
-                    # The cadence is paced from the instant frame 1 became
-                    # VISIBLE to the collector, not from the instant the write
-                    # was begun: otherwise frame 1's own write cost is
-                    # subtracted from the first inter-frame interval and every
-                    # recorded delta but the first is right only in sum.
-                    first_write = labels[0]
                     started_epoch_s, started_monotonic_s = time.time(), labels[0]
             exit_reason = "source_exhausted_then_term"
             hold_until_term(stop)
@@ -251,6 +284,20 @@ def run(args):
         "label_shift_basis": shift_basis, "archived_endpoint_epoch_s": endpoint,
         "interval_ms": args.interval_ms, "frames_written": written,
         "first_write_epoch_s": started_epoch_s, "first_write_monotonic_s": started_monotonic_s,
+        # The three numbers that show the first-frame causality was honoured:
+        # when the feeder started, how long after that frame 1 became visible,
+        # and how much accumulation frame 1 claimed.  The second must not be
+        # less than the third.
+        "spawn_monotonic_s": spawn_monotonic_s,
+        "first_write_delay_s": (labels[0] - spawn_monotonic_s) if written else None,
+        "first_frame_elapsed_s": (writes[0] / 1e9) if written else None,
+        # Lateness against the instant frame 1 was DUE (its own elapsed_ns
+        # after spawn, or the `auto` wall target when that is later).  A slow
+        # digest pre-pass -- ~55 ms here, but a cold or busy disk could exceed
+        # the 257 ms first interval -- shows up as a positive number rather
+        # than as a failure: the frame is simply written as soon as the
+        # pre-pass ends, which is still no EARLIER than causality allows.
+        "first_write_late_s": (max(0.0, labels[0] - first_due)) if written else None,
         "frame_elapsed_ns": writes if written <= 256 else None,
         "write_monotonic_s": labels if written <= 256 else None,
         "write_delta_s": {
@@ -274,12 +321,17 @@ def parser():
 
 
 def main(argv=None):
+    # FIRST, before argument parsing and before the digest pre-pass: every
+    # frame's due instant is measured from here, so anything charged to this
+    # process before this line would be silently subtracted from frame 1's
+    # own interval.
+    spawn_monotonic_s = time.monotonic()
     args = parser().parse_args(sys.argv[1:] if argv is None else argv)
     if args.interval_ms <= 0:
         print("error: interval must be positive", file=sys.stderr)
         return 2
     try:
-        return run(args)
+        return run(args, spawn_monotonic_s)
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
