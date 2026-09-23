@@ -994,8 +994,13 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                 else:
                     checks["machine_quiet"] = dict(verdict="skipped", reason="not an evidence night",
                                                    payload_kind=payload_kind)
-        passed = all(c["verdict"] == "pass" or (name == "machine_quiet" and c["verdict"] == "skipped")
-                     for name, c in checks.items())
+        # One predicate decides both the verdict and the refusal text below,
+        # so the text names exactly the checks that failed: a `skipped`
+        # machine_quiet row is not a failure and is never listed as one
+        # (fix round 2, delta re-audit N-b).
+        failed = [name for name, c in checks.items()
+                  if not (c["verdict"] == "pass" or (name == "machine_quiet" and c["verdict"] == "skipped"))]
+        passed = not failed
         record["armable"] = passed and not record["fake_launchctl"]
         record["rehearsal_ready"] = passed and record["fake_launchctl"]
         record["finished_epoch_s"] = time.time()
@@ -1013,8 +1018,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             stale = checks.get("supervisor", {}).get("reason", "")
             if stale.startswith("stale resident supervisor"):
                 raise Refused(stale)
-            raise Refused("pre-arm checks failed: " + ", ".join(k for k, v in checks.items() if v["verdict"] != "pass")
-                          + "; see " + str(path))
+            raise Refused("pre-arm checks failed: " + ", ".join(failed) + "; see " + str(path))
         return record
 
 

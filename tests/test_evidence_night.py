@@ -1162,6 +1162,28 @@ class LifecycleTests(unittest.TestCase):
         with self.assertRaises(ProductionSamplerInvoked):
             entry.check(**{k: v for k, v in self.kw.items() if k != "quiet_observer"})
 
+    def test_the_generic_refusal_names_only_failed_checks_never_a_skipped_one(self):
+        """Fix round 2, delta re-audit N-b.
+
+        A candidate whose chain is not an evidence night records
+        `machine_quiet: skipped`, which `passed` already treats as no
+        failure.  At 0e5578fb the generic refusal text listed every check
+        whose verdict was not "pass", so when the courier failed the operator
+        read "pre-arm checks failed: courier, machine_quiet" -- naming a check
+        that never ran as failed.  Counterfactual: courier fails, machine
+        quiet is skipped; the text must name the courier alone.
+        """
+
+        with patch.object(entry.shutil, "which", return_value=None):
+            with self.assertRaises(entry.Refused) as refused:
+                entry.check(**self.kw)
+        written = json.loads((self.stage / "lifecycle/check.json").read_text())
+        self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "skipped")
+        self.assertEqual(written["checks"]["courier"]["verdict"], "fail")
+        message = str(refused.exception)
+        self.assertTrue(message.startswith("pre-arm checks failed: courier; see "), message)
+        self.assertNotIn("machine_quiet", message)
+
     def test_an_unreadable_payload_kind_fails_the_arm_check_closed(self):
         # Two declarations: the gate's probe calls the kind ambiguous; the
         # arm check refuses rather than guessing either scope.
