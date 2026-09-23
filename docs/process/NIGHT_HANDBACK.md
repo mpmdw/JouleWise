@@ -195,7 +195,8 @@ report computed from the night's files by fixed rules, set out under "What
 happens with the result" below) came out **INCONCLUSIVE**: only 2 of the 12
 envelopes survived the pre-registered exclusion rules, and two envelopes cannot
 form even one of the adjacent pairs (envelopes 1 and 2, 3 and 4, and so on)
-whose differences the sizing arithmetic consumes. Its full record is the Executed block for that
+whose energy differences set how many envelope pairs the follow-on experiment,
+block two (described below), must measure. Its full record is the Executed block for that
 plan id below. Two separate causes were found, and both were ruled and cured
 on 2026-09-22 (records under `docs/process_traces/2026-09-22-activation-59857fe5/`
 and the two cold-gate packets cited there). Both cures remain in force,
@@ -269,7 +270,8 @@ label "MEASURED ON A NON-IDLE MACHINE", and not used to size block two — the
 follow-on experiment that will add a small deliberate CPU load and measure its
 extra energy against idle envelopes, whose number of envelope pairs the pilot
 exists to choose. Ruling 10 (Q3, §4) orders the pilot re-run ONCE under a new
-registration, v3 (defined below), "on a machine passing the t0 predicate" —
+registration — the protocol file fixed before any data is taken — v3, set
+out in the next paragraphs, "on a machine passing the t0 predicate" —
 the check at t0 that no single outside process is busy, rule 1 below. **This
 night is that re-run.**
 
@@ -288,7 +290,9 @@ night is that re-run.**
   night's executor, which is the root of the chain's process tree, and every
   process reached from it by following parent–child links down — the
   collector, `sudo`, `powermetrics` (the power sampler, reading every
-  100 ms), `top`, the census and the load recorder. The executor's process
+  100 ms), `top`, the collector's census and the load recorder (the night
+  driver's own census runs in the chain's parent, so it is not an observer).
+  The executor's process
   id is the **chain root pid**. Every other process on the machine is a
   **non-observer**.
 - The **load recorder** is one process the executor starts beside the
@@ -340,11 +344,16 @@ and the magistrate's fix-round record
    machine-state row) carries `top_consumers_at_decision`, the observation's
    busiest processes. Nothing has been captured, so D-182's
    zero-capture successor route (table above) applies. Why 0.5: it is half
-   the runaway signature (1.00 core) and five times the largest single
-   30 s sample of any process other than the two daemons on either archived
-   night (`corespotlightd`, 0.104); ruling 10 §3(i). Worked example: last
-   night's `fseventsd` at 1.00 busy cores is refused before any chain starts;
-   `corespotlightd` at 0.104 passes. A process that stays below 0.5 but runs
+   the runaway signature (1.00 core), and it is above every single 30 s
+   sample of any other non-observer process on either archived night — the
+   largest being `XprotectService` at 0.353 in one row on attempt 2; the
+   largest recurring one is `corespotlightd`, at most 0.104 over 14 rows
+   (harvest record §6 table). Ruling 10 §3(i) states the margin as "5× the
+   largest single-sample transient … (`corespotlightd` 0.104)"; that
+   overlooks the 0.353 row, so the true margin over any observed transient
+   is 1.4×, not 5×. Worked example: last night's `fseventsd` at 1.00 busy
+   cores is refused before any chain starts; `XprotectService` at 0.353 and
+   `corespotlightd` at 0.104 pass. A process that stays below 0.5 but runs
    for long is caught by rule 2. An observation that fails or cannot be read
    is `armable: false` at the check and `night_probe_error` at t0, never a
    pass (seat report §4a, §2 F3). The check spends this 30 s observation only
@@ -357,16 +366,21 @@ and the magistrate's fix-round record
    rows. A total of 30 core-seconds or more excludes the envelope with reason
    `non_observer_process_busy`, recorded with the process's name, pid and
    core-seconds. Why a total and not a median: an eight-row (four-minute)
-   burst at 1.5 cores costs about 270 J yet passes a twenty-row median; the
-   total catches it at 8 × 1.5 × 30 = 360 core-seconds (ruling 10 §3,
-   MATERIAL, and its regression 6). Why 30: it is 0.05 of a core — the
-   smallest extra load block two is registered to add — held for 600 s. At
-   0.3194 W per busy core, 30 core-seconds is about 7.7 J inside a 480 s
-   interior, above the ≈ 5 J smallest energy difference the project's claims
+   burst at 1.5 cores is 8 × 1.5 × 30 = 360 core-seconds, about 115 J at the
+   0.3194 W per busy core below (1.5 × 240 s × 0.3194 W; ruling 10 put it
+   near 270 J using ≈ 1.1 W of extra draw), yet it passes a twenty-row
+   median, because twelve of the twenty rows are near zero; the total
+   catches it (ruling 10 §3, MATERIAL, and its regression 6). Why 30: it is 0.05 of a core — the
+   smallest extra load block two is registered to add — held for 600 s.
+   Spread evenly over the envelope, 30 core-seconds is 0.05 core; only the
+   480 s interior counts as energy, so that is 0.05 × 480 = 24 core-seconds
+   inside it, and at 0.3194 W per busy core about 7.7 J (0.05 × 480 ×
+   0.3194 = 7.67), above the ≈ 5 J smallest energy difference the project's claims
    rest on (v3 `non_observer_process_busy.bar_basis`). The 0.3194 W is the
    extra power attempt 2 drew with `fseventsd` on one core, (306.2873 −
    152.9535) J ÷ 480 s (ruling 21 §2); it is a rate for one daemon on an
-   efficiency-class core, used here only to size the bar. Worked examples:
+   efficiency-class core (one of the processor's low-power cores), used
+   here only to size the bar. Worked examples:
    attempt 2's journal, run through v3's own summary code on a copy in which
    the observer processes are marked by command name (the archived rows carry
    no marks), loses every envelope — `fseventsd` at 544.7–575.6 core-seconds,
@@ -382,7 +396,10 @@ and the magistrate's fix-round record
    `night/refusal.json` with reason `non_observer_process_busy`, naming the
    process, pid and core-seconds. The earliest this can happen is after
    envelope 2: t0 + 600 s of settling (the chain's wait before envelope 1) +
-   2 × 620 s = t0 + 1,840 s, about 07:31 PDT for this plan. One excluded envelope followed by a clean one never aborts.
+   2 × 620 s = t0 + 1,840 s after the chain starts; the chain starts only
+   after the t0 gate's own 30 s observation (rule 1), so about 07:31:10 PDT
+   for this plan. One excluded envelope followed by a clean one never
+   aborts.
    Why: a daemon stuck the way `fseventsd` was would otherwise spend the whole
    2.2-hour span on envelopes that will all be excluded (ruling 10 §3,
    "Abort count"). This abort comes AFTER capture, so D-182, which licenses a
@@ -390,8 +407,8 @@ and the magistrate's fix-round record
    an addendum (`docs/decision_log.md`, D-182 "Addendum (2026-09-23)", Gmail
    `1a0cd4d699a90f29`): such an abort with fewer than `minimum_retained` (8)
    envelopes captured licenses one new-plan successor. **The code that
-   installs that successor has not landed**: lane A270
-   (QPE01-ABORT-SUCCESSOR-01) is registered in `TASK_QUEUE.md` but not
+   installs that successor has not landed**: the successor-installing change
+   (lane A270, QPE01-ABORT-SUCCESSOR-01) is registered in `TASK_QUEUE.md` but not
    implemented, and
    `joulewise/arm_retry.py`'s own text for this reason says "until that lane
    lands the chain ends with no successor". On this night, therefore, the
@@ -406,12 +423,17 @@ and the magistrate's fix-round record
    harvest record §6), about 67 core-seconds per 600 s envelope — over the
    bar — so without the guard a marking failure would abort after envelope 2
    under `non_observer_process_busy`, blaming a busy machine for a broken
-   measurement. On that refusal the chain stops at envelope 01: the capture
-   directory `envelope-01` stays on disk, `evidence_envelopes.jsonl` is not
-   written, and `evidence_outcome.json` reports `envelopes_attempted` 0 (seat
+   measurement. The realistic case is that the guard fires at envelope 01:
+   the capture directory `envelope-01` stays on disk,
+   `evidence_envelopes.jsonl` is not written, and `evidence_outcome.json`
+   reports `envelopes_attempted` 0. If it fired at envelope n, rows 1 … n − 1
+   exist and `envelopes_attempted` is n − 1 (seat
    report, fix round 2, R1 and deviation 2; record 08 §4, item D1).
 
 **The observer floor: corrected, reported, and fed to an unchanged stop.**
+(A **stop** — in full, a stop branch — is a registered condition under which
+the pilot summary reports "no cutoff qualifies": the pilot then sets nothing
+from its numbers. The full list is under "What happens with the result".)
 The measurement's own processes use CPU and so draw power. For each envelope
 the collector records `whole_envelope_observer_cpu_s`: its own CPU time plus
 that of every child process it reaped once that child ended. That covers two
@@ -441,7 +463,7 @@ The **D-079 calibration acceptance** — the frozen artifact that pins the exact
 bytes of the code deriving the energy numbers, so a later run can be shown to
 have used the same estimator — is generation r7 (PR #380, merge
 `7eb53effc78b8c90995ca8206df67c0e10ff18e5`), unchanged for this night: none
-of the five source files that
+of the four estimator source files and the protocol file whose digests
 `configs/calibration/calibration_acceptance_d079_v2_n17_r7.json` pins changed
 between the attempt-2 arm head `dbd5cd59` and the v3 merge `3a411784`.
 
@@ -483,7 +505,8 @@ the one in the published plan.** Its acquisition end is t0 + 9000 s
 (09:30 PDT), its completion / courier boundary is t0 + 9300 s (09:35 PDT),
 and its daily dead-man is `ceil((t0 + 9300 + 3600) / 60) × 60` in epoch
 seconds (1790184900, 10:35 PDT), until uninstalled. The programmed span is
-600 + 11 × 620 + 600 = 8,020 s, ending about 09:13:40 PDT, inside the
+600 + 11 × 620 + 600 = 8,020 s from chain start, which follows the t0
+gate's 30 s observation, so it ends about 09:14:10 PDT, inside the
 9,000 s window. No capture is run by the preparation scripts.
 
 **What the night does.** The authority is cold gate packet 10 → 10a,
@@ -527,10 +550,20 @@ summary (`night/evidence/summary.json`, written by `pilot_summary` in
   and at least 4 pairs formed (`minimum_retained`, `minimum_adjacent_pairs`);
   otherwise it is **INCONCLUSIVE**, with no top-up and no pooling with any
   other night.
-- On `SPREAD_RECORDED`, the sample standard deviation of the pair
-  differences, `s_pair`, is raised to a one-sided 90 % upper bound,
-  `s_upper = s_pair × sqrt((n − 1) / χ²₀.₁₀(n − 1))`, and block two's pair
-  count is `max(3, ceil(8 × s_upper² / δ²))` with δ = 1 J (ruling 46b).
+- On `SPREAD_RECORDED`, the sample standard deviation of the n pair
+  differences, `s_pair`, is raised to a one-sided 90 % upper bound (a value
+  the true spread lies below with 90 % confidence), `s_upper = s_pair ×
+  sqrt((n − 1) / χ²₀.₁₀(n − 1))`, where χ²₀.₁₀(k) is the value a chi-square
+  variable with k degrees of freedom falls below 10 % of the time. Block
+  two's pair count is `max(3, ceil(8 × s_upper² / δ²))`, where δ = 1 J
+  (`sizing.delta_j`) is the smallest energy difference block two is sized to
+  resolve, set at the instrument's ≈ 1 J attribution limit (ruling 46b;
+  ruling 21 §2). Worked example (illustrative numbers): 6 pairs with
+  `s_pair` 0.5 J give χ²₀.₁₀(5) = 1.6103, factor sqrt(5 / 1.6103) = 1.762
+  (the registration's `reference_factors.n_6`), `s_upper` 0.881 J, and
+  max(3, ceil(8 × 0.776)) = 7 pairs — the figures
+  `joulewise/quiet_predicate_campaign.py` (`chi_square_lower_decile`,
+  `size_block_two`) returns for these inputs.
 - A **stop branch** is a registered condition under which the summary
   reports "no cutoff qualifies": this pilot then sets no busy-cores cutoff
   for a future quiet-machine admission rule and no block-two size. v3 has
@@ -963,7 +996,8 @@ Armed 2026-09-22 20:12:28 PDT by headless activation ca45291d through the tracke
   `non_observer_process_busy` is rule 3's abort (report the process, pid and
   core-seconds it names, and that no successor is installed); one with
   reason `night_probe_error` and the text "ancestry marking failed" is rule
-  4's guard, and then `evidence_envelopes.jsonl` is absent by design.
+  4's guard, and then `evidence_envelopes.jsonl` is absent by design if it
+  fired at envelope 1 (if at envelope n, it holds rows 1 … n − 1).
 - The pilot summary reports retained and excluded envelopes with their
   reasons, disjoint-pair spread, `s_upper` and δ = 1 J sizing for block two
   or "no cutoff qualifies" with its causes; `observer_floor_cores`,
@@ -1033,13 +1067,14 @@ pre-registered finding about block two's 0.05-core level, not as a defect of
 the night. An INCONCLUSIVE summary names the cause (which exclusion reasons
 removed which envelopes — in particular whether rule 2 excluded envelopes and
 which processes it named) and returns the work to the diagnosis loop. A
-rule-3 abort ends the span with no successor until lane A270 lands. There is
+rule-3 abort ends the span with no successor until the successor-installing
+change (lane A270) lands. There is
 no top-up and no pooling of an aborted night's envelopes with a later one.
 No courier or successor may turn sizing into an arm without that ruling;
 only the lead may arm block two. No quiet-admission threshold is activated,
 and the results remain PROVISIONAL.
 
-Two standing items for Ed, carried over verbatim in substance from the
+Two standing items for Ed, carried over in substance from the
 previous handback text (written by activation 59857fe5 on 2026-09-22), are
 not decided here: a proposed standing rule that a sealed cold-gate
 ruling governs over a later brief that contradicts it, and a proposed
