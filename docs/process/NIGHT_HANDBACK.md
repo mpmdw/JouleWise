@@ -81,7 +81,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | Exact cause | Why A172 grants no retry exception |
 |---|---|
 | `night_refused_agent_present` | Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182. |
-| `night_refused_not_quiet` | One-shot load refusal for v2, a terminal power/thermal predicate failure, or one named non-observer process at or above 0.5 busy cores over a single 30 s observation at t0 or at the arm check (registration v3; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). The detail names the process, its pid and its share, and the receipt's C3 row carries top_consumers_at_decision. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182. |
+| `night_refused_not_quiet` | One-shot load refusal for v2, a terminal power/thermal predicate failure, more than two `corecaptured` spawn reports in the last 10 minutes at t0, persistent `corecaptured` spawning after the arm check's Wi-Fi toggle, or one named non-observer process at or above 0.5 busy cores over a single 30 s observation at t0 or at the arm check (registration v3; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). The detail names the applicable spawn count and times or the busy process, pid and share; the receipt's C3 row carries top_consumers_at_decision for the processor check. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182. |
 | `night_refused_bind_expired` | Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182. |
 | `night_refused_hid_idle` | Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182. |
 | `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182. |
@@ -263,16 +263,27 @@ dated addenda at its end, the 03:10 PDT one by magistrate 7a0f14bd is the
 correction in force for the observer accounting described below).
 
 The loop was caused by `launchd`, macOS's service manager, respawning
-`corecaptured`, the Wi-Fi log-capture helper, about every 95 seconds. Each
+`corecaptured`, the Wi-Fi log-capture helper, about every 80–95 seconds. Each
 spawn made `fseventsd`, the file-system event daemon, replay its event history
-and burn one processor core. The arm check counts spawn reports in the last
-10 minutes; above two it toggles Wi-Fi once, waits at least three minutes
-after Wi-Fi is back on, and counts only new spawns. If two or more recur, it
-tries the configured `fseventsd` restart once and refuses the arm check with
-`night_refused_not_quiet`. The t0 admission check, at the planned measurement
-start, only reads the log and refuses above two spawns; it never toggles Wi-Fi
-or delays t0. A failed t0 log read is recorded as not measured, while the
-existing processor-use check still guards the machine.
+and burn one processor core. The check reads `/usr/bin/log show --last 10m
+--style syslog --predicate 'process == "launchd" AND eventMessage CONTAINS
+"corecaptured"'` and counts lines of this exact form from the captured log:
+`2026-09-22 10:23:33.210175-0700  localhost launchd[1]: [system/com.apple.corecaptured [38329]:] Successfully spawned corecaptured[38329] because xpc event`.
+The arm check toggles Wi-Fi once if it counts at least three spawns, waits at
+least three minutes after Wi-Fi is back on, and counts only new spawns. One or
+more new spawns triggers `/usr/bin/sudo -n
+/usr/local/sbin/joulewise-restart-fseventsd` once and refuses the arm check
+with `night_refused_not_quiet`. That restart runs `pkill -x fseventsd`;
+launchd respawns the daemon. The following `machine_quiet` row observes for
+30 seconds and refuses any non-observer process averaging at least 0.5 busy
+cores, including `fseventsd` if it remains busy. If any earlier arm check
+fails, the `corecaptured` row reads the log for a count, records remediation
+`not_licensed`, and fails if the count exceeds two; it does not touch the radio
+or restart the daemon. A failed log read refuses at the arm check. At t0,
+the admission check reads the log and refuses above two spawns; it never
+actuates. Its read adds about 1–3 seconds before the existing 30-second
+processor observation. A failed t0 log read is recorded as not measured;
+the processor check still guards the machine.
 
 A cold gate, QPE01-DAEMON-CONTAMINATION-01, ruled on that night in three
 rounds; its packet is

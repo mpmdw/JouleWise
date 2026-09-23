@@ -1503,16 +1503,19 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
                 ),
             )
         if rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
-            # This is the planned t0 boundary. Read only: no cure, delay, or
-            # process action may move the measurement start.
+            # This is the planned t0 boundary. The read adds probe time, but
+            # there is no cure, deliberate wait, or process action here.
             try:
+                log_started_epoch_s = _clock_value(probes, "epoch")
                 log_result = _run(probes, corecaptured_loop.LOG_ARGV)
+                log_finished_epoch_s = _clock_value(probes, "epoch")
                 evidence.append(log_result)
                 rows["C3"].evidence.append(_probe_citation(log_result))
                 if not _completed_ok(log_result):
                     raise ValueError(f"log exited {log_result.exit_code}: {log_result.stderr.strip()}")
                 spawns = corecaptured_loop.count_spawns(
-                    log_result.stdout, _clock_value(probes, "epoch"))
+                    log_result.stdout, log_started_epoch_s,
+                    until_epoch_s=log_finished_epoch_s)
             except (ProbeError, ValueError) as exc:
                 rows["C3"].measured["corecaptured"] = {
                     "status": "not_measured", "reason": str(exc)}

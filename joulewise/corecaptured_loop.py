@@ -26,13 +26,16 @@ class SpawnObservation:
     last: str | None
 
 
-def count_spawns(log_text: str, now_epoch_s: float, *, after_epoch_s: float | None = None) -> SpawnObservation:
-    """Count spawn reports within ten minutes, optionally strictly after a cure.
+def count_spawns(log_text: str, now_epoch_s: float, *, after_epoch_s: float | None = None,
+                 until_epoch_s: float | None = None) -> SpawnObservation:
+    """Count spawns from ten minutes before a read through its completion.
 
-    Raises ValueError for a missing header or a malformed timestamped record;
+    ``now_epoch_s`` is the clock immediately before the log command. A caller
+    may supply its clock after the command as ``until_epoch_s``. Raises
+    ValueError for a missing header or a malformed nonblank record;
     callers decide whether an unavailable observation is a refusal.
     """
-    lines = log_text.splitlines()
+    lines = [line for line in log_text.splitlines() if line.strip()]
     if not lines or not lines[0].startswith("Timestamp "):
         raise ValueError("corecaptured log has no syslog header")
     matched: list[str] = []
@@ -45,7 +48,7 @@ def count_spawns(log_text: str, now_epoch_s: float, *, after_epoch_s: float | No
         except ValueError as exc:
             raise ValueError("corecaptured log has an invalid timestamp") from exc
         if (SPAWN_LINE.fullmatch(match.group("message"))
-                and now_epoch_s - 600 <= epoch <= now_epoch_s
+                and now_epoch_s - 600 <= epoch <= (now_epoch_s if until_epoch_s is None else until_epoch_s)
                 and (after_epoch_s is None or epoch > after_epoch_s)):
             matched.append(match.group("timestamp"))
     return SpawnObservation(len(matched), matched[0] if matched else None,

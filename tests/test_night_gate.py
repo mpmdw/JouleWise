@@ -368,6 +368,43 @@ class NightGateTests(unittest.TestCase):
                 self.assertEqual(c3.measured["corecaptured"]["status"], "not_measured")
                 self.assertTrue(c3.measured["corecaptured"]["reason"])
 
+    def test_corecaptured_t0_window_anchors_before_slow_log_read(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        source = EvidenceRegistrationTests().source()
+        source.now_value = now
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, -1), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+        source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV, stdout=raw)
+        original_run = source.run
+
+        def slow_run(argv):
+            if argv == corecaptured_loop.LOG_ARGV:
+                source.now_value += 30
+            return original_run(argv)
+
+        source.run = slow_run
+        receipt = self.evaluate(make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100), source)
+        c3 = next(row for row in receipt.conditions if row.condition_id == "C3")
+        self.assertEqual(c3.measured["corecaptured"]["last_10m_spawns"], 3)
+        self.assertEqual(receipt.refusal.reason, "night_refused_not_quiet")
+
+    def test_corecaptured_t0_threshold_is_three_spawns(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, -1), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+            if i in (2, 3):
+                source = EvidenceRegistrationTests().source()
+                source.now_value = now
+                source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV, stdout=raw)
+                receipt = self.evaluate(make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100), source)
+                self.assertEqual(receipt.refusal is not None, i == 3)
+
     def test_production_argv_constants_are_pinned(self) -> None:
         self.assertEqual(
             ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),

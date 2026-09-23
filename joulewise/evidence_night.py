@@ -849,40 +849,52 @@ def production_corecaptured_actuator():
     return CorecapturedActuator(probe_command, time.sleep, time.time)
 
 
-def corecaptured_arm_check(actuator):
-    """Try one Wi-Fi reset, then observe a full post-reset three minutes."""
-    def command(argv):
+def corecaptured_arm_check(actuator, *, read_only=False):
+    """Count spawns; on armable checks, try one bounded Wi-Fi reset if needed."""
+    def command(argv, *, timeout, action):
         try:
-            return actuator.run(argv)
+            return actuator.run(argv, timeout=timeout)
         except Exception as exc:
-            raise Refused(f"corecaptured actuator failed: {type(exc).__name__}: {exc}") from exc
+            raise Refused(f"corecaptured {action} failed: {type(exc).__name__}: {exc}") from exc
 
     def observe(*, after=None):
-        raw = command(corecaptured_loop.LOG_ARGV)
+        started = actuator.now_epoch_s()
+        raw = command(corecaptured_loop.LOG_ARGV, timeout=30, action="log read")
+        finished = actuator.now_epoch_s()
         if raw.returncode:
             raise Refused(f"corecaptured log not measured (exit {raw.returncode}): {raw.stderr.strip()}")
         try:
             return corecaptured_loop.count_spawns(
-                raw.stdout, actuator.now_epoch_s(), after_epoch_s=after)
+                raw.stdout, started, after_epoch_s=after, until_epoch_s=finished)
         except ValueError as exc:
             raise Refused(f"corecaptured log not measured: {exc}") from exc
 
     before = observe()
     result = dict(last_10m_spawns=before.count, first_spawn=before.first,
                   last_spawn=before.last, remediation="none")
+    if read_only:
+        result["remediation"] = "not_licensed"
+        if before.count > 2:
+            raise Refused(
+                f"night_refused_not_quiet: corecaptured: {before.count} launchd spawns "
+                "in the last 10 minutes; remediation not licensed because an earlier check failed",
+                evidence=result)
+        return result
     if before.count <= 2:
         return result
 
     result["remediation"] = "wifi_toggle_attempted"
     try:
         try:
-            off = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "off"))
+            off = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "off"),
+                          timeout=30, action="Wi-Fi off")
             result["wifi_off_exit_code"] = off.returncode
             if not off.returncode:
                 actuator.sleep(8)
         finally:
             # Restore radio power even when the off command or wait fails.
-            on = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "on"))
+            on = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "on"),
+                         timeout=30, action="Wi-Fi on")
             result["wifi_on_exit_code"] = on.returncode
     except Exception as exc:
         raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
@@ -902,9 +914,10 @@ def corecaptured_arm_check(actuator):
                       f"post-toggle observation failed: {exc}", evidence=result) from exc
     result.update(post_toggle_spawns=after.count, post_toggle_first_spawn=after.first,
                   post_toggle_last_spawn=after.last)
-    if after.count >= 2:
+    if after.count >= 1:
         try:
-            restart = command(("/usr/bin/sudo", "-n", "/usr/local/sbin/joulewise-restart-fseventsd"))
+            restart = command(("/usr/bin/sudo", "-n", "/usr/local/sbin/joulewise-restart-fseventsd"),
+                              timeout=60, action="fseventsd restart")
         except Refused as exc:
             raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns before "
                           f"Wi-Fi toggle, {after.count} new spawns after toggle; "
@@ -1074,8 +1087,13 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                     verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
             else:
                 if payload_kind == KIND:
-                    inspect("corecaptured", lambda: corecaptured_arm_check(
-                        corecaptured_actuator or production_corecaptured_actuator()))
+                    actuator = corecaptured_actuator or production_corecaptured_actuator()
+                    if nothing_loaded and all(row["verdict"] == "pass" for row in checks.values()):
+                        inspect("corecaptured", lambda: corecaptured_arm_check(actuator))
+                    else:
+                        # A loaded night or any other prior failure removes
+                        # authority to touch the radio or restart fseventsd.
+                        inspect("corecaptured", lambda: corecaptured_arm_check(actuator, read_only=True))
                     inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
                 else:
                     checks["corecaptured"] = dict(verdict="skipped", reason="not an evidence night",
