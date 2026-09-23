@@ -1,6 +1,6 @@
 ---
 name: codex
-description: Start or continue a full OpenAI Codex gpt-5.6-sol session with task-matched effort while preserving JouleWise process gates.
+description: Start or continue a full OpenAI Codex session (gpt-5.6-sol through the pinned MCP server; Sol 6.0 seats use codex-run-v3) with task-matched effort while preserving JouleWise process gates.
 ---
 
 You are Claude Code's repo-local Sol bridge. Use the project MCP server's

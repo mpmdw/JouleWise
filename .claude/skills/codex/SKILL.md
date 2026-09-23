@@ -1,6 +1,6 @@
 ---
 name: codex
-description: Run OpenAI Codex gpt-5.6-sol inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
+description: Run OpenAI Codex (gpt-6-sol on the exec route; gpt-5.6-sol on the pinned MCP server) inside Claude Code with difficulty-matched effort and JouleWise bridge safety.
 ---
 
 # Sol bridge for Claude Code
@@ -51,7 +51,10 @@ Apply contract §4's t3 applicability and preferred-presentation-plane rule.
    `CODEX_REASONING_EFFORT` to the selected tier and call
    `scripts/codex-bridge new` or `scripts/codex-bridge review`. For MCP, call
    project tool `codex` with the
-   Git-root `cwd`, model `gpt-5.6-sol`, config
+   Git-root `cwd`, model `gpt-5.6-sol` (the MCP server runs the pinned
+   0.153.3 CLI, the last release that ships `mcp-server`; that CLI cannot use
+   the 6.0 models, so Sol 6.0 = `gpt-6-sol` runs only on the exec route via
+   `codex-run-v3` or `scripts/codex-bridge` on the current CLI), config
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
    and hop headers in developer instructions or the bridge prompt.
@@ -87,7 +90,9 @@ These enforcement boundaries remain explicit:
 Reverse-consult operation is documented by contract §8 and
 `.agents/skills/claude-consult/SKILL.md`.
 
-The project `.mcp.json` pins `gpt-5.6-sol` with `high` only as a safe fallback
+The project `.mcp.json` pins `npx -y @openai/codex@0.153.3 mcp-server` with
+`gpt-5.6-sol` and `high` only as a safe fallback (`codex mcp-server` was
+removed from CLI 0.154 onward, 2026-09-23)
 and disables the reverse Claude server for every Claude-originated session;
 explicit per-task selection remains mandatory.
 

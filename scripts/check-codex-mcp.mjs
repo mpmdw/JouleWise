@@ -17,9 +17,15 @@ if (rootResult.status !== 0) {
 const repoRoot = rootResult.stdout.trim();
 const mcpConfig = JSON.parse(readFileSync(resolve(repoRoot, ".mcp.json"), "utf8"));
 const codexServer = mcpConfig?.mcpServers?.codex;
+// The MCP route is pinned to the last Codex CLI that ships `mcp-server`
+// (0.153.3; removed from 0.154 onward) and to the 5.6 model that CLI may use.
+// Sol 6.0 (gpt-6-sol) seats run through the exec route (codex-run-v3 /
+// scripts/codex-bridge) on the current CLI.
 const expectedModel = "gpt-5.6-sol";
 const expectedEffort = "high";
 const expectedCodexArgs = [
+  "-y",
+  "@openai/codex@0.153.3",
   "mcp-server",
   "-c",
   `model="${expectedModel}"`,
@@ -30,7 +36,7 @@ const expectedCodexArgs = [
 ];
 
 if (
-  codexServer?.command !== "codex" ||
+  codexServer?.command !== "npx" ||
   JSON.stringify(codexServer?.args) !== JSON.stringify(expectedCodexArgs)
 ) {
   process.stderr.write(
@@ -224,8 +230,10 @@ try {
   const codexVersion = commandVersion(codexBin, ["--version"]);
   const claudeVersion = commandVersion(claudeBin, ["--version"]);
   const nodeVersion = commandVersion(nodeBin, ["--version"]);
+  // The MCP route launches exactly what .mcp.json launches (npx + the pinned
+  // 0.153.3 CLI); the current `codex` binary is only version-reported.
   const [codexTools, claudeTools] = await Promise.all([
-    listMcpTools(codexBin, codexServer.args, "Codex"),
+    listMcpTools(codexServer.command, codexServer.args, "Codex"),
     listMcpTools(nodeBin, [resolve(repoRoot, "scripts/claude-bridge-mcp.mjs")], "Claude bridge"),
   ]);
   validateCodexTools(codexTools);

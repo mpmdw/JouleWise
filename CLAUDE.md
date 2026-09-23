@@ -64,7 +64,10 @@ pet. Set `CODEX_APP_BRIDGE=off` only to require standalone `codex exec`.
 
 The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
 tooling, not tracked here). It supplies the audited report and D-064 evidence
-path described by the contract. Current model: gpt-5.6-sol.
+path described by the contract. Current model: gpt-6-sol (exec route, CLI
+0.156.1+). The MCP server in `.mcp.json` is pinned to CLI 0.153.3 with
+gpt-5.6-sol because `codex mcp-server` was removed from CLI 0.154 onward and
+the 0.153.3 client cannot use the 6.0 models.
 `scripts/codex-run` remains the older
 hardened, timeout-bounded single-call protocol.
 
