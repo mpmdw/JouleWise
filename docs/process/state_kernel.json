@@ -4688,6 +4688,37 @@
       "status_note": "Deferred 2026-08-03 from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake); the production hardening is a NEEDS_RULING tradeoff, non-blocking (no current concurrent-client scenario).",
       "stop_card": null
     },
+    "NOTICE-SUMMARY-V3-TEXT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-23-activation-4158e658/08-armgate-sol-refuter.md (Sol 6.0 findings F1, F2)",
+          "docs/process_traces/2026-09-23-activation-4158e658/06-armgate-fable-verdict.md (Q4, NIT-1, NIT-2)",
+          "docs/process_traces/2026-09-23-activation-4158e658/07-armgate-opus-lens.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NOTICE-SUMMARY-V3-TEXT-01/acceptance",
+          "label": "NOTICE-SUMMARY-V3-TEXT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Regressions at the production call sites, each failing before the change: render_notice for a v3 plan names the 0.5-core arm/t0 rule, the 30 core-second exclusion and the two-in-a-row abort, and states the span computed from the registration (8,020 s for v3); the generated summary.md for a v3 summary no longer says busy cores are never an exclusion input; a v2-pinned plan's text is unchanged or refused as today; lands under the twelve-row gate (quiet_predicate_campaign.py is a claim-bearing file: full gate)."
+      },
+      "authority": {
+        "label": "Arm gate of activation 4158e658 on plan qpe01-pilot-n1-20260923-0700: Sol 6.0 dissent (ARM AFTER CURES) recorded under the cold Fable ARM verdict (registration by the magistrate, not a ruling)",
+        "path": "docs/process_traces/2026-09-23-activation-4158e658/01-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Two generated texts still describe the v2 pilot and are false under registration v3 (configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json). (1) The arm notice that Ed receives (joulewise/evidence_night.py render_notice, the hard-coded line at :283 on main 26fb4280) says busy cores remain a descriptive covariate and that the program is 7,800 s; under v3 a process outside the measurement apparatus at or above 0.5 busy cores refuses the night at the arm check or t0, one that uses 30 or more core-seconds (busy cores times seconds) inside an envelope excludes that envelope, two such envelopes in a row end the night, and the program is 8,020 s (600 s settle + 11 x 620 s slot pitch + 600 s); the notice also calls the night the first evidence night and claims exactly one git show. (2) The pinned campaign writes summary.md with the sentence 'Busy cores are recorded covariates and never an exclusion input', false under v3. Derive the span from the registration (settle_s + (envelopes - 1) x slot_pitch_s + envelope_s), name the v3 rules in the notice, and correct the summary sentence (arm gate records 06-08 in docs/process_traces/2026-09-23-activation-4158e658/).",
+      "id": "NOTICE-SUMMARY-V3-TEXT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 276,
+      "status": "queued",
+      "status_note": "2026-09-23 activation 4158e658: registered from the arm gate; the 07:00 v3 pilot is staged to be armed with a one-line correction appended to the notice instead of a new head.",
+      "stop_card": null
+    },
     "NOTICE-TRANSPORT-FALLBACK-01": {
       "acceptance": {
         "evidence": [
