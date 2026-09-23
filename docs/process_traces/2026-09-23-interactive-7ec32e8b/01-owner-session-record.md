@@ -64,3 +64,33 @@ worktree (the live activation's), and every dirty or unmerged tree. 20 worktrees
 4. Block-two design pass under option (c) is a MAJOR decision: prepare the packet, do not decide it, until Ed's go.
 5. Codex model id for "Sol 6.0": `gpt-6-sol` and `gpt-6.0-sol` are rejected for this ChatGPT account
    (probe 01:52); `.mcp.json` still pins `gpt-5.6-sol`. Ask Ed for the id from the Codex app's model picker.
+
+## 6. Addendum 02:00–02:40 PDT — model topology, Codex CLI, PR #385
+
+**Ed's rulings (verbatim):** "after you've set up the magistrate with the best new models (opus 5.5 supposedly as
+good as fable for way cheaper), test it fable, make sure i can handle any other blockers here to start getting full
+paper automation ready" and "fable 5.1 should do a final pass and opus 5.5 should have the same ish level of
+reverence of their opinion, judge how useful it's and where it should be in the orchestration yourself".
+
+**Fable's placement (this session):** the headless magistrate loop runs on **Opus 5.5** (`--model opus` in
+`scripts/magistrate_watchdog.py`); Opus 5.5 also directs seats and runs lenses and refuters. **Fable 5.1 is the final
+pass**: a cold instance rules on every merge candidate and every arm and judges every cold gate; a Fable refusal is a
+stop. Sol 6.0 (`gpt-6-sol`, high) executes and consults; Astra sparingly. Evidence: the read-only Opus 5.5 dry run of
+the real relaunch template (02:12; $0.59, 54 s) read the state correctly, ordered the next actions with their
+authorities, applied rule 11 exactly, and caught that the RUN_STATE top block still lists the fseventsd restart as an
+owner action and A268 as waiting on Ed (both resolved in §1–§2); Fable's independent reading agreed on every point.
+Earlier the same model found the fseventsd root cause Fable had wrong (§2). Fable activations had been dying of usage
+exhaustion about every 1.5 h (attempt 84 by 09-22); the Opus loop removes that churn.
+
+**Codex CLI facts (bench):** the desktop app (ChatGPT.app 26.917, Codex framework 153.0.8010) updates itself; the CLI
+is the separate npm package and was still 0.153.3, which rejected the 6.0 models ("not supported when using Codex with
+a ChatGPT account"). App model list: `gpt-6-astra` (frontier; low…ultra), `gpt-6-sol` (workhorse; low…ultra),
+`gpt-6-luna` (fast; low…max); the 5.6 family is "older". CLI updated to 0.156.1 (`npm install -g @openai/codex@latest`);
+`codex exec -m gpt-6-sol` OK; a scout-genre `codex-run-v3` seat on gpt-6-sol returned a valid envelope. CLI 0.154+
+removed `codex mcp-server`, so the MCP route is pinned to `npx -y @openai/codex@0.153.3 mcp-server` with
+`gpt-5.6-sol`; `scripts/check-codex-mcp.mjs` passes 9/9 on the branch. **PR #385** carries all of this plus the
+relaunch-prompt topology line; reviewed by an Opus 5.5 lens and a cold Fable 5.1 final pass (comments on the PR).
+
+**Live activation note:** 7a0f14bd (Fable) launched 01:29 after a022aecc exited; it has pushed the v3 branch, run an
+Opus contract lens, and opened PR #384 (D-182 addendum + lanes A270/A271). The new pins reach the next activation only
+after the magistrate fast-forwards the canonical checkout itself (D-183); this session never touched that root.
