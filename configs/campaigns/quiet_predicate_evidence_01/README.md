@@ -60,7 +60,7 @@ envelope, and would have excluded all twelve. Second, before the night: the
 pre-arm check and the t0 gate each take one 30-second observation and refuse
 if any non-observer process is using 0.5 busy cores or more (`armable: false`
 at the arm check, `night_refused_not_quiet` at t0), naming the process and
-keeping the observation in `top_consumers_at_decision`. Third, during the
+keeping the observation in `top_consumers_at_decision`. Both also read the last ten minutes of launchd's reports that it spawned `corecaptured` (the Wi-Fi log-capture helper, whose respawn loop contaminated the 2026-09-22 night through `fseventsd`): the t0 gate is detection only and refuses with `night_refused_not_quiet` above two spawns; the arm check, only when every earlier check passed, may toggle Wi-Fi once, wait 180 s and refuse if any new spawn appears (cold ruling 16, 2026-09-23). Third, during the
 night: two envelopes in a row excluded this way end the chain with a typed
 refusal whose reason is `non_observer_process_busy`, about 31 minutes after
 t0 instead of three hours later; one such envelope followed by a clean one

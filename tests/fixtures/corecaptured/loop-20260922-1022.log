@@ -1,0 +1,31 @@
+Timestamp                       (process)[PID]    
+2026-09-22 10:23:33.196085-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:23:33.210175-0700  localhost launchd[1]: [system/com.apple.corecaptured [38329]:] Successfully spawned corecaptured[38329] because xpc event
+2026-09-22 10:24:52.196758-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:24:52.212296-0700  localhost launchd[1]: [system/com.apple.corecaptured [38892]:] Successfully spawned corecaptured[38892] because xpc event
+2026-09-22 10:26:11.693049-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:26:11.704440-0700  localhost launchd[1]: [system/com.apple.corecaptured [39780]:] Successfully spawned corecaptured[39780] because xpc event
+2026-09-22 10:27:31.910902-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:27:31.918085-0700  localhost launchd[1]: [system/com.apple.corecaptured [53158]:] Successfully spawned corecaptured[53158] because xpc event
+2026-09-22 10:28:52.109062-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:28:52.118332-0700  localhost launchd[1]: [system/com.apple.corecaptured [60546]:] Successfully spawned corecaptured[60546] because xpc event
+2026-09-22 10:30:13.259436-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:30:13.278230-0700  localhost launchd[1]: [system/com.apple.corecaptured [69872]:] Successfully spawned corecaptured[69872] because xpc event
+2026-09-22 10:31:34.073877-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:31:34.090564-0700  localhost launchd[1]: [system/com.apple.corecaptured [70553]:] Successfully spawned corecaptured[70553] because xpc event
+2026-09-22 10:32:54.694707-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:32:54.712055-0700  localhost launchd[1]: [system/com.apple.corecaptured [71246]:] Successfully spawned corecaptured[71246] because xpc event
+2026-09-22 10:34:15.279305-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:34:15.290456-0700  localhost launchd[1]: [system/com.apple.corecaptured [71669]:] Successfully spawned corecaptured[71669] because xpc event
+2026-09-22 10:35:35.204721-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:35:35.216496-0700  localhost launchd[1]: [system/com.apple.corecaptured [71781]:] Successfully spawned corecaptured[71781] because xpc event
+2026-09-22 10:36:55.940706-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:36:55.953623-0700  localhost launchd[1]: [system/com.apple.corecaptured [71860]:] Successfully spawned corecaptured[71860] because xpc event
+2026-09-22 10:38:16.777712-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:38:16.791294-0700  localhost launchd[1]: [system/com.apple.corecaptured [72557]:] Successfully spawned corecaptured[72557] because xpc event
+2026-09-22 10:39:38.280792-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:39:38.292365-0700  localhost launchd[1]: [system/com.apple.corecaptured [72625]:] Successfully spawned corecaptured[72625] because xpc event
+2026-09-22 10:40:58.644872-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:40:58.661716-0700  localhost launchd[1]: [system/com.apple.corecaptured [72779]:] Successfully spawned corecaptured[72779] because xpc event
+2026-09-22 10:42:20.017628-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
+2026-09-22 10:42:20.034356-0700  localhost launchd[1]: [system/com.apple.corecaptured [73789]:] Successfully spawned corecaptured[73789] because xpc event

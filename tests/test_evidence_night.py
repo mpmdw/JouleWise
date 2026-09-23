@@ -35,6 +35,7 @@ def _census_clean_tempdir(**kwargs):
 
 
 from joulewise import evidence_night as entry
+from joulewise import corecaptured_loop
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,6 +67,44 @@ def _production_sampler_forbidden(*args, **kwargs):
 
 
 _SAMPLER_GUARD = None
+_CORE_GUARD = None
+
+
+def quiet_corecaptured_actuator():
+    quiet = (ROOT / "tests/fixtures/corecaptured/quiet-header-only.log").read_text()
+    return entry.CorecapturedActuator(
+        lambda argv, timeout=None: subprocess.CompletedProcess(argv, 0, quiet, ""),
+        lambda seconds: None, time.time)
+
+
+class FakeCorecapturedActuator:
+    def __init__(self, before, after, now, exit_codes=None, log_delay_s=0):
+        self.logs = [before, after]
+        self.now = now
+        self.commands = []
+        self.sleeps = []
+        self.exit_codes = exit_codes or {}
+        self.log_delay_s = log_delay_s
+        self.timeouts = []
+
+    def run(self, argv, *, timeout=None):
+        argv = tuple(argv)
+        self.commands.append(argv)
+        self.timeouts.append(timeout)
+        if argv == corecaptured_loop.LOG_ARGV:
+            self.now += self.log_delay_s
+            return subprocess.CompletedProcess(argv, 0, self.logs.pop(0), "")
+        return subprocess.CompletedProcess(argv, self.exit_codes.get(argv[-1], 0), "", "")
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    def clock(self):
+        return self.now
+
+    def actuator(self):
+        return entry.CorecapturedActuator(self.run, self.sleep, self.clock)
 
 
 def setUpModule():
@@ -73,15 +112,19 @@ def setUpModule():
     # `top -l 2 -s 30`.  An AssertionError is outside the families
     # `machine_quiet_check` converts into a refusal, so a stray call fails its
     # test loudly rather than sampling the machine or passing quietly.
-    global _SAMPLER_GUARD
+    global _SAMPLER_GUARD, _CORE_GUARD
     from joulewise import night_gate
     _SAMPLER_GUARD = patch.object(night_gate, "production_interval_observation",
                                   _production_sampler_forbidden)
     _SAMPLER_GUARD.start()
+    _CORE_GUARD = patch.object(entry, "production_corecaptured_actuator",
+                               quiet_corecaptured_actuator)
+    _CORE_GUARD.start()
 
 
 def tearDownModule():
     _SAMPLER_GUARD.stop()
+    _CORE_GUARD.stop()
 
 
 class ProductionSamplerGuardTests(unittest.TestCase):
@@ -716,7 +759,7 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
         (self.canonical / "joulewise").mkdir()
         (self.canonical / "joulewise/__init__.py").write_text("")
-        for name in ("night_gate.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
+        for name in ("night_gate.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
@@ -849,6 +892,262 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
         self.assertFalse(any("launchctl" in str(c) for c in self.calls))
+
+    def test_corecaptured_arm_toggles_once_and_counts_only_post_toggle_spawns(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"  # five real spawn rows
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, before, now)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = record["checks"]["corecaptured"]
+        self.assertEqual(row["last_10m_spawns"], 5)
+        self.assertEqual(row["post_toggle_spawns"], 0)
+        self.assertEqual(row["remediation"], "wifi_toggled_once")
+        self.assertEqual(fake.sleeps, [8, 180])
+        self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
+        self.assertEqual(sum(argv[-1] == "on" for argv in fake.commands), 1)
+        self.assertEqual(sum(argv[0] == "/usr/bin/sudo" for argv in fake.commands), 0)
+        self.assertEqual(fake.commands.count(corecaptured_loop.LOG_ARGV), 2)
+
+    def test_corecaptured_arm_zero_spawns_does_not_toggle(self):
+        quiet = (ROOT / "tests/fixtures/corecaptured/quiet-header-only.log").read_text()
+        fake = FakeCorecapturedActuator(quiet, quiet, time.time())
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        self.assertEqual(record["checks"]["corecaptured"]["last_10m_spawns"], 0)
+        self.assertEqual(fake.commands, [corecaptured_loop.LOG_ARGV])
+        self.assertEqual(fake.sleeps, [])
+
+    def test_corecaptured_arm_threshold_is_three_spawns(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, -1), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+            if i in (2, 3):
+                fake = FakeCorecapturedActuator(raw, raw, now)
+                with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+                    record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+                self.assertEqual(record["checks"]["corecaptured"]["last_10m_spawns"], i)
+                self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), i == 3)
+
+    def test_corecaptured_arm_window_anchors_before_slow_log_read(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, 10), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+        fake = FakeCorecapturedActuator(raw, raw, now, log_delay_s=30)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        self.assertEqual(record["checks"]["corecaptured"]["last_10m_spawns"], 3)
+        self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
+
+    def test_corecaptured_rehearsal_never_actuates_production_machine(self):
+        # Counter-review S-1: a fixture launchctl decides "nothing loaded" in a
+        # rehearsal, so the production actuator must stay read-only.
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        fake = FakeCorecapturedActuator(raw, raw, now)
+        self.assertNotEqual(self.kw["launchctl_bin"], "launchctl")
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND), \
+                patch.object(entry, "production_corecaptured_actuator", return_value=fake.actuator()):
+            with self.assertRaisesRegex(entry.Refused, "not licensed"):
+                entry.check(**self.kw)
+        self.assertFalse(any(argv[0] in ("/usr/sbin/networksetup", "/usr/bin/sudo")
+                             for argv in fake.commands))
+
+    def test_corecaptured_arm_backward_clock_refuses_without_actuation(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        fake = FakeCorecapturedActuator(raw, raw, now, log_delay_s=-3600)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "backward"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        self.assertFalse(any(argv[0] in ("/usr/sbin/networksetup", "/usr/bin/sudo")
+                             for argv in fake.commands))
+
+    def test_corecaptured_timed_out_move_is_recorded_without_exit_code(self):
+        # Delta re-audit A271 F2: a move that raised has no exit code; the
+        # attempted command and its exception must still be on the record.
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator("\n".join(raw.splitlines()[:11]) + "\n", raw, now)
+        original = fake.run
+
+        def timeout_off(argv, *, timeout=None):
+            if argv[-1] == "off":
+                fake.commands.append(tuple(argv))
+                raise subprocess.TimeoutExpired(argv, timeout)
+            return original(argv, timeout=timeout)
+
+        fake.run = timeout_off
+        with self.assertRaises(entry.Refused) as caught:
+            entry.corecaptured_arm_check(fake.actuator())
+        errors = caught.exception.evidence["command_errors"]
+        self.assertIn("TimeoutExpired", errors["Wi-Fi off"])
+        self.assertNotIn("wifi_off_exit_code", caught.exception.evidence)
+        self.assertEqual(caught.exception.evidence["wifi_on_exit_code"], 0)
+
+    def test_corecaptured_arm_off_timeout_restores_wifi_and_refuses(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator("\n".join(raw.splitlines()[:11]) + "\n", raw, now)
+        original = fake.run
+
+        def timeout_off(argv, *, timeout=None):
+            if argv[-1] == "off":
+                fake.commands.append(tuple(argv))
+                fake.timeouts.append(timeout)
+                raise subprocess.TimeoutExpired(argv, timeout)
+            return original(argv, timeout=timeout)
+
+        fake.run = timeout_off
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "Wi-Fi toggle failed"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["verdict"], "fail")
+        self.assertEqual([argv[-1] for argv in fake.commands if "networksetup" in argv[0]], ["off", "on"])
+        self.assertEqual(fake.timeouts, [30, 30, 30])
+
+    def test_corecaptured_arm_wait_timeout_restores_wifi(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator("\n".join(raw.splitlines()[:11]) + "\n", raw, now)
+
+        def timeout_wait(seconds):
+            raise subprocess.TimeoutExpired("Wi-Fi settle", seconds)
+
+        actuator = entry.CorecapturedActuator(fake.run, timeout_wait, fake.clock)
+        with self.assertRaisesRegex(entry.Refused, "Wi-Fi toggle failed"):
+            entry.corecaptured_arm_check(actuator)
+        self.assertEqual([argv[-1] for argv in fake.commands if "networksetup" in argv[0]], ["off", "on"])
+
+    def test_corecaptured_arm_on_timeout_names_failed_restore(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator("\n".join(raw.splitlines()[:11]) + "\n", raw, now)
+        original = fake.run
+
+        def timeout_on(argv, *, timeout=None):
+            if argv[-1] == "on":
+                fake.commands.append(tuple(argv))
+                fake.timeouts.append(timeout)
+                raise subprocess.TimeoutExpired(argv, timeout)
+            return original(argv, timeout=timeout)
+
+        fake.run = timeout_on
+        with self.assertRaisesRegex(entry.Refused, "Wi-Fi on failed: TimeoutExpired"):
+            entry.corecaptured_arm_check(fake.actuator())
+        self.assertEqual(fake.timeouts, [30, 30, 30])
+
+    def test_corecaptured_arm_commands_have_bounded_timeouts(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator("\n".join(raw.splitlines()[:11]) + "\n", raw, now)
+        with self.assertRaisesRegex(entry.Refused, "fseventsd restart exit"):
+            entry.corecaptured_arm_check(fake.actuator())
+        self.assertEqual(fake.timeouts, [30, 30, 30, 30, 60])
+
+    def test_corecaptured_one_new_spawn_after_toggle_refuses(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-300, -150, -1), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+        stamp = datetime.fromtimestamp(now + 95).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+        after = (raw + f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [4]:] "
+                 "Successfully spawned corecaptured[4] because xpc event\n")
+        fake = FakeCorecapturedActuator(raw, after, now)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "1 new spawns after toggle"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        self.assertEqual(sum(argv[0] == "/usr/bin/sudo" for argv in fake.commands), 1)
+
+    def test_loaded_night_agent_makes_corecaptured_read_only(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, before, now)
+        loaded = dict(self.absent_agents, jobs=[dict(label="com.joulewise.night", liveness="LOADED")])
+        with patch.object(entry, "night_agents", return_value=loaded), \
+             patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "night agents already loaded"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["verdict"], "fail")
+        self.assertEqual(row["last_10m_spawns"], 5)
+        self.assertEqual(row["remediation"], "not_licensed")
+        self.assertIn("earlier check failed", row["reason"])
+        self.assertEqual(fake.commands, [corecaptured_loop.LOG_ARGV])
+
+    def test_failed_census_makes_corecaptured_read_only(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, before, now)
+        with patch.object(entry, "census_check", side_effect=entry.Refused("census failed")), \
+             patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "census failed"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["verdict"], "fail")
+        self.assertEqual(row["last_10m_spawns"], 5)
+        self.assertEqual(row["remediation"], "not_licensed")
+        self.assertIn("earlier check failed", row["reason"])
+        self.assertEqual(fake.commands, [corecaptured_loop.LOG_ARGV])
+
+    def test_failed_census_read_only_count_of_two_passes_without_actuation(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:5]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, before, now)
+        with patch.object(entry, "census_check", side_effect=entry.Refused("census failed")), \
+             patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "census failed"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["verdict"], "pass")
+        self.assertEqual(row["last_10m_spawns"], 2)
+        self.assertEqual(row["remediation"], "not_licensed")
+        self.assertEqual(fake.commands, [corecaptured_loop.LOG_ARGV])
+
+    def test_corecaptured_arm_persistence_restarts_once_and_refuses(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, raw, now)
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "night_refused_not_quiet: corecaptured"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["post_toggle_spawns"], 2)
+        self.assertEqual(row["fseventsd_restart_exit_code"], 0)
+        self.assertEqual(sum("networksetup" in argv[0] and argv[-1] == "off"
+                             for argv in fake.commands), 1)
+        self.assertEqual(sum("networksetup" in argv[0] and argv[-1] == "on"
+                             for argv in fake.commands), 1)
+        self.assertEqual(sum(argv[0] == "/usr/bin/sudo" for argv in fake.commands), 1)
+
+    def test_corecaptured_arm_restores_wifi_if_off_command_fails(self):
+        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        before = "\n".join(raw.splitlines()[:11]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        fake = FakeCorecapturedActuator(before, before, now, exit_codes={"off": 1})
+        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
+            with self.assertRaisesRegex(entry.Refused, "corecaptured: 5 spawns"):
+                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
+        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
+        self.assertEqual(row["wifi_off_exit_code"], 1)
+        self.assertEqual(row["wifi_on_exit_code"], 0)
+        self.assertEqual(fake.sleeps, [])
+        self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
+        self.assertEqual(sum(argv[-1] == "on" for argv in fake.commands), 1)
 
     def test_sealed_bytes_checked_before_host_probes(self):
         self.plan.write_bytes(self.plan.read_bytes() + b" ")
