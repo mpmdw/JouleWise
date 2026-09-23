@@ -94,3 +94,24 @@ relaunch-prompt topology line; reviewed by an Opus 5.5 lens and a cold Fable 5.1
 **Live activation note:** 7a0f14bd (Fable) launched 01:29 after a022aecc exited; it has pushed the v3 branch, run an
 Opus contract lens, and opened PR #384 (D-182 addendum + lanes A270/A271). The new pins reach the next activation only
 after the magistrate fast-forwards the canonical checkout itself (D-183); this session never touched that root.
+
+## 7. Addendum 02:55 PDT — wall meter connected and reading (lane E214 / A214 WALL-METER-GAIN-01 unblocked)
+
+Ed plugged the ChargerLAB POWER-Z KM003C inline on the charger path and ran its PC-port USB-C cable to the Mac.
+Bench-verified 02:55:
+- `ioreg -p IOUSB`: "POWER_Z KM003C", vendor "ChargerLab", idVendor 24521 (0x5FC9), idProduct 99 (0x63).
+- Live read with the 09-21 probe (vendor bulk transfer, 1 Hz): `Vbus 27.57 V, Ibus 0.008 A, P 0.22 W, T 36.1 C`
+  over five consecutive seconds. The 09-21 log from the same probe showed 7.6–11.7 W through the meter.
+- Same instant, `ioreg -rn AppleSmartBattery`: `CurrentCapacity 100`, `FullyCharged Yes`, `IsCharging No`,
+  `Amperage` = 2^64 − 439, i.e. **−439 mA** at 12.85 V ≈ **−5.6 W**: the battery was supplying the machine while
+  "on AC Power" with the 140 W PD charger negotiated at 28 V. The meter path therefore carried almost nothing.
+  This is exactly the correction term the lane registration names ("the battery must be held full and battery
+  current logged as the correction term"): system draw ≈ adapter power (meter) + battery discharge power, and the
+  desk arm must log both at the same cadence and reject spans where the battery is not float-charging.
+- Durable copies (the session scratchpad is temporary): `~/night-archive/km003c-tools-20260923/` holds
+  `km003c_probe.py`, the 09-21 paired log, the protocol-research checkout, and the probe venv's requirements.
+  The tracked reader for the desk arm is the lane's deliverable; build it from that probe.
+
+Owner precondition for the desk arm: none further; the meter stays plugged in. The magistrate may run the arm in any
+window-free hour once the reader is tracked and tested; it must record whether the logging host (this Mac) adds
+measurable load, per the lane text.
