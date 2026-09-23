@@ -783,6 +783,21 @@ print(json.dumps(result))
     return json.loads(run([root / ".venv/bin/python", "-B", "-c", code], cwd=root, input=json.dumps(request)))
 
 
+def candidate_payload_kind(state):
+    """The sealed chain's payload kind, read the way the t0 gate reads it.
+
+    The t0 gate spends its 30 s non-observer observation only when
+    `probe_payload_kind` of the plan's chain says `quiet_predicate_evidence`
+    (night_gate, the C5 `payload_kind` condition).  The arm check mirrors that
+    scope on the same bytes: the custody `chain.zsh` the `sealed` check has
+    just verified against its digest.
+    """
+
+    from joulewise import night_gate
+    chain = safe_path(Path(state["custody_root"]) / "chain.zsh")
+    return night_gate.probe_payload_kind(chain.read_text(encoding="utf-8"))
+
+
 def machine_quiet_check(observer=None):
     """The arm check refuses on the SAME predicate as t0 (cold gate 10, Q2(i)).
 
@@ -964,8 +979,23 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
-            inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
-        passed = all(c["verdict"] == "pass" for c in checks.values())
+            # Scoped like the t0 gate (F12, fix round 1): the predicate is spent
+            # only on a quiet_predicate_evidence chain.  Any other chain records
+            # the decision as `skipped`, so check.json still shows it; a chain
+            # whose kind cannot be read fails closed.
+            try:
+                payload_kind = candidate_payload_kind(state)
+            except (Refused, OSError, ValueError) as exc:
+                checks["machine_quiet"] = dict(
+                    verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
+            else:
+                if payload_kind == KIND:
+                    inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
+                else:
+                    checks["machine_quiet"] = dict(verdict="skipped", reason="not an evidence night",
+                                                   payload_kind=payload_kind)
+        passed = all(c["verdict"] == "pass" or (name == "machine_quiet" and c["verdict"] == "skipped")
+                     for name, c in checks.items())
         record["armable"] = passed and not record["fake_launchctl"]
         record["rehearsal_ready"] = passed and record["fake_launchctl"]
         record["finished_epoch_s"] = time.time()
@@ -977,9 +1007,9 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             # failed" would make the operator open check.json to learn which
             # process held the machine (cold gate 10, 2026-09-23, Q2(i)).
             for name in ("night_agents", "census", "machine_quiet"):
-                reason = checks.get(name, {}).get("reason")
-                if reason:
-                    raise Refused(reason)
+                row = checks.get(name, {})
+                if row.get("verdict") == "fail" and row.get("reason"):
+                    raise Refused(row["reason"])
             stale = checks.get("supervisor", {}).get("reason", "")
             if stale.startswith("stale resident supervisor"):
                 raise Refused(stale)
