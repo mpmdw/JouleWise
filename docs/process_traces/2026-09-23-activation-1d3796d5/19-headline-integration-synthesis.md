@@ -46,3 +46,7 @@ Inputs: three blind design packets, A (08, MATH importer), B (09, scored-campaig
 ## 4. Scorecard (same packets)
 
 Sol 6.0 (17): found the 5-bundle vs 2-sub-block conflict, the problem-only bootstrap gap, and packet A's arithmetic slip. Opus 5.5 (18): the same conflicts plus the bench-token-pilot restructure, the greedy-only adapter (`mlx_runtime.py:984-1009`), D-045.7 against net joules, block membership across models, the overrun-drop bias, and the n arithmetic. Both PASS. Opus was deeper on this packet; Sol's F4 inference point was the only one Opus missed.
+
+## Addendum (15:50 PDT, same activation) — correction to M1
+
+M1 and §1's reason column call packet A's 4,040 "an arithmetic slip". **That is wrong.** The importer seat (record 21) authenticated the pinned files and computed the population from them: 5,001 rows, 5,000 distinct ids before exclusion (one id appears twice), 4,999 singleton ids. Exclusions are both rows of the duplicated id (2), 954 non-rational references and 5 plain-comma references. That leaves **5,001 − 2 − 954 − 5 = 4,040 eligible**, with the reference self-check passing 4,040/4,040. Packet A misstated only its base (5,000 instead of 5,001 rows); its total and table were right. Both integration seats (17, 18) and this synthesis repeated the base error. The rule "exclude both rows of the duplicated id" stands.
