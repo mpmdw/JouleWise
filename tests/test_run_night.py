@@ -3850,11 +3850,53 @@ class WindowDeadlineTests(unittest.TestCase):
 
     def test_a_grandchild_that_ignores_sigterm_is_killed_and_still_proven(self) -> None:
         grandchild = self.root / "grandchild.pid"
+        ready = self.root / "grandchild.ready"
         self._arm(
-            "/bin/zsh -c 'trap \"\" TERM; exec /bin/sleep 25' &\n"
+            f"/bin/zsh -c 'trap \"\" TERM; : > {ready}; exec /bin/sleep 300' &\n"
             f"echo $! > {grandchild}\n/bin/sleep 20\n")
+        # The two-second scaled deadline can fire before the grandchild has
+        # installed its TERM trap; the census then proves the group gone with
+        # TERM alone and the escalation under test never runs (CI, 09-23,
+        # every run after c741678b). Hold the chain start until the trap is
+        # in place and the grandchild is a member of the chain's group.
+        complete_start = self.driver._complete_chain_start
+
+        def complete_after_ready(descriptor, process, night_dir):
+            pgid = complete_start(descriptor, process, night_dir)
+
+            def reap() -> None:
+                # A failed readiness wait raises before any deadline exists.
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            self.addCleanup(reap)
+            self._await(ready, timeout_s=10)
+            self._await(grandchild, timeout_s=10)
+            self.assertEqual(pgid, os.getpgid(int(grandchild.read_text().strip())))
+            return pgid
+
+        # Diagnostic trail (CI-only failure, 09-23): every census answer with
+        # its time, plus a ps snapshot of the group, lands in the assertion
+        # message so a Linux failure shows what the census actually saw.
+        trail: list[str] = []
+        real_census = self.driver._group_census
+
+        def recording_census(pgid, timeout_s=1):
+            absent, lines = real_census(pgid, timeout_s)
+            snapshot = subprocess.run(
+                ["ps", "-eo", "pid,pgid,ppid,stat,etimes,args"],
+                capture_output=True, text=True, check=False).stdout.splitlines()
+            members = [row for row in snapshot[1:] if row.split()[1:2] == [str(pgid)]]
+            trail.append(f"{time.monotonic():.2f} absent={absent} lines={lines} ps={members}")
+            return absent, lines
+
         sent, patch = self._signal_spy()
-        with patch:
+        with mock.patch.object(self.driver, "_complete_chain_start",
+                               side_effect=complete_after_ready), \
+                mock.patch.object(self.driver, "_group_census",
+                                  side_effect=recording_census), patch:
             exit_code = self.driver.run_night(self.plan_path)
         pid = int(grandchild.read_text().strip())
         self.assertEqual(self.driver.EXIT_ABORTED, exit_code)
@@ -3862,7 +3904,8 @@ class WindowDeadlineTests(unittest.TestCase):
         self.assertEqual("night_window_exceeded", refusal["refusal"]["reason"])
         self.assertTrue(deadline["proven"])
         self.assertIn(signal.SIGKILL, [number for _pgid, number in sent],
-                      "a TERM-ignoring member must force the escalation")
+                      "a TERM-ignoring member must force the escalation; grandchild "
+                      f"pid {pid}; census trail:\n" + "\n".join(trail[:3] + ["..."] + trail[-4:]))
         self.assertFalse(self._alive(pid), "the TERM-ignoring member survived")
 
     # ---- (3) a census that never empties -----------------------------------
