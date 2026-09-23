@@ -36,7 +36,17 @@ DIRECTIVES_ARGV = ("gh", "issue", "list", "--repo", "mpmdw/JouleWise", "--label"
 
 
 class Refused(Exception):
-    """A preparation cannot safely advance."""
+    """A preparation cannot safely advance.
+
+    `evidence` is an optional mapping of the observation the refusal rests on.
+    `check()` merges it into the failing check's row, so a refusal whose text
+    points at a field (for example "observation in top_consumers_at_decision")
+    leaves that field in check.json (lens S4, fix round 1).
+    """
+
+    def __init__(self, *args, evidence=None):
+        super().__init__(*args)
+        self.evidence = dict(evidence or {})
 
 
 def run(argv, *, cwd=None, input=None):
@@ -801,7 +811,9 @@ def machine_quiet_check(observer=None):
         raise Refused("non-observer observation carries no interval_s")
     consumers = (observation.get("metrics") or {}).get("top_consumers") or []
     if offender is not None:
-        raise Refused(night_gate.non_observer_refusal_detail(offender, interval_s))
+        raise Refused(night_gate.non_observer_refusal_detail(offender, interval_s),
+                      evidence=dict(top_consumers_at_decision=list(consumers), interval_s=interval_s,
+                                    bar_busy_cores=night_gate.T0_NON_OBSERVER_SHARE_MAX))
     return dict(top_consumers_at_decision=list(consumers), interval_s=interval_s,
                 bar_busy_cores=night_gate.T0_NON_OBSERVER_SHARE_MAX)
 
@@ -930,7 +942,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                 checks[name] = dict(verdict="pass")
                 checks[name].update(evidence)
             except (Refused, OSError, ValueError, KeyError, TypeError) as exc:
-                checks[name] = dict(verdict="fail", reason=str(exc))
+                checks[name] = {**getattr(exc, "evidence", {}), "verdict": "fail", "reason": str(exc)}
             return checks[name]["verdict"] == "pass"
 
         def seal():

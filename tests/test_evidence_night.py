@@ -276,8 +276,17 @@ class PrepareTests(unittest.TestCase):
                 record = json.loads((Path(state["staging"]) / "lifecycle/check.json").read_text())
                 self.assertFalse(record["armable"])
                 self.assertFalse(record["rehearsal_ready"])
-                self.assertEqual(record["checks"]["machine_quiet"],
-                                 dict(verdict="fail", reason=expected))
+                # Fix round 1 (lens S4): the refusal text points at
+                # top_consumers_at_decision, so the failing row carries it --
+                # the observation the arm was refused on, naming the offender.
+                failing = record["checks"]["machine_quiet"]
+                self.assertEqual((failing["verdict"], failing["reason"]), ("fail", expected))
+                self.assertEqual(failing["interval_s"], 30.4)
+                self.assertEqual(failing["bar_busy_cores"], night_gate.T0_NON_OBSERVER_SHARE_MAX)
+                self.assertEqual([(c["pid"], c["busy_cores"], c["observer"])
+                                  for c in failing["top_consumers_at_decision"]],
+                                 [(341, 0.998, False)])
+                self.assertTrue(failing["top_consumers_at_decision"][0]["command"].endswith("/fseventsd"))
 
     def test_the_arm_check_records_an_unreadable_observation_as_not_armable(self):
         """Fix round 1 (lens S3): a failed or unreadable observation is a written refusal.
