@@ -115,3 +115,51 @@ Bench-verified 02:55:
 Owner precondition for the desk arm: none further; the meter stays plugged in. The magistrate may run the arm in any
 window-free hour once the reader is tracked and tested; it must record whether the logging host (this Mac) adds
 measurable load, per the lane text.
+
+## 8. Addendum 03:15 PDT — Ed's headline research question and the first design sketch
+
+**Ed, verbatim (~03:00):** "i want a paper that's legitimately novel results on a power analysis benchmark that idk
+characterizes something, a new axis from prompt difficulty to power consumption that type of question, prompt
+difficulty if it matches model size versus expected power consumption etc about". Then (~03:05): "go on block 2.
+i want as high quality a paper as possible" (directive issue #386). Then (~03:20), on the horizon: "i technically
+have til end of november" — Fable's answer: a characterization paper with the difficulty axis as its spine
+(difficulty × model size × quantization × reasoning mode, energy-to-correct-answer, calibrated pre-registered
+instrument, released harness), ~9 weeks in five blocks (instrument sign-off + Paper B; headline experiment; second
+size pair + quant + reasoning arms; optional second device class; writing).
+
+**Opus 5.5 design sketch (read-only, ~5 min), verbatim; planning figures are marked by the author as unverified:**
+
+```
+Claim: On the M3 Max, with Qwen3-1.7B vs 8B (_v5: 4-bit MLX, greedy, one attempt), the model that spends fewer joules per correct MATH answer switches from 1.7B to 8B at some published level L* ≤ 5. The claim is falsified if R_L = J/correct(8B) ÷ J/correct(1.7B) has a 95% interval above 1 at every level.
+
+1. What "difficulty" and "matches model size" mean
+- Difficulty: MATH's author-assigned Levels 1–5, never the tested model's solve rate. 64 frozen, hashed items per level, balanced by subject (MATH-500's per-level counts are unchecked).
+- Second ladder: the repo's contamination-free affine_mod_ladder_v1.
+- Size match: the sign of R_L at each level. L* is the lowest level whose interval sits entirely below 1.
+- Arms: thinking off (primary) and thinking on.
+
+2. Why J/correct and not J/token
+Energy per token (J/token) is set by the bytes each token moves at near-flat power (PC-4). Harder items do the same work per token, so J/token changes only through context growth (PC-5), which is already known. The new quantity is J/correct = J/token × tokens/attempt ÷ accuracy. The 8B pays about 4× per token (a planning figure; re-measure it) and must win that back on accuracy and length. Report all three factors.
+The physical test fits E = fixed + a·p + b·d per model (p = prompt tokens, d = generated tokens) and checks the residual. A residual above 5 J that trends with level would be a new mechanism. I expect none.
+Confounds to report: output length incl. thinking tokens; cap hits (a truncated answer counts as incorrect; a cell with >20% truncations is labelled cap-bound); retries: none; prefill (MATH prompts too short to resolve prefill energy alone, report block totals); KV-cache growth; order and heat effects: ABBA ordering.
+
+3. Budget
+- Unit: one level block per 600 s envelope. Under greedy decoding, repeats vary only in energy. The binomial uncertainty on accuracy (±12% at n=64) outweighs the ≈1 J floor.
+- Thinking off: 20 envelopes, about 2 windows (2 models × 5 levels × 2 repeats). Assumes an 8B block fits in 480 s.
+- Thinking on: 40–60 envelopes, about 4–5 windows (trace length unknown).
+- Floors: Paper B's floors carry over only if the hashes match, else +2 windows.
+- Total: about 10 windows including reserve, about 3.5 days.
+- Slot: promote RQ-NEXT-EPCA-LEVELS from Paper D 2b (windows 49–53) to Paper C's headline. Run it after a 1.7B/8B slice of the Q4 shape grid, displacing Q5 and session/prefix. Paper B is not yet data-complete.
+Pre-register: the AP-5 extension to MATH (C-004/D-041 currently allow scores only beside energy); item hashes, scorer, extractor and cap; the decision rule with Holm correction; a fixed n (D-062); at least 3 correct per level, otherwise merge levels in a pre-declared order; strict-valid envelopes only, contaminated ones re-run; a 16-item sizing pilot kept separate from the test items.
+
+4. Threats
+- Novelty: if token counts explain everything, J/correct is just arithmetic. Closest work known to the author: "Intelligence per Watt" (Saad-Falcon et al., 2025; scope unsure), RouteLLM and FrugalGPT (route by cost, not energy), Wilkins et al. 2024, Luccioni et al. FAccT 2024, ML.ENERGY. Defense: the measured residual plus the decomposition.
+- Validity: MATH is probably in Qwen3's training data, so claims cover only this frozen subset. If both models score high (unverified), R_L may never cross 1. The null result ("1.7B is cheaper at every level") still counts.
+Sources: research_plan_2026-09-16.md (EPCA-LEVELS is Paper D Phase 2b, windows 49–53); research_prospectus_2026-09-16.md (Axis 1, rank 5); docs/research_question_bank.md (PC-1..9, RQ-D-A10, RQ-NEXT-EPCA-LEVELS/-MECHANISM, C-004); docs/contracts/analysis_plans.md (AP-5, binomial guard, ban on any "difficulty causes energy" claim). Current model pair is Qwen3 1.7B/8B.
+```
+
+**Fable's disposition:** the sketch is a promotion of an RQ the repo already holds (RQ-NEXT-EPCA-LEVELS, AP-5) to
+the paper's headline, which is exactly Ed's stated question; the promotion is a plan change for the magistrate to
+register through the normal gate (pre-decision consult with Sol 6.0, cold Fable final pass), with Ed's "highest
+quality" tiebreaker. Every number above is a planning figure until measured. Scorecard: Opus 5.5 located the
+existing RQ, the analysis-plan constraints and the claim-shape ban without being told they existed.
