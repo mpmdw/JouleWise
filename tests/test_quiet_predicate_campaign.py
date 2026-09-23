@@ -3539,6 +3539,34 @@ class ObserverFloorTests(unittest.TestCase):
         self.assertIn("sibling process of the collector", report["observer_floor_components_role"])
         self.assertIn("never a stop input", report["observer_floor_components_role"])
 
+    def test_the_companion_above_the_smallest_share_is_never_a_stop_cause(self):
+        """Fix round 2, delta re-audit D3: the "reported only" claim, made testable.
+
+        The forcing problem: the sibling test above asserts the stop reads the
+        ruled floor and "never the companion", but on its fixture both are
+        0.175 cores, far above the 0.05-core `smallest_holdable_share`, so a
+        stop fed the companion gives the same cause and the assertion cannot
+        tell the two apart (mutation M9 survived all 152 tests).
+
+        Counterfactual input: the floor BELOW the share and the companion
+        ABOVE it.  Each of the twelve 600 s envelopes costs 29.9 s whole
+        (floor 29.9 / 600 = 0.04983 cores, under 0.05) and its sibling load
+        recorder 0.5 s (companion (29.9 + 0.5) / 600 = 0.05067 cores, over
+        0.05).  A stop fed the ruled floor carries no observer cause; a stop
+        fed the companion would carry `observer_floor_above_smallest_holdable_share`.
+        """
+
+        share = PROTOCOL["block_two"]["smallest_holdable_share"]
+        report = self.summarize([29.9] * 12, rounds=1.0, recorder=.5)
+        self.assertAlmostEqual(report["observer_floor_cores"], 29.9 / 600.)
+        self.assertAlmostEqual(report["observer_floor_including_load_recorder_cores"],
+                               (29.9 + .5) / 600.)
+        # The fixture straddles the share, or the assertion below is vacuous.
+        self.assertLess(report["observer_floor_cores"], share)
+        self.assertGreater(report["observer_floor_including_load_recorder_cores"], share)
+        stop = report["block_two_stop"] or {}
+        self.assertNotIn("observer_floor_above_smallest_holdable_share", stop.get("causes") or [])
+
     def test_the_summary_observer_definition_is_the_ruled_sentence_plus_the_sibling_fact(self):
         # Fix round 1 (lens N5): the pre-v3 string ("SELF + reaped CHILDREN,
         # including collector, recorder, sampler and census") was one of the
