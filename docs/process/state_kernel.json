@@ -767,7 +767,7 @@
       },
       "authority": {
         "anchor": "verdict",
-        "label": "PR #393 body row 9, as supplied in the registration charge; related final pass record 25",
+        "label": "PR #393 body, gate-ledger row 9; related final pass record 25",
         "path": "docs/process_traces/2026-09-23-activation-f2d6899b/25-cold-fable-final-pass-45889885.md"
       },
       "dependencies": [],
@@ -780,7 +780,7 @@
       "priority": "p3_hardening_candidates",
       "rank": 279,
       "status": "queued",
-      "status_note": "2026-09-23 activation f2d6899b: WATCH [AGENT], P3. Recurrence in replay or CI triggers timing-margin investigation; five clean full replays trigger retirement.",
+      "status_note": "2026-09-23 activation f2d6899b: QUEUED as a watch item [AGENT], P3. Recurrence in replay or CI triggers timing-margin investigation; five clean full replays trigger retirement.",
       "stop_card": null
     },
     "BLOCK-TWO-DESIGN-01": {
@@ -4699,7 +4699,7 @@
           "label": "NOTICE-SUMMARY-V3-TEXT-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Regressions at the production call sites, each failing before the change: render_notice for a v3 plan names the 0.5-core arm/t0 rule, the 30 core-second exclusion and the two-in-a-row abort, and states the span computed from the registration (8,020 s for v3); the generated summary.md for a v3 summary no longer says busy cores are never an exclusion input; a v2-pinned plan's text is unchanged or refused as today; lands under the twelve-row gate (quiet_predicate_campaign.py is a claim-bearing file: full gate)."
+        "summary": "Regressions at the production call sites, each failing before the change: render_notice for a v3 plan names the 0.5-core arm/t0 rule, the 30 core-second exclusion and the two-in-a-row abort, and states the span computed from the registration (8,020 s for v3); the generated summary.md for a v3 summary no longer says busy cores are never an exclusion input; a v2-pinned plan's text is unchanged or refused as today; lands under the twelve-row gate (quiet_predicate_campaign.py is a claim-bearing file: full gate). The rendered arm notice contains, verbatim: \"the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes\"."
       },
       "authority": {
         "label": "Arm gate of activation 4158e658 on plan qpe01-pilot-n1-20260923-0700: Sol 6.0 dissent (ARM AFTER CURES) recorded under the cold Fable ARM verdict (registration by the magistrate, not a ruling)",
@@ -4715,7 +4715,7 @@
       "priority": "p2_next_slice",
       "rank": 276,
       "status": "queued",
-      "status_note": "2026-09-23 activation 4158e658: registered from the arm gate; the 07:00 v3 pilot is staged to be armed with a one-line correction appended to the notice instead of a new head. 2026-09-23 activation f2d6899b, record 32 §4: the arm notice must also say \"the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes\". Until A276 lands, the magistrate appends that sentence by hand.",
+      "status_note": "2026-09-23 activation 4158e658: registered from the arm gate; the 07:00 v3 pilot is staged to be armed with a one-line correction appended to the notice instead of a new head. 2026-09-23 activation f2d6899b, record 32 §4: the arm notice must also say \"the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes\". Until registration v4 (A278) lands, every arm notice carries that sentence; the magistrate appends it by hand until A276's generated notice includes it.",
       "stop_card": null
     },
     "NOTICE-TRANSPORT-FALLBACK-01": {
@@ -6348,7 +6348,7 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "At the next registration change (block two or the next pilot re-run, whichever comes first), create a new registration version with t0_corecaptured_spawns_max: 2 and cold ruling 16’s id appended to its ruling string. Preserve every byte of v3: the registration table in joulewise/night_gate.py:55–75 is digest-keyed. Carry the non-blocking record 33 follow-ups: exact WINDOW_S edge tests at 600 and 601 seconds, reconcile LOG_ARGV --last 10m with WINDOW_S, fix document-level first use of “arm check”, and gloss “rehearsal” and “fixture launchctl” in the handback paragraph.",
+      "goal": "At the next registration change (block two (the next planned block of measurement nights) or the next pilot re-run, whichever comes first), create a new registration version with t0_corecaptured_spawns_max: 2 and cold ruling 16’s id appended to its ruling string. Preserve every byte of v3: the registration table in joulewise/night_gate.py:55–75 is digest-keyed. Carry the non-blocking record 33 follow-ups: exact WINDOW_S edge tests at 600 and 601 seconds, reconcile LOG_ARGV --last 10m with WINDOW_S, fix document-level first use of “arm check”, and gloss “rehearsal” and “fixture launchctl” in the handback paragraph.",
       "id": "QPE01-REGISTRATION-V4-CORECAPTURED-01",
       "lane": "agent",
       "priority": "p2_next_slice",
@@ -9896,7 +9896,7 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Cure the production successor eligibility gap found by cold ruling 16 Q1: nothing writes the harvested zero_capture_evidence C5 block, so joulewise/arm_retry.py zero_capture_successor_allowed rejects every live receipt with missing_zero_capture_evidence and D-182 cannot deliver its one successor. The implementer should consult on two options: make harvest write the block, or rebase eligibility on the on-disk facts established by scripts/magistrate_watchdog.py _zero_capture_disk_facts. A234 releases the hold but does not itself deliver the ~20-minute successor.",
+      "goal": "Cure the production successor eligibility gap found by cold ruling 16 Q1: nothing writes the harvested zero_capture_evidence block (a field in the refusal receipt's C5 row, the night gate's record that no measurement started), so joulewise/arm_retry.py zero_capture_successor_allowed rejects every live receipt with missing_zero_capture_evidence and D-182 (the rule that allows one replacement night, the successor, after a refusal that captured nothing) cannot deliver its one successor. The implementer should consult on two options: make harvest write the block, or rebase eligibility on the on-disk facts (no chain.started, no *.consumed.json reservation marker, no capture file) established by scripts/magistrate_watchdog.py _zero_capture_disk_facts. A234 releases the hold but does not itself deliver the ~20-minute successor.",
       "id": "ZERO-CAPTURE-EVIDENCE-WRITER-01",
       "lane": "agent",
       "priority": "p1_phase_gate",

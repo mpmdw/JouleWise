@@ -33,7 +33,7 @@ EXPECTED_IDS = {
     "ENVELOPE-START-DRIFT-01",
     # 2026-09-23 activation 7a0f14bd, D-182 addendum (Ed-ratified) + owner session record 7ec32e8b §2: register QPE01-ABORT-SUCCESSOR-01 (270), FSEVENTSD-CORECAPTURED-PREDICATE-01 (271): 226 + 2 = 228.
     "QPE01-ABORT-SUCCESSOR-01",
-    # 2026-09-23 activation f2d6899b: A271 landed by PR #394, merge MERGE_SHA_A271. Its t0 check is detection-only (lead ruling record 05, upheld by ruling 16 Q2); registration v4 recording is deferred per final pass record 32 §4.
+    # 2026-09-23 activation f2d6899b: A271 landed by PR #394, merge c741678b. Its t0 check is detection-only (lead ruling record 05, upheld by ruling 16 Q2); registration v4 recording is deferred per final pass record 32 §4.
     # 2026-09-23 activation 4158e658, directive #386 + owner session record 7ec32e8b (records 04, 07): register THROUGHPUT-01 (272), BLOCK-TWO-DESIGN-01 (273), PROMPT-AUDIT-01 (274), CENSUS-MULTILINE-ARGV-01 (275): 228 + 4 = 232.
     "THROUGHPUT-01",
     "BLOCK-TWO-DESIGN-01",
