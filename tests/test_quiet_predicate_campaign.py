@@ -3283,6 +3283,10 @@ class NonObserverAbortTests(FrozenExecutorTests):
                                     3: [("fseventsd", 341, 36.)], 4: []})
 
 
+# The v3 registration's bytes as of fix round 1 (the components text now
+# names the load recorder as a sibling outside whole).  Pinned as a literal
+# here AND as `night_gate.QPE01_PILOT_REGISTRATION_SHA256`.
+V3_REGISTRATION_SHA256 = "9491bc370b515c7d56d21f87e0c6721be8cb2b6501b430b9dce75a93f59a6f0a"
 V2_PROTOCOL = json.loads((ROOT / "configs/campaigns/quiet_predicate_evidence_01"
                           / "pilot_protocol_v2.json").read_text())
 
@@ -3342,12 +3346,91 @@ class ObserverFloorTests(unittest.TestCase):
                          ["observer_floor_above_smallest_holdable_share"])
         self.assertEqual(report["block_two_stop"]["outcome"], "no cutoff qualifies")
         components = report["envelopes"][0]["observer_floor_components"]
-        self.assertEqual(components["round_block"], 1.)
-        self.assertEqual(components["load_recorder"], .2)
-        self.assertAlmostEqual(components["power_recorder_residue"], 103.8)
-        self.assertAlmostEqual(components["round_block"] + components["load_recorder"]
-                               + components["power_recorder_residue"],
+        self.assertEqual(components["round_block"], {"cpu_s": 1., "inside_whole": True})
+        self.assertEqual(components["load_recorder"], {"cpu_s": .2, "inside_whole": False})
+        self.assertEqual(components["power_recorder_residue"]["inside_whole"], True)
+        self.assertAlmostEqual(components["power_recorder_residue"]["cpu_s"], 104.)
+        # A DEFINITIONAL identity, not a measurement: the residue is defined
+        # as whole minus round_block, so the two inside-whole components sum
+        # to whole by construction.  It guards the bookkeeping (no component
+        # outside whole may be subtracted from it), not the physics.
+        self.assertAlmostEqual(components["round_block"]["cpu_s"]
+                               + components["power_recorder_residue"]["cpu_s"],
                                components["whole_envelope_observer_cpu_s"], delta=1e-9)
+
+    def test_the_residue_no_longer_subtracts_the_sibling_load_recorder(self):
+        """Fix round 1, lens S1 as ruled by the magistrate (2026-09-23).
+
+        The forcing fact: `whole_envelope_observer_cpu_s` is the collector's
+        RUSAGE_SELF + RUSAGE_CHILDREN; the 30 s load recorder is launched by
+        the executor as the collector's SIBLING and journals its own CPU, so
+        it was never inside whole.  The 16900e3d formula subtracted it anyway
+        (residue = whole - round_block - load_recorder), understating the
+        power recorder's residue by exactly the load recorder's CPU.
+
+        Counterfactual: a fixture whose load recorder is NOT zero (0.2 s per
+        envelope).  The old formula gives 105 - 1 - 0.2 = 103.8; the ruled one
+        gives 105 - 1 = 104.0.  With a zero load recorder the two agree and
+        the test could not tell them apart.
+        """
+
+        report = self.summarize([105.] * 12, rounds=1.0, recorder=.2)
+        old_formula = 105. - 1.0 - .2
+        for value in report["envelopes"]:
+            components = value["observer_floor_components"]
+            self.assertGreater(components["load_recorder"]["cpu_s"], 0)
+            self.assertAlmostEqual(components["power_recorder_residue"]["cpu_s"], 104.)
+            self.assertNotAlmostEqual(components["power_recorder_residue"]["cpu_s"], old_formula)
+            self.assertFalse(components["load_recorder"]["inside_whole"])
+        # The ruled floor keeps the load recorder out; the REPORTED companion
+        # adds the sibling back over the same readable envelopes and spans.
+        self.assertAlmostEqual(report["observer_floor_cores"], 12 * 105. / 7200.)
+        self.assertAlmostEqual(report["observer_floor_including_load_recorder_cores"],
+                               (12 * 105. + 12 * .2) / 7200.)
+        # Reported only: the stop branch reads the ruled floor, never the
+        # companion (a companion above the smallest share changes no cause).
+        self.assertEqual(report["block_two_stop"]["causes"],
+                         ["observer_floor_above_smallest_holdable_share"])
+        self.assertIn("sibling process of the collector", report["observer_floor_components_role"])
+        self.assertIn("never a stop input", report["observer_floor_components_role"])
+
+    def test_the_registration_pins_the_corrected_components_text(self):
+        """Fix round 1 (lens S1): v3's bytes change only in the components text.
+
+        The four ruled strings stay byte-for-byte as ruling 31 / brief 6(c)
+        gave them -- including the `definition`'s "including ... load
+        recorder", whose inaccuracy the magistrate holds for the block-two
+        consult rather than patching -- and the magistrate-authored
+        `components` text now says in plain words that the load recorder is a
+        sibling outside whole.  The digest is pinned here as a literal so a
+        silent change to the bytes cannot pass by re-pinning the constant.
+        """
+
+        import hashlib
+        raw = (ROOT / campaign.PROTOCOL_PATH).read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        self.assertEqual(digest, V3_REGISTRATION_SHA256)
+        self.assertEqual(digest, night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+        floor = json.loads(raw)["observer_floor"]
+        self.assertEqual(floor["statistic"],
+                         "per envelope: session.whole_envelope_observer_cpu_s / (end_stamp.monotonic_before_s"
+                         " - start_stamp.monotonic_before_s); campaign value = sum of "
+                         "whole_envelope_observer_cpu_s over all readable envelopes / sum of their spans")
+        self.assertEqual(floor["definition"],
+                         "SELF + all reaped CHILDREN, including collector, power recorder, load recorder "
+                         "and census; never subtracted")
+        self.assertEqual(floor["limitation_sentence"],
+                         "Block two measures the marginal energy of the level on top of this observer, "
+                         "not on an idle machine.")
+        self.assertEqual(floor["supersedes"],
+                         "v2 observer_floor_cores summed per-round observer_cpu_s (worker/census block only) "
+                         "and omitted the power recorder; v2 reported 0.0531 (20260922-0217) and 0.0528 "
+                         "(20260922-2100); corrected whole-envelope values 0.176 and 0.159 cores")
+        self.assertIn("load_recorder (30 s covariate recorder; inside_whole false) is a sibling process "
+                      "of the collector", floor["components"])
+        self.assertIn("outside whole_envelope_observer_cpu_s", floor["components"])
+        self.assertIn("never a stop input", floor["components"])
+        self.assertNotIn("whole minus those two", floor["components"])
 
     def test_the_variation_is_the_sample_sd_of_the_per_envelope_shares(self):
         import statistics
@@ -3372,7 +3455,8 @@ class ObserverFloorTests(unittest.TestCase):
         # The two nights' own bytes, under the corrected statistic, with the
         # v2 retention rules so nothing but the floor changes (exhibit G and
         # ruling 31 §1 recompute the same numbers independently).
-        for night, floor, variation in ((CLEAN, .17572, .00214), (CONTAMINATED, .15909, .00267)):
+        for night, floor, variation, including in ((CLEAN, .17572, .00214, .183),
+                                                   (CONTAMINATED, .15909, .00267, .166)):
             with self.subTest(night=night.parent.name):
                 archived = json.loads((night / "evidence/summary.json").read_text())
                 report = archive_summary(night, V2_PROTOCOL)
@@ -3390,13 +3474,22 @@ class ObserverFloorTests(unittest.TestCase):
                                  ["observer_floor_above_smallest_holdable_share"])
                 # The v2 numbers these supersede, for the record.
                 self.assertLess(archived["observer_floor_cores"], .054)
-                # Every component sums to the whole, and nothing else moved.
+                # The two inside-whole components sum to whole (a definitional
+                # identity: the residue IS whole minus round_block), and the
+                # sibling load recorder is reported outside it.
                 for value in report["envelopes"]:
                     components = value["observer_floor_components"]
                     self.assertAlmostEqual(
-                        components["round_block"] + components["load_recorder"]
-                        + components["power_recorder_residue"],
-                        components["whole_envelope_observer_cpu_s"], delta=1e-6)
+                        components["round_block"]["cpu_s"] + components["power_recorder_residue"]["cpu_s"],
+                        components["whole_envelope_observer_cpu_s"], delta=1e-9)
+                    self.assertFalse(components["load_recorder"]["inside_whole"])
+                    self.assertGreater(components["load_recorder"]["cpu_s"], 0)
+                # The reported companion with the sibling load recorder added
+                # back (magistrate ruling on lens S1): ~0.183 / ~0.166 cores.
+                self.assertAlmostEqual(report["observer_floor_including_load_recorder_cores"],
+                                       including, delta=.002)
+                self.assertGreater(report["observer_floor_including_load_recorder_cores"],
+                                   report["observer_floor_cores"])
                 if report["status"] != campaign.REPLAY_NEVER_EVIDENCE:
                     self.assertEqual([v["joules"] for v in report["envelopes"]],
                                      [v["joules"] for v in archived["envelopes"]])

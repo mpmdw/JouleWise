@@ -1223,15 +1223,24 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     # lines above.  The 100 ms power recorder is reaped by the collector
     # AFTER the round block ends, so two thirds of the apparatus was missing:
     # both archived nights reported ~0.053 cores where the whole envelope
-    # costs 0.176 and 0.159.  The number the registration's own
-    # `observer_definition` describes ("SELF + reaped CHILDREN, including
-    # collector, recorder, sampler and census") is this one.
+    # costs 0.176 and 0.159.
     #
-    # The components are reported because the correction's largest term has
-    # no PID attached at this revision: `power_recorder_residue` is what the
-    # collector reaped that was neither the round block nor the 30 s load
-    # recorder, and its size (0.10-0.12 cores) means a reader must be able to
-    # see it rather than infer it.
+    # What "whole" holds, and what it does not (magistrate ruling on lens S1,
+    # fix round 1, 2026-09-23): `whole_envelope_observer_cpu_s` is the
+    # COLLECTOR's own CPU plus the CPU of every child the collector reaped
+    # (RUSAGE_SELF + RUSAGE_CHILDREN, scripts/sample_quiet_predicate_evidence.py
+    # `cpu_total`).  The 30 s load recorder is launched by the EXECUTOR, as a
+    # sibling of the collector, and journals its own CPU per row; it is
+    # therefore NOT inside whole.  So the components split in two:
+    #   - inside whole: `round_block` (the sampler's worker/census block) and
+    #     `power_recorder_residue` = whole - round_block, which is everything
+    #     else the collector reaped -- the 100 ms power recorder, unattributed
+    #     by PID at this revision.  These two sum to whole by definition.
+    #   - outside whole: `load_recorder`, the sibling's own journaled CPU.
+    # The ruled floor stays sum(whole) / sum(span).  The companion
+    # `observer_floor_including_load_recorder_cores` adds the sibling back
+    # ((sum(whole) + sum(load_recorder)) / sum(span)); it is REPORTED only and
+    # never feeds a stop.
     readable = [v for v in values if v.get("error") is None]
     shares = []
     for value in readable:
@@ -1240,15 +1249,18 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             raise ValueError(f"envelope {value['index']}: whole_envelope_observer_cpu_s or "
                              "envelope span missing; absent evidence is never a pass")
         shares.append(whole / span)
+        round_block = value.get("observer_cpu_s")
         value["observer_floor_components"] = {
-            "round_block": value.get("observer_cpu_s"),
-            "load_recorder": value.get("recorder_observer_cpu_s"),
-            "power_recorder_residue": whole - (value.get("observer_cpu_s") or 0)
-                                      - (value.get("recorder_observer_cpu_s") or 0),
+            "round_block": {"cpu_s": round_block, "inside_whole": True},
+            "power_recorder_residue": {"cpu_s": whole - (round_block or 0), "inside_whole": True},
+            "load_recorder": {"cpu_s": value.get("recorder_observer_cpu_s"), "inside_whole": False},
             "whole_envelope_observer_cpu_s": whole, "envelope_span_s": span}
     observer_support_s = sum(v["envelope_span_s"] for v in readable)
-    observer_floor = (sum(v["whole_envelope_observer_cpu_s"] for v in readable) / observer_support_s
-                      if observer_support_s else None)
+    observer_whole_s = sum(v["whole_envelope_observer_cpu_s"] for v in readable)
+    observer_floor = observer_whole_s / observer_support_s if observer_support_s else None
+    observer_floor_including_load_recorder = (
+        (observer_whole_s + sum(v.get("recorder_observer_cpu_s") or 0 for v in readable))
+        / observer_support_s if observer_support_s else None)
     observer_variation = statistics.stdev(shares) if len(shares) >= 2 else None
     # The stop branch keeps its v2 FORM and cause name (synthesis 35 §3): it is
     # now fed the corrected statistic, and a clean pilot is EXPECTED to stop on
@@ -1277,10 +1289,17 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         "clean_machine_definition": "envelopes passing census, AC and thermal hard probes; independent of energy retention",
         "observer_floor_cores": observer_floor, "observer_support_s": observer_support_s,
         "observer_variation_cores": observer_variation,
-        "observer_floor_components_role": "per envelope, on envelopes[*].observer_floor_components: "
-            "round_block (the sampler's worker/census block), load_recorder (the 30 s covariate "
-            "recorder) and power_recorder_residue (what the collector reaped beyond those two, "
-            "the 100 ms power recorder's cost, unattributed by PID at this revision)",
+        "observer_floor_including_load_recorder_cores": observer_floor_including_load_recorder,
+        "observer_floor_components_role": "per envelope, on envelopes[*].observer_floor_components, "
+            "each component with its cpu_s and an explicit inside_whole flag: round_block (the "
+            "sampler's worker/census block) and power_recorder_residue (whole_envelope_observer_cpu_s "
+            "minus round_block: everything else the collector reaped, the 100 ms power recorder's "
+            "cost, unattributed by PID at this revision) are inside whole_envelope_observer_cpu_s and "
+            "sum to it; load_recorder (the 30 s covariate recorder) is a sibling process of the "
+            "collector, launched by the executor, so its CPU is outside whole_envelope_observer_cpu_s "
+            "and outside observer_floor_cores; observer_floor_including_load_recorder_cores = "
+            "(sum of whole_envelope_observer_cpu_s + sum of load_recorder) / sum of spans over the "
+            "same readable envelopes, reported only, never a stop input",
         "s_upper": s_upper,
         "s_upper_reason": "one-sided upper 90% chi-square bound; independent normal pair differences assumed"
             if sufficient else "fewer than four retained disjoint pairs or eight retained envelopes; no top-up",

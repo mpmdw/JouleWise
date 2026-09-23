@@ -1359,11 +1359,15 @@ class EvidenceRegistrationTests(unittest.TestCase):
         # `non_observer_process_busy` exclusion and its integral, the t0
         # share, the corrected `observer_floor`); v2 joins v1 as ruled
         # history, keyed by its own literal and superseded_by v3.
+        # 2026-09-23 (fix round 1, magistrate ruling on contract lens S1): the
+        # v3 digest is re-pinned because the magistrate-authored
+        # `observer_floor.components` text now states that the 30 s load
+        # recorder is a sibling of the collector, outside whole.
         # Any membership/metadata amendment needs its cold-gate ruling and a
         # dated update here.
         serialized = json.dumps(night_gate.RULED_REGISTRATIONS, sort_keys=True, separators=(',', ':'))
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         'c91f6898f0cb2e484c4c0c11a63172a9af0184edec1ff1cbec675d6c0a68c717')
+                         '1499b108886972e73c6e4361d76b455b31f4846a643248dc2a9896a7daed7dbe')
 
     def test_every_ruled_registration_names_tracked_records_that_exist(self):
         # Ruling 61a S4: prose authority is not enough; each entry's records

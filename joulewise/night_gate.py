@@ -64,7 +64,7 @@ D166_REGISTRATION_PATH = (
 # (whole-envelope accounting over the collector's own span, with the v2
 # statistic named in its supersession note).
 QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json"
-QPE01_PILOT_REGISTRATION_SHA256 = "b6cb513fe4aa8b2c5557b589fae07ef4149d480cd1c831aa267ecb37c97104fa"
+QPE01_PILOT_REGISTRATION_SHA256 = "9491bc370b515c7d56d21f87e0c6721be8cb2b6501b430b9dce75a93f59a6f0a"
 # v2's bytes stay in the table as ruled history, for the same reason v1's do:
 # the table is KEYED by digest, so re-pointing the constant above would carry
 # the v2 entry away with it.  Its own literal keeps the 2026-09-22 night's
