@@ -1043,6 +1043,41 @@ class LifecycleTests(unittest.TestCase):
                                reason="terminal record present; plan span inactive at observation time (scripts/magistrate_watchdog.plan_span_active)",
                                evidence=[str(only / "night/refusal.json")])])
 
+    def test_a_root_recorded_under_the_superseded_v2_registration_stays_retained(self):
+        """Brief 04 regression 4, third limb -- a GUARD, not defect-shaped.
+
+        Superseding v2 by v3 must not orphan the nights already recorded
+        under v2: their custody roots must still classify `retained`, or the
+        next arm check would refuse on history.  This holds by construction
+        today (`retained_roots` reads terminal markers, the custody path and
+        the plan span, never the registration digest), so the test cannot
+        fail on 16900e3d; it exists so a future change that makes retention
+        read the registration cannot land silently (lens S6, fix round 1).
+        """
+
+        import hashlib
+        from joulewise import night_gate
+        state = {"roots_under": str(self.custody.parent.parent)}
+        v2 = (ROOT / "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json").read_bytes()
+        self.assertEqual(hashlib.sha256(v2).hexdigest(), night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256)
+        self.assertIsNone(night_gate.armable_registration(night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256))
+        root = self.custody.parent / "under-v2"
+        (root / "night").mkdir(parents=True)
+        (root / "registration.json").write_bytes(v2)
+        plan = dict(self.sibling_plan(root), registration_path=str(root / "registration.json"))
+        (root / "night_plan.json").write_text(json.dumps(plan))
+        for marker in ("chain.started", "chain.exited", "refusal.json"):
+            (root / "night" / marker).write_text("{}")
+        (root / "night/receipt.json").write_text(json.dumps({"rows": [{"id": "C1", "measured": {
+            "registration_sha256": night_gate.QPE01_PILOT_REGISTRATION_V2_SHA256}}]}))
+        row = entry.retained_roots(state)["inventory"][0]
+        self.assertEqual((row["plan"], row["classification"]),
+                         (str(root / "night_plan.json"), "retained"))
+        record = entry.check(**dict(self.kw, quiet_observer=quiet_machine))
+        self.assertEqual(record["checks"]["retained_roots"]["verdict"], "pass")
+        self.assertEqual([r["classification"] for r in record["checks"]["retained_roots"]["inventory"]],
+                         ["retained"])
+
     def test_discovery_span_fence_reuses_the_watchdog_rule(self):
         from scripts.magistrate_watchdog import COURIER_DEADLINE_S
         state = {"roots_under": str(self.custody.parent.parent)}
