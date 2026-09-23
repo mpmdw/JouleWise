@@ -3863,6 +3863,15 @@ class WindowDeadlineTests(unittest.TestCase):
 
         def complete_after_ready(descriptor, process, night_dir):
             pgid = complete_start(descriptor, process, night_dir)
+
+            def reap() -> None:
+                # A failed readiness wait raises before any deadline exists.
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            self.addCleanup(reap)
             self._await(ready, timeout_s=10)
             self._await(grandchild, timeout_s=10)
             self.assertEqual(pgid, os.getpgid(int(grandchild.read_text().strip())))
