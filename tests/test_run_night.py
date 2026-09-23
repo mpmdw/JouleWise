@@ -3852,7 +3852,7 @@ class WindowDeadlineTests(unittest.TestCase):
         grandchild = self.root / "grandchild.pid"
         ready = self.root / "grandchild.ready"
         self._arm(
-            f"/bin/zsh -c 'trap \"\" TERM; : > {ready}; exec /bin/sleep 25' &\n"
+            f"/bin/zsh -c 'trap \"\" TERM; : > {ready}; exec /bin/sleep 300' &\n"
             f"echo $! > {grandchild}\n/bin/sleep 20\n")
         # The two-second scaled deadline can fire before the grandchild has
         # installed its TERM trap; the census then proves the group gone with
