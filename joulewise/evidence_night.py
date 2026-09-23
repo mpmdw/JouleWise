@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from typing import Callable
@@ -770,6 +771,9 @@ def _successor_claims(state):
         raise Refused("successor claim directory is not a directory")
     claims = {}
     for path in sorted(directory.iterdir()):
+        # Atomic-claim scratch files and macOS metadata are not claim names.
+        if path.name.startswith("."):
+            continue
         safe_path(path)
         if not path.is_file() or path.suffix != ".json":
             raise Refused("unreadable successor claim: " + str(path))
@@ -824,7 +828,8 @@ def successor_check(state, now_epoch_s=None):
         if not isinstance(key, str) or key.count(":") < 2:
             raise Refused("malformed zero-capture release key")
         prior_id, prior_root, _ = key.split(":", 2)
-        if (Path(prior_root).parent == root and not Path(prior_root, "night_plan.json").is_file()
+        if (Path(prior_root).expanduser().parent.resolve(strict=False) == root
+                and not Path(prior_root, "night_plan.json").is_file()
                 and (prior_id not in claims or now <= claims[prior_id].get(
                     "predecessor_completion_epoch_s", float("inf")))):
             raise Refused("released predecessor custody is missing")
@@ -895,14 +900,19 @@ def _create_successor_claim(state, row):
         return
     directory.mkdir(exist_ok=True)
     path = safe_path(directory / (predecessor + ".json"))
+    descriptor, temporary = tempfile.mkstemp(prefix=".successor-claim-", suffix=".tmp", dir=directory)
     try:
-        with path.open("x", encoding="utf-8") as stream:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             json.dump(expected, stream, sort_keys=True)
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
+        # Link is create-once at the final name: an existing claim still wins.
+        os.link(temporary, path)
     except FileExistsError:
         raise Refused("concurrent successor claim")
+    finally:
+        os.unlink(temporary)
 
 
 def clone_census(state, caller_pid, observation=None, *, argv_only=False):
@@ -1642,7 +1652,8 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
                 raise Refused("successor facts changed after check.json")
             record["phase"] = "publishing"
             save()  # Durable intent precedes the rename, including lost acknowledgement.
-            _create_successor_claim(state, successor)
+            if not fake:
+                _create_successor_claim(state, successor)
             publication_started = True
             os.replace(plan, target)
             published = True

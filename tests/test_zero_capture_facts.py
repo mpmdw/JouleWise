@@ -51,15 +51,13 @@ class ZeroCaptureFactsTests(unittest.TestCase):
         (self.custody / "night" / "evidence").symlink_to(self.root / "missing")
         self.assertEqual(zero_capture_facts(self.plan).capture_entries_found, 1)
 
-    def test_calibration_ledger_record_for_this_plan_blocks(self):
+    def test_calibration_shared_ledger_does_not_change_clean_facts(self):
         ledger = self.root / "ledger.jsonl"
         runs = self.root / "runs"
         self.chain.write_text(f"export RUNS_ROOT='{runs}'\nexport CALIBRATION_LEDGER='{ledger}'\n")
-        ledger.write_text(json.dumps({"plan_id": "other"}) + "\n")
+        ledger.write_text(json.dumps({"plan_id": "frozen-calibration-plan"}) + "\n" + "{torn\n")
         self.assertTrue(zero_capture_facts(self.plan).clean)
-        with ledger.open("a") as stream:
-            stream.write(json.dumps({"plan_id": "predecessor", "event": "bracket_session_open"}) + "\n")
-        self.assertEqual(zero_capture_facts(self.plan).ledger_sessions_found, 1)
+        (self.custody / "night/chain.started").write_text("{}")
         self.assertFalse(zero_capture_facts(self.plan).clean)
 
 

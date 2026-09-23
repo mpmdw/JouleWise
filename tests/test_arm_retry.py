@@ -461,7 +461,7 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
         receipt = dict(verdict="REFUSED", plan_id="predecessor",
                        refusal={"reason": "night_refused_not_quiet"},
                        conditions=[dict(condition_id="C5", measured={})])
-        facts = ZeroCaptureFacts(True, True, True, True, 0, 0, 0, "empty", 0, 0, True)
+        facts = ZeroCaptureFacts(True, True, True, True, 0, 0, 0, "empty", 0, True)
         delivery = {"courier.sent": True, "message_id": "sent-message", "plan_id": "predecessor"}
         claims = dict(candidate_plan_id="successor", candidate_sha256="a" * 64,
                       predecessor_sha256="b" * 64, predecessor_is_successor=False,
@@ -482,7 +482,7 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
         result, receipt, facts, delivery, claims = self.evidence()
         for name, value in (("chain_started", 1), ("reservation_markers_found", 1),
                             ("capture_entries_found", 1), ("envelopes_captured", 1),
-                            ("ledger_sessions_found", 1), ("scan_complete", False),
+                            ("scan_complete", False),
                             ("custody_root_present", False)):
             with self.subTest(name=name):
                 self.assertFalse(arm_retry.successor_license(result, receipt,

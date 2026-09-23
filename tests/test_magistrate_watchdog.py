@@ -225,6 +225,84 @@ class FenceTests(WatchdogTestCase):
         self.assertNotEqual("LAUNCHING", decision.state)
         self.assertEqual([], state["released_zero_capture_refusals"])
 
+    def test_a277_base_fixture_shape_release_parity(self) -> None:
+        # Expectations are the 313efcca _delivered_zero_capture_refusal outcomes
+        # for its F3 fixture shapes. Each decision also checks the release key.
+        shapes = (
+            ("clean_calibration", False, None, True),
+            ("clean_evidence", True, None, True),
+            ("nested_custody_marker", False, "custody_marker", False),
+            ("runs_marker", False, "runs_marker", False),
+            ("calibration_capture", False, "calibration_capture", False),
+            ("evidence_capture", True, "evidence_capture", False),
+            ("broken_capture_symlink", True, "broken_capture_symlink", False),
+            ("nonempty_index", True, "nonempty_index", False),
+            ("empty_index", True, "empty_index", True),
+            ("chain_started", False, "chain_started", False),
+            ("missing_chain", False, "missing_chain", False),
+            ("ambiguous_payload", True, "ambiguous_payload", False),
+        )
+        for name, evidence, mutation, expected in shapes:
+            with self.subTest(shape=name):
+                plan = self.make_plan(t0=self.base.timestamp() - 60,
+                                      authored_epoch_s=self.base.timestamp() - 3600,
+                                      name=name)
+                night = self.write_terminal_refusal(plan, bare_c5=True, evidence=evidence)
+                custody = Path(plan.custody_root)
+                runs = self.temp / f"{name}-runs"
+                if mutation == "custody_marker":
+                    path = custody / "nested/deep/attempt.consumed.json"
+                elif mutation == "runs_marker":
+                    path = runs / "deep/attempt.consumed.json"
+                elif mutation == "calibration_capture":
+                    path = runs / "instrument_validation/attempt/sample.json"
+                elif mutation == "evidence_capture":
+                    path = night / "evidence/envelope-01/sample.json"
+                else:
+                    path = None
+                if path is not None:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("{}")
+                if mutation == "broken_capture_symlink":
+                    (night / "evidence").symlink_to(self.temp / "missing-target")
+                elif mutation in ("nonempty_index", "empty_index"):
+                    (night / "evidence_envelopes.jsonl").write_text(
+                        "{}\n" if mutation == "nonempty_index" else "")
+                elif mutation == "chain_started":
+                    (night / "chain.started").write_text("{}")
+                elif mutation == "missing_chain":
+                    Path(plan.chain_path).unlink()
+                elif mutation == "ambiguous_payload":
+                    with Path(plan.chain_path).open("a") as stream:
+                        stream.write("export NIGHT_PAYLOAD_KIND='quiet_predicate_evidence'\n")
+                self.assertEqual(wd._delivered_zero_capture_refusal(
+                    plan, self.base.timestamp(), self.harness.storage), expected)
+                state = wd.initial_state()
+                decision = wd.decide(self.harness.storage, self.harness.deps, state)
+                self.assertEqual(bool(state["released_zero_capture_refusals"]), expected)
+                self.assertEqual(decision.state == "LAUNCHING", expected)
+                shutil.rmtree(custody)
+
+    def test_a277_symlink_inside_custody_is_stricter_than_base(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan, bare_c5=True)
+        (Path(plan.custody_root) / "latest").symlink_to(self.temp / "missing-target")
+        self.assert_no_f3_release()
+
+    def test_a277_torn_unrelated_shared_ledger_does_not_block_release(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() - 60,
+                              authored_epoch_s=self.base.timestamp() - 3600)
+        self.write_terminal_refusal(plan, bare_c5=True)
+        ledger = self.temp / "shared-ledger.jsonl"
+        ledger.write_text('{"plan_id":"frozen-calibration-plan"}\n{torn\n')
+        with Path(plan.chain_path).open("a") as chain:
+            chain.write(f"export CALIBRATION_LEDGER='{ledger}'\n")
+        state = wd.initial_state()
+        self.assertEqual("LAUNCHING", wd.decide(
+            self.harness.storage, self.harness.deps, state).state)
+        self.assertEqual(1, len(state["released_zero_capture_refusals"]))
+
     def test_f3_nested_consumed_marker_vetoes_release(self) -> None:
         plan = self.make_plan(t0=self.base.timestamp() - 60,
                               authored_epoch_s=self.base.timestamp() - 3600)

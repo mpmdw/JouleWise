@@ -2594,7 +2594,7 @@ class LifecycleTests(unittest.TestCase):
         (magistrate / "state.json").write_text(json.dumps(state))
         return root, parsed
 
-    def test_a277_delivered_bare_c5_check_and_publish_claim(self):
+    def test_a277_rehearsal_publication_does_not_create_successor_claim(self):
         root, _ = self.released_predecessor()
         report = self.checked()
         row = report["checks"]["successor"]
@@ -2605,10 +2605,7 @@ class LifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(entry.Refused, "installer --launchd-probe failed"):
             self.publish(runner=fail_probe)
         claim = self.custody.parent / "successor-claims/predecessor.json"
-        value = json.loads(claim.read_text())
-        self.assertEqual((value["successor_plan_id"], value["successor_sha256"]),
-                         (row["candidate_plan_id"], row["candidate_sha256"]))
-        self.assertEqual(len(list(claim.parent.glob("*.json"))), 1)
+        self.assertFalse(claim.exists())
 
     def test_a277_missing_delivery_or_latch_never_licenses_bare_c5(self):
         root, _ = self.released_predecessor()
@@ -2728,21 +2725,45 @@ class LifecycleTests(unittest.TestCase):
         capture.write_text("{}")
         self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
 
-    def test_a277_calibration_ledger_session_blocks(self):
-        _, parsed, _, ledger = self.calibration_predecessor()
-        ledger.write_text(json.dumps({"plan_id": parsed.plan_id, "event": "bracket_session_open"}) + "\n")
-        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
-
-    def test_a277_missing_custody_root_refused(self):
+    def test_a277_missing_custody_root_refused_while_release_is_recorded(self):
         root, _ = self.released_predecessor()
         shutil.rmtree(root)
         self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+        (self.custody.parent / "magistrate/state.json").write_text("{}")
+        self.assertEqual(self.checked()["checks"]["successor"]["verdict"], "pass")
 
-    def test_a277_symlinked_custody_root_refused(self):
+    def test_a277_symlinked_custody_root_refused_while_release_is_recorded(self):
         root, _ = self.released_predecessor()
         shutil.rmtree(root)
         root.symlink_to(self.base / "missing-custody", target_is_directory=True)
         self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_resolved_released_key_root_detects_missing_custody(self):
+        root, _ = self.released_predecessor()
+        state_path = self.custody.parent / "magistrate/state.json"
+        state = json.loads(state_path.read_text())
+        key = state["released_zero_capture_refusals"][0]
+        state["released_zero_capture_refusals"] = [key.replace(str(root), str(root.parent / "alias" / ".." / root.name))]
+        state_path.write_text(json.dumps(state))
+        shutil.rmtree(root)
+        self.assertIn("released predecessor custody is missing",
+                      self.checked("successor")["checks"]["successor"]["reason"])
+
+    def test_a277_claim_temp_and_ds_store_ignored_but_malformed_final_refuses(self):
+        self.released_predecessor()
+        row = self.checked()["checks"]["successor"]
+        directory = self.custody.parent / "successor-claims"
+        directory.mkdir()
+        (directory / ".successor-claim-crash.tmp").write_text('{"torn"')
+        (directory / ".DS_Store").write_bytes(b"Finder metadata")
+        self.assertEqual(self.checked()["checks"]["successor"]["verdict"], "pass")
+        entry._create_successor_claim(self.state, row)
+        self.assertTrue((directory / "predecessor.json").is_file())
+        self.assertEqual(sorted(path.name for path in directory.iterdir()),
+                         [".DS_Store", ".successor-claim-crash.tmp", "predecessor.json"])
+        (directory / "predecessor.json").write_text('{"torn"')
+        self.assertIn("malformed successor claim",
+                      self.checked("successor")["checks"]["successor"]["reason"])
 
     def test_a277_watchdog_and_check_read_same_facts(self):
         from scripts import magistrate_watchdog as wd

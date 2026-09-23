@@ -24,7 +24,6 @@ class ZeroCaptureFacts:
     capture_entries_found: int = 0
     envelope_index_state: str = "unknown"
     envelopes_captured: int = 0
-    ledger_sessions_found: int = 0
     scan_complete: bool = False
 
     @property
@@ -35,7 +34,7 @@ class ZeroCaptureFacts:
                 and self.reservation_markers_found == 0
                 and self.capture_entries_found == 0
                 and self.envelope_index_state in ("absent", "empty", "not_applicable")
-                and self.envelopes_captured == 0 and self.ledger_sessions_found == 0)
+                and self.envelopes_captured == 0)
 
 
 def _mode(path):
@@ -77,25 +76,6 @@ def _literal(text, name):
     return words[0]
 
 
-def _ledger_sessions(path, plan_id):
-    mode = _mode(path)
-    if mode is None:
-        return 0
-    if not stat.S_ISREG(mode):
-        return 1
-    count = 0
-    with path.open(encoding="utf-8") as stream:
-        for line in stream:
-            if not line.strip():
-                raise ValueError("blank ledger row")
-            row = json.loads(line)
-            if not isinstance(row, dict):
-                raise ValueError("non-object ledger row")
-            if row.get("plan_id") == plan_id:
-                count += 1
-    return count
-
-
 def zero_capture_facts(plan):
     """Return immutable facts for a delivered plan, never licensing torn custody."""
     custody = Path(plan.custody_root)
@@ -124,20 +104,17 @@ def zero_capture_facts(plan):
                          or _literal(chain, "NIGHT_PAYLOAD_KIND") != "quiet_predicate_evidence"):
             raise ValueError("ambiguous payload kind")
         runs_root = None
-        ledger = None
         if not evidence:
             runs_root = Path(_literal(chain, "RUNS_ROOT"))
-            # Older calibration wrappers inherited the ledger environment.
-            # chain.started is still the pre-launch session fence for those.
-            if re.search(r"^export CALIBRATION_LEDGER=", chain, re.MULTILINE):
-                ledger = Path(_literal(chain, "CALIBRATION_LEDGER"))
-            if not runs_root.is_absolute() or (ledger is not None and not ledger.is_absolute()):
+            # run_night.py:536 creates chain.started before the chain starts at
+            # run_night.py:3170; any ledger session is appended inside that
+            # chain. No chain.started therefore also means no ledger session.
+            if not runs_root.is_absolute():
                 raise ValueError("relative calibration root")
         reservations = _tree_count(custody, lambda name: name.endswith(".consumed.json"))
         if runs_root is not None:
             reservations += _tree_count(runs_root, lambda name: name.endswith(".consumed.json"))
             captures = _tree_count(runs_root / "instrument_validation", lambda _: True)
-            ledger_sessions = _ledger_sessions(ledger, plan.plan_id) if ledger is not None else 0
             index_state = "not_applicable"
             envelopes = 0
         else:
@@ -156,11 +133,10 @@ def zero_capture_facts(plan):
                     raise ValueError("non-object envelope row")
                 # A start-drift abort writes a row before that slot's capture.
                 envelopes = sum("collector_exit" in row for row in rows)
-            ledger_sessions = 0
         return ZeroCaptureFacts(**base, chain_started=int(_mode(night / "chain.started") is not None),
             reservation_markers_found=reservations, capture_entries_found=captures,
             envelope_index_state=index_state, envelopes_captured=envelopes,
-            ledger_sessions_found=ledger_sessions, scan_complete=True)
+            scan_complete=True)
     except (OSError, UnicodeError, ValueError, TypeError):
         return ZeroCaptureFacts(**base)
 
