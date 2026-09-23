@@ -7,9 +7,11 @@ import json
 import re
 import unittest
 from pathlib import Path
+from datetime import datetime
 from unittest import mock
 
 from joulewise import night_gate
+from joulewise import corecaptured_loop
 from joulewise.night_plan_writer import night_plan_mapping
 
 
@@ -51,6 +53,9 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
         night_gate.THERMAL_ARGV: result(
             night_gate.THERMAL_ARGV,
             stdout="Note: No thermal warning level has been recorded\n",
+        ),
+        corecaptured_loop.LOG_ARGV: result(
+            corecaptured_loop.LOG_ARGV, stdout="Timestamp                       (process)[PID]    \n"
         ),
         night_gate.BOOT_SESSION_ARGV: result(
             night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
@@ -331,6 +336,99 @@ class NightGateTests(unittest.TestCase):
             night_gate, "D166_REGISTRATION_SHA256", registration_hash
         ):
             return night_gate.evaluate_night(plan, source.probes())
+
+    def test_corecaptured_t0_is_detection_only_and_names_count_and_times(self):
+        raw = (Path(__file__).parent / "fixtures/corecaptured/loop-20260922-1022.log").read_text()
+        first_five = "\n".join(raw.splitlines()[:11]) + "\n"
+        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
+        source = EvidenceRegistrationTests().source()
+        source.now_value = now
+        source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV,
+                                                             stdout=first_five)
+        plan = make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100)
+        receipt = self.evaluate(plan, source)
+        self.assertEqual(receipt.refusal.reason, "night_refused_not_quiet")
+        self.assertIn("corecaptured: 5 launchd spawns", receipt.refusal.detail)
+        self.assertIn("10:23:33.210175", receipt.refusal.detail)
+        self.assertIn("10:28:52.118332", receipt.refusal.detail)
+        self.assertEqual(source.run_calls.count(corecaptured_loop.LOG_ARGV), 1)
+        self.assertFalse(any("networksetup" in " ".join(argv) or "sudo" in " ".join(argv)
+                             for argv in source.run_calls))
+
+    def test_corecaptured_t0_log_failure_is_recorded_without_refusal(self):
+        for raw in (result(corecaptured_loop.LOG_ARGV, exit_code=1,
+                           stderr="log unavailable"),
+                    result(corecaptured_loop.LOG_ARGV, stdout="broken output")):
+            with self.subTest(raw=raw.stdout or raw.stderr):
+                source = EvidenceRegistrationTests().source()
+                source.results[corecaptured_loop.LOG_ARGV] = raw
+                receipt = self.evaluate(make_plan(), source)
+                self.assertIsNone(receipt.refusal)
+                c3 = next(row for row in receipt.conditions if row.condition_id == "C3")
+                self.assertEqual(c3.measured["corecaptured"]["status"], "not_measured")
+                self.assertTrue(c3.measured["corecaptured"]["reason"])
+
+    def test_corecaptured_t0_window_anchors_before_slow_log_read(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        source = EvidenceRegistrationTests().source()
+        source.now_value = now
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, 10), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+        source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV, stdout=raw)
+        original_run = source.run
+
+        def slow_run(argv):
+            if argv == corecaptured_loop.LOG_ARGV:
+                source.now_value += 30
+            return original_run(argv)
+
+        source.run = slow_run
+        receipt = self.evaluate(make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100), source)
+        c3 = next(row for row in receipt.conditions if row.condition_id == "C3")
+        self.assertEqual(c3.measured["corecaptured"]["last_10m_spawns"], 3)
+        self.assertEqual(receipt.refusal.reason, "night_refused_not_quiet")
+
+    def test_corecaptured_t0_backward_clock_is_not_measured(self):
+        # Delta re-audit A271 F1: a clock stepped back during the read must
+        # not yield a measured false zero.
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        source = EvidenceRegistrationTests().source()
+        source.now_value = now
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, -1), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+        source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV, stdout=raw)
+        original_run = source.run
+
+        def backward_run(argv):
+            if argv == corecaptured_loop.LOG_ARGV:
+                source.now_value -= 3600
+            return original_run(argv)
+
+        source.run = backward_run
+        receipt = self.evaluate(make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100), source)
+        c3 = next(row for row in receipt.conditions if row.condition_id == "C3")
+        self.assertEqual(c3.measured["corecaptured"]["status"], "not_measured")
+        self.assertIn("backward", c3.measured["corecaptured"]["reason"])
+
+    def test_corecaptured_t0_threshold_is_three_spawns(self):
+        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
+        raw = "Timestamp                       (process)[PID]\n"
+        for i, offset in enumerate((-590, -300, -1), 1):
+            stamp = datetime.fromtimestamp(now + offset).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            raw += (f"{stamp}  localhost launchd[1]: [system/com.apple.corecaptured [{i}]:] "
+                    f"Successfully spawned corecaptured[{i}] because xpc event\n")
+            if i in (2, 3):
+                source = EvidenceRegistrationTests().source()
+                source.now_value = now
+                source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV, stdout=raw)
+                receipt = self.evaluate(make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100), source)
+                self.assertEqual(receipt.refusal is not None, i == 3)
 
     def test_production_argv_constants_are_pinned(self) -> None:
         self.assertEqual(

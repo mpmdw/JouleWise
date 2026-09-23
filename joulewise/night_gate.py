@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
+from joulewise import corecaptured_loop
+
 
 SCHEMA = "joulewise.unattended_night_receipt.v2"
 PLAN_SCHEMA = "joulewise.night_plan.v2"
@@ -1500,6 +1502,33 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
                     tuple(evidence),
                 ),
             )
+        if rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
+            # This is the planned t0 boundary. The read adds probe time, but
+            # there is no cure, deliberate wait, or process action here.
+            try:
+                log_started_epoch_s = _clock_value(probes, "epoch")
+                log_result = _run(probes, corecaptured_loop.LOG_ARGV)
+                log_finished_epoch_s = _clock_value(probes, "epoch")
+                evidence.append(log_result)
+                rows["C3"].evidence.append(_probe_citation(log_result))
+                if not _completed_ok(log_result):
+                    raise ValueError(f"log exited {log_result.exit_code}: {log_result.stderr.strip()}")
+                spawns = corecaptured_loop.count_spawns(
+                    log_result.stdout, log_started_epoch_s,
+                    until_epoch_s=log_finished_epoch_s)
+            except (ProbeError, ValueError) as exc:
+                rows["C3"].measured["corecaptured"] = {
+                    "status": "not_measured", "reason": str(exc)}
+            else:
+                rows["C3"].measured["corecaptured"] = {
+                    "status": "measured", "last_10m_spawns": spawns.count,
+                    "first_spawn": spawns.first, "last_spawn": spawns.last}
+                if spawns.count > corecaptured_loop.SPAWNS_MAX:
+                    return _finish(plan, probes, rows, Refusal(
+                        "night_refused_not_quiet",
+                        f"corecaptured: {spawns.count} launchd spawns in last 10 min "
+                        f"(first {spawns.first}, last {spawns.last})",
+                        tuple(evidence)))
         # The per-process machine-state predicate (cold gate 10
         # QPE01-DAEMON-CONTAMINATION-01, 2026-09-23, Q2(i)), on BOTH branches
         # -- t0 (`legacy_load=True`, via `evaluate_night`) and the arm check
