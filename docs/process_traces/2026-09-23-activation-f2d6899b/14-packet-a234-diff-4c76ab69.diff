@@ -1,0 +1,575 @@
+diff --git a/docs/phase_2/derivation_night_runbook.md b/docs/phase_2/derivation_night_runbook.md
+index 9f46ab1b..1b0f70a4 100644
+--- a/docs/phase_2/derivation_night_runbook.md
++++ b/docs/phase_2/derivation_night_runbook.md
+@@ -1851,7 +1851,9 @@ The **magistrate** is the headless lead agent that prepares and installs a night
+ 
+ The **watchdog** is the supervisor that starts and stops magistrate sessions around measurement windows. The **night gate** checks prerequisites before measurements; its **receipt** records the decision and observations. The **driver** is the program that runs that check, launches the measurement chain and arranges result delivery by the **courier**. A **ledger** is the capture-history record; **custody** means retaining the files that establish what ran and what it produced. A **measurement pack** is the fixed collection of experiment instructions and inputs required by a pack-class plan. A **reviewed head**, written H, is the full Git commit identifier of the reviewed code and instructions. A **fingerprint** is the lowercase SHA-256 digest of exact file bytes. A **binding** is a recorded equality tying a plan to its file bytes, head or other fixed input; a **pin** is the expected value in that equality. A **sidecar** is a companion file, such as a stored fingerprint or previous job-file bytes. An **API** is a programmatic service interface, such as the mail-send operation. A **committed installation** means both jobs were loaded, verified and accepted by the installer's final time check; this is separate from recording a Git commit. **Noncommit evidence** positively establishes that this installation did not reach that state. A missing response does not establish noncommit.
+ 
+-The **arm-time census** is the process inventory before publication. The **plan span** is the agent-free interval beginning 25 minutes before `t0`, the plan's scheduled measurement start, and ending under the existing chain and courier completion rules. Permission to retry an arm abort does not excuse a process inside that span. `production_census` uses the night gate's raw process check. `handoff_census` checks departure of owned processes only, and `_is_interactive_claude` recognizes command shape only; neither proves the arm or plan-span census clean. A172 changes none of them.
++The **arm-time census** is the process inventory before publication. The **plan span** is the agent-free interval beginning eight minutes before `t0`, the plan's scheduled measurement start, and ending under the existing chain and courier completion rules. Permission to retry an arm abort does not excuse a process inside that span. `production_census` uses the night gate's raw process check. `handoff_census` checks departure of owned processes only, and `_is_interactive_claude` recognizes command shape only; neither proves the arm or plan-span census clean. A172 changes none of them.
++
++A **zero-capture refusal** is a final night-gate refusal on machine state for which the driver's result and receipt agree and no measurement chain started or capture was recorded. `courier.sent` records completed delivery, but the courier and driver may still be running. After that marker appears, the watchdog checks `production_census`, its raw process inventory, on every tick while the plan's scheduled window remains open. A non-empty census keeps the agent-free hold. An empty census establishes that the courier and driver have exited (the census matches the courier, a `claude -p` process, and the driver, whose command line carries the courier's `claude` path); the watchdog records that observation in its `state.json` and then releases the hold early. The release is one-way: the magistrate the watchdog then starts is itself a census match, so a later non-empty census does not restore the hold. The cost is then delivery, harvest (inspection and preservation of the night's records), cleanup and preparation of a fresh plan, not the unused window. The **successor** is that fresh plan: it needs a new identity and notice, at least 60 seconds after the refusal's final write, installation before its own cutoff, and the usual owner veto and checks at its own scheduled start. The current next-start planner puts that start at least 40 minutes ahead of preparation, so the 20-minute recovery target is not a guarantee of a new measurement within 20 minutes. Registration and class refusals, or any night whose chain started, keep the full plan-span hold and cold-gate review.
+ 
+ A **listed install span** is a local-time interval from `run_night.INSTALL_SPANS`,
+ resolved for its local date; an **epoch second** counts from 1970-01-01 00:00 UTC.
+diff --git a/docs/process/NIGHT_HANDBACK.md b/docs/process/NIGHT_HANDBACK.md
+index e714c6ee..27576680 100644
+--- a/docs/process/NIGHT_HANDBACK.md
++++ b/docs/process/NIGHT_HANDBACK.md
+@@ -54,6 +54,8 @@ The **watchdog** is the supervisor that starts and stops magistrate sessions aro
+ 
+ The **arm-time census** is the process inventory before publication. The **plan span** is the agent-free interval beginning eight minutes before `t0`, the plan's scheduled measurement start, and ending under the existing chain and courier completion rules. Permission to retry an arm abort does not excuse a process inside that span. `production_census` uses the night gate's raw process check. `handoff_census` checks departure of owned processes only, and `_is_interactive_claude` recognizes command shape only; neither proves the arm or plan-span census clean. A172 changes none of them.
+ 
++A **zero-capture refusal** is a final night-gate refusal on machine state for which the driver's result and receipt agree and no measurement chain started or capture was recorded. `courier.sent` records completed delivery, but the courier and driver may still be running. After that marker appears, the watchdog checks `production_census`, its raw process inventory, on every tick while the plan's scheduled window remains open. A non-empty census keeps the agent-free hold. An empty census establishes that the courier and driver have exited (the census matches the courier, a `claude -p` process, and the driver, whose command line carries the courier's `claude` path); the watchdog records that observation in its `state.json` and then releases the hold early. The release is one-way: the magistrate the watchdog then starts is itself a census match, so a later non-empty census does not restore the hold. The cost is then delivery, harvest (inspection and preservation of the night's records), cleanup and preparation of a fresh plan, not the unused window. The **successor** is that fresh plan: it needs a new identity and notice, at least 60 seconds after the refusal's final write, installation before its own cutoff, and the usual owner veto and checks at its own scheduled start. The current next-start planner puts that start at least 40 minutes ahead of preparation, so the 20-minute recovery target is not a guarantee of a new measurement within 20 minutes. Registration and class refusals, or any night whose chain started, keep the full plan-span hold and cold-gate review.
++
+ A **listed install span** is a local-time interval from `run_night.INSTALL_SPANS`,
+ resolved for its local date; an **epoch second** counts from 1970-01-01 00:00 UTC.
+ `install_close_epoch(plan)` is the exclusive install cutoff, `t0 − 10 minutes`
+diff --git a/joulewise/arm_retry.py b/joulewise/arm_retry.py
+index 88a719ca..6c45d15e 100644
+--- a/joulewise/arm_retry.py
++++ b/joulewise/arm_retry.py
+@@ -18,6 +18,11 @@ RETRY_INTERVAL_S = 60
+ # interval beyond ordering. R1 repeats that lead on EVERY attempt.
+ NOTICE_LEAD_S = 0
+ UNCERTAIN_STATES = ("CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN")
++ZERO_CAPTURE_MACHINE_REFUSALS = frozenset({
++    "night_refused_not_quiet", "night_refused_bind_expired",
++    "night_refused_agent_present", "night_refused_hid_idle",
++    "night_refused_boot_clock",
++})
+ RETRY_CAUSES = {
+     "arm_idle_interactive": "Only an otherwise idle interactive agent session blocked the arm-time census. Its complete descendant process tree must establish no test, measurement or capture work; unknown activity is not idle. Repeat the unchanged census after the session closes; never signal a foreign process. A173 alone owns any future stub exemption.",
+     "arm_notice_mismatch": "The notice fingerprint or reviewed head differs from the approved candidate. Recheck preserved candidate bytes and all fixed inputs, then send a new notice. Changed science, custody or unexplained candidate bytes are evidence drift, not a notice-only fault.",
+@@ -194,6 +199,50 @@ def retry_allowed(now_epoch_s, plan, attempts, notice) -> Decision:
+         return Decision(False, "malformed_evidence")
+ 
+ 
++def terminal_zero_capture_refusal(result, receipt) -> Decision:
++    """Read the shared terminal result and receipt fence before delivery checks.
++
++    Live gate receipts do not yet have the harvested C5 zero_capture_evidence
++    block. A positive capture claim in any measured row still vetoes release.
++    """
++    try:
++        reason = result["aborted_reason"]
++        if (result["verdict"] != "REFUSED" or receipt["verdict"] != "REFUSED"
++                or reason not in ZERO_CAPTURE_MACHINE_REFUSALS
++                or receipt["refusal"]["reason"] != reason):
++            return Decision(False, "not_zero_capture_machine_refusal")
++        plan_id = result["plan_id"]
++        if not isinstance(plan_id, str) or not plan_id or receipt["plan_id"] != plan_id:
++            return Decision(False, "handoff_plan_mismatch")
++        if result["chain_exit_code"] is not None or result["chain_sha256"] is not None:
++            return Decision(False, "chain_may_have_started")
++        rows = receipt["conditions"]
++        if not isinstance(rows, list) or not any(
++                isinstance(row, dict) and row.get("condition_id") == "C5" for row in rows):
++            return Decision(False, "missing_zero_capture_evidence")
++        for row in rows:
++            measured = row["measured"]
++            if not isinstance(measured, dict):
++                return Decision(False, "missing_zero_capture_evidence")
++            for evidence in (measured, measured.get("zero_capture_evidence", {})):
++                if not isinstance(evidence, dict):
++                    return Decision(False, "missing_zero_capture_evidence")
++                if (("chain_started_absent" in evidence
++                     and evidence["chain_started_absent"] is not True)
++                        or ("reservation_absent" in evidence
++                            and evidence["reservation_absent"] is not True)
++                        or evidence.get("session_id") is not None
++                        or ("capture_writer_ran" in evidence
++                            and evidence["capture_writer_ran"] is not False)
++                        or ("instrument_validation_empty" in evidence
++                            and evidence["instrument_validation_empty"] is not True)
++                        or evidence.get("captured_envelopes", 0) != 0):
++                    return Decision(False, "start_reservation_or_capture_not_absent")
++        return Decision(True, "terminal_zero_capture_refusal")
++    except (KeyError, TypeError, ValueError):
++        return Decision(False, "missing_zero_capture_evidence")
++
++
+ def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
+     """D-182 eligibility for ONE new plan, never authority to re-arm old bytes.
+ 
+@@ -207,19 +256,13 @@ def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
+     from the terminal write, install close and every observed NO.
+     retry_allowed retains its same-candidate semantics.
+     """
+-    eligible = {"night_refused_not_quiet", "night_refused_bind_expired", "night_refused_agent_present",
+-                "night_refused_hid_idle", "night_refused_boot_clock"}
++    terminal = terminal_zero_capture_refusal(result, receipt)
++    if not terminal.allowed:
++        return terminal
+     try:
+-        reason = result["aborted_reason"]
+-        if (result["verdict"] != "REFUSED" or receipt["verdict"] != "REFUSED"
+-                or reason not in eligible or receipt["refusal"]["reason"] != reason):
+-            return Decision(False, "not_zero_capture_machine_refusal")
+         plan_id = result["plan_id"]
+-        if (not isinstance(plan_id, str) or not plan_id
+-                or receipt["plan_id"] != plan_id or delivery["plan_id"] != plan_id):
++        if delivery["plan_id"] != plan_id:
+             return Decision(False, "handoff_plan_mismatch")
+-        if (result["chain_exit_code"] is not None or result["chain_sha256"] is not None):
+-            return Decision(False, "chain_may_have_started")
+         rows = [row for row in receipt["conditions"] if row["condition_id"] == "C5"]
+         if len(rows) != 1:
+             return Decision(False, "missing_zero_capture_evidence")
+diff --git a/scripts/magistrate_watchdog.py b/scripts/magistrate_watchdog.py
+index 8b65c556..88acdf84 100755
+--- a/scripts/magistrate_watchdog.py
++++ b/scripts/magistrate_watchdog.py
+@@ -16,6 +16,7 @@ import datetime as dt
+ import fcntl
+ import hashlib
+ import json
++import math
+ import os
+ import plistlib
+ import re
+@@ -43,6 +44,7 @@ from joulewise.night_gate import (  # noqa: E402
+     PlanError,
+     agent_census,
+ )
++from joulewise.arm_retry import terminal_zero_capture_refusal  # noqa: E402
+ from scripts.run_night import (  # noqa: E402
+     COURIER_DEADLINE_S,
+     COURIER_LOCK_FRESH_S,
+@@ -729,7 +731,8 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
+ 
+ 
+ def installed_agent_fence(
+-    now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None
++    now: dt.datetime, storage: Storage, *, launch_agents_dir: Path | None = None,
++    state: Mapping[str, Any] | None = None,
+ ) -> str | None:
+     """Read installed agents independently of custody discovery; fail closed."""
+     directory = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
+@@ -760,7 +763,7 @@ def installed_agent_fence(
+             if plan.authored_epoch_s > now.timestamp():
+                 raise ValueError("installed plan authored_epoch_s is in the future")
+             deadman_epoch(plan)
+-            if plan_span_active(plan, now.timestamp(), storage):
++            if plan_span_active(plan, now.timestamp(), storage, state):
+                 reasons.append(f"installed_plan:{plan.plan_id}")
+         except (OSError, ValueError, OverflowError, TypeError, KeyError, IndexError, PlanError,
+                 plistlib.InvalidFileException, ExpatError) as exc:
+@@ -772,7 +775,56 @@ def plan_completion_epoch(plan: NightPlan) -> float:
+     return plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S
+ 
+ 
+-def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool:
++def _terminal_refusal_result(night: Path, storage: Storage) -> Mapping[str, Any] | None:
++    try:
++        result = json.loads(storage.read_text(night / "result.json"))
++    except (OSError, ValueError, TypeError):
++        return None
++    return result if isinstance(result, dict) and result.get("verdict") == "REFUSED" else None
++
++
++def _delivered_zero_capture_refusal(
++    plan: NightPlan, now_epoch_s: float, storage: Storage
++) -> bool:
++    night = Path(plan.custody_root) / "night"
++    if not storage.exists(night / "courier.sent") or storage.exists(night / "chain.started"):
++        return False
++    result = _terminal_refusal_result(night, storage)
++    if result is None or result.get("plan_id") != plan.plan_id:
++        return False
++    ended = result.get("ended_epoch_s")
++    if (not isinstance(ended, (int, float)) or isinstance(ended, bool)
++            or not math.isfinite(ended) or ended > now_epoch_s):
++        return False
++    try:
++        receipt = json.loads(storage.read_text(night / "receipt.json"))
++    except (OSError, ValueError, TypeError):
++        return False
++    return terminal_zero_capture_refusal(result, receipt).allowed
++
++
++def _release_key(plan: NightPlan) -> str:
++    return f"{plan.plan_id}:{plan.custody_root}"
++
++
++def _release_observed(
++    plan: NightPlan, storage: Storage, state: Mapping[str, Any] | None
++) -> bool:
++    if state is None:
++        # evidence_night passes Storage(plan custody root); the watchdog state
++        # is a sibling under the same night-custody parent.
++        custody = Path(plan.custody_root).expanduser().resolve(strict=False)
++        state_storage = (Storage(custody.parent / "magistrate")
++                         if storage.root == custody else storage)
++        state = load_state(state_storage)
++    released = state.get("released_zero_capture_refusals", [])
++    return isinstance(released, list) and _release_key(plan) in released
++
++
++def plan_span_active(
++    plan: NightPlan, now_epoch_s: float, storage: Storage,
++    state: Mapping[str, Any] | None = None,
++) -> bool:
+     """File 15 row 3, including completion, courier, dead-man, and chain rules."""
+ 
+     if now_epoch_s < plan.t0_epoch_s - PLAN_LEAD_S:
+@@ -783,6 +835,9 @@ def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> b
+     )
+     if chain_open:
+         return True
++    if (_delivered_zero_capture_refusal(plan, now_epoch_s, storage)
++            and _release_observed(plan, storage, state)):
++        return False
+     if now_epoch_s <= plan_completion_epoch(plan):
+         return True
+     if storage.exists(night / "courier.sent"):
+@@ -790,24 +845,34 @@ def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> b
+     return now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S
+ 
+ 
+-def plan_is_armed(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool:
++def plan_is_armed(
++    plan: NightPlan, now_epoch_s: float, storage: Storage,
++    state: Mapping[str, Any] | None = None,
++) -> bool:
+     """An authored plan remains armed until its durable completion or final bound."""
+ 
+     if plan.authored_epoch_s > now_epoch_s:
+         return False
+     night = Path(plan.custody_root) / "night"
+-    if storage.exists(night / "chain.started") and not storage.exists(night / "chain.exited"):
+-        return True
++    if storage.exists(night / "chain.started"):
++        if not storage.exists(night / "chain.exited"):
++            return True
++        if _terminal_refusal_result(night, storage) is not None:
++            return now_epoch_s <= plan_completion_epoch(plan)
++    if _delivered_zero_capture_refusal(plan, now_epoch_s, storage):
++        return (now_epoch_s <= plan_completion_epoch(plan)
++                and not _release_observed(plan, storage, state))
+     if storage.exists(night / "courier.sent"):
+         return False
+     return now_epoch_s <= deadman_epoch(plan) + COURIER_LOCK_FRESH_S
+ 
+ 
+ def armed_plans(
+-    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage
++    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage,
++    state: Mapping[str, Any] | None = None,
+ ) -> list[NightPlan]:
+     return sorted(
+-        (plan for plan in plans if plan_is_armed(plan, now_epoch_s, storage)),
++        (plan for plan in plans if plan_is_armed(plan, now_epoch_s, storage, state)),
+         key=lambda plan: (plan.plan_id, plan.measurement_root, plan.measurement_head),
+     )
+ 
+@@ -862,13 +927,14 @@ def fenced_checkout_rows(plans: Sequence[NightPlan]) -> list[list[str | None]]:
+ 
+ 
+ def relevant_standdown_plan(
+-    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage
++    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage,
++    state: Mapping[str, Any] | None = None,
+ ) -> NightPlan | None:
+     candidates = [
+         plan
+         for plan in plans
+         if now_epoch_s >= plan.t0_epoch_s - REQUEST_LEAD_S
+-        and plan_span_active(plan, now_epoch_s, storage)
++        and plan_span_active(plan, now_epoch_s, storage, state)
+     ]
+     return min(candidates, key=lambda plan: plan.t0_epoch_s, default=None)
+ 
+@@ -1429,14 +1495,40 @@ def decide(
+ 
+     snapshot = plan_snapshot or load_plans(storage, now_epoch_s=wall.timestamp())
+     plans = list(snapshot.plans)
++    if snapshot.errors:
++        return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
++    # Delivery is only a candidate for release. The courier and driver can
++    # both outlive courier.sent; the production census covers both argv shapes.
+     try:
+-        armed = armed_plans(plans, wall.timestamp(), storage)
++        release_candidates = [
++            plan for plan in plans
++            if plan.t0_epoch_s - PLAN_LEAD_S <= wall.timestamp() <= plan_completion_epoch(plan)
++            and _delivered_zero_capture_refusal(plan, wall.timestamp(), storage)
++        ]
++    except (OverflowError, ValueError) as exc:
++        return Decision("HOLD_UNSAFE", f"night_plan_malformed: t0_epoch_s/window_max_s: {exc}")
++    # The release is one-way. Once an empty census has been observed after
++    # delivery, the next magistrate is itself a census match, so a later
++    # non-empty census must not re-arm the plan and re-fence the checkout.
++    released = state.get("released_zero_capture_refusals", [])
++    if not isinstance(released, list):
++        released = []
++    loaded = {_release_key(plan) for plan in plans}
++    released = sorted({key for key in released if isinstance(key, str) and key in loaded})
++    pending = [plan for plan in release_candidates if _release_key(plan) not in released]
++    release_census: CensusObservation | None = None
++    if pending:
++        release_census = deps.census()
++        append_census_event(storage, state, wall, release_census)
++        if release_census.empty:
++            released = sorted(set(released) | {_release_key(plan) for plan in pending})
++    state["released_zero_capture_refusals"] = released
++    try:
++        armed = armed_plans(plans, wall.timestamp(), storage, state)
+         conflicts = plan_conflicts(armed)
+     except (OverflowError, ValueError) as exc:
+         return Decision("HOLD_UNSAFE", f"night_plan_malformed: t0_epoch_s/window_max_s: {exc}")
+     state["fenced_checkouts"] = fenced_checkout_rows(armed)
+-    if snapshot.errors:
+-        return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+     if conflicts:
+         return Decision("HOLD_UNSAFE", "plan_conflict: " + "; ".join(conflicts))
+ 
+@@ -1465,10 +1557,10 @@ def decide(
+             lock = None
+ 
+     try:
+-        installed = installed_agent_fence(wall, storage)
++        installed = installed_agent_fence(wall, storage, state=state)
+     except (OSError, ValueError, OverflowError) as exc:
+         return Decision("HOLD_UNSAFE", f"installed_agent_fence: {exc}")
+-    active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage)]
++    active_plans = [plan for plan in plans if plan_span_active(plan, wall.timestamp(), storage, state)]
+     try:
+         stop = deps.git_probe()
+     except Exception as exc:
+@@ -1481,8 +1573,12 @@ def decide(
+     if storage.exists(storage.root / "STOP"):
+         stop = StopObservation("STOPPED", "local STOP file present")
+     if active_plans:
+-        census = deps.census()
+-        append_census_event(storage, state, wall, census)
++        census = release_census or deps.census()
++        if release_census is None:
++            append_census_event(storage, state, wall, census)
++        if release_census is not None and not census.empty:
++            return Decision("HOLD_CENSUS", "production census non-empty after delivered refusal",
++                            adopt=owner is not None)
+         if owner is not None:
+             phase = standdown_phase(min(active_plans, key=lambda item: item.t0_epoch_s), wall.timestamp())
+             return Decision(
+diff --git a/tests/test_arm_retry.py b/tests/test_arm_retry.py
+index bd16b97b..dcc12071 100644
+--- a/tests/test_arm_retry.py
++++ b/tests/test_arm_retry.py
+@@ -465,6 +465,22 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
+ 
+     def test_zero_capture_successor_requires_delivery_and_no_start(self):
+         result, receipt, delivery = self.evidence()
++        self.assertTrue(arm_retry.terminal_zero_capture_refusal(result, receipt).allowed)
++        self.assertEqual(arm_retry.ZERO_CAPTURE_MACHINE_REFUSALS, {
++            "night_refused_not_quiet", "night_refused_agent_present",
++            "night_refused_hid_idle", "night_refused_boot_clock",
++            "night_refused_bind_expired",
++        })
++        for reason in ("night_refused_registration", "night_refused_class_unbuilt"):
++            changed_result = dict(result, aborted_reason=reason)
++            changed_receipt = copy.deepcopy(receipt)
++            changed_receipt["refusal"]["reason"] = reason
++            self.assertFalse(arm_retry.terminal_zero_capture_refusal(
++                changed_result, changed_receipt).allowed)
++        claimed = copy.deepcopy(receipt)
++        claimed["conditions"][0]["measured"]["capture_writer_ran"] = True
++        self.assertFalse(arm_retry.terminal_zero_capture_refusal(result, claimed).allowed)
++        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, claimed, delivery).allowed)
+         self.assertFalse(arm_retry.zero_capture_successor_allowed(result, receipt, {}).allowed)
+         decision = arm_retry.zero_capture_successor_allowed(result, receipt, delivery)
+         self.assertTrue(decision.allowed)
+diff --git a/tests/test_magistrate_watchdog.py b/tests/test_magistrate_watchdog.py
+index 2864dd58..c58dcfba 100644
+--- a/tests/test_magistrate_watchdog.py
++++ b/tests/test_magistrate_watchdog.py
+@@ -180,6 +180,188 @@ class WatchdogTestCase(unittest.TestCase):
+ 
+ 
+ class FenceTests(WatchdogTestCase):
++    def write_terminal_refusal(self, plan: wd.NightPlan, *,
++                               reason: str = "night_refused_not_quiet",
++                               delivered: bool = True,
++                               started: bool = False,
++                               capture_in_receipt: bool = False) -> Path:
++        night = Path(plan.custody_root) / "night"
++        night.mkdir(exist_ok=True)
++        (night / "result.json").write_text(json.dumps({
++            "plan_id": plan.plan_id, "verdict": "REFUSED", "aborted_reason": reason,
++            "chain_exit_code": None, "chain_sha256": None,
++            "ended_epoch_s": plan.t0_epoch_s + 1,
++        }), encoding="utf-8")
++        (night / "receipt.json").write_text(json.dumps({
++            "plan_id": plan.plan_id, "verdict": "REFUSED",
++            "refusal": {"reason": reason},
++            "conditions": [{"condition_id": "C5", "measured":
++                            {"capture_writer_ran": capture_in_receipt}}],
++        }), encoding="utf-8")
++        (night / "refusal.json").write_text("{}", encoding="utf-8")
++        if delivered:
++            (night / "courier.sent").write_text("sent\n", encoding="utf-8")
++        if started:
++            (night / "chain.started").write_text("{}", encoding="utf-8")
++        return night
++
++    def test_delivered_refusal_live_census_holds_decide(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan)
++        self.harness.census = wd.CensusObservation(False, 0, "18001 driver; 29161 claude -p", "")
++        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
++        self.assertEqual("HOLD_CENSUS", decision.state)
++        self.assertEqual(1, self.harness.census_calls)
++
++    def test_delivered_refusal_live_census_preserves_owned_adoption(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan)
++        self.write_live_lock()
++        self.harness.processes.rows = [wd.ProcessInfo(100, 99, "token-a", "session")]
++        self.harness.census = wd.CensusObservation(False, 0, "18001 driver", "")
++        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
++        self.assertEqual("HOLD_CENSUS", decision.state)
++        self.assertTrue(decision.adopt)
++
++    def test_delivered_refusal_empty_census_releases_decide(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan)
++        state = wd.initial_state()
++        decision = wd.decide(self.harness.storage, self.harness.deps, state)
++        self.assertEqual("LAUNCHING", decision.state)
++        self.assertEqual(1, self.harness.census_calls)
++        self.assertEqual([["__canonical_repo__", str(wd.CANONICAL_REPO), None]],
++                         state["fenced_checkouts"])
++
++    def test_delivered_refusal_release_is_one_way(self) -> None:
++        # After the observed release the watchdog launches a magistrate, and
++        # that magistrate is itself a census match. A later non-empty census
++        # must not re-arm the plan, re-fence the checkout or hold the session.
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan)
++        state = wd.initial_state()
++        self.assertEqual("LAUNCHING", wd.decide(
++            self.harness.storage, self.harness.deps, state).state)
++        self.assertEqual(1, self.harness.census_calls)
++        self.harness.census = wd.CensusObservation(False, 0, "85802 claude -p magistrate", "")
++        decision = wd.decide(self.harness.storage, self.harness.deps, state)
++        self.assertNotEqual("HOLD_CENSUS", decision.state)
++        self.assertEqual("LAUNCHING", decision.state)
++        self.assertEqual(1, self.harness.census_calls)
++        self.assertFalse(wd.plan_is_armed(plan, self.base.timestamp(), self.harness.storage, state))
++        self.assertEqual([["__canonical_repo__", str(wd.CANONICAL_REPO), None]],
++                         state["fenced_checkouts"])
++
++    def test_delivered_refusal_armed_until_empty_census_observed(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan)
++        now = self.base.timestamp()
++        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
++        state = wd.initial_state()
++        self.assertEqual("LAUNCHING", wd.decide(
++            self.harness.storage, self.harness.deps, state).state)
++        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
++        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
++
++    def test_noneligible_delivered_refusal_preserves_base_disarm(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan, reason="night_refused_registration")
++        now = self.base.timestamp()
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
++
++    def test_delivered_zero_capture_refusal_releases_both_holds_early(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan)
++        now = self.base.timestamp()
++        self.assertLess(now, wd.plan_completion_epoch(plan))
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
++        state = wd.initial_state()
++        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
++        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
++        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
++        self.assertFalse(wd.plan_span_active(plan, now, wd.Storage(Path(plan.custody_root))))
++        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
++
++    def test_refusal_without_courier_holds_until_delivery(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        night = self.write_terminal_refusal(plan, delivered=False)
++        now = self.base.timestamp()
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        self.assertTrue(wd.plan_is_armed(plan, now, self.harness.storage))
++        (night / "courier.sent").write_text("sent\n", encoding="utf-8")
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        state = wd.initial_state()
++        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
++        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
++        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
++
++    def test_started_chain_refusal_keeps_full_span(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        night = self.write_terminal_refusal(plan, started=True)
++        (night / "chain.exited").write_text("{}", encoding="utf-8")
++        now = self.base.timestamp()
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        self.assertTrue(wd.plan_span_active(plan, wd.plan_completion_epoch(plan), self.harness.storage))
++        self.assertTrue(wd.plan_is_armed(plan, wd.plan_completion_epoch(plan), self.harness.storage))
++        self.assertFalse(wd.plan_span_active(plan, wd.plan_completion_epoch(plan) + 1,
++                                             self.harness.storage))
++        (night / "chain.started").unlink()
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        state = wd.initial_state()
++        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
++        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
++        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
++
++    def test_registration_refusal_and_receipt_capture_keep_hold(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        night = self.write_terminal_refusal(plan, reason="night_refused_registration")
++        now = self.base.timestamp()
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        self.assertFalse(wd.plan_is_armed(plan, now, self.harness.storage))
++        self.write_terminal_refusal(plan, reason="night_refused_class_unbuilt")
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        self.write_terminal_refusal(plan, capture_in_receipt=True)
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        (night / "result.json").unlink()
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        self.write_terminal_refusal(plan)
++        self.assertTrue(wd.plan_span_active(plan, now, self.harness.storage))
++        state = wd.initial_state()
++        self.assertEqual("LAUNCHING", wd.decide(self.harness.storage, self.harness.deps, state).state)
++        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
++        self.assertFalse(wd.plan_span_active(plan, now, self.harness.storage))
++
++    def test_early_release_reaches_standdown_and_launch_filter(self) -> None:
++        plan = self.make_plan(t0=self.base.timestamp() - 60,
++                              authored_epoch_s=self.base.timestamp() - 3600)
++        self.write_terminal_refusal(plan)
++        now = self.base.timestamp()
++        self.assertIsNotNone(wd.relevant_standdown_plan([plan], now, self.harness.storage))
++        directory = wd.Path.home() / "Library/LaunchAgents"
++        directory.mkdir(parents=True)
++        (directory / "com.joulewise.night.plist").write_bytes(plistlib.dumps({
++            "ProgramArguments": ["--plan", str(Path(plan.custody_root) / "night_plan.json")],
++        }))
++        self.assertIsNotNone(wd.installed_agent_fence(self.base, self.harness.storage))
++        state = wd.initial_state()
++        decision = wd.decide(self.harness.storage, self.harness.deps, state)
++        self.assertEqual("LAUNCHING", decision.state)
++        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
++        self.assertIsNone(wd.relevant_standdown_plan([plan], now, self.harness.storage))
++        self.assertIsNone(wd.installed_agent_fence(self.base, self.harness.storage))
++
+     def test_retired_v1_is_ignored_once_and_only_v2_plan_sets_span(self) -> None:
+         valid = self.make_plan(t0=self.base.timestamp() + wd.PLAN_LEAD_S, name="valid-v2")
+         retired_root = self.temp / "retired-v1"
