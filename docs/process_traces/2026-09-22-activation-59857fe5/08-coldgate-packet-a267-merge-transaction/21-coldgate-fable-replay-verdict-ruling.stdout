@@ -1,0 +1,2 @@
+Ruling 21 written (7,733 bytes, under 8 KB, only file touched): Q1 AFFIRM (a) chain-level; Q2 AFFIRM (d) amended with a one-bounded-slot floor and tail budget; Q3 AFFIRM arm on the raw rows with three conditions (addendum text, notice links, driver fix may follow but must land before the next replay); Q4 max chain 0.352 s, none over 0.5 s, fidelity 10/12 with both mismatches (08, 09) refusing-direction and zero admitting; no BLOCKER, three MATERIAL (undisposed X1 ESCALATE, stale slot-9 count, driver sequencing); no prior verdict reinterpreted.
+rc=0
