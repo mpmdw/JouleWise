@@ -263,6 +263,10 @@ class SuiteManifestTests(unittest.TestCase):
         parsed = SuiteManifest.from_mapping(two_file)
         self.assertEqual(parsed.to_dict(), two_file)
         self.assertEqual(parsed.benchmark_import.source_files, source_files)
+        missing_pointer = copy.deepcopy(two_file)
+        del missing_pointer["benchmark_import"]["source_files"][1]["lfs_pointer_blob_sha1"]
+        with self.assertRaisesRegex(SchemaError, "lfs_pointer_blob_sha1"):
+            SuiteManifest.from_mapping(missing_pointer)
         for mutation, error in (({"bytes": 0}, "bytes"), ({"sha256": "bad"}, "sha256"), ({"surprise": 1}, "unknown key")):
             bad = copy.deepcopy(two_file)
             bad["benchmark_import"]["source_files"][1].update(mutation)

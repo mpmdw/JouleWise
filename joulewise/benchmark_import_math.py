@@ -36,8 +36,8 @@ PROMPT_TEMPLATE_ID = "math_levels_v1/qwen3_chat_boxed_v1"
 PROMPT_TEMPLATE_SHA256 = "1a0796c08f1175730c3dde6a9e7d38312904f985853cb2ad46d594a90dd2319d"
 DIFFICULTY_QUARANTINE = "PENDING D-166 addendum/AP-5M: MATH author-assigned level (Hendrycks et al. 2021), fixed before any model output; stratifies comparisons and licenses no difficulty-causes-energy or intelligence-per-joule claim"
 CONTAMINATION_NOTE = "PENDING AP-5M: MATH (2021) and PRM800K (2023) predate Qwen3 and are widely redistributed; pre-training contamination is UNMITIGABLE; accuracy is a property of this pinned subject-balanced rational-answer subset, never a capability claim"
-CORRECTNESS_QUARANTINE = "quarantined annotation (C-004); malformed and capped count as incorrect (D-047.6); AP-5M PENDING; no capability claim"
-ELIGIBILITY_NOTE = "Rational-only reference subset; duplicated ids and ambiguous plain commas excluded; report per-level retention."
+CORRECTNESS_QUARANTINE = "quarantined annotation (C-004); malformed counts as incorrect (D-047.6); capped counts as truncated-incorrect (integration synthesis M2; AP-5M PENDING); no capability claim"
+ELIGIBILITY_NOTE = "Rational-only reference subset: 2 duplicate rows, 954 non-rational references, and 5 ambiguous plain-comma references excluded; retained by level: 381/437, 733/894, 924/1130, 967/1214, 1035/1324."
 
 
 def canonical_json(value: Any) -> str:
@@ -53,21 +53,31 @@ def git_blob_sha1(payload: bytes) -> str:
 
 
 def authenticate_file(path: str | Path, name: str, *, pointer_path: str | Path | None = None, license_path: str | Path | None = None, expected: Mapping[str, Any] | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Check every pinned receipt before parsing. Optional paths bind local pointer/license bytes."""
+    """Check every pinned receipt, including local pointer and license bytes."""
     if name not in SOURCE_RECEIPTS:
         raise ValueError(f"unknown source file: {name}")
     expected = SOURCE_RECEIPTS[name] if expected is None else expected
+    if pointer_path is None:
+        raise ValueError(f"{name} lfs_pointer_blob_sha1 receipt missing: pointer path required")
+    if license_path is None:
+        raise ValueError(f"{name} license_blob_sha1 receipt missing: license path required")
     payload = Path(path).read_bytes()
     sha = hashlib.sha256(payload).hexdigest()
     pointer = f"version https://git-lfs.github.com/spec/v1\noid sha256:{sha}\nsize {len(payload)}\n".encode("ascii")
-    receipt = {"sha256": sha, "bytes": len(payload), "git_blob_sha1": git_blob_sha1(payload), "lfs_pointer_blob_sha1": git_blob_sha1(pointer), "line_count": len(payload.splitlines()), "license_blob_sha1": LICENSE_BLOB_SHA1}
+    try:
+        pointer_bytes = Path(pointer_path).read_bytes()
+    except OSError as exc:
+        raise ValueError(f"{name} lfs_pointer_blob_sha1 receipt missing") from exc
+    try:
+        license_bytes = Path(license_path).read_bytes()
+    except OSError as exc:
+        raise ValueError(f"{name} license_blob_sha1 receipt missing") from exc
+    receipt = {"sha256": sha, "bytes": len(payload), "git_blob_sha1": git_blob_sha1(payload), "lfs_pointer_blob_sha1": git_blob_sha1(pointer_bytes), "line_count": len(payload.splitlines()), "license_blob_sha1": git_blob_sha1(license_bytes)}
     for field in ("sha256", "bytes", "git_blob_sha1", "lfs_pointer_blob_sha1", "line_count", "license_blob_sha1"):
         if receipt[field] != expected[field]:
             raise ValueError(f"{name} {field} receipt mismatch: got {receipt[field]}, expected {expected[field]}")
-    if pointer_path is not None and Path(pointer_path).read_bytes() != pointer:
-        raise ValueError(f"{name} committed LFS pointer bytes mismatch")
-    if license_path is not None and git_blob_sha1(Path(license_path).read_bytes()) != expected["license_blob_sha1"]:
-        raise ValueError(f"{name} license_blob_sha1 receipt mismatch")
+    if pointer_bytes != pointer:
+        raise ValueError(f"{name} lfs_pointer_blob_sha1 receipt mismatch: committed pointer bytes mismatch")
     records = []
     for index, line in enumerate(payload.splitlines()):
         try:
@@ -98,7 +108,46 @@ _UNIT = re.compile(r"(.*?)(?:\\(?:text|mbox|textrm|mathrm)\{[^{}0-9]*\})+")
 _LHS = re.compile(r"[A-Za-z]=(.+)")
 
 
+def canonical_reference_v1(raw: str) -> str | None:
+    """Frozen reference parser: eligibility must not follow scorer revisions."""
+    if not isinstance(raw, str):
+        return None
+    s = raw.replace(r"\dfrac", r"\frac").replace(r"\tfrac", r"\frac")
+    s = s.replace(r"\$", "").replace("$", "")
+    for token in (r"\!", r"\,", r"\;", r"\:", r"\ ", "~"):
+        s = s.replace(token, "")
+    s = "".join(s.split())
+    for suffix in (r"^\circ", r"^{\circ}", r"\%", "%", r"\degree"):
+        if s.endswith(suffix):
+            s = s[:-len(suffix)]
+            break
+    match = _UNIT.fullmatch(s)
+    if match and match.group(1):
+        s = match.group(1)
+    s = s.replace("{,}", ",")
+    match = _LHS.fullmatch(s)
+    if match:
+        s = match.group(1)
+    try:
+        if _INT.fullmatch(s) or _DEC.fullmatch(s):
+            return str(Fraction(s))
+        if _GROUPED.fullmatch(s):
+            return str(Fraction(s.replace(",", "")))
+        match = _SLASH.fullmatch(s)
+        if match:
+            return str(Fraction(int(match.group(1)), int(match.group(2))))
+        match = _FRAC.fullmatch(s)
+        if match:
+            sign, n1, n2, d1, d2 = match.groups()
+            value = Fraction(int(n1 if n1 is not None else n2), int(d1 if d1 is not None else d2))
+            return str(-value if sign == "-" else value)
+    except (ValueError, ZeroDivisionError):
+        pass
+    return None
+
+
 def canonical_math_rational(raw: str) -> str | None:
+    """Response parser; deliberately duplicated from pinned reference v1."""
     if not isinstance(raw, str):
         return None
     s = raw.replace(r"\dfrac", r"\frac").replace(r"\tfrac", r"\frac")
@@ -136,10 +185,15 @@ def canonical_math_rational(raw: str) -> str | None:
 
 
 def last_boxed(text: str) -> str | None:
-    index = max(text.rfind(r"\boxed{"), text.rfind(r"\fbox{"))
-    if index < 0:
+    matches = list(re.finditer(r"\\(?:boxed|fbox)(?=\{|\s+[^\s{}])", text))
+    if not matches:
         return None
-    start = text.index("{", index)
+    match = matches[-1]
+    index = match.end()
+    if text[index] != "{":
+        token = re.match(r"\s+([^\s{}])", text[index:])
+        return token.group(1) if token else None
+    start = index
     depth = 0
     for cursor in range(start, len(text)):
         if text[cursor] == "{":
@@ -170,7 +224,7 @@ def eligible_records(rows: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, 
             excluded["duplicate_unique_id"] += 1
             continue
         nonduplicate[level] += 1
-        gold = canonical_math_rational(row["answer"])
+        gold = canonical_reference_v1(row["answer"])
         if gold is None:
             excluded["gold_not_rational"] += 1
             continue
@@ -178,7 +232,7 @@ def eligible_records(rows: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, 
             excluded["plain_comma_gold"] += 1
             continue
         box = last_boxed(row["solution"])
-        if box is None or canonical_math_rational(box) != gold:
+        if box is None or canonical_reference_v1(box) != gold:
             raise ValueError(f"reference answer/last box mismatch: {uid}")
         source_fields = {field: row[field] for field in ("problem", "answer", "level", "subject", "unique_id")}
         eligible.append({**row, "source_item_id": "math_" + uid.removesuffix(".json").replace("/", "_"), "source_sha256": canonical_json_sha256(source_fields), "expected_answer": gold, "in_math500": row["source_file"] == "test.jsonl"})
@@ -199,10 +253,20 @@ def _keyed(rows: Sequence[Mapping[str, Any]], domain: str) -> list[dict[str, Any
     return sorted(result, key=lambda row: selection_key(domain, row["source_sha256"]))
 
 
+def _subject_interleaved(rows: Sequence[Mapping[str, Any]], domain: str) -> list[dict[str, Any]]:
+    subjects = sorted({row["subject"] for row in rows})
+    queues = {subject: [row for row in rows if row["subject"] == subject] for subject in subjects}
+    ordered = []
+    for round_index in range(max((len(queue) for queue in queues.values()), default=0)):
+        round_rows = [queue[round_index] for queue in queues.values() if round_index < len(queue)]
+        ordered.extend(sorted(round_rows, key=lambda row: selection_key(domain, row["source_sha256"])))
+    return ordered
+
+
 def select_pilot(rows: Sequence[Mapping[str, Any]], per_level: int = 16) -> list[dict[str, Any]]:
     if type(per_level) is not int or per_level <= 0:
         raise ValueError("per_level must be positive")
-    queues = {level: _keyed([r for r in rows if r["level"] == level], PILOT_DOMAIN) for level in range(1, 6)}
+    queues = {level: _subject_interleaved(_keyed([r for r in rows if r["level"] == level], PILOT_DOMAIN), PILOT_DOMAIN) for level in range(1, 6)}
     if any(len(queue) < per_level for queue in queues.values()):
         raise ValueError("short pilot level")
     # Round-robin, hardest first; 16 complete rounds gives 16 in every level.
@@ -218,12 +282,7 @@ def select_items(rows: Sequence[Mapping[str, Any]], pilot: Sequence[Mapping[str,
     remaining = _keyed([row for row in rows if row["source_item_id"] not in pilot_ids], SELECTION_DOMAIN)
     selected = []
     for level in range(1, 6):
-        subjects = sorted({row["subject"] for row in remaining if row["level"] == level})
-        queues = {subject: [row for row in remaining if row["level"] == level and row["subject"] == subject] for subject in subjects}
-        ordered = []
-        for round_index in range(max((len(queue) for queue in queues.values()), default=0)):
-            round_rows = [queue[round_index] for queue in queues.values() if round_index < len(queue)]
-            ordered.extend(sorted(round_rows, key=lambda row: selection_key(SELECTION_DOMAIN, row["source_sha256"])))
+        ordered = _subject_interleaved([row for row in remaining if row["level"] == level], SELECTION_DOMAIN)
         if len(ordered) < n:
             raise ValueError(f"short level {level}: {len(ordered)} < {n}")
         selected.extend(ordered[:n])
@@ -233,11 +292,19 @@ def select_items(rows: Sequence[Mapping[str, Any]], pilot: Sequence[Mapping[str,
 def score_response(response_text: str, expected_answer: str, *, runtime_status: str = "succeeded", enable_thinking: bool = False) -> dict[str, Any]:
     if runtime_status not in {"succeeded", "capped", "malformed", "runtime_failed"} or not isinstance(response_text, str):
         raise ValueError("invalid response or runtime status")
-    if canonical_math_rational(expected_answer) is None:
+    reference = canonical_math_rational(expected_answer)
+    if reference is None:
         raise ValueError("expected answer is not rational")
     section = response_text.rsplit("</think>", 1)[1] if enable_thinking and "</think>" in response_text else (None if enable_thinking else response_text)
     box = last_boxed(section) if section is not None else None
     parsed = canonical_math_rational(box) if box is not None else None
+    # A stripped unit or percent can change the value; keep the parsed value
+    # for audit, but never award correctness for these response-only hazards.
+    unsafe_response = bool(box is not None and (
+        re.search(r"\\(?:text|mathrm)\{\s*(?:thousand|million|billion|trillion|hundred|dozen|i)\s*\}", box, re.IGNORECASE)
+        or re.search(r"i\s*$", box)
+        or ("%" in box) != ("%" in expected_answer)
+    ))
     parse_status = "missing_think_close" if section is None else "no_box_or_unbalanced" if box is None else "boxed_noncanonical" if parsed is None else "parsed"
     if runtime_status in {"runtime_failed", "malformed"}:
         outcome = "malformed"
@@ -245,11 +312,11 @@ def score_response(response_text: str, expected_answer: str, *, runtime_status: 
         outcome = "truncated"
     elif section is None or box is None:
         outcome = "malformed"
-    elif parsed == canonical_math_rational(expected_answer):
+    elif parsed == reference and not unsafe_response:
         outcome = "correct"
     else:
         outcome = "incorrect"
-    return {"outcome": outcome, "correct": outcome == "correct", "parsed_answer": parsed, "expected_answer": canonical_math_rational(expected_answer), "parse_status": parse_status, "runtime_status": runtime_status}
+    return {"outcome": outcome, "correct": outcome == "correct", "parsed_answer": parsed, "expected_answer": reference, "parse_status": parse_status, "runtime_status": runtime_status}
 
 
 def score_math_outcome_table(response_rows: Sequence[Mapping[str, Any]], manifest: Mapping[str, Any], sidecar: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -314,14 +381,19 @@ def render_prompts(rows: Sequence[Mapping[str, Any]], tokenizer_dirs: Sequence[s
             ids = list(tokenizer.apply_chat_template(messages, tokenize=True, **kwargs))
             if list(tokenizer.encode(text, add_special_tokens=True)) != ids:
                 raise ValueError("prompt text/token ids mismatch")
-            tail = "<|im_start|>assistant\n" if enable_thinking else "<|im_start|>assistant\n" + EMPTY_THINK_PREFIX
-            if not text.endswith(tail) or enable_thinking and "<think>" in text:
-                raise ValueError("thinking-arm render tail mismatch")
+            if text != _expected_rendered_prompt(row["problem"], enable_thinking):
+                raise ValueError("rendered prompt shape mismatch")
             current.append({"source_item_id": row["source_item_id"], "rendered_prompt_text": text, "prompt_token_ids": ids})
         if rendered and current != rendered:
             raise ValueError("tokenizer mirrors render differently")
         rendered = current
     return {"items": rendered, "chat_template_sha256": pinsets[0][0], "tokenizer_json_sha256": pinsets[0][1], "tokenizer_id": pinsets[0][2], "rendered_with": {"library": "transformers", "version": version}}
+
+
+def _expected_rendered_prompt(problem: str, enable_thinking: bool) -> str:
+    user = PROMPT_TEMPLATE.replace("{problem}", problem)
+    tail = "" if enable_thinking else EMPTY_THINK_PREFIX
+    return f"<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n{tail}"
 
 
 def build_math_manifest(rows: Sequence[Mapping[str, Any]], receipts: Mapping[str, Any], *, set_name: str, n: int | None = None, enable_thinking: bool = False, rendered: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -410,9 +482,8 @@ def build_math_suite_manifest(
         prompt_text = rendered_row.get("rendered_prompt_text")
         if not isinstance(token_ids, list) or not token_ids or not isinstance(prompt_text, str):
             raise ValueError(f"rendered prompt missing for {item_id}")
-        expected_user = PROMPT_TEMPLATE.replace("{problem}", row["problem"])
-        if f"<|im_start|>user\n{expected_user}<|im_end|>" not in prompt_text:
-            raise ValueError(f"rendered prompt problem mismatch for {item_id}")
+        if prompt_text != _expected_rendered_prompt(row["problem"], enable_thinking):
+            raise ValueError(f"rendered prompt shape mismatch for {item_id}")
         items.append({
             "item_id": item_id, "item_type": "text_prompt", "category": "math",
             "difficulty": {"axis": "math_author_level", "value": row["level"], "scale": "ordinal", "label": f"Level {row['level']}", "source": "hendrycks_math_2021", "quarantine_note": DIFFICULTY_QUARANTINE},
@@ -430,7 +501,7 @@ def build_math_suite_manifest(
         "analysis_contract": {"independent_unit": "bundle", "primary_window_class": "suite", "allowed_aggregation_levels": ["suite", "block", "level"]},
         "execution_policy": {"order_policy": "manifest_order", "within_bundle_repeats": 1, "cooldown_policy": "bundle_only", "declared_cache_policy": "warm_cache", "cache_policy_verification": CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED, "warmup_policy": "adapter_default", "default_output_policy": "natural_eos"},
         "source_manifest": {"source_kind": "benchmark_import", "source_id": f"openai/prm800k@{COMMIT}:prm800k/math_splits/test+train", "revision": COMMIT, "subset_id": f"math_test_{set_label}_{arm}_v1", "subset_sha256": subset_hash, "license": "MIT", "contamination_note": CONTAMINATION_NOTE + "; " + ELIGIBILITY_NOTE},
-        "benchmark_import": {"dataset": "math", "split": "test", "repo_url": REPO_URL, "commit": COMMIT, "file_path": "prm800k/math_splits/test.jsonl", "file_sha256": receipts["test.jsonl"]["sha256"], "file_git_blob_sha1": receipts["test.jsonl"]["git_blob_sha1"], "license_spdx": "MIT", "license_blob_sha1": LICENSE_BLOB_SHA1, "source_files": source_files, "selection_rule": "domain-separated SHA-256; pilot first 16 per level, test subject-interleaved prefix", "selection_domain": PILOT_DOMAIN if set_name == "pilot" else SELECTION_DOMAIN, "k": len(selected), "selected_item_ids": ids, "selected_item_ids_sha256": ids_hash, "canonical_subset_json_sha256": subset_hash, "prompt_template_id": PROMPT_TEMPLATE_ID, "prompt_template_sha256": PROMPT_TEMPLATE_SHA256, "chat_template_sha256": pins[0], "enable_thinking": enable_thinking, "tokenizer_json_sha256": pins[1], "tokenizer_id": pins[2], "rendered_with": rendered["rendered_with"]},
+        "benchmark_import": {"dataset": "math", "split": "test", "repo_url": REPO_URL, "commit": COMMIT, "file_path": "prm800k/math_splits/test.jsonl", "file_sha256": receipts["test.jsonl"]["sha256"], "file_git_blob_sha1": receipts["test.jsonl"]["git_blob_sha1"], "license_spdx": "MIT", "license_blob_sha1": receipts["test.jsonl"]["license_blob_sha1"], "source_files": source_files, "selection_rule": "domain-separated SHA-256; pilot and test subject-interleaved per level", "selection_domain": PILOT_DOMAIN if set_name == "pilot" else SELECTION_DOMAIN, "k": len(selected), "selected_item_ids": ids, "selected_item_ids_sha256": ids_hash, "canonical_subset_json_sha256": subset_hash, "prompt_template_id": PROMPT_TEMPLATE_ID, "prompt_template_sha256": PROMPT_TEMPLATE_SHA256, "chat_template_sha256": pins[0], "enable_thinking": enable_thinking, "tokenizer_json_sha256": pins[1], "tokenizer_id": pins[2], "rendered_with": rendered["rendered_with"]},
         "items": items, "markers": dict(MARKER_DEFAULTS), "outputs": dict(OUTPUT_DEFAULTS),
     }
     SuiteManifest.from_mapping(manifest)
@@ -483,13 +554,13 @@ def validate_math_annotations(manifest: Mapping[str, Any], sidecar: Mapping[str,
             raise ValueError(f"MATH annotation {index} answer hash mismatch")
         prompt = item.source.prompt_text
         prefix = "<|im_start|>user\n"
-        suffix = "\n\nPlease reason step by step, and put your final answer within \\boxed{}."
-        if not isinstance(prompt, str) or not prompt.startswith(prefix):
+        suffix = PROMPT_TEMPLATE.replace("{problem}", "")
+        full_suffix = suffix + "<|im_end|>\n<|im_start|>assistant\n" + ("" if benchmark.enable_thinking else EMPTY_THINK_PREFIX)
+        if not isinstance(prompt, str) or not prompt.startswith(prefix) or not prompt.endswith(full_suffix):
             raise ValueError(f"MATH annotation {index} prompt shape mismatch")
-        end = prompt.find(suffix + "<|im_end|>", len(prefix))
-        if end < 0:
+        problem = prompt[len(prefix):-len(full_suffix)]
+        if prompt != _expected_rendered_prompt(problem, benchmark.enable_thinking):
             raise ValueError(f"MATH annotation {index} prompt shape mismatch")
-        problem = prompt[len(prefix):end]
         source_fields = {"problem": problem, "answer": answer, "level": row["level"], "subject": row["subject"], "unique_id": uid}
         if canonical_json_sha256(source_fields) != item.source.source_sha256:
             raise ValueError(f"MATH annotation {index} source hash mismatch")

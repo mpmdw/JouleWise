@@ -628,6 +628,8 @@ class BenchmarkImport:
                 field = f"benchmark_import.source_files[{index}]"
                 raw_file = _require_mapping(raw_file, field)
                 _reject_unknown(raw_file, {"path", "sha256", "bytes", "line_count", "git_blob_sha1", "lfs_pointer_blob_sha1", "license_blob_sha1"}, field)
+                if "lfs_pointer_blob_sha1" not in raw_file:
+                    raise SchemaError(f"{field}.lfs_pointer_blob_sha1 is required")
                 path = _require_string(raw_file.get("path"), f"{field}.path")
                 if path in seen_paths:
                     raise SchemaError(f"{field}.path must be unique")
@@ -639,7 +641,7 @@ class BenchmarkImport:
                     "line_count": _positive_int(raw_file.get("line_count"), f"{field}.line_count"),
                     "git_blob_sha1": _require_hex_digest(raw_file.get("git_blob_sha1"), f"{field}.git_blob_sha1", 40),
                     "lfs_pointer_blob_sha1": (
-                        None if raw_file.get("lfs_pointer_blob_sha1") is None
+                        None if raw_file["lfs_pointer_blob_sha1"] is None
                         else _require_hex_digest(raw_file["lfs_pointer_blob_sha1"], f"{field}.lfs_pointer_blob_sha1", 40)
                     ),
                     "license_blob_sha1": _require_hex_digest(raw_file.get("license_blob_sha1"), f"{field}.license_blob_sha1", 40),
