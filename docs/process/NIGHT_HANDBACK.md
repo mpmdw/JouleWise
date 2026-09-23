@@ -267,7 +267,7 @@ correction in force for the observer accounting described below).
 The loop was caused by `launchd`, macOS's service manager, respawning
 `corecaptured`, the Wi-Fi log-capture helper, about every 80–95 seconds. Each
 spawn made `fseventsd`, the file-system event daemon, replay its event history
-and burn one processor core. Both the pre-arm check and the night gate at `t0` read `/usr/bin/log show --last 10m
+and burn one processor core. Both the pre-arm check (the **arm check**: the checks that run before a night is installed) and the night gate at `t0` read `/usr/bin/log show --last 10m
 --style syslog --predicate 'process == "launchd" AND eventMessage CONTAINS
 "corecaptured"'` and counts lines of this exact form from the captured log:
 `2026-09-22 10:23:33.210175-0700  localhost launchd[1]: [system/com.apple.corecaptured [38329]:] Successfully spawned corecaptured[38329] because xpc event`.
@@ -275,7 +275,7 @@ The arm check (on a real arm, never a rehearsal with a fixture `launchctl`) togg
 least three minutes after Wi-Fi is back on, and counts only new spawns. One or
 more new spawns triggers `/usr/bin/sudo -n
 /usr/local/sbin/joulewise-restart-fseventsd` once and refuses the arm check
-with `night_refused_not_quiet`. That restart runs `pkill -x fseventsd`;
+with `night_refused_not_quiet` (the refusal code for a machine that is not quiet). That restart runs `pkill -x fseventsd`;
 launchd respawns the daemon. The following `machine_quiet` row observes for
 30 seconds and refuses any non-observer process averaging at least 0.5 busy
 cores, including `fseventsd` if it remains busy. If any earlier arm check
