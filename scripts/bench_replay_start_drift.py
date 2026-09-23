@@ -472,7 +472,7 @@ def tail_budget(rows, protocol, worst_skipped_tail_s=WORST_SKIPPED_TAIL_S):
             "budget_s": budget_s, "gap_s": gap_s, "fits": fits, "statement": statement}
 
 
-def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BAR_S,
+def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=None,
             archived_bounded=ARCHIVED_V31_BOUNDED,
             worst_skipped_tail_s=WORST_SKIPPED_TAIL_S, smoke=False):
     """PASS only when the six clauses of `RULED_ADMISSIBILITY_TEXT` all hold.
@@ -498,6 +498,15 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
     (4) and (5) are not applied and the artifact says so; nothing else is
     exempt.
     """
+    # The session-level bar is the NIGHT's registered abort rule
+    # (`start_drift_abort_s`, A269 ruling 10 A1/A2 made it a registration
+    # field), read from the protocol the verdict is taken over so a later
+    # registration cannot leave this bench judging against a stale literal
+    # (delta lens 03 MATERIAL 1); `SESSION_BAR_S` is only the fallback for a
+    # protocol that predates the field.
+    if session_bar_s is None:
+        session_bar_s = protocol.get("start_drift_abort_s", SESSION_BAR_S)
+
 
     chain = [r["chain_start_drift_s"] for r in rows if r["chain_start_drift_s"] is not None]
     session = [r["session_start_drift_s"] for r in rows if r["session_start_drift_s"] is not None]

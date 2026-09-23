@@ -326,6 +326,35 @@ class RuledReplayVerdictTests(unittest.TestCase):
         self.assertEqual(bench.verdict(asserted, SMOKE_PROTOCOL, smoke=True)["status"],
                          "FAIL")
 
+    def test_the_ruled_text_is_pinned_to_the_ruling_file(self):
+        """The admissibility text is byte-equal to ruling 21's block quote.
+
+        Delta lens 03 MATERIAL 2: a substring assertion lets the text drift
+        from the ruling with the suite green.  The ruling's block is the
+        paragraph beginning "> Admissibility (cold ruling 21"; its closing
+        sentence ("Driver output: ...") names artifact 24's own output and is
+        not part of the rule, so it is stripped before the comparison.
+        """
+
+        text = (REPO_ROOT / RULING).read_text(encoding="utf-8")
+        block = next(line for line in text.splitlines()
+                     if line.startswith("> Admissibility (cold ruling 21"))
+        block = block[2:]
+        cut = block.index(" Driver output:")
+        self.assertEqual(bench.RULED_ADMISSIBILITY_TEXT, block[:cut])
+
+    def test_the_session_bar_comes_from_the_protocol(self):
+        """`start_drift_abort_s` in the protocol is the session bar (lens 03 M1)."""
+
+        rows = faithful_rows()
+        rows[0]["session_start_drift_s"] = 1.5
+        protocol = dict(PROTOCOL, start_drift_abort_s=1.0)
+        self.assertEqual(bench.verdict(rows, protocol)["status"], "ESCALATE")
+        self.assertEqual(bench.verdict(rows, protocol)["session_bar_s"], 1.0)
+        self.assertEqual(bench.verdict(rows, PROTOCOL)["status"], "PASS")
+        legacy = {k: v for k, v in PROTOCOL.items() if k != "start_drift_abort_s"}
+        self.assertEqual(bench.verdict(rows, legacy)["session_bar_s"], bench.SESSION_BAR_S)
+
     def test_the_archived_class_constant_is_the_one_the_ruling_cites(self):
         """The fidelity comparison is a CONSTANT, never read from the run it judges.
 
