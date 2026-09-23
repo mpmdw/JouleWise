@@ -20,6 +20,8 @@ import traceback
 from typing import Callable
 
 from joulewise import corecaptured_loop
+from joulewise.arm_retry import successor_license
+from joulewise.zero_capture_facts import zero_capture_facts
 
 KIND = "quiet_predicate_evidence"
 REMOTE = "https://github.com/mpmdw/JouleWise"
@@ -760,6 +762,149 @@ def retained_roots(state, now_epoch_s=None):
         row["classification"] == "retained" for row in inventory) else "fail")
 
 
+def _successor_claims(state):
+    directory = safe_path(Path(state["roots_under"]) / "night-custody" / "successor-claims")
+    if not directory.exists():
+        return {}, directory
+    if not directory.is_dir():
+        raise Refused("successor claim directory is not a directory")
+    claims = {}
+    for path in sorted(directory.iterdir()):
+        safe_path(path)
+        if not path.is_file() or path.suffix != ".json":
+            raise Refused("unreadable successor claim: " + str(path))
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if (not isinstance(value, dict) or value.get("schema") != "joulewise.successor_claim.v1"
+                    or path.name != value["predecessor_plan_id"] + ".json"
+                    or not isinstance(value["successor_plan_id"], str)
+                    or not value["successor_plan_id"]
+                    or isinstance(value["predecessor_completion_epoch_s"], bool)
+                    or not isinstance(value["predecessor_completion_epoch_s"], (int, float))
+                    or not math.isfinite(value["predecessor_completion_epoch_s"])
+                    or not re.fullmatch(r"[0-9a-f]{64}", value["successor_sha256"])):
+                raise ValueError("invalid claim")
+            claims[value["predecessor_plan_id"]] = value
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise Refused("malformed successor claim: " + str(path)) from exc
+    return claims, directory
+
+
+def _courier_message_id(path):
+    raw = safe_path(path).read_text(encoding="utf-8").strip()
+    if raw.startswith("{"):
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise Refused("courier.sent is not a delivery record")
+        raw = value.get("gmail_message_id", value.get("message_id"))
+    elif "=" in raw:
+        fields = dict(line.split("=", 1) for line in raw.splitlines() if "=" in line)
+        raw = fields.get("gmail_message_id", fields.get("message_id"))
+    else:
+        raise Refused("courier.sent has no message id field")
+    if not isinstance(raw, str) or not raw.strip():
+        raise Refused("courier.sent has no message id")
+    return raw.strip()
+
+
+def successor_check(state, now_epoch_s=None):
+    """Read the retained predecessor and durable claim before any new arm."""
+    from joulewise.night_gate import NightPlan
+    from scripts.magistrate_watchdog import (Storage, _delivered_zero_capture_refusal,
+                                              _release_observed, load_state, plan_completion_epoch)
+    now = time.time() if now_epoch_s is None else now_epoch_s
+    raw = safe_path(Path(state["plan_path"])).read_bytes()
+    candidate_id = json.loads(raw)["plan_id"]
+    candidate_sha = hashlib.sha256(raw).hexdigest()
+    claims, _ = _successor_claims(state)
+    released = []
+    root = safe_path(Path(state["roots_under"]) / "night-custody")
+    magistrate = load_state(Storage(root / "magistrate"))
+    for key in magistrate.get("released_zero_capture_refusals", []):
+        if not isinstance(key, str) or key.count(":") < 2:
+            raise Refused("malformed zero-capture release key")
+        prior_id, prior_root, _ = key.split(":", 2)
+        if (Path(prior_root).parent == root and not Path(prior_root, "night_plan.json").is_file()
+                and (prior_id not in claims or now <= claims[prior_id].get(
+                    "predecessor_completion_epoch_s", float("inf")))):
+            raise Refused("released predecessor custody is missing")
+    for path in sorted(root.glob("*/night_plan.json")):
+        safe_path(path)
+        if not path.is_file():
+            raise Refused("retained plan is not a regular file: " + str(path))
+        try:
+            plan = NightPlan.from_mapping(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
+            raise Refused("unreadable predecessor plan: " + str(path)) from exc
+        storage = Storage(path.parent)
+        if (now <= plan_completion_epoch(plan)
+                and _release_observed(plan, storage, None)):
+            # A one-way latch is an observation, never a substitute for fresh facts.
+            released.append((plan, path, storage))
+    if len(released) > 1:
+        raise Refused("more than one released predecessor remains in its plan span")
+    if not released:
+        # The claim survives removal of its custody root. While that original
+        # span would still be active, another candidate cannot evade its count.
+        for claim in claims.values():
+            if (now <= claim.get("predecessor_completion_epoch_s", -1)
+                    and (claim["successor_plan_id"], claim["successor_sha256"])
+                    != (candidate_id, candidate_sha)):
+                raise Refused("successor claim remains active after predecessor removal")
+        return dict(predecessor_plan_id=None, candidate_plan_id=candidate_id,
+                    candidate_sha256=candidate_sha, claims_seen=len(claims))
+    plan, path, storage = released[0]
+    facts = zero_capture_facts(plan)
+    if not _delivered_zero_capture_refusal(plan, now, storage):
+        raise Refused("successor refused: released predecessor no longer has delivered zero-capture facts")
+    night = path.parent / "night"
+    result = json.loads(safe_path(night / "result.json").read_text(encoding="utf-8"))
+    receipt = json.loads(safe_path(night / "receipt.json").read_text(encoding="utf-8"))
+    delivery = {"plan_id": plan.plan_id, "courier.sent": facts.courier_sent,
+                "message_id": _courier_message_id(night / "courier.sent")}
+    predecessor_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    claim_inputs = dict(candidate_plan_id=candidate_id, candidate_sha256=candidate_sha,
+                        predecessor_sha256=predecessor_sha,
+                        predecessor_is_successor=any(c["successor_plan_id"] == plan.plan_id
+                                                     for c in claims.values()),
+                        existing_claim=claims.get(plan.plan_id))
+    decision = successor_license(result, receipt, facts, delivery, claim_inputs, now)
+    if not decision.allowed:
+        raise Refused("successor refused: " + decision.reason)
+    return dict(predecessor_plan_id=plan.plan_id, predecessor_completion_epoch_s=plan_completion_epoch(plan),
+                candidate_plan_id=candidate_id, candidate_sha256=candidate_sha,
+                facts=asdict(facts), claim_existing=plan.plan_id in claims)
+
+
+def _create_successor_claim(state, row):
+    predecessor = row["predecessor_plan_id"]
+    if predecessor is None:
+        return
+    claims, directory = _successor_claims(state)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", predecessor):
+        raise Refused("unsafe predecessor plan id")
+    expected = dict(schema="joulewise.successor_claim.v1", predecessor_plan_id=predecessor,
+                    predecessor_completion_epoch_s=row["predecessor_completion_epoch_s"],
+                    successor_plan_id=row["candidate_plan_id"],
+                    successor_sha256=row["candidate_sha256"])
+    if predecessor in claims:
+        prior = claims[predecessor]
+        if (prior["successor_plan_id"], prior["successor_sha256"]) != (
+                expected["successor_plan_id"], expected["successor_sha256"]):
+            raise Refused("successor already claimed by another candidate")
+        return
+    directory.mkdir(exist_ok=True)
+    path = safe_path(directory / (predecessor + ".json"))
+    try:
+        with path.open("x", encoding="utf-8") as stream:
+            json.dump(expected, stream, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError:
+        raise Refused("concurrent successor claim")
+
+
 def clone_census(state, caller_pid, observation=None, *, argv_only=False):
     # Fixture observations cross as data; all imports/classification belong to H.
     code = """import json,sys
@@ -1079,6 +1224,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             checks["courier"] = dict(verdict="pass" if courier else "fail", path=courier,
                                       reason="courier on PATH" if courier else "courier unavailable")
             inspect("retained_roots", lambda: retained_roots(state))
+            inspect("successor", lambda: successor_check(state))
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
@@ -1414,7 +1560,7 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
         stage = Path(state["staging"])
         plan = sealed_state(state, lock_verifier=lock_verifier)
         lifecycle = lifecycle_dir(stage)
-        require_fresh_check(state, launchctl_bin)
+        checked = require_fresh_check(state, launchctl_bin)
         fake = str(launchctl_bin) != "launchctl"
         if not isinstance(notice_accepted, str) or not notice_accepted.strip():
             raise Refused("notice acceptance message id is required")
@@ -1488,8 +1634,15 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
                                          runner=runner, magistrate=magistrate)
             if not fake and observed_veto["production"] is not True:
                 raise Refused("rehearsal veto evidence cannot authorize a real arm")
+            successor = successor_check(state)
+            prior_successor = checked["checks"].get("successor", {})
+            if (prior_successor.get("verdict") != "pass"
+                    or prior_successor.get("predecessor_plan_id") != successor["predecessor_plan_id"]
+                    or prior_successor.get("candidate_sha256") != successor["candidate_sha256"]):
+                raise Refused("successor facts changed after check.json")
             record["phase"] = "publishing"
             save()  # Durable intent precedes the rename, including lost acknowledgement.
+            _create_successor_claim(state, successor)
             publication_started = True
             os.replace(plan, target)
             published = True

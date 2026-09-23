@@ -302,31 +302,10 @@ authoring refuses an undersized window and never extends it silently.
 Generate its wrapper afterward with the existing `--plan OUTPUT` invocation.
 Without the flag the legacy `--check` output remains byte-identical.
 
-**D-182** authorizes this route. Binding observations inside the window are not retries. A terminal
-zero-capture machine-state refusal permits **ONE new-plan successor** only
-when `zero_capture_successor_allowed(result, receipt, delivery)` receives:
+**D-182** authorizes one successor: a fresh plan with a new plan id and SHA-256 digest after an eligible predecessor (the refused plan) captured nothing. The production `evidence_night check` writes a `successor` row after `retained_roots`. A retained root is a prior plan's custody directory; the watchdog's latched early release makes that plan's span inactive before its normal completion time. When the check finds such a predecessor, it rereads the real custody directory, `night/result.json`, `night/receipt.json`, `night/courier.sent` (the delivered result email's message id), and the shared disk facts. These facts count `chain.started`, `*.consumed.json` reservation markers, calibration-ledger sessions for the plan, capture entries, and evidence envelopes. A bare C5 receipt row is neither proof of absence nor a veto. Missing or symlinked custody, unreadable result or receipt, or any start, reservation or capture fact refuses the successor.
 
-- Matching terminal REFUSED result/receipt, with exactly not_quiet, bind_expired,
-  agent_present, hid_idle or boot_clock as the refusal reason.
-- Explicit C5.measured.zero_capture_evidence with chain_started_absent=true,
-  reservation_absent=true, session_id=null, capture_writer_ran=false and
-  instrument_validation_empty=true.
-  The last assertion means `runs/instrument_validation` was positively
-  inventoried empty. Missing evidence is not absence. The desk caller owns
-  harvesting these facts; a bare refusal receipt cannot supply them by itself.
-- Completed courier.sent evidence, nonempty message_id, matching plan_id and
-  an explicit successors_used count of zero from preserved history.
+`successor_license(result, receipt, facts, delivery, claims, now_epoch_s)` is the pure zero-capture decision. It requires the exact machine-state refusal, null chain fields, completed delivery with message id, a new plan id and digest, at least 60 seconds from `result.ended_epoch_s`, and no prior use of the licence. `publish_install` rereads the facts after the fresh check, notice and veto; immediately before publication it creates `night-custody/successor-claims/<predecessor plan_id>.json` with exclusive creation. A successor claim is a durable record binding one predecessor to one successor id and digest. The same candidate may be republished; another candidate, or a successor trying to license a third plan, is refused. The claim remains after predecessor custody is removed. Every observed NO still stops the arm, and the candidate must meet its own install close and all ordinary gates. The predecessor stays immutable. `retry_allowed` keeps its existing same-plan rules.
 
-The pure helper establishes eligibility only; it does not publish or arm.
-`successor_arm_allowed(now, plan, notice, result, receipt, delivery)` then
-checks a new id and digest against delivery.plan_sha256, a fresh notice after
-the predecessor's terminal write (result.ended_epoch_s), at least 60 s since
-that write and now before the successor's own install_close_epoch. It composes
-ordinary fresh-plan `retry_allowed` with empty history; every observed NO on
-any notice thread still stops.
-The predecessor stays immutable. `classify_abort` retains its classes and
-`retry_allowed` its existing same-plan rules: neither a cold refusal nor a
-changed digest can masquerade as another same-candidate attempt. This work
-does not change the watchdog or install a new recovery loop. Installation
+The direct `install_night_agent.sh` route performs no successor check; a follow-up lane owns that route. The captured-abort `non_observer_process_busy` door belongs to A270 and is not opened by this zero-capture decision. This work does not change the watchdog's one-way release semantics. Installation
 closes at t0 − 10 minutes: the eight-minute REQUEST lead plus a two-minute
 installation margin.

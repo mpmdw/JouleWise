@@ -2558,6 +2558,214 @@ class LifecycleTests(unittest.TestCase):
             self.assertTrue(errors.getvalue().startswith("REFUSED: veto present:"))
 
 
+    def released_predecessor(self, name="predecessor", *, ended_delta=61.0, reason="night_refused_not_quiet"):
+        """Driver-shaped delivered refusal with a bare C5 and a real release key."""
+        from scripts import magistrate_watchdog as wd
+        now = time.time()
+        root = self.sibling_root(name, "result.json", "receipt.json", "courier.sent",
+                                 t0=now - 60)
+        plan = self.sibling_plan(root, t0=now - 60)
+        plan["chain_path"] = str(root / "chain.zsh")
+        plan["chain_sha256_path"] = str(root / "chain.zsh.sha256")
+        (root / "night_plan.json").write_text(json.dumps(plan))
+        (root / "chain.zsh").write_text("export NIGHT_PAYLOAD_KIND='quiet_predicate_evidence'\n")
+        result = dict(schema="joulewise.unattended_night_result.v1", plan_id=name,
+                      receipt_class="DIAGNOSTIC_NO_PACK", verdict="REFUSED",
+                      aborted_reason=reason, chain_exit_code=None, chain_sha256=None,
+                      started_epoch_s=now - ended_delta - 1, ended_epoch_s=now - ended_delta,
+                      census_count=0, census_hits=[], artifacts=[])
+        receipt = dict(schema="joulewise.unattended_night_receipt.v2", plan_id=name,
+                       receipt_class="DIAGNOSTIC_NO_PACK", verdict="REFUSED",
+                       authored_monotonic_ns=0,
+                       refusal=dict(reason=reason, detail="fixture machine refusal", evidence=[]),
+                       conditions=[dict(condition_id="C5", status="REFUSED", basis=None,
+                                        evidence=[], measured={})])
+        (root / "night/result.json").write_text(json.dumps(result))
+        (root / "night/receipt.json").write_text(json.dumps(receipt))
+        (root / "night/courier.sent").write_text(json.dumps({
+            "gmail_message_id": "delivered-message-id", "sent_epoch_s": now - 1,
+            "verdict": "REFUSED"}) + "\n")
+        parsed = wd.NightPlan.from_mapping(plan)
+        key = wd._release_key(parsed, wd.Storage(root))
+        magistrate = self.custody.parent / "magistrate"
+        magistrate.mkdir(exist_ok=True)
+        state = wd.initial_state()
+        state["released_zero_capture_refusals"] = [key]
+        (magistrate / "state.json").write_text(json.dumps(state))
+        return root, parsed
+
+    def test_a277_delivered_bare_c5_check_and_publish_claim(self):
+        root, _ = self.released_predecessor()
+        report = self.checked()
+        row = report["checks"]["successor"]
+        self.assertEqual((row["verdict"], row["predecessor_plan_id"]), ("pass", "predecessor"))
+        self.assertTrue(report["rehearsal_ready"])
+        def fail_probe(argv, **kw):
+            return subprocess.CompletedProcess(argv, 2, "", "fixture probe refusal")
+        with self.assertRaisesRegex(entry.Refused, "installer --launchd-probe failed"):
+            self.publish(runner=fail_probe)
+        claim = self.custody.parent / "successor-claims/predecessor.json"
+        value = json.loads(claim.read_text())
+        self.assertEqual((value["successor_plan_id"], value["successor_sha256"]),
+                         (row["candidate_plan_id"], row["candidate_sha256"]))
+        self.assertEqual(len(list(claim.parent.glob("*.json"))), 1)
+
+    def test_a277_missing_delivery_or_latch_never_licenses_bare_c5(self):
+        root, _ = self.released_predecessor()
+        (root / "night/courier.sent").unlink()
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+        (root / "night/courier.sent").write_text("message-id\n")
+        (self.custody.parent / "magistrate/state.json").write_text("{}")
+        report = self.checked("retained_roots")
+        self.assertEqual(report["checks"]["retained_roots"]["verdict"], "fail")
+
+    def assert_post_release_fact_blocks(self, mutate):
+        root, _ = self.released_predecessor()
+        mutate(root)
+        report = self.checked("successor")
+        self.assertEqual(report["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_chain_started_blocks(self):
+        self.assert_post_release_fact_blocks(lambda r: (r / "night/chain.started").write_text("{}"))
+
+    def test_a277_nested_reservation_blocks(self):
+        def mutate(root):
+            marker = root / "deep/nested/reservation.consumed.json"
+            marker.parent.mkdir(parents=True)
+            marker.write_text("{}")
+        self.assert_post_release_fact_blocks(mutate)
+
+    def test_a277_symlinked_evidence_blocks(self):
+        self.assert_post_release_fact_blocks(
+            lambda r: (r / "night/evidence").symlink_to(r / "missing"))
+
+    def test_a277_nonempty_envelope_index_blocks(self):
+        self.assert_post_release_fact_blocks(
+            lambda r: (r / "night/evidence_envelopes.jsonl").write_text("{}\n"))
+
+    def test_a277_symlinked_envelope_index_blocks(self):
+        self.assert_post_release_fact_blocks(
+            lambda r: (r / "night/evidence_envelopes.jsonl").symlink_to(r / "missing"))
+
+    def test_a277_spacing_and_door_disjointness(self):
+        root, _ = self.released_predecessor(ended_delta=59.99)
+        ended = json.loads((root / "night/result.json").read_text())["ended_epoch_s"]
+        with patch.object(entry.time, "time", return_value=ended + 59.99):
+            self.assertIn("successor_spacing", self.checked("successor")["checks"]["successor"]["reason"])
+        result = json.loads((root / "night/result.json").read_text())
+        receipt = json.loads((root / "night/receipt.json").read_text())
+        result["aborted_reason"] = receipt["refusal"]["reason"] = "non_observer_process_busy"
+        (root / "night/result.json").write_text(json.dumps(result))
+        (root / "night/receipt.json").write_text(json.dumps(receipt))
+        from scripts import magistrate_watchdog as wd
+        parsed = wd.NightPlan.from_mapping(json.loads((root / "night_plan.json").read_text()))
+        state = wd.initial_state()
+        state["released_zero_capture_refusals"] = [wd._release_key(parsed, wd.Storage(root))]
+        (self.custody.parent / "magistrate/state.json").write_text(json.dumps(state))
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_existing_claim_and_removed_root_still_bound_count(self):
+        root, _ = self.released_predecessor()
+        row = self.checked()["checks"]["successor"]
+        entry._create_successor_claim(self.state, row)
+        self.assertEqual(self.checked()["checks"]["successor"]["verdict"], "pass")
+        claim = self.custody.parent / "successor-claims/predecessor.json"
+        value = json.loads(claim.read_text())
+        value["successor_plan_id"] = "different-plan"
+        claim.write_text(json.dumps(value))
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+        shutil.rmtree(root)
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_successor_refusal_cannot_license_third_plan(self):
+        root, _ = self.released_predecessor()
+        row = self.checked()["checks"]["successor"]
+        entry._create_successor_claim(self.state, row)
+        shutil.rmtree(root)
+        successor_root, _ = self.released_predecessor(name=row["candidate_plan_id"])
+        self.assertTrue(successor_root.exists())
+        # Give the candidate a third identity while preserving the fixture's
+        # sealed bytes and allowing this deliberately renamed staging path.
+        candidate = json.loads(self.plan.read_text())
+        candidate["plan_id"] = "third-plan"
+        self.plan.write_text(json.dumps(candidate))
+        self.state["plan_id"] = "third-plan"
+        self.state["digests"][str(self.plan)] = entry.digest(self.plan)
+        entry.saved_json(self.stage / "prepare.json", self.state)
+        expected = {key: self.state[key] for key in
+                    ("plan_id", "measurement_root", "staging", "custody_root")}
+        with patch.object(entry, "locations", return_value=expected):
+            report = self.checked("successor")
+        self.assertIn("successor_already_used", report["checks"]["successor"]["reason"])
+
+    def test_a277_multiple_released_predecessors_refused(self):
+        self.released_predecessor(name="first")
+        self.released_predecessor(name="second")
+        # Restore both release keys; the fixture helper writes one per call.
+        from scripts import magistrate_watchdog as wd
+        keys = []
+        for name in ("first", "second"):
+            root = self.custody.parent / name
+            parsed = wd.NightPlan.from_mapping(json.loads((root / "night_plan.json").read_text()))
+            keys.append(wd._release_key(parsed, wd.Storage(root)))
+        state = wd.initial_state()
+        state["released_zero_capture_refusals"] = keys
+        (self.custody.parent / "magistrate/state.json").write_text(json.dumps(state))
+        self.assertIn("more than one", self.checked("successor")["checks"]["successor"]["reason"])
+
+    def calibration_predecessor(self):
+        root, parsed = self.released_predecessor()
+        runs = self.base / "calibration-runs"
+        ledger = self.base / "calibration-ledger.jsonl"
+        (root / "chain.zsh").write_text(
+            f"export RUNS_ROOT='{runs}'\nexport CALIBRATION_LEDGER='{ledger}'\n")
+        return root, parsed, runs, ledger
+
+    def test_a277_calibration_capture_entry_blocks(self):
+        _, _, runs, _ = self.calibration_predecessor()
+        capture = runs / "instrument_validation" / "entry"
+        capture.parent.mkdir(parents=True)
+        capture.write_text("{}")
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_calibration_ledger_session_blocks(self):
+        _, parsed, _, ledger = self.calibration_predecessor()
+        ledger.write_text(json.dumps({"plan_id": parsed.plan_id, "event": "bracket_session_open"}) + "\n")
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_missing_custody_root_refused(self):
+        root, _ = self.released_predecessor()
+        shutil.rmtree(root)
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_symlinked_custody_root_refused(self):
+        root, _ = self.released_predecessor()
+        shutil.rmtree(root)
+        root.symlink_to(self.base / "missing-custody", target_is_directory=True)
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_watchdog_and_check_read_same_facts(self):
+        from scripts import magistrate_watchdog as wd
+        root, plan = self.released_predecessor()
+        now = time.time()
+        self.assertTrue(wd._delivered_zero_capture_refusal(plan, now, wd.Storage(root)))
+        self.assertEqual(self.checked()["checks"]["successor"]["verdict"], "pass")
+        marker = root / "late" / "reservation.consumed.json"
+        marker.parent.mkdir()
+        marker.write_text("{}")
+        self.assertFalse(wd._delivered_zero_capture_refusal(plan, now, wd.Storage(root)))
+        self.assertEqual(self.checked("successor")["checks"]["successor"]["verdict"], "fail")
+
+    def test_a277_publish_rereads_facts_before_claim(self):
+        root, _ = self.released_predecessor()
+        self.assertEqual(self.checked()["checks"]["successor"]["verdict"], "pass")
+        marker = root / "late.consumed.json"
+        marker.write_text("{}")
+        with self.assertRaisesRegex(entry.Refused, "successor"):
+            self.publish()
+        self.assertFalse((self.custody.parent / "successor-claims/predecessor.json").exists())
+
+
 @unittest.skipUnless(Path('/bin/zsh').is_file(), 'real installer requires zsh')
 class LifecycleCompositionTests(unittest.TestCase):
     @classmethod

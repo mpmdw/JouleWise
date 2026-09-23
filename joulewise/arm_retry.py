@@ -244,72 +244,70 @@ def terminal_zero_capture_refusal(result, receipt) -> Decision:
         return Decision(False, "missing_zero_capture_evidence")
 
 
-def zero_capture_successor_allowed(result, receipt, delivery) -> Decision:
-    """D-182 eligibility for ONE new plan, never authority to re-arm old bytes.
+def successor_license(result, receipt, facts, delivery, claims, now_epoch_s) -> Decision:
+    """Pure D-182 door 1 plus the shared one-use, delivery and spacing tail.
 
-    The caller supplies harvested positive evidence in C5.measured's
-    ``zero_capture_evidence``: chain_started_absent, reservation_absent,
-    session_id (explicit null), capture_writer_ran (explicit false), and
-    instrument_validation_empty. No missing field
-    means absence. ``delivery`` binds a completed courier.sent marker and its
-    message_id to this plan, plus the preserved successor count (zero).
-    ``successor_arm_allowed`` separately enforces fresh-plan arming, 60 s
-    from the terminal write, install close and every observed NO.
-    retry_allowed retains its same-candidate semantics.
+    Door 2 for a captured ``non_observer_process_busy`` abort belongs to A270.
+    ``claims`` binds the candidate identity and the durable prior claim.
     """
     terminal = terminal_zero_capture_refusal(result, receipt)
     if not terminal.allowed:
         return terminal
+    if facts is None or not getattr(facts, "clean", False):
+        return Decision(False, "start_reservation_or_capture_not_absent")
     try:
+        if (facts.chain_started or facts.reservation_markers_found
+                or facts.capture_entries_found or facts.envelopes_captured
+                or facts.ledger_sessions_found):
+            return Decision(False, "start_reservation_or_capture_not_absent")
         plan_id = result["plan_id"]
         if delivery["plan_id"] != plan_id:
             return Decision(False, "handoff_plan_mismatch")
-        rows = [row for row in receipt["conditions"] if row["condition_id"] == "C5"]
-        if len(rows) != 1:
-            return Decision(False, "missing_zero_capture_evidence")
-        evidence = rows[0]["measured"]["zero_capture_evidence"]
-        if (evidence["chain_started_absent"] is not True
-                or evidence["reservation_absent"] is not True
-                or evidence["session_id"] is not None
-                or evidence["capture_writer_ran"] is not False
-                or evidence["instrument_validation_empty"] is not True):
-            return Decision(False, "start_reservation_or_capture_not_absent")
         if (delivery["courier.sent"] is not True
-                or not isinstance(delivery["message_id"], str) or not delivery["message_id"]):
+                or not isinstance(delivery["message_id"], str)
+                or not delivery["message_id"]):
             return Decision(False, "delivery_incomplete")
-        if type(delivery["successors_used"]) is not int or delivery["successors_used"] != 0:
+        candidate_id = claims["candidate_plan_id"]
+        candidate_sha = claims["candidate_sha256"]
+        predecessor_sha = claims["predecessor_sha256"]
+        if (not isinstance(candidate_id, str) or not candidate_id
+                or not isinstance(candidate_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", candidate_sha)
+                or not isinstance(predecessor_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", predecessor_sha)):
+            return Decision(False, "malformed_successor_evidence")
+        if candidate_id == plan_id or candidate_sha == predecessor_sha:
+            return Decision(False, "predecessor_rearm")
+        if claims["predecessor_is_successor"] is True:
             return Decision(False, "successor_already_used")
+        existing = claims["existing_claim"]
+        if existing is not None and (existing.get("successor_plan_id") != candidate_id
+                                     or existing.get("successor_sha256") != candidate_sha):
+            return Decision(False, "successor_already_used")
+        if _number(now_epoch_s) - _number(result["ended_epoch_s"]) < RETRY_INTERVAL_S:
+            return Decision(False, "successor_spacing")
         return Decision(True, "new_plan_only")
-    except (KeyError, TypeError, ValueError):
-        return Decision(False, "missing_zero_capture_evidence")
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+        return Decision(False, "malformed_successor_evidence")
 
 
-def successor_arm_allowed(now_epoch_s, plan, notice, result, receipt, delivery) -> Decision:
-    """Apply D-182 to a fresh candidate after harvested eligibility is proved.
+def zero_capture_successor_allowed(result, receipt, delivery, facts=None, claims=None,
+                                   now_epoch_s=None) -> Decision:
+    """Compatibility entry point; missing disk facts never grant a licence."""
+    return successor_license(result, receipt, facts, delivery, claims,
+                             now_epoch_s)
 
-    plan/notice use retry_allowed's evidence format. result.ended_epoch_s is
-    the predecessor's terminal result write time; delivery.plan_sha256 binds
-    its harvested bytes. No predecessor attempt enters same-plan history.
-    """
-    eligible = zero_capture_successor_allowed(result, receipt, delivery)
+
+def successor_arm_allowed(now_epoch_s, plan, notice, result, receipt, delivery,
+                          facts=None, claims=None) -> Decision:
+    """Desk adapter for retry-format plan/notice evidence; no production caller."""
+    eligible = successor_license(result, receipt, facts, delivery, claims, now_epoch_s)
     if not eligible.allowed:
         return eligible
     try:
-        now = _number(now_epoch_s)
         terminal = _number(result["ended_epoch_s"])
-        if now - terminal < RETRY_INTERVAL_S:
-            return Decision(False, "successor_spacing")
-        candidate = json.loads(plan["plan_bytes"])
-        old_digest = delivery["plan_sha256"]
-        if not isinstance(old_digest, str) or re.fullmatch(r"[0-9a-f]{64}", old_digest) is None:
-            return Decision(False, "missing_predecessor_digest")
-        if (candidate["plan_id"] == result["plan_id"]
-                or hashlib.sha256(plan["plan_bytes"]).hexdigest() == old_digest):
-            return Decision(False, "predecessor_rearm")
         if (_number(notice["sent_epoch_s"]) < terminal
                 or notice["message_id"] == delivery["message_id"]):
             return Decision(False, "notice_not_fresh")
-        return retry_allowed(now, plan, [], notice)
+        return retry_allowed(now_epoch_s, plan, [], notice)
     except (KeyError, TypeError, ValueError, OverflowError):
         return Decision(False, "malformed_successor_evidence")
 
@@ -330,7 +328,7 @@ def render_policy() -> str:
     lines.extend(["",
         "Unknown or mixed causes and every capture, clock, custody, ledger or pre-registration guard stay on the cold-gate path; receipt refusals remain ineligible for same-plan retries. Known concurrent refusal evidence overrides an eligible arm cause. These dispositions preserve existing harvest, delivery and human-resolution remedies; they do not call a review into a live chain.", "",
         "R1's operative time bounds are `now < install_close_epoch(plan)` and plan age within `PLAN_MAX_AGE_S` (including the existing authored-to-t0 check), with at least {} seconds between arm attempts. D-180's same-or-next-listed-span ceiling is subsumed by `install_close_epoch(plan)` and `PLAN_MAX_AGE_S`, because with whole-day install spans it could otherwise bind 15 minutes before install close. There is no attempt-count cap, separate notice-age limit, new window cadence or delay after a successful harvest.".format(RETRY_INTERVAL_S), "",
-        "D-182: binding observations inside the window are not retries; a terminal zero-capture machine-state refusal permits ONE new-plan successor only after positive evidence of no chain.started claim, no reservation or ledger session, no capture writer run and an empty runs/instrument_validation inventory, plus completed courier.sent delivery. zero_capture_successor_allowed checks that evidence separately. successor_arm_allowed requires a new id and digest, fresh notice, at least 60 s after the predecessor's terminal write, and now before the successor's own install_close_epoch. Every observed NO on any notice thread still stops. Never re-arm the predecessor or put a new plan in same-candidate retry history.", "",
+        "D-182: binding observations inside the window are not retries. A zero-capture machine-state refusal may license ONE new-plan successor after courier delivery. A successor is a fresh plan with its own id and SHA-256 digest. The evidence-night successor check reads the predecessor (the refused plan), the shared disk facts (chain start, reservation markers, calibration ledger sessions, capture entries and envelope index), and the courier.sent delivery marker with message id. A bare C5 receipt row supplies none of these disk facts. The check requires the watchdog's early-release latch, at least 60 s since result.ended_epoch_s, and an unspent successor claim; a claim is the create-once file under night-custody/successor-claims that binds the predecessor to the successor id and digest. publish-install creates that claim immediately before publication. The candidate still needs a fresh accepted notice, its own future install close, and no observed NO on any notice thread. Never re-arm the predecessor or treat this as a same-candidate retry. Direct install_night_agent.sh performs no successor check; a follow-up lane owns that route.", "",
         "Every actual attempt sends a newly accepted notice and repeats the existing notice-to-publication lead: accepted email before publication, with no additional minimum interval. A notice is stale if its SHA-256 fingerprint (digest of the exact plan bytes) or reviewed head differs, a newer abort or NO exists, or it belongs to an earlier attempt. A new thread never clears an earlier NO. Waiting observations send no repeated email. Preserve each attempt in `$STAGE/arm-attempts/NNNNNN/` (a positive ordinal padded to at least six digits, without a count limit), created exclusively; never overwrite prior notice, candidate or failure evidence.", "",
         "`prerequisites_clear` covers census, watchdog, science, custody, no invocation and authorized observable stop/directive checks; `veto_clear` covers directive issues (`gh issue list --label directive`), `standdown.request`/STOP and any NO relayed into a readable channel. Record an unreadable notice thread as a limitation in the attempt directory; it is not a stop and neither clearance boolean requires reading it. Preserve every observed NO; each stops publication.", "",
         "<!-- END ARM-RETRY-POLICY v1 -->", ""])
