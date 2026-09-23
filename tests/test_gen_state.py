@@ -33,7 +33,7 @@ EXPECTED_IDS = {
     "ENVELOPE-START-DRIFT-01",
     # 2026-09-23 activation 7a0f14bd, D-182 addendum (Ed-ratified) + owner session record 7ec32e8b §2: register QPE01-ABORT-SUCCESSOR-01 (270), FSEVENTSD-CORECAPTURED-PREDICATE-01 (271): 226 + 2 = 228.
     "QPE01-ABORT-SUCCESSOR-01",
-    "FSEVENTSD-CORECAPTURED-PREDICATE-01",
+    # 2026-09-23 activation f2d6899b: A271 landed by PR #394, merge c741678b. Its t0 check is detection-only (lead ruling record 05, upheld by ruling 16 Q2); registration v4 recording is deferred per final pass record 32 §4.
     # 2026-09-23 activation 4158e658, directive #386 + owner session record 7ec32e8b (records 04, 07): register THROUGHPUT-01 (272), BLOCK-TWO-DESIGN-01 (273), PROMPT-AUDIT-01 (274), CENSUS-MULTILINE-ARGV-01 (275): 228 + 4 = 232.
     "THROUGHPUT-01",
     "BLOCK-TWO-DESIGN-01",
@@ -41,6 +41,10 @@ EXPECTED_IDS = {
     "CENSUS-MULTILINE-ARGV-01",
     # 2026-09-23 activation 4158e658 arm gate: register NOTICE-SUMMARY-V3-TEXT-01 (276): 232 + 1 = 233.
     "NOTICE-SUMMARY-V3-TEXT-01",
+    # 2026-09-23 activation f2d6899b: retire A234/A212/A271 and register A277/A278/A279: 233 - 3 + 3 = 233.
+    "ZERO-CAPTURE-EVIDENCE-WRITER-01",
+    "QPE01-REGISTRATION-V4-CORECAPTURED-01",
+    "BIND-SUPERVISION-RECV-STALL-FLAKE-01",
     "CANONICAL-REFUSAL-STRINGS-01",
     # 2026-09-20 activation 21752427, touch 6: register the successor runbook
     # doc lane RUNBOOK-TRACKED-COMMANDS-01; no retirements: 220 + 1 = 221.
@@ -91,7 +95,7 @@ EXPECTED_IDS = {
     # 2026-09-17 interactive session 5c919872: gate redesign; magistrate registrations, not rulings.
     "QUIET-PREDICATE-EVIDENCE-01",
     "SPOTLIGHT-FSEVENTS-ATTRIBUTION-01",
-    "WATCHDOG-EARLY-REFUSAL-RELEASE-01",
+    # 2026-09-23 activation f2d6899b: A234 landed by PR #393, merge ea4995d5; cold final pass record 25.
     # 2026-09-17 activation 9853dd2b: cold-gate convening coldness lane for the council (magistrate registration, not a ruling).
     "COLDGATE-CONVENE-DOCTRINE-FREE-01",
     # 2026-09-17 activation 9853dd2b: pre-registration chain-digest addendum lane (magistrate registration, not a ruling).
@@ -157,7 +161,7 @@ EXPECTED_IDS = {
     "TEST-CANONICAL-PATH-DEPENDENCY-01",
     # 2026-09-16 activation 08ca8197: Ed's remark on the cost of a t0 refusal
     # (relayed by the interactive session b0ae8462), registered as the fast-retry lane.
-    "REFUSAL-FAST-RETRY-01",
+    # 2026-09-23 activation f2d6899b: A212 landed by PR #393, merge ea4995d5; cold ruling 16 Q1 and final pass record 25.
     # 2026-09-16 activation 08ca8197: pgrep -lf multi-line argv parse nit from the
     # interactive session's seats, registered at its request.
     "TEST-PGREP-DIALECT-MULTILINE-01",

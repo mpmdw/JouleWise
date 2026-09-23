@@ -1,0 +1,586 @@
+diff --git a/docs/process/NIGHT_HANDBACK.md b/docs/process/NIGHT_HANDBACK.md
+index e714c6ee..fde68409 100644
+--- a/docs/process/NIGHT_HANDBACK.md
++++ b/docs/process/NIGHT_HANDBACK.md
+@@ -262,6 +262,18 @@ reader, never used to exclude an envelope. Harvest record:
+ dated addenda at its end, the 03:10 PDT one by magistrate 7a0f14bd is the
+ correction in force for the observer accounting described below).
+ 
++The loop was caused by `launchd`, macOS's service manager, respawning
++`corecaptured`, the Wi-Fi log-capture helper, about every 95 seconds. Each
++spawn made `fseventsd`, the file-system event daemon, replay its event history
++and burn one processor core. The arm check counts spawn reports in the last
++10 minutes; above two it toggles Wi-Fi once, waits at least three minutes
++after Wi-Fi is back on, and counts only new spawns. If two or more recur, it
++tries the configured `fseventsd` restart once and refuses the arm check with
++`night_refused_not_quiet`. The t0 admission check, at the planned measurement
++start, only reads the log and refuses above two spawns; it never toggles Wi-Fi
++or delays t0. A failed t0 log read is recorded as not measured, while the
++existing processor-use check still guards the machine.
++
+ A cold gate, QPE01-DAEMON-CONTAMINATION-01, ruled on that night in three
+ rounds; its packet is
+ `docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/`.
+diff --git a/joulewise/corecaptured_loop.py b/joulewise/corecaptured_loop.py
+new file mode 100644
+index 00000000..9a279087
+--- /dev/null
++++ b/joulewise/corecaptured_loop.py
+@@ -0,0 +1,52 @@
++"""Parse launchd's corecaptured spawn reports from a syslog-style log read."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++from datetime import datetime
++import re
++
++
++LOG_ARGV = ("/usr/bin/log", "show", "--last", "10m", "--style", "syslog",
++            "--predicate", 'process == "launchd" AND eventMessage CONTAINS "corecaptured"')
++SPAWN_LINE = re.compile(
++    r"^launchd\[1\]: \[system/com\.apple\.corecaptured \[(?P<pid>[0-9]+)\]:\] "
++    r"Successfully spawned corecaptured\[(?P=pid)\](?: because .*)?$"
++)
++TIMESTAMPED_LINE = re.compile(
++    r"^(?P<timestamp>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+[+-]\d{4})\s+"
++    r"\S+\s+(?P<message>.*)$"
++)
++
++
++@dataclass(frozen=True)
++class SpawnObservation:
++    count: int
++    first: str | None
++    last: str | None
++
++
++def count_spawns(log_text: str, now_epoch_s: float, *, after_epoch_s: float | None = None) -> SpawnObservation:
++    """Count spawn reports within ten minutes, optionally strictly after a cure.
++
++    Raises ValueError for a missing header or a malformed timestamped record;
++    callers decide whether an unavailable observation is a refusal.
++    """
++    lines = log_text.splitlines()
++    if not lines or not lines[0].startswith("Timestamp "):
++        raise ValueError("corecaptured log has no syslog header")
++    matched: list[str] = []
++    for line in lines[1:]:
++        match = TIMESTAMPED_LINE.fullmatch(line)
++        if match is None:
++            raise ValueError("corecaptured log has an unparseable line")
++        try:
++            epoch = datetime.fromisoformat(match.group("timestamp")).timestamp()
++        except ValueError as exc:
++            raise ValueError("corecaptured log has an invalid timestamp") from exc
++        if (SPAWN_LINE.fullmatch(match.group("message"))
++                and now_epoch_s - 600 <= epoch <= now_epoch_s
++                and (after_epoch_s is None or epoch > after_epoch_s)):
++            matched.append(match.group("timestamp"))
++    return SpawnObservation(len(matched), matched[0] if matched else None,
++                            matched[-1] if matched else None)
+diff --git a/joulewise/evidence_night.py b/joulewise/evidence_night.py
+index 1f5ab747..88245ddc 100644
+--- a/joulewise/evidence_night.py
++++ b/joulewise/evidence_night.py
+@@ -3,7 +3,7 @@ from __future__ import annotations
+ 
+ import argparse
+ from contextlib import contextmanager
+-from dataclasses import asdict
++from dataclasses import asdict, dataclass
+ from datetime import datetime, timezone
+ import fcntl
+ import hashlib
+@@ -17,6 +17,9 @@ import subprocess
+ import sys
+ import time
+ import traceback
++from typing import Callable
++
++from joulewise import corecaptured_loop
+ 
+ KIND = "quiet_predicate_evidence"
+ REMOTE = "https://github.com/mpmdw/JouleWise"
+@@ -833,6 +836,87 @@ def machine_quiet_check(observer=None):
+                 bar_busy_cores=night_gate.T0_NON_OBSERVER_SHARE_MAX)
+ 
+ 
++@dataclass(frozen=True)
++class CorecapturedActuator:
++    """All clock, log, radio and restart actions for the arm check."""
++
++    run: Callable
++    sleep: Callable[[float], None]
++    now_epoch_s: Callable[[], float]
++
++
++def production_corecaptured_actuator():
++    return CorecapturedActuator(probe_command, time.sleep, time.time)
++
++
++def corecaptured_arm_check(actuator):
++    """Try one Wi-Fi reset, then observe a full post-reset three minutes."""
++    def command(argv):
++        try:
++            return actuator.run(argv)
++        except Exception as exc:
++            raise Refused(f"corecaptured actuator failed: {type(exc).__name__}: {exc}") from exc
++
++    def observe(*, after=None):
++        raw = command(corecaptured_loop.LOG_ARGV)
++        if raw.returncode:
++            raise Refused(f"corecaptured log not measured (exit {raw.returncode}): {raw.stderr.strip()}")
++        try:
++            return corecaptured_loop.count_spawns(
++                raw.stdout, actuator.now_epoch_s(), after_epoch_s=after)
++        except ValueError as exc:
++            raise Refused(f"corecaptured log not measured: {exc}") from exc
++
++    before = observe()
++    result = dict(last_10m_spawns=before.count, first_spawn=before.first,
++                  last_spawn=before.last, remediation="none")
++    if before.count <= 2:
++        return result
++
++    result["remediation"] = "wifi_toggle_attempted"
++    try:
++        try:
++            off = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "off"))
++            result["wifi_off_exit_code"] = off.returncode
++            if not off.returncode:
++                actuator.sleep(8)
++        finally:
++            # Restore radio power even when the off command or wait fails.
++            on = command(("/usr/sbin/networksetup", "-setairportpower", "en0", "on"))
++            result["wifi_on_exit_code"] = on.returncode
++    except Exception as exc:
++        raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
++                      f"Wi-Fi toggle failed: {exc}", evidence=result) from exc
++    if off.returncode or on.returncode:
++        raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
++                      f"Wi-Fi toggle exits off={off.returncode}, on={on.returncode}",
++                      evidence=result)
++    result["remediation"] = "wifi_toggled_once"
++    try:
++        completed = actuator.now_epoch_s()
++        result["toggle_completed_epoch_s"] = completed
++        actuator.sleep(180)
++        after = observe(after=completed)
++    except Exception as exc:
++        raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns; "
++                      f"post-toggle observation failed: {exc}", evidence=result) from exc
++    result.update(post_toggle_spawns=after.count, post_toggle_first_spawn=after.first,
++                  post_toggle_last_spawn=after.last)
++    if after.count >= 2:
++        try:
++            restart = command(("/usr/bin/sudo", "-n", "/usr/local/sbin/joulewise-restart-fseventsd"))
++        except Refused as exc:
++            raise Refused(f"night_refused_not_quiet: corecaptured: {before.count} spawns before "
++                          f"Wi-Fi toggle, {after.count} new spawns after toggle; "
++                          f"fseventsd restart failed: {exc}", evidence=result) from exc
++        result["fseventsd_restart_exit_code"] = restart.returncode
++        raise Refused(
++            f"night_refused_not_quiet: corecaptured: {before.count} spawns before Wi-Fi toggle, "
++            f"{after.count} new spawns after toggle (first {after.first}, last {after.last}); "
++            f"fseventsd restart exit {restart.returncode}", evidence=result)
++    return result
++
++
+ def census_check(state, runner, observer, caller_pid):
+     argv = clone_census(state, caller_pid, argv_only=True)["argv"]
+     raw = runner(argv)
+@@ -943,7 +1027,7 @@ print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record
+ 
+ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
+           runner=probe_command, census_observer=None, caller_pid=None, lock_verifier=verify_lock,
+-          launchctl_bin="launchctl", quiet_observer=None):
++          launchctl_bin="launchctl", quiet_observer=None, corecaptured_actuator=None):
+     with candidate_lock(candidate):
+         state = candidate_state(candidate)
+         record = dict(schema="joulewise.evidence_check.v1", started_epoch_s=time.time(),
+@@ -990,8 +1074,12 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
+                     verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
+             else:
+                 if payload_kind == KIND:
++                    inspect("corecaptured", lambda: corecaptured_arm_check(
++                        corecaptured_actuator or production_corecaptured_actuator()))
+                     inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
+                 else:
++                    checks["corecaptured"] = dict(verdict="skipped", reason="not an evidence night",
++                                                   payload_kind=payload_kind)
+                     checks["machine_quiet"] = dict(verdict="skipped", reason="not an evidence night",
+                                                    payload_kind=payload_kind)
+         # One predicate decides both the verdict and the refusal text below,
+@@ -999,7 +1087,8 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
+         # machine_quiet row is not a failure and is never listed as one
+         # (fix round 2, delta re-audit N-b).
+         failed = [name for name, c in checks.items()
+-                  if not (c["verdict"] == "pass" or (name == "machine_quiet" and c["verdict"] == "skipped"))]
++                  if not (c["verdict"] == "pass" or (name in ("machine_quiet", "corecaptured")
++                                                   and c["verdict"] == "skipped"))]
+         passed = not failed
+         record["armable"] = passed and not record["fake_launchctl"]
+         record["rehearsal_ready"] = passed and record["fake_launchctl"]
+@@ -1011,7 +1100,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
+             # text is the whole finding, and burying it behind "pre-arm checks
+             # failed" would make the operator open check.json to learn which
+             # process held the machine (cold gate 10, 2026-09-23, Q2(i)).
+-            for name in ("night_agents", "census", "machine_quiet"):
++            for name in ("night_agents", "census", "corecaptured", "machine_quiet"):
+                 row = checks.get(name, {})
+                 if row.get("verdict") == "fail" and row.get("reason"):
+                     raise Refused(row["reason"])
+diff --git a/joulewise/night_gate.py b/joulewise/night_gate.py
+index f9a8bb9e..45a3520e 100644
+--- a/joulewise/night_gate.py
++++ b/joulewise/night_gate.py
+@@ -25,6 +25,8 @@ from datetime import datetime, timezone
+ from pathlib import Path
+ from typing import Callable, Mapping, Protocol
+ 
++from joulewise import corecaptured_loop
++
+ 
+ SCHEMA = "joulewise.unattended_night_receipt.v2"
+ PLAN_SCHEMA = "joulewise.night_plan.v2"
+@@ -1500,6 +1502,30 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
+                     tuple(evidence),
+                 ),
+             )
++        if rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
++            # This is the planned t0 boundary. Read only: no cure, delay, or
++            # process action may move the measurement start.
++            try:
++                log_result = _run(probes, corecaptured_loop.LOG_ARGV)
++                evidence.append(log_result)
++                rows["C3"].evidence.append(_probe_citation(log_result))
++                if not _completed_ok(log_result):
++                    raise ValueError(f"log exited {log_result.exit_code}: {log_result.stderr.strip()}")
++                spawns = corecaptured_loop.count_spawns(
++                    log_result.stdout, _clock_value(probes, "epoch"))
++            except (ProbeError, ValueError) as exc:
++                rows["C3"].measured["corecaptured"] = {
++                    "status": "not_measured", "reason": str(exc)}
++            else:
++                rows["C3"].measured["corecaptured"] = {
++                    "status": "measured", "last_10m_spawns": spawns.count,
++                    "first_spawn": spawns.first, "last_spawn": spawns.last}
++                if spawns.count > 2:
++                    return _finish(plan, probes, rows, Refusal(
++                        "night_refused_not_quiet",
++                        f"corecaptured: {spawns.count} launchd spawns in last 10 min "
++                        f"(first {spawns.first}, last {spawns.last})",
++                        tuple(evidence)))
+         # The per-process machine-state predicate (cold gate 10
+         # QPE01-DAEMON-CONTAMINATION-01, 2026-09-23, Q2(i)), on BOTH branches
+         # -- t0 (`legacy_load=True`, via `evaluate_night`) and the arm check
+diff --git a/tests/fixtures/corecaptured/live-last10m-20260923.log b/tests/fixtures/corecaptured/live-last10m-20260923.log
+new file mode 100644
+index 00000000..7cb0996d
+--- /dev/null
++++ b/tests/fixtures/corecaptured/live-last10m-20260923.log
+@@ -0,0 +1 @@
++Timestamp                       (process)[PID]    
+diff --git a/tests/fixtures/corecaptured/loop-20260922-1022.log b/tests/fixtures/corecaptured/loop-20260922-1022.log
+new file mode 100644
+index 00000000..5dce953b
+--- /dev/null
++++ b/tests/fixtures/corecaptured/loop-20260922-1022.log
+@@ -0,0 +1,31 @@
++Timestamp                       (process)[PID]    
++2026-09-22 10:23:33.196085-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:23:33.210175-0700  localhost launchd[1]: [system/com.apple.corecaptured [38329]:] Successfully spawned corecaptured[38329] because xpc event
++2026-09-22 10:24:52.196758-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:24:52.212296-0700  localhost launchd[1]: [system/com.apple.corecaptured [38892]:] Successfully spawned corecaptured[38892] because xpc event
++2026-09-22 10:26:11.693049-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:26:11.704440-0700  localhost launchd[1]: [system/com.apple.corecaptured [39780]:] Successfully spawned corecaptured[39780] because xpc event
++2026-09-22 10:27:31.910902-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:27:31.918085-0700  localhost launchd[1]: [system/com.apple.corecaptured [53158]:] Successfully spawned corecaptured[53158] because xpc event
++2026-09-22 10:28:52.109062-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:28:52.118332-0700  localhost launchd[1]: [system/com.apple.corecaptured [60546]:] Successfully spawned corecaptured[60546] because xpc event
++2026-09-22 10:30:13.259436-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:30:13.278230-0700  localhost launchd[1]: [system/com.apple.corecaptured [69872]:] Successfully spawned corecaptured[69872] because xpc event
++2026-09-22 10:31:34.073877-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:31:34.090564-0700  localhost launchd[1]: [system/com.apple.corecaptured [70553]:] Successfully spawned corecaptured[70553] because xpc event
++2026-09-22 10:32:54.694707-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:32:54.712055-0700  localhost launchd[1]: [system/com.apple.corecaptured [71246]:] Successfully spawned corecaptured[71246] because xpc event
++2026-09-22 10:34:15.279305-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:34:15.290456-0700  localhost launchd[1]: [system/com.apple.corecaptured [71669]:] Successfully spawned corecaptured[71669] because xpc event
++2026-09-22 10:35:35.204721-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:35:35.216496-0700  localhost launchd[1]: [system/com.apple.corecaptured [71781]:] Successfully spawned corecaptured[71781] because xpc event
++2026-09-22 10:36:55.940706-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:36:55.953623-0700  localhost launchd[1]: [system/com.apple.corecaptured [71860]:] Successfully spawned corecaptured[71860] because xpc event
++2026-09-22 10:38:16.777712-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:38:16.791294-0700  localhost launchd[1]: [system/com.apple.corecaptured [72557]:] Successfully spawned corecaptured[72557] because xpc event
++2026-09-22 10:39:38.280792-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:39:38.292365-0700  localhost launchd[1]: [system/com.apple.corecaptured [72625]:] Successfully spawned corecaptured[72625] because xpc event
++2026-09-22 10:40:58.644872-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:40:58.661716-0700  localhost launchd[1]: [system/com.apple.corecaptured [72779]:] Successfully spawned corecaptured[72779] because xpc event
++2026-09-22 10:42:20.017628-0700  localhost launchd[1]: [system:] service inactive: com.apple.corecaptured
++2026-09-22 10:42:20.034356-0700  localhost launchd[1]: [system/com.apple.corecaptured [73789]:] Successfully spawned corecaptured[73789] because xpc event
+diff --git a/tests/fixtures/corecaptured/quiet-header-only.log b/tests/fixtures/corecaptured/quiet-header-only.log
+new file mode 100644
+index 00000000..7cb0996d
+--- /dev/null
++++ b/tests/fixtures/corecaptured/quiet-header-only.log
+@@ -0,0 +1 @@
++Timestamp                       (process)[PID]    
+diff --git a/tests/test_corecaptured_loop.py b/tests/test_corecaptured_loop.py
+new file mode 100644
+index 00000000..68ff6732
+--- /dev/null
++++ b/tests/test_corecaptured_loop.py
+@@ -0,0 +1,43 @@
++"""Real launchd syslog wording, copied from the owner's read-only capture."""
++
++from datetime import datetime
++from pathlib import Path
++import unittest
++
++from joulewise import corecaptured_loop as loop
++
++
++FIXTURES = Path(__file__).parent / "fixtures/corecaptured"
++
++
++class CorecapturedLogTests(unittest.TestCase):
++    def test_real_loop_counts_spawns_not_inactive_lines(self):
++        raw = (FIXTURES / "loop-20260922-1022.log").read_text()
++        lines = raw.splitlines()
++        self.assertEqual(len(lines), 31)
++        self.assertEqual(sum("service inactive" in line for line in lines), 15)
++        now = datetime.fromisoformat("2026-09-22 10:42:21-07:00").timestamp()
++        observed = loop.count_spawns(raw, now)
++        self.assertEqual(observed.count, 8)
++        self.assertEqual(observed.first, "2026-09-22 10:32:54.712055-0700")
++        self.assertEqual(observed.last, "2026-09-22 10:42:20.034356-0700")
++
++    def test_header_only_is_a_measured_zero(self):
++        now = datetime.fromisoformat("2026-09-23 10:23:00-07:00").timestamp()
++        for name in ("quiet-header-only.log", "live-last10m-20260923.log"):
++            with self.subTest(name=name):
++                self.assertEqual(loop.count_spawns((FIXTURES / name).read_text(), now).count, 0)
++
++    def test_post_toggle_cutoff_and_malformed_output(self):
++        raw = (FIXTURES / "loop-20260922-1022.log").read_text()
++        now = datetime.fromisoformat("2026-09-22 10:31:35-07:00").timestamp()
++        completed = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
++        self.assertEqual(loop.count_spawns(raw, now, after_epoch_s=completed).count, 2)
++        with self.assertRaisesRegex(ValueError, "header"):
++            loop.count_spawns("", now)
++        with self.assertRaisesRegex(ValueError, "unparseable"):
++            loop.count_spawns(raw + "broken\n", now)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/test_evidence_night.py b/tests/test_evidence_night.py
+index 834338e4..dae0af40 100644
+--- a/tests/test_evidence_night.py
++++ b/tests/test_evidence_night.py
+@@ -35,6 +35,7 @@ def _census_clean_tempdir(**kwargs):
+ 
+ 
+ from joulewise import evidence_night as entry
++from joulewise import corecaptured_loop
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+ 
+@@ -66,6 +67,40 @@ def _production_sampler_forbidden(*args, **kwargs):
+ 
+ 
+ _SAMPLER_GUARD = None
++_CORE_GUARD = None
++
++
++def quiet_corecaptured_actuator():
++    quiet = (ROOT / "tests/fixtures/corecaptured/quiet-header-only.log").read_text()
++    return entry.CorecapturedActuator(
++        lambda argv: subprocess.CompletedProcess(argv, 0, quiet, ""),
++        lambda seconds: None, time.time)
++
++
++class FakeCorecapturedActuator:
++    def __init__(self, before, after, now, exit_codes=None):
++        self.logs = [before, after]
++        self.now = now
++        self.commands = []
++        self.sleeps = []
++        self.exit_codes = exit_codes or {}
++
++    def run(self, argv):
++        argv = tuple(argv)
++        self.commands.append(argv)
++        if argv == corecaptured_loop.LOG_ARGV:
++            return subprocess.CompletedProcess(argv, 0, self.logs.pop(0), "")
++        return subprocess.CompletedProcess(argv, self.exit_codes.get(argv[-1], 0), "", "")
++
++    def sleep(self, seconds):
++        self.sleeps.append(seconds)
++        self.now += seconds
++
++    def clock(self):
++        return self.now
++
++    def actuator(self):
++        return entry.CorecapturedActuator(self.run, self.sleep, self.clock)
+ 
+ 
+ def setUpModule():
+@@ -73,15 +108,19 @@ def setUpModule():
+     # `top -l 2 -s 30`.  An AssertionError is outside the families
+     # `machine_quiet_check` converts into a refusal, so a stray call fails its
+     # test loudly rather than sampling the machine or passing quietly.
+-    global _SAMPLER_GUARD
++    global _SAMPLER_GUARD, _CORE_GUARD
+     from joulewise import night_gate
+     _SAMPLER_GUARD = patch.object(night_gate, "production_interval_observation",
+                                   _production_sampler_forbidden)
+     _SAMPLER_GUARD.start()
++    _CORE_GUARD = patch.object(entry, "production_corecaptured_actuator",
++                               quiet_corecaptured_actuator)
++    _CORE_GUARD.start()
+ 
+ 
+ def tearDownModule():
+     _SAMPLER_GUARD.stop()
++    _CORE_GUARD.stop()
+ 
+ 
+ class ProductionSamplerGuardTests(unittest.TestCase):
+@@ -716,7 +755,7 @@ class LifecycleTests(unittest.TestCase):
+         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
+         (self.canonical / "joulewise").mkdir()
+         (self.canonical / "joulewise/__init__.py").write_text("")
+-        for name in ("night_gate.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
++        for name in ("night_gate.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
+             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
+         clone_route = {"test_retry_uses_clone_retry_route": "retry",
+                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
+@@ -848,6 +887,61 @@ class LifecycleTests(unittest.TestCase):
+         self.assertEqual(before, {p: after[p] for p in before})
+         self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
+         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
++
++    def test_corecaptured_arm_toggles_once_and_counts_only_post_toggle_spawns(self):
++        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
++        before = "\n".join(raw.splitlines()[:11]) + "\n"  # five real spawn rows
++        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
++        fake = FakeCorecapturedActuator(before, before, now)
++        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
++            record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
++        row = record["checks"]["corecaptured"]
++        self.assertEqual(row["last_10m_spawns"], 5)
++        self.assertEqual(row["post_toggle_spawns"], 0)
++        self.assertEqual(row["remediation"], "wifi_toggled_once")
++        self.assertEqual(fake.sleeps, [8, 180])
++        self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
++        self.assertEqual(sum(argv[-1] == "on" for argv in fake.commands), 1)
++        self.assertEqual(fake.commands.count(corecaptured_loop.LOG_ARGV), 2)
++
++    def test_corecaptured_arm_zero_spawns_does_not_toggle(self):
++        quiet = (ROOT / "tests/fixtures/corecaptured/quiet-header-only.log").read_text()
++        fake = FakeCorecapturedActuator(quiet, quiet, time.time())
++        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
++            record = entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
++        self.assertEqual(record["checks"]["corecaptured"]["last_10m_spawns"], 0)
++        self.assertEqual(fake.commands, [corecaptured_loop.LOG_ARGV])
++        self.assertEqual(fake.sleeps, [])
++
++    def test_corecaptured_arm_persistence_restarts_once_and_refuses(self):
++        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
++        before = "\n".join(raw.splitlines()[:11]) + "\n"
++        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
++        fake = FakeCorecapturedActuator(before, raw, now)
++        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
++            with self.assertRaisesRegex(entry.Refused, "night_refused_not_quiet: corecaptured"):
++                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
++        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
++        self.assertEqual(row["post_toggle_spawns"], 2)
++        self.assertEqual(row["fseventsd_restart_exit_code"], 0)
++        self.assertEqual(sum("networksetup" in argv[0] and argv[-1] == "off"
++                             for argv in fake.commands), 1)
++        self.assertEqual(sum(argv[0] == "/usr/bin/sudo" for argv in fake.commands), 1)
++
++    def test_corecaptured_arm_restores_wifi_if_off_command_fails(self):
++        raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
++        before = "\n".join(raw.splitlines()[:11]) + "\n"
++        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
++        fake = FakeCorecapturedActuator(before, before, now, exit_codes={"off": 1})
++        with patch.object(entry, "candidate_payload_kind", return_value=entry.KIND):
++            with self.assertRaisesRegex(entry.Refused, "corecaptured: 5 spawns"):
++                entry.check(**dict(self.kw, corecaptured_actuator=fake.actuator()))
++        row = json.loads((self.stage / "lifecycle/check.json").read_text())["checks"]["corecaptured"]
++        self.assertEqual(row["wifi_off_exit_code"], 1)
++        self.assertEqual(row["wifi_on_exit_code"], 0)
++        self.assertEqual(fake.sleeps, [])
++        self.assertEqual(sum(argv[-1] == "off" for argv in fake.commands), 1)
++        self.assertEqual(sum(argv[-1] == "on" for argv in fake.commands), 1)
+         self.assertFalse(any("launchctl" in str(c) for c in self.calls))
+ 
+     def test_sealed_bytes_checked_before_host_probes(self):
+diff --git a/tests/test_night_gate.py b/tests/test_night_gate.py
+index 761e7a10..cf38e453 100644
+--- a/tests/test_night_gate.py
++++ b/tests/test_night_gate.py
+@@ -7,9 +7,11 @@ import json
+ import re
+ import unittest
+ from pathlib import Path
++from datetime import datetime
+ from unittest import mock
+ 
+ from joulewise import night_gate
++from joulewise import corecaptured_loop
+ from joulewise.night_plan_writer import night_plan_mapping
+ 
+ 
+@@ -52,6 +54,9 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
+             night_gate.THERMAL_ARGV,
+             stdout="Note: No thermal warning level has been recorded\n",
+         ),
++        corecaptured_loop.LOG_ARGV: result(
++            corecaptured_loop.LOG_ARGV, stdout="Timestamp                       (process)[PID]    \n"
++        ),
+         night_gate.BOOT_SESSION_ARGV: result(
+             night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
+         ),
+@@ -332,6 +337,37 @@ class NightGateTests(unittest.TestCase):
+         ):
+             return night_gate.evaluate_night(plan, source.probes())
+ 
++    def test_corecaptured_t0_is_detection_only_and_names_count_and_times(self):
++        raw = (Path(__file__).parent / "fixtures/corecaptured/loop-20260922-1022.log").read_text()
++        first_five = "\n".join(raw.splitlines()[:11]) + "\n"
++        now = datetime.fromisoformat("2026-09-22 10:29:00-07:00").timestamp()
++        source = EvidenceRegistrationTests().source()
++        source.now_value = now
++        source.results[corecaptured_loop.LOG_ARGV] = result(corecaptured_loop.LOG_ARGV,
++                                                             stdout=first_five)
++        plan = make_plan(t0_epoch_s=now - 5, authored_epoch_s=now - 100)
++        receipt = self.evaluate(plan, source)
++        self.assertEqual(receipt.refusal.reason, "night_refused_not_quiet")
++        self.assertIn("corecaptured: 5 launchd spawns", receipt.refusal.detail)
++        self.assertIn("10:23:33.210175", receipt.refusal.detail)
++        self.assertIn("10:28:52.118332", receipt.refusal.detail)
++        self.assertEqual(source.run_calls.count(corecaptured_loop.LOG_ARGV), 1)
++        self.assertFalse(any("networksetup" in " ".join(argv) or "sudo" in " ".join(argv)
++                             for argv in source.run_calls))
++
++    def test_corecaptured_t0_log_failure_is_recorded_without_refusal(self):
++        for raw in (result(corecaptured_loop.LOG_ARGV, exit_code=1,
++                           stderr="log unavailable"),
++                    result(corecaptured_loop.LOG_ARGV, stdout="broken output")):
++            with self.subTest(raw=raw.stdout or raw.stderr):
++                source = EvidenceRegistrationTests().source()
++                source.results[corecaptured_loop.LOG_ARGV] = raw
++                receipt = self.evaluate(make_plan(), source)
++                self.assertIsNone(receipt.refusal)
++                c3 = next(row for row in receipt.conditions if row.condition_id == "C3")
++                self.assertEqual(c3.measured["corecaptured"]["status"], "not_measured")
++                self.assertTrue(c3.measured["corecaptured"]["reason"])
++
+     def test_production_argv_constants_are_pinned(self) -> None:
+         self.assertEqual(
+             ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3"),
