@@ -369,7 +369,9 @@ After: the text reads "pre-arm checks failed: courier; see …".
    empty list.
 2. **R1 envelope row.** The guard raises before envelope 01's row is appended
    to `evidence_envelopes.jsonl`, so on a marking failure that journal is
-   empty (the envelope directory and its session remain). Nothing is admitted
+   ABSENT — no row is ever written, and `evidence_outcome.json` reports
+   `envelopes_attempted: 0` while envelope 01's capture directory and session
+   remain on disk (delta re-audit 2, N2-a; corrected by the magistrate). Nothing is admitted
    either way; the refusal document and the outcome error both carry the
    cause. Recorded so a reader of that file on such a night is not surprised.
 3. The seat report's §7 open question "F16 in the chain" is closed by R1.

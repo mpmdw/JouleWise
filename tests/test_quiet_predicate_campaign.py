@@ -3564,7 +3564,8 @@ class ObserverFloorTests(unittest.TestCase):
         # The fixture straddles the share, or the assertion below is vacuous.
         self.assertLess(report["observer_floor_cores"], share)
         self.assertGreater(report["observer_floor_including_load_recorder_cores"], share)
-        stop = report["block_two_stop"] or {}
+        self.assertIsNotNone(report["block_two_stop"])  # delta re-audit 2 N2-d: an absent stop would make the assertion below vacuous
+        stop = report["block_two_stop"]
         self.assertNotIn("observer_floor_above_smallest_holdable_share", stop.get("causes") or [])
 
     def test_the_summary_observer_definition_is_the_ruled_sentence_plus_the_sibling_fact(self):
