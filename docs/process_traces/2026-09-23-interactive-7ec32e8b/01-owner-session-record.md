@@ -163,3 +163,20 @@ the paper's headline, which is exactly Ed's stated question; the promotion is a 
 register through the normal gate (pre-decision consult with Sol 6.0, cold Fable final pass), with Ed's "highest
 quality" tiebreaker. Every number above is a planning figure until measured. Scorecard: Opus 5.5 located the
 existing RQ, the analysis-plan constraints and the claim-shape ban without being told they existed.
+
+## 9. Addendum 03:40 PDT — hierarchy ruling and the paper mandate
+
+**Ed, verbatim:** "and hierarchy wise you 1 pt above opus 5.5 in judgement, then astra you judge how it
+relates/compliments your models - otherwise sounds good grind on that paper boss, get me as far as you can, ahead of
+schedule would be dope, and i might not have access to nvidia hardware".
+
+**Standing, as recorded for every activation:** Fable 5.1 sits one notch above Opus 5.5 on judgment: where a Fable
+final pass or cold-gate ruling and an Opus lens disagree, Fable's verdict prevails and Opus's dissent is recorded, never
+silently dropped. Opus 5.5 runs the magistrate loop, directs seats, and carries lenses and refuters with that one-notch
+deference. Astra (gpt-6-astra) is placed by Fable as the cross-family refuter on load-bearing consults (fourth seat
+beside Sol 6.0, Opus 5.5 and a blind Fable) and as the computer-use specialist for GUI-bearing machine prep; not a
+routine seat while quota is scarce. Sol 6.0 high executes and consults; Luna 6 for simple mechanical seats.
+
+**Paper mandate:** highest quality, as far and as fast as the gates allow; ahead of the research plan's schedule is
+welcome. The NVIDIA/second-device block is not assumed (Ed may not have the hardware); plan the Apple-only
+characterization and treat any NVIDIA leg as a bonus.
