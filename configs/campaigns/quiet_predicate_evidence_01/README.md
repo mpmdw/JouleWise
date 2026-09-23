@@ -5,9 +5,16 @@ current Mac. It collects evidence for a future CPU activity limit; it does not
 choose or activate a limit. All results are **PROVISIONAL**. Stage B and a
 separate cold-gate ruling remain necessary before activation.
 
-The frozen registration is `pilot_protocol_v1.json`, under cold gate 10 Q1/Q2
-(2026-09-19), adjudication 10a and sizing ruling 46b. Its exact SHA-256 fingerprint is a key in
-`night_gate.RULED_REGISTRATIONS`. That table can change only by cold-gate ruling.
+The frozen registration is `pilot_protocol_v3.json`, SHA-256
+`9491bc370b515c7d56d21f87e0c6721be8cb2b6501b430b9dce75a93f59a6f0a`. It keeps
+every value of v1 (cold gate 10 Q1/Q2 of 2026-09-19, adjudication 10a and
+sizing ruling 46b) and v2 (the A269 gate of 2026-09-22), and adds the rules of
+cold gate QPE01-DAEMON-CONTAMINATION-01 of 2026-09-23: ruling 10 (the
+non-observer process rule below) and ruling 31's reporting limbs as
+adjudicated by synthesis 35 (the corrected observer floor below). Its exact
+SHA-256 fingerprint is a key in `night_gate.RULED_REGISTRATIONS`. That table
+can change only by cold-gate ruling. v1 and v2 stay in the table as
+superseded history; no night can be armed against them again.
 The registration also names the fingerprint of the tracked evidence chain
 source. The gate measures that source at the plan's measurement commit and
 compares it to the literal in the pinned wrapper. An advisory sidecar cannot
@@ -26,8 +33,38 @@ It writes `evidence_busy_cores.jsonl`, never `quiet_samples.jsonl`. Its busy-cor
 intervals are joined to scheduled envelopes by monotonic support; the summary
 reports each envelope's median/max and the distribution for envelopes passing
 census, AC and thermal probes. These numbers are covariates: they describe the machine and are **never an exclusion
-or admission input**. Observer CPU cost includes the whole observer and its
-reaped children, including the recorder and census, and is never subtracted.
+or admission input**. Observer CPU cost is never subtracted from energy. The
+observer floor is the collector's whole-envelope CPU -- its own CPU plus the
+CPU of every child it reaped (the power recorder, the round's sampler and the
+census) -- divided by the collector's own span, summed over envelopes. The
+30-second recorder is started by the executor, beside the collector rather
+than under it, so its CPU is not in that figure; the summary reports it as a
+separate component and adds it back in a reported-only companion,
+`observer_floor_including_load_recorder_cores`.
+
+**Processes that are not the measurement (registration v3).** An *observer*
+process is one the measurement started: the executor, which is the root of
+the night's process tree, and everything descended from it (collector,
+`sudo`, `powermetrics`, `top`, the census and the 30-second recorder). The
+recorder is handed the executor's process id and marks each busy process it
+sees `observer: true` or `false` by that ancestry; every other process is a
+*non-observer*. Three rules read that mark. First, per envelope: for each
+non-observer process (identified by pid and start time) the summary adds up
+busy cores times interval seconds over the recorder rows that lie wholly
+inside the envelope, and if one process reaches 30 core-seconds -- the
+smallest block-two level, 0.05 core, held for the whole 600 s -- the
+envelope is excluded as `non_observer_process_busy`, with the process's name,
+pid and core-seconds written on the envelope's row. On the 2026-09-22 21:00
+night `fseventsd` held about one full core, roughly 600 core-seconds per
+envelope, and would have excluded all twelve. Second, before the night: the
+pre-arm check and the t0 gate each take one 30-second observation and refuse
+if any non-observer process is using 0.5 busy cores or more (`armable: false`
+at the arm check, `night_refused_not_quiet` at t0), naming the process and
+keeping the observation in `top_consumers_at_decision`. Third, during the
+night: two envelopes in a row excluded this way end the chain with a typed
+refusal whose reason is `non_observer_process_busy`, about 31 minutes after
+t0 instead of three hours later; one such envelope followed by a clean one
+does not end it.
 
 Envelopes are excluded only by frozen, named mechanisms: the census is not
 clean or is unknown; the AC probe does not report “AC Power” or errors; a
@@ -63,7 +100,7 @@ rounding these factors for sizing. **Independence and normality of the pair
 differences are assumptions of this construction**, not pilot findings.
 
 The next plan can be authored only after the pilot's spread is measured.
-The source for all five sizing constants is `pilot_protocol_v1.json`: δ = 1 J,
+The source for all five sizing constants is the frozen registration (values unchanged since `pilot_protocol_v1.json`): δ = 1 J,
 multiplier 8, minimum 3 pairs, stop above 24 pairs, and smallest holdable
 block-two share 0.05 core. Code reads these registered values. Its sample size is
 `n_pairs = max(3, ceil(8 * s_upper² / δ²))`. The eleven overlapping adjacent

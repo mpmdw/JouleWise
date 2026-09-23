@@ -3452,6 +3452,16 @@ class ObserverFloorTests(unittest.TestCase):
         self.assertIn("sibling process of the collector", report["observer_floor_components_role"])
         self.assertIn("never a stop input", report["observer_floor_components_role"])
 
+    def test_the_summary_observer_definition_is_the_ruled_sentence_plus_the_sibling_fact(self):
+        # Fix round 1 (lens N5): the pre-v3 string ("SELF + reaped CHILDREN,
+        # including collector, recorder, sampler and census") was one of the
+        # three conflicting definitions refuter 32 named.
+        ruled = PROTOCOL["observer_floor"]["definition"]
+        report = self.summarize([105.] * 12)
+        self.assertEqual(report["observer_definition"],
+                         ruled + ", with the 30 s load recorder a sibling process reported "
+                                 "beside it (see observer_floor_components_role)")
+
     def test_the_registration_pins_the_corrected_components_text(self):
         """Fix round 1 (lens S1): v3's bytes change only in the components text.
 

@@ -920,6 +920,13 @@ def non_observer_rule(protocol):
     return rule
 
 
+# The summary's `observer_definition` (fix round 1, lens N5): registration
+# v3's ruled `observer_floor.definition` sentence, verbatim, followed by the
+# sibling fact.  The ruled sentence's "including ... load recorder" is left as
+# ruled; the magistrate holds its inaccuracy for the block-two consult.
+OBSERVER_DEFINITION = ("SELF + all reaped CHILDREN, including collector, power recorder, load recorder "
+                       "and census; never subtracted, with the 30 s load recorder a sibling process "
+                       "reported beside it (see observer_floor_components_role)")
 EXECUTOR_NON_OBSERVER_VERDICT = "executor_non_observer_process_busy"
 NON_OBSERVER_DISAGREEMENT = "non_observer_verdict_disagreement"
 
@@ -1345,7 +1352,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             f"; delta_j={protocol['sizing']['delta_j']}; stop above {protocol['sizing']['maximum_pairs']} pairs"
             if sufficient else "INCONCLUSIVE; no sizing",
         "whole_campaign_observer_cpu_s": observer_cpu_s,
-        "observer_definition": "SELF + reaped CHILDREN, including collector, recorder, sampler and census; never subtracted",
+        "observer_definition": OBSERVER_DEFINITION,
         "cutoff_authority": False, "top_up": False}
     if replay_recorders:
         # Nothing this night produced is a measurement.  The status, the
