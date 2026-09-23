@@ -92,7 +92,7 @@ Reverse-consult operation is documented by contract §8 and
 
 The project `.mcp.json` pins `npx -y @openai/codex@0.153.3 mcp-server` with
 `gpt-5.6-sol` and `high` only as a safe fallback (`codex mcp-server` was
-removed from CLI 0.154 onward, 2026-09-23)
+absent from CLI 0.154 onward, observed 2026-09-23)
 and disables the reverse Claude server for every Claude-originated session;
 explicit per-task selection remains mandatory.
 

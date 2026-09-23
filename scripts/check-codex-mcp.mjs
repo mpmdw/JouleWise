@@ -239,7 +239,8 @@ try {
   validateCodexTools(codexTools);
   validateFableConsultTools(claudeTools);
   checkClaudeApproval();
-  process.stdout.write(`PASS: ${codexVersion}\n`);
+  const pinnedMcpCli = codexServer.args[1];
+  process.stdout.write(`PASS: exec-route CLI ${codexVersion}; MCP route pinned to ${pinnedMcpCli}\n`);
   process.stdout.write(`PASS: Claude Code ${claudeVersion}\n`);
   process.stdout.write(`PASS: Node.js ${nodeVersion}\n`);
   process.stdout.write(
