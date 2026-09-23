@@ -3535,14 +3535,26 @@ class ObserverFloorTests(unittest.TestCase):
     @unittest.skipUnless(CLEAN.is_dir() and CONTAMINATED.is_dir(),
                          "the 2026-09-22 harvest archives are not on this machine")
     def test_both_archived_nights_re_derive_to_the_corrected_floor(self):
+        """Brief 6(d) on both archives' own bytes.
+
+        The 02:17 night's energies are NOT verifiable by this route: that
+        archive predates `power.recorder_kind`, so re-deriving it with today's
+        code trips the bench-replay guard (status REPLAY_NEVER_EVIDENCE) and
+        blanks every energy field.  Only the 21:00 night's joules, pair SD and
+        s_upper are compared byte-for-byte.  Each night's guard state is
+        asserted explicitly, so the energy comparison can never become
+        vacuous unnoticed (fix round 1, Fable lens S5).
+        """
         # The two nights' own bytes, under the corrected statistic, with the
         # v2 retention rules so nothing but the floor changes (exhibit G and
         # ruling 31 §1 recompute the same numbers independently).
-        for night, floor, variation, including in ((CLEAN, .17572, .00214, .183),
-                                                   (CONTAMINATED, .15909, .00267, .166)):
+        for night, floor, variation, including, status in (
+                (CLEAN, .17572, .00214, .183, campaign.REPLAY_NEVER_EVIDENCE),
+                (CONTAMINATED, .15909, .00267, .166, "SPREAD_RECORDED")):
             with self.subTest(night=night.parent.name):
                 archived = json.loads((night / "evidence/summary.json").read_text())
                 report = archive_summary(night, V2_PROTOCOL)
+                self.assertEqual(report["status"], status)
                 self.assertAlmostEqual(report["observer_floor_cores"], floor, places=3)
                 self.assertAlmostEqual(report["observer_variation_cores"], variation, places=4)
                 # The registered stop branch, unchanged in form, on the
