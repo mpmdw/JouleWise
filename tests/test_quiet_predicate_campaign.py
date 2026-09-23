@@ -106,14 +106,26 @@ class CampaignTests(unittest.TestCase):
                 campaign.pilot_summary(root, protocol, [])
                 memo = (root / "summary.md").read_text()
                 # harvest record 5fe5a59b section 7 item 2: the unfiltered SD is labelled as such
-                self.assertIn("unfiltered single-envelope SD (every captured envelope, "
-                              "excluded ones included)", memo)
+                self.assertIn("unfiltered single-envelope SD (every envelope with a readable energy value, excluded envelopes included) None J;", memo)
                 if campaign.non_observer_rule(protocol):
                     self.assertNotIn("never an exclusion input", memo)
-                    self.assertIn("30 or more core-seconds", memo)
-                    self.assertIn("excludes that envelope", memo)
+                    rule = campaign.non_observer_rule(protocol)
+                    self.assertIn("Busy cores are recorded covariates. A process outside the measurement apparatus using "
+                                  f'{rule["bar_core_seconds"]:g} or more core-seconds inside an envelope excludes that envelope. ', memo)
                 else:
-                    self.assertIn("Busy cores are recorded covariates and never an exclusion input. ", memo)
+                    self.assertEqual(memo,
+                        "# QPE-01 pilot (PROVISIONAL, descriptive)\n\n"
+                        f"Status: INCONCLUSIVE. Retained 0/{protocol['envelopes']} envelopes; 0 disjoint pairs.\n\n"
+                        "Disjoint-pair sample SD: None J (df=None); upper 90% bound: None J. "
+                        "This chi-square construction assumes independent, normally distributed pair differences.\n\n"
+                        "Block-two pairs: None; sizing stop: no decision. No sizing when INCONCLUSIVE.\n\n"
+                        "Diagnostics only: 0 overlapping differences (SD None J); "
+                        "unfiltered single-envelope SD (every envelope with a readable energy value, excluded envelopes included) None J; "
+                        "first-to-last retained drift None J. Overlapping adjacent pairs with |delta| > 3 * s_pair: []. "
+                        "Values are in summary.json.\n\n"
+                        "Busy cores are recorded covariates and never an exclusion input. "
+                        "Every exclusion and partial interior is retained in summary.json. "
+                        "No top-up, cutoff or activation authority. Block two is not authored by this summary.\n")
 
     def summarize(self, energies, excluded=(), missing=(), observer_core=None, recorder=False,
                   drift=0, slew=()):

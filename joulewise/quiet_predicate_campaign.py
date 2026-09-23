@@ -1435,7 +1435,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         "This chi-square construction assumes independent, normally distributed pair differences.\n\n" +
         f"Block-two pairs: {stop['pairs']}; sizing stop: {stop['outcome']}. No sizing when INCONCLUSIVE.\n\n" +
         f"Diagnostics only: {len(overlapping)} overlapping differences (SD {report['adjacent_pair_sd_j']} J); " +
-        f"unfiltered single-envelope SD (every captured envelope, excluded ones included) {report['unfiltered_single_envelope_sd_j']} J; " +
+        f"unfiltered single-envelope SD (every envelope with a readable energy value, excluded envelopes included) {report['unfiltered_single_envelope_sd_j']} J; " +
         f"first-to-last retained drift {report['first_to_last_retained_drift_j']} J. " +
         f"Overlapping adjacent pairs with |delta| > 3 * s_pair: {large_pairs}. Values are in summary.json.\n\n" +
         ((f'Busy cores are recorded covariates. A process outside the measurement apparatus using '

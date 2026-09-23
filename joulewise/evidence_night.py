@@ -239,6 +239,16 @@ from joulewise.quiet_predicate_campaign import CHAIN_PATH, manifest_for, tracked
 check='plan'
 try:
     p=night_gate.NightPlan.from_mapping(json.loads(Path(sys.argv[1]).read_text()))
+    check='registration file'
+    registration=Path(p.registration_path)
+    if not registration.is_absolute(): registration=Path(p.measurement_root)/registration
+    registration_raw=registration.read_bytes(); sha=hashlib.sha256(registration_raw).hexdigest()
+    check='registration ruled digest'
+    if not (sha in night_gate.RULED_REGISTRATIONS and night_gate.RULED_REGISTRATIONS[sha]['binds_chain']): raise ValueError(check)
+    check='registration current digest'
+    if sha!=night_gate.QPE01_PILOT_REGISTRATION_SHA256: raise ValueError(check)
+    check='registration armability'
+    if night_gate.armable_registration(sha) is None: raise ValueError(check)
     check='wrapper sidecar'
     wrapper=Path(p.chain_path); raw=wrapper.read_bytes(); text=raw.decode()
     if not (Path(p.chain_sha256_path).read_text().split()==[hashlib.sha256(raw).hexdigest(),wrapper.name]): raise ValueError(check)
@@ -249,11 +259,7 @@ try:
     source=hashlib.sha256(tracked_bytes(p.measurement_root,p.measurement_head,CHAIN_PATH)).hexdigest()
     if not (night_gate.chain_literal(text,'EVIDENCE_CHAIN_SOURCE_SHA256')==source): raise ValueError(check)
     check='registration'
-    registration=Path(p.registration_path)
-    if not registration.is_absolute(): registration=Path(p.measurement_root)/registration
-    raw=registration.read_bytes(); sha=hashlib.sha256(raw).hexdigest()
-    if not (sha in night_gate.RULED_REGISTRATIONS and night_gate.RULED_REGISTRATIONS[sha]['binds_chain']): raise ValueError(check)
-    if not (json.loads(raw)['chain_source_sha256']==source): raise ValueError(check)
+    if not (json.loads(registration_raw)['chain_source_sha256']==source): raise ValueError(check)
     check='published plan path'
     if not (night_gate.chain_literal(text,'EVIDENCE_PLAN_PATH')==str(Path(p.custody_root)/'night_plan.json')): raise ValueError(check)
     check='zsh -n'
@@ -274,8 +280,6 @@ def notice_subject(state):
 
 
 def render_notice(state, *, checked=None, check_sha256=None):
-    from joulewise import night_gate
-
     binding = state["bindings"]
     registration = Path(binding["registration_path"])
     if not registration.is_absolute():
@@ -284,15 +288,17 @@ def render_notice(state, *, checked=None, check_sha256=None):
     registration_sha256 = hashlib.sha256(raw).hexdigest()
     if registration_sha256 != binding["registration_sha256"]:
         raise Refused("notice registration differs from sealed binding")
-    if (registration_sha256 != night_gate.QPE01_PILOT_REGISTRATION_SHA256
-            or night_gate.armable_registration(registration_sha256) is None):
-        raise Refused("notice registration is unknown or superseded")
     protocol = json.loads(raw)
     rule = protocol["non_observer_process_busy"]
     span = (protocol["settle_s"] + (protocol["envelopes"] - 1)
             * protocol["slot_pitch_s"] + protocol["envelope_s"])
     if span > protocol["window_max_s"]:
         raise Refused("notice program exceeds registered window")
+    words = ("zero", "one", "two", "three", "four", "five", "six", "seven",
+             "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen",
+             "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty")
+    def count_word(number):
+        return words[number] if isinstance(number, int) and 0 <= number < len(words) else str(number)
     plan = json.loads(Path(state["plan_path"]).read_text())
     s = state["schedule"]
     lines = ["DRAFT — NOT SENT; prerequisites and veto observations are not yet recorded.",
@@ -301,17 +307,19 @@ def render_notice(state, *, checked=None, check_sha256=None):
              "", "Ed,", "Launch needs no action from you unless you reply NO. Your NO overrides.",
              f'Arm attempt {state["attempt"]}; prior candidates for this date: {", ".join(state["prior_candidates"]) or "none"}.',
              "This idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
-             f'After {protocol["settle_s"]} seconds settling, {protocol["envelopes"]} '
+             f'After {protocol["settle_s"]} seconds settling, {count_word(protocol["envelopes"])} '
              f'{protocol["envelope_s"]}-second idle envelopes start {protocol["slot_pitch_s"]} seconds apart '
              f'and use {protocol["interior_s"]}-second interiors after {protocol["interior_offset_s"]}-second offsets.',
-             "Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a busy-cores journal.",
+             "Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a journal of busy cores (the average number of CPU cores a process kept busy).",
              f'The {span:,}-second program fits inside the {protocol["window_max_s"]:,}-second window; no top-up or automatic repeat.',
-             f'A process outside the measurement apparatus at or above {protocol["t0_non_observer_share_max"]:g} busy cores '
-             'refuses the night at the arm check or at t0.',
+             f'A process outside the measurement apparatus (the night\'s own measurement processes) at or above {protocol["t0_non_observer_share_max"]:g} busy cores '
+             'refuses the night at the arm check (the checks run when the night is installed) or at t0, the scheduled start.',
              f'A process outside the measurement apparatus using {rule["bar_core_seconds"]:g} or more core-seconds '
+             '(busy cores multiplied by seconds) '
              'inside an envelope excludes that envelope. '
-             f'{rule["abort_after_consecutive"]} such exclusions in a row end the night.',
-             "the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes",
+             f'{count_word(rule["abort_after_consecutive"]).capitalize()} such exclusions in a row end the night.',
+             "At t0, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes.",
+             "During the night, read-only git show checks run in the measurement clone; successful results publication commits and pushes them from a separate results clone.",
              "Partial observations and refusals are kept. No model, load generator, calibration-ledger session or measurement pack runs.",
              "The scheduler supervises the program and the courier emails the result. Evidence remains PROVISIONAL.",
              "After delivery the lead sizes block two or records 'no cutoff qualifies'.",

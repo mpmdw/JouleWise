@@ -429,7 +429,10 @@ banner and no To or Subject lines. Stdout's first two lines, `To: …` and
 `Subject: …`, are mail headers; after one blank line, all remaining lines are
 the body. The preparation draft in `prepare.json` stays unchanged, as do all
 sealed artifacts. Missing, non-armable, mismatched, stale or future-dated
-checks, sealed-byte drift and the exclusive install close refuse before output.
+checks, sealed-byte drift, a registration that differs from its sealed binding,
+a registration with an unruled or non-current digest, a registration that is
+not currently armable under H's code, and the exclusive install close refuse
+before output.
 A missing check names the requiring command: `check.json is required before notice`.
 The magistrate supplies the two stdout header values to its already-authorized
 Gmail tool and sends the exact `lifecycle/notice.txt` body to the single To

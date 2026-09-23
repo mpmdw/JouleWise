@@ -36,6 +36,7 @@ def _census_clean_tempdir(**kwargs):
 
 from joulewise import evidence_night as entry
 from joulewise import corecaptured_loop
+from joulewise import night_gate
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,24 +64,55 @@ class NoticeProtocolTextTests(unittest.TestCase):
         self.protocols = ROOT / "configs/campaigns/quiet_predicate_evidence_01"
 
     def test_v3_notice_states_bound_schedule_and_all_refusal_rules(self):
-        protocol_path = self.protocols / "pilot_protocol_v3.json"
+        protocol_path = ROOT / night_gate.QPE01_PILOT_REGISTRATION_PATH
         protocol = json.loads(protocol_path.read_text())
         text = entry.render_notice(self.state(protocol_path))
         span = (protocol["settle_s"] + (protocol["envelopes"] - 1)
                 * protocol["slot_pitch_s"] + protocol["envelope_s"])
-        self.assertIn(f"{span:,}-second program", text)
-        self.assertIn(f'{protocol["t0_non_observer_share_max"]} busy cores', text)
-        self.assertIn("arm check or at t0", text)
-        self.assertIn(f'{protocol["non_observer_process_busy"]["bar_core_seconds"]} or more core-seconds', text)
-        self.assertIn("excludes that envelope", text)
-        self.assertIn(f'{protocol["non_observer_process_busy"]["abort_after_consecutive"]} such exclusions in a row end the night', text)
-        self.assertIn("the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes", text)
+        self.assertIn("This idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.", text)
+        self.assertIn(f'After {protocol["settle_s"]} seconds settling, twelve '
+                      f'{protocol["envelope_s"]}-second idle envelopes start {protocol["slot_pitch_s"]} seconds apart '
+                      f'and use {protocol["interior_s"]}-second interiors after {protocol["interior_offset_s"]}-second offsets.', text)
+        self.assertIn("Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a journal of busy cores (the average number of CPU cores a process kept busy).", text)
+        self.assertIn(f'The {span:,}-second program fits inside the {protocol["window_max_s"]:,}-second window; no top-up or automatic repeat.', text)
+        self.assertIn(f'A process outside the measurement apparatus (the night\'s own measurement processes) at or above {protocol["t0_non_observer_share_max"]:g} busy cores refuses the night at the arm check (the checks run when the night is installed) or at t0, the scheduled start.', text)
+        rule = protocol["non_observer_process_busy"]
+        self.assertIn(f'A process outside the measurement apparatus using {rule["bar_core_seconds"]:g} or more core-seconds (busy cores multiplied by seconds) inside an envelope excludes that envelope. Two such exclusions in a row end the night.', text)
+        self.assertIn("At t0, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes.", text)
+        self.assertIn("During the night, read-only git show checks run in the measurement clone; successful results publication commits and pushes them from a separate results clone.", text)
         self.assertNotIn("This first idle-variance", text)
         self.assertNotIn("exactly one read-only git show", text)
 
-    def test_superseded_v2_notice_is_refused(self):
-        with self.assertRaisesRegex(entry.Refused, "superseded"):
-            entry.render_notice(self.state(self.protocols / "pilot_protocol_v2.json"))
+    def test_notice_registration_binding_and_relative_clone_root(self):
+        registration = ROOT / night_gate.QPE01_PILOT_REGISTRATION_PATH
+        state = self.state(registration)
+        state["bindings"]["registration_sha256"] = "0" * 64
+        with self.assertRaisesRegex(entry.Refused, "notice registration differs from sealed binding"):
+            entry.render_notice(state)
+        clone = self.addCleanup_path / "clone"
+        relative = Path(night_gate.QPE01_PILOT_REGISTRATION_PATH)
+        target = clone / relative
+        target.parent.mkdir(parents=True)
+        target.write_bytes(registration.read_bytes())
+        state = self.state(registration)
+        state["measurement_root"] = str(clone)
+        state["bindings"]["registration_path"] = str(relative)
+        self.assertIn("This idle-variance evidence night sizes a later experiment", entry.render_notice(state))
+
+    def test_notice_window_and_registered_counts_refuse_or_render(self):
+        protocol = json.loads((ROOT / night_gate.QPE01_PILOT_REGISTRATION_PATH).read_text())
+        path = self.addCleanup_path / "changed-registration.json"
+        protocol["window_max_s"] = 8000
+        path.write_text(json.dumps(protocol))
+        with self.assertRaisesRegex(entry.Refused, "notice program exceeds registered window"):
+            entry.render_notice(self.state(path))
+        protocol["window_max_s"] = 9000
+        protocol["settle_s"] = 601
+        protocol["non_observer_process_busy"]["abort_after_consecutive"] = 3
+        path.write_text(json.dumps(protocol))
+        rendered = entry.render_notice(self.state(path))
+        self.assertIn("After 601 seconds settling, twelve", rendered)
+        self.assertIn("Three such exclusions in a row end the night.", rendered)
 
 
 def quiet_machine():
@@ -334,6 +366,8 @@ class PrepareTests(unittest.TestCase):
         self.assertTrue(any("scripts/gen_evidence_night.py" in c and "--render-only" in c for c in calls))
         self.assertTrue(any(c[0].endswith("/scripts/install_night_agent.sh") and "--render-only" in c for c in calls))
         self.assertIn("DRAFT — NOT SENT", first["notice_draft"])
+        self.assertIn("At t0, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes.", first["notice_draft"])
+        self.assertIn("During the night, read-only git show checks run in the measurement clone; successful results publication commits and pushes them from a separate results clone.", first["notice_draft"])
         self.assertEqual(first["frozen_triple"], [first["plan_id"], first["measurement_root"], self.head])
         plan = json.loads(Path(first["plan_path"]).read_text())
         self.assertEqual(plan["schema"], "joulewise.night_plan.v2")
@@ -620,6 +654,44 @@ class PrepareTests(unittest.TestCase):
                 for path, raw in originals.items():
                     Path(path).write_bytes(raw)
                 state_path.write_text(json.dumps(state))
+
+    def test_sealed_registration_decisions_use_candidate_interpreter(self):
+        state = entry.prepare(**self.kw)
+        root = Path(state["measurement_root"])
+        plan = Path(state["plan_path"])
+        # The caller's import is intentionally wrong; H's interpreter still
+        # accepts the current registration.
+        with patch.object(night_gate, "armable_registration", return_value=None):
+            self.assertEqual(entry.sealed_candidate(root, plan)["registration_sha256"],
+                             night_gate.QPE01_PILOT_REGISTRATION_SHA256)
+
+        original = json.loads(plan.read_text())
+        altered = plan.with_name("registration-test-plan.json")
+        cases = ((str(root / "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json"),
+                  "registration current digest"),)
+        for registration, refusal in cases:
+            with self.subTest(refusal=refusal):
+                altered.write_text(json.dumps(dict(original, registration_path=registration)))
+                with self.assertRaisesRegex(entry.Refused, "sealed candidate failed " + refusal):
+                    entry.sealed_candidate(root, altered)
+
+        unknown = self.base_dir / "unruled.json"
+        unknown.write_bytes((root / night_gate.QPE01_PILOT_REGISTRATION_PATH).read_bytes() + b" ")
+        altered.write_text(json.dumps(dict(original, registration_path=str(unknown))))
+        with self.assertRaisesRegex(entry.Refused, "sealed candidate failed registration ruled digest"):
+            entry.sealed_candidate(root, altered)
+
+        real_run = entry.run
+        def H_with_superseded_current(argv, **kwargs):
+            if len(argv) >= 4 and argv[2] == "-c" and "registration armability" in argv[3]:
+                argv = list(argv)
+                argv[3] = argv[3].replace(
+                    "from joulewise import night_gate\n",
+                    "from joulewise import night_gate\nnight_gate.armable_registration=lambda sha: None\n")
+            return real_run(argv, **kwargs)
+        with patch.object(entry, "run", side_effect=H_with_superseded_current):
+            with self.assertRaisesRegex(entry.Refused, "sealed candidate failed registration armability"):
+                entry.sealed_candidate(root, plan)
 
     def test_lock_precedes_first_staging_write(self):
         paths = entry.locations(Path(self.kw["roots_under"]), Path(self.kw["staging_under"]), self.t0, self.head)
@@ -2172,7 +2244,7 @@ class LifecycleTests(unittest.TestCase):
         entry.saved_json(self.stage / "prepare.json", self.state)
         self.checked()
         before = (self.stage / "prepare.json").read_bytes()
-        registration = ROOT / "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json"
+        registration = ROOT / night_gate.QPE01_PILOT_REGISTRATION_PATH
         bindings = dict(registration_path=str(registration),
                         registration_sha256=entry.digest(registration),
                         chain_source_path="source", chain_source_sha256="b" * 64)
@@ -2189,6 +2261,8 @@ class LifecycleTests(unittest.TestCase):
                          "Subject: NIGHT NOTICE — " + self.state["plan_id"] +
                          " (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt 2"])
         self.assertEqual(body, self.journal("notice.txt").read_text())
+        self.assertIn("at or above 0.5 busy cores refuses the night", body)
+        self.assertIn("A process outside the measurement apparatus using 30 or more core-seconds", body)
         checked = json.loads(self.journal("check.json").read_text())
         provenance = (f'Prepared candidate {self.state["plan_id"]}; pre-arm check '
                       f'{entry.digest(self.journal("check.json"))[:12]} at '
