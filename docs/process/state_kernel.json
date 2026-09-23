@@ -753,6 +753,47 @@
       "status_note": "2026-09-18 headless activation f0b608b7: record 19 confirmed the production `--request` argv is the only production payload that can hit the kernel argument limit; the test-fixture argv defect is separate (lane 238) and its fix does not touch this seam.",
       "stop_card": null
     },
+    "BLOCK-TWO-DESIGN-01": {
+      "acceptance": {
+        "evidence": [
+          "Pilot re-run result and level/apparatus decision with rationale against option (c): docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/35-magistrate-synthesis-round-3.md and docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md section 1.",
+          "Consult records for Sol 6.0, Opus 5.5, blind Fable, and the cold Fable final pass: RUN_STATE.md (activation 7a0f14bd top block).",
+          "Explicit disposition of the load recorder accounting error: docs/process_traces/2026-09-22-activation-a022aecc/08-magistrate-fix-round-record.md section 2."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BLOCK-TWO-DESIGN-01/acceptance",
+          "label": "BLOCK-TWO-DESIGN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cited decision fixes the second block’s levels and apparatus after the pilot result, shows how the energy-per-correct-answer comparison remains answerable, records the three pre-decision consultations and cold Fable final pass, and disposes of the ruling 31 load-recorder wording; sources: docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/35-magistrate-synthesis-round-3.md, docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md sections 1 and 8, and docs/process_traces/2026-09-22-activation-a022aecc/08-magistrate-fix-round-record.md section 2."
+      },
+      "authority": {
+        "label": "Owner record sections 1 and 8; interim apparatus record and ruling 31 correction cited in goal",
+        "path": "docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "The third-version idle-pilot re-run result is available before the block-two level and apparatus design is decided.",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "QPE01-V3-PILOT-RERUN-RESULT"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "After the third-version idle-pilot re-run result, decide the second measurement block’s load levels and measurement apparatus under Ed’s option (c), which keeps the corrected observer accounting and registered comparison while redesigning levels or using a lighter apparatus (docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/35-magistrate-synthesis-round-3.md; docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md section 1). The design must make the headline question answerable: how energy per correct MATH mathematics-benchmark answer varies by the benchmark authors’ difficulty levels and by model size (docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md section 8). Before deciding, consult Sol 6.0, Opus 5.5, and a blind Fable seat; obtain a separate cold Fable final pass, as directed in RUN_STATE.md (activation 7a0f14bd top block). Include the known error in ruling 31’s definition sentence: the 30-second load recorder is a sibling of the collector and is outside its whole-envelope observer CPU figure (docs/process_traces/2026-09-22-activation-a022aecc/08-magistrate-fix-round-record.md section 2).",
+      "id": "BLOCK-TWO-DESIGN-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 273,
+      "status": "queued",
+      "status_note": "2026-09-23 activation 4158e658: registered as design work after Ed chose option (c) and issue #386 released the major-decision hold; final decision depends on the third-version pilot re-run result.",
+      "stop_card": null
+    },
     "BRACKET-EVALUATOR-PLAN-IDENTITY-01": {
       "acceptance": {
         "evidence": [
@@ -1084,6 +1125,36 @@
       "rank": 265,
       "status": "queued",
       "status_note": "2026-09-21: registered by the magistrate from the refuter's finding; not fixed under RETAINED-ROOT-REFUSAL-CLASS-01 (its WRITE_SCOPE excluded the D-183 paragraph). Registration, not a ruling.",
+      "stop_card": null
+    },
+    "CENSUS-MULTILINE-ARGV-01": {
+      "acceptance": {
+        "evidence": [
+          "A regression fixture contains a two-line pgrep -fl entry with a second line beginning import, as specified in docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md.",
+          "Focused census regression passes; docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md records the original ValueError and a clean rerun."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CENSUS-MULTILINE-ARGV-01/acceptance",
+          "label": "CENSUS-MULTILINE-ARGV-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The parser treats a continuation line beginning with import as part of the preceding process, counts that process once, and does not raise; source: docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md, “Lane handed to the magistrate”."
+      },
+      "authority": {
+        "label": "PR #385 full-suite replay, “Lane handed to the magistrate: CENSUS-MULTILINE-ARGV-01”",
+        "path": "docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make the process census parser handle a process command line containing newline characters in pgrep -fl output: a line without an opening process identifier continues the preceding process entry, which is counted once, so a multiline command does not make the admission census raise an exception (docs/process_traces/2026-09-23-interactive-7ec32e8b/07-full-suite-replay-pr385.md, “Lane handed to the magistrate”).",
+      "id": "CENSUS-MULTILINE-ARGV-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 275,
+      "status": "queued",
+      "status_note": "2026-09-23 activation 4158e658: routine-tier parser hardening registered from the full-suite replay; the recorded failure was caused by a multiline command argument in the live process table.",
       "stop_card": null
     },
     "CGV-HARDEN-01": {
@@ -6064,6 +6135,36 @@
       "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started; hardening, not night-critical. The residual is narrower than the cured F3 defect: it requires an uncommitted edit in the driver checkout between a successful probe and the night. Lands under the twelve-row gate.",
       "stop_card": null
     },
+    "PROMPT-AUDIT-01": {
+      "acceptance": {
+        "evidence": [
+          "Report inventory and proposed diff against the 04:55 addendum of directive issue mpmdw/JouleWise#386.",
+          "Fable final-pass record before any prompt change, as required by directive issue mpmdw/JouleWise#386."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PROMPT-AUDIT-01/acceptance",
+          "label": "PROMPT-AUDIT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The audit report and proposed diff cover every listed Claude prompt and both target models, with no changes applied before a Fable final pass; source: directive issue mpmdw/JouleWise#386, 04:55 addendum quoted in the assignment."
+      },
+      "authority": {
+        "label": "Directive issue mpmdw/JouleWise#386 04:55 addendum supplied verbatim in this assignment; RUN_STATE.md is the repository path for issue #386 context, not the addendum text",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "After window machinery is in place, run the Claude Code /claude-api prompt-audit skill over every project prompt sent to Claude models: docs/process/MAGISTRATE_RELAUNCH_PROMPT.md, NIGHT_COURIER_PROMPT.md, cold-gate charter and consultation templates, .claude/agents/*.md, .claude/skills/*/SKILL.md, and seat-brief templates, targeting Opus 5.5 for the loop and Fable 5.1 for the final pass; deliver an audit report and proposed diff, and apply changes only after a Fable final pass (directive issue mpmdw/JouleWise#386, 04:55 addendum, quoted in the assignment; Ed 04:50 approved queueing for later).",
+      "id": "PROMPT-AUDIT-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 274,
+      "status": "queued",
+      "status_note": "2026-09-23 activation 4158e658: routine-tier lane registered for later, after window machinery, from issue #386 04:55 addendum quoted in the assignment.",
+      "stop_card": null
+    },
     "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01": {
       "acceptance": {
         "evidence": [
@@ -6129,11 +6230,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "2026-09-23 activation 7a0f14bd: PR #387 merged as 3a411784, with in-chain marking guard fix round 2 R1",
+            "path": "RUN_STATE.md"
+          },
           "kind": "event",
           "required": "the pull request for branch feat/2026-09-23-qpe01-registration-v3-nonobserver (lane QPE01-NONOBSERVER-PREDICATE-01: registration v3, the non_observer_process_busy exclusion and its two-in-a-row abort) merges to main",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "QPE01-REGISTRATION-V3-MERGED"
         }
@@ -6146,8 +6250,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 270,
-      "status": "blocked",
-      "status_note": "2026-09-23: registered by activation 7a0f14bd (registration, not a ruling). Priority p1 and rank just after the v3 lane QPE01-NONOBSERVER-PREDICATE-01, which is not itself a kernel task (its priority p1 comes from synthesis 15 of the same cold gate). BLOCKED only until the v3 branch merges.",
+      "status": "queued",
+      "status_note": "2026-09-23 activation 4158e658: precondition met — the in-chain marking guard (fix round 2 R1, commit 0fd965fe) is on main at merge 3a411784 (PR #387). Git ancestry check confirmed 0fd965fe is an ancestor of HEAD; READY.",
       "stop_card": null
     },
     "QPE01-CLOCK-DISCIPLINE-ANCHOR-01": {
@@ -8162,6 +8266,36 @@
       "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) per the prune ruling R-7 (D-161 (2)). The three-seat enumeration (Sol xhigh, Opus 5, Fable 5) is custodied beside the ruling (00-brief, 01-sol-seat, 02-opus-seat, 03-fable-seat). Its sibling HISTPACK-PROMISOR-NOFETCH-01 (A107) was retired unbuilt by R-2 in this same wave; the pre-night piece of D-161, the reviewed refresh lane, is PINSET-REFRESH-LANE-01. R-5 directs the freed enforcement budget at the unenforced ruled clauses (S9), which this row does not itself spend.",
       "stop_card": null
     },
+    "THROUGHPUT-01": {
+      "acceptance": {
+        "evidence": [
+          "For every action, cite its landing or retirement record against the ordered list in docs/process_traces/2026-09-23-interactive-7ec32e8b/04-throughput-lane-synthesis.md.",
+          "Record the count of windows per day that yield usable data, as required by docs/process_traces/2026-09-23-interactive-7ec32e8b/04-throughput-lane-synthesis.md."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/THROUGHPUT-01/acceptance",
+          "label": "THROUGHPUT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Each of the nine actions is landed or explicitly retired with a cited record, and usable measurement windows per day are measured; source: docs/process_traces/2026-09-23-interactive-7ec32e8b/04-throughput-lane-synthesis.md."
+      },
+      "authority": {
+        "label": "Three-seat throughput synthesis; directive issue #386 ordering quoted in RUN_STATE.md (activation 7a0f14bd top block)",
+        "path": "docs/process_traces/2026-09-23-interactive-7ec32e8b/04-throughput-lane-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Nine ordered actions from docs/process_traces/2026-09-23-interactive-7ec32e8b/04-throughput-lane-synthesis.md and directive issue mpmdw/JouleWise#386 (quoted in RUN_STATE.md (activation 7a0f14bd top block)): (1) Finish window machinery after the merged third-version idle-pilot admission rule (PR #387, merge 3a411784): land A234 watchdog release after a proved terminal refusal and A212 fast retry together after reconciling the 40-minute arm lead, then land A271 detection and recovery for the Wi-Fi log-capture daemon loop. (2) In parallel with item 1, build the headline experiment path: a scored campaign night, a MATH benchmark importer for author-assigned difficulty levels, and an amendment to analysis plan AP-5, with three independent reviews and one integration decision. (3) Once item 2 defines the experiment, make one preregistration packet for both reasoning modes, the MATH and constructed ladders, a 16-item runtime sizing pilot, envelope caps, sparse-level merging, multiple-test correction, and a fixed item count. (4) After item 3 defines the plans, use a window queue from authored through harvested, prepare each successor before the current window, and arm only after harvest, cleanup, fresh check, notice, and veto. (5) For each change and arm, apply the risk-tiered review gates adopted in the cited synthesis, reserving the full gate for claim-bearing work and a shorter lens plus final pass for routine work. (6) Before implementation reviews, put the clause-to-acceptance map, executable counterexample, consuming production call site, and unresolved rulings into each brief. (7) Once window captures begin, evaluate cloud review and drafting sessions off the measurement Mac, keeping that Mac agent-free during capture. (8) From the first experiment work, maintain the paper draft and figure code from authenticated harvests, including crossover and null-result text. (9) Once the sizing pilot sets runtime and caps, report each level’s accuracy needed for the larger model to break even and the energy-per-correct-answer decomposition, keeping the reasoning-on arm primary for the crossover question.",
+      "id": "THROUGHPUT-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 272,
+      "status": "queued",
+      "status_note": "2026-09-23 activation 4158e658: registered from the three-seat synthesis and issue #386. Item 5 is a process rule Fable adopted under Ed’s delegation in that record; this registration does not ratify or amend any process rule. Item 1(a), the third-version rule, is done at PR #387 merge 3a411784.",
+      "stop_card": null
+    },
     "TOOL-01": {
       "acceptance": {
         "evidence": [
@@ -9756,5 +9890,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-22"
+  "updated": "2026-09-23"
 }
