@@ -1495,14 +1495,23 @@ class EvidenceRegistrationTests(unittest.TestCase):
                 self.assertIsNone(receipt.refusal)
                 c3 = next(row for row in receipt.conditions if row.condition_id == "C3").measured
                 self.assertEqual(c3["top_consumers_at_decision"][0]["observer"], True)
+                # The PASS detail names the predicate that just ran (Fable N4).
+                self.assertEqual(c3["detail"], (
+                    "agent, HID, AC, display, load, thermal and non-observer process predicates passed"
+                    if legacy_load else "agent, screensaver configuration, AC, display, thermal "
+                                        "and non-observer process predicates passed"))
 
     def test_the_non_observer_predicate_is_spent_only_on_an_evidence_night(self):
         # It costs thirty seconds of real machine time, and the ruling scopes
         # it to the pilot's own nights (v2 and v3 plans alike).  A calibration
         # or rehearsal payload never reaches the sampler at all.
         source = FakeProbeSource()
-        self.assertEqual(night_gate.evaluate_night(make_plan(), source.probes()).verdict, "GO")
+        receipt = night_gate.evaluate_night(make_plan(), source.probes())
+        self.assertEqual(receipt.verdict, "GO")
         self.assertEqual(source.observation_calls, 0)
+        # A calibration receipt never claims the predicate it did not run.
+        c3 = next(row for row in receipt.conditions if row.condition_id == "C3").measured
+        self.assertEqual(c3["detail"], "agent, HID, AC, display, load, and thermal predicates passed")
         evidence = self.source()
         night_gate.evaluate_night(make_plan(), evidence.probes())
         self.assertEqual(evidence.observation_calls, 1)

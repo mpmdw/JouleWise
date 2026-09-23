@@ -1544,8 +1544,19 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
     except ProbeError as exc:
         return _probe_refusal(plan, probes, rows, evidence, exc)
     rows["C3"].status = "PASS"
-    rows["C3"].measured["detail"] = ("agent, HID, AC, display, load, and thermal predicates passed"
-        if legacy_load else "agent, screensaver configuration, AC, display and thermal predicates passed")
+    # The detail names the non-observer predicate only when it ran (an
+    # evidence night; fix round 1, Fable lens N4), so a calibration receipt
+    # keeps its historical text and never claims a check it did not make.
+    non_observer = ("non_observer_interval_s" in rows["C3"].measured)
+    if legacy_load:
+        rows["C3"].measured["detail"] = (
+            "agent, HID, AC, display, load, thermal and non-observer process predicates passed"
+            if non_observer else "agent, HID, AC, display, load, and thermal predicates passed")
+    else:
+        rows["C3"].measured["detail"] = (
+            "agent, screensaver configuration, AC, display, thermal and non-observer process "
+            "predicates passed" if non_observer
+            else "agent, screensaver configuration, AC, display and thermal predicates passed")
 
 
 def _check_clock(plan, probes, rows, evidence, *, pack_arm=None, strict_probe=False):
