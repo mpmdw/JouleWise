@@ -39,6 +39,18 @@ from joulewise import evidence_night as entry
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def quiet_machine():
+    """A machine-state observation with nothing but the observer's own work.
+
+    `check` otherwise spends thirty real seconds watching THIS machine, and
+    its verdict would then depend on whatever else happens to be running.
+    """
+
+    from tests.test_night_gate import QUIET_OBSERVATION
+
+    return dict(QUIET_OBSERVATION)
+
+
 class ArgumentsTests(unittest.TestCase):
     def test_e3_boundary_check_documentation_agrees(self):
         clause = ("`publish-install` repeats the veto observation and the loaded-jobs probe "
@@ -225,7 +237,7 @@ class PrepareTests(unittest.TestCase):
             entry.check(candidate=state["staging"], canonical=state["measurement_root"],
                 supervisor_state=resident, runner=probes, caller_pid=90,
                 census_observer=lambda **kw: observation(row(90, 1, "/bin/python3"), hits=()),
-                lock_verifier=lambda root: None)
+                quiet_observer=quiet_machine, lock_verifier=lambda root: None)
         self.assertEqual(entry.prepare(**self.kw), state)
         self.assertTrue((Path(state["staging"]) / "lifecycle/check.json").is_file())
 
@@ -2047,7 +2059,7 @@ os.execv(sys.executable,[sys.executable,*args])
             checked = entry.check(candidate=stage, canonical=canonical, supervisor_state=resident,
                 launchctl_bin=str(fake.executable), runner=probes, caller_pid=90, census_observer=lambda **kw: observation(
                     row(20, 1, "/bin/claude"), row(90, 20, "/bin/python3"), hits=(20,)),
-                lock_verifier=lambda root: None)
+                quiet_observer=quiet_machine, lock_verifier=lambda root: None)
             self.assertFalse(checked["armable"])
             self.assertTrue(checked["rehearsal_ready"])
             self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))

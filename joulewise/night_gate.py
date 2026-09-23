@@ -57,8 +57,19 @@ D166_REGISTRATION_PATH = (
 # binds EVIDENCE_CHAIN_PATH, never a Python module): the cured Python is
 # pinned per plan by ``measurement_head`` and the plan's evidence manifest
 # (``quiet_predicate_campaign.MANIFEST_PATHS``), not by this digest.
-QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v2.json"
-QPE01_PILOT_REGISTRATION_SHA256 = "2c5392401a7956dfbb30f316a084541e0f53f214a4ce98c7d56d595ddb2779f1"
+# 2026-09-23 (cold gate QPE01-DAEMON-CONTAMINATION-01, rulings 10/21/31,
+# syntheses 15/25/35): the current pilot registration is v3.  It adds the
+# `non_observer_process_busy` exclusion and its per-envelope integral, the
+# `t0_non_observer_share_max` gate share, and the corrected `observer_floor`
+# (whole-envelope accounting over the collector's own span, with the v2
+# statistic named in its supersession note).
+QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json"
+QPE01_PILOT_REGISTRATION_SHA256 = "b6cb513fe4aa8b2c5557b589fae07ef4149d480cd1c831aa267ecb37c97104fa"
+# v2's bytes stay in the table as ruled history, for the same reason v1's do:
+# the table is KEYED by digest, so re-pointing the constant above would carry
+# the v2 entry away with it.  Its own literal keeps the 2026-09-22 night's
+# registration readable, and `superseded_by` refuses any new arm against it.
+QPE01_PILOT_REGISTRATION_V2_SHA256 = "2c5392401a7956dfbb30f316a084541e0f53f214a4ce98c7d56d595ddb2779f1"
 # v1's bytes (``pilot_protocol_v1.json``, never modified) stay in the table as
 # ruled history.  The table is KEYED by digest, so re-pointing the constant
 # above would have carried the v1 entry away with it; the v1 digest is
@@ -80,16 +91,28 @@ RULED_REGISTRATIONS = {
         "records": ("docs/decision_log.md#D-165", "docs/decision_log.md#D-166")},
     QPE01_PILOT_REGISTRATION_V1_SHA256: {"label": "QPE-01 idle-variance pilot protocol v1",
         "ruling": "cold gate 10 Q1/Q2 (2026-09-19); sizing ruling 46b", "binds_chain": True,
-        "superseded_by": QPE01_PILOT_REGISTRATION_SHA256,
+        "superseded_by": QPE01_PILOT_REGISTRATION_V2_SHA256,
         "records": ("docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/10-coldgate-fable-ruling.md",
                     "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md")},
-    QPE01_PILOT_REGISTRATION_SHA256: {"label": "QPE-01 idle-variance pilot protocol v2 (A269 gate 2026-09-22)",
+    QPE01_PILOT_REGISTRATION_V2_SHA256: {"label": "QPE-01 idle-variance pilot protocol v2 (A269 gate 2026-09-22)",
         "ruling": "cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b; "
                   "A269 cold gate 10 (2026-09-22) Q1(c)/Q2(a)/Q3", "binds_chain": True,
+        "superseded_by": QPE01_PILOT_REGISTRATION_SHA256,
         "records": ("docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/10-coldgate-fable-ruling.md",
                     "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md",
                     "docs/process_traces/2026-09-22-activation-d9990b3c/02-a269-start-drift-diagnosis.md",
                     "docs/process_traces/2026-09-22-activation-d9990b3c/01-coldgate-packet-a267-clock-discipline-anchor/14-coldgate-fable-rebuttal-ruling.md")},
+    QPE01_PILOT_REGISTRATION_SHA256: {
+        "label": "QPE-01 idle-variance pilot protocol v3 (QPE01-DAEMON-CONTAMINATION-01 gate 2026-09-23)",
+        "ruling": "cold gate 10 Q1/Q2 (2026-09-19); adjudication 10a; sizing ruling 46b; "
+                  "A269 cold gate 10 (2026-09-22) Q1(c)/Q2(a)/Q3; "
+                  "QPE01-DAEMON-CONTAMINATION-01 ruling 10 (2026-09-23) Q1(c)/Q2/Q3(a), "
+                  "ruling 31 reporting limbs as adjudicated by synthesis 35", "binds_chain": True,
+        "records": ("docs/process_traces/2026-09-19-activation-d0b83820/10-coldgate-packet-stage-a-executor/10-coldgate-fable-ruling.md",
+                    "docs/process_traces/2026-09-19-activation-d0b83820/46b-ruling-stage-a-seat-r3.md",
+                    "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/10-coldgate-fable-ruling.md",
+                    "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/15-magistrate-synthesis.md",
+                    "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/25-magistrate-synthesis-round-2.md")},
 }
 
 
@@ -150,6 +173,19 @@ THERMAL_ARGV = ("/usr/bin/pmset", "-g", "therm")
 BOOT_SESSION_ARGV = ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid")
 
 LOAD_MAX = 2.0
+# Cold gate 10 QPE01-DAEMON-CONTAMINATION-01 (2026-09-23) Q2(i).  The night of
+# 2026-09-22 21:00 ran twelve envelopes while `fseventsd` held a full busy core
+# in every sample, and the gate admitted it: the load average was 1.03, under
+# LOAD_MAX, because a one-minute host-wide mean cannot name a process.  The
+# cure is a PER-PROCESS predicate over one interval observation.  0.5 busy
+# cores is five times the largest single-sample transient seen outside the
+# daemons on either archived night (`corespotlightd` 0.104) and half the
+# runaway signature (1.0); anything admitted below it is caught per envelope by
+# the registration's `non_observer_process_busy` integral.  The bar is a GATE
+# predicate, not a registration field, so it binds v2 and v3 plans alike.
+T0_NON_OBSERVER_SHARE_MAX = 0.5
+NON_OBSERVER_OBSERVATION_INTERVAL_S = 30
+NON_OBSERVER_EXCLUSION = "non_observer_process_busy"
 PLAN_MAX_AGE_S = 36 * 60 * 60
 
 NIGHT_GATE_REASON_CODES = frozenset(
@@ -190,6 +226,7 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
         "night_plan_overruns_deadman",   # t0 + window_max_s + courier deadline is not before the dead-man hour
         "night_record_exists",            # a write-once record proves this night was already invoked
         "night_window_exceeded",  # driver wall-clock deadline: chain terminated after the exclusive window end plus shutdown grace
+        NON_OBSERVER_EXCLUSION,  # two consecutive envelopes lost to a busy non-observer process; the chain ends (cold gate 10, 2026-09-23, Q2)
     }
 )
 if NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES != {"night_refused_bind_expired"}:
@@ -288,6 +325,14 @@ class Probes:
     read_text: Callable[[str], str]
     checkout_head: Callable[[], str]
     measurement_head: Callable[[str], str]
+    # The non-observer machine-state observation (cold gate 10
+    # QPE01-DAEMON-CONTAMINATION-01, 2026-09-23, Q2(i)).  It is not one argv,
+    # so it cannot travel through ``run``: it is a whole
+    # ``quiet_admission.sample_interval`` worker that spends
+    # ``NON_OBSERVER_OBSERVATION_INTERVAL_S`` seconds watching the machine.
+    # ``None`` means the production sampler; a caller that must not touch the
+    # machine (every test) supplies its own observation here.
+    observe_interval: Callable[[], Mapping[str, object]] | None = None
 
 
 class CensusProbes(Protocol):
@@ -742,6 +787,75 @@ def _probe_refusal(
         tuple(evidence),
     )
     return _finish(plan, probes, rows, refusal)
+
+
+def production_interval_observation(interval_s: float | None = None) -> Mapping[str, object]:
+    """One live ``sample_interval`` with THIS process as the observer root.
+
+    No `powermetrics` exists at t0 or at the arm check -- the chain has not
+    started -- so the gate's own pid is the whole observer tree (cold gate 10,
+    2026-09-23, Q2(i)); the chain-root marking the recorder needs is a separate
+    cure in ``quiet_predicate_campaign.record_covariates``.
+    """
+
+    from joulewise.quiet_admission import sample_interval
+
+    if interval_s is None:
+        interval_s = NON_OBSERVER_OBSERVATION_INTERVAL_S
+    return sample_interval(interval_s, observer_pid=os.getpid())
+
+
+def non_observer_consumers(observation: Mapping[str, object]) -> list[dict]:
+    """The observation's non-observer consumers, or a refusal if it is malformed.
+
+    Absent or unreadable evidence is never a pass: an observation with no
+    ``observer`` flag on a consumer is precisely the defect the 2026-09-22
+    night carried (every row read ``observer: false``, including the power
+    sampler), so a consumer that does not carry a real boolean is a ProbeError,
+    not a non-observer.
+    """
+
+    if not isinstance(observation, Mapping):
+        raise ProbeError("non-observer observation must be an object")
+    metrics = observation.get("metrics")
+    if not isinstance(metrics, Mapping):
+        raise ProbeError("non-observer observation carries no metrics")
+    consumers = metrics.get("top_consumers")
+    if not isinstance(consumers, list):
+        raise ProbeError("non-observer observation carries no top_consumers")
+    result = []
+    for consumer in consumers:
+        if (not isinstance(consumer, Mapping)
+                or not isinstance(consumer.get("observer"), bool)
+                or not isinstance(consumer.get("pid"), int)
+                or isinstance(consumer.get("pid"), bool)
+                or not isinstance(consumer.get("command"), str)
+                or isinstance(consumer.get("busy_cores"), bool)
+                or not isinstance(consumer.get("busy_cores"), (int, float))
+                or not math.isfinite(float(consumer["busy_cores"]))):
+            raise ProbeError("malformed consumer in the non-observer observation")
+        if not consumer["observer"]:
+            result.append(dict(consumer))
+    return result
+
+
+def non_observer_offender(observation: Mapping[str, object]) -> dict | None:
+    """The busiest non-observer consumer at or above the ruled share, or None."""
+
+    busy = [c for c in non_observer_consumers(observation)
+            if float(c["busy_cores"]) >= T0_NON_OBSERVER_SHARE_MAX]
+    if not busy:
+        return None
+    return max(busy, key=lambda c: (float(c["busy_cores"]), -c["pid"]))
+
+
+def non_observer_refusal_detail(offender: Mapping[str, object], interval_s: float) -> str:
+    """Cold gate 10 (2026-09-23) Q2(i) refusal text, quoted, not paraphrased."""
+
+    return (f"non-observer process busy: {os.path.basename(offender['command'])} "
+            f"pid {offender['pid']} at {float(offender['busy_cores']):.3f} busy cores over "
+            f"{float(interval_s):.1f} s (bar {T0_NON_OBSERVER_SHARE_MAX}); "
+            "observation in top_consumers_at_decision")
 
 
 def _completed_ok(result: ProbeResult) -> bool:
@@ -1384,6 +1498,47 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
                     tuple(evidence),
                 ),
             )
+        # The per-process machine-state predicate (cold gate 10
+        # QPE01-DAEMON-CONTAMINATION-01, 2026-09-23, Q2(i)), on BOTH branches
+        # -- t0 (`legacy_load=True`, via `evaluate_night`) and the arm check
+        # (`legacy_load=False`, via `evaluate_dynamic_hard`).  It runs LAST
+        # because it costs thirty seconds and every predicate above it costs
+        # milliseconds: a machine that fails the thermal probe should not be
+        # watched for half a minute first.
+        #
+        # It is spent only on a QPE-01 evidence night.  `payload_kind` is set
+        # by `_check_chain_identity`, which runs before this check on both
+        # paths, and the registration check refuses an evidence payload that
+        # is not pinned to a chain-binding QPE-01 registration -- so this
+        # condition is exactly "a pilot night, v2 or v3 alike", which is the
+        # scope the ruling gives the predicate.
+        if rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
+            observer = probes.observe_interval or production_interval_observation
+            try:
+                observation = observer()
+            except Exception as exc:  # the sampler owns many failure types
+                raise ProbeError(
+                    f"non-observer interval observation failed: {type(exc).__name__}: {exc}"
+                ) from exc
+            offender = non_observer_offender(observation)
+            interval_s = (observation.get("interval_s")
+                          if isinstance(observation, Mapping) else None)
+            if not isinstance(interval_s, (int, float)) or isinstance(interval_s, bool):
+                raise ProbeError("non-observer observation carries no interval_s")
+            rows["C3"].measured["top_consumers_at_decision"] = list(
+                (observation.get("metrics") or {}).get("top_consumers") or [])
+            rows["C3"].measured["non_observer_interval_s"] = interval_s
+            if offender is not None:
+                return _finish(
+                    plan,
+                    probes,
+                    rows,
+                    Refusal(
+                        "night_refused_not_quiet",
+                        non_observer_refusal_detail(offender, interval_s),
+                        tuple(evidence),
+                    ),
+                )
     except ProbeError as exc:
         return _probe_refusal(plan, probes, rows, evidence, exc)
     rows["C3"].status = "PASS"

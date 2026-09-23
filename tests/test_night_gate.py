@@ -58,6 +58,31 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
     }
 
 
+def interval_observation(*consumers, interval_s: float = 30.4) -> dict:
+    """One ``quiet_admission.sample_interval`` observation, as a fixture.
+
+    Only the two fields the gate's non-observer predicate reads are filled;
+    `consumers` are (command, pid, busy_cores, observer) tuples.
+    """
+
+    return {
+        "interval_s": interval_s,
+        "metrics": {
+            "top_consumers": [
+                {"command": command, "pid": pid, "busy_cores": busy,
+                 "start_identity": "Mon Sep 22 21:00:00 2026", "observer": observer}
+                for command, pid, busy, observer in consumers
+            ]
+        },
+    }
+
+
+QUIET_OBSERVATION = interval_observation(
+    ("/sbin/launchd", 1, 0.008, False),
+    ("/usr/bin/powermetrics", 17875, 0.114, True),
+)
+
+
 class FakeProbeSource:
     def __init__(
         self,
@@ -90,6 +115,18 @@ class FakeProbeSource:
         self.measurement_calls: list[str] = []
         self.measurement_error: Exception | None = None
         self.raise_for: dict[tuple[str, ...], Exception] = {}
+        # Every gate test supplies its own machine-state observation: the
+        # production default spends thirty real seconds watching THIS machine
+        # and would make the suite depend on what else is running.
+        self.observation: dict | None = dict(QUIET_OBSERVATION)
+        self.observation_error: Exception | None = None
+        self.observation_calls = 0
+
+    def observe_interval(self) -> dict:
+        self.observation_calls += 1
+        if self.observation_error is not None:
+            raise self.observation_error
+        return self.observation
 
     def run(self, argv: tuple[str, ...]) -> night_gate.ProbeResult:
         self.run_calls.append(argv)
@@ -129,6 +166,7 @@ class FakeProbeSource:
             read_text=self.read_text,
             checkout_head=self.checkout_head,
             measurement_head=self.measurement_head,
+            observe_interval=self.observe_interval,
         )
 
 
@@ -1124,6 +1162,12 @@ class NightGateTests(unittest.TestCase):
                 "night_plan_overruns_deadman",
                 "night_record_exists",
                 "night_window_exceeded",
+                # Cold gate 10 QPE01-DAEMON-CONTAMINATION-01 (2026-09-23) Q2:
+                # the two-consecutive-envelope machine-state abort.  It keeps
+                # the REGISTRATION's exclusion spelling rather than taking a
+                # `night_` prefix, because the refusal document and the
+                # excluded envelopes must name the same cause.
+                "non_observer_process_busy",
             },
         )
         self.assertEqual(night_gate.NIGHT_DRIVER_REASON_CODES & night_gate.NIGHT_GATE_REASON_CODES, {"night_refused_bind_expired"})
@@ -1185,7 +1229,12 @@ class NightGateTests(unittest.TestCase):
             night_gate.NIGHT_GATE_REASON_CODES,
             night_gate.NIGHT_DRIVER_REASON_CODES,
         ):
-            self.assertTrue(all(code.startswith("night_") or code in {"launch_go_receipt_missing", "launch_go_receipt_invalid"} for code in registry))
+            self.assertTrue(all(code.startswith("night_") or code in {
+                "launch_go_receipt_missing", "launch_go_receipt_invalid",
+                # Ruled vocabulary, not a new convention: the abort's reason is
+                # the registration's own exclusion name (cold gate 10, Q2).
+                night_gate.NON_OBSERVER_EXCLUSION,
+            } for code in registry))
 
 
 if __name__ == "__main__":

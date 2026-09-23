@@ -773,6 +773,31 @@ print(json.dumps(result))
     return json.loads(run([root / ".venv/bin/python", "-B", "-c", code], cwd=root, input=json.dumps(request)))
 
 
+def machine_quiet_check(observer=None):
+    """The arm check refuses on the SAME predicate as t0 (cold gate 10, Q2(i)).
+
+    An arm that passes a check a busy machine would fail at t0 spends the
+    whole span -- settle plus twelve slots -- to learn what thirty seconds at
+    the check would have said.  The bar, the observation and the refusal text
+    are the gate's, imported rather than restated, so the two can never drift.
+
+    `observer` exists for tests and for a caller that already holds an
+    observation; None spends the real thirty seconds.
+    """
+
+    from joulewise import night_gate
+    observation = night_gate.production_interval_observation() if observer is None else observer()
+    offender = night_gate.non_observer_offender(observation)
+    interval_s = observation.get("interval_s") if isinstance(observation, dict) else None
+    if type(interval_s) not in (int, float) or type(interval_s) is bool:
+        raise Refused("non-observer observation carries no interval_s")
+    consumers = (observation.get("metrics") or {}).get("top_consumers") or []
+    if offender is not None:
+        raise Refused(night_gate.non_observer_refusal_detail(offender, interval_s))
+    return dict(top_consumers_at_decision=list(consumers), interval_s=interval_s,
+                bar_busy_cores=night_gate.T0_NON_OBSERVER_SHARE_MAX)
+
+
 def census_check(state, runner, observer, caller_pid):
     argv = clone_census(state, caller_pid, argv_only=True)["argv"]
     raw = runner(argv)
@@ -883,7 +908,7 @@ print(json.dumps([dict(record,route=classify_abort(record['cause'])) for record 
 
 def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
           runner=probe_command, census_observer=None, caller_pid=None, lock_verifier=verify_lock,
-          launchctl_bin="launchctl"):
+          launchctl_bin="launchctl", quiet_observer=None):
     with candidate_lock(candidate):
         state = candidate_state(candidate)
         record = dict(schema="joulewise.evidence_check.v1", started_epoch_s=time.time(),
@@ -919,6 +944,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
+            inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
         passed = all(c["verdict"] == "pass" for c in checks.values())
         record["armable"] = passed and not record["fake_launchctl"]
         record["rehearsal_ready"] = passed and record["fake_launchctl"]
@@ -926,7 +952,11 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
         path = lifecycle_dir(candidate) / "check.json"
         saved_json(path, record)
         if not passed:
-            for name in ("night_agents", "census"):
+            # These three name the machine, not the paperwork: their reason
+            # text is the whole finding, and burying it behind "pre-arm checks
+            # failed" would make the operator open check.json to learn which
+            # process held the machine (cold gate 10, 2026-09-23, Q2(i)).
+            for name in ("night_agents", "census", "machine_quiet"):
                 reason = checks.get(name, {}).get("reason")
                 if reason:
                     raise Refused(reason)
