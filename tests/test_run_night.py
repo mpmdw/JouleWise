@@ -3877,9 +3877,26 @@ class WindowDeadlineTests(unittest.TestCase):
             self.assertEqual(pgid, os.getpgid(int(grandchild.read_text().strip())))
             return pgid
 
+        # Diagnostic trail (CI-only failure, 09-23): every census answer with
+        # its time, plus a ps snapshot of the group, lands in the assertion
+        # message so a Linux failure shows what the census actually saw.
+        trail: list[str] = []
+        real_census = self.driver._group_census
+
+        def recording_census(pgid, timeout_s=1):
+            absent, lines = real_census(pgid, timeout_s)
+            snapshot = subprocess.run(
+                ["ps", "-eo", "pid,pgid,ppid,stat,etimes,args"],
+                capture_output=True, text=True, check=False).stdout.splitlines()
+            members = [row for row in snapshot[1:] if row.split()[1:2] == [str(pgid)]]
+            trail.append(f"{time.monotonic():.2f} absent={absent} lines={lines} ps={members}")
+            return absent, lines
+
         sent, patch = self._signal_spy()
         with mock.patch.object(self.driver, "_complete_chain_start",
-                               side_effect=complete_after_ready), patch:
+                               side_effect=complete_after_ready), \
+                mock.patch.object(self.driver, "_group_census",
+                                  side_effect=recording_census), patch:
             exit_code = self.driver.run_night(self.plan_path)
         pid = int(grandchild.read_text().strip())
         self.assertEqual(self.driver.EXIT_ABORTED, exit_code)
@@ -3887,7 +3904,8 @@ class WindowDeadlineTests(unittest.TestCase):
         self.assertEqual("night_window_exceeded", refusal["refusal"]["reason"])
         self.assertTrue(deadline["proven"])
         self.assertIn(signal.SIGKILL, [number for _pgid, number in sent],
-                      "a TERM-ignoring member must force the escalation")
+                      "a TERM-ignoring member must force the escalation; grandchild "
+                      f"pid {pid}; census trail:\n" + "\n".join(trail[:3] + ["..."] + trail[-4:]))
         self.assertFalse(self._alive(pid), "the TERM-ignoring member survived")
 
     # ---- (3) a census that never empties -----------------------------------
