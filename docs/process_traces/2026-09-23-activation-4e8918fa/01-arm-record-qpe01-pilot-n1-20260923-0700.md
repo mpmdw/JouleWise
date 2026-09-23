@@ -4,8 +4,8 @@ Headless magistrate activation `4e8918fa-0d77-4628-a452-d21ab50ead19`, on Opus 5
 05:34:23 PDT (attempt 87) after activation 4158e658 exited under D-183: 4158e658's resident supervisor (pid
 2913, started 04:24) was older than H, which reached the canonical checkout at 05:13, so `check` would have
 refused it. This activation ran the successor procedure in
-`docs/process_traces/2026-09-23-activation-4158e658/01-activation-record.md` §3, steps 0–8, between 05:34 and
-05:38 PDT. The machine-readable outputs are the staging `lifecycle/` records, whose digests are listed below.
+`docs/process_traces/2026-09-23-activation-4158e658/01-activation-record.md` §3, steps 0–7, between 05:34 and
+05:38 PDT; step 8 is this record and the exit. The machine-readable outputs are the staging `lifecycle/` records, whose digests are listed below.
 
 ## Authority
 
