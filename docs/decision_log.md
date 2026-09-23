@@ -225,7 +225,7 @@ be re-derived by a future agent gets an entry here.
 | D-179 | REPORTED PHASE ENERGY — fixed ordered 50-member mean; 20 independent units (10 repeats + 10 ABBA blocks), stratified t9 interval plus recorded kind bounds; attribution floor beside; runtime-observed ratio of totals; both Qwen3 v5 registrations before frozen specs; closed typed refusals through D-173 custody; X5 remains RETIRED_FALLBACK; normative home `docs/contracts/paper_reported_energy.md` | adjudicated (magistrate synthesis, 2026-09-08; S2 fix rulings installed; production issuance unregistered) |
 | D-180 | ARM RECOVERABILITY AND STEERABILITY — install spans recur within a day; pre-authorized retry class for non-physics arm aborts (idle interactive session, stale notice hash, uncertain tick, transport) without a cold gate; idle interactive sessions not foreign at the arm-time census of stub nights (plan span unchanged); remote control between windows; lanes INSTALL-WINDOWS-MULTI-01 / ARM-RETRY-CLASS-01 / ARM-CENSUS-IDLE-INTERACTIVE-01 / REMOTE-CONTROL-BETWEEN-WINDOWS-01 | ratified by Ed (2026-09-10; decided ≠ done, each clause lands under gates) |
 | D-181 | WINDOWS RUN WHENEVER THE MACHINE IS QUIET — no cadence rule (clean census, day or night, several windows per day when the gates pass; every soundness fence unchanged); Fable 5.1 is the final eyes on every merge (gate rows 7/12 unchanged, final head sha in row 12); the owner's hands step for the first pack night prepared and emailed; lanes INSTALL-WINDOWS-MULTI-01 → ARM-RETRY-CLASS-01 → ARM-CENSUS-IDLE-INTERACTIVE-01 promoted to the head of the agent lane behind the 09-15 harvest event | ratified by Ed (2026-09-14, directive issue #337; recorded verbatim, nothing installed by the entry) |
-| D-182 | ZERO-CAPTURE MACHINE-STATE REFUSAL LICENSES ONE NEW-PLAN SUCCESSOR — a night that refuses on machine state (census, load or CPU quietness, bind-window expiry, screensaver configuration, boot clock) with zero capture licenses ONE new-plan successor once the courier has delivered: new plan id, fresh notice, ≥ 60 s spacing, bounded by the new plan's install close; never a re-arm of the same plan; every observed NO still stops; physics/evidence refusals and every gate at the successor's own t0 unchanged | ratified by Ed (2026-09-16 00:35 PDT for t0 refusals, lane record 06 amendment of activation 08ca8197; re-affirmed and extended to bind-window expiry 2026-09-17, interactive session 5c919872, "affirm of course"; recorded verbatim, nothing installed by the entry) |
+| D-182 | ZERO-CAPTURE MACHINE-STATE REFUSAL LICENSES ONE NEW-PLAN SUCCESSOR — a night that refuses on machine state (census, load or CPU quietness, bind-window expiry, screensaver configuration, boot clock) with zero capture licenses ONE new-plan successor once the courier has delivered: new plan id, fresh notice, ≥ 60 s spacing, bounded by the new plan's install close; never a re-arm of the same plan; every observed NO still stops; physics/evidence refusals and every gate at the successor's own t0 unchanged; ADDENDUM 2026-09-23 (ratified by Ed by email): a chain abort on `non_observer_process_busy` (two consecutive envelopes excluded under registration v3) with fewer than `minimum_retained` (8) envelopes captured licenses one new-plan successor on the same terms, the captured envelopes archived under cold-gate ruling 10's Q1 label (lane QPE01-ABORT-SUCCESSOR-01) | ratified by Ed (2026-09-16 00:35 PDT for t0 refusals, lane record 06 amendment of activation 08ca8197; re-affirmed and extended to bind-window expiry 2026-09-17, interactive session 5c919872, "affirm of course"; recorded verbatim, nothing installed by the entry) |
 | D-183 | NO ARTIFICIAL OWNER STOPS — the process exists to prevent bad science, not to idle; any precondition an agent can satisfy itself with its own authority (git, gh, launchctl at the documented interfaces) is satisfied by the agent, never queued as an owner action. First instance: the canonical checkout `/Users/edr/code/JouleWise` behind a merged cure stalled the loop 40 h (05:10 09-20 → 21:40 09-21) because the relaunch prompt fenced every git operation there; now a clean canonical tree behind H is fast-forwarded by the evidence-night `check` itself (`git pull --ff-only`, evidence `fast_forward`) whenever no night agent is loaded, the relaunch prompt licenses that one move and requires the session to exit for a fresh supervisor instead of holding, and owner actions remain ONLY hardware, sudo, and the notice NO. Soundness fences unchanged: no move while anything is armed or loaded, no reset/force, dirty trees refuse | ratified by Ed (2026-09-21 21:50 PDT, interactive session: "make sure no more idiotic stops artificially, you have gh auth for a reason"; "the process is meant to prevent bad science not work for 40h") |
 
 ---
@@ -12015,6 +12015,98 @@ stay fail-closed (D-161); the successor passes every gate anew at its own t0,
 including the census (D-181); the refusal that ends a span ends it (no waiting
 inside a refused span beyond the bind window the plan itself seals); no
 frequency bound is added (every bound must be scientific, D-181).
+
+### Addendum (2026-09-23) — a chain abort on `non_observer_process_busy` with too few envelopes captured licenses one successor
+
+**Status:** ratified by Ed by email, 2026-09-23 01:06 PDT, Gmail message
+`1a0cd4d699a90f29` in thread `1a0ccfe8cb5c59ee`, verbatim: "Yes, whatever you
+recommend that gets me towards paper safe data asap". The email quoted the rule
+below back to him in full before that reply (writing "≥ 60 s" as "at least 60 s"). Durable copy:
+`docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md`
+section 1 row 1. Text source: cold-gate ruling 10 of QPE01-DAEMON-CONTAMINATION-01,
+`docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/10-coldgate-fable-ruling.md`
+section 3 (the paragraph "REJECT the 'zero-capture class' label"), which proposed
+it for Ed's ratification because enacting it lay outside the gate's authority.
+The original D-182 text above is unchanged; nothing is installed by this entry.
+
+**The rule (ruling 10's text, ratified):**
+
+> A chain abort on `non_observer_process_busy` with fewer than `minimum_retained`
+> envelopes captured licenses one new-plan successor on the same terms as a
+> zero-capture refusal (new plan id, fresh notice, ≥ 60 s spacing, bounded by
+> install close, every NO stops); the captured envelopes stay in the archive
+> under the Q1 label.
+
+**Why D-182 alone did not cover it.** D-182 licenses a successor only when
+*nothing* was captured (no capture writer ran). This abort happens *after*
+capture: by the time it fires, at least two power captures have run. Ruling 10
+therefore refused to call it a zero-capture refusal and asked Ed for this
+separate licence; without it the abort ended the span with no successor.
+
+**Terms, so the rule can be applied without this session's context.**
+
+- An *envelope* is one 600 s capture window of the idle-variance pilot night
+  (the night that measures how much the idle machine's energy varies from window
+  to window). Registration v3
+  (`configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json`,
+  landing with lane QPE01-NONOBSERVER-PREDICATE-01) schedules twelve of them,
+  620 s apart, after a 600 s settle.
+- An *observer* process is one the night's own measurement chain started: the
+  load recorder marks every descendant of the chain's root process (collector,
+  `sudo`, `powermetrics`, `top`, census, recorder) as `observer: true`. Every
+  other process is *non-observer*.
+- The *per-envelope non-observer integral rule* of registration v3: for each
+  envelope and each non-observer process, add up busy cores × sample length over
+  the 30 s load samples that fall inside the envelope; 30 core-seconds or more
+  (0.05 core held for the whole 600 s) excludes that envelope with reason
+  `non_observer_process_busy`. A *chain abort on `non_observer_process_busy`*
+  is what the registration's `abort_after_consecutive: 2` makes of two such
+  exclusions in a row: the chain stops and writes a typed refusal naming the
+  process. The earliest possible abort is after envelope 2, about 31 min after
+  t0 (the planned start instant): 600 s settle + 2 × 620 s.
+- `minimum_retained` is the registration field giving the fewest envelopes a
+  pilot must keep for its summary to count; it is **8** in v3 (and in v1 and v2).
+  *Envelopes captured* counts every envelope whose power capture ran before the
+  abort, whether or not it was later excluded.
+- *The same terms as a zero-capture refusal* means the full D-182 list above:
+  the courier (the process that delivers the night's result) has delivered
+  (`courier.sent` exists for the aborted plan); the successor has its own new plan
+  id and digest and its own fresh notice email (the standing no-objection window
+  applies); it is armed no sooner than 60 s after the aborted plan's terminal
+  write and only while the successor's own `install_close_epoch` lies ahead; the
+  aborted plan is never re-armed; a NO on any notice thread stops it. *One*
+  successor: the licence is spent once used.
+- *The captured envelopes stay in the archive under the Q1 label* means they are
+  neither deleted nor voided: they are kept byte-exact, reported as measured,
+  and carry the standing ruling 10 Q1 gave night `qpe01-pilot-n1-20260922-2100`,
+  "AFFIRM (c)": recorded as registered, labelled as measured on a non-idle
+  machine, not used to size block two (the planned second block, an
+  idle-load-idle bracket at levels of 0 and 0.05 busy cores), and reported side
+  by side with the re-run. Ruling 10's label text for that night, verbatim:
+
+  > MEASURED ON A NON-IDLE MACHINE. All twelve envelopes were captured while the system daemon `fseventsd` (pid 341) held 0.998–1.000 busy cores in 243 of 243 load-journal samples that carried metrics (2 of 245 rows carried none), in a `scan_old` failure loop logged from 04:49:03 PDT on 2026-09-22, 16 h before t0; `mediaanalysisd` additionally ran at 1.3–1.8 busy cores in ten consecutive 30 s samples and 0.9 in an eleventh (t+243 s to t+547 s of envelope 1). The registered rules (registration v2, sha256 2c539240…) name no exclusion for non-observer processes, so every envelope is retained and the registered summary is reported as computed. This night is NOT used to size block two; the pilot is re-run under registration v3, which adds the non-observer-process rule fixed before that night runs. Both nights are reported side by side.
+
+  That label names one night's processes and numbers; how those facts are
+  restated for a later aborted night is not ruled here (seat report
+  `docs/process_traces/2026-09-23-activation-7a0f14bd/01-d182-addendum-and-lanes-seat-report.md`).
+
+**Worked example.** A v3 pilot night starts while a system daemon holds a full
+core. Envelope 1 accumulates about 600 core-seconds for that daemon (the
+2026-09-22 21:00 night measured 575–606), far above 30, so it is excluded;
+envelope 2 is excluded the same way; the chain aborts about 31 min after t0 with
+2 envelopes captured. 2 < 8, so one new-plan successor is licensed on D-182's
+terms. Counter-case: envelopes 1–8 are clean, 9 and 10 are excluded, the chain
+aborts with 10 captured; 10 ≥ 8, so no successor, and the span ends as before.
+A second abort, in the successor itself, licenses nothing further.
+
+**What this does not change.** Physics, evidence and pre-registration refusals
+stay fail-closed (D-161); the successor passes every gate anew at its own t0,
+including the census and the 0.5-busy-core non-observer predicate; no frequency
+bound is added (D-181). This addendum names no other abort or exclusion reason.
+
+**Implementation lane:** QPE01-ABORT-SUCCESSOR-01 (kernel rank 270), blocked
+until the registration v3 branch `feat/2026-09-23-qpe01-registration-v3-nonobserver`
+merges.
 
 ## D-183: No artificial owner stops — an agent satisfies any precondition it can satisfy itself (Ed, 2026-09-21)
 

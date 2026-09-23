@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "codex": {
-      "command": "codex",
+      "command": "npx",
       "args": [
+        "-y",
+        "@openai/codex@0.153.3",
         "mcp-server",
         "-c",
         "model=\"gpt-5.6-sol\"",

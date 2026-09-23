@@ -2947,6 +2947,37 @@
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
       "stop_card": null
     },
+    "FSEVENTSD-CORECAPTURED-PREDICATE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md section 2 (root cause, the 01:41 toggle cure, the passwordless kill route, the lane text)",
+          "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/10-coldgate-fable-ruling.md section 1 (the scan_old loop from 04:49:03 PDT 2026-09-22)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FSEVENTSD-CORECAPTURED-PREDICATE-01/acceptance",
+          "label": "FSEVENTSD-CORECAPTURED-PREDICATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Regressions at the production call sites (the arm check and night_gate's t0 machine predicate), each failing before the change: a fixture log with 5 corecaptured spawn lines in the last 10 min triggers the single Wi-Fi toggle path, then the re-sample; a fixture with 0 spawn lines does not toggle; a condition that persists after the toggle and the 3 min wait refuses with night_refused_not_quiet naming the process; the toggle runs at most once per check; the exact spawn-line text is pinned from a real /usr/bin/log capture, not from the record's abbreviation; lands under the twelve-row gate."
+      },
+      "authority": {
+        "anchor": "2-fseventsd-runaway--root-cause-and-cures-bench-verified",
+        "label": "2026-09-23 interactive session 7ec32e8b, owner session record section 2 (Ed at the machine; registration by the magistrate, not a ruling)",
+        "path": "docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "On 2026-09-22 the file-system event daemon fseventsd sat at one full busy core for about 20 h and contaminated a whole pilot night. Root cause, bench-verified at 01:41 PDT 2026-09-23: launchd respawned corecaptured (the Wi-Fi log-capture helper) about every 95 s for a stuck Wi-Fi capture session, and each spawn made fseventsd replay and abandon its event history (13 corecaptured spawns against 14 scan_old log lines in 30 min). Add to the arm check and the t0 predicate (the admission check at the planned start instant): count the unified-log lines in which launchd reports spawning corecaptured over the last 10 min (read with /usr/bin/log show; the zsh builtin log shadows it). If more than 2, toggle Wi-Fi once with networksetup (bench cure: networksetup -setairportpower en0 off; sleep 8; networksetup -setairportpower en0 on), wait at least 3 min, re-sample fseventsd's busy cores and the spawn count, and only if the condition persists refuse with night_refused_not_quiet naming the process. Fallback if the toggle does not clear it: the passwordless kill route Ed installed, sudo -n /usr/local/sbin/joulewise-restart-fseventsd (runs pkill -x fseventsd; launchd respawns it).",
+      "id": "FSEVENTSD-CORECAPTURED-PREDICATE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 271,
+      "status": "queued",
+      "status_note": "2026-09-23: registered by activation 7a0f14bd from the owner session record of interactive session 7ec32e8b (registration, not a ruling).",
+      "stop_card": null
+    },
     "G2A-FIRST-WINDOW-01": {
       "acceptance": {
         "evidence": [
@@ -4459,11 +4490,15 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "anchor": "1-eds-rulings-verbatim-where-quoted",
+            "label": "Ed's ruling, interactive session 7ec32e8b 01:37 PDT 2026-09-23, section 1 row 4",
+            "path": "docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md"
+          },
           "kind": "external",
           "required": "Ed chooses the destination for raw night evidence files above GitHub's 100 MB limit (Git LFS, exclusion of raw plists from the results branch, or another store)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "ED-NIGHT-RESULTS-DESTINATION"
         }
@@ -4476,8 +4511,8 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 268,
-      "status": "blocked",
-      "status_note": "2026-09-22: registered by activation 22666c9f; BLOCKED on Ed's choice of destination (ED-EXTERNAL decision, agent implementation). The evidence bytes are intact in the custody root and the harvest archive; nothing is lost.",
+      "status": "queued",
+      "status_note": "2026-09-22: registered by activation 22666c9f; BLOCKED on Ed's choice of destination (ED-EXTERNAL decision, agent implementation). The evidence bytes are intact in the custody root and the harvest archive; nothing is lost. 2026-09-23 (activation 7a0f14bd): UNBLOCKED by Ed's ruling in interactive session 7ec32e8b at 01:37 PDT (\"agree to your rec on both answers pending\", owner session record section 1 row 4): the raw powermetrics plists are EXCLUDED from the results branch; the reduced per-envelope records stay on it; the raw plists are offloaded to iCloud after each harvest; the driver checks file sizes before its push.",
       "stop_card": null
     },
     "NIGHT-STALL-WALLCLOCK-ABORT-01": {
@@ -6070,6 +6105,49 @@
       "rank": 147,
       "status": "blocked",
       "status_note": "The default composed-member-envelope mean rule may be implemented now. The t95 plus window variant remains proposed and cannot govern _v5 collection until this cold gate rules it.",
+      "stop_card": null
+    },
+    "QPE01-ABORT-SUCCESSOR-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/decision_log.md D-182 Addendum (2026-09-23) (rule text, terms, worked example)",
+          "docs/process_traces/2026-09-22-activation-a022aecc/03-coldgate-packet-daemon-contamination/10-coldgate-fable-ruling.md section 3 (abort count, proposed addendum) and section 2 (Q1 label)",
+          "docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md section 1 row 1 (Ed's ratification, verbatim)",
+          "joulewise/arm_retry.py zero_capture_successor_allowed and successor_arm_allowed (the existing D-182 route)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QPE01-ABORT-SUCCESSOR-01/acceptance",
+          "label": "QPE01-ABORT-SUCCESSOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Regressions at the production call sites (the evidence executor's abort path and the successor eligibility check in joulewise/arm_retry.py), each failing before the change: (1) an abort on non_observer_process_busy after 2 captured envelopes, courier delivered, licenses exactly one new-plan successor; (2) an abort after minimum_retained (8) or more captured envelopes licenses none; (3) a second non_observer_process_busy abort (in the successor) licenses no second successor; (4) an observed NO on any notice thread stops the successor; (5) the aborted plan's captured envelopes remain in the archive and its harvest record carries the Q1 label; the existing D-182 zero-capture regressions and every physics/evidence refusal stay unchanged (fail-closed, no successor); the stale no-successor sentence for non_observer_process_busy in joulewise/arm_retry.py and docs/process/NIGHT_HANDBACK.md is replaced; lands under the twelve-row gate."
+      },
+      "authority": {
+        "anchor": "addendum-2026-09-23--a-chain-abort-on-non_observer_process_busy-with-too-few-envelopes-captured-licenses-one-successor",
+        "label": "D-182 addendum (2026-09-23), ratified by Ed by email, Gmail message 1a0cd4d699a90f29",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the pull request for branch feat/2026-09-23-qpe01-registration-v3-nonobserver (lane QPE01-NONOBSERVER-PREDICATE-01: registration v3, the non_observer_process_busy exclusion and its two-in-a-row abort) merges to main",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "QPE01-REGISTRATION-V3-MERGED"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Implement the D-182 addendum ratified by Ed on 2026-09-23. Under registration v3 of the idle-variance pilot night (configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json), an envelope (one 600 s capture window; twelve per night) is excluded with reason non_observer_process_busy when one process not started by the night's own measurement chain adds up to 30 or more busy-core-seconds inside it, and two such exclusions in a row abort the chain with a typed refusal. Today that abort ends the span with no successor (the v3 branch's joulewise/arm_retry.py says so in its non_observer_process_busy entry), because D-182's successor route requires that nothing was captured. Make an abort on non_observer_process_busy with fewer than minimum_retained envelopes captured (minimum_retained is the registration field, 8 in v3; captured counts every envelope whose power capture ran, excluded or not) produce exactly ONE new-plan successor through the existing zero-capture successor route (zero_capture_successor_allowed and successor_arm_allowed in joulewise/arm_retry.py, and the successor procedure in docs/process/NIGHT_HANDBACK.md) on D-182's terms: courier delivered (courier.sent), new plan id and digest, fresh notice, at least 60 s after the aborted plan's terminal write, before the successor's own install close, the aborted plan never re-armed, every observed NO stops. The captured envelopes are kept byte-exact in the archive under cold-gate ruling 10's Q1 label (measured on a non-idle machine, not used to size block two).",
+      "id": "QPE01-ABORT-SUCCESSOR-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 270,
+      "status": "blocked",
+      "status_note": "2026-09-23: registered by activation 7a0f14bd (registration, not a ruling). Priority p1 and rank just after the v3 lane QPE01-NONOBSERVER-PREDICATE-01, which is not itself a kernel task (its priority p1 comes from synthesis 15 of the same cold gate). BLOCKED only until the v3 branch merges.",
       "stop_card": null
     },
     "QPE01-CLOCK-DISCIPLINE-ANCHOR-01": {
