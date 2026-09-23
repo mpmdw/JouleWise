@@ -48,6 +48,32 @@ USAGE
     python3 -B scripts/bench_replay_start_drift.py --archive <harvest root> \\
         --expect-sha <merge sha> --artifact <path>.md --raw <path>.json
 
+THE RULED ADMISSIBILITY RULE.  Cold gate #3 ruling 21 (2026-09-22,
+``docs/process_traces/2026-09-22-activation-59857fe5/08-coldgate-packet-a267-merge-transaction/21-coldgate-fable-replay-verdict-ruling.md``)
+settled what this driver may fail a replay for, and replaced the lead's own
+convention -- written into record 16 before any full replay existed, and known
+in that record as "X2" -- that EVERY slot come back ``anchor_status:
+"bounded"`` with ``interior_complete_support``.  X2 is unsatisfiable by a
+faithful replay: the archived night of 2026-09-22 left five of its twelve
+envelopes unresolved, so a replay resolving all twelve would be evidence of a
+recorder NOT reproducing the archive.  The ruled rule, implemented in
+``verdict()`` and quoted verbatim into every artifact as
+``RULED_ADMISSIBILITY_TEXT``, is six clauses: (1) twelve of twelve slots
+recorded at the merged head; (2) every slot ``collector_exit == 0``,
+``cleanup_proven``, an attestation that ran; (3) every CHAIN-level
+``start_drift_s`` at or under 0.5 s, with ``max <= 0.5 s`` stated; (4) the
+fidelity table against the archived v3.1 class printed with its tally, and no
+slot resolving where the archive did not -- one such ADMITTING-direction slot
+VOIDS the run, while a slot REFUSING what the archive resolved is admissible
+and merely reported; (5) a floor of at least one slot ``bounded`` with
+complete interior support, which is what X2 was actually for (proof the
+finalisation tail ran at this head); (6) the worst measured ``tail_s`` plus
+the archive's worst SKIPPED tail (2.3 s) still inside the inter-slot gap.
+The session-level figure is reported per slot and assessed only against the
+night's ruled 2 s rule; ruling 21 Q1 held the 0.5 s bar to be chain-level
+only, so ``SESSION_BAR_S`` is 2.0 s here and a chain pass with a session
+figure over 2 s is still the ESCALATE status.
+
 ``--smoke`` runs a scaled protocol copy (envelope 60 s, pitch 80 s, settle 5 s,
 three slots, ~5 min) to prove the plumbing -- writer cadence, anchor status,
 the attestation running in the gap, every fail-closed marker -- and stamps
@@ -86,11 +112,17 @@ SCHEMA = "joulewise.bench_replay_start_drift.v1"
 # in-chain abort threshold -- the two bars are sequential, not alternatives,
 # and comparing against 2 s here would pass a bench the ruling fails (R7).
 START_DRIFT_BAR_S = 0.5
-# A269 ruling 10 A1: the session-level figure runs ~0.12-0.16 s above the
-# chain-level one, and it is the figure R6's own precondition sentence names.
-# A chain-level pass with a session-level figure over the bar is ESCALATED to
-# the magistrate, never quietly passed.
-SESSION_BAR_S = 0.5
+# The session-level figure is REPORTED per slot and assessed only against the
+# night's own 2 s rule (A269 ruling 10 amendment A1) -- the only ruled
+# session-level bar in the lane.  Cold ruling 21 Q1 held that the 0.5 s bench
+# bar binds the CHAIN-level figure and nothing else, and that the 0.5 s
+# session bar this constant used to carry was a lead convention (known in
+# record 16 as "X1"), not a ruled bar: on the executed 2026-09-22 replay it
+# would have exited ESCALATE rc 3 on slot 1's 0.608 s, a figure that clears
+# the ruled 2 s rule with 1.39 s of margin.  A chain-level pass with a
+# session-level figure over the NIGHT's 2 s rule remains a third status,
+# ESCALATED to the magistrate and never quietly passed.
+SESSION_BAR_S = 2.0
 BENCH_ROOT = Path.home() / "night-bench"
 CUSTODY_ROOT_FORBIDDEN = Path.home() / "night-custody"
 PLAN_ID_PREFIX = "bench-replay-"
@@ -288,21 +320,33 @@ def slot_rows(night_dir, protocol):
     return out
 
 
-# The slot fields a verdict is allowed to be taken over, and the value each
-# must hold (execution lens 17b B2).  The bench exists to time the
-# inter-slot TAIL -- collector exit, plist parse, anchor derivation, group
-# teardown, interior reduction -- so a slot whose tail did not actually run
-# is not a measurement of it, however small its drift figure looks.  In the
-# lens's live smoke all three slots came back `anchor_status: "unknown"`
-# (`clock_fit_span_insufficient`) with `interior_complete_support: False`:
-# `align_frames` returned nothing, the expensive part of the tail never ran,
-# and the bench returned PASS anyway.
-ADMISSIBLE_SLOT = (("collector_exit", 0), ("cleanup_proven", True),
-                   ("anchor_status", "bounded"), ("interior_complete_support", True))
+# The PER-SLOT fields a verdict is allowed to be taken over, and the value
+# each must hold (execution lens 17b B2, as amended by cold ruling 21 Q2).
+# The bench exists to time the inter-slot TAIL -- collector exit, plist
+# parse, anchor derivation, group teardown, interior reduction -- so a slot
+# whose tail did not actually run is not a measurement of it, however small
+# its drift figure looks.  In the lens's live smoke all three slots came
+# back `anchor_status: "unknown"` (`clock_fit_span_insufficient`) with
+# `interior_complete_support: False`: `align_frames` returned nothing, the
+# expensive part of the tail never ran, and the bench returned PASS anyway.
+# That lens's cure demanded `anchor_status == "bounded"` and
+# `interior_complete_support` on EVERY slot -- the lead's convention "X2".
+# Ruling 21 Q2 REMOVED both from this tuple: the archived night itself left
+# five of twelve envelopes unresolved, so X2 fails a faithful replay by
+# construction.  What X2 was for is now carried by two RUN-level rules
+# instead -- archived-class fidelity (rule 4, `fidelity()`) and the
+# bounded-with-interior floor (rule 5, at least one slot) -- both of which a
+# tail that never ran anywhere still fails.
+ADMISSIBLE_SLOT = (("collector_exit", 0), ("cleanup_proven", True))
 # A 60 s smoke envelope is too short for the clock fit the anchor needs, so
 # the anchor and the interior reduction that depends on it CANNOT resolve
-# there.  Those two fields are therefore not admissible input under
-# `--smoke`, and the smoke's own artifact says so.  Nothing else is exempt.
+# there.  These two fields are therefore not admissible input under
+# `--smoke`: they no longer sit in `ADMISSIBLE_SLOT`, so what the exemption
+# now switches off is the pair of ruled rules taken over them -- (4) the
+# archived-class fidelity comparison and (5) the bounded-with-interior floor.
+# The smoke's own artifact says so. Nothing else is exempt: rules (1), (2),
+# (3) and (6), and the attestation states below, bind a smoke as they bind a
+# full run.
 SMOKE_EXEMPT_FIELDS = ("anchor_status", "interior_complete_support")
 # The attestation states a BENCH slot may hold (execution lens 17b S3).  The
 # bench never turns network time off -- the `systemsetup` stub toggles
@@ -318,20 +362,141 @@ BENCH_ATTESTATION_STATES = ("authenticated", "slew_attested")
 # to one line; the statement is read in the artifact's headline and in a
 # terminal, and the first defective slots are what a reader acts on.
 DEFECT_SLOT_CLAUSE_CAP = 3
+# The archived night's OWN v3.1 forward projection over its twelve envelopes,
+# executed at 447fd6bf and recorded at
+# `docs/process_traces/2026-09-22-activation-e4b4ead6/01-launch-and-resume-record.md:29`
+# (A269 record 01 step 10): "v3.1 forward projection over the twelve fixtures
+# at 447fd6bf: bounded {02, 05, 06, 08, 09, 11, 12}".  The other five are
+# unresolved for reasons that belong to the archived capture and not to any
+# replay of it: 01/03/04/10 `affine_clock_fit_empty` (a real slew inside the
+# capture) and 07 the 15 ms backstop.  A FAITHFUL replay reproduces these
+# CLASSES; the `anchor_detail` string may legitimately differ, because the
+# replay's clock relation is the archived labels against live pacing, so only
+# the two-way class (bounded vs anything else) is compared.  The mapping is a
+# CONSTANT here and is never read from the run it judges.
+ARCHIVED_V31_BOUNDED = frozenset({2, 5, 6, 8, 9, 11, 12})
+# The archived night's worst SKIPPED tail: the largest end-postparse cost any
+# one of its envelopes spent on the derive/integrate/reduce work that a
+# REFUSING-direction slot does not do (A269 exhibit C, `end-postparse` min
+# 0.011 s / max 2.291 s), rounded up as ruling 21 rule (6) states it.  A
+# refusing slot's tail is SHORTER than the archive's by at most this much, so
+# adding it to the worst measured tail bounds what a fully-resolving replay
+# could have cost, and that bound must still fit the inter-slot gap.
+WORST_SKIPPED_TAIL_S = 2.3
+# The exact admissibility text ruling 21 Q2 requires every artifact of this
+# driver to carry, quoted verbatim from that ruling's "Admissibility rule"
+# block.  Its closing sentence there ("Driver output: status FAIL, statement
+# quoted verbatim above, retained as issued") named artifact 24's own
+# pre-amendment output and is not part of the rule, so it is not reproduced;
+# the driver's status and statement are printed by `markdown()` regardless.
+RULED_ADMISSIBILITY_TEXT = (
+    "Admissibility (cold ruling 21, 2026-09-22). This artifact meets ruling 10 \u00a7Q7 / P7.1 "
+    "when ALL hold: (1) 12 of 12 slots recorded at the merged head; (2) every slot "
+    "`collector_exit == 0`, `cleanup_proven == True`, `attestation_state \u2208 {authenticated, "
+    "slew_attested}`; (3) every chain-level `start_drift_s` \u2264 0.5 s, and `max \u2264 0.5 s` is "
+    "stated; (4) the fidelity table against the archived v3.1 class {02,05,06,08,09,11,12} "
+    "is printed with its tally; no slot resolves (`bounded`) where the archive did not \u2014 "
+    "one such slot VOIDS the run; slots refusing where the archive resolved are "
+    "admissible; (5) at least one slot is `bounded` with `interior_complete_support == "
+    "True`; (6) max `tail_s` + 2.3 s (F8 worst skipped tail) < the 20 s gap, stated with "
+    "the figures. Session-level `start_drift_s` is reported per slot and assessed only "
+    "against the night's 2 s rule (A269 A1); the driver's 0.5 s session bar and its "
+    "`bounded`-on-every-slot requirement are lead conventions, not ruled bars.")
+
+
+def fidelity(rows, archived_bounded=ARCHIVED_V31_BOUNDED):
+    """Ruled rule (4): each slot's replayed anchor CLASS against the archived one.
+
+    Pure: it reads the rows and the constant and nothing else.  Every slot
+    lands in one of three directions.  `match` -- the replay resolved what the
+    archive resolved, or refused what it refused.  `refusing` -- the replay
+    left UNRESOLVED an envelope the archive resolved; admissible, because that
+    slot did LESS tail work than the archive did, bounded by
+    `WORST_SKIPPED_TAIL_S`, and the drift figure is empirically independent of
+    the anchor class.  `admitting` -- the replay RESOLVED an envelope the
+    archive did not; that is a recorder producing a result the archive lacks,
+    which is infidelity, and one such slot voids the run.
+    """
+
+    table = []
+    for row in rows:
+        index = row.get("index")
+        replayed = "bounded" if row.get("anchor_status") == "bounded" else "unresolved"
+        archived = "bounded" if index in archived_bounded else "unresolved"
+        if replayed == archived:
+            direction = "match"
+        elif replayed == "bounded":
+            direction = "admitting"
+        else:
+            direction = "refusing"
+        table.append({"index": index, "anchor_status": row.get("anchor_status"),
+                      "anchor_detail": row.get("anchor_detail"),
+                      "replay_class": replayed, "archived_class": archived,
+                      "direction": direction})
+    admitting = sorted(entry["index"] for entry in table if entry["direction"] == "admitting")
+    refusing = sorted(entry["index"] for entry in table if entry["direction"] == "refusing")
+    matched = [entry["index"] for entry in table if entry["direction"] == "match"]
+    return {"table": table, "slots": len(table), "matched": len(matched),
+            "admitting": admitting, "refusing": refusing,
+            "archived_bounded": sorted(archived_bounded),
+            "tally": (f"{len(matched)}/{len(table)} match; admitting-direction {len(admitting)}; "
+                      f"refusing-direction {len(refusing)}")}
+
+
+def tail_budget(rows, protocol, worst_skipped_tail_s=WORST_SKIPPED_TAIL_S):
+    """Ruled rule (6): the worst measured tail plus the worst skipped one, against the gap.
+
+    The gap is the protocol's own `slot_pitch_s - envelope_s` (20 s in the
+    full protocol), and it is the quantity the bar is about: spawn instants
+    are absolute, so a slot's `start_drift_s` is exactly how far its
+    predecessor's finalisation tail overran that gap.  A protocol that states
+    neither figure leaves the rule unassessable, which is a FAIL and not a
+    skip -- `fits` is False and the statement says why.
+    """
+
+    tails = [row["tail_s"] for row in rows if row.get("tail_s") is not None]
+    pitch, envelope = protocol.get("slot_pitch_s"), protocol.get("envelope_s")
+    gap_s = None if pitch is None or envelope is None else pitch - envelope
+    max_tail_s = max(tails) if tails else None
+    budget_s = None if max_tail_s is None else max_tail_s + worst_skipped_tail_s
+    fits = budget_s is not None and gap_s is not None and budget_s < gap_s
+    if gap_s is None:
+        statement = ("the protocol states no `slot_pitch_s`/`envelope_s`, so the inter-slot gap "
+                     "the tail must fit is unknown and the budget cannot be taken")
+    elif max_tail_s is None:
+        statement = f"no slot recorded a `tail_s`, so nothing is budgeted against the {gap_s} s gap"
+    else:
+        statement = (f"max tail_s {max_tail_s:.3f} s + {worst_skipped_tail_s} s worst skipped tail "
+                     f"= {budget_s:.3f} s {'<' if fits else '>='} the {gap_s} s inter-slot gap")
+    return {"max_tail_s": max_tail_s, "worst_skipped_tail_s": worst_skipped_tail_s,
+            "budget_s": budget_s, "gap_s": gap_s, "fits": fits, "statement": statement}
 
 
 def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BAR_S,
-            smoke=False):
-    """PASS only when EVERY slot is admissible and its chain drift is at or under the bar.
+            archived_bounded=ARCHIVED_V31_BOUNDED,
+            worst_skipped_tail_s=WORST_SKIPPED_TAIL_S, smoke=False):
+    """PASS only when the six clauses of `RULED_ADMISSIBILITY_TEXT` all hold.
 
-    Four failure shapes are distinguished, because they mean different
-    things: a slot whose finalisation tail did not run (`ADMISSIBLE_SLOT`;
-    its drift figure is not a measurement of the thing the bar is about); a
-    slot over the bar (the tail still does not fit the gap); a slot that
-    produced no chain-level figure at all (the journal is incomplete, so the
-    bar is not evidenced); and a chain-level pass whose session-level figure
-    is over the bar, which A269 ruling 10 A1 makes an ESCALATION rather than
-    a pass or a fail.
+    Cold ruling 21 Q2 is the authority for every clause below
+    (`docs/process_traces/2026-09-22-activation-59857fe5/08-coldgate-packet-a267-merge-transaction/21-coldgate-fable-replay-verdict-ruling.md`).
+    Six failure shapes are distinguished, because they mean different things:
+    a journal short of the registered slot count or missing a chain figure
+    (rule 1: the bar is not evidenced); a slot whose collector did not exit
+    cleanly, whose groups were not proven torn down, or whose attestation did
+    not run (rule 2, `ADMISSIBLE_SLOT` plus `BENCH_ATTESTATION_STATES`); a
+    slot over the chain-level bar (rule 3: the tail still does not fit the
+    gap); a slot that RESOLVED an anchor the archive left unresolved (rule 4,
+    ADMITTING direction: recorder infidelity, and it voids the run); no slot
+    at all `bounded` with complete interior support (rule 5: nothing proves
+    the finalisation tail ran at this head); and a worst-tail-plus-worst-skip
+    budget that does not fit the inter-slot gap (rule 6).  A chain-level pass
+    whose SESSION-level figure is over the night's 2 s rule is neither a pass
+    nor a fail but the third status, ESCALATE (A269 ruling 10 A1, affirmed as
+    the only ruled session bar by ruling 21 Q1).
+
+    Under `--smoke` a 60 s envelope cannot resolve an anchor at all, so rules
+    (4) and (5) are not applied and the artifact says so; nothing else is
+    exempt.
     """
 
     chain = [r["chain_start_drift_s"] for r in rows if r["chain_start_drift_s"] is not None]
@@ -342,11 +507,9 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
                   if r["chain_start_drift_s"] is not None and r["chain_start_drift_s"] > bar_s)
     session_over = sorted(r["index"] for r in rows
                           if r["session_start_drift_s"] is not None and r["session_start_drift_s"] > session_bar_s)
-    required = [(field, value) for field, value in ADMISSIBLE_SLOT
-                if not (smoke and field in SMOKE_EXEMPT_FIELDS)]
     defects = []
     for r in rows:
-        for field, value in required:
+        for field, value in ADMISSIBLE_SLOT:
             if r.get(field) != value:
                 defects.append({"index": r["index"], "field": field,
                                 "value": r.get(field), "required": value})
@@ -354,8 +517,27 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
             defects.append({"index": r["index"], "field": "attestation_state",
                             "value": r.get("attestation_state"),
                             "required": " or ".join(BENCH_ATTESTATION_STATES)})
+    # Rules (4) and (5): run-level, computed over every row, and not applied
+    # to a smoke because its envelope cannot produce the anchor they read.
+    fidelity_table = fidelity(rows, archived_bounded)
+    floor_slots = sorted(r["index"] for r in rows
+                         if r.get("anchor_status") == "bounded"
+                         and r.get("interior_complete_support") is True)
+    admitting = [] if smoke else list(fidelity_table["admitting"])
+    refusing = [] if smoke else list(fidelity_table["refusing"])
+    floor_met = True if smoke else bool(floor_slots)
+    for index in admitting:
+        # An admitting-direction slot is recorded as a per-slot defect too, so
+        # it reaches `slot_defects`, the artifact table and the statement's
+        # clause list by the same route as every other defect.
+        defects.append({"index": index, "field": "anchor_status", "value": "bounded",
+                        "required": "not 'bounded' where the archived v3.1 class is unresolved "
+                                    "(an ADMITTING-direction mismatch VOIDS the run)"})
+    # Rule (6): always assessed, including under `--smoke`, because the gap is
+    # a property of the protocol that ran and both protocols state one.
+    budget = tail_budget(rows, protocol, worst_skipped_tail_s)
     complete = len(rows) == expected and not missing
-    if defects or not complete or over:
+    if defects or not complete or over or not floor_met or not budget["fits"]:
         status = "FAIL"
     elif session_over:
         # A THIRD status, neither PASS nor FAIL (execution lens 17b B1).  The
@@ -364,55 +546,85 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
         # lens's own live smoke produced exactly that: chain max 0.479 s
         # under the bar, session max 0.734 s over it, exit 0.  The full run
         # is launched detached and unattended, so a reader of the exit code
-        # and the headline would have proceeded to arm on a split.
+        # and the headline would have proceeded to arm on a split.  The bar
+        # it splits against is now the night's ruled 2 s rule, not the 0.5 s
+        # lead convention ruling 21 Q1 struck out.
         status = "ESCALATE"
     else:
         status = "PASS"
     escalate = status == "ESCALATE"
     # The SPLIT -- a chain figure at or under its bar beside a session figure
-    # over its own -- reported independently of `status` (delta execution lens
-    # SHOULD-FIX 2).  `escalate_chain_pass_session_fail` is by construction
-    # `status == "ESCALATE"`, so a run that is over the session bar AND has an
-    # inadmissible slot came back FAIL with that flag FALSE and a statement
-    # that never mentioned the session figure: a reader of `slot_defects` plus
-    # that boolean concluded the session-level figure had been fine.
-    # `session_bar_exceeded` is true whenever `session_slots_over_bar` is
-    # non-empty, whatever the status, and the statement says so too.
+    # over the night's rule -- reported independently of `status` (delta
+    # execution lens SHOULD-FIX 2).  `escalate_chain_pass_session_fail` is by
+    # construction `status == "ESCALATE"`, so a run that is over the session
+    # rule AND has an inadmissible slot came back FAIL with that flag FALSE
+    # and a statement that never mentioned the session figure: a reader of
+    # `slot_defects` plus that boolean concluded the session-level figure had
+    # been fine.  `session_bar_exceeded` is true whenever
+    # `session_slots_over_bar` is non-empty, whatever the status, and the
+    # statement says so too.
     session_bar_exceeded = bool(session_over)
     if status == "PASS" and chain:
         statement = (f"max(chain start_drift_s) = {max(chain):.3f} s <= {bar_s} s over "
                      f"{len(rows)}/{expected} slots")
+        if smoke:
+            statement += ("; anchor fidelity and the bounded-with-interior floor are NOT "
+                          "applied to a smoke (a 60 s envelope cannot resolve an anchor)")
+        else:
+            statement += (f"; anchor-class fidelity {fidelity_table['tally']}"
+                          f"; bounded with complete interior support on slots {floor_slots}")
+        statement += f"; {budget['statement']}"
+        if session:
+            statement += (f"; max(session start_drift_s) = {max(session):.3f} s <= "
+                          f"{session_bar_s} s, the night's rule")
     elif status == "ESCALATE":
         statement = (f"the chain-level bar is met ({max(chain):.3f} s <= {bar_s} s) but the "
-                     f"session-level figure is not (max {max(session):.3f} s > {session_bar_s} s "
-                     f"on slots {session_over}): a split verdict is ESCALATED to the "
-                     "magistrate, never passed")
+                     f"night's session-level rule is not (max {max(session):.3f} s > "
+                     f"{session_bar_s} s on slots {session_over}): a split verdict is "
+                     "ESCALATED to the magistrate, never passed")
     else:
         # A FAIL has a LEADING defect, and it is whichever one actually
         # happened (delta execution lens NIT 1).  An admissibility-only FAIL
         # -- every chain figure at or under the bar, the journal complete,
-        # one slot whose tail did not run -- used to open "max <= 0.5 s NOT
-        # shown: over=[] missing=[] recorded=12/12", which reports the bar as
-        # unmet when it was met and buries the defect that failed the run
-        # behind three empty fields.
+        # one slot whose collector did not exit -- used to open "max <= 0.5 s
+        # NOT shown: over=[] missing=[] recorded=12/12", which reports the bar
+        # as unmet when it was met and buries the defect that failed the run
+        # behind three empty fields.  The ruled rules (4), (5) and (6) join
+        # that ordering: each leads when it is the clause that fired.
         defect_slots = sorted({d["index"] for d in defects})
         clauses = [f"slot {d['index']} {d['field']}={d['value']!r} "
                    f"(required {d['required']!r})" for d in defects]
         if len(defect_slots) > DEFECT_SLOT_CLAUSE_CAP:
             clauses = (clauses[:DEFECT_SLOT_CLAUSE_CAP]
-                       + [f"… and {len(defects) - DEFECT_SLOT_CLAUSE_CAP} more"])
-        if defects and complete and not over and not missing:
-            statement = (f"{len(defect_slots)}/{len(rows)} slots NOT admissible, so their "
-                         f"drift figures are not a measurement of the finalisation tail: "
-                         + "; ".join(clauses)
-                         + (f"; the chain figures themselves are under the bar "
-                            f"(max {max(chain):.3f} s <= {bar_s} s)" if chain else ""))
-        else:
+                       + [f"\u2026 and {len(defects) - DEFECT_SLOT_CLAUSE_CAP} more"])
+        if not complete or missing or over:
             statement = (f"max <= {bar_s} s NOT shown: over={over} missing={missing} "
                          f"recorded={len(rows)}/{expected}"
                          + "".join(f"; {clause}" for clause in clauses))
+        else:
+            if admitting:
+                lead = (f"anchor fidelity VOIDS the run: slots {admitting} resolved "
+                        f"(anchor_status 'bounded') where the archived v3.1 class is "
+                        f"unresolved, which is an ADMITTING-direction mismatch \u2014 the recorder "
+                        f"produced a result the archive lacks; anchor-class fidelity "
+                        f"{fidelity_table['tally']}")
+            elif not floor_met:
+                lead = ("no slot is 'bounded' with complete interior support, so nothing here "
+                        "proves the finalisation tail the bench exists to time ran at this head; "
+                        f"anchor-class fidelity {fidelity_table['tally']}")
+            elif not budget["fits"]:
+                lead = f"the skipped-tail budget does not fit the inter-slot gap: {budget['statement']}"
+            else:
+                lead = (f"{len(defect_slots)}/{len(rows)} slots NOT admissible, so their "
+                        f"drift figures are not a measurement of the finalisation tail: "
+                        + "; ".join(clauses))
+                clauses = []
+            statement = lead + "".join(f"; {clause}" for clause in clauses)
+            if chain:
+                statement += (f"; the chain figures themselves are under the bar "
+                              f"(max {max(chain):.3f} s <= {bar_s} s)")
         if session_bar_exceeded:
-            statement += (f"; the session-level bar is exceeded too (max "
+            statement += (f"; the night's session-level rule is exceeded too (max "
                           f"{max(session):.3f} s > {session_bar_s} s on slots {session_over})")
     return {"bar_s": bar_s, "session_bar_s": session_bar_s, "slots_expected": expected,
             "slots_recorded": len(rows), "slots_missing_chain_drift": missing,
@@ -420,6 +632,10 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
             "max_session_start_drift_s": max(session) if session else None,
             "slots_over_bar": over, "session_slots_over_bar": session_over,
             "slot_defects": defects, "smoke_exempt_fields": list(SMOKE_EXEMPT_FIELDS) if smoke else [],
+            "fidelity": fidelity_table, "fidelity_applied": not smoke,
+            "admitting_direction_slots": admitting, "refusing_direction_slots": refusing,
+            "bounded_interior_slots": floor_slots, "bounded_interior_floor_met": floor_met,
+            "tail_budget": budget, "ruled_admissibility": RULED_ADMISSIBILITY_TEXT,
             "status": status, "escalate_chain_pass_session_fail": escalate,
             "session_bar_exceeded": session_bar_exceeded, "statement": statement}
 
@@ -427,6 +643,9 @@ def verdict(rows, protocol, *, bar_s=START_DRIFT_BAR_S, session_bar_s=SESSION_BA
 def markdown(report):
     rows = report["slots"]
     v = report["verdict"]
+    fid = v.get("fidelity") or {"table": [], "tally": "n/a (no fidelity table computed)"}
+    budget = v.get("tail_budget") or {}
+    fidelity_applied = v.get("fidelity_applied", False)
     lines = [f"# Bench replay — chain-level `start_drift_s` ({report['kind']})", "",
              f"Schema `{report['schema']}`. Merged sha `{report['head']}`"
              f" (clean tree: {report['clean_tree']}).",
@@ -444,23 +663,37 @@ def markdown(report):
     lines += ["## Verdict", "",
               f"**{v['status']}** — {v['statement']}.",
               *(["", "`ESCALATE` is neither a pass nor a fail: the chain-level bar is met and "
-                 "the session-level figure is not, which A269 ruling 10 A1 sends to the "
-                 "magistrate. The process exits 3.", ""]
+                 "the session-level figure is over the night's own 2 s rule, which A269 ruling "
+                 "10 A1 sends to the magistrate. The process exits 3.", ""]
                 if v['status'] == "ESCALATE" else []),
               f"max(session `start_drift_s`) = {v['max_session_start_drift_s']} s "
-              f"(bar {v['session_bar_s']} s; over: {v['session_slots_over_bar'] or 'none'}).",
+              f"(assessed only against the night's {v['session_bar_s']} s rule, A269 ruling 10 "
+              f"A1; over it: {v['session_slots_over_bar'] or 'none'}).",
               f"Session bar exceeded (true whatever the status): "
               f"{v.get('session_bar_exceeded', bool(v['session_slots_over_bar']))}.",
               f"Chain-pass/session-fail split requiring escalation (this is "
               f"`status == ESCALATE`; a FAIL over the session bar reads False here "
               f"and True on the line above): {v['escalate_chain_pass_session_fail']}.",
-              f"Inadmissible slots (the finalisation tail did not run): "
+              f"Slot defects (ruling 21 rules (2) and (4)): "
               f"{v.get('slot_defects') or 'none'}.",
+              f"Anchor-class fidelity vs the archived v3.1 class (ruling 21 rule (4)): "
+              + (f"{fid['tally']}; admitting-direction slots "
+                 f"{v.get('admitting_direction_slots') or 'none'} (one voids the run), "
+                 f"refusing-direction slots {v.get('refusing_direction_slots') or 'none'} "
+                 f"(admissible, reported)."
+                 if fidelity_applied else
+                 "NOT APPLIED under `--smoke`."),
+              f"Bounded with complete interior support (ruling 21 rule (5), floor of at least "
+              f"one slot): "
+              + (f"slots {v.get('bounded_interior_slots') or 'none'}."
+                 if fidelity_applied else "NOT APPLIED under `--smoke`."),
+              f"Skipped-tail budget (ruling 21 rule (6)): {budget.get('statement', 'n/a')}.",
               *(["A 60 s smoke envelope is too short for the clock fit the anchor needs, so "
                  "`anchor_status` CANNOT resolve at this envelope length and the interior "
-                 "reduction that depends on it cannot run either. Those two fields are "
-                 "exempt from admission HERE and only here; the full run at 600 s admits no "
-                 "such slot."] if report["kind"] == "smoke" else []), "",
+                 "reduction that depends on it cannot run either. The two ruled rules taken "
+                 "over those fields \u2014 (4) archived-class fidelity and (5) the "
+                 "bounded-with-interior floor \u2014 are therefore not applied HERE and only "
+                 "here; the full run at 600 s applies both."] if report["kind"] == "smoke" else []), "",
               "## Per slot", "",
               "| slot | scheduled_mono_s | actual_mono_s | chain drift s | session drift s | "
               "collector exit | cleanup proven | cleanup wall s | attestation | attest wall s | "
@@ -474,6 +707,32 @@ def markdown(report):
                      f"{r['collector_exit']} | {r['cleanup_proven']} | {show(r['cleanup_wall_s'])} | "
                      f"{r['attestation_state']} | {show(r['network_time_attestation_wall_s'])} | "
                      f"{r['anchor_status']} | {show(r['tail_s'])} |")
+    if fidelity_applied:
+        lines += ["", "## Anchor fidelity vs the archived v3.1 class", "",
+                  "The archived night's own v3.1 forward projection over its twelve envelopes "
+                  "(bounded {02, 05, 06, 08, 09, 11, 12}; A269 record 01 step 10, executed at "
+                  "`447fd6bf`) is a CONSTANT in this driver and is never read from the run it "
+                  "judges. A slot REFUSING what the archive resolved did less tail work than "
+                  "the archive did and is admissible \u2014 reported, not a defect. A slot "
+                  "ADMITTING what the archive refused is a recorder producing a result the "
+                  "archive lacks, which is infidelity, and one such slot VOIDS the run.", "",
+                  "| slot | replay anchor_status | anchor_detail | archived class | direction |",
+                  "| --- | --- | --- | --- | --- |"]
+        for entry in fid["table"]:
+            lines.append(f"| {entry['index']} | {entry['anchor_status']} | "
+                         f"{entry['anchor_detail']} | {entry['archived_class']} | "
+                         f"{entry['direction']} |")
+        lines += ["", f"Tally: {fid['tally']}.",
+                  f"Skipped-tail budget: {budget.get('statement', 'n/a')}."]
+    lines += ["", "## Ruled admissibility (cold ruling 21, 2026-09-22)", "",
+              "> " + RULED_ADMISSIBILITY_TEXT, "",
+              "That ruling is "
+              "`docs/process_traces/2026-09-22-activation-59857fe5/08-coldgate-packet-a267-merge-transaction/"
+              "21-coldgate-fable-replay-verdict-ruling.md`. This driver implements clauses (1)-(6) "
+              "directly: the two lead conventions the ruling names \u2014 a 0.5 s session bar and "
+              "`anchor_status == \"bounded\"` on every slot \u2014 were removed from it by that "
+              "ruling's condition C3, and the session figure above is assessed only against the "
+              "night's 2 s rule."]
     lines += ["", "## Replay provenance (never evidence)", "",
               "| slot | recorder_kind | label shift | K s | frames | source plist sha256 | written stream sha256 |",
               "| --- | --- | --- | --- | --- | --- | --- |"]
