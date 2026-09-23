@@ -465,6 +465,26 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
 
     def test_zero_capture_successor_requires_delivery_and_no_start(self):
         result, receipt, delivery = self.evidence()
+        self.assertTrue(arm_retry.terminal_zero_capture_refusal(result, receipt).allowed)
+        no_c5 = copy.deepcopy(receipt)
+        no_c5['conditions'] = []
+        self.assertTrue(arm_retry.terminal_zero_capture_refusal(result, no_c5).allowed)
+        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, no_c5, delivery).allowed)
+        self.assertEqual(arm_retry.ZERO_CAPTURE_MACHINE_REFUSALS, {
+            "night_refused_not_quiet", "night_refused_agent_present",
+            "night_refused_hid_idle", "night_refused_boot_clock",
+            "night_refused_bind_expired",
+        })
+        for reason in ("night_refused_registration", "night_refused_class_unbuilt"):
+            changed_result = dict(result, aborted_reason=reason)
+            changed_receipt = copy.deepcopy(receipt)
+            changed_receipt["refusal"]["reason"] = reason
+            self.assertFalse(arm_retry.terminal_zero_capture_refusal(
+                changed_result, changed_receipt).allowed)
+        claimed = copy.deepcopy(receipt)
+        claimed["conditions"][0]["measured"]["capture_writer_ran"] = True
+        self.assertFalse(arm_retry.terminal_zero_capture_refusal(result, claimed).allowed)
+        self.assertFalse(arm_retry.zero_capture_successor_allowed(result, claimed, delivery).allowed)
         self.assertFalse(arm_retry.zero_capture_successor_allowed(result, receipt, {}).allowed)
         decision = arm_retry.zero_capture_successor_allowed(result, receipt, delivery)
         self.assertTrue(decision.allowed)
