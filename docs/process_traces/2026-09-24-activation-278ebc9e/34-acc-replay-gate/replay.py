@@ -86,18 +86,26 @@ def capture_record(label: str, archive: Path, slot: int) -> dict:
     intervals = load_intervals(trace_path)
     pulses = load_pulses(events_path)
     evidence = json.loads(evidence_path.read_text())
-    if evidence["protocol_id"] != detector.PROTOCOL_ID:
+    if evidence["protocol_id"] != "powermetrics_pulse_fiducial_v3":
         raise ValueError(f"unexpected recorded protocol: {capture}")
     recorded = [p["pulse_index"] for p in evidence["pulses"] if MISS in p["reasons"]]
     if len(evidence["pulses"]) not in (0, PULSES):
         raise ValueError(f"partial recorded fit set: {capture}")
+    fitted = (
+        evidence["clock_anchor_resolved"] is True
+        and len(evidence["pulses"]) == PULSES
+    )
     v3 = geometry_misses(intervals, pulses)
     # Counterfactual v4 keeps each archived command-on phase and extends its
     # observed on/off duration by exactly 1 s. The archive contains v3 frames;
     # their timing is the object of this geometry-only replay.
+    assert detector.PULSE_DURATION_S == 2.0
     v4 = geometry_misses(
         intervals,
-        [detector.CommandedPulse(p.on_s, p.off_s + 1.0) for p in pulses],
+        [
+            detector.CommandedPulse(p.on_s, p.off_s + (detector.PULSE_DURATION_S - 1.0))
+            for p in pulses
+        ],
     )
     return {
         "capture": f"{label}-d{slot:02d}",
@@ -111,10 +119,15 @@ def capture_record(label: str, archive: Path, slot: int) -> dict:
         "commanded_pulses": len(pulses),
         "recorded_fit_count": len(evidence["pulses"]),
         "recorded_capture_reasons": evidence["reasons"],
+        "fitted": fitted,
         "recorded_misses": recorded,
         "v3_replay_misses": v3,
         "v4_replay_misses": v4,
-        "v3_exact_match": recorded == v3,
+        "v3_comparison": (
+            ("exact_match" if recorded == v3 else "mismatch")
+            if fitted else "v3_comparison_undefined_unfitted"
+        ),
+        "v3_exact_match": recorded == v3 if fitted else None,
     }
 
 
@@ -127,7 +140,7 @@ def run() -> dict:
     if len(captures) != 24 or sum(c["commanded_pulses"] for c in captures) != 24 * PULSES:
         raise AssertionError("archive population is not 24 x 59")
     return {
-        "schema": "acceptance-25g83-r-acc-1b-replay/v1",
+        "schema": "acceptance-25g83-r-acc-1b-replay/v2",
         "rule": "production _fit_pulse interior filter, inset 0.25 s",
         "v4_counterfactual": "recorded command-on and observed duration plus 1.0 s",
         "captures": captures,
@@ -137,8 +150,13 @@ def run() -> dict:
             "recorded_miss_count": sum(len(c["recorded_misses"]) for c in captures),
             "v3_replay_miss_count": sum(len(c["v3_replay_misses"]) for c in captures),
             "v4_replay_miss_count": sum(len(c["v4_replay_misses"]) for c in captures),
-            "v3_exact_capture_count": sum(c["v3_exact_match"] for c in captures),
-            "verdict": "PASS" if all(c["v3_exact_match"] and not c["v4_replay_misses"] for c in captures) else "FAIL",
+            "fitted_capture_count": sum(c["fitted"] for c in captures),
+            "unfitted_capture_count": sum(not c["fitted"] for c in captures),
+            "v3_exact_capture_count": sum(c["v3_exact_match"] is True for c in captures),
+            "verdict": "PASS" if all(
+                (not c["fitted"] or c["v3_exact_match"])
+                and not c["v4_replay_misses"] for c in captures
+            ) else "FAIL",
         },
     }
 
@@ -150,7 +168,11 @@ def main() -> int:
     result = run()
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     for c in result["captures"]:
-        print(f"{c['capture']:7} recorded={c['recorded_misses']} v3={c['v3_replay_misses']} v4={c['v4_replay_misses']}")
+        print(
+            f"{c['capture']:7} fitted={c['fitted']} "
+            f"recorded={c['recorded_misses']} v3={c['v3_replay_misses']} "
+            f"comparison={c['v3_comparison']} v4={c['v4_replay_misses']}"
+        )
     print(f"R-ACC-1(b): {result['summary']['verdict']}")
     return 0 if result["summary"]["verdict"] == "PASS" else 1
 
