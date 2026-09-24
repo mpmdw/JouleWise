@@ -154,12 +154,14 @@ def probe_payload_kind(text):
         return kind_row("calibration").kind
     try:
         if (len(declarations) != 1 or
-                re.search(r"^\s*export\s+CALIBRATION_LEDGER\b", text, re.MULTILINE) or
-                chain_literal(text, "NIGHT_PAYLOAD_KIND") != kind_row("quiet_predicate_evidence").kind):
+                re.search(r"^\s*export\s+CALIBRATION_LEDGER\b", text, re.MULTILINE)):
+            raise ValueError("ambiguous")
+        kind = chain_literal(text, "NIGHT_PAYLOAD_KIND")
+        if kind not in NIGHT_KINDS or not NIGHT_KINDS[kind].payload_kind:
             raise ValueError("ambiguous")
     except ValueError as exc:
         raise ValueError("probe payload kind ambiguous") from exc
-    return kind_row("quiet_predicate_evidence").kind
+    return kind
 # Brackets preserve agent matches but exclude peer pgrep argv: overlapping
 # driver/chain censuses self-matched and aborted the 2026-09-20 pilot night.
 AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")

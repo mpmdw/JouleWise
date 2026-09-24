@@ -158,6 +158,8 @@ def checkout_ok(root, head):
 def locations(roots, stages, epoch, head):
     local = datetime.fromtimestamp(epoch)
     row = kind_row(KIND)
+    if not row.plan_id_prefix or not row.measurement_root_suffix:
+        raise Refused("kind has no preparation path identity")
     plan_id = row.plan_id_prefix + local.strftime("%Y%m%d-%H%M")
     stamp = f"{local:%Y%m%d-%H%M}-{epoch}-{head}"
     return dict(plan_id=plan_id,
@@ -430,7 +432,10 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             for path in (root, stage, custody):
                 absent(path)
             stage.mkdir()
-            prefix = kind_row(kind).plan_id_prefix + datetime.fromtimestamp(epoch).strftime("%Y%m%d")
+            prefix = kind_row(kind).plan_id_prefix
+            if not prefix:
+                raise Refused("kind has no plan id prefix")
+            prefix += datetime.fromtimestamp(epoch).strftime("%Y%m%d")
             prior = sorted(r["plan_id"] for r in records if r.get("plan_id", "").startswith(prefix))
             state.update(paths, plan_path=str(stage / "night_plan.json"),
                          attempt=1 + len(prior), prior_candidates=prior)
@@ -1346,18 +1351,16 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
-            # Scoped like the t0 gate (F12, fix round 1): the predicate is spent
-            # only on a quiet_predicate_evidence chain.  Any other chain records
-            # the decision as `skipped`, so check.json still shows it; a chain
-            # whose kind cannot be read fails closed.
+            # Each arm predicate follows its own row flag, as at t0. An
+            # unflagged kind records `skipped`; an unreadable kind fails closed.
             try:
                 payload_kind = candidate_payload_kind(state)
             except (Refused, OSError, ValueError) as exc:
                 checks["machine_quiet"] = dict(
                     verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
             else:
-                if (payload_kind in NIGHT_KINDS and
-                        kind_row(payload_kind).corecaptured_at_arm_and_t0):
+                row = NIGHT_KINDS.get(payload_kind)
+                if row is not None and row.corecaptured_at_arm_and_t0:
                     actuator = corecaptured_actuator or production_corecaptured_actuator()
                     # A rehearsal decides "nothing loaded" with a fixture
                     # launchctl, so it never licenses the production radio or
@@ -1371,10 +1374,12 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                         # A loaded night or any other prior failure removes
                         # authority to touch the radio or restart fseventsd.
                         inspect("corecaptured", lambda: corecaptured_arm_check(actuator, read_only=True))
-                    inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
                 else:
                     checks["corecaptured"] = dict(verdict="skipped", reason="not an evidence night",
                                                    payload_kind=payload_kind)
+                if row is not None and row.non_observer_at_arm_and_t0:
+                    inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
+                else:
                     checks["machine_quiet"] = dict(verdict="skipped", reason="not an evidence night",
                                                    payload_kind=payload_kind)
         # One predicate decides both the verdict and the refusal text below,

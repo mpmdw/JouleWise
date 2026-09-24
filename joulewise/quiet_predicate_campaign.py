@@ -158,14 +158,14 @@ def manifest_for(plan):
         raise ValueError("evidence registration must be the tracked pilot protocol")
     if plan.receipt_class != row.receipt_class or plan.quiet_admission is not None:
         raise ValueError("evidence pilot requires v2 DIAGNOSTIC_NO_PACK")
-    if plan.window_max_s != protocol["window_max_s"] or plan.window_max_s != row.window_max_s:
+    if plan.window_max_s != protocol["window_max_s"]:
         raise ValueError("window_max_s must equal the frozen protocol's 9000 s")
     return {"schema": MANIFEST_SCHEMA, "plan_id": plan.plan_id,
             "measurement_head": plan.measurement_head, "files": files}
 
 
 def verify_manifest(plan, chain_text):
-    if night_gate.probe_payload_kind(chain_text) != "quiet_predicate_evidence":
+    if night_gate.probe_payload_kind(chain_text) != kind_row("quiet_predicate_evidence").kind:
         raise ValueError("probe receipt kind does not match payload kind")
     manifest_path = Path(night_gate.chain_literal(chain_text, "EVIDENCE_MANIFEST_PATH"))
     if not manifest_path.is_absolute():

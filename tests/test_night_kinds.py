@@ -1,9 +1,9 @@
 """Byte and refusal parity for the two-kind table.
 
-Goldens were produced by running this SAME fixture module against a
-``git archive cdc05e9b`` copy under /tmp (see the report for commands).
-The measurement checkout stays at the base bytes on both runs, since H and
-the sealed manifest pin those bytes; only the imported authoring code changes.
+The goldens are retained cdc05e9b archive outputs. Their fixed /tmp paths
+are relocated to each unique fixture before comparing bytes and digests.
+The archived measurement source stays fixed; candidate-head preparation is
+proved separately through the real prepare path.
 """
 from __future__ import annotations
 
@@ -18,11 +18,15 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import unittest
 from unittest import mock
+from dataclasses import replace
+from types import MappingProxyType
 
 from joulewise import evidence_night, night_gate, quiet_predicate_campaign
+from joulewise import night_kinds
 try:
     from joulewise.night_kinds import NIGHT_KINDS, UnknownNightKind, kind_row
 except ModuleNotFoundError:  # The base archive intentionally predates the table.
@@ -32,8 +36,8 @@ from scripts import gen_evidence_night
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SOURCE = Path(os.environ.get("JW_KIND_BASE_SOURCE", "/tmp/jwkindbase"))
-FIXTURE = Path("/tmp/jwkindfixture")
+FIXTURE = None
+BASE_SOURCE = None
 GOLDENS = {
     'chain': 'IyEvYmluL3pzaAojIEdFTkVSQVRFRCBieSBzY3JpcHRzL2dlbl9ldmlkZW5jZV9uaWdodC5weTsgZG8gbm90IGVkaXQuCnNldCAtZXVvIHBpcGVmYWlsCmV4cG9ydCBOSUdIVF9QQVlMT0FEX0tJTkQ9cXVpZXRfcHJlZGljYXRlX2V2aWRlbmNlCmV4cG9ydCBQWVRIT05ET05UV1JJVEVCWVRFQ09ERT0xCmV4cG9ydCBFVklERU5DRV9QTEFOX1BBVEg9Jy90bXAvandraW5kZml4dHVyZS9jdXN0b2R5L25pZ2h0X3BsYW4uanNvbicKZXhwb3J0IEVWSURFTkNFX01BTklGRVNUX1BBVEg9Jy90bXAvandraW5kZml4dHVyZS9jdXN0b2R5L2V2aWRlbmNlX21hbmlmZXN0Lmpzb24nCmV4cG9ydCBFVklERU5DRV9NQU5JRkVTVF9TSEEyNTY9JzNmNmIwMDM5YzA3OTliZTRmNzllNWM0YWIyYzIxZTFhYTEwYWE5ZGI4ZTNjNzdkZWQwMGRkODViNTMzMGY5YmInCmV4cG9ydCBFVklERU5DRV9DSEFJTl9TT1VSQ0VfU0hBMjU2PSc1NjhhMjc3MWIyOGRhOWQ4MDVjZDIzZmY0MDU5YmJiYzI3ZDZkZmFkMWY4ZDk2MDMzMzFhNDEyZTM3NTFiN2VhJwpleHBvcnQgUFk9Jy90bXAvandraW5kYmFzZS8udmVudi9iaW4vcHl0aG9uJwpleHBvcnQgUFlUSE9OUEFUSD0nL3RtcC9qd2tpbmRiYXNlJwpyZWZ1c2UoKSB7ICIkUFkiIC1CIC1tIGpvdWxld2lzZS5xdWlldF9wcmVkaWNhdGVfY2FtcGFpZ24gcmVmdXNlIC0tcmVhc29uICIkMSI7IGV4aXQgMjsgfQpbWyAiJHtOSUdIVF9QTEFOX0lEOi19IiA9PSAncXBlMDEtcGlsb3QtbjEtMjAyNjA5MjMtMjIwMCcgXV0gfHwgcmVmdXNlICdOSUdIVF9QTEFOX0lEIG1pc21hdGNoJwpbWyAiJHtNRUFTVVJFTUVOVF9ST09UOi19IiA9PSAnL3RtcC9qd2tpbmRiYXNlJyBdXSB8fCByZWZ1c2UgJ01FQVNVUkVNRU5UX1JPT1QgbWlzbWF0Y2gnCltbICIke01FQVNVUkVNRU5UX0hFQUQ6LX0iID09ICcwYWVkMGRhMzI1YmY2YjRiZWRmNDFlMmMwMmVmZTM0MTQzNzdhOTA2JyBdXSB8fCByZWZ1c2UgJ01FQVNVUkVNRU5UX0hFQUQgbWlzbWF0Y2gnCltbICIkKC91c3IvYmluL3NoYXN1bSAtYSAyNTYgJy90bXAvandraW5kYmFzZS9zY3JpcHRzL25pZ2h0X2NoYWlucy9xdWlldF9wcmVkaWNhdGVfZXZpZGVuY2UuenNoJyB8IC91c3IvYmluL2F3ayAne3ByaW50ICQxfScpIiA9PSAiJEVWSURFTkNFX0NIQUlOX1NPVVJDRV9TSEEyNTYiIF1dIHx8IHJlZnVzZSBjaGFpbl9zb3VyY2Vfc2hhMjU2X21pc21hdGNoCmV4ZWMgL2Jpbi96c2ggJy90bXAvandraW5kYmFzZS9zY3JpcHRzL25pZ2h0X2NoYWlucy9xdWlldF9wcmVkaWNhdGVfZXZpZGVuY2UuenNoJwo=',
     'chain_sha256': 'YjBjYWUzNDg0Y2NiZDMzYmU3YzNmM2E5ODFjYjFkZjNjNTVlYWM2Y2M4MDc3NzQ2NGI1ZTZiZmYxMGMwZDBmMiAgY2hhaW4uenNoCg==',
@@ -70,12 +74,6 @@ def ensure_base_source():
 
 def render_fixture():
     ensure_base_source()
-    os.environ["TZ"] = "UTC"
-    if hasattr(time, "tzset"):
-        time.tzset()
-    if FIXTURE.exists():
-        shutil.rmtree(FIXTURE)
-    FIXTURE.mkdir()
     measurement = BASE_SOURCE
     custody = FIXTURE / "custody"
     custody.mkdir()
@@ -171,6 +169,29 @@ def refusal_fixture():
 
 
 class NightKindTests(unittest.TestCase):
+    def setUp(self):
+        global FIXTURE, BASE_SOURCE
+        FIXTURE = Path(tempfile.mkdtemp(prefix="jwkind-", dir="/private/tmp"))
+        BASE_SOURCE = FIXTURE / "base"
+        self.old_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "UTC"
+        if hasattr(time, "tzset"):
+            time.tzset()
+
+    def tearDown(self):
+        if self.old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = self.old_tz
+        if hasattr(time, "tzset"):
+            time.tzset()
+        shutil.rmtree(FIXTURE)
+
+    def test_fixture_is_unique_and_local_to_one_run(self):
+        self.assertTrue(FIXTURE.name.startswith("jwkind-"))
+        self.assertEqual(BASE_SOURCE.parent, FIXTURE)
+        self.assertTrue(FIXTURE.is_dir())
+
     def test_rows_and_unknown_kind(self):
         self.assertEqual(set(NIGHT_KINDS), {"quiet_predicate_evidence", "calibration"})
         self.assertIs(night_gate.NIGHT_KINDS, NIGHT_KINDS)
@@ -193,6 +214,10 @@ class NightKindTests(unittest.TestCase):
         self.assertFalse(calibration.requires_chain_bound_registration)
         self.assertFalse(calibration.corecaptured_at_arm_and_t0)
         self.assertFalse(calibration.non_observer_at_arm_and_t0)
+        self.assertTrue(idle.payload_kind)
+        self.assertFalse(calibration.payload_kind)
+        self.assertIsNone(calibration.plan_id_prefix)
+        self.assertIsNone(calibration.measurement_root_suffix)
         with self.assertRaises(UnknownNightKind):
             kind_row("unknown_kind")
         with self.assertRaises(TypeError):
@@ -201,9 +226,17 @@ class NightKindTests(unittest.TestCase):
             idle.kind = "other"
 
     def test_base_archive_byte_goldens(self):
+        self.assert_prepared_candidate_head()
         actual = render_fixture()
         self.assertEqual(set(actual), set(GOLDENS))
         base = {name: base64.b64decode(raw) for name, raw in GOLDENS.items()}
+        old_chain = base["chain"]
+        old_wrapper_digest = hashlib.sha256(old_chain).hexdigest().encode()
+        for name, raw in base.items():
+            base[name] = (raw.replace(b"/tmp/jwkindbase", str(BASE_SOURCE).encode())
+                          .replace(b"/tmp/jwkindfixture", str(FIXTURE).encode()))
+        relocated_wrapper_digest = hashlib.sha256(base["chain"]).hexdigest().encode()
+        base["chain_sha256"] = base["chain_sha256"].replace(old_wrapper_digest, relocated_wrapper_digest)
         old_manifest = json.loads(base["manifest"])
         new_manifest = json.loads(actual["manifest"])
         added = "joulewise/night_kinds.py"
@@ -237,6 +270,132 @@ class NightKindTests(unittest.TestCase):
             "calibration": ("Refused", "invalid or unresolved kind"),
             "wrong_prefix": ("Refused", "candidate is not a completed, owned preparation"),
         })
+
+    def test_probe_accepts_a_registered_third_payload_kind(self):
+        third = replace(kind_row("quiet_predicate_evidence"), kind="scored_campaign")
+        table = MappingProxyType(dict(NIGHT_KINDS, scored_campaign=third))
+        with mock.patch.object(night_gate, "NIGHT_KINDS", table):
+            self.assertEqual(night_gate.probe_payload_kind(
+                "export NIGHT_PAYLOAD_KIND=scored_campaign\n"), "scored_campaign")
+            for text in ("export NIGHT_PAYLOAD_KIND=unknown\n",
+                         "export NIGHT_PAYLOAD_KIND=scored_campaign\nexport NIGHT_PAYLOAD_KIND=scored_campaign\n",
+                         "export NIGHT_PAYLOAD_KIND=scored_campaign\nexport CALIBRATION_LEDGER=x\n"):
+                with self.subTest(text=text), self.assertRaisesRegex(ValueError, "probe payload kind ambiguous"):
+                    night_gate.probe_payload_kind(text)
+
+    def test_calibration_cannot_supply_preparation_paths(self):
+        with mock.patch.object(evidence_night, "KIND", "calibration"):
+            with self.assertRaisesRegex(evidence_night.Refused, "no preparation path identity"):
+                evidence_night.locations(FIXTURE, FIXTURE / "stages", 1790200800, "a" * 40)
+
+    def test_generator_exports_manifest_for(self):
+        self.assertIs(gen_evidence_night.manifest_for, quiet_predicate_campaign.manifest_for)
+
+    def test_manifest_verifier_uses_row_kind(self):
+        row = replace(kind_row("quiet_predicate_evidence"), kind="scored_campaign")
+        manifest = {"files": {quiet_predicate_campaign.CHAIN_PATH: "a" * 64}}
+        path = FIXTURE / "manifest.json"
+        raw = json.dumps(manifest).encode()
+        path.write_bytes(raw)
+        chain = (f"export EVIDENCE_MANIFEST_PATH={path}\n"
+                 f"export EVIDENCE_MANIFEST_SHA256={hashlib.sha256(raw).hexdigest()}\n"
+                 f"export EVIDENCE_CHAIN_SOURCE_SHA256={'a' * 64}\n")
+        with mock.patch.object(quiet_predicate_campaign, "kind_row", return_value=row), \
+                mock.patch.object(night_gate, "probe_payload_kind", return_value=row.kind), \
+                mock.patch.object(quiet_predicate_campaign, "manifest_for", return_value=manifest):
+            self.assertEqual(quiet_predicate_campaign.verify_manifest(None, chain)[1], manifest)
+
+    def test_generator_uses_calibration_basename_from_row(self):
+        render_fixture()
+        plan_path = FIXTURE / "custody/night_plan.json"
+        chain = FIXTURE / "custody/chain.zsh"
+        chain.write_text("alternate_calibration.zsh\n")
+        calibration = replace(kind_row("calibration"),
+                              chain_source_path="scripts/night_chains/alternate_calibration.zsh")
+        original = gen_evidence_night.kind_row
+        with mock.patch.object(gen_evidence_night, "kind_row",
+                               side_effect=lambda kind: calibration if kind == "calibration" else original(kind)):
+            with self.assertRaisesRegex(gen_evidence_night.GenerationRefusal,
+                                        "calibration/derivation chain refused"):
+                gen_evidence_night.generate(plan_path)
+
+    def test_manifest_window_follows_protocol_not_row_default(self):
+        render_fixture()
+        plan = night_gate.NightPlan.from_mapping(json.loads(
+            (FIXTURE / "custody/night_plan.json").read_text()))
+        row = replace(kind_row("quiet_predicate_evidence"), window_max_s=8999)
+        original = quiet_predicate_campaign.tracked_bytes
+        def tracked(root, head, name):
+            if name == "joulewise/night_kinds.py":
+                return (ROOT / name).read_bytes()
+            return original(root, head, name)
+        with mock.patch.object(quiet_predicate_campaign, "kind_row", return_value=row), \
+                mock.patch.object(quiet_predicate_campaign, "tracked_bytes", side_effect=tracked):
+            self.assertEqual(quiet_predicate_campaign.manifest_for(plan)["plan_id"], plan.plan_id)
+
+    def test_arm_flags_match_t0_scoping_when_flags_differ(self):
+        from tests.test_evidence_night import LifecycleTests
+        case = LifecycleTests("test_the_arm_check_spends_the_predicate_only_on_an_evidence_chain")
+        case.setUp()
+        try:
+            third = replace(kind_row("quiet_predicate_evidence"), kind="scored_campaign",
+                            corecaptured_at_arm_and_t0=False,
+                            non_observer_at_arm_and_t0=True)
+            table = MappingProxyType(dict(NIGHT_KINDS, scored_campaign=third))
+            case.evidence_chain("export NIGHT_PAYLOAD_KIND=scored_campaign\n")
+            seen = []
+            def observe():
+                seen.append("quiet")
+                return case.kw["quiet_observer"]()
+            with mock.patch.object(night_gate, "NIGHT_KINDS", table), \
+                    mock.patch.object(evidence_night, "NIGHT_KINDS", table):
+                record = evidence_night.check(**dict(case.kw, quiet_observer=observe))
+            self.assertEqual(record["checks"]["corecaptured"]["verdict"], "skipped")
+            self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "pass")
+            self.assertEqual(seen, ["quiet"])
+            self.assertFalse(third.corecaptured_at_arm_and_t0)
+            self.assertTrue(third.non_observer_at_arm_and_t0)
+        finally:
+            case.doCleanups()
+
+    @unittest.skipUnless(Path("/bin/zsh").is_file(), "candidate sealing requires zsh")
+    def test_prepare_authors_row_paths_and_seals_candidate_at_head(self):
+        self.assert_prepared_candidate_head()
+
+    @unittest.skipUnless(Path("/bin/zsh").is_file(), "candidate sealing requires zsh")
+    def test_k3_kills_prefix_and_suffix_mutations(self):
+        for field in ("plan_id_prefix", "measurement_root_suffix"):
+            with self.subTest(field=field):
+                row = replace(kind_row("quiet_predicate_evidence"), **{field: "mutant-"})
+                table = MappingProxyType(dict(NIGHT_KINDS, quiet_predicate_evidence=row))
+                with mock.patch.object(night_kinds, "NIGHT_KINDS", table):
+                    with self.assertRaises(AssertionError):
+                        self.assert_prepared_candidate_head()
+
+    def assert_prepared_candidate_head(self):
+        # Clone the committed candidate H locally; no network or machine action.
+        work = Path(tempfile.mkdtemp(prefix="head-", dir=FIXTURE))
+        remote = work / "remote.git"
+        subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(ROOT), str(remote)], check=True)
+        head = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
+        subprocess.run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", head], check=True)
+        t0 = (int(time.time()) // 60 + 90) * 60
+        def builder(root):
+            (root / ".venv/bin").mkdir(parents=True)
+            (root / ".venv/bin/python").symlink_to(sys.executable)
+        state = evidence_night.prepare(
+            kind=kind_row("quiet_predicate_evidence").kind, t0=str(t0), head=head,
+            remote=str(remote), roots_under=work / "roots", staging_under=work / "stages",
+            builder=builder, lock_verifier=lambda root: None)
+        row = kind_row("quiet_predicate_evidence")
+        plan = json.loads(Path(state["plan_path"]).read_text())
+        self.assertEqual(row.plan_id_prefix, "qpe01-pilot-n1-")
+        self.assertEqual(row.measurement_root_suffix, "qpe01-pilot-n1")
+        self.assertTrue(plan["plan_id"].startswith("qpe01-pilot-n1-"))
+        self.assertTrue(Path(plan["measurement_root"]).name.endswith("qpe01-pilot-n1"))
+        self.assertEqual(plan["measurement_head"], head)
+        self.assertEqual(state["bindings"], evidence_night.sealed_candidate(
+            Path(state["measurement_root"]), Path(state["plan_path"])))
 
 
 if __name__ == "__main__" and "--dump-goldens" in sys.argv:

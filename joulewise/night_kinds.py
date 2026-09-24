@@ -24,8 +24,8 @@ def _idle_manifest_for(plan):
 @dataclass(frozen=True)
 class NightKind:
     kind: str
-    plan_id_prefix: str
-    measurement_root_suffix: str
+    plan_id_prefix: str | None
+    measurement_root_suffix: str | None
     chain_source_path: str
     protocol_path: str | None
     receipt_class: str | None
@@ -38,6 +38,7 @@ class NightKind:
     requires_chain_bound_registration: bool
     corecaptured_at_arm_and_t0: bool
     non_observer_at_arm_and_t0: bool
+    payload_kind: bool
     notice_intro: str
     notice_envelope_noun: str
     notice_work: str
@@ -61,6 +62,7 @@ NIGHT_KINDS = MappingProxyType({
         requires_chain_bound_registration=True,
         corecaptured_at_arm_and_t0=True,
         non_observer_at_arm_and_t0=True,
+        payload_kind=True,
         notice_intro="This idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
         notice_envelope_noun="idle envelopes",
         notice_work="Partial observations and refusals are kept. No model, load generator, calibration-ledger session or measurement pack runs.",
@@ -68,8 +70,8 @@ NIGHT_KINDS = MappingProxyType({
     ),
     "calibration": NightKind(
         kind="calibration",
-        plan_id_prefix="",
-        measurement_root_suffix="",
+        plan_id_prefix=None,
+        measurement_root_suffix=None,
         chain_source_path="scripts/night_chains/calibration_derivation_only.zsh",
         protocol_path=None,
         receipt_class=None,
@@ -82,6 +84,7 @@ NIGHT_KINDS = MappingProxyType({
         requires_chain_bound_registration=False,
         corecaptured_at_arm_and_t0=False,
         non_observer_at_arm_and_t0=False,
+        payload_kind=False,
         notice_intro="",
         notice_envelope_noun="",
         notice_work="",
