@@ -110,3 +110,9 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - P and K in different model families.
    Fable adds a **fresh forger seat** as the final gate: a read-only seat that sees only the contract spends 30 minutes trying to forge ownership past `_seal`. If it succeeds with the same signature, stop patching and rewrite `_structure` wholesale as table-driven. Sol and Astra blind seats follow at the 10:57 Codex reset (D-184; dropped only for usage until then). Then synthesis and a cold Fable gate on the amendment plus the round-3 plan. Implementation must wait for Codex anyway, because P and K must be in different model families.
 46. Holding lean until the Codex reset (≈10:57 PDT). Standing duties continue each slice: the standdown poll, the unread-from-Ed search, and directives.
+47. The hold ran 07:10–10:59 with a standdown poll every 10 s, and the unread-from-Ed search and directive check every ~30 min: nothing new. Brief 44 was prepared: the B0 fix-round-1 resume from WIP `f170af7c`.
+48. Codex reset at ≈10:59. Seats launched:
+   - 45: Sol 6.0 blind seat on escalation brief 41;
+   - 46: Astra 6 blind seat on brief 41;
+   - 47: B0 fix-round-1 resume, brief 44;
+   - 48: v4 PR resume, brief 45 (approved scope expansion to `calibration_bracketing.py` plus tests; 38/20 §3.2; V1 failures classified as r8-pin or real; the replay re-run at head).
