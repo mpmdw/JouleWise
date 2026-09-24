@@ -173,7 +173,7 @@ def refusal_fixture():
 class NightKindTests(unittest.TestCase):
     def setUp(self):
         global FIXTURE, BASE_SOURCE
-        FIXTURE = Path(tempfile.mkdtemp(prefix="jwkind-", dir="/private/tmp"))
+        FIXTURE = Path(tempfile.mkdtemp(prefix="jwkind-", dir="/private/tmp" if Path("/private/tmp").is_dir() else None))
         BASE_SOURCE = FIXTURE / "base"
         self.old_tz = os.environ.get("TZ")
         os.environ["TZ"] = "UTC"
