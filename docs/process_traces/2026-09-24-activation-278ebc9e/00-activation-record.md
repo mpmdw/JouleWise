@@ -35,3 +35,9 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - **No registered science night is armable today.** A newly ruled DIAGNOSTIC (for example the calibration night with uncalibrated labels) could precede acceptance, but only by a prospective change to R-ORDER, which needs a cold ruling.
    - The M1 equivalence-rule replacement does not by itself unblock A179.
    - So the root of the critical path is instrument acceptance on 25G83. It is important science under D-184, so a four-model council convenes on it. Packet scout brief 21 has been launched (worktree `wt-278ebc9e-packets2`); the seats follow, then a cold Fable ruling, and Ed is informed after.
+26. Seat K (Opus 5.5, run 2) returned rc 0: three commits `8afca9b9`, `0b60ebab`, `04962287` on `fix/2026-09-24-a291-fix2-checker`, pushed by the magistrate. The results:
+   - The item-centric checker, the seeded `generate_case` and the stress test pass. The two seeds give 300 registrations each with 0 violations, and the signatures of all 60 cases differ from one another.
+   - The fuzz is **RED at `20cd29de`** on properties (a), (b) and (d): operators 1 and 6 produce a raw `ZeroDivisionError`, and `inv_11`/`inv_12` are never emitted. Properties (c), (e) and (f) pass there.
+   - K declares it did not read the packer source.
+   - K notes that E2 (a forged roster sealed by the packer itself) does not show in the public-entry fuzz, because a resealed mutant is replayed and refused. P's R1 regression owns E2.
+   - Report 16b.
