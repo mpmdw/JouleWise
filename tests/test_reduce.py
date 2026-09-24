@@ -86,8 +86,10 @@ def self_consistent_calibration(
         LEGACY_PULSE_COUNT,
         PROTOCOL_ID,
         PROTOCOL_V2_ID,
+        PROTOCOL_V3_ID,
         PROTOCOL_V2_SHA256,
         PROTOCOL_V3_SHA256,
+        PROTOCOL_V4_SHA256,
         RESIDUAL_REGION_METHOD,
         CommandedPulse,
         instrument_evidence,
@@ -115,6 +117,7 @@ def self_consistent_calibration(
         commanded_edges = pulse_schedule(
             protocol_pulse_count(protocol_id),
             start_s=first_endpoint_s + 14.95,
+            duration_s=2.0 if protocol_id == PROTOCOL_ID else 1.0,
         )
     cache_key = (
         first_endpoint_s,
@@ -242,14 +245,15 @@ def self_consistent_calibration(
         "pulse_protocol_id": protocol_id,
         "power_policy": "ac_high_power",
     }
-    if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
+    if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
         bindings.update(
             {
                 "estimator_revision": RESIDUAL_REGION_METHOD,
                 "protocol_sha256": (
                     PROTOCOL_V2_SHA256
                     if protocol_id == PROTOCOL_V2_ID
-                    else PROTOCOL_V3_SHA256
+                    else (PROTOCOL_V3_SHA256 if protocol_id == PROTOCOL_V3_ID
+                          else PROTOCOL_V4_SHA256)
                 ),
             }
         )
@@ -265,7 +269,7 @@ def self_consistent_calibration(
         protocol_pulse_count=protocol_pulse_count(protocol_id),
         capture_wall_time_s=(
             min(float(row["timestamp_s"]) for row in event_rows)
-            if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
+            if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}
             else None
         ),
     )
@@ -2867,6 +2871,7 @@ class D078R01RegressionTests(unittest.TestCase):
             PROTOCOL_V2_ID,
             PROTOCOL_V2_SHA256,
             PROTOCOL_V3_SHA256,
+            PROTOCOL_V4_SHA256,
             RESIDUAL_REGION_METHOD,
         )
 
@@ -2894,7 +2899,7 @@ class D078R01RegressionTests(unittest.TestCase):
                     "protocol_sha256": (
                         PROTOCOL_V2_SHA256
                         if protocol_id == PROTOCOL_V2_ID
-                        else PROTOCOL_V3_SHA256
+                        else PROTOCOL_V4_SHA256
                     ),
                 }
             )

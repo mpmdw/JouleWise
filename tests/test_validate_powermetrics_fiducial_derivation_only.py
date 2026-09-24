@@ -331,7 +331,10 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         clauses under test can run.
         """
 
-        epoch = _acceptance_epoch() | {"os_build": os_build}
+        epoch = _acceptance_epoch() | {
+            "os_build": os_build,
+            "pulse_protocol_id": validation_script.PROTOCOL_ID,
+        }
         t1 = {field: f"value-{field}" for field in T1_FIELDS}
         t1.update(epoch)
         t1.update(
@@ -347,7 +350,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
                         / "configs"
                         / "calibration"
                         / "powermetrics_fiducial"
-                        / "protocol_v3.json"
+                        / "protocol_v4.json"
                     ).read_bytes()
                 ).hexdigest(),
             }

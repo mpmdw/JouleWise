@@ -38,6 +38,7 @@ from joulewise.powermetrics_fiducial import (
     PROTOCOL_V2_ID,
     PROTOCOL_V2_SHA256,
     PROTOCOL_V3_SHA256,
+    PROTOCOL_V3_ID,
     PULSE_COUNT,
     RESIDUAL_REGION_METHOD,
     CommandedPulse,
@@ -143,7 +144,7 @@ class ScheduleTests(unittest.TestCase):
         schedule = pulse_schedule(5, start_s=10.0)
         self.assertEqual(len(schedule), 5)
         for (on_s, off_s), (next_on_s, _next_off) in zip(schedule, schedule[1:]):
-            self.assertAlmostEqual(off_s - on_s, 1.0, places=12)
+            self.assertAlmostEqual(off_s - on_s, 2.0, places=12)
             self.assertGreaterEqual(next_on_s - off_s, 1.5)
         self.assertEqual(schedule[0][0], 10.0)
 
@@ -153,7 +154,7 @@ class ScheduleTests(unittest.TestCase):
         )
         trace = [TraceInterval(start_s=0.0, end_s=pulses[-1].off_s + 5.0, power_w=2.0)]
         with self.assertRaisesRegex(ValueError, "gaps disagree"):
-            authenticate_protocol_schedule(pulses, trace)
+            authenticate_protocol_schedule(pulses, trace, PROTOCOL_V3_ID)
 
     def test_vdc_schedule_passes_authentication(self) -> None:
         scheduled = pulse_schedule(5, start_s=5.0)
@@ -965,7 +966,7 @@ class EvidenceTests(unittest.TestCase):
         bindings = self.bindings(
             os_build="25F84",
             mlx_version="0.29.3",
-            pulse_protocol_id=PROTOCOL_ID,
+            pulse_protocol_id=PROTOCOL_V3_ID,
             estimator_revision=RESIDUAL_REGION_METHOD,
             protocol_sha256=PROTOCOL_V3_SHA256,
         )
@@ -979,7 +980,7 @@ class EvidenceTests(unittest.TestCase):
                 "power_trace.csv": "01" * 32,
             },
             protocol_pulse_count=3,
-            protocol_id=PROTOCOL_ID,
+            protocol_id=PROTOCOL_V3_ID,
             capture_wall_time_s=1_784_491_000.25,
         )
         payload["clock_anchor"] = {

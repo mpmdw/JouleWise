@@ -10,23 +10,36 @@ and wall/monotonic clock-span discrepancy constrain distinct causal links, so
 none is proven to contain another. The full composed bound drives both the
 continuous anchor-shift scan and every timing license.
 
+At 25G83 native cadence, the per-window cadence diagnostic records median
+and maximum native frame length inside each measured claim window and compares
+them to the derivation corpus. A maximum above 0.75 s flags the A243 trigger;
+the flag alone does not refuse. Constant-within-frame allocation can misplace
+a step by `ΔP × f(1−f) × Δ`, mean `ΔP × Δ/6` (about 1.35 J per edge at
+33 W and 0.245 s). The reducer's point estimate and common-shift envelope
+use the same interval-support allocation (`joulewise/reduce.py`, integration
+and anchor-shift scan). The D-078/D-083 addendum's estimand statement governs
+paper disclosure of absolute phase splits.
+
 The ONE home for the estimator and protocol constants is
 `joulewise/powermetrics_fiducial.py` plus the executable protocol file
-`configs/calibration/powermetrics_fiducial/protocol_v3.json`. Protocol v3 is
-required for every future claim-bearing calibration collection. The v1 and
-v2 protocol files are byte-frozen historical identities; authenticated v2
+`configs/calibration/powermetrics_fiducial/protocol_v4.json`. Protocol v4 is
+the live identity; v3 and v4 are the 59-pulse claim-bearing identities. The v1,
+v2, and v3 protocol files are byte-frozen historical identities; authenticated v2
 artifacts remain verifiable as the current D-078 arc's validation evidence,
 but v2 must not mint a new claim-bearing calibration capture.
 
-## Required protocol (`powermetrics_pulse_fiducial_v3`)
+## Required live protocol (`powermetrics_pulse_fiducial_v4`)
 
 - Workload: preallocated 4096x4096 FP16 MLX matmuls; buffers allocated
   outside every pulse window; `mx.eval` fences each matmul so pulse edges are
   honest. MLX dispatch/fence latency stays IN the bound and is never
   subtracted.
-- Shape: 3 warmup pulses, then k = 59 pulses of 1.0 s each; gap after pulse
+- Shape: 3 warmup pulses, then k = 59 pulses of 2.0 s each (authenticated
+  pulse duration 1.8–2.2 s, 0.25 s plateau inset); gap after pulse
   j is `1.5 + vanDerCorput_2(j)` s (deterministic low-discrepancy spacing;
-  avoids 10 Hz phase lock); >= 5 s baseline before and after the train.
+  avoids 10 Hz phase lock and is quasi-random at 0.245 s native cadence);
+  >= 5 s baseline before and after the train. Historical v3 remains 1.0 s
+  with authenticated duration 0.8–1.2 s.
 - Events: `pulse_command_on` / `pulse_command_off` with full paired
   `ClockStamps`; their half-widths widen every residual interval.
 - Rails: `gpu_power` is the primary rail; CPU+GPU combined is corroboration
@@ -274,7 +287,7 @@ incorporates it, so no observation judges itself.
 
 ## V2/v3 capture-time freshness and authentication
 
-Every v2/v3 `instrument_evidence.json` records
+Every v2/v3/v4 `instrument_evidence.json` records
 `capture_wall_time_s` and `max_age_s = 86400`. `capture_wall_time_s` must agree
 within +/-1 s with the minimum timestamp re-derived from the complete,
 hash-verified calibration `events.jsonl`; changing the declaration and
@@ -370,7 +383,7 @@ ALL of: `schema_version` is `joulewise.instrument_evidence.v1`; under the
 frozen historical replay arms only, `protocol_id` is
 `powermetrics_pulse_fiducial_v1` or `powermetrics_pulse_fiducial_v2` (v2 is
 pinned to the frozen replay sha; the current strict path accepts authenticated
-v2 validation evidence from this arc and requires v3 for future claim-bearing
+v2 validation evidence from this arc and accepts v3/v4 for claim-bearing
 calibration collections, as specified below); `status` is `valid`;
 `anchor_method_version` is a registered stored anchor method and equals the
 measuring bundle's recorded anchor method; the artifact's
@@ -408,7 +421,7 @@ any non-empty reason list on `status = valid` are invalid evidence and reduce
 only to `instrument_calibration_invalid`.
 
 The live harness loads
-`configs/calibration/powermetrics_fiducial/protocol_v3.json` before calibration
+`configs/calibration/powermetrics_fiducial/protocol_v4.json` before calibration
 and field-compares the complete JSON object with the executable module pins
 (`protocol_v1.json` and `protocol_v2.json` stay byte-frozen historical
 identities and are not loaded for new live execution). A missing, incomplete,
@@ -417,7 +430,7 @@ refuses the run before any live capture. The JSON's estimator revision records
 the v2 coverage and trace-anchor-widening rules above.
 
 Every protocol's `status = valid` predicate additionally requires ALL
-protocol-specific pulses detected (40 for v1/v2, 59 for v3): a run with a fitted
+protocol-specific pulses detected (40 for v1/v2, 59 for v3/v4): a run with a fitted
 bound but fewer than the protocol count, or any undetected pulse, is
 `invalid`. A capture whose own clock anchor is unresolved is forced `invalid`
 (the harness exits nonzero) - detection may still run against the native
@@ -442,16 +455,16 @@ estimator as `joint_loss_sublevel_interval_branch_v2`, adds the capture's own
 effective trace-anchor bound to the residual maximum, and requires complete
 deterministic branch-and-bound coverage of the accepted two-edge loss region.
 
-V2 and v3 extend the binding vector with `estimator_revision` and
+V2, v3, and v4 extend the binding vector with `estimator_revision` and
 `protocol_sha256`; those fields are absent only from sealed v1. Current
 strict-physics reduction accepts authenticated v2 validation artifacts from
-this D-078 arc and v3 artifacts. New claim-bearing calibration capture
-requires v3; v1 is usable only under frozen historical replay. A body
+this D-078 arc and v3/v4 artifacts. New claim-bearing calibration capture
+uses v4; v1 is usable only under frozen historical replay. A body
 relabeled across protocol identities is invalid. Re-deriving eligible
 40-pulse historical primary bytes may mint only v2 validation evidence; it
-cannot manufacture the additional 19 observations required by v3.
+cannot manufacture the 59 pulses required by v3/v4.
 
-The live harness loads protocol v3. Its `--rederive-from ... --output ...`
+The live harness loads protocol v4. Its `--rederive-from ... --output ...`
 mode performs no live capture: it verifies the source manifest and primary
 hashes, reruns the current estimator over the same bytes, and emits v2
 validation evidence for a compatible 40-pulse source. It refuses any hash

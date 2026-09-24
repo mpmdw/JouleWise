@@ -438,6 +438,65 @@ def _dropped_samples(curve: list[TracePoint], requested_hz: float) -> int:
     return sum(1 for gap in gaps if gap > 2.0 * nominal)
 
 
+def _native_frame_cadence_flag(
+    curve: list[TracePoint], window: Window, corpus: dict[str, float] | None,
+) -> dict[str, Any]:
+    """Flag native cadence inside one claim window without changing admission."""
+
+    lengths = [
+        point.support_end_s - point.support_start_s
+        for point in curve
+        if point.support_start_s is not None
+        and point.support_end_s is not None
+        and window.start_s <= point.support_start_s
+        and point.support_end_s <= window.end_s
+    ]
+    median_s = statistics.median(lengths) if lengths else None
+    maximum_s = max(lengths) if lengths else None
+    corpus_median_s = corpus.get("median_s") if corpus else None
+    corpus_max_s = corpus.get("max_s") if corpus else None
+    return {
+        "measured_interior_median_s": median_s,
+        "measured_interior_max_s": maximum_s,
+        "derivation_corpus_median_s": corpus_median_s,
+        "derivation_corpus_max_s": corpus_max_s,
+        "median_exceeds_corpus": (
+            median_s > corpus_median_s
+            if median_s is not None and corpus_median_s is not None else None
+        ),
+        "max_exceeds_corpus": (
+            maximum_s > corpus_max_s
+            if maximum_s is not None and corpus_max_s is not None else None
+        ),
+        "a243_trigger_flag": maximum_s > 0.75 if maximum_s is not None else None,
+    }
+
+
+def _active_derivation_corpus_cadence() -> dict[str, float] | None:
+    """Read the hash-pinned issued corpus diagnostic when one is active."""
+
+    from joulewise.calibration_bracketing import (  # noqa: PLC0415
+        ACTIVE_ACCEPTANCE_ID,
+        ISSUED_ACCEPTANCE_REGISTRY,
+    )
+
+    registered = ISSUED_ACCEPTANCE_REGISTRY.get(ACTIVE_ACCEPTANCE_ID)
+    if not registered:
+        return None
+    try:
+        raw = Path(registered["path"]).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != registered["file_sha256"]:
+            return None
+        cadence = json.loads(raw)["derivation_notes"]["native_frame_cadence_s"]
+        median_s, max_s = float(cadence["median_s"]), float(cadence["max_s"])
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(median_s) and math.isfinite(max_s)
+            and 0 < median_s <= max_s):
+        return None
+    return {"median_s": median_s, "max_s": max_s}
+
+
 # ----------------------------------------------------------------------------
 # Uncertainty terms + claim gates
 
@@ -1312,7 +1371,9 @@ def _verify_instrument_calibration(
         PROTOCOL_ID,
         PROTOCOL_V2_ID,
         PROTOCOL_V2_SHA256,
+        PROTOCOL_V3_ID,
         PROTOCOL_V3_SHA256,
+        PROTOCOL_V4_SHA256,
         REGION_COVERAGE_RESOLUTION_S,
         REPLAY_PROTOCOL_V2_SHA256,
         RESIDUAL_REGION_METHOD,
@@ -1329,7 +1390,7 @@ def _verify_instrument_calibration(
     evidence_protocol_id = evidence.get("protocol_id")
     if evidence_protocol_id not in SUPPORTED_PROTOCOL_IDS:
         return None, "instrument_calibration_protocol_mismatch"
-    if strict_physics and evidence_protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_ID}:
+    if strict_physics and evidence_protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
         return None, "instrument_calibration_invalid"
     if not strict_physics and evidence_protocol_id not in {
         LEGACY_PROTOCOL_ID,
@@ -1337,7 +1398,7 @@ def _verify_instrument_calibration(
     }:
         # Frozen replay never learns a successor protocol identity.
         return None, "instrument_calibration_protocol_mismatch"
-    if strict_physics and evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
+    if strict_physics and evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
         capture_wall_time_s = evidence.get(CAPTURE_TIME_FIELD)
         max_age_s = evidence.get("max_age_s")
         if (
@@ -1368,7 +1429,7 @@ def _verify_instrument_calibration(
             return None, "instrument_calibration_invalid"
     binding_fields = (
         V2_BINDING_FIELDS
-        if evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
+        if evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}
         else LEGACY_BINDING_FIELDS
     )
     evidence_reasons = evidence.get("reasons")
@@ -1630,7 +1691,7 @@ def _verify_instrument_calibration(
         "mlx_version": mlx.get("version") if isinstance(mlx, dict) else None,
         "pulse_protocol_id": evidence_protocol_id,
     }
-    if evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
+    if evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
         expected.update(
             {
                 "estimator_revision": RESIDUAL_REGION_METHOD,
@@ -1638,7 +1699,8 @@ def _verify_instrument_calibration(
                     (
                         PROTOCOL_V2_SHA256
                         if evidence_protocol_id == PROTOCOL_V2_ID
-                        else PROTOCOL_V3_SHA256
+                        else (PROTOCOL_V3_SHA256 if evidence_protocol_id == PROTOCOL_V3_ID
+                              else PROTOCOL_V4_SHA256)
                     )
                     if strict_physics
                     else REPLAY_PROTOCOL_V2_SHA256
@@ -3277,6 +3339,10 @@ def _reduce_v060(
             and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
         ),
     )
+    if reducer_version == AXI_REDUCER_VERSION:
+        window_precheck["native_frame_cadence"] = _native_frame_cadence_flag(
+            curve, window, _active_derivation_corpus_cadence()
+        )
     if (
         reducer_version in {AXI_ANCHOR_REDUCER_VERSION, AXI_REDUCER_VERSION}
         and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
@@ -3638,6 +3704,10 @@ def _reduce(
             and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
         ),
     )
+    if reducer_version == REDUCER_VERSION:
+        window_evidence_precheck["native_frame_cadence"] = _native_frame_cadence_flag(
+            curve, window, _active_derivation_corpus_cadence()
+        )
     if (
         reducer_version in ANCHOR_REDUCER_VERSIONS
         and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK

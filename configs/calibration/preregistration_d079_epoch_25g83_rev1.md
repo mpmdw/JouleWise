@@ -596,3 +596,56 @@ start-to-start cadence, fixed order, agent-free), the protocol id, the
 membership, exclusion, stopping and analysis rules, V3, the known-conditions
 section, revision 2's equivalence rule and both of its branches. It authorizes
 no window and licenses no measurement.
+
+---
+
+# Revision 4 (2026-09-24, cold gate ACCEPTANCE-25G83-01)
+
+STATUS: D-184's 2026-09-24 addendum, verbatim: "the 09-23 hold (\"wait on major decisions til i get the reads of the new models\") is LIFTED. The four-model council decides experiment-design changes (block-two redesign, shakedown design, registration text, analysis-plan adoption) and Ed receives an after-the-fact summary by email, not a question. Only hardware, sudo, a notice NO, and publishing claims remain Ed's. Ed chose this over \"keep asking me on major design changes\"." This Revision 4 is the council's registered design under cold gate ACCEPTANCE-25G83-01; it authorizes no window and licenses no measurement. The arm notice remains Ed's notice-NO opportunity. The after-the-fact email states: "V3 for 25G83/v4 is now two 12-slot windows ≥ 6 h apart, retained n ≥ 12, third window only on count; reply NO to stop before W1 is armed."
+
+Authority: cold gate ACCEPTANCE-25G83-01, `docs/process_traces/2026-09-24-activation-278ebc9e/31-coldgate-packet-acceptance/20-coldgate-fable-acceptance-ruling.md`, §3 items 1(a), 2(a)–(j), 2(l), 4, and 7. Revisions 1–3 above retain their bytes as historical records. This revision supersedes their conflicting scientific rules for the following epoch only.
+
+## Registered epoch and seal
+
+Epoch: {os_build: 25G83, hardware_model: Mac15,9, power_policy: ac_high_power, sampling_interval_ms: 100, estimator_revision: joint_loss_sublevel_interval_branch_v2, pulse_protocol_id: powermetrics_pulse_fiducial_v4}. The /usr/bin/powermetrics sha256 in force is b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5. The ledger head sequence and digest are restated from the committed head pin at sealing, before W1's arm. A change of epoch field or powermetrics bytes voids this registration.
+
+At sealing, the magistrate records the SHA-256 of this complete Revision 4 registration file and of `configs/calibration/powermetrics_fiducial/protocol_v4.json` in the registration seal/arm record, along with the committed ledger head pin and v4 derivation-chain digest. The arm notice quotes both file digests. The issuer compares the registration digest to the W1 arm pin before reading values. Digest values are computed from final bytes at sealing; no digest is asserted in this draft. W2 and any W3 use those sealed digests without edits.
+
+## Sample, stopping, and blindness
+
+W1 and W2 are 12-slot derivation windows whose starts are at least 6 hours apart, at any hour and on any dates. Each uses one 600 s settle and 12 fixed-order slots at 600 s start-to-start cadence, `window_max_s` 9000. The derivation chain digest is re-pinned for v4 before W1. No agent is present during the [QUIET-MAC] window; every slot is used or recorded unused through terminal abort, never compressed or replaced. Protocol v4 uses 59 pulses and its immutable JSON; no capture parameter is tuned between observations.
+
+After W1 is terminal, the check dry run may report counts only. If fewer than 8 of W1's 12 observations are valid and not excluded under `affine_clock_fit_empty`, stop without W2 and return to the council through R-ACC-3. Otherwise run W2. Only if the check dry run after W2 is terminal reports fewer than 12 valid observations not excluded under `affine_clock_fit_empty`, open one W3 with the same 12-slot rules. If W3 is not opened, no W3 ledger session exists and the issuer's registration session list is {W1, W2}; if opened it is {W1, W2, W3}. No other early stop, top-up, or retry is authorized. Retained n ≥ 12 issues under the D-126 clause 2 dated addendum; n < 12 never issues.
+
+No person or agent reads any B value, screen, or statistic until both W1 and W2 are terminal, or all three sessions are terminal if W3 opened. Revision 1's issuer blindness fence remains in force. The check dry run reports session states, slot counts, and named exclusion counts only.
+
+## Membership, diagnostics, and envelope
+
+Every valid registered member with resolved stored anchor-v3 evidence belongs to the corpus. No member is excluded on B. The eleven seen n1/n2 B values, the 25G83 frame-length distribution, and the r6 decimation are disclosed design inputs, not members; n1/n2 used protocol v3 and are a different epoch, so Revision 1's same-epoch rule does not fire.
+
+The disclosed observations are:
+
+- n1 B values in seconds, as reported in `03-diagnostic-invalid-captures-astra.md`
+  (2026-09-19): d01 0.0411335143, d03 0.0420027810,
+  d05 0.1727106361, d12 0.0325503191.
+- n2 B values in seconds, as reported in `01-n2-20260919-harvest-record.md`
+  §2.5: d01 0.04103035733376445, d03 0.04337273381948624,
+  d05 0.028250396657612444, d07 0.035576770468514644,
+  d09 0.03487995875720681, d11 0.13333095801710004,
+  d12 0.036897960254235855.
+- 25G83 frame lengths over 24 captures: median 0.2485 s, p95 0.274 s,
+  maximum 0.419 s (cold-gate exhibit ex-26, desk result 2).
+- r6 decimation at the new cadence: 34 captures in two phases, all detecting
+  59/59 pulses; B span 0.0220–0.0390 s, median about 0.029 s; 7/34 exceed
+  r6's 0.032898493715362 s screen (ex-26, desk result 1 and §c).
+
+These observations informed protocol and diagnostic rules only; none enters
+the new corpus.
+
+Revision 1's screen challenge against 0.032898493715362 does not apply to this epoch. Record the count above that threshold and the r6-maximum-plus-range comparison as diagnostics only. Count members with B > 0.075 s; at count ≥ 2 label the artifact `excursion_limited` and open an estimator lane comparing common shift with per-pulse jitter before any phase-split claim. A member with B > 0.25 s, more than one native sample interval, refuses issuance and names that mechanism. These diagnostics never exclude a member.
+
+S = max(corpus range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818 s). C = max(predecessor C, Q99, S). If C = S, record `max_budgetable_excess_s = 0` and `zero_headroom`, and issue; drift above S refuses under the operative bracket. Never lower S. D-125's dated addendum governs this epoch. The level screen remains the quantized corpus maximum. The analysis and quantile proof rules of Revision 1 remain in force.
+
+## Barrier basis
+
+Physical barriers: plateau interiors, SNR, 59-pulse detection, edge coverage, anchor feasibility, pre and post brackets, 600 s settle and slot cadence, fixed slot count, and blindness. Three calendar days and n ≥ 19 were yield arithmetic; the r6 screen challenge, strict S ≥ C refusal, and equivalence shortcut are not physical barriers for this epoch and do not apply. n ≥ 12 is defensible for the issued bounds because the level screen is an order statistic with coverage n/(n+1), S is floored, and t(0.995,11) = 3.106 widens Q99 by 7.9% against t(0.995,18) = 2.878, conservatively.

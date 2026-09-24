@@ -612,8 +612,8 @@ replays stay byte-frozen):
   is never trusted from the metadata scalar alone (an invalid block is
   `clock_anchor_unresolved`). Current 0.5.2/0.6.2 strict reduction accepts
   authenticated protocol-v2 validation evidence from the current D-078 arc
-  and protocol-v3 evidence; every future claim-bearing calibration capture
-  must use v3's 59-pulse protocol. Both identities require the v2 estimator
+  and protocol-v3/v4 evidence; every future claim-bearing calibration capture
+  must use the v3 or v4 59-pulse protocol. These identities require the v2 estimator
   revision and residual-region fields, `capture_wall_time_s`, and
   `max_age_s = 86400`; a missing protocol-specific shape is
   `instrument_calibration_invalid`. Claim-time verification independently
@@ -637,6 +637,13 @@ replays stay byte-frozen):
   `instrument_calibration_mismatch` (production tolerance: 0.010 s). A single
   calibration remains valid only for non-claim-bearing probe/exploratory
   reduction. Frozen 0.5.1/0.6.1 replay semantics do not dispatch this gate.
+- Every current claim window records the median and maximum native powermetrics
+  frame length wholly inside its measured interval in
+  `window_evidence_precheck.native_frame_cadence`. It compares both with the
+  hash-pinned active acceptance's derivation-corpus frame lengths. The
+  `a243_trigger_flag` is set when the window maximum exceeds 0.75 s; it is
+  diagnostic only and never refuses the claim. An unavailable corpus reference
+  is recorded as null, not inferred from the nominal 100 ms setting.
 - `energy_uncertainty_status = "bounded"` only when every required bound
   term (drift, both interpolation terms, anchor shift) is present.
   Interval-support traces keep both interpolation terms exactly 0; point

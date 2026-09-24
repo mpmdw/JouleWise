@@ -8,7 +8,7 @@ fits the interval-average model
 
 per pulse with a robust constrained loss. The instrument residual bound
 ``B_fiducial`` is the sample maximum over all per-pulse onset/offset residual
-intervals of ``max(|r_lower|, |r_upper|)``. Protocol v3's 59 pulses make it a
+intervals of ``max(|r_lower|, |r_upper|)``. Protocol v3/v4's 59 pulses make it a
 nonparametric 95/95 calibration bound for the calibration distribution
 (``1 - 0.95**59 >= 0.95``), not an unconditional out-of-sample deterministic
 bound. Claim-time determinism is conditional on the registered binding,
@@ -42,12 +42,14 @@ from joulewise.uncertainty_evidence import (
 
 LEGACY_PROTOCOL_ID = "powermetrics_pulse_fiducial_v1"
 PROTOCOL_V2_ID = "powermetrics_pulse_fiducial_v2"
-PROTOCOL_ID = "powermetrics_pulse_fiducial_v3"
+PROTOCOL_V3_ID = "powermetrics_pulse_fiducial_v3"
+PROTOCOL_ID = "powermetrics_pulse_fiducial_v4"
 SUPPORTED_PROTOCOL_IDS = frozenset(
-    {LEGACY_PROTOCOL_ID, PROTOCOL_V2_ID, PROTOCOL_ID}
+    {LEGACY_PROTOCOL_ID, PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}
 )
 PROTOCOL_V2_SHA256 = "82d8c3125ef25437a89916429578d60fe47cbba2beb5bf54eb39b55935cc3783"
 PROTOCOL_V3_SHA256 = "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1"
+PROTOCOL_V4_SHA256 = "02b91ba7b2f608b40ebcf5f301b2f473a8347931b25de1d3cfea4fd9e5ee4d00"
 # The 0.5.1/0.6.1 replay arms froze their binding expectation at the
 # protocol_v2.json bytes current when they were minted; re-keying the live
 # constant must never change frozen replay dispositions.
@@ -60,7 +62,8 @@ LEGACY_PULSE_COUNT = 40
 PROTOCOL_V2_PULSE_COUNT = 40
 PULSE_COUNT = 59
 WARMUP_PULSE_COUNT = 3
-PULSE_DURATION_S = 1.0
+PULSE_DURATION_S = 2.0
+HISTORICAL_PULSE_DURATION_S = 1.0
 PULSE_GAP_BASE_S = 1.5
 BASELINE_S = 5.0
 SAMPLING_INTERVAL_MS = 100
@@ -94,8 +97,10 @@ DETECTION_NONCONVERGENT = "detection_nonconvergent"
 CLOCK_ANCHOR_UNRESOLVED = "clock_anchor_unresolved"
 MAX_VALIDATED_EDGE_SHIFT_S = 0.50
 MAX_EVENT_CLOCK_SKEW_S = 1.0
-MIN_AUTHENTICATED_PULSE_DURATION_S = 0.8
-MAX_AUTHENTICATED_PULSE_DURATION_S = 1.2
+MIN_AUTHENTICATED_PULSE_DURATION_S = 1.8
+MAX_AUTHENTICATED_PULSE_DURATION_S = 2.2
+HISTORICAL_MIN_AUTHENTICATED_PULSE_DURATION_S = 0.8
+HISTORICAL_MAX_AUTHENTICATED_PULSE_DURATION_S = 1.2
 MAX_AUTHENTICATED_GAP_ERROR_S = 0.25
 MIN_AUTHENTICATED_BASELINE_S = 4.5
 HUBER_DELTA = 1.345
@@ -127,7 +132,7 @@ def protocol_pulse_count(protocol_id: str) -> int:
         return LEGACY_PULSE_COUNT
     if protocol_id == PROTOCOL_V2_ID:
         return PROTOCOL_V2_PULSE_COUNT
-    if protocol_id == PROTOCOL_ID:
+    if protocol_id in {PROTOCOL_V3_ID, PROTOCOL_ID}:
         return PULSE_COUNT
     raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
 
@@ -137,8 +142,10 @@ def protocol_sha256(protocol_id: str) -> str | None:
 
     if protocol_id == PROTOCOL_V2_ID:
         return PROTOCOL_V2_SHA256
-    if protocol_id == PROTOCOL_ID:
+    if protocol_id == PROTOCOL_V3_ID:
         return PROTOCOL_V3_SHA256
+    if protocol_id == PROTOCOL_ID:
+        return PROTOCOL_V4_SHA256
     if protocol_id == LEGACY_PROTOCOL_ID:
         return None
     raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
@@ -255,7 +262,7 @@ def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
             },
             "warmup_pulses": WARMUP_PULSE_COUNT,
             "pulse_count": LEGACY_PULSE_COUNT,
-            "pulse_duration_s": PULSE_DURATION_S,
+            "pulse_duration_s": HISTORICAL_PULSE_DURATION_S,
             "pulse_gap_s": "1.5 + van_der_corput_base2(j)",
             "baseline_before_s": BASELINE_S,
             "baseline_after_s": BASELINE_S,
@@ -279,14 +286,16 @@ def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
                 "event-stamp uncertainty widens every residual interval",
             ],
         }
-    if protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_ID}:
+    if protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
         raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
 
     return {
         "schema_version": (
             "joulewise.pulse_fiducial_protocol.v2"
             if protocol_id == PROTOCOL_V2_ID
-            else "joulewise.pulse_fiducial_protocol.v3"
+            else ("joulewise.pulse_fiducial_protocol.v3"
+                  if protocol_id == PROTOCOL_V3_ID
+                  else "joulewise.pulse_fiducial_protocol.v4")
         ),
         "protocol_id": protocol_id,
         "estimator_revision": RESIDUAL_REGION_METHOD,
@@ -299,8 +308,11 @@ def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
         },
         "warmup_pulses": WARMUP_PULSE_COUNT,
         "pulse_count": protocol_pulse_count(protocol_id),
-        "pulse_duration_s": PULSE_DURATION_S,
+        "pulse_duration_s": (PULSE_DURATION_S if protocol_id == PROTOCOL_ID
+                             else HISTORICAL_PULSE_DURATION_S),
         "pulse_gap_s": "1.5 + van_der_corput_base2(j)",
+        **({"gap_cadence_note": "The 1.5 + van_der_corput_base2(j) gap avoids phase locking at 0.1 s; at 0.245 s native cadence it is quasi-random."}
+           if protocol_id == PROTOCOL_ID else {}),
         "baseline_before_s": BASELINE_S,
         "baseline_after_s": BASELINE_S,
         "sampling_interval_ms": SAMPLING_INTERVAL_MS,
@@ -399,24 +411,29 @@ def pulse_schedule(
 
 
 def authenticate_protocol_schedule(
-    pulses: Sequence[CommandedPulse], intervals: Sequence[TraceInterval]
+    pulses: Sequence[CommandedPulse], intervals: Sequence[TraceInterval],
+    protocol_id: str = PROTOCOL_ID,
 ) -> None:
-    """Authenticate the executed v2/v3 command schedule from primary evidence.
+    """Authenticate the executed v2/v3/v4 command schedule from primary evidence.
 
     Pulse edges come from paired event ClockStamps. The anchored trace proves
     that commanded-quiet support exists before and after the train; no planned
     offset metadata is trusted. This gate is invoked only for the current
-    strict-physics v2/v3 path, never for byte-frozen v1 replay semantics.
+    strict-physics v2/v3/v4 path, never for byte-frozen v1 replay semantics.
     """
 
     if not pulses or not intervals:
         raise ValueError("calibration schedule baseline is underivable")
+    minimum_duration = (MIN_AUTHENTICATED_PULSE_DURATION_S if protocol_id == PROTOCOL_ID
+                        else HISTORICAL_MIN_AUTHENTICATED_PULSE_DURATION_S)
+    maximum_duration = (MAX_AUTHENTICATED_PULSE_DURATION_S if protocol_id == PROTOCOL_ID
+                        else HISTORICAL_MAX_AUTHENTICATED_PULSE_DURATION_S)
     for pulse in pulses:
         duration_s = pulse.off_s - pulse.on_s
         if (
             not math.isfinite(duration_s)
-            or duration_s < MIN_AUTHENTICATED_PULSE_DURATION_S
-            or duration_s > MAX_AUTHENTICATED_PULSE_DURATION_S
+            or duration_s < minimum_duration
+            or duration_s > maximum_duration
         ):
             raise ValueError("calibration pulse duration disagrees with protocol")
     for pulse_index, (pulse, following) in enumerate(
@@ -1117,9 +1134,9 @@ def rederive_detection_from_artifacts(
     if derivation_role not in (None, "validation_only", "prospective"):
         raise ValueError("derivation_role is not registered")
     expected_pulse_count = protocol_pulse_count(protocol_id)
-    strict_protocol = protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
+    strict_protocol = protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}
     if strict_protocol:
-        # Strict v2/v3 semantics authenticate the wall-clock event label against
+        # Strict v2/v3/v4 semantics authenticate the wall-clock event label against
         # the embedded physics ClockStamp before either freshness or fitting can
         # consume it. Protocol v1 remains a byte-frozen historical arm.
         capture_wall_time_from_events(events_jsonl)
@@ -1190,7 +1207,7 @@ def rederive_detection_from_artifacts(
         if strict_protocol:
             return clock_stamp_half_width_s(stamp)
         # Byte-frozen v1 replay keeps the historical arithmetic, including
-        # its old malformed-stamp behavior. Strict v2/v3 intake above owns
+        # its old malformed-stamp behavior. Strict v2/v3/v4 intake above owns
         # the physical-sanity gate for every current accepted command stamp.
         return (
             stamp.monotonic_after_s - stamp.monotonic_before_s
@@ -1260,7 +1277,7 @@ def rederive_detection_from_artifacts(
     ]
     protocol_intervals = trim_trace_after_pulses(intervals, pairs["warmup"])
     if strict_protocol:
-        authenticate_protocol_schedule(pairs["pulse"], protocol_intervals)
+        authenticate_protocol_schedule(pairs["pulse"], protocol_intervals, protocol_id)
     return replace(
         detect_pulses(
             protocol_intervals,
@@ -1406,7 +1423,7 @@ def instrument_evidence(
             )
     binding_fields = (
         V2_BINDING_FIELDS
-        if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
+        if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}
         else LEGACY_BINDING_FIELDS
     )
     missing = [
@@ -1545,7 +1562,7 @@ def instrument_evidence(
         }
     if launch_lineage is not None:
         payload["launch_lineage"] = copy.deepcopy(dict(launch_lineage))
-    if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
+    if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
         payload[CAPTURE_TIME_FIELD] = capture_wall_time_s
         payload["max_age_s"] = MAX_AGE_S
     return payload

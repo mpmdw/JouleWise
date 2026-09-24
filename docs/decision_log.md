@@ -8454,6 +8454,8 @@ No published replay number changes; the six-decimal value remains
 
 ## D-125: Ed's morning ratification batch — D-124 signed off, lineage envelopes ratified, D-117 cl.1 amended for successors, the 40-hour window
 
+**Dated addendum (2026-09-24, cold gate ACCEPTANCE-25G83-01, `docs/process_traces/2026-09-24-activation-278ebc9e/31-coldgate-packet-acceptance/20-coldgate-fable-acceptance-ruling.md`, §3 item 2(i)):** "S = max(range quantized 1e-6, 0.010818) unchanged; C = max(predecessor C, Q99, S). When C = S, max_budgetable_excess_s = 0 is recorded as zero_headroom and issuance proceeds; drift above S then refuses as today. Never lower S." This applies to epoch 25G83/v4 under registration Revision 4; historical generations keep their sealed arithmetic.
+
 **Date:** 2026-08-08 morning. **Status:** RATIFIED (Ed, in-thread).
 
 1. **D-124 signed off.** Ed's condition ("if instrument gets better")
@@ -8479,6 +8481,8 @@ No published replay number changes; the six-decimal value remains
    to it as the resume script across /clear.
 
 ## D-126: U2 second convening — synthesis of record; COLD-GATE-U2-PENDING resolves to this entry
+
+**Dated addendum (2026-09-24, cold gate ACCEPTANCE-25G83-01, `docs/process_traces/2026-09-24-activation-278ebc9e/31-coldgate-packet-acceptance/20-coldgate-fable-acceptance-ruling.md`, §3 item 2(c)):** "SUCCESSOR_MINIMUM_CORPUS_SIZE = 12 for epoch 25G83/v4 under registration rev 4". This amends clause 2's n ≥ 19 floor only for that registered epoch. Earlier registrations and issued generations retain their recorded floors.
 
 **Date:** 2026-08-08. **Status:** ADOPTED (magistrate transcription of
 the sealed second convening; both judges' rulings custodied at

@@ -2,7 +2,7 @@
 """Lead-owned [QUIET-MAC] pulse-fiducial calibration run (D-078).
 
 The current claim-bearing protocol is frozen in
-configs/calibration/powermetrics_fiducial/protocol_v3.json and documented in
+configs/calibration/powermetrics_fiducial/protocol_v4.json and documented in
 docs/contracts/powermetrics_fiducial.md. Historical protocol files remain
 byte-frozen validation identities.
 
@@ -128,7 +128,7 @@ from joulewise.uncertainty_evidence import (  # noqa: E402
 )
 
 PROTOCOL_PATH = (
-    REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v3.json"
+    REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v4.json"
 )
 PROTOCOL_V2_PATH = (
     REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v2.json"

@@ -3614,7 +3614,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             / "protocol_v3.json"
         )
         protocol.parent.mkdir(parents=True)
-        for protocol_name in ("protocol_v2.json", "protocol_v3.json"):
+        for protocol_name in ("protocol_v2.json", "protocol_v3.json", "protocol_v4.json"):
             shutil.copy2(
                 REPO_ROOT
                 / "configs"
@@ -4403,7 +4403,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             / "configs"
             / "calibration"
             / "powermetrics_fiducial"
-            / "protocol_v3.json"
+            / "protocol_v4.json"
         ).write_bytes(b"{}\n")
         return state
 
@@ -4425,7 +4425,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "power_policy": "ac_high_power",
             "sampling_interval_ms": 100,
             "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
-            "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+            "pulse_protocol_id": "powermetrics_pulse_fiducial_v4",
         }
         t1 = {
             **epoch,
@@ -4440,7 +4440,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     / "configs"
                     / "calibration"
                     / "powermetrics_fiducial"
-                    / "protocol_v3.json"
+                    / "protocol_v4.json"
                 ).read_bytes()
             ).hexdigest(),
         }
@@ -5784,12 +5784,12 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                             / "configs"
                             / "calibration"
                             / "powermetrics_fiducial"
-                            / "protocol_v3.json",
+                            / "protocol_v4.json",
                             self.repo
                             / "configs"
                             / "calibration"
                             / "powermetrics_fiducial"
-                            / "protocol_v3.json",
+                            / "protocol_v4.json",
                         )
                     self._write_valid_rederive_source(state["source"])
                     corrected = self._run_corrected_script(

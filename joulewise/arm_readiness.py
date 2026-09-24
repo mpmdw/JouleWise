@@ -8135,7 +8135,7 @@ def _run_under_lease_rehearsal(
         "power_policy": "ac_high_power",
         "sampling_interval_ms": 100,
         "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
-        "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+        "pulse_protocol_id": "powermetrics_pulse_fiducial_v4",
     }
     t1 = {field: f"synthetic-{field}" for field in T1_FIELDS}
     t1.update(epoch)
