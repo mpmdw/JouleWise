@@ -15,6 +15,7 @@ import sys
 import time
 
 from joulewise import night_gate
+from joulewise.night_kinds import kind_row
 from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 
 PROTOCOL_PATH = night_gate.QPE01_PILOT_REGISTRATION_PATH
@@ -82,6 +83,7 @@ def replay_refusal_error(error):
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
                   "joulewise/quiet_predicate_campaign.py", "joulewise/night_gate.py",
+                  "joulewise/night_kinds.py",
                   "joulewise/night_agent_install.py", "scripts/run_night.py")
 MANIFEST_SCHEMA = "joulewise.night_evidence_manifest.v1"
 RECEIPT_SCHEMA = "joulewise.night_evidence_probe_receipt.v1"
@@ -143,6 +145,7 @@ def validate_protocol(protocol, source_digest):
 
 
 def manifest_for(plan):
+    row = kind_row("quiet_predicate_evidence")
     contents = {name: tracked_bytes(plan.measurement_root, plan.measurement_head, name)
                 for name in MANIFEST_PATHS}
     files = {name: digest(raw) for name, raw in contents.items()}
@@ -151,9 +154,9 @@ def manifest_for(plan):
     registration = Path(plan.registration_path)
     if not registration.is_absolute():
         registration = Path(plan.measurement_root) / registration
-    if registration.resolve() != (Path(plan.measurement_root) / PROTOCOL_PATH).resolve():
+    if registration.resolve() != (Path(plan.measurement_root) / row.protocol_path).resolve():
         raise ValueError("evidence registration must be the tracked pilot protocol")
-    if plan.receipt_class != "DIAGNOSTIC_NO_PACK" or plan.quiet_admission is not None:
+    if plan.receipt_class != row.receipt_class or plan.quiet_admission is not None:
         raise ValueError("evidence pilot requires v2 DIAGNOSTIC_NO_PACK")
     if plan.window_max_s != protocol["window_max_s"]:
         raise ValueError("window_max_s must equal the frozen protocol's 9000 s")
@@ -162,7 +165,7 @@ def manifest_for(plan):
 
 
 def verify_manifest(plan, chain_text):
-    if night_gate.probe_payload_kind(chain_text) != "quiet_predicate_evidence":
+    if night_gate.probe_payload_kind(chain_text) != kind_row("quiet_predicate_evidence").kind:
         raise ValueError("probe receipt kind does not match payload kind")
     manifest_path = Path(night_gate.chain_literal(chain_text, "EVIDENCE_MANIFEST_PATH"))
     if not manifest_path.is_absolute():

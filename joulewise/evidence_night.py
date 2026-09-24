@@ -21,10 +21,11 @@ import traceback
 from typing import Callable
 
 from joulewise import corecaptured_loop
+from joulewise.night_kinds import NIGHT_KINDS, kind_row
 from joulewise.arm_retry import successor_license
 from joulewise.zero_capture_facts import zero_capture_facts
 
-KIND = "quiet_predicate_evidence"
+KIND = kind_row("quiet_predicate_evidence").kind
 REMOTE = "https://github.com/mpmdw/JouleWise"
 SCHEMA = "joulewise.evidence_prepare.v1"
 STEPS = ("clone", "venv", "plan", "wrapper", "render", "complete")
@@ -156,10 +157,13 @@ def checkout_ok(root, head):
 
 def locations(roots, stages, epoch, head):
     local = datetime.fromtimestamp(epoch)
-    plan_id = "qpe01-pilot-n1-" + local.strftime("%Y%m%d-%H%M")
+    row = kind_row(KIND)
+    if not row.plan_id_prefix or not row.measurement_root_suffix:
+        raise Refused("kind has no preparation path identity")
+    plan_id = row.plan_id_prefix + local.strftime("%Y%m%d-%H%M")
     stamp = f"{local:%Y%m%d-%H%M}-{epoch}-{head}"
     return dict(plan_id=plan_id,
-                measurement_root=str(roots / f"JouleWise-measurement-{stamp}-qpe01-pilot-n1"),
+                measurement_root=str(roots / f"JouleWise-measurement-{stamp}-{row.measurement_root_suffix}"),
                 staging=str(stages / f"{plan_id}-{stamp}"),
                 custody_root=str(roots / "night-custody" / f"{plan_id}-{stamp}"))
 
@@ -214,7 +218,7 @@ def staging_lock(stages, name):
 
 def prior_records(stages, roots):
     records = []
-    for directory in sorted(stages.glob("qpe01-pilot-n1-*")):
+    for directory in sorted(stages.glob(kind_row(KIND).plan_id_prefix + "*")):
         safe_path(directory)
         if not directory.is_dir():
             continue
@@ -226,7 +230,7 @@ def prior_records(stages, roots):
                 raise Refused(f"unidentified prior preparation output: {directory}") from exc
         records.append(record)
     referenced = {r.get("custody_root") for r in records}
-    for directory in sorted((roots / "night-custody").glob("qpe01-pilot-n1-*")):
+    for directory in sorted((roots / "night-custody").glob(kind_row(KIND).plan_id_prefix + "*")):
         safe_path(directory)
         if (directory.is_dir() and not (directory / "night_plan.json").is_file()
                 and str(directory) not in referenced):
@@ -235,10 +239,20 @@ def prior_records(stages, roots):
 
 
 def sealed_candidate(root, plan):
-    code = """import hashlib,json,subprocess,sys
+    row = kind_row(KIND)
+    code = """import hashlib,importlib,json,subprocess,sys
 from pathlib import Path
 from joulewise import night_gate
-from joulewise.quiet_predicate_campaign import CHAIN_PATH, manifest_for, tracked_bytes, verify_manifest
+try:
+    from joulewise.night_kinds import kind_row
+    selected=kind_row('quiet_predicate_evidence')
+    row={'chain_source_path':selected.chain_source_path,'manifest_module':selected.manifest_module}
+except ModuleNotFoundError:
+    row=__KIND_ROW__
+CHAIN_PATH=row['chain_source_path']
+campaign=importlib.import_module(row['manifest_module'])
+manifest_for=campaign.manifest_for; tracked_bytes=campaign.tracked_bytes
+verify_manifest=campaign.verify_manifest
 check='plan'
 try:
     p=night_gate.NightPlan.from_mapping(json.loads(Path(sys.argv[1]).read_text()))
@@ -271,7 +285,8 @@ except (OSError,ValueError,KeyError,AssertionError,subprocess.SubprocessError):
     print(json.dumps({'failed':check})); sys.exit(0)
 print(json.dumps({'registration_path':str(registration),'registration_sha256':sha,
                   'chain_source_path':str(Path(p.measurement_root)/CHAIN_PATH),'chain_source_sha256':source}))
-"""
+""".replace("__KIND_ROW__", repr({"chain_source_path": row.chain_source_path,
+                                     "manifest_module": row.manifest_module}))
     result = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan], cwd=root))
     if "failed" in result:
         raise Refused("sealed candidate failed " + result["failed"])
@@ -279,10 +294,11 @@ print(json.dumps({'registration_path':str(registration),'registration_sha256':sh
 
 
 def notice_subject(state):
-    return f'NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; DIAGNOSTIC_NO_PACK) — attempt {state["attempt"]}'
+    return f'NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; {kind_row(KIND).receipt_class}) — attempt {state["attempt"]}'
 
 
 def render_notice(state, *, checked=None, check_sha256=None):
+    row = kind_row(KIND)
     binding = state["bindings"]
     registration = Path(binding["registration_path"])
     if not registration.is_absolute():
@@ -309,9 +325,9 @@ def render_notice(state, *, checked=None, check_sha256=None):
              'Subject: ' + notice_subject(state),
              "", "Ed,", "Launch needs no action from you unless you reply NO. Your NO overrides.",
              f'Arm attempt {state["attempt"]}; prior candidates for this date: {", ".join(state["prior_candidates"]) or "none"}.',
-             "This idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
+             row.notice_intro,
              f'After {protocol["settle_s"]} seconds settling, {count_word(protocol["envelopes"])} '
-             f'{protocol["envelope_s"]}-second idle envelopes start {protocol["slot_pitch_s"]} seconds apart '
+             f'{protocol["envelope_s"]}-second {row.notice_envelope_noun} start {protocol["slot_pitch_s"]} seconds apart '
              f'and use {protocol["interior_s"]}-second interiors after {protocol["interior_offset_s"]}-second offsets.',
              "Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a journal of busy cores (the average number of CPU cores a process kept busy).",
              f'The {span:,}-second program fits inside the {protocol["window_max_s"]:,}-second window; no top-up or automatic repeat.',
@@ -323,9 +339,9 @@ def render_notice(state, *, checked=None, check_sha256=None):
              f'{count_word(rule["abort_after_consecutive"]).capitalize()} such exclusions in a row end the night.',
              "At t0 the gate reads launchd's log for the previous ten minutes; when that read succeeds, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes. When the log cannot be read, the count is recorded as not measured and the night continues.",
              "During the night, read-only git show checks run in the measurement clone; successful results publication commits and pushes them from a separate results clone.",
-             "Partial observations and refusals are kept. No model, load generator, calibration-ledger session or measurement pack runs.",
+             row.notice_work,
              "The scheduler supervises the program and the courier emails the result. Evidence remains PROVISIONAL.",
-             "After delivery the lead sizes block two or records 'no cutoff qualifies'.",
+             row.notice_followup,
              f'plan_id: {state["plan_id"]}', f'repo_head = measurement_head = H: {state["head"]}',
              f'clone: {state["measurement_root"]}', f'custody: {state["custody_root"]}',
              f'runs: {state["custody_root"]}/runs', f'staged plan: {state["plan_path"]}',
@@ -416,7 +432,10 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             for path in (root, stage, custody):
                 absent(path)
             stage.mkdir()
-            prefix = "qpe01-pilot-n1-" + datetime.fromtimestamp(epoch).strftime("%Y%m%d")
+            prefix = kind_row(kind).plan_id_prefix
+            if not prefix:
+                raise Refused("kind has no plan id prefix")
+            prefix += datetime.fromtimestamp(epoch).strftime("%Y%m%d")
             prior = sorted(r["plan_id"] for r in records if r.get("plan_id", "").startswith(prefix))
             state.update(paths, plan_path=str(stage / "night_plan.json"),
                          attempt=1 + len(prior), prior_candidates=prior)
@@ -489,32 +508,41 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
         if "plan" not in done:
             absent(plan)
             # Author with H's code, never the caller checkout's imports.
+            row = kind_row(kind)
             code = """import json,sys,time
 from pathlib import Path
 from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S
 from joulewise.night_plan_writer import write_night_plan
-from joulewise.quiet_predicate_campaign import PROTOCOL_PATH
 s=json.load(sys.stdin); c=s['custody_root']
+try:
+    from joulewise.night_kinds import kind_row
+    selected=kind_row(s['kind'])
+    row={'receipt_class':selected.receipt_class,'window_max_s':selected.window_max_s,
+         'protocol_path':selected.protocol_path}
+except ModuleNotFoundError:
+    row=__KIND_ROW__
 authored_epoch_s=int(time.time())
 if s['t0']-authored_epoch_s > PLAN_MAX_AGE_S:
     print(json.dumps({'refused':"t0 is beyond the plan's maximum age at authoring"}))
     sys.exit(0)
 p=NightPlan.from_mapping(dict(schema='joulewise.night_plan.v2',schema_version=2,
-plan_id=s['plan_id'],receipt_class='DIAGNOSTIC_NO_PACK',t0_epoch_s=s['t0'],
-window_max_s=9000,authored_epoch_s=authored_epoch_s,repo_head=s['head'],
+plan_id=s['plan_id'],receipt_class=row['receipt_class'],t0_epoch_s=s['t0'],
+window_max_s=row['window_max_s'],authored_epoch_s=authored_epoch_s,repo_head=s['head'],
 measurement_root=s['measurement_root'],measurement_head=s['head'],
 chain_path=c+'/chain.zsh',chain_sha256_path=c+'/chain.zsh.sha256',
-custody_root=c,registration_path=PROTOCOL_PATH))
+custody_root=c,registration_path=row['protocol_path']))
 write_night_plan(s['plan_path'],p)
 print(json.dumps({}))
-"""
+            """.replace("__KIND_ROW__", repr({"receipt_class": row.receipt_class,
+                                     "window_max_s": row.window_max_s,
+                                     "protocol_path": row.protocol_path}))
             result = json.loads(run([python, "-B", "-c", code], cwd=root, input=json.dumps(state)))
             if "refused" in result:
                 raise Refused(result["refused"])
             checkpoint(state_path, state, "plan", [plan])
         if "wrapper" not in done:
             absent(custody)
-            run([python, "-B", "scripts/gen_evidence_night.py", "--plan", plan, "--render-only"], cwd=root)
+            run([python, "-B", kind_row(kind).generator_script, "--plan", plan, "--render-only"], cwd=root)
             state["bindings"] = sealed_candidate(root, plan)
             checkpoint(state_path, state, "wrapper", [custody / name for name in
                        ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", "evidence_manifest.json")])
@@ -1003,6 +1031,11 @@ from types import SimpleNamespace
 from joulewise import arm_census, night_gate
 from joulewise.quiet_guard_process import KernelProcessTable, KernelProcessRecord, DarwinProcessRecord
 request=json.load(sys.stdin); result={'argv':list(night_gate.AGENT_CENSUS_ARGV)}
+try:
+    from joulewise.night_kinds import kind_row
+    receipt_class=kind_row('quiet_predicate_evidence').receipt_class
+except ModuleNotFoundError:
+    receipt_class=__RECEIPT_CLASS__
 if not request['argv_only']:
     data=request['observation']; pid=request['caller_pid']
     if data is None: observation=arm_census.observe_arm_census(caller_pid=pid)
@@ -1011,10 +1044,10 @@ if not request['argv_only']:
             KernelProcessTable(tuple(KernelProcessRecord(**r) for r in data['inventory']['rows'])),
             tuple(DarwinProcessRecord(**dict(r,argv=tuple(r['argv']))) for r in data['records']),
             tuple(data['hit_pids']),tuple(data['diagnostics']))
-    verdict=arm_census.classify_arm_census(SimpleNamespace(receipt_class='DIAGNOSTIC_NO_PACK'),observation,caller_pid=pid)
+    verdict=arm_census.classify_arm_census(SimpleNamespace(receipt_class=receipt_class),observation,caller_pid=pid)
     result.update(observation=asdict(observation),classification=asdict(verdict))
 print(json.dumps(result))
-"""
+""".replace("__RECEIPT_CLASS__", repr(kind_row(KIND).receipt_class))
     root = Path(state["measurement_root"])
     request = dict(argv_only=argv_only, caller_pid=caller_pid,
                    observation=asdict(observation) if observation is not None else None)
@@ -1318,17 +1351,16 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
-            # Scoped like the t0 gate (F12, fix round 1): the predicate is spent
-            # only on a quiet_predicate_evidence chain.  Any other chain records
-            # the decision as `skipped`, so check.json still shows it; a chain
-            # whose kind cannot be read fails closed.
+            # Each arm predicate follows its own row flag, as at t0. An
+            # unflagged kind records `skipped`; an unreadable kind fails closed.
             try:
                 payload_kind = candidate_payload_kind(state)
             except (Refused, OSError, ValueError) as exc:
                 checks["machine_quiet"] = dict(
                     verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
             else:
-                if payload_kind == KIND:
+                row = NIGHT_KINDS.get(payload_kind)
+                if row is not None and row.corecaptured_at_arm_and_t0:
                     actuator = corecaptured_actuator or production_corecaptured_actuator()
                     # A rehearsal decides "nothing loaded" with a fixture
                     # launchctl, so it never licenses the production radio or
@@ -1342,10 +1374,12 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
                         # A loaded night or any other prior failure removes
                         # authority to touch the radio or restart fseventsd.
                         inspect("corecaptured", lambda: corecaptured_arm_check(actuator, read_only=True))
-                    inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
                 else:
                     checks["corecaptured"] = dict(verdict="skipped", reason="not an evidence night",
                                                    payload_kind=payload_kind)
+                if row is not None and row.non_observer_at_arm_and_t0:
+                    inspect("machine_quiet", lambda: machine_quiet_check(quiet_observer))
+                else:
                     checks["machine_quiet"] = dict(verdict="skipped", reason="not an evidence night",
                                                    payload_kind=payload_kind)
         # One predicate decides both the verdict and the refusal text below,
@@ -1623,7 +1657,7 @@ def baseline_drift(state):
 
 def notice_unused(state, notice_id):
     stage = Path(state["staging"])
-    prefix = "qpe01-pilot-n1-" + datetime.fromtimestamp(state["t0"]).strftime("%Y%m%d")
+    prefix = kind_row(KIND).plan_id_prefix + datetime.fromtimestamp(state["t0"]).strftime("%Y%m%d")
     candidates = set(stage.parent.glob(prefix + "*")) | {stage}
     for candidate in sorted(candidates):
         safe_path(candidate)
