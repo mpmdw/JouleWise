@@ -3683,7 +3683,7 @@
           "label": "HEADLINE-REDUCER-SEALED-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Reduce only a sealed, replayable roster. Each score row and capture window carries both registration and roster digests plus scorer_id; mismatch refuses. Key windows by (block_id, attempt) so voided and retried captures cannot collide. Derive a cap hit from generated_tokens at or above the registered token cap, require stop_reason, and refuse disagreement with cap flags. Every registered item is exactly one counted row or typed terminal refusal. Accept a terminal ceiling_violation window, record its gross_j on the refusal, and exclude it from cell sums by rule, not caller filtering. Pass terminal refusals through typed; consume every field listed as CARRIED to this reducer by gate 45. Full claim-bearing review gate after A291."
+        "summary": "Reduce only a sealed, replayable roster. Each score row carries scorer_id and both the registration and roster digests; each capture window carries both digests; any mismatch refuses; mismatch refuses. Key windows by (block_id, attempt) so voided and retried captures cannot collide. Derive a cap hit from generated_tokens at or above the registered token cap, require stop_reason, and refuse disagreement with cap flags. Every registered item is exactly one counted row or typed terminal refusal. Accept a terminal ceiling_violation window, record its gross_j on the refusal, and exclude it from cell sums by rule, not caller filtering. Pass terminal refusals through typed; consume every field listed as CARRIED to this reducer by gate 45. Full claim-bearing review gate after A291."
       },
       "authority": {
         "label": "A281A-RECUT cold gate Q3–Q5, amended by addendum §7 seal/replay and precedence",
@@ -8009,7 +8009,7 @@
       "acceptance": {
         "evidence": [
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/29-a280-pra-opus-lens.md R3 (arm-to-t0 gap and prescribed command)",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md items 10 and 14 (registration direction)"
+          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md item 10 and NEXT EXACT ACTION (4) (registration direction)"
         ],
         "pointer": {
           "json_pointer": "/tasks/T0-CLEAN-TREE-CHECK-01/acceptance",
