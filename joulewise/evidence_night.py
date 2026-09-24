@@ -155,9 +155,9 @@ def checkout_ok(root, head):
         raise Refused("dirty clone")
 
 
-def locations(roots, stages, epoch, head):
+def locations(roots, stages, epoch, head, kind=KIND):
     local = datetime.fromtimestamp(epoch)
-    row = kind_row(KIND)
+    row = kind_row(kind)
     if not row.plan_id_prefix or not row.measurement_root_suffix:
         raise Refused("kind has no preparation path identity")
     plan_id = row.plan_id_prefix + local.strftime("%Y%m%d-%H%M")
@@ -216,9 +216,9 @@ def staging_lock(stages, name):
         yield
 
 
-def prior_records(stages, roots):
+def prior_records(stages, roots, kind=KIND):
     records = []
-    for directory in sorted(stages.glob(kind_row(KIND).plan_id_prefix + "*")):
+    for directory in sorted(stages.glob(kind_row(kind).plan_id_prefix + "*")):
         safe_path(directory)
         if not directory.is_dir():
             continue
@@ -230,7 +230,7 @@ def prior_records(stages, roots):
                 raise Refused(f"unidentified prior preparation output: {directory}") from exc
         records.append(record)
     referenced = {r.get("custody_root") for r in records}
-    for directory in sorted((roots / "night-custody").glob(kind_row(KIND).plan_id_prefix + "*")):
+    for directory in sorted((roots / "night-custody").glob(kind_row(kind).plan_id_prefix + "*")):
         safe_path(directory)
         if (directory.is_dir() and not (directory / "night_plan.json").is_file()
                 and str(directory) not in referenced):
@@ -239,16 +239,24 @@ def prior_records(stages, roots):
 
 
 def sealed_candidate(root, plan):
-    row = kind_row(KIND)
+    from joulewise.night_gate import probe_payload_kind
+    value = json.loads(Path(plan).read_text())
+    chain = Path(value["chain_path"])
+    row = kind_row(probe_payload_kind(chain.read_text()))
+    if row.handler != "evidence":
+        raise Refused("sealed candidate has no approved evidence handler")
     code = """import hashlib,importlib,json,subprocess,sys
 from pathlib import Path
 from joulewise import night_gate
+fallback=__KIND_ROW__
 try:
     from joulewise.night_kinds import kind_row
-    selected=kind_row('quiet_predicate_evidence')
-    row={'chain_source_path':selected.chain_source_path,'manifest_module':selected.manifest_module}
+    selected=kind_row(__SELECTED_KIND__)
+    row={'chain_source_path':selected.chain_source_path,'manifest_module':selected.manifest_module,
+         'manifest_name':getattr(selected,'manifest_name',fallback['manifest_name']),
+         'wrapper_prefix':getattr(selected,'wrapper_prefix',fallback['wrapper_prefix'])}
 except ModuleNotFoundError:
-    row=__KIND_ROW__
+    row=fallback
 CHAIN_PATH=row['chain_source_path']
 campaign=importlib.import_module(row['manifest_module'])
 manifest_for=campaign.manifest_for; tracked_bytes=campaign.tracked_bytes
@@ -270,35 +278,60 @@ try:
     wrapper=Path(p.chain_path); raw=wrapper.read_bytes(); text=raw.decode()
     if not (Path(p.chain_sha256_path).read_text().split()==[hashlib.sha256(raw).hexdigest(),wrapper.name]): raise ValueError(check)
     check='manifest'
-    if not (json.loads((Path(p.custody_root)/'evidence_manifest.json').read_text())==manifest_for(p)): raise ValueError(check)
+    if not (json.loads((Path(p.custody_root)/row['manifest_name']).read_text())==manifest_for(p)): raise ValueError(check)
     verify_manifest(p,text)
     check='chain source'
     source=hashlib.sha256(tracked_bytes(p.measurement_root,p.measurement_head,CHAIN_PATH)).hexdigest()
-    if not (night_gate.chain_literal(text,'EVIDENCE_CHAIN_SOURCE_SHA256')==source): raise ValueError(check)
+    if not (night_gate.chain_literal(text,row['wrapper_prefix']+'_CHAIN_SOURCE_SHA256')==source): raise ValueError(check)
     check='registration'
     if not (json.loads(registration_raw)['chain_source_sha256']==source): raise ValueError(check)
     check='published plan path'
-    if not (night_gate.chain_literal(text,'EVIDENCE_PLAN_PATH')==str(Path(p.custody_root)/'night_plan.json')): raise ValueError(check)
+    if not (night_gate.chain_literal(text,row['wrapper_prefix']+'_PLAN_PATH')==str(Path(p.custody_root)/'night_plan.json')): raise ValueError(check)
     check='zsh -n'
     if not (subprocess.run(['/bin/zsh','-n',str(wrapper)],capture_output=True).returncode==0): raise ValueError(check)
 except (OSError,ValueError,KeyError,AssertionError,subprocess.SubprocessError):
     print(json.dumps({'failed':check})); sys.exit(0)
 print(json.dumps({'registration_path':str(registration),'registration_sha256':sha,
                   'chain_source_path':str(Path(p.measurement_root)/CHAIN_PATH),'chain_source_sha256':source}))
-""".replace("__KIND_ROW__", repr({"chain_source_path": row.chain_source_path,
-                                     "manifest_module": row.manifest_module}))
+""".replace("__SELECTED_KIND__", repr(row.kind)).replace("__KIND_ROW__", repr({
+    "chain_source_path": row.chain_source_path, "manifest_module": row.manifest_module,
+    "manifest_name": row.manifest_name, "wrapper_prefix": row.wrapper_prefix}))
     result = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan], cwd=root))
     if "failed" in result:
         raise Refused("sealed candidate failed " + result["failed"])
     return result
 
 
+def selected_candidate_row(state):
+    """Select from the sealed wrapper and its already bound chain source."""
+    from joulewise import night_gate
+    chain = safe_path(Path(state["custody_root"]) / "chain.zsh")
+    raw = chain.read_bytes()
+    tokens = safe_path(Path(str(chain) + ".sha256")).read_text().split()
+    if tokens != [hashlib.sha256(raw).hexdigest(), chain.name]:
+        raise Refused("candidate chain digest mismatch")
+    row = kind_row(night_gate.probe_payload_kind(raw.decode("utf-8")))
+    if not row.wrapper_prefix:
+        raise Refused("candidate kind has no wrapper literal handler")
+    source = safe_path(Path(state["measurement_root"]) / row.chain_source_path)
+    binding = state["bindings"]
+    if (binding["chain_source_path"] != str(source)
+            or binding["chain_source_sha256"] != digest(source)
+            or night_gate.chain_literal(raw.decode("utf-8"), row.wrapper_prefix + "_CHAIN_SOURCE_SHA256")
+            != binding["chain_source_sha256"]):
+        raise Refused("candidate chain source differs from sealed binding")
+    return row
+
+
 def notice_subject(state):
-    return f'NIGHT NOTICE — {state["plan_id"]} (EVIDENCE; {kind_row(KIND).receipt_class}) — attempt {state["attempt"]}'
+    row = selected_candidate_row(state)
+    return f'NIGHT NOTICE — {state["plan_id"]} ({row.notice_subject_label}; {row.receipt_class}) — attempt {state["attempt"]}'
 
 
 def render_notice(state, *, checked=None, check_sha256=None):
-    row = kind_row(KIND)
+    row = selected_candidate_row(state)
+    if row.handler != "evidence":
+        raise Refused("notice has no approved evidence handler")
     binding = state["bindings"]
     registration = Path(binding["registration_path"])
     if not registration.is_absolute():
@@ -329,18 +362,16 @@ def render_notice(state, *, checked=None, check_sha256=None):
              f'After {protocol["settle_s"]} seconds settling, {count_word(protocol["envelopes"])} '
              f'{protocol["envelope_s"]}-second {row.notice_envelope_noun} start {protocol["slot_pitch_s"]} seconds apart '
              f'and use {protocol["interior_s"]}-second interiors after {protocol["interior_offset_s"]}-second offsets.',
-             "Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a journal of busy cores (the average number of CPU cores a process kept busy).",
+             row.notice_power,
              f'The {span:,}-second program fits inside the {protocol["window_max_s"]:,}-second window; no top-up or automatic repeat.',
-             f'A process outside the measurement apparatus (the night\'s own measurement processes) at or above {protocol["t0_non_observer_share_max"]:g} busy cores '
-             'refuses the night at the arm check (the pre-arm checks run before this notice is sent and before the night is installed) or at t0, the scheduled start.',
-             f'A process outside the measurement apparatus using {rule["bar_core_seconds"]:g} or more core-seconds '
-             '(busy cores multiplied by seconds) '
-             'inside an envelope excludes that envelope. '
-             f'{count_word(rule["abort_after_consecutive"]).capitalize()} such exclusions in a row end the night.',
-             "At t0 the gate reads launchd's log for the previous ten minutes; when that read succeeds, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes. When the log cannot be read, the count is recorded as not measured and the night continues.",
-             "During the night, read-only git show checks run in the measurement clone; successful results publication commits and pushes them from a separate results clone.",
+             row.notice_busy_arm.format(share=protocol["t0_non_observer_share_max"]),
+             row.notice_busy_envelope.format(bar=rule["bar_core_seconds"],
+                 count=count_word(rule["abort_after_consecutive"]).capitalize()),
+             *( ["At t0 the gate reads launchd's log for the previous ten minutes; when that read succeeds, the night is refused at its start if launchd spawned the Wi-Fi log-capture helper corecaptured more than twice in the previous ten minutes. When the log cannot be read, the count is recorded as not measured and the night continues."]
+                if row.corecaptured_at_arm_and_t0 else []),
+             row.notice_publication,
              row.notice_work,
-             "The scheduler supervises the program and the courier emails the result. Evidence remains PROVISIONAL.",
+             row.notice_courier,
              row.notice_followup,
              f'plan_id: {state["plan_id"]}', f'repo_head = measurement_head = H: {state["head"]}',
              f'clone: {state["measurement_root"]}', f'custody: {state["custody_root"]}',
@@ -371,7 +402,9 @@ def render_notice(state, *, checked=None, check_sha256=None):
 def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             staging_under="/Users/edr/night-plan-staging", builder=build_venv,
             lock_verifier=verify_lock):
-    if kind != KIND:
+    row = NIGHT_KINDS.get(kind)
+    if (row is None or row.handler != "evidence" or not row.generator_script
+            or not row.manifest_name or not row.wrapper_prefix):
         raise Refused("invalid or unresolved kind")
     now = time.time()
     explicit_t0 = None if t0 == "next" else parse_t0(t0, now)
@@ -381,7 +414,7 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
         if any(os.path.lexists(p / ".git") for p in (parent, *parent.parents)):
             raise Refused(f"fenced checkout: preparation locations must be outside worktrees: {parent}")
     # Look for an owned candidate before resolving defaults again.
-    records = prior_records(stages, roots)
+    records = prior_records(stages, roots, kind)
     candidates = [record for record in records
                   if (record.get("kind") == kind and record.get("remote") == remote
                       and record.get("roots_under") == str(roots)
@@ -403,7 +436,7 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             resolved_head = parse_head(refs[0])
         state = dict(schema=SCHEMA, kind=kind, t0=epoch, head=resolved_head,
                      remote=remote, roots_under=str(roots), digests={}, steps=[])
-    paths = locations(roots, stages, epoch, resolved_head)
+    paths = locations(roots, stages, epoch, resolved_head, kind)
     root, stage, custody = (safe_path(paths[k]) for k in ("measurement_root", "staging", "custody_root"))
     if any(a == b or a in b.parents or b in a.parents
            for a, b in ((root, stage), (root, custody), (stage, custody))):
@@ -466,7 +499,7 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             required.add(str(stage / "night_plan.json"))
         if "wrapper" in done:
             required.update(str(custody / name) for name in
-                            ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", "evidence_manifest.json"))
+                            ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", row.manifest_name))
         if not required.issubset(state["digests"]):
             raise Refused("unknown prior-preparation ownership: missing sealed digests")
         for path, sha in state["digests"].items():
@@ -542,10 +575,13 @@ print(json.dumps({}))
             checkpoint(state_path, state, "plan", [plan])
         if "wrapper" not in done:
             absent(custody)
-            run([python, "-B", kind_row(kind).generator_script, "--plan", plan, "--render-only"], cwd=root)
+            generator_argv = [python, "-B", row.generator_script, "--plan", plan, "--render-only"]
+            if kind != KIND:
+                generator_argv.extend(("--chain-template", row.chain_source_path))
+            run(generator_argv, cwd=root)
             state["bindings"] = sealed_candidate(root, plan)
             checkpoint(state_path, state, "wrapper", [custody / name for name in
-                       ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", "evidence_manifest.json")])
+                       ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", row.manifest_name)])
         else:
             sealed_candidate(root, plan)
         # Read validation uses the pinned executor even on a completed resume.
@@ -586,12 +622,16 @@ print(json.dumps(s))
 def candidate_state(candidate):
     stage = safe_path(candidate)
     state = read_state(stage / "prepare.json")
+    row = NIGHT_KINDS.get(state.get("kind"))
+    if row is None or row.handler != "evidence":
+        raise Refused("candidate is not a completed, owned preparation")
     expected = locations(safe_path(state["roots_under"]), stage.parent,
-                         state["t0"], parse_head(state["head"]))
+                         state["t0"], parse_head(state["head"]), row.kind)
     if (any(state.get(k) != v for k, v in expected.items())
             or state.get("plan_path") != str(stage / "night_plan.json")
-            or state.get("kind") != KIND
             or [s["step"] for s in state["steps"]] != list(STEPS)):
+        raise Refused("candidate is not a completed, owned preparation")
+    if selected_candidate_row(state).kind != row.kind:
         raise Refused("candidate is not a completed, owned preparation")
     return state
 
@@ -613,9 +653,12 @@ def sealed_state(state, *, published=False, lock_verifier=verify_lock):
     root = safe_path(state["measurement_root"])
     stage, custody = safe_path(state["staging"]), safe_path(state["custody_root"])
     plan = custody / "night_plan.json" if published else stage / "night_plan.json"
+    row = selected_candidate_row(state)
+    if row.handler != "evidence" or not row.manifest_name:
+        raise Refused("sealed state has no approved evidence handler")
     required = {str(stage / "night_plan.json"), str(root / "env/mac-measurement-lock.txt")}
     required.update(str(custody / name) for name in
-                    ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", "evidence_manifest.json"))
+                    ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", row.manifest_name))
     if not required.issubset(state["digests"]):
         raise Refused("missing sealed digests")
     render = stage / "render"
@@ -1025,6 +1068,7 @@ def _create_successor_claim(state, row):
 
 def clone_census(state, caller_pid, observation=None, *, argv_only=False):
     # Fixture observations cross as data; all imports/classification belong to H.
+    row = selected_candidate_row(state)
     code = """import json,sys
 from dataclasses import asdict
 from types import SimpleNamespace
@@ -1033,7 +1077,7 @@ from joulewise.quiet_guard_process import KernelProcessTable, KernelProcessRecor
 request=json.load(sys.stdin); result={'argv':list(night_gate.AGENT_CENSUS_ARGV)}
 try:
     from joulewise.night_kinds import kind_row
-    receipt_class=kind_row('quiet_predicate_evidence').receipt_class
+    receipt_class=kind_row(__SELECTED_KIND__).receipt_class
 except ModuleNotFoundError:
     receipt_class=__RECEIPT_CLASS__
 if not request['argv_only']:
@@ -1047,7 +1091,7 @@ if not request['argv_only']:
     verdict=arm_census.classify_arm_census(SimpleNamespace(receipt_class=receipt_class),observation,caller_pid=pid)
     result.update(observation=asdict(observation),classification=asdict(verdict))
 print(json.dumps(result))
-""".replace("__RECEIPT_CLASS__", repr(kind_row(KIND).receipt_class))
+""".replace("__SELECTED_KIND__", repr(row.kind)).replace("__RECEIPT_CLASS__", repr(row.receipt_class))
     root = Path(state["measurement_root"])
     request = dict(argv_only=argv_only, caller_pid=caller_pid,
                    observation=asdict(observation) if observation is not None else None)
@@ -1064,9 +1108,7 @@ def candidate_payload_kind(state):
     just verified against its digest.
     """
 
-    from joulewise import night_gate
-    chain = safe_path(Path(state["custody_root"]) / "chain.zsh")
-    return night_gate.probe_payload_kind(chain.read_text(encoding="utf-8"))
+    return selected_candidate_row(state).kind
 
 
 def machine_quiet_check(observer=None):
@@ -1657,7 +1699,7 @@ def baseline_drift(state):
 
 def notice_unused(state, notice_id):
     stage = Path(state["staging"])
-    prefix = kind_row(KIND).plan_id_prefix + datetime.fromtimestamp(state["t0"]).strftime("%Y%m%d")
+    prefix = selected_candidate_row(state).plan_id_prefix + datetime.fromtimestamp(state["t0"]).strftime("%Y%m%d")
     candidates = set(stage.parent.glob(prefix + "*")) | {stage}
     for candidate in sorted(candidates):
         safe_path(candidate)

@@ -1387,15 +1387,18 @@ def _check_chain_identity(plan, probes, rows, evidence):
         # sidecar. Calibration wrappers retain their historical path unchanged.
         try:
             kind = probe_payload_kind(chain_text)
-            if kind_row(kind).authenticate_chain_source:
-                chain_path = kind_row(kind).chain_source_path
+            selected = kind_row(kind)
+            if selected.handler not in ("evidence", "calibration"):
+                raise ValueError("payload kind has no approved gate handler")
+            if selected.authenticate_chain_source:
+                chain_path = selected.chain_source_path
                 source = _run(probes, ("/usr/bin/git", "-C", plan.measurement_root,
                                       "show", f"{plan.measurement_head}:{chain_path}"))
                 if source.exit_code != 0:
                     raise ProbeError("tracked evidence chain source unavailable")
                 measured = hashlib.sha256(source.stdout.encode("utf-8")).hexdigest()
                 actual = probes.read_text(str(Path(plan.measurement_root) / chain_path))
-                if (chain_literal(chain_text, "EVIDENCE_CHAIN_SOURCE_SHA256") != measured or
+                if (chain_literal(chain_text, selected.wrapper_prefix + "_CHAIN_SOURCE_SHA256") != measured or
                         hashlib.sha256(actual.encode("utf-8")).hexdigest() != measured):
                     raise ValueError("evidence chain source differs from measurement_head or pinned wrapper")
                 rows["C5"].measured.update(payload_kind=kind, chain_source_sha256=measured)

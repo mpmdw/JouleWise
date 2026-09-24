@@ -1858,7 +1858,13 @@ class LaunchdAccessProbeTests(unittest.TestCase):
         self.fake.directive(self.label, "bootstrap")
         self.fake.directive(self.label, "bootout", loaded=True)
         clock = itertools.count(0.0, 5.0)  # only launchd_probe reads this clock
-        with mock.patch.object(self.engine.time, "monotonic", side_effect=lambda: next(clock)):
+        real_run = subprocess.run
+        def runner(argv, **kwargs):
+            if argv[0] == "/usr/bin/pgrep":
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return real_run(argv, **kwargs)
+        with mock.patch.object(self.engine.time, "monotonic", side_effect=lambda: next(clock)), \
+                mock.patch.object(self.engine.subprocess, "run", side_effect=runner):
             with self.assertRaises(self.engine.Refused) as caught:
                 self.engine.launchd_probe(self.prepared, str(self.fake.executable),
                                           self.engine.Shield(), timeout_s=0.5)

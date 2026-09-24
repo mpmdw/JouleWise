@@ -97,12 +97,12 @@ def zero_capture_facts(plan):
         return ZeroCaptureFacts(**base)
     try:
         chain = Path(plan.chain_path).read_text(encoding="utf-8")
-        declarations = re.findall(r"^\s*export\s+NIGHT_PAYLOAD_KIND\b.*$", chain, re.MULTILINE)
-        evidence = bool(declarations)
-        if evidence and (len(declarations) != 1 or
-                         re.search(r"^\s*export\s+CALIBRATION_LEDGER\b", chain, re.MULTILINE)
-                         or _literal(chain, "NIGHT_PAYLOAD_KIND") != "quiet_predicate_evidence"):
-            raise ValueError("ambiguous payload kind")
+        from joulewise.night_gate import probe_payload_kind
+        from joulewise.night_kinds import kind_row
+        row = kind_row(probe_payload_kind(chain))
+        if row.handler not in ("evidence", "calibration") or not row.successor_release:
+            raise ValueError("payload kind has no approved successor handler")
+        evidence = row.handler == "evidence"
         runs_root = None
         if not evidence:
             runs_root = Path(_literal(chain, "RUNS_ROOT"))
@@ -118,8 +118,8 @@ def zero_capture_facts(plan):
             index_state = "not_applicable"
             envelopes = 0
         else:
-            captures = _tree_count(night / "evidence", lambda _: True)
-            index = night / "evidence_envelopes.jsonl"
+            captures = _tree_count(night / row.artifact_dir, lambda _: True)
+            index = night / row.envelope_index_name
             index_mode = _mode(index)
             if index_mode is None:
                 index_state, envelopes = "absent", 0

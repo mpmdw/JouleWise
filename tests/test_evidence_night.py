@@ -46,21 +46,33 @@ class NoticeProtocolTextTests(unittest.TestCase):
         raw = protocol_path.read_bytes()
         plan = self.addCleanup_path / "plan.json"
         plan.write_text(json.dumps({"authored_epoch_s": 1, "window_max_s": 9000}))
+        row = entry.kind_row(entry.KIND)
+        clone = self.addCleanup_path / "clone"
+        source = clone / row.chain_source_path
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("fixture chain source\n")
+        source_sha = entry.digest(source)
+        custody = self.addCleanup_path / "custody"
+        custody.mkdir(exist_ok=True)
+        chain = custody / "chain.zsh"
+        chain.write_text(f"export NIGHT_PAYLOAD_KIND={row.kind}\n"
+                         f"export EVIDENCE_CHAIN_SOURCE_SHA256={source_sha}\n")
+        (custody / "chain.zsh.sha256").write_text(f"{entry.digest(chain)}  chain.zsh\n")
         return {
             "schedule": {"boundaries": {}, "install_spans_today": []},
             "plan_id": "fixture", "attempt": 1, "prior_candidates": [],
-            "head": "a" * 40, "measurement_root": "/fixture/clone",
-            "custody_root": "/fixture/custody", "plan_path": str(plan), "digests": {},
+            "head": "a" * 40, "measurement_root": str(clone),
+            "custody_root": str(custody), "plan_path": str(plan), "digests": {},
             "bindings": {"registration_path": str(protocol_path),
                          "registration_sha256": entry.digest(protocol_path),
-                         "chain_source_path": "/fixture/chain",
-                         "chain_source_sha256": "b" * 64},
+                         "chain_source_path": str(source),
+                         "chain_source_sha256": source_sha},
         }
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory(dir="/tmp")
         self.addCleanup(temp.cleanup)
-        self.addCleanup_path = Path(temp.name)
+        self.addCleanup_path = Path(temp.name).resolve()
         self.protocols = ROOT / "configs/campaigns/quiet_predicate_evidence_01"
 
     def test_v3_notice_states_bound_schedule_and_all_refusal_rules(self):
@@ -876,6 +888,10 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "joulewise/__init__.py").write_text("")
         for name in ("night_gate.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
+        night_row = entry.kind_row(entry.KIND)
+        tracked_chain = self.canonical / night_row.chain_source_path
+        tracked_chain.parent.mkdir(parents=True)
+        tracked_chain.write_text("fixture evidence source\n")
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
         if clone_route:
@@ -905,9 +921,17 @@ class LifecycleTests(unittest.TestCase):
             measurement_head=self.head, measurement_root=str(self.root), custody_root=str(self.custody),
             t0_epoch_s=self.t0)))
         files = [self.plan, self.root / "env/mac-measurement-lock.txt"]
+        source_path = self.root / night_row.chain_source_path
+        source_sha = entry.digest(source_path)
         for name in ("chain.zsh", "chain.zsh.sha256", "chain.zsh.chain-source.sha256", "evidence_manifest.json"):
             path = self.custody / name
-            path.write_text("sealed " + name)
+            if name == "chain.zsh":
+                path.write_text(f"export NIGHT_PAYLOAD_KIND={night_row.kind}\n"
+                                f"export EVIDENCE_CHAIN_SOURCE_SHA256={source_sha}\n")
+            elif name == "chain.zsh.sha256":
+                path.write_text(f"{entry.digest(self.custody / 'chain.zsh')}  chain.zsh\n")
+            else:
+                path.write_text("sealed " + name)
             files.append(path)
         for label in ("com.joulewise.night", "com.joulewise.night.deadman"):
             path = self.stage / "render" / (label + ".plist")
@@ -916,7 +940,8 @@ class LifecycleTests(unittest.TestCase):
         self.state = dict(schema=entry.SCHEMA, kind=entry.KIND, head=self.head, t0=self.t0,
             roots_under=str(self.base / "roots"), **paths, plan_path=str(self.plan),
             interpreter={"fixture": True}, steps=[dict(step=s) for s in entry.STEPS],
-            digests={str(p): entry.digest(p) for p in files})
+            digests={str(p): entry.digest(p) for p in files},
+            bindings={"chain_source_path": str(source_path), "chain_source_sha256": source_sha})
         entry.saved_json(self.stage / "prepare.json", self.state)
         self.absent_agents = dict(jobs=[dict(label=label, liveness="ABSENT") for label in
             ("com.joulewise.night", "com.joulewise.night.deadman")], plists=[], listing=dict(exit_code=0))
@@ -1558,7 +1583,8 @@ class LifecycleTests(unittest.TestCase):
             calls.append("observed")
             return quiet_machine()
 
-        record = entry.check(**dict(self.kw, quiet_observer=spy))
+        with patch.object(entry, "candidate_payload_kind", return_value="calibration"):
+            record = entry.check(**dict(self.kw, quiet_observer=spy))
         self.assertEqual(calls, [])
         self.assertEqual(record["checks"]["machine_quiet"],
                          dict(verdict="skipped", reason="not an evidence night", payload_kind="calibration"))
@@ -1566,7 +1592,6 @@ class LifecycleTests(unittest.TestCase):
         written = json.loads((self.stage / "lifecycle/check.json").read_text())
         self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "skipped")
         # The same candidate with an evidence chain: the observer is spent once.
-        self.evidence_chain()
         record = entry.check(**dict(self.kw, quiet_observer=spy))
         self.assertEqual(calls, ["observed"])
         self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "pass")
@@ -1588,7 +1613,8 @@ class LifecycleTests(unittest.TestCase):
         quiet is skipped; the text must name the courier alone.
         """
 
-        with patch.object(entry.shutil, "which", return_value=None):
+        with patch.object(entry.shutil, "which", return_value=None), \
+                patch.object(entry, "candidate_payload_kind", return_value="calibration"):
             with self.assertRaises(entry.Refused) as refused:
                 entry.check(**self.kw)
         written = json.loads((self.stage / "lifecycle/check.json").read_text())
@@ -1601,9 +1627,8 @@ class LifecycleTests(unittest.TestCase):
     def test_an_unreadable_payload_kind_fails_the_arm_check_closed(self):
         # Two declarations: the gate's probe calls the kind ambiguous; the
         # arm check refuses rather than guessing either scope.
-        self.evidence_chain("export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n"
-                            "export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n")
-        record = self.checked("payload kind unreadable")
+        with patch.object(entry, "candidate_payload_kind", side_effect=ValueError("ambiguous")):
+            record = self.checked("payload kind unreadable")
         self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "fail")
         self.assertFalse(record["armable"])
 
@@ -2245,9 +2270,8 @@ class LifecycleTests(unittest.TestCase):
         self.checked()
         before = (self.stage / "prepare.json").read_bytes()
         registration = ROOT / night_gate.QPE01_PILOT_REGISTRATION_PATH
-        bindings = dict(registration_path=str(registration),
-                        registration_sha256=entry.digest(registration),
-                        chain_source_path="source", chain_source_sha256="b" * 64)
+        bindings = dict(self.state["bindings"], registration_path=str(registration),
+                        registration_sha256=entry.digest(registration))
         schedule = dict(self.schedule, install_spans_today=[(self.t0 - 3600, self.t0 - 1800)])
         original = entry.notice
         with patch.object(entry, "sealed_candidate", return_value=bindings), \

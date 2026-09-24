@@ -43,6 +43,22 @@ class NightKind:
     notice_envelope_noun: str
     notice_work: str
     notice_followup: str
+    # Shared entry points dispatch only to handlers explicitly granted here.
+    handler: str | None = None
+    manifest_name: str | None = None
+    wrapper_prefix: str | None = None
+    notice_subject_label: str = ""
+    notice_power: str = ""
+    notice_busy_arm: str = ""
+    notice_busy_envelope: str = ""
+    notice_publication: str = ""
+    notice_courier: str = ""
+    artifact_dir: str | None = None
+    artifact_names: tuple[str, ...] = ()
+    envelope_index_name: str | None = None
+    cleanup_name: str | None = None
+    outcome_name: str | None = None
+    successor_release: bool = False
 
 
 NIGHT_KINDS = MappingProxyType({
@@ -67,6 +83,21 @@ NIGHT_KINDS = MappingProxyType({
         notice_envelope_noun="idle envelopes",
         notice_work="Partial observations and refusals are kept. No model, load generator, calibration-ledger session or measurement pack runs.",
         notice_followup="After delivery the lead sizes block two or records 'no cutoff qualifies'.",
+        handler="evidence",
+        manifest_name="evidence_manifest.json",
+        wrapper_prefix="EVIDENCE",
+        notice_subject_label="EVIDENCE",
+        notice_power="Power sampling is every 100 ms, with census, AC-power, thermal, timing and cleanup observations and a journal of busy cores (the average number of CPU cores a process kept busy).",
+        notice_busy_arm="A process outside the measurement apparatus (the night's own measurement processes) at or above {share:g} busy cores refuses the night at the arm check (the pre-arm checks run before this notice is sent and before the night is installed) or at t0, the scheduled start.",
+        notice_busy_envelope="A process outside the measurement apparatus using {bar:g} or more core-seconds (busy cores multiplied by seconds) inside an envelope excludes that envelope. {count} such exclusions in a row end the night.",
+        notice_publication="During the night, read-only git show checks run in the measurement clone; successful results publication commits and pushes them from a separate results clone.",
+        notice_courier="The scheduler supervises the program and the courier emails the result. Evidence remains PROVISIONAL.",
+        artifact_dir="evidence",
+        artifact_names=("evidence_busy_cores.jsonl", "evidence_processes.jsonl", "evidence_envelopes.jsonl", "evidence_cleanup.json", "evidence_outcome.json"),
+        envelope_index_name="evidence_envelopes.jsonl",
+        cleanup_name="evidence_cleanup.json",
+        outcome_name="evidence_outcome.json",
+        successor_release=True,
     ),
     "calibration": NightKind(
         kind="calibration",
@@ -89,6 +120,8 @@ NIGHT_KINDS = MappingProxyType({
         notice_envelope_noun="",
         notice_work="",
         notice_followup="",
+        handler="calibration",
+        successor_release=True,
     ),
 })
 

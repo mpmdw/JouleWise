@@ -793,12 +793,16 @@ def probe_label(plan_id):
 def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_path=None):
     import math
     from joulewise.night_gate import probe_payload_kind
+    from joulewise.night_kinds import kind_row
     try:
         kind = probe_payload_kind(Path(prepared.plan.chain_path).read_text())
     except (OSError, ValueError) as exc:
         raise Refused(2, str(exc))
-    if kind == "quiet_predicate_evidence":
+    row = kind_row(kind)
+    if row.handler == "evidence":
         return validate_evidence_probe_receipt(prepared, max_age_s, receipt_path)
+    if row.handler != "calibration":
+        raise Refused(2, "night payload kind has no approved probe handler")
     path = receipt_path or prepared.plan_path.parent / "night_probe_receipt.json"
     try:
         receipt = json.loads(path.read_text())
@@ -887,8 +891,15 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
 
 def evidence_probe_bindings(plan, plan_path, python):
     from joulewise import night_gate
-    from joulewise.quiet_predicate_campaign import verify_manifest, CHAIN_PATH, HARNESS_PATHS, PROTOCOL_PATH
+    from joulewise.night_kinds import kind_row
+    from importlib import import_module
     chain = Path(plan.chain_path)
+    row = kind_row(night_gate.probe_payload_kind(chain.read_text()))
+    if row.handler != "evidence":
+        raise ValueError("night payload kind has no approved probe handler")
+    campaign = import_module(row.manifest_module)
+    verify_manifest, CHAIN_PATH = campaign.verify_manifest, row.chain_source_path
+    HARNESS_PATHS, PROTOCOL_PATH = campaign.HARNESS_PATHS, row.protocol_path
     sha = _digest(chain)
     tokens = Path(plan.chain_sha256_path).read_text().split()
     if not tokens or tokens[0] != sha or len(tokens) > 2 or (len(tokens) == 2 and tokens[1] != chain.name):
@@ -902,7 +913,7 @@ def evidence_probe_bindings(plan, plan_path, python):
     published_plan_path = Path(plan.custody_root) / "night_plan.json"
     if Path(plan_path).resolve() != published_plan_path.resolve():
         raise ValueError("evidence plan not at its published path")
-    if night_gate.chain_literal(chain.read_text(), "EVIDENCE_PLAN_PATH") != str(published_plan_path):
+    if night_gate.chain_literal(chain.read_text(), row.wrapper_prefix + "_PLAN_PATH") != str(published_plan_path):
         raise ValueError("evidence plan path mismatch")
     registration_sha = manifest["files"][PROTOCOL_PATH]
     ruled = night_gate.RULED_REGISTRATIONS.get(registration_sha)
@@ -925,7 +936,11 @@ def evidence_probe_bindings(plan, plan_path, python):
 def validate_evidence_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_path=None):
     """Second receipt kind; no calibration custody arithmetic is applicable."""
     import math
-    from joulewise.quiet_predicate_campaign import RECEIPT_SCHEMA
+    from importlib import import_module
+    from joulewise.night_kinds import kind_row
+    from joulewise.night_gate import probe_payload_kind
+    row = kind_row(probe_payload_kind(Path(prepared.plan.chain_path).read_text()))
+    RECEIPT_SCHEMA = import_module(row.manifest_module).RECEIPT_SCHEMA
     path = receipt_path or prepared.plan_path.parent / "night_probe_receipt.json"
     try:
         receipt = json.loads(path.read_text())
@@ -1165,8 +1180,12 @@ def validate_install(args, repo):
             payload_kind = night_gate.probe_payload_kind(chain_text)
         except ValueError as exc:
             raise Refused(2, "ambiguous night payload declaration: " + str(exc))
-        if payload_kind == "quiet_predicate_evidence":
-            from joulewise.quiet_predicate_campaign import verify_manifest, PROTOCOL_PATH
+        from joulewise.night_kinds import kind_row
+        row = kind_row(payload_kind)
+        if row.handler == "evidence":
+            from importlib import import_module
+            campaign = import_module(row.manifest_module)
+            verify_manifest, PROTOCOL_PATH = campaign.verify_manifest, row.protocol_path
             sha = _digest(chain)
             try:
                 tokens = Path(plan.chain_sha256_path).read_text().split()
@@ -1178,17 +1197,17 @@ def validate_install(args, repo):
                 manifest_path, manifest, manifest_sha = verify_manifest(plan, chain_text)
             except (OSError, ValueError) as exc:
                 raise Refused(2, "evidence manifest verification failed: " + str(exc))
-            if night_gate.chain_literal(chain_text, "EVIDENCE_PLAN_PATH") != str(Path(plan.custody_root) / "night_plan.json"):
+            if night_gate.chain_literal(chain_text, row.wrapper_prefix + "_PLAN_PATH") != str(Path(plan.custody_root) / "night_plan.json"):
                 raise Refused(2, "evidence plan path mismatch")
             ruled = night_gate.RULED_REGISTRATIONS.get(manifest["files"][PROTOCOL_PATH])
             if ruled is None or not ruled["binds_chain"]:
                 raise Refused(2, "registration is not a chain-bound ruled registration")
             # Printed digests are advisory: nothing consumes them. The launchd
             # probe executes the chain verify-only before any install.
-            print(json.dumps({"payload_kind": "quiet_predicate_evidence", "chain_sha256": sha, "input_digests": {
+            print(json.dumps({"payload_kind": row.kind, "chain_sha256": sha, "input_digests": {
                 str(Path(args.plan).absolute()): "sha256:" + _digest(args.plan),
                 str(manifest_path): "sha256:" + manifest_sha}}, sort_keys=True))
-        else:
+        elif row.handler == "calibration":
             source = Path(plan.measurement_root) / "scripts/night_chains/calibration_derivation_only.zsh"
             if source.is_file() and "NIGHT_RESERVATION_ARGV_ONLY" in source.read_text():
                 try:
@@ -1197,6 +1216,8 @@ def validate_install(args, repo):
                     raise Refused(2, "reservation inspection failed: " + str(exc))
             else:
                 print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
+        else:
+            raise Refused(2, "night payload kind has no approved render handler")
     if args.render_only is None and not getattr(args, "launchd_probe", False):
         validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
     return prepared

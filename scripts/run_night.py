@@ -45,6 +45,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import night_gate, t0_rehearsal, quiet_admission
+from joulewise.night_kinds import kind_row
 from joulewise.measurement_liveness import observe_identity  # noqa: E402
 
 from joulewise.night_gate import (  # noqa: E402
@@ -1001,7 +1002,19 @@ def _artifact_entry(custody_root: Path, path: Path) -> dict[str, Any] | None:
         return {"path": relative, "sha256": None, "error": type(exc).__name__}
 
 
-def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
+def _custody_row(plan):
+    try:
+        chain = Path(plan.chain_path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        # Pre-wrapper fixture callers retain the historical idle inventory.
+        return kind_row("quiet_predicate_evidence")
+    return kind_row(night_gate.probe_payload_kind(chain))
+
+
+def _artifact_list(custody_root: Path, night_dir: Path, plan: NightPlan | None = None) -> list[dict[str, Any]]:
+    row = _custody_row(plan) if plan is not None else kind_row("quiet_predicate_evidence")
+    if row.handler not in ("evidence", "calibration"):
+        raise ValueError("night payload kind has no approved artifact handler")
     paths = [
         custody_root / "night.log",
         night_dir / "receipt.json",
@@ -1026,15 +1039,11 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, Any]]:
         night_dir / "courier.attempts.jsonl",
         night_dir / "courier.heartbeat",
         night_dir / "courier.sent",
-        night_dir / "evidence_busy_cores.jsonl",
-        night_dir / "evidence_processes.jsonl",
-        night_dir / "evidence_envelopes.jsonl",
-        night_dir / "evidence_cleanup.json",
-        night_dir / "evidence_outcome.json",
+        *(night_dir / name for name in row.artifact_names),
     ]
     artifacts = [entry for path in paths
                  if (entry := _artifact_entry(custody_root, path)) is not None]
-    evidence = night_dir / "evidence"
+    evidence = night_dir / (row.artifact_dir or "evidence")
 
     def discovery_failed(error):
         raise error
@@ -1095,14 +1104,14 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
         )
         destination = clone / "docs" / "process_traces" / "night-results" / plan.plan_id
         destination.mkdir(parents=True, exist_ok=True)
-        for artifact in _artifact_list(custody_root, night_dir):
+        for artifact in _artifact_list(custody_root, night_dir, plan):
             if "error" in artifact:
                 omitted.append(f"{artifact['path']} ({artifact['error']})")
                 continue
             source = custody_root / artifact["path"]
             # Preserve repeated envelope basenames; flattening loses all but
             # the final rounds/session/raw-power file.
-            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / "evidence") else Path(source.name)
+            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / (_custody_row(plan).artifact_dir or "evidence")) else Path(source.name)
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
@@ -1196,6 +1205,9 @@ def _watchdog_liveness_for_courier(plan: NightPlan) -> tuple[Path, str, str]:
 def _courier_argv(
     custody_root: Path, plan: NightPlan, courier_bin: Path
 ) -> tuple[str, ...]:
+    row = _custody_row(plan)
+    if row.handler not in ("evidence", "calibration"):
+        raise ValueError("night payload kind has no approved courier handler")
     prompt = (REPO_ROOT / "docs" / "process" / "NIGHT_COURIER_PROMPT.md").read_text(
         encoding="utf-8"
     )
@@ -1215,10 +1227,10 @@ def _courier_argv(
         "You must include these watchdog fields in the email body. An age greater "
         "than 900 seconds, or an unavailable age, means the watchdog is dead.\n"
     )
-    cleanup_path = custody_root / "night/evidence_cleanup.json"
+    cleanup_path = custody_root / "night" / (row.cleanup_name or "evidence_cleanup.json")
     if cleanup_path.exists():
         prompt += (f"\nEvidence cleanup record: {cleanup_path}. Read this existing record and "
-                   "night/evidence_outcome.json; report success, partial evidence or refusal, "
+                   f"night/{row.outcome_name or 'evidence_outcome.json'}; report success, partial evidence or refusal, "
                    "including unproven cleanup and all refusal documents. Never recreate the record.\n")
     return (
         str(courier_bin),
@@ -1343,14 +1355,20 @@ def _evidence_cleanup_error(plan, night_dir):
             return None
         c5 = next((row for row in receipt["conditions"]
                    if row["condition_id"] == "C5"), {})
-        if (c5.get("status") != "PASS"
-                or c5.get("measured", {}).get("payload_kind") != "quiet_predicate_evidence"):
+        if c5.get("status") != "PASS":
             return None
-
-        from joulewise.quiet_predicate_campaign import cleanup_record, write_refusal
+        payload_kind = c5.get("measured", {}).get("payload_kind")
+        if payload_kind is None:
+            return None
+        row = kind_row(payload_kind)
+        if row.handler != "evidence":
+            return "night payload kind has no approved cleanup handler"
+        from importlib import import_module
+        executor = import_module(row.executor_module)
+        cleanup_record, write_refusal = executor.cleanup_record, executor.write_refusal
         cleanup = cleanup_record(night_dir)
         cleanup_proven = cleanup["cleanup_proven"] is True
-        path = night_dir / "evidence_outcome.json"
+        path = night_dir / row.outcome_name
         try:
             raw = path.read_bytes()
         except FileNotFoundError:
@@ -1602,7 +1620,7 @@ def _write_result(
                              else None),
         "refusal_documents": [str(path.relative_to(custody_root))
                               for path in _refusal_paths(night_dir)],
-        "artifacts": _artifact_list(custody_root, night_dir),
+        "artifacts": _artifact_list(custody_root, night_dir, plan),
     }
     _write_json(night_dir / "result.json", document)
     return document
@@ -3693,11 +3711,16 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
     except ValueError as exc:
         _atomic_probe_json(receipt_path, {"outcome": "refused", "refusal_code": str(exc)})
         return 2
-    if payload_kind == "quiet_predicate_evidence":
+    row = kind_row(payload_kind)
+    if row.handler == "evidence":
         phase("evidence-dispatch", {"schema": "joulewise.night_evidence_probe_receipt.v1",
               "plan_id": plan.plan_id, "measurement_head": plan.measurement_head,
               "verify_only": True, "collect_started": False, "load_started": False})
         return _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase)
+    if row.handler != "calibration":
+        _atomic_probe_json(receipt_path, {"outcome": "refused",
+                                          "refusal_code": "night payload kind has no approved probe handler"})
+        return 2
     phase("bindings", {"plan_id": plan.plan_id, "measurement_head": plan.measurement_head})
     bindings = probe_bindings(plan, plan_path, sys.executable)
     record = dict(bindings, schema="joulewise.night_probe_receipt.v1",
