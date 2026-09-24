@@ -18,20 +18,20 @@ from scripts.gen_derivation_night import GenerationRefusal, _quote, _census_clea
 
 
 def generate(plan_path, *, out=None, chain_template=CHAIN_PATH):
+    plan_path = Path(plan_path).absolute()
+    plan = NightPlan.from_mapping(json.loads(plan_path.read_text()))
     matches = [item for item in NIGHT_KINDS.values()
                if item.chain_source_path == chain_template and item.payload_kind]
+    row = matches[0] if len(matches) == 1 else kind_row("quiet_predicate_evidence")
+    if plan.receipt_class != row.receipt_class or plan.quiet_admission is not None:
+        raise GenerationRefusal("evidence requires v2 DIAGNOSTIC_NO_PACK")
     if len(matches) != 1:
         raise GenerationRefusal("calibration/derivation or alternate chain refused")
-    row = matches[0]
     if (row.handler != "evidence" or not row.manifest_for
             or not row.executor_module or not row.manifest_name or not row.wrapper_prefix):
         raise GenerationRefusal("calibration/derivation or alternate chain refused")
     # Match the basename stem as the original refusal did, including suffix variants.
     calibration_basename = Path(kind_row("calibration").chain_source_path).stem
-    plan_path = Path(plan_path).absolute()
-    plan = NightPlan.from_mapping(json.loads(plan_path.read_text()))
-    if plan.receipt_class != row.receipt_class or plan.quiet_admission is not None:
-        raise GenerationRefusal("evidence requires v2 DIAGNOSTIC_NO_PACK")
     target = Path(out).absolute() if out else Path(plan.chain_path)
     if str(target) != plan.chain_path or plan.chain_sha256_path != str(target) + ".sha256":
         raise GenerationRefusal("output and sidecar must match the sealed plan")

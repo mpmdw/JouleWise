@@ -1,7 +1,7 @@
 """Read-only, fail-closed disk facts shared by release and successor admission.
 
-The disk scan uses the Python standard library and selects the recognised
-night-kind row. A missing scan root is empty only after the real custody root
+The disk scan uses the night-kind and gate modules to select a recognised
+row. A missing scan root is empty only after the real custody root
 and delivered result/receipt are established.
 """
 
@@ -138,7 +138,7 @@ def zero_capture_facts(plan):
             reservation_markers_found=reservations, capture_entries_found=captures,
             envelope_index_state=index_state, envelopes_captured=envelopes,
             scan_complete=True)
-    except (OSError, UnicodeError, ValueError, TypeError):
+    except (OSError, UnicodeError, ValueError, TypeError, ImportError):
         return ZeroCaptureFacts(**base)
 
 

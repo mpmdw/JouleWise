@@ -143,6 +143,16 @@ class EvidenceGeneratorTests(unittest.TestCase):
         with self.assertRaisesRegex(generator.GenerationRefusal, "calibration/derivation"):
             generator.generate(self.f.plan_path)
 
+    def test_alternate_template_preserves_plan_refusal_order(self):
+        self.f.plan = replace(self.f.plan, receipt_class="REHEARSAL_STUB")
+        self.f.write_plan()
+        with self.assertRaisesRegex(generator.GenerationRefusal,
+                                    "evidence requires v2 DIAGNOSTIC_NO_PACK"):
+            generator.generate(self.f.plan_path, chain_template="custom.zsh")
+        self.f.plan_path.write_text("[]")
+        with self.assertRaises(night_gate.PlanError):
+            generator.generate(self.f.plan_path, chain_template="custom.zsh")
+
     def test_dirty_tracked_input_unruled_protocol_census_and_sidecar_refuse(self):
         source = self.f.repo / campaign.HARNESS_PATHS[0]
         data = source.read_bytes()

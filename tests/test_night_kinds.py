@@ -243,6 +243,13 @@ class NightKindTests(unittest.TestCase):
         self.assertEqual(idle.wrapper_prefix, "EVIDENCE")
         self.assertTrue(idle.successor_release)
         self.assertEqual(calibration.handler, "calibration")
+        self.assertEqual(calibration.artifact_names, idle.artifact_names)
+        self.assertEqual(calibration.artifact_dir, idle.artifact_dir)
+        self.assertEqual(calibration.cleanup_name, idle.cleanup_name)
+        self.assertEqual(calibration.outcome_name, idle.outcome_name)
+        from scripts import run_night
+        self.assertEqual(run_night._REPORTING_ARTIFACT_NAMES, idle.artifact_names)
+        self.assertEqual(run_night._REPORTING_ARTIFACT_DIR, idle.artifact_dir)
         self.assertIsNone(calibration.plan_id_prefix)
         self.assertIsNone(calibration.measurement_root_suffix)
         with self.assertRaises(UnknownNightKind):
@@ -251,6 +258,69 @@ class NightKindTests(unittest.TestCase):
             NIGHT_KINDS["other"] = None
         with self.assertRaises(FrozenInstanceError):
             idle.kind = "other"
+
+    def test_driver_dispatch_requires_wrapper_or_valid_c5(self):
+        from scripts import run_night
+        from tests.test_night_gate import make_plan
+
+        custody = FIXTURE / "dispatch-custody"
+        night = custody / "night"
+        night.mkdir(parents=True)
+        chain = custody / "chain.zsh"
+        idle = kind_row("quiet_predicate_evidence")
+        plan = make_plan(plan_id=idle.plan_id_prefix + "test", custody_root=str(custody),
+                         chain_path=str(chain), chain_sha256_path=str(chain) + ".sha256",
+                         registration_path=idle.protocol_path)
+        with self.assertRaisesRegex(ValueError, "night payload kind unavailable"):
+            run_night._custody_row(plan)
+        receipt = {"plan_id": plan.plan_id, "conditions": [{"condition_id": "C5",
+                   "status": "PASS", "measured": {"payload_kind": idle.kind}}]}
+        (night / "receipt.json").write_text(json.dumps(receipt))
+        with mock.patch.object(night_gate, "validate_receipt", return_value=[]):
+            self.assertIs(run_night._custody_row(plan), idle)
+            chain.write_bytes(b"\xff")
+            self.assertIs(run_night._custody_row(plan), idle)
+            chain.write_text("#!/bin/zsh\n")
+            with self.assertRaisesRegex(ValueError, "differs from authenticated receipt"):
+                run_night._custody_row(plan)
+        receipt["conditions"][0]["measured"]["payload_kind"] = None
+        (night / "receipt.json").write_text(json.dumps(receipt))
+        chain.unlink()
+        with mock.patch.object(night_gate, "validate_receipt", return_value=[]), \
+                self.assertRaisesRegex(ValueError, "night payload kind unavailable"):
+            run_night._custody_row(plan)
+
+    def test_result_reporting_survives_unavailable_kind(self):
+        from scripts import run_night
+        from tests.test_night_gate import make_plan
+
+        for case, raw in (("ambiguous", b"export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n"
+                            b"export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n"),
+                          ("nonutf8", b"\xff"),
+                          ("unknown", b"export NIGHT_PAYLOAD_KIND=unknown\n"),
+                          ("calibration_missing", None)):
+            with self.subTest(case=case):
+                custody = FIXTURE / ("report-" + case)
+                night = custody / "night"
+                night.mkdir(parents=True)
+                chain = custody / "chain.zsh"
+                if raw is not None:
+                    chain.write_bytes(raw)
+                plan = make_plan(plan_id="cal-fixture" if raw is None else "qpe01-pilot-n1-test",
+                                 custody_root=str(custody), chain_path=str(chain),
+                                 chain_sha256_path=str(chain) + ".sha256")
+                run_night._write_standard_refusal_result(
+                    custody, night, plan, run_night._CODES["chain_digest_mismatch"],
+                    "fixture", time.time(), time.monotonic_ns())
+                result = json.loads((night / "result.json").read_text())
+                self.assertEqual(result["verdict"], "REFUSED")
+                self.assertEqual(len(result["artifacts"]), 1)
+
+    def test_sealed_candidate_malformed_plan_is_typed(self):
+        path = FIXTURE / "malformed-sealed-plan.json"
+        path.write_text("[]")
+        with self.assertRaisesRegex(evidence_night.Refused, "sealed candidate failed plan"):
+            evidence_night.sealed_candidate(FIXTURE, path)
 
     def test_base_archive_byte_goldens(self):
         self.assert_prepared_candidate_head()
@@ -390,7 +460,10 @@ class NightKindTests(unittest.TestCase):
                                    census_row(90, 20, "/bin/python3"), hits=(20,))
             census = evidence_night.clone_census(state, 90, observed)
             self.assertEqual(census["classification"]["receipt_class"], third.receipt_class)
-            with self.assertRaisesRegex(gen_evidence_night.GenerationRefusal, "alternate chain refused"):
+            generator_row = replace(third, receipt_class=plan.receipt_class)
+            generator_table = MappingProxyType(dict(NIGHT_KINDS, test_night=generator_row))
+            with mock.patch.object(gen_evidence_night, "NIGHT_KINDS", generator_table), \
+                    self.assertRaisesRegex(gen_evidence_night.GenerationRefusal, "alternate chain refused"):
                 gen_evidence_night.generate(plan_path, chain_template=third.chain_source_path)
 
             wrapper = "export NIGHT_PAYLOAD_KIND=test_night\n"
@@ -427,8 +500,8 @@ class NightKindTests(unittest.TestCase):
             self.assertIn("no approved probe handler", receipt_path.read_text())
             with self.assertRaisesRegex(ValueError, "no approved artifact handler"):
                 run_night._artifact_list(custody, custody / "night", plan)
-            with self.assertRaisesRegex(ValueError, "no approved courier handler"):
-                run_night._courier_argv(custody, plan, FIXTURE / "courier")
+            self.assertEqual(run_night._courier_argv(custody, plan, FIXTURE / "courier")[0],
+                             str(FIXTURE / "courier"))
             night = custody / "night"
             night.mkdir(exist_ok=True)
             (night / "chain.started").write_text("{}")
@@ -448,12 +521,15 @@ class NightKindTests(unittest.TestCase):
                 chain.unlink()
                 with self.assertRaisesRegex(ValueError, "no approved artifact handler"):
                     run_night._artifact_list(custody, night, plan)
-                with self.assertRaisesRegex(ValueError, "no approved courier handler"):
-                    run_night._courier_argv(custody, plan, FIXTURE / "courier")
+                self.assertEqual(run_night._courier_argv(custody, plan, FIXTURE / "courier")[0],
+                                 str(FIXTURE / "courier"))
                 self.assertEqual(run_night._evidence_cleanup_error(plan, night),
                                  "night payload kind has no approved cleanup handler")
             (night / "courier.sent").write_text("delivered")
             (night / "result.json").write_text("{}")
+            (night / "chain.started").unlink()
+            chain.write_text(f"export NIGHT_PAYLOAD_KIND={third.kind}\n")
+            self.assertFalse(zero_capture_facts.zero_capture_facts(plan).scan_complete)
             self.assertFalse(zero_capture_facts.zero_capture_facts(plan).clean)
 
     def test_third_row_notice_text_and_corecaptured_flag(self):
@@ -576,10 +652,10 @@ class NightKindTests(unittest.TestCase):
         courier = run_night._courier_argv(custody, plan, FIXTURE / "courier")
         self.assertIn("night/evidence_outcome.json", courier[2])
         Path(original.chain_path).unlink()
-        idle_paths = {entry["path"] for entry in run_night._artifact_list(custody, night, original)}
+        idle_paths = {entry["path"] for entry in run_night._artifact_list(custody, night)}
         self.assertIn("night/evidence_cleanup.json", idle_paths)
         with self.assertRaisesRegex(ValueError, "payload kind unavailable"):
-            run_night._artifact_list(custody, night, replace(original, plan_id="test-night"))
+            run_night._artifact_list(custody, night, original)
 
     def test_calibration_cannot_supply_preparation_paths(self):
         with self.assertRaisesRegex(evidence_night.Refused, "no preparation path identity"):

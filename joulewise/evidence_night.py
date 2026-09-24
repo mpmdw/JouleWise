@@ -239,10 +239,13 @@ def prior_records(stages, roots, kind=KIND):
 
 
 def sealed_candidate(root, plan):
-    from joulewise.night_gate import probe_payload_kind
+    from joulewise.night_gate import NightPlan, probe_payload_kind
     try:
-        value = json.loads(Path(plan).read_text())
-        chain = Path(value["chain_path"])
+        value = NightPlan.from_mapping(json.loads(Path(plan).read_text()))
+    except (OSError, UnicodeError, ValueError, KeyError) as exc:
+        raise Refused("sealed candidate failed plan") from exc
+    try:
+        chain = Path(value.chain_path)
         row = kind_row(probe_payload_kind(chain.read_text()))
     except (OSError, UnicodeError, ValueError, KeyError) as exc:
         raise Refused("sealed candidate payload kind unreadable") from exc
@@ -640,9 +643,8 @@ def candidate_state(candidate):
                          state["t0"], parse_head(state["head"]), row.kind)
     if (any(state.get(k) != v for k, v in expected.items())
             or state.get("plan_path") != str(stage / "night_plan.json")
+            or state.get("kind") != row.kind
             or [s["step"] for s in state["steps"]] != list(STEPS)):
-        raise Refused("candidate is not a completed, owned preparation")
-    if selected_candidate_row(state).kind != row.kind:
         raise Refused("candidate is not a completed, owned preparation")
     return state
 
@@ -664,7 +666,9 @@ def sealed_state(state, *, published=False, lock_verifier=verify_lock):
     root = safe_path(state["measurement_root"])
     stage, custody = safe_path(state["staging"]), safe_path(state["custody_root"])
     plan = custody / "night_plan.json" if published else stage / "night_plan.json"
-    row = selected_candidate_row(state)
+    row = NIGHT_KINDS.get(state.get("kind"))
+    if row is None:
+        raise Refused("sealed state has no approved evidence handler")
     if row.handler != "evidence" or not row.manifest_name:
         raise Refused("sealed state has no approved evidence handler")
     required = {str(stage / "night_plan.json"), str(root / "env/mac-measurement-lock.txt")}
@@ -682,6 +686,8 @@ def sealed_state(state, *, published=False, lock_verifier=verify_lock):
         safe_path(physical)
         if not physical.is_file() or digest(physical) != sha:
             raise Refused(f"sealed-byte drift: {physical}")
+    if selected_candidate_row(state).kind != row.kind:
+        raise Refused("sealed state payload kind differs from preparation")
     checkout_ok(root, state["head"])
     lock_verifier(root)
     if interpreter(root) != state["interpreter"]:

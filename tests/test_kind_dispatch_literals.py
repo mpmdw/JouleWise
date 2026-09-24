@@ -12,12 +12,16 @@ FILES = (
     'scripts/run_night.py',
     'joulewise/zero_capture_facts.py',
 )
-TOKENS = re.compile(r"quiet_predicate_evidence|QPE01|qpe01|evidence_manifest\.json|EVIDENCE_")
+TOKENS = re.compile(r"quiet_predicate_evidence|QPE01|qpe01|evidence_manifest\.json|EVIDENCE_|\bKIND\b")
 # Each allowed line is pinned exactly; new literals need a reviewed reason.
 ALLOW = {
     ('joulewise/evidence_night.py', 'KIND = kind_row("quiet_predicate_evidence").kind'): 'Explicit idle default for a legacy caller without a candidate plan.',
+    ('joulewise/evidence_night.py', 'def locations(roots, stages, epoch, head, kind=KIND):'): 'Legacy locations callers default to the idle row until a kind is supplied.',
+    ('joulewise/evidence_night.py', 'def prior_records(stages, roots, kind=KIND):'): 'Legacy prior-record callers default to the idle row until a kind is supplied.',
+    ('joulewise/evidence_night.py', '            if kind != KIND:'): 'Non-idle preparation uses the row-selected plan writer.',
     ('joulewise/evidence_night.py', '    if sha!=night_gate.QPE01_PILOT_REGISTRATION_SHA256: raise ValueError(check)'): 'Ruled idle registration constant or historical digest entry; no new digest is admitted.',
     ('joulewise/evidence_night.py', "    `probe_payload_kind` of the plan's chain says `quiet_predicate_evidence`"): 'Idle executor compatibility reference.',
+    ('scripts/gen_evidence_night.py', '    row = matches[0] if len(matches) == 1 else kind_row("quiet_predicate_evidence")'): 'Unknown templates retain the legacy idle refusal ordering.',
     ('joulewise/night_gate.py', '``binds_chain``, the zsh chain source named by ``EVIDENCE_CHAIN_PATH``. It'): 'Historical idle protocol explanation or recorder compatibility comment.',
     ('joulewise/night_gate.py', '# binds EVIDENCE_CHAIN_PATH, never a Python module): the cured Python is'): 'Historical idle protocol explanation or recorder compatibility comment.',
     ('joulewise/night_gate.py', '# 2026-09-23 (cold gate QPE01-DAEMON-CONTAMINATION-01, rulings 10 and 31;'): 'Historical idle protocol explanation or recorder compatibility comment.',
@@ -42,8 +46,6 @@ ALLOW = {
     ('scripts/run_night.py', 'REPLAY_RECORDER_ENV = "EVIDENCE_POWER_RECORDER_REPLAY"'): 'Idle recorder or wrapper environment compatibility literal.',
     ('scripts/run_night.py', '    # Q7; brief D6).  The bench driver sets EVIDENCE_POWER_RECORDER_REPLAY in'): 'Historical idle protocol explanation or recorder compatibility comment.',
     ('scripts/run_night.py', '    environment.pop("EVIDENCE_PROCESS_JOURNAL", None)'): 'Idle recorder or wrapper environment compatibility literal.',
-    ('scripts/run_night.py', '        idle = kind_row("quiet_predicate_evidence")'): 'Sealed idle plan compatibility when the wrapper is absent during refusal custody.',
-    ('scripts/run_night.py', '    row = _custody_row(plan) if plan is not None else kind_row("quiet_predicate_evidence")'): 'Explicit idle default for a legacy caller without a candidate plan.',
     ('scripts/run_night.py', '                    if os.environ.get("EVIDENCE_PROCESS_JOURNAL"):'): 'Idle recorder or wrapper environment compatibility literal.',
 }
 
