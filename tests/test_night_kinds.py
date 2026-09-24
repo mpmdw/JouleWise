@@ -35,6 +35,7 @@ from joulewise.night_plan_writer import write_night_plan
 from scripts import gen_evidence_night
 
 from tests.git_fixture import init_git_fixture
+from tests.test_evidence_night import _census_clean_tempdir
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,8 +174,21 @@ def refusal_fixture():
 class NightKindTests(unittest.TestCase):
     def setUp(self):
         global FIXTURE, BASE_SOURCE
-        FIXTURE = Path(tempfile.mkdtemp(prefix="jwkind-", dir="/private/tmp" if Path("/private/tmp").is_dir() else None))
+        # Same hermetic pattern as tests.test_evidence_night.PrepareTests: a
+        # census-clean, symlink-free fixture root, and a courier stub on PATH
+        # (the real prepare path checks `command -v claude`; the stub must never run).
+        self._fixture_dir = _census_clean_tempdir(
+            prefix="jwkind-", dir="/private/tmp" if Path("/private/tmp").is_dir() else "/tmp")
+        FIXTURE = Path(self._fixture_dir.name).resolve()
         BASE_SOURCE = FIXTURE / "base"
+        stub_bin = FIXTURE / "bin"
+        stub_bin.mkdir()
+        courier = stub_bin / "claude"
+        courier.write_text("#!/bin/sh\necho 'courier must not run' >&2\nexit 99\n")
+        courier.chmod(0o755)
+        self._path_patch = mock.patch.dict(
+            os.environ, {"PATH": str(stub_bin) + os.pathsep + os.environ.get("PATH", "")})
+        self._path_patch.start()
         self.old_tz = os.environ.get("TZ")
         os.environ["TZ"] = "UTC"
         if hasattr(time, "tzset"):
@@ -187,7 +201,8 @@ class NightKindTests(unittest.TestCase):
             os.environ["TZ"] = self.old_tz
         if hasattr(time, "tzset"):
             time.tzset()
-        shutil.rmtree(FIXTURE)
+        self._path_patch.stop()
+        self._fixture_dir.cleanup()
 
     def test_fixture_is_unique_and_local_to_one_run(self):
         self.assertTrue(FIXTURE.name.startswith("jwkind-"))
