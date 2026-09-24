@@ -148,9 +148,12 @@ def refresh_derived(g, r):
     for level in range(1, 6):
         for model in ('big', 'small'):
             positions, slots = [], set()
+            nonterminal = 0
             for parent in r['blocks']:
                 if parent['parent_block_id'] is not None or parent['level'] != level or parent['model'] != model:
                     continue
+                fully_nonterminal = all((model, item) not in terminal for item in parent['items'])
+                nonterminal += fully_nonterminal
                 indices = []
                 for item in parent['items']:
                     if (model, item) in terminal:
@@ -158,16 +161,17 @@ def refresh_derived(g, r):
                     owner = parent if not parent['superseded'] else next((b for b in r['blocks'] if b['parent_block_id'] == parent['block_id'] and b['items'] == [item]), None)
                     if owner and owner['block_id'] in live:
                         indices.append(live[owner['block_id']])
-                if len(indices) == len(parent['items']):
+                if indices:
                     positions.append(sum(indices) / len(indices))
+                if fully_nonterminal and len(indices) == len(parent['items']):
                     slots.update(indices)
-            pos[(model, level)] = positions
-            short[f'{model}:{level}'] = len(positions) < 5 or len(slots) < 5
+            pos[(model, level)] = (positions, nonterminal)
+            short[f'{model}:{level}'] = nonterminal < 5 or len(slots) < 5
     r['planned_spread_shortfall'] = short
     r['drift_lever_slots'] = {}
     for level in range(1, 6):
-        a, b = pos[('big', level)], pos[('small', level)]
-        r['drift_lever_slots'][str(level)] = abs(sum(a)/len(a) - sum(b)/len(b)) if a and b else None
+        (a, na), (b, nb) = pos[('big', level)], pos[('small', level)]
+        r['drift_lever_slots'][str(level)] = abs(sum(a)/len(a) - sum(b)/len(b)) if na and nb else None
     return r
 
 
@@ -608,6 +612,64 @@ class CheckerTests(unittest.TestCase):
         flagged = c.check_executed(g, r, self.p, lower)
         self.assertTrue(flagged['drift_exceeded']['1'])
 
+    def test_executed_uses_only_live_reschedule_and_advance_attempts(self):
+        gm, _, rescheduled, pm = mixed_initial_roster()
+        ga, root, pa = fixture()
+        advanced = advance_first(ga, root)
+        for label, g, roster, predictions, moved, level, expected in (
+            ('reschedule', gm, rescheduled, pm, 'big:on:2:0', '2',
+             abs(sum([1, 10, 11, 12, 13])/5 - sum(range(14, 19))/5)),
+            ('advance', ga, advanced, pa, 'big:on:1:0', '1',
+             abs(sum([51, 1, 2, 3, 4])/5 - sum(range(5, 10))/5)),
+        ):
+            with self.subTest(label=label):
+                for index in range(1, len(roster['envelopes'])):
+                    if roster['envelopes'][index]['kind'] == 'loaded':
+                        roster = report_keep(roster, index)
+                self.assertEqual([], c.check_roster(g, roster, predictions))
+                keys = {(pl['block_id'], pl['attempt']) for pl in roster['placements']
+                        if pl['block_id'] in roster['envelopes'][pl['envelope_index']]['blocks']}
+                actual = c.check_executed(g, roster, predictions, keys)
+                self.assertFalse(actual['spread_exceeded'][f'big:{level}'])
+                self.assertEqual(expected, actual['executed_drift_lever_slots'][level])
+                voided = next((pl['block_id'], pl['attempt']) for pl in roster['placements']
+                              if pl['block_id'] == moved and
+                              pl['block_id'] in roster['envelopes'][pl['envelope_index']]['voided_block_ids'])
+                self.assertEqual(actual, c.check_executed(g, roster, predictions, keys | {voided}))
+
+    def test_executed_partly_counted_parent_position(self):
+        g, split, p = split_roster(capacity=90)
+        complete = report_keep(split, 52)
+        self.assertEqual([], c.check_roster(g, complete, p))
+        live = {(pl['block_id'], pl['attempt']) for pl in complete['placements']
+                if pl['block_id'] in complete['envelopes'][pl['envelope_index']]['blocks']}
+        partial = live - {('big:on:1:0:single:0', 2)}
+        result = c.check_executed(g, complete, p, partial)
+        self.assertTrue(result['spread_exceeded']['big:1'])
+        # One counted item places parent 0 at 52; four other big parents
+        # remain at 1..4. The small parents remain at 5..9.
+        self.assertEqual(abs(sum([52, 1, 2, 3, 4])/5 - sum(range(5, 10))/5),
+                         result['executed_drift_lever_slots']['1'])
+
+    def test_executed_single_advance_uses_retry_attempt(self):
+        g, split, p = split_roster(capacity=50)
+        roster = completed_culprit_single(g, split)
+        for index in (53, 54):
+            roster = report_keep(roster, index)
+        next(b for b in roster['blocks'] if b['block_id'] == 'big:on:1:0:single:0')['late'] = False
+        seal(roster)
+        self.assertEqual([], c.check_roster(g, roster, p))
+        keys = {(pl['block_id'], pl['attempt']) for pl in roster['placements']
+                if pl['block_id'] in roster['envelopes'][pl['envelope_index']]['blocks']}
+        result = c.check_executed(g, roster, p, keys)
+        self.assertFalse(result['spread_exceeded']['big:1'])
+        # The retried single is at 54 and its sibling at 53; each has one
+        # counted item, so their parent position is (54+53)/2.
+        expected = abs(sum([(54+53)/2, 1, 2, 3, 4])/5 - sum(range(5, 10))/5)
+        self.assertEqual(expected, result['executed_drift_lever_slots']['1'])
+        self.assertEqual(result, c.check_executed(g, roster, p,
+                         keys | {('big:on:1:0:single:0', 2)}))
+
     def test_INV_31_innocent_initial_reschedule(self):
         g, root, r, p = mixed_initial_roster()
         self.assertEqual([], c.check_roster(g, root, p))
@@ -674,6 +736,10 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(2, sum(t['type'] == 'ceiling_violation' for t in roster['terminal_refusals']))
         self.assertEqual('ceiling_violation', roster['blocks'][50]['retry_stage'])
         self.assertEqual('ceiling_violation', roster['blocks'][51]['retry_stage'])
+        # Parent 0 still has two live singles at 56; RD-4 positions it at
+        # (56+56)/2. The remaining big parents are at 1..4, small at 5..9.
+        self.assertEqual(abs(sum([56, 1, 2, 3, 4])/5 - sum(range(5, 10))/5),
+                         roster['drift_lever_slots']['1'])
         self.assertTrue(roster['planned_spread_shortfall']['big:1'])
         # A third culprit observation for A crosses FT-2's per-item limit.
         wrong = deepcopy(roster)
@@ -699,6 +765,75 @@ class CheckerTests(unittest.TestCase):
         cross['blocks'][-1]['parent_block_id'] = 'big:on:1:1'  # P5c
         seal(cross)
         self.assertRow('INV-24', g=g90, r=cross, p=p90)
+
+    def test_INV_35a_reschedule_without_culprit_code(self):
+        g, _, roster, p = mixed_initial_roster()
+        wrong = deepcopy(roster)
+        observations = wrong['events'][0]['observations']
+        observations[0].update(status='cut_off', elapsed_s=4.0, decision='reschedule')
+        observations[1]['decision'] = 'keep'  # Only one reschedule: INV-35(c) stays quiet.
+        wrong['envelopes'][0]['observations'] = deepcopy(observations)
+        seal(wrong)
+        found = {(v.inv_id, v.code) for v in c.check_roster(g, wrong, p)}
+        self.assertIn(('INV-35', 'reschedule_without_culprit'), found)
+        self.assertNotIn(('INV-35', 'inv_35c'), found)
+
+    def test_INV_35c_excess_reschedules_code(self):
+        g, _, roster, p = mixed_initial_roster()
+        wrong = deepcopy(roster)
+        wrong['events'][0]['observations'][0]['decision'] = 'reschedule'
+        wrong['envelopes'][0]['observations'] = deepcopy(wrong['events'][0]['observations'])
+        seal(wrong)
+        found = {(v.inv_id, v.code) for v in c.check_roster(g, wrong, p)}
+        self.assertIn(('INV-35', 'inv_35c'), found)
+        self.assertNotIn(('INV-35', 'reschedule_without_culprit'), found)
+
+    def test_eligibility_excludes_whole_block_and_same_cell_parent(self):
+        g, root, _ = fixture()
+        advanced = advance_first(g, root)
+        parent = next(b for b in advanced['blocks'] if b['block_id'] == 'big:on:1:0')
+        # Envelope 2 has another level-1 parent; envelope 10 is the first fit.
+        self.assertEqual(10, c._eligible(g, advanced, 0, parent, 4.0))
+        for index in range(1, 50):
+            advanced = report_keep(advanced, index)
+        other_level = next(b for b in advanced['blocks'] if b['block_id'] == 'big:on:2:0')
+        # Envelope 50 is idle; 51 has a whole-block retry, so use fresh 52.
+        self.assertEqual(52, c._eligible(g, advanced, 50, other_level, 4.0))
+
+    def test_culprit_strict_elapsed_boundary(self):
+        block = self.r['blocks'][0]
+        at_bound = dict(block_id=block['block_id'], status='cut_off',
+                        elapsed_s=block['predicted_s'])
+        self.assertEqual('unattributed_overrun', c._decide(self.g, block, at_bound, False))
+
+    def test_planned_shortfall_requires_five_distinct_envelopes(self):
+        roster = deepcopy(self.r)
+        moved = roster['envelopes'][2]['blocks'].pop()
+        roster['envelopes'][0]['blocks'].append(moved)
+        roster['placements'][2]['envelope_index'] = 0
+        # Deliberately isolate the derived predicate from static M8/INV-15.
+        short, _ = c._derived(self.g, roster)
+        self.assertTrue(short['big:1'])
+        refresh_derived(self.g, roster)
+        self.assertTrue(roster['planned_spread_shortfall']['big:1'])
+
+    def test_planned_lever_null_with_zero_nonterminal_parents(self):
+        g, roster, _ = fixture(n=10, block_size=2)
+        roster = deepcopy(roster)
+        for parent in roster['blocks']:
+            if parent['model'] == 'big' and parent['level'] == 1:
+                roster['terminal_refusals'].append(dict(model='big', item_id=parent['items'][0]))
+        # Every big parent still has a positioned item, but none is non-terminal.
+        _, lever = c._derived(g, roster)
+        self.assertIsNone(lever['1'])
+        refresh_derived(g, roster)
+        self.assertIsNone(roster['drift_lever_slots']['1'])
+
+    def test_registered_descendant_requires_claim_ready(self):
+        descendant = keep_first(self.g, self.r)
+        descendant['claim_ready'] = False
+        seal(descendant)
+        self.assertRow('INV-05', r=descendant)
 
 
 if __name__ == '__main__':
