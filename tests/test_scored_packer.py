@@ -7,6 +7,7 @@ import unittest
 from joulewise import scored_packer as sp, scored_registration as sr
 from tests.scored_roster_checker import check_roster, check_transition, check_executed
 from tests.test_scored_registration import fixture
+from tests.test_scored_roster_checker import r2_four_envelope_roster
 from tests.test_scored_packer_stress import run_case
 import random
 
@@ -247,7 +248,48 @@ class ScoredPackerTests(unittest.TestCase):
         self.assertNotIn('violations', oracle)
         cell = f"large:{next(b['level'] for b in roster['blocks'] if b['block_id'] == rescheduled)}"
         self.assertTrue(actual['spread_exceeded'][cell])
-        self.assertFalse(oracle['spread_exceeded'][cell])
+        self.assertEqual(actual, oracle)
+        self.assertTrue(oracle['spread_exceeded'][cell])
+
+    def test_r2_partly_terminal_parent_planned_position(self):
+        g, roster, predictions = r2_four_envelope_roster()
+        reg = sr.Registration.from_mapping(g)
+        self.assertEqual(check_roster(g, roster, predictions), [])
+        shortfall, lever = sp._derived(reg, roster)
+        # Two live singles of parent 0 occupy envelope 56. The other big
+        # parents occupy 1..4; the small parents occupy 5..9.
+        expected = abs(sum([56, 1, 2, 3, 4]) / 5 - sum([5, 6, 7, 8, 9]) / 5)
+        self.assertEqual(expected, 6.199999999999999)
+        self.assertEqual(lever['1'], expected)
+        self.assertEqual(roster['drift_lever_slots']['1'], expected)
+        self.assertTrue(shortfall['big:1'])
+        self.assertEqual(shortfall, roster['planned_spread_shortfall'])
+
+    def test_executed_partly_counted_parent_position(self):
+        g, predictions = fixture(n=10, block_size=2, cap=6.0)
+        reg = sr.Registration.from_mapping(g)
+        roster = sp.pack(reg, predictions)
+        first = roster['envelopes'][0]
+        observations = [dict(block_id=bid, status='cut_off' if j == 0 else 'not_started',
+                             elapsed_s=1.3 if j == 0 else None)
+                        for j, bid in enumerate(first['blocks'])]
+        roster = sp.requeue_overrun(reg, roster, 0, observations)
+        while any(e['kind'] == 'loaded' and e['observations'] is None for e in roster['envelopes']):
+            envelope = next(e for e in roster['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
+            stages = {b['block_id']: b['retry_stage'] for b in roster['blocks']}
+            whole = any(stages[bid] == 'whole_block' for bid in envelope['blocks'])
+            observations = [dict(block_id=bid, status='cut_off' if whole else 'completed',
+                                 elapsed_s=.1 if whole else .01) for bid in envelope['blocks']]
+            roster = sp.requeue_overrun(reg, roster, envelope['index'], observations)
+        self.assertEqual(check_roster(g, roster, predictions), [])
+        keys = {(p['block_id'], p['attempt']) for p in roster['placements']
+                if p['block_id'] in roster['envelopes'][p['envelope_index']]['blocks']}
+        keys.remove(('large:decode:1:0:single:0', 2))
+        actual = sp.executed_status(reg, roster, predictions, keys)
+        expected = abs(sum([13, 2, 4, 6, 8]) / 5 - sum([1, 3, 5, 7, 9]) / 5)
+        self.assertEqual(actual['executed_drift_lever_slots']['1'], expected)
+        self.assertTrue(actual['spread_exceeded']['large:1'])
+        self.assertEqual(actual, check_executed(g, roster, predictions, keys))
 
     def test_typed_static_invariant_refusals(self):
         g, p = fixture(n=5)

@@ -5,10 +5,10 @@ import unittest
 
 from joulewise.scored_registration import Registration
 from joulewise.scored_packer import pack, requeue_overrun, verify_executed_roster, executed_status
-from tests.scored_roster_checker import check_roster
+from tests.scored_roster_checker import check_roster, check_executed
 from tests.test_scored_registration import fixture
 
-SEEDS = (291013,)
+SEEDS = (291013, 291014)
 EDGE_NAMES = {
     ('initial', 'advance'): 'E1', ('initial', 'reschedule'): 'E2',
     ('initial', 'unattributed_overrun'): 'E3', ('whole_block', 'split'): 'E4',
@@ -97,18 +97,25 @@ def run_case(i, rng, check=True):
     verify_executed_roster(reg, roster, p)
     keys = {(x['block_id'], x['attempt']) for x in roster['placements'] if rng.random() < .75}
     result = executed_status(reg, roster, p, keys)
+    if check:
+        oracle = check_executed(g, roster, p, keys)
+        assert 'violations' not in oracle, (i, oracle['violations'][:5])
+        assert result == oracle, (i, result, oracle)
+        checked += 1
     return counts, calls, checked
 
 
 class ScoredPackerStressTests(unittest.TestCase):
     def test_seeded_300_registration_sequences(self):
-        rng = random.Random(SEEDS[0])
-        totals = Counter()
-        calls = checked = 0
-        for i in range(300):
-            edge_counts, n_calls, n_checked = run_case(i, rng)
-            totals.update(edge_counts)
-            calls += n_calls
-            checked += n_checked
-        print(f'STRESS seeds={SEEDS} registrations=300 calls={calls} rosters_checked={checked} violations=0 edges={dict(sorted(totals.items()))}')
-        self.assertEqual(set(totals), {f'E{i}' for i in range(1, 12)})
+        for seed in SEEDS:
+            with self.subTest(seed=seed):
+                rng = random.Random(seed)
+                totals = Counter()
+                calls = checked = 0
+                for i in range(300):
+                    edge_counts, n_calls, n_checked = run_case(i, rng)
+                    totals.update(edge_counts)
+                    calls += n_calls
+                    checked += n_checked
+                print(f'STRESS seed={seed} registrations=300 calls={calls} checker_calls={checked} violations=0 edges={dict(sorted(totals.items()))}')
+                self.assertEqual(set(totals), {f'E{i}' for i in range(1, 12)})
