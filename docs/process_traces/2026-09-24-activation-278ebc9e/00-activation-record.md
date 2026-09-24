@@ -41,3 +41,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - K declares it did not read the packer source.
    - K notes that E2 (a forged roster sealed by the packer itself) does not show in the public-entry fuzz, because a resealed mutant is replayed and refused. P's R1 regression owns E2.
    - Report 16b.
+27. Acceptance packet 22 is committed (Sol scout, rc 0, about 34 KB, ten citation spot-checks; report 21b). Four blind seats (brief 23) were launched at about 05:53: Sol 24, Astra 25, Opus 26 and Fable 27. Each has its own worktree, `wt-278ebc9e-acc-*`.
