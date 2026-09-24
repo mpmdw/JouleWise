@@ -78,3 +78,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    | Block drift | **99.9 %** | 12.7 % |
 
    The magistrate flags the block-drift row as MATERIAL for the cold gate on the v4 PR. If the two derivation windows sit in different drift states, an n = 12 acceptance would refuse nearly every later window: a yield failure, not a false claim. The gate must weigh this against a third window or a drift-spanning design.
+38. A291 integration head `0fa4e6e3` (branch `fix/2026-09-24-a291-fix2-integration`, pushed). The five scored modules at the bench ran 71 tests OK in 1,053 s. The fuzz census now includes `inv_11` (447) and `inv_12` (41); at `20cd29de` it had neither. Stress: 0 violations on both seeds. A delta re-audit follows (brief 39).
