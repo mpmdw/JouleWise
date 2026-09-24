@@ -62,3 +62,7 @@ Ed, verbatim: "ok can i leave? you relaunch the magisrate with the new version o
 ## 9. Hold lifted (≈04:40 PDT)
 
 Asked: lift the 09-23 "wait on major decisions" hold so the D-184 council decides experiment-design changes and Ed is informed after? Ed: "Yes, council decides, inform me after". Remaining owner-only items: hardware, sudo, a notice NO, publishing claims. Recorded as the D-184 addendum.
+
+## 10. Fan out after the reset (04:40 PDT)
+
+Ed, verbatim: "usage is low, but usage on this acc and codex resets in the next few hours so after that reset do whatever you can to fan out and accelerate the results". Applied: RUN_STATE interactive block, directive issue for the successor, memory. The resident 7370d0fb exited cleanly at 04:37 on directive #406; the watchdog was IDLE with the successor eligible at ≈04:42.
