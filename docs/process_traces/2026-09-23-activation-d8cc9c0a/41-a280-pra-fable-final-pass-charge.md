@@ -1,4 +1,4 @@
-# Charge — cold Fable final pass on A280 PR A (night-kind table), merge candidate 50dc2272
+# Charge — cold Fable final pass on A280 PR A (night-kind table), merge candidate bedcc0ae
 
 Assembled by the resident magistrate (Opus 5.5, activation d8cc9c0a). Nothing is armed; no night agent is loaded. This pass is gate-ledger row 7's evidence for merging branch `feat/2026-09-23-a280-kind-table` into main. It is ALSO the cold gate for one rule-11 trigger. The delta re-audit found a regression that cannot fail (a test-strength defect in the same class as a round-1 finding), so any further fix round would be the second on that defect. Rule on it here.
 
@@ -11,7 +11,7 @@ Bench evidence (magistrate, executed): at 702afd8d, the 19-module named acceptan
 Deferred, not in PR A (the magistrate carries them): Opus 29 S3, the PR B call-site list and idle-only notice sentences, goes into PR B's brief. Opus 29 N5, the installer catch, is pre-existing. The clean-tree check at t0 (29 §R3) becomes a new lane.
 
 ## Questions
-- Q1 MERGE / FIX-FIRST / REFUSE on 50dc2272. Verify by execution, not by the reports: `git diff cdc05e9b..50dc2272`, and at least your own base-vs-head probe of plan authoring, the rendered chain, the notice, the manifest, and the refusal texts in `git archive` copies under /tmp.
+- Q1 MERGE / FIX-FIRST / REFUSE on bedcc0ae (= 50dc2272 plus the one-line test-helper fix in record 42). Verify by execution, not by the reports: `git diff cdc05e9b..bedcc0ae`, and at least your own base-vs-head probe of plan authoring, the rendered chain, the notice, the manifest, and the refusal texts in `git archive` copies under /tmp.
 - Q2 Sol 36 F1 (the window mutant survives K3 and gate tests) and F2 (the prefix/suffix mutation regression passes even when `prepare` ignores the mutated fields). Is a fix required before merge, or a follow-up lane after merge? If before merge, give the exact test change. It is small enough that the magistrate would make it at the bench, and you then rule whether a further delta pass is needed.
 - Q3 Anything any reviewer missed that would mis-arm or wrongly refuse a real night.
 
