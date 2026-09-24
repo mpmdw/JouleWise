@@ -2523,6 +2523,11 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("does not stand a night down", prompt)
         self.assertIn("never amends a process rule", prompt)
         self.assertIn("installed from that plan's `measurement_root`", prompt)
+        # Ed 2026-09-24: two replies were missed because sessions polled one thread id.
+        self.assertIn("from:claude2.glaring610@passmail.net is:unread", prompt)
+        self.assertIn("across ALL threads", prompt)
+        self.assertIn("Never look for Ed's answer on a single thread id", prompt)
+        self.assertLess(prompt.index("is:unread"), prompt.index("notice.ack"))
 
     def test_directive_channel_is_documented_as_owner_only_data(self) -> None:
         """Counterfactual input: a relaunch reads any GitHub issue as an instruction."""
