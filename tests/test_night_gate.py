@@ -889,6 +889,17 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual(lines[:50], measured["measurement_checkout_porcelain"])
         self.assertIs(measured["measurement_checkout_porcelain_truncated"], True)
 
+    def test_measurement_checkout_porcelain_at_fifty_is_not_truncated(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        lines = [f"?? file-{index}.py" for index in range(50)]
+        source.results[argv] = result(argv, stdout="\n".join(lines) + "\n")
+        receipt = self.evaluate(plan, source)
+        measured = next(row for row in receipt.conditions if row.condition_id == "C5").measured
+        self.assertEqual(lines, measured["measurement_checkout_porcelain"])
+        self.assertNotIn("measurement_checkout_porcelain_truncated", measured)
+
     def test_measurement_checkout_status_exit_128_is_probe_error(self) -> None:
         plan = make_plan()
         argv = checkout_status_argv(plan.measurement_root)
@@ -905,8 +916,8 @@ class NightGateTests(unittest.TestCase):
         from scripts import run_night
 
         command = (sys.executable, "-B", "-c",
-                   "import os,time; os.write(1,b'?? partial.py\\n'); "
-                   "os.write(2,b'partial stderr\\n'); time.sleep(2)")
+                   "import os,time; os.write(1,b'?? partial.py\\n\\xff'); "
+                   "os.write(2,b'partial stderr\\n\\xfe'); time.sleep(2)")
         with mock.patch.object(run_night, "PROBE_TIMEOUT_S", 0.1):
             timed_out = run_night._probe_runner(command)
         self.assertEqual(124, timed_out.exit_code)
@@ -914,6 +925,8 @@ class NightGateTests(unittest.TestCase):
         self.assertIsInstance(timed_out.stderr, str)
         self.assertIn("?? partial.py", timed_out.stdout)
         self.assertIn("partial stderr", timed_out.stderr)
+        self.assertIn("\ufffd", timed_out.stdout)
+        self.assertIn("\ufffd", timed_out.stderr)
 
         plan = make_plan()
         argv = checkout_status_argv(plan.measurement_root)
