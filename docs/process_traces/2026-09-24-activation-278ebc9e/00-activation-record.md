@@ -85,3 +85,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - 3.3: the jittered r6 diagnostic runs now, and the PR does not wait for it;
    - 3.4: replay.py pins PROTOCOL_ID and PULSE_DURATION_S, and the README wording is corrected.
    Items 3.1/3.3/3.4 go to replay-fix seat 40. Item 3.2 goes into the v4 PR (seat 36's fix round or the magistrate's bench).
+40. Replay fix (brief 40, Sol) landed: the corrected replay says `R-ACC-1(b): PASS`. The normal command asserts `PULSE_DURATION_S == 2.0`, so it runs only once v4 is on the branch; on this branch the constant is 1.0, so results.json was generated with 2.0 set in memory. Re-run the replay on the v4 PR head before merge. The jitter_r6 diagnostic is prepared but not run: the raw r6 bundles live only under the canonical root, which seats may not touch. The magistrate may copy them read-only to /tmp and run it later. It is diagnostic only, and the PR does not wait (38/20 §3.3).
