@@ -17,23 +17,19 @@ file instead.
 - The desk simulations ([19](docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/README.md)) show the claim gate is badly underpowered and the equivalence rule false-alarms 58 % of the time. Both need a redesign council before any claim use.
 - Ed was emailed after the fact twice (`1a0d364481dec249`, `1a0d38b0e64ad452`) and asked to turn off macOS auto-updates.
 
-**In flight** (outputs under `/tmp/278ebc9e/`; if lost, re-run the brief):
-- A291 delta re-audit (Astra, brief 39).
-- B0 fix round 1 (Sol, brief 32, on `feat/2026-09-24-a280-b0-kind-dispatch` at `7647bb2e`; lenses 29a/29b found 3 BLOCKERs).
-- The v4 + rev 4 full-tier PR (Sol, brief 36, worktree `wt-278ebc9e-accv4`, branch `feat/2026-09-24-acc-25g83-v4-rev4`).
-- A cold Fable addendum on the replay gate (packet 38): v4 has zero misses in 1,416 pulses; v3 matches 22/24, and the other two captures were anchor-bypassed.
+**Codex is out of usage until ≈10:57 PDT 09-24** (the seats report "try again at 10:57 AM"). That time is the #408 reset for Codex.
+
+**State at ≈06:55:**
+- **A291** integration head `0fa4e6e3` passes 71 tests, and the similarity screen and scope predicate pass. But delta re-audit 39b found **AUD-1 BLOCKER: the SAME SIGNATURE as the original escalation** (the seal accepts a two-live-owner forgery; the packer's INV-11 is not the contract's all-items-terminal predicate). The standing escalation trigger and a mandatory cold gate apply, so the next step is a consult (brief 41), not fix round 3. The Opus seat is running (`/tmp/278ebc9e/42-esc2-opus.md`).
+- **B0** fix round 1: UNVERIFIED WIP `f170af7c`; the seat died on the Codex limit.
+- **Acceptance v4 + rev 4** PR: UNREVIEWED WIP `8379b1ea`. NEEDS_SCOPE `joulewise/calibration_bracketing.py` + its tests, which the magistrate approved (record 00 item 42). The 38/20 §3.2 sentence is still owed in rev 4 2(f).
+- The replay gate PASSES (38/20).
 
 **SUCCESSOR'S NEXT EXACT ACTION:**
-1. Harvest the four in-flight items and commit seat work (seat sandboxes cannot write `.git`).
-2. A291: if re-audit 39 is clean, open the PR with the gate ledger and get a cold Fable final pass on the merge candidate. If it finds defects, run fix round 3. A second fix round on the same signature means consult first.
-3. B0: delta re-audit of fix round 1, then a cold Fable final pass and a full replay, then the PR.
-4. Acceptance: v4 PR lenses, then a cold gate on the PR. That gate must weigh the n = 12 block-drift yield finding (record 00 item 37) and the replay addendum. Then the r8 science-neutral reissue, the rev 4 seal, the W1 arm under NIGHT_HANDBACK (the W1 notice quotes the rev 4 and v4 digests), then W2.
-5. After the Claude and Codex usage reset (#408), fan out:
-   - the calibration-night registration (R-Q1/R-Q2, 32k desk smoke, KM003C passive logger as a night payload);
-   - AP-5M v5 and A291 contract v5 (R-Q3), then the E2 council on v5 (#405);
-   - the TIER-01 installation PR (after Ed's veto window);
-   - a claim-gate and equivalence-rule redesign council using the trace-19 results;
-   - A243 cadence attribution (only under `sudo -n` if covered).
+1. Harvest `/tmp/278ebc9e/42-esc2-opus.md` into record 42. At or after 10:57, run the Sol + Astra blind seats on brief 41, then a synthesis, a cold Fable gate on the fix-round-3 plan, and seats.
+2. At or after 10:57, resume seat 36 with the approved scope (`codex-run-v3 resume <run_key> --approve-scope-add '["joulewise/calibration_bracketing.py","tests/test_calibration_bracketing.py"]'`; the run_key is in `/tmp/278ebc9e/36-accv4.manifest.jsonl`), or start a fresh seat on the WIP. Then lenses, then the cold gate on the PR (weigh item 37's block-drift yield), then r8, the rev 4 seal and the W1 arm.
+3. At or after 10:57, a fresh B0 seat on WIP `f170af7c` with brief 32 (it reports V1–V4), then a delta re-audit.
+4. #408 fan-out lanes: listed in the previous version of this block and in record 00 item 28 (the calibration-night registration, AP-5M v5 + A291 contract v5, TIER-01 installation, the claim-gate redesign council, A243).
 
 **▶▶ INTERACTIVE 02a24110 (Fable, Ed present) — ≈04:00–04:35 PDT 09-24; NOTHING ARMED:** Ed's 22:19 PDT 09-23 E1–E4 email was missed by two activations; rulings, the search-by-sender fix in the relaunch prompt, Ed's batch answers (E1 ids+hashes only; O-21 YES; E8 required checks on main) and D-184 (four-model council for major changes, usage the only limit) are in [record 01](docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md) and directive issues #405/#406. Claude Code CLI symlink moved to 2.1.281 at 04:12; Codex config is `gpt-6-sol`. **RESIDENT 7370d0fb (launched 03:46 on the older in-memory CLI): at the next slice boundary commit, push, and exit so the watchdog spawns the successor on 2.1.281 (`--model opus`).** Ed has left the machine; every decision he could be asked was asked and answered in this session; no email to Ed asks any of E1–E4 or O-21 again. **HOLD LIFTED (D-184 addendum):** the four-model council decides experiment-design changes (block two, shakedown, registration text, AP-5M adoption); Ed gets an after-the-fact summary, never a question; owner-only = hardware, sudo, notice NO, claim publication. **FAN OUT AFTER THE RESET (Ed, 04:40 PDT 09-24, verbatim: "usage is low, but usage on this acc and codex resets in the next few hours so after that reset do whatever you can to fan out and accelerate the results"):** until the Claude-account and Codex usage windows reset (Ed: within a few hours of 04:40), work lean; from the reset onward, maximal fan-out (multi-Sol seats, Astra, Opus corps, Workflow fleets per the standing authorizations) on the critical path: A3 first model night + B1 meter check (council #407), scored night kind (A280), decoding/runtime (A283), packer (A291 consult), AP-5M adoption (E2 council), estimator (A293).
 
