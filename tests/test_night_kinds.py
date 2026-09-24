@@ -391,7 +391,10 @@ class NightKindTests(unittest.TestCase):
 
     def assert_prepared_candidate_head(self):
         # Clone the committed candidate H locally; no network or machine action.
-        work = Path(tempfile.mkdtemp(prefix="head-", dir=FIXTURE))
+        # Census-clean like the fixture root: a random suffix containing "t3"
+        # would make the generator refuse the plan path.
+        self._head_dir = _census_clean_tempdir(prefix="head-", dir=FIXTURE, ignore_cleanup_errors=True)
+        work = Path(self._head_dir.name)
         remote = work / "remote.git"
         subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(ROOT), str(remote)], check=True)
         head = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
