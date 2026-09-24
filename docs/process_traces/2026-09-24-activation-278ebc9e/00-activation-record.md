@@ -172,3 +172,8 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - It remains undetermined whether one sampler (the suspect is `thermal`) or the whole binary causes the slowdown. A same-build A/B/A sampler-subset probe settles that.
    The magistrate's `sudo -n -l` check was DENIED by the harness classifier (credential exploration), and the magistrate does not pursue it. So the probe is an Ed sudo item. Reply to Ed: Gmail `1a0d4d7081f2e57d` (evidence plus three commands; he replies "done").
    **The acceptance lane is HELD** at its current branch (no r8, no seal, no W1) until the probe result is in. If a sampler subset restores ~120 ms, the premise of ruling ACCEPTANCE-25G83-01 changes (option A, restore the cadence), and the question returns to the council and cold gate. The v4 fix round (brief 73) still completes as code, because it is harmless if unused.
+70. B0 delta re-audit (brief 72, Astra, rc 0; report 72b). C3–C6 PASS; C1 and C2 are PARTIAL. Findings:
+   - 2 BLOCKERs. F1: a non-UTF-8 wrapper with a BOM/UTF-16 C5 receipt makes head skip the base's refusal repair. F2: sealing refusal texts and order change on malformed or moved wrappers and sources.
+   - 2 should_fix. A TypeError on a malformed kind field; a bare wrapper accepted as kind in `_custody_row`.
+   - The goldens are unchanged.
+   **STANDING ESCALATION TRIGGER:** the same signature twice (idle behaviour changes on malformed inputs; an unauthenticated kind source). A second fix round on the same defect also triggers the mandatory cold gate. So the next spend is the consult (brief 76; seats Sol 77, Astra 78, Opus 79, launched ≈12:27). The cold gate on its plan waits for Fable. B0 is PARKED at `bee658c5`.
