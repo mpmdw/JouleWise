@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Activation d8cc9c0a record: headline gates, stopped draft, and next actions",
-    "path": "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md"
+    "label": "Activation a65fb4fa record: PR #403 landed; scored packer in progress; analysis-plan proposal awaits Ed",
+    "path": "docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -3499,14 +3499,20 @@
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/21-coldgate-packet-a281/11-opus-contract-refuter.md R3, R4, R6, R7 (wording, statuses and recapture bound)",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/10-coldgate-fable-ruling.md Q4 (retry-tail and parent-unit drift sentences)",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/21-coldgate-fable-addendum-ruling.md §7 X/P (cause and precedence)",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md item 9 (proposed status; Ed E2 pending)"
+          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md item 9 (proposed status; Ed E2 pending)",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/07d-a282-ap5m-draft-v4.md version-4 proposed amendment",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/30-coldgate-packet-a282-ap5m/10-coldgate-fable-ruling.md 18-question ruling",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/30-coldgate-packet-a282-ap5m/11-opus-contract-refuter.md paired refuter",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/30-coldgate-packet-a282-ap5m/21-coldgate-fable-addendum-ruling.md 28 final texts and O-21",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/39-a282-v4-installation-check.md byte-exact installation check",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md items 5, 10, 17, 21, 23, 25 and 28; Ed decision email"
         ],
         "pointer": {
           "json_pointer": "/tasks/HEADLINE-AP5M-AMENDMENT-01/acceptance",
           "label": "HEADLINE-AP5M-AMENDMENT-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "A coherent amendment and D-166 addendum draft spell out estimand, capture unit, error bounds, sparse-level merge order, multiplicity, primary thinking-on claim, and forbidden upgrades. An independent cold gate reviews the draft; Ed’s E2 reply to Gmail 1a0d069e15a52ba9 decides adoption. The magistrate records the ruling and does not ratify the claim policy. Carry the full authoritative 25-row decision-pattern table and status rules from gate 21 Q1, including the three-way direction test, pooled licensing and boundary rules, reverse order, non-monotone patterns, sparse Level 3, gap levels, and the ceiling-violation null. Use the refuter’s exact pooled-level null and gap wording; constituents of an estimable merged group are pooled with pooled_in, while constituents of a non-estimable merged group are not estimable with pooled_in and reason. Bound ceiling-violation recapture to one later census-clean window with both models adjacent as singles, check other blocks against s_per_token_upper, and make a second violation terminal. Carry the M8 parent-block retry-tail, M12 retry, cause-agnostic spread_exceeded, and parent-unit drift sentences from gate 45 Q4 as amended by addendum §7 X/P. At a level with both NE(ceiling_violation) and spread_exceeded, NE takes precedence and spread_exceeded is recorded alongside; otherwise spread_exceeded yields NR(spread_exceeded). Adoption remains Ed’s E2 decision."
+        "summary": "A coherent amendment and D-166 addendum draft spell out estimand, capture unit, error bounds, sparse-level merge order, multiplicity, primary thinking-on claim, and forbidden upgrades. An independent cold gate reviews the draft; Ed’s E2 reply to Gmail 1a0d069e15a52ba9 decides adoption. The magistrate records the ruling and does not ratify the claim policy. Carry the full authoritative 25-row decision-pattern table and status rules from gate 21 Q1, including the three-way direction test, pooled licensing and boundary rules, reverse order, non-monotone patterns, sparse Level 3, gap levels, and the ceiling-violation null. Use the refuter’s exact pooled-level null and gap wording; constituents of an estimable merged group are pooled with pooled_in, while constituents of a non-estimable merged group are not estimable with pooled_in and reason. Bound ceiling-violation recapture to one later census-clean window with both models adjacent as singles, check other blocks against s_per_token_upper, and make a second violation terminal. Carry the M8 parent-block retry-tail, M12 retry, cause-agnostic spread_exceeded, and parent-unit drift sentences from gate 45 Q4 as amended by addendum §7 X/P. At a level with both NE(ceiling_violation) and spread_exceeded, NE takes precedence and spread_exceeded is recorded alongside; otherwise spread_exceeded yields NR(spread_exceeded). Adoption remains Ed’s E2 decision. The version-4 proposal installs the cold ruling as amended by the addendum after the paired refuter; its 28 operative texts passed the byte-exact installation check, and the check's paraphrase BLOCKERs were fixed at 1f07c4ec. Adoption and installation into docs/contracts/analysis_plans.md remain pending Ed."
       },
       "authority": {
         "label": "Cold gate decision specification Q1 with paired refuter R3/R4/R6/R7; re-cut Q4 as amended by addendum §7; Ed decides adoption under E2",
@@ -3522,7 +3528,7 @@
       "priority": "p1_phase_gate",
       "rank": 282,
       "status": "queued",
-      "status_note": "2026-09-23 activation d8cc9c0a: READY [AGENT] for AP-5M drafting with the ruled table and addendum; adoption waits for Ed E2, unanswered at Gmail 1a0d069e15a52ba9. 2026-09-23 activation 1d3796d5: READY [AGENT] to redraft; then cold gate; Ed decides E2 adoption. Proposal only until Ed replies.",
+      "status_note": "No agent action until Ed replies. 2026-09-24 activation a65fb4fa: DRAFT READY [AGENT]; adoption pending Ed. Version 4 of the proposed MATH analysis plan, record 07d at 1f07c4ec, installs all 28 final texts from cold gate A282-AP5M-01 (30/10, 18 questions), as amended by addendum 30/21 after paired refuter 30/11. Installation check 39 found the texts byte-exact; its paraphrase findings were fixed at 1f07c4ec. Ed was emailed five decisions in Gmail thread 1a0d069e15a52ba9, message 1a0d2c87919abfe3: publication of problem text, adoption E2, decoding E3, measurement budget E4, and instrument-floor check O-21. The magistrate does not adopt claim policy. On Ed’s adoption, install the adopted text in docs/contracts/analysis_plans.md through a normal PR.",
       "stop_card": null
     },
     "HEADLINE-DECODING-AND-RUNTIME-01": {
@@ -3562,14 +3568,15 @@
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/21-coldgate-packet-a281/10-coldgate-fable-ruling.md Q1 authoritative table and Q2 D3/D5a",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/21-coldgate-packet-a281/11-opus-contract-refuter.md R3/R4/R6/R7 status wording",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/21-coldgate-fable-addendum-ruling.md §7 P precedence",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md items 5, 8–9 (draft and escalation)"
+          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md items 5, 8–9 (draft and escalation)",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/10-coldgate-fable-ruling.md Q1 mandatory CONSUMED constants"
         ],
         "pointer": {
           "json_pointer": "/tasks/HEADLINE-ESTIMATOR-DECISION-TABLE-01/acceptance",
           "label": "HEADLINE-ESTIMATOR-DECISION-TABLE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "After the AP-5M amendment carries the authoritative gate-21 table, implement the exact 25 worked patterns and status rules. Exhaustively enumerate all 1,764 assignments over nine partitions against an independent table-driven reference, including the 676 reachable inputs; test Holm cutoff equality and first-failure stopping. For every bootstrap replicate, every drawn block and model gets share-scaled instrument bound u = k × (floor_j + anchor_j) × s; point bounds use s = 1. Preserve typed NE and NR outcomes, merged-group status, gaps, ceiling precedence, and no false crossover. Full claim-bearing gate before scored-night integration."
+        "summary": "After the AP-5M amendment carries the authoritative gate-21 table, implement the exact 25 worked patterns and status rules. Exhaustively enumerate all 1,764 assignments over nine partitions against an independent table-driven reference, including the 676 reachable inputs; test Holm cutoff equality and first-failure stopping. For every bootstrap replicate, every drawn block and model gets share-scaled instrument bound u = k × (floor_j + anchor_j) × s; point bounds use s = 1. Preserve typed NE and NR outcomes, merged-group status, gaps, ceiling precedence, and no false crossover. Full claim-bearing gate before scored-night integration. The Q1 CARRIED constants merge_order, min_correct and holm_m are mandatory CONSUMED rows in this estimator’s gate."
       },
       "authority": {
         "label": "A281-DECISION-SPEC cold gate Q1–Q3 and paired refuter, pending AP-5M installation",
@@ -3595,7 +3602,7 @@
       "priority": "p1_phase_gate",
       "rank": 293,
       "status": "blocked",
-      "status_note": "2026-09-23 activation d8cc9c0a: BLOCKED on A282 AP-5M carrying the table; P1. Draft d2f9a273 remains ungated.",
+      "status_note": "2026-09-24 activation a65fb4fa: BLOCKED on Ed’s AP-5M adoption and installation; P1. The draft at d2f9a273 remains ungated. Consume merge_order, min_correct and holm_m as mandatory rows (cold ruling 15/10 Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A282 AP-5M carrying the table; P1. Draft d2f9a273 remains ungated.",
       "stop_card": null
     },
     "HEADLINE-PACKER-RECUT-01": {
@@ -3609,7 +3616,24 @@
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/10-coldgate-fable-ruling.md Q1–Q4",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/11-opus-contract-refuter.md paired refuter",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/21-coldgate-fable-addendum-ruling.md §7 final text",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md items 12–14"
+          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md items 12–14",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/02-a291-invariant-matrix-and-roster-contract.md initial contract",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/02b-a291-invariant-matrix-and-roster-contract-v2.md revised contract",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/09-a291-contract-sol-lens.md contract lens",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/13-a291-contract-synthesis-and-rulings.md magistrate synthesis",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/10-coldgate-fable-ruling.md cold ruling",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/11-opus-contract-refuter.md paired BLOCKER",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/20-addendum/21-coldgate-fable-addendum-ruling.md FT-1..FT-14 and I2 gate",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/02d-a291-contract-v4-self-contained.md ruled self-contained contract",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/25-a291-residual-details-rulings.md residual rulings",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/29-a291-v3-installation-rulings.md installation rulings",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/31-a291-v4-residual-rulings.md version-4 residual rulings",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/37-a291-checker-opus-lens.md checker BLOCKERs",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/44-a291-checker-delta.md checker fix delta",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/46-a291-i1-fix1-report.md 20cd29de stress and planned-lever fix",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md items 3, 8, 11, 13, 15, 18–19, 22, 26–31, 33 and 36",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/50-a291-fix1-delta.md B1 BLOCKER (seal and cache), S1 same-signature (D5 YES), S2 seed diversity",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/36-a291-implementer-i1-report.md I1 stress run"
         ],
         "pointer": {
           "json_pointer": "/tasks/HEADLINE-PACKER-RECUT-01/acceptance",
@@ -3631,8 +3655,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 291,
-      "status": "queued",
-      "status_note": "2026-09-23 activation d8cc9c0a: READY [AGENT], P1 phase gate; new re-cut after stopped A281a branch c0998fdb. A281a′ in the cold-gate text means this row. All §7 text is brief authority; no draft is gated.",
+      "status": "active",
+      "status_note": "2026-09-24 activation a65fb4fa: IN PROGRESS [AGENT], P1. The contract was drafted in records 02 and 02b, checked by lens 09 and synthesis 13, then ruled by cold gate A291-CONTRACT-01 (15/10). Paired refuter 15/11 found a BLOCKER; cold addendum 15/20/21 cured it with final texts FT-1..FT-14. The self-contained ruled version 4 is record 02d, with rulings 25, 29 and 31. The independent checker was committed first (b8962fd0); Opus lens 37 found two BLOCKERs, fixed at b8fae7b3, and delta 44 was clean. Implementer stage I1 is ef1c5e48 (300-registration stress run, zero violations); the fixed checker then caught an I1 planned-lever misreading, fixed at 20cd29de (both stress seeds zero violations). Branch feat/2026-09-24-a291-packer-recut is at 20cd29de. Delta re-audit 50 of 20cd29de: F1-F4 arithmetic confirmed, but B1 BLOCKER (the seal accepts a forged roster with two live placements for one block, which the checker rejects, so the seal does not enforce the full invariant set; a trusted-output cache lets a re-finalized roster skip replay) and S1 same-signature YES (a derived lever uses two parent populations). STANDING ESCALATION TRIGGER FIRED: NEXT is a blind consult (Sol 6.0 high and Opus 5.5) on the structural cure, not fix round 2: one invariant table consumed by the seal and mirrored by the independently written checker; each derived quantity computed once from one population definition; no trusted-output cache. Then a cold Fable gate on the fix-round-2 plan before any code, then I2 (witness matrix and perturbation sweep with a seed-driven generator), I3 (mutation sweeps), cold delta gate and cold Fable final pass before merge. The independent checker stays read-only for the implementer. AP-5M retry sentences must land with or before this code (A282).",
       "stop_card": null
     },
     "HEADLINE-PURE-MODULES-GATE-01": {
@@ -3676,14 +3700,15 @@
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/10-coldgate-fable-ruling.md Q3–Q5 (row, cap, window, terminal rules)",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/21-coldgate-fable-addendum-ruling.md §7 S/R/P (seal, replay, precedence)",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/21-coldgate-packet-a281/11-opus-contract-refuter.md R9 (cap and windows)",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md item 12 (split and ordering)"
+          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md item 12 (split and ordering)",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/10-coldgate-fable-ruling.md Q1 and Q16 consumer obligations"
         ],
         "pointer": {
           "json_pointer": "/tasks/HEADLINE-REDUCER-SEALED-01/acceptance",
           "label": "HEADLINE-REDUCER-SEALED-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Reduce only a sealed, replayable roster. Each score row carries scorer_id and both the registration and roster digests; each capture window carries both digests; any mismatch refuses; mismatch refuses. Key windows by (block_id, attempt) so voided and retried captures cannot collide. Derive a cap hit from generated_tokens at or above the registered token cap, require stop_reason, and refuse disagreement with cap flags. Every registered item is exactly one counted row or typed terminal refusal. Accept a terminal ceiling_violation window, record its gross_j on the refusal, and exclude it from cell sums by rule, not caller filtering. Pass terminal refusals through typed; consume every field listed as CARRIED to this reducer by gate 45. Full claim-bearing review gate after A291."
+        "summary": "Reduce only a sealed, replayable roster. Each score row carries scorer_id and both the registration and roster digests; each capture window carries both digests; any mismatch refuses; mismatch refuses. Key windows by (block_id, attempt) so voided and retried captures cannot collide. Derive a cap hit from generated_tokens at or above the registered token cap, require stop_reason, and refuse disagreement with cap flags. Every registered item is exactly one counted row or typed terminal refusal. Accept a terminal ceiling_violation window, record its gross_j on the refusal, and exclude it from cell sums by rule, not caller filtering. Pass terminal refusals through typed; consume every field listed as CARRIED to this reducer by gate 45. Full claim-bearing review gate after A291. At the real reduce entry, re-run every A291 reduce-column witness marked PROVISIONAL; the helper witness is not closure of that column (A291 cold ruling Q16). The Q1 CARRIED constant cap_bound_fraction is a mandatory CONSUMED row in this reducer’s gate."
       },
       "authority": {
         "label": "A281A-RECUT cold gate Q3–Q5, amended by addendum §7 seal/replay and precedence",
@@ -3709,7 +3734,7 @@
       "priority": "p1_phase_gate",
       "rank": 292,
       "status": "blocked",
-      "status_note": "2026-09-23 activation d8cc9c0a: BLOCKED on A291 packer gate; P1. The c0998fdb reducer is a stopped draft.",
+      "status_note": "2026-09-24 activation a65fb4fa: BLOCKED on A291 gated packer and sealed roster; P1. The stopped c0998fdb draft is not accepted. At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A291 packer gate; P1. The c0998fdb reducer is a stopped draft.",
       "stop_card": null
     },
     "HEADLINE-SCORED-NIGHT-KIND-01": {
@@ -3720,14 +3745,17 @@
           "docs/process_traces/2026-09-23-activation-1d3796d5/00-activation-record.md items 6, 11 and 32–38, activation status",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md items 4, 7, 11–12 (PR A and pending PR B)",
           "docs/process_traces/2026-09-23-activation-d8cc9c0a/29-a280-pra-opus-lens.md S3 (remaining call sites)",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/43-a280-pra-fable-final-pass.md verdict and Q3 (final-pass and authentication coupling)"
+          "docs/process_traces/2026-09-23-activation-d8cc9c0a/43-a280-pra-fable-final-pass.md verdict and Q3 (final-pass and authentication coupling)",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/20-addendum/21-coldgate-fable-addendum-ruling.md FT-9 runner sequencing obligation",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/02d-a291-contract-v4-self-contained.md CARRIED runner fields and sizing receipt (consumer table)",
+          "docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md items 1–2 and 18; current activation context"
         ],
         "pointer": {
           "json_pointer": "/tasks/HEADLINE-SCORED-NIGHT-KIND-01/acceptance",
           "label": "HEADLINE-SCORED-NIGHT-KIND-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "PR A demonstrates byte-identical existing idle-kind outputs and unchanged refusal behaviour. PR B passes production-path regressions for kind authentication, model and tokenizer pins, worker isolation, complete power-frame support, scorer custody, block spread and retries, and the provisional courier versus desk-reduced claim boundary. A bench dry run precedes the sizing pilot. The full claim-bearing review gate passes. PR B’s brief must list every remaining kind-specific call site: locations, prior_records, sealed_candidate, notice_subject, render_notice, the census snippet, notice_unused, and render_notice’s idle-only notice sentences; the corecaptured t0 sentence must follow its row flag. The scored row must authenticate the chain source so t0 machine checks run."
+        "summary": "PR A demonstrates byte-identical existing idle-kind outputs and unchanged refusal behaviour. PR B passes production-path regressions for kind authentication, model and tokenizer pins, worker isolation, complete power-frame support, scorer custody, block spread and retries, and the provisional courier versus desk-reduced claim boundary. A bench dry run precedes the sizing pilot. The full claim-bearing review gate passes. PR B’s brief must list every remaining kind-specific call site: locations, prior_records, sealed_candidate, notice_subject, render_notice, the census snippet, notice_unused, and render_notice’s idle-only notice sentences; the corecaptured t0 sentence must follow its row flag. The scored row must authenticate the chain source so t0 machine checks run. PR B’s runner must wait for requeue_overrun(r) to return and load its roster before starting envelope r+1; if it cannot, report every block in r+1 as not_started (FT-9). PR B must consume the carried ceiling_s, envelope_s, offset_s, pitch_s and sizing_receipt_sha256 fields."
       },
       "authority": {
         "label": "Headline integration synthesis, amended by Opus call-site lens S3 and cold final pass record 43",
@@ -3743,7 +3771,7 @@
       "priority": "p1_phase_gate",
       "rank": 280,
       "status": "queued",
-      "status_note": "2026-09-23 activation d8cc9c0a: PR A, the behaviour-preserving night-kind table, MERGED as PR #401 (merge 1246b299, head ce84d641). Cold Fable final pass MERGE (record 43); full local replay at 6532182f 7,029 tests 0 failures; post-review test-only commits reviewed fresh-eyes; hosted CI green on the final head. PR B (the scored kind) is next. PR B is not started. 2026-09-23 activation 1d3796d5: READY [AGENT], P1 phase gate. A277 has merged as PR #399, so PR A can start; PR B follows PR A. Scored-packer modules on a draft branch have their own full-gate lane A281.",
+      "status_note": "2026-09-24 activation a65fb4fa: PR B has not started. Its brief must include the S3 kind-specific call sites; the runner owns FT-9 sequencing, so envelope r+1 waits for requeue_overrun(r) to return and load its roster, and it consumes ceiling_s, envelope_s, offset_s, pitch_s and sizing_receipt_sha256. 2026-09-23 activation d8cc9c0a: PR A, the behaviour-preserving night-kind table, MERGED as PR #401 (merge 1246b299, head ce84d641). Cold Fable final pass MERGE (record 43); full local replay at 6532182f 7,029 tests 0 failures; post-review test-only commits reviewed fresh-eyes; hosted CI green on the final head. PR B (the scored kind) is next. PR B is not started. 2026-09-23 activation 1d3796d5: READY [AGENT], P1 phase gate. A277 has merged as PR #399, so PR A can start; PR B follows PR A. Scored-packer modules on a draft branch have their own full-gate lane A281.",
       "stop_card": null
     },
     "HEADLINE-SCORER-AUDIT-01": {
@@ -4078,36 +4106,6 @@
       "rank": 186,
       "status": "queued",
       "status_note": "2026-09-10 23:40: registered from synthesis 153 (deferred item); inert until a continuation is issued.",
-      "stop_card": null
-    },
-    "KIND-TABLE-WINDOW-MUTANT-TEST-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/43-a280-pra-fable-final-pass.md Q2 F1 (executed mutant, exact fixture shape)",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md item 11 (PR A gate context)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/KIND-TABLE-WINDOW-MUTANT-TEST-01/acceptance",
-          "label": "KIND-TABLE-WINDOW-MUTANT-TEST-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Create a committed-mutant fixture in a bare-clone test root: commit a night_kinds.py row with window_max_s=8999 instead of the frozen protocol 9000 seconds, update-ref main to that commit, call the real prepare path with that head, and assert the frozen-protocol refusal. The test fails if the refusal guard is removed and passes at the reviewed kind-table head."
-      },
-      "authority": {
-        "label": "Cold Fable final pass Q2 F1, committed-mutant follow-up",
-        "path": "docs/process_traces/2026-09-23-activation-d8cc9c0a/43-a280-pra-fable-final-pass.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Add a durable regression proving that a wrong measurement-window length in the night-kind table cannot arm an idle night. A cold final pass proved the production refusal in a temporary committed mutant, but that executed probe is not yet a repository test.",
-      "id": "KIND-TABLE-WINDOW-MUTANT-TEST-01",
-      "lane": "agent",
-      "priority": "p3_tooling",
-      "rank": 295,
-      "status": "queued",
-      "status_note": "2026-09-23 activation d8cc9c0a: READY, P3; follow-up test after PR #401 final pass.",
       "stop_card": null
     },
     "L10-A-G2B-CONTRACT-PREFIX-01": {
@@ -8005,36 +8003,6 @@
       "status_note": "2026-09-19 activation a743be05 — READY [AGENT]; priority p3_tooling per ruling 09a. No fallback (diagnostic only; install still refuses correctly).",
       "stop_card": null
     },
-    "T0-CLEAN-TREE-CHECK-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/29-a280-pra-opus-lens.md R3 (arm-to-t0 gap and prescribed command)",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md item 10 and NEXT EXACT ACTION (4) (registration direction)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/T0-CLEAN-TREE-CHECK-01/acceptance",
-          "label": "T0-CLEAN-TREE-CHECK-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "At the t0 gate or verify_environment, run git status --porcelain=v1 --untracked-files=all in the measurement clone and refuse a nonempty result or an uncheckable tree before executing the night. A regression changes an unmanifested executed file after arm and proves t0 refusal; a clean clone proceeds. Do not extend the manifest list as the cure."
-      },
-      "authority": {
-        "label": "Opus PR A lens R3, dedicated t0 clean-tree check",
-        "path": "docs/process_traces/2026-09-23-activation-d8cc9c0a/29-a280-pra-opus-lens.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "At t0, the planned start of a measurement night, verify that the dedicated measurement clone has no tracked edits or untracked files. The arm check already checks the clone, but an executing Python file outside the small sealed-file manifest could change between that check and t0 while the current t0 gate checks only the commit identifier.",
-      "id": "T0-CLEAN-TREE-CHECK-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 294,
-      "status": "queued",
-      "status_note": "2026-09-23 activation d8cc9c0a: READY [AGENT], P2; separate from PR A and PR B.",
-      "stop_card": null
-    },
     "T0-CLOCK-ROW-RENAME-01": {
       "acceptance": {
         "evidence": [
@@ -10372,5 +10340,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-23"
+  "updated": "2026-09-24"
 }
