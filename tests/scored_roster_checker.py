@@ -9,8 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from copy import deepcopy
 import hashlib
+from itertools import groupby, product
 import json
 import math
+from operator import itemgetter
 import re
 
 
@@ -253,28 +255,18 @@ def _window_of(g, r, keys):
     Anything other than exactly one live listing leaves the item unlocated;
     INV-11 reports that roster separately.
     """
-    holders = {}
-    for block in r['blocks']:
-        if not block['superseded']:
-            for item in block['items']:
-                holders.setdefault((block['model'], item), []).append(block['block_id'])
-    listings = {}
-    for envelope in r['envelopes']:
-        for bid in envelope['blocks']:
-            listings.setdefault(bid, []).append(envelope['index'])
+    first = itemgetter(0)
+    held = sorted(((b['model'], x), b['block_id']) for b in r['blocks'] if not b['superseded'] for x in b['items'])
+    holders = {key: [bid for _, bid in run] for key, run in groupby(held, key=first)}
+    shown = sorted((bid, e['index']) for e in r['envelopes'] for bid in e['blocks'])
+    slots = {bid: [ix for _, ix in run] for bid, run in groupby(shown, key=first)}
     attempt_at = {(pl['block_id'], pl['envelope_index']): pl['attempt'] for pl in r['placements']}
-    refused = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
+    refused = set(map(itemgetter('model', 'item_id'), r['terminal_refusals']))
     located = {}
-    for model in _roles(g):
-        for item in _items(g):
-            if (model, item) in refused:
-                continue
-            spots = [(bid, slot) for bid in holders.get((model, item), []) for slot in listings.get(bid, [])]
-            if len(spots) != 1:
-                continue
-            bid, slot = spots[0]
-            if keys is None or (bid, attempt_at.get((bid, slot))) in keys:
-                located[(model, item)] = slot
+    for model, item in product(_roles(g), _items(g)):
+        spots = [] if (model, item) in refused else [(bid, ix) for bid in holders.get((model, item), ()) for ix in slots.get(bid, ())]
+        if len(spots) == 1 and (keys is None or (spots[0][0], attempt_at.get(spots[0])) in keys):
+            located[model, item] = spots[0][1]
     return located, refused
 
 
@@ -829,6 +821,14 @@ def check_transition(registration, before, after, predicted_decode_s):
     return list(dict.fromkeys(out))
 
 
+def _unreported(r):
+    return [e['index'] for e in r['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None]
+
+
+def _window_keys_ok(keys):
+    return isinstance(keys, (set, frozenset)) and all(type(k) is tuple and len(k) == 2 and isinstance(k[0], str) and _int(k[1]) for k in keys)
+
+
 def check_executed(registration, roster, predicted_decode_s, captured_window_keys):
     """Return the 31 X-5 executed-status shape; invalid rosters return violations.
 
@@ -836,17 +836,17 @@ def check_executed(registration, roster, predicted_decode_s, captured_window_key
     under ``violations`` while valid inputs use exactly the three ruled keys.
     """
     violations = check_roster(registration, roster, predicted_decode_s)
-    if not violations and any(e['kind'] == 'loaded' and e['observations'] is None for e in roster['envelopes']):
+    if not violations and _unreported(roster):
         _bad(violations, 'INV-46', 'executed roster has unreported loaded envelope', 'unreported_envelope')
-    if not isinstance(captured_window_keys, (set, frozenset)) or any(not isinstance(x, tuple) or len(x) != 2 or not isinstance(x[0], str) or not _int(x[1]) for x in captured_window_keys):
+    if not _window_keys_ok(captured_window_keys):
         _bad(violations, 'INV-52', 'captured window keys must be a set of (block_id, attempt) pairs')
     if violations:
         return {'violations': violations}
-    g = registration
-    spread, lever = _derived(g, roster, captured_window_keys)
-    gap = _gap(g)
-    exceeded = {level: value is not None and gap is not None and value > gap for level, value in lever.items()}
-    return {'spread_exceeded': spread, 'executed_drift_lever_slots': lever, 'drift_exceeded': exceeded}
+    spread, lever = _derived(registration, roster, captured_window_keys)
+    gap = _gap(registration)
+    # drift_exceeded is false for a null lever and whenever max_gap is undefined (02d §4.2).
+    return {'spread_exceeded': spread, 'executed_drift_lever_slots': lever,
+            'drift_exceeded': {level: gap is not None and value is not None and value > gap for level, value in lever.items()}}
 
 
 def check_registration(registration):

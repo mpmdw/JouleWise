@@ -22,6 +22,7 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
+from operator import itemgetter
 from pathlib import Path
 import re
 import unittest
@@ -147,14 +148,11 @@ def refresh_derived(g, r):
     This deliberately differs in shape from the oracle: it first stamps every
     live item with its envelope index, then reads each registered slice.
     """
-    stamp = {}
     kind = {b['block_id']: b for b in r['blocks']}
-    for e in r['envelopes']:
-        for bid in e['blocks']:
-            if not kind[bid]['superseded']:
-                for item in kind[bid]['items']:
-                    stamp[kind[bid]['model'], item] = e['index']
-    gone = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
+    stamp = {(kind[bid]['model'], item): e['index']
+             for e in r['envelopes'] for bid in e['blocks'] if not kind[bid]['superseded']
+             for item in kind[bid]['items']}
+    gone = set(map(itemgetter('model', 'item_id'), r['terminal_refusals']))
     width = g['block_size'][g['arm']]
     table, short = {}, {}
     for level in range(1, 6):
