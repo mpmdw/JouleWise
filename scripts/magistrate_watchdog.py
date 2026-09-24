@@ -43,10 +43,9 @@ from joulewise.night_gate import (  # noqa: E402
     PLAN_MAX_AGE_S,
     PlanError,
     agent_census,
-    chain_literal,
-    probe_payload_kind,
 )
 from joulewise.arm_retry import terminal_zero_capture_refusal  # noqa: E402
+from joulewise.zero_capture_facts import zero_capture_facts  # noqa: E402
 from scripts.run_night import (  # noqa: E402
     COURIER_DEADLINE_S,
     COURIER_LOCK_FRESH_S,
@@ -798,77 +797,6 @@ def _terminal_refusal_result(night: Path, storage: Storage) -> Mapping[str, Any]
     return result if isinstance(result, dict) and result.get("verdict") == "REFUSED" else None
 
 
-def _tree_has_match(root: Path, predicate: Callable[[str], bool]) -> bool:
-    """Inspect all depths; an unreadable descendant prevents release.
-
-    Only a root that does not exist at all counts as empty. A root that is a
-    file, or a symlink (broken or not), counts as a match, so a dangling link
-    can never stand in for absent capture.
-    """
-    try:
-        root_mode = os.lstat(root).st_mode
-    except FileNotFoundError:
-        return False
-    if not stat.S_ISDIR(root_mode):
-        return True
-    pending = [root]
-    while pending:
-        directory = pending.pop()
-        try:
-            with os.scandir(directory) as entries:
-                for entry in entries:
-                    if entry.is_dir(follow_symlinks=False):
-                        pending.append(Path(entry.path))
-                    elif predicate(entry.name):
-                        return True
-        except FileNotFoundError:
-            if directory == root:
-                continue
-            raise
-    return False
-
-
-def _reservation_absent(custody: Path, runs_root: Path | None) -> bool:
-    return not any(_tree_has_match(root, lambda name: name.endswith(".consumed.json"))
-                   for root in (custody, runs_root) if root is not None)
-
-
-def _calibration_capture_absent(runs_root: Path) -> bool:
-    return not _tree_has_match(runs_root / "instrument_validation", lambda _name: True)
-
-
-def _evidence_capture_absent(custody: Path) -> bool:
-    if _tree_has_match(custody / "night" / "evidence", lambda _name: True):
-        return False
-    envelope_index = custody / "night" / "evidence_envelopes.jsonl"
-    try:
-        index = os.lstat(envelope_index)
-    except FileNotFoundError:
-        return True
-    return stat.S_ISREG(index.st_mode) and index.st_size == 0
-
-
-def _zero_capture_disk_facts(plan: NightPlan, storage: Storage) -> bool:
-    custody = Path(plan.custody_root)
-    if storage.exists(custody / "night" / "chain.started"):
-        return False
-    try:
-        chain_text = storage.read_text(Path(plan.chain_path))
-        kind = probe_payload_kind(chain_text)
-        if kind == "calibration":
-            runs_root = Path(chain_literal(chain_text, "RUNS_ROOT"))
-            if not runs_root.is_absolute():
-                return False
-            return (_reservation_absent(custody, runs_root)
-                    and _calibration_capture_absent(runs_root))
-        if kind == "quiet_predicate_evidence":
-            return (_reservation_absent(custody, None)
-                    and _evidence_capture_absent(custody))
-    except (OSError, UnicodeError, ValueError):
-        return False
-    return False
-
-
 def _delivered_zero_capture_refusal(
     plan: NightPlan, now_epoch_s: float, storage: Storage
 ) -> bool:
@@ -887,7 +815,7 @@ def _delivered_zero_capture_refusal(
     except (OSError, ValueError, TypeError):
         return False
     return (terminal_zero_capture_refusal(result, receipt).allowed
-            and _zero_capture_disk_facts(plan, storage))
+            and zero_capture_facts(plan).clean)
 
 
 def _release_key(plan: NightPlan, storage: Storage) -> str | None:

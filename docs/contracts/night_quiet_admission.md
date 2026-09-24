@@ -302,31 +302,10 @@ authoring refuses an undersized window and never extends it silently.
 Generate its wrapper afterward with the existing `--plan OUTPUT` invocation.
 Without the flag the legacy `--check` output remains byte-identical.
 
-**D-182** authorizes this route. Binding observations inside the window are not retries. A terminal
-zero-capture machine-state refusal permits **ONE new-plan successor** only
-when `zero_capture_successor_allowed(result, receipt, delivery)` receives:
+**D-182** authorizes one successor: a fresh plan with a new plan id and SHA-256 digest after an eligible predecessor (the refused plan) captured nothing. The production `evidence_night check` writes a `successor` row after `retained_roots`. A retained root is a prior plan's custody directory; the watchdog's latched early release (its one-way record that it released the hold) makes that plan's span inactive before its normal completion time. When the check finds such a predecessor, it rereads the real custody directory, `night/result.json`, `night/receipt.json`, `night/courier.sent` (the delivered result email's message id), and the shared disk facts. These facts count `chain.started`, `*.consumed.json` reservation markers, capture entries, and evidence envelopes. The driver creates `chain.started` before starting the chain (`scripts/run_night.py:536`, `:3170`); a calibration-ledger session is appended inside the chain, so absent `chain.started` also establishes no ledger session. A bare C5 receipt row (the receipt's C5 no-retry-bound condition without harvested zero-capture evidence) is neither proof of absence nor a veto. The successor route additionally requires the driver's receipt shape, with exactly one C5 row; early release keeps the receipt's veto-only role (cold ruling 16 Q1), so a receipt without that row still allows release but licenses no successor. Missing or symlinked custody refuses the successor while the watchdog release is recorded; the watchdog forgets that key when it no longer finds the plan. An unreadable result or receipt, or any start, reservation or capture fact, also refuses the successor.
 
-- Matching terminal REFUSED result/receipt, with exactly not_quiet, bind_expired,
-  agent_present, hid_idle or boot_clock as the refusal reason.
-- Explicit C5.measured.zero_capture_evidence with chain_started_absent=true,
-  reservation_absent=true, session_id=null, capture_writer_ran=false and
-  instrument_validation_empty=true.
-  The last assertion means `runs/instrument_validation` was positively
-  inventoried empty. Missing evidence is not absence. The desk caller owns
-  harvesting these facts; a bare refusal receipt cannot supply them by itself.
-- Completed courier.sent evidence, nonempty message_id, matching plan_id and
-  an explicit successors_used count of zero from preserved history.
+`successor_license(result, receipt, facts, delivery, claims, now_epoch_s)` is the pure zero-capture decision. It requires the exact machine-state refusal, null chain fields, completed delivery with message id, a new plan id and digest, at least 60 seconds from `result.ended_epoch_s`, and no prior use of the licence. Real `publish_install` rereads the facts after the fresh check, notice and veto; immediately before publication it fsyncs a temporary claim and links it to `night-custody/successor-claims/<predecessor plan_id>.json` with exclusive final-name creation. Rehearsal publication creates no claim. Only the literal `launchctl` is the real launchd tool; any other spelling that resolves to the real tool (an absolute path, a symlink) is refused rather than treated as a rehearsal, so no real publication can skip the claim. A predecessor whose plan id cannot name a claim file (the claim-name pattern `[A-Za-z0-9][A-Za-z0-9._-]*`) fails the `successor` row at check time. A successor claim is a durable record binding one predecessor to one successor id and digest until the predecessor's completion time. The same candidate may be republished; another candidate, or a successor trying to license a third plan, is refused during that span. The claim remains after predecessor custody is removed. Re-preparing a candidate with changed bytes after failed publication gives up the successor for the rest of the span. Removing released predecessor custody during its span is an operator action that forfeits the successor bound. Every observed NO still stops the arm, and the candidate must meet its own install close and all ordinary gates. The predecessor stays immutable. `retry_allowed` keeps its existing same-plan rules.
 
-The pure helper establishes eligibility only; it does not publish or arm.
-`successor_arm_allowed(now, plan, notice, result, receipt, delivery)` then
-checks a new id and digest against delivery.plan_sha256, a fresh notice after
-the predecessor's terminal write (result.ended_epoch_s), at least 60 s since
-that write and now before the successor's own install_close_epoch. It composes
-ordinary fresh-plan `retry_allowed` with empty history; every observed NO on
-any notice thread still stops.
-The predecessor stays immutable. `classify_abort` retains its classes and
-`retry_allowed` its existing same-plan rules: neither a cold refusal nor a
-changed digest can masquerade as another same-candidate attempt. This work
-does not change the watchdog or install a new recovery loop. Installation
+The direct `install_night_agent.sh` route performs no successor check; a follow-up lane owns that route. The captured-abort `non_observer_process_busy` door belongs to A270 and is not opened by this zero-capture decision. The watchdog still records release one-way, but its release predicate is stricter than 313efcca for any symlink inside custody (including one unrelated to a reservation or capture); that symlink now prevents early release. All other 313efcca fixture shapes keep their release decisions. Installation
 closes at t0 − 10 minutes: the eight-minute REQUEST lead plus a two-minute
 installation margin.
