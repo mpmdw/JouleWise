@@ -131,3 +131,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - Item 5: adjacent idle brackets cannot separate prefill from decode without breaking KV continuity. The recommendation is shared bookends, marked as shared.
    - Item 12: the ruled bytes-law form is inconsistent at L = 512. The recommendation is to fit for L > 512 only, with 512 as the normaliser.
    PROPOSED numbers: a ±0.10 W stopwatch band, and a ±100 mA battery exclusion. The docket goes to a cold gate once the 25G83 acceptance is on track. The desk smoke loads a model; it is agent-compatible, not quiet work, and can run at the desk.
+54. The claim-gate council packet 55 is committed (report 54b). Four blind seats (brief 58) were launched at ≈11:18: Sol 59, Astra 60, Opus 61 and Fable 62, in worktrees `wt-278ebc9e-cg-*`. The 32k desk smoke (brief 56, Sol, worktree `wt-278ebc9e-smoke`) is running.
