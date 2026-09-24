@@ -7,6 +7,7 @@ from joulewise.scored_registration import Registration
 from joulewise.scored_packer import pack, requeue_overrun, verify_executed_roster, executed_status
 from tests.scored_roster_checker import check_roster, check_executed
 from tests.test_scored_registration import fixture
+from tests.scored_case_generator import EDGES, generate_case
 
 SEEDS = (291013, 291014)
 EDGE_NAMES = {
@@ -119,3 +120,30 @@ class ScoredPackerStressTests(unittest.TestCase):
                     checked += n_checked
                 print(f'STRESS seed={seed} registrations=300 calls={calls} checker_calls={checked} violations=0 edges={dict(sorted(totals.items()))}')
                 self.assertEqual(set(totals), {f'E{i}' for i in range(1, 12)})
+
+    def test_generate_case_variation_and_checker_agreement(self):
+        """ex-10 B8 variation rule on the seed-driven generator (text 8)."""
+        cases = 60
+        signatures = {}
+        for seed in SEEDS:
+            with self.subTest(seed=seed):
+                totals = Counter()
+                signatures[seed] = []
+                for i in range(cases):
+                    case = generate_case(seed, i)
+                    final = case.rosters[-1]
+                    # The checker replays every event of the final roster, so
+                    # each intermediate derivation and digest is re-derived.
+                    self.assertEqual([], check_roster(case.g, final, case.p), (seed, i))
+                    verify_executed_roster(case.reg, final, case.p)
+                    rng = random.Random(f'keys:{seed}:{i}')
+                    keys = {(x['block_id'], x['attempt']) for x in final['placements'] if rng.random() < .75}
+                    self.assertEqual(check_executed(case.g, final, case.p, keys),
+                                     executed_status(case.reg, final, case.p, keys), (seed, i))
+                    totals.update(case.counts)
+                    signatures[seed].append(case.signature)
+                print(f'GENERATOR seed={seed} cases={cases} edges={dict(sorted(totals.items()))}')
+                self.assertEqual(set(EDGES), {e for e in totals if totals[e]})
+        differ = sum(a != b for a, b in zip(*(signatures[seed] for seed in SEEDS)))
+        print(f'GENERATOR signatures differ {differ}/{cases}')
+        self.assertGreaterEqual(differ, 0.6 * cases)
