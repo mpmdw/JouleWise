@@ -42,3 +42,10 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - K notes that E2 (a forged roster sealed by the packer itself) does not show in the public-entry fuzz, because a resealed mutant is replayed and refused. P's R1 regression owns E2.
    - Report 16b.
 27. Acceptance packet 22 is committed (Sol scout, rc 0, about 34 KB, ten citation spot-checks; report 21b). Four blind seats (brief 23) were launched at about 05:53: Sol 24, Astra 25, Opus 26 and Fable 27. Each has its own worktree, `wt-278ebc9e-acc-*`.
+28. The R-Q4(a) desk simulations (brief 18, Sol, rc 0, 72 s full run; trace 19, report 18b) call the production code and are committed. The magistrate reads the findings as follows. They are UNRULED, and the rulings go to a later gate.
+   - The D-165 dominance replay reproduces the ruling's seed-278 numbers.
+   - **The claims.py directional admission path is severely underpowered.** It misses a 2σ effect in 100 % of trials and a 5σ effect in 84 %. Its nominal 95 % interval covers only about 56 % under the declared generating models (shared-plus-local shocks), whereas the expanded decision interval covers about 95 %.
+   - `tost_v1` at a 4σ margin fails to admit equivalence at δ = 0 in 94.8 % of trials.
+   - The current equivalence-night rule false-alarms in 58 % of no-change trials (n_old 17, m 12).
+   - The PROPOSED replacement (TOST margin 3.5σ, α 0.05, variance-ratio bound 20, m 12) has 0.2–1.3 % no-change false alarm and 97.8–99.8 % power at +5σ. It is nearly blind to a ×4 variance increase (90.8 % PASS). So the variance side needs redesign before registration.
+   - Consequence: the claim gate must be redesigned (a council plus cold gate) before any claim-bearing use. This joins the TIER-01 installation and the AP-5M v5 amendments as a pending lane.
