@@ -149,3 +149,12 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
 63. **Fable 5.1 monthly spend limit reached ≈11:41 PDT.** New `claude -p --model fable` sessions refuse ("You've hit your monthly spend limit"). Opus 5.5 still runs (probe returned OK), and Codex has been back since 10:59. The cold gate CLAIMGATE-01 judge session was refused mid-run (rc 1, no ruling). Consequence under the standing topology: no merges, no arms and no new cold rulings until Fable returns or Ed names a substitute. Implementation and review continue. Owner-action email: Gmail `1a0d4ba304ba9bf7` (add credits, or name a substitute seat; no other question).
 64. v4 PR Sol execution lens (brief 67, rc 0; report 68b). The counterfactuals and 47 focused tests pass. One should_fix: at `calibration_bracketing.py:289` a v4 protocol digest is admitted for EVERY v3 identity, whereas ruling 1(c) authorises that pairing only for the r8 reissue. The cure is to confine it to r8. The Opus contract lens is still running.
 65. B0 fix round 1 (brief 44, Sol, rc 0, clean; report 47b): C1–C6 done, the lens witnesses match base, V1 603 tests OK, M3 is killed. Committed `bee658c5` and pushed. Astra delta re-audit launched (brief 72).
+66. **The Astra delta refuter on A291-R3b (brief 71, rc 0; report 71b) says: REVISE BEFORE DISPATCH.** Findings:
+   - 3 BLOCKERs:
+     - inv_51 has two owners in the boundary map;
+     - B1 cannot kill deletion of the superseded-holder clause;
+     - per-model formation accepts cross-model parent reordering that the seal-owned checker row inv_10 rejects.
+   - 4 should_fix.
+   - Of the nine prior findings, only F1 and F5 are cured.
+   - The closed predicate again passes all 1,868 legal rosters, and there is no K/P write collision.
+   **STANDING ESCALATION TRIGGER on the TEXT GATE itself.** Two consecutive text rounds (R3 → 4 BLOCKERs; R3b → 3 BLOCKERs) failed with the same signature: gate texts meant for verbatim pasting carry implementation contradictions that only execution finds. So the next spend is NOT R3c. It is a consult on the gating method (for example prototype-first, where one seat builds an executable reference that the refuters attack, versus text-first). That consult needs the Fable cold seat, which is out on spend. **A291 is PARKED** until Fable returns or Ed names a substitute. The magistrate does not run a third text round (anti-spiral).
