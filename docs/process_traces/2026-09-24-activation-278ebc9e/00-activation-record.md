@@ -68,3 +68,13 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - 36 the full-tier v4 + rev 4 PR, `wt-278ebc9e-accv4`, branch `feat/2026-09-24-acc-25g83-v4-rev4` from main.
    The r8 reissue follows 36's gates.
 36. Replay gate (brief 33, Sol) came back `blocked`, as ruled: v4 has zero misses in 1,416 pulses, and v3 matches exactly on 22 of 24 captures. The two mismatches, n1-d07 and n1-d10, have `recorded_fit_count` 0 with `clock_anchor_unresolved`: the detector bypassed fitting, so no misses were recorded. The magistrate bench-checked this in `results.json`. The ruling says "stop and return to the council", so a cold Fable addendum on packet 38 (J1–J4) was convened rather than the magistrate reinterpreting the criterion. Trace 34 and report 33b are committed.
+37. The R-ACC-2(k) simulation (brief 35, Sol, rc 0; report 35b; trace 19, `sim_acc_n12.py`) shows false-claim admission of 0/200 in all eight cells (Gaussian, heavy excursions, serial AR(1), block drift, each at n = 12 and n = 19). **Precondition MET: "admission zero: YES".** Later level-screen refusal at n = 12 vs n = 19:
+
+   | Model | n = 12 | n = 19 |
+   |---|---|---|
+   | Gaussian | 7.8 % | 5.7 % |
+   | Heavy excursions | 4.5 % | 3.1 % |
+   | AR(1) | 18.1 % | 11.7 % |
+   | Block drift | **99.9 %** | 12.7 % |
+
+   The magistrate flags the block-drift row as MATERIAL for the cold gate on the v4 PR. If the two derivation windows sit in different drift states, an n = 12 acceptance would refuse nearly every later window: a yield failure, not a false claim. The gate must weigh this against a third window or a drift-spanning design.
