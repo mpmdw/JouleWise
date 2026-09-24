@@ -161,10 +161,23 @@ This procedure does not expand commit, push, merge, or deployment authority.
    distinct angles (deep regression hunt; claim-to-evidence trace;
    merge-order simulation across sibling PRs), lead triage, fixes, CI
    green. Gate ledger: twelve-row PR-body table (`.github/pull_request_template.md`), checked by
-   `scripts/check_gate_ledger.py` in the advisory `gate-ledger` workflow — see D-170. **Final-head rule:** any commit that lands after the last
+   `scripts/check_gate_ledger.py` in the `gate-ledger` workflow, a required status check on `main` since 2026-09-24 (Ed's branch-protection change; see D-170 and `docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md` §7). **Final-head rule:** any commit that lands after the last
    review round gets one more fresh review before merge — no commit
    merges unreviewed, however small (its first application caught a
    crash path in a "trivial" post-review fix).
+
+   **Rule TIER-01 (proposed; cold-gated here; Ed sees the result and may veto).**
+   1. A change is FULL-TIER if it can alter any of: (i) a raw-bundle byte or recorded timestamp; (ii) a reduced energy, time, token count or correctness score; (iii) an admit, refuse, select or exclude decision over bundles, nights, blocks, envelopes or items; (iv) a unit or an uncertainty; (v) a registration, prospective manifest, analysis plan or estimator constant; (vi) a published number or sentence in the paper, README claims or claim renderers. This includes, without limiting (i)–(vi): `joulewise/clock.py`, `controller.py`, the night driver and chain, collectors and runtime adapters, calibration, scoring, packers, reducers, estimators, admission predicates, arm readiness and census, and everything under `configs/campaigns` and `configs/model_panels`. Everything else is LIGHT-TIER.
+   2. Every PR body carries `Tier: full|light` and a six-line impact statement answering (i)–(vi). The independent reviewer confirms the tier; any disagreement resolves to full.
+   3. FULL-TIER keeps the twelve-row ledger unchanged. LIGHT-TIER requires ledger rows 1, 9, 11 and 12 with evidence, one independent non-author reviewer, CI green and the lead's own read of the diff; rows 2–8 and 10 read `N/A (light tier)`, which the checker accepts only when `Tier: light` is declared.
+   4. Installation is one FULL-TIER PR editing together `docs/orchestration.md` §5 merge gate, `.github/pull_request_template.md`, `scripts/check_gate_ledger.py` with its tests, and the `gate-ledger.yml` header, and reconciling the docs to the actual branch-protection state.
+   5. Revert trigger: for 30 days from installation every material defect found after merge is logged in a tracked file with the tier of the PR that merged it. If any defect that changes a recorded, reduced or published number entered under LIGHT-TIER, TIER-01 is suspended at once (all changes full tier) and may be reinstated only by a new cold gate.
+   6. Day-30 review: the magistrate records light-tier merge count and escape count in the decision log; the rule continues only by a recorded decision.
+
+   Installed 2026-09-24 by cold gate COUNCIL-407-01 §G5, as a D-184
+   addendum. Ed was informed with veto by Gmail `1a0d364481dec249`.
+   The day-30 review date is 2026-10-24; material defects and the
+   suspension trigger are tracked in `docs/process/tier01_defect_log.md`.
 6. **Integration review** — after parallel streams merge, one dedicated
    review hunts *interaction* defects no single-stream review can see.
    Its catches are definitionally unique (first outing: two).

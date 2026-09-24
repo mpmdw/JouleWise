@@ -12,6 +12,9 @@ import sys
 
 
 KEYS = tuple(range(1, 13))
+LIGHT_REQUIRED = frozenset((1, 9, 11, 12))
+LIGHT_NA = frozenset(KEYS) - LIGHT_REQUIRED
+LIGHT_NA_TEXT = "N/A (light tier)"
 SHA_RE = re.compile(r"[0-9a-fA-F]{7,40}")
 LEDGER_HEADING = "## Gate ledger (D-118 / D-121)"
 
@@ -135,6 +138,12 @@ def _is_commit(sha: str, repo_root: Path) -> bool:
 
 def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
     """Return one refusal message per ledger defect."""
+    tier_lines = [line.strip() for line in body.splitlines() if line.startswith("Tier:")]
+    if len(tier_lines) > 1:
+        return ["gate-ledger: duplicate Tier declaration"]
+    if tier_lines and tier_lines[0] not in ("Tier: full", "Tier: light"):
+        return ["gate-ledger: Tier must be full or light"]
+    tier = tier_lines[0].removeprefix("Tier: ") if tier_lines else "full"
     rows, malformed = _ledger_rows(body)
     if not rows and not malformed and not rows.heading_seen:
         return [f"gate-ledger: no {LEDGER_HEADING!r} section in the PR body"]
@@ -156,6 +165,13 @@ def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
             continue
         if not evidence:
             defects.append(f"gate-ledger: item {key}: evidence is empty")
+            continue
+        if tier == "light" and key in LIGHT_NA:
+            if evidence != LIGHT_NA_TEXT:
+                defects.append(f"gate-ledger: item {key}: light tier requires {LIGHT_NA_TEXT}")
+            continue
+        if evidence == LIGHT_NA_TEXT:
+            defects.append(f"gate-ledger: item {key}: {LIGHT_NA_TEXT} is allowed only in light-tier rows 2-8 and 10")
             continue
         if evidence == "NOT-RUN":
             defects.append(f"gate-ledger: item {key}: NOT-RUN")
@@ -211,7 +227,10 @@ def main(argv: list[str] | None = None) -> int:
     if defects:
         print("\n".join(defects))
         return 1
-    print("gate-ledger: 12/12 RUN")
+    if any(line.strip() == "Tier: light" for line in body.splitlines()):
+        print("gate-ledger: 4/4 RUN; 8/8 N/A (light tier)")
+    else:
+        print("gate-ledger: 12/12 RUN")
     return 0
 
 
