@@ -1007,7 +1007,8 @@ def _custody_row(plan):
     receipt_kind = None
     try:
         receipt = json.loads((Path(plan.custody_root) / "night/receipt.json").read_text())
-        if receipt.get("plan_id") == plan.plan_id and not night_gate.validate_receipt(receipt):
+        if (isinstance(receipt, Mapping) and receipt.get("plan_id") == plan.plan_id
+                and not night_gate.validate_receipt(receipt)):
             c5 = next((item for item in receipt["conditions"]
                        if item["condition_id"] == "C5"), {})
             if c5.get("status") == "PASS":

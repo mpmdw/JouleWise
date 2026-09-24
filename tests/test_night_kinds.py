@@ -316,6 +316,32 @@ class NightKindTests(unittest.TestCase):
                 self.assertEqual(result["verdict"], "REFUSED")
                 self.assertEqual(len(result["artifacts"]), 1)
 
+    def test_cleanup_repairs_idle_outcome_with_unreadable_wrapper(self):
+        from scripts import run_night
+        from tests.test_night_gate import make_plan
+        from joulewise import quiet_predicate_campaign
+
+        custody = FIXTURE / "cleanup-unreadable"
+        night = custody / "night"
+        night.mkdir(parents=True)
+        chain = custody / "chain.zsh"
+        chain.write_bytes(b"\xff")
+        (night / "chain.started").write_text("{}")
+        plan = make_plan(custody_root=str(custody), chain_path=str(chain),
+                         chain_sha256_path=str(chain) + ".sha256")
+        (night / "receipt.json").write_text(json.dumps({"plan_id": plan.plan_id,
+            "conditions": [{"condition_id": "C5", "status": "PASS", "measured": {
+                "payload_kind": "quiet_predicate_evidence"}}]}))
+        with mock.patch.object(night_gate, "validate_receipt", return_value=[]), \
+                mock.patch.object(quiet_predicate_campaign, "cleanup_record",
+                                  return_value={"cleanup_proven": True}), \
+                mock.patch.object(quiet_predicate_campaign, "write_refusal") as refusal:
+            self.assertIsNone(run_night._evidence_cleanup_error(plan, night))
+        self.assertEqual(json.loads((night / "evidence_outcome.json").read_text()),
+                         {"outcome": "refused", "error": "chain ended without evidence outcome",
+                          "cleanup_proven": True})
+        refusal.assert_called_once()
+
     def test_sealed_candidate_malformed_plan_is_typed(self):
         path = FIXTURE / "malformed-sealed-plan.json"
         path.write_text("[]")
