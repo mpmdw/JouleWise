@@ -1269,17 +1269,21 @@ def _check_static_start(plan, probes, rows, evidence):
     try:
         checkout_status = _run(
             probes,
-            ("/usr/bin/git", "-C", plan.measurement_root, "--no-optional-locks",
+            ("/usr/bin/git", "-c", "core.fsmonitor=false", "-C", plan.measurement_root, "--no-optional-locks",
              "status", "--porcelain=v1", "--untracked-files=all"),
         )
         evidence.append(checkout_status)
+        rows["C5"].evidence.append(_probe_citation(checkout_status))
         porcelain = checkout_status.stdout.splitlines()
-        rows["C5"].measured["measurement_checkout_porcelain"] = porcelain
         if checkout_status.exit_code != 0:
+            rows["C5"].measured["measurement_checkout_porcelain"] = None
             raise ProbeError(
                 f"measurement checkout status failed at {plan.measurement_root}: "
                 f"exit {checkout_status.exit_code}: {checkout_status.stderr.strip()}"
             )
+        rows["C5"].measured["measurement_checkout_porcelain"] = porcelain[:50]
+        if len(porcelain) > 50:
+            rows["C5"].measured["measurement_checkout_porcelain_truncated"] = True
     except Exception as exc:
         return _probe_refusal(plan, probes, rows, evidence, exc)
     if checkout_status.stdout:
@@ -1290,7 +1294,7 @@ def _check_static_start(plan, probes, rows, evidence):
             Refusal(
                 "night_plan_stale",
                 f"measurement checkout {plan.measurement_root} has tracked edits or "
-                f"untracked files: {porcelain[:5]}",
+                f"untracked files: {'; '.join(porcelain[:5])}",
                 tuple(evidence),
             ),
         )

@@ -134,6 +134,26 @@ class ArmRetryTests(unittest.TestCase):
             block = raw[raw.index(begin):raw.index(end) + len(end)]
             self.assertEqual(block, arm_retry.render_policy().encode(), name)
 
+    def test_stale_plan_operator_description_names_clone_cleanliness(self):
+        self.assertEqual(
+            arm_retry.COLD_GATE_CODES["night_plan_stale"],
+            "Plan age, pinned head, or a clean measurement clone failed; not a stale notice.",
+        )
+        for name in DOCS:
+            self.assertIn(
+                "| `night_plan_stale` | Plan age, pinned head, or a clean measurement clone failed; not a stale notice. |",
+                (ROOT / name).read_text(),
+            )
+
+    def test_runbook_describes_t0_clone_status_and_recut_remedy(self):
+        text = (ROOT / DOCS[1]).read_text()
+        section = text.split("### 0.8 The clone's tree is clean", 1)[1].split(
+            "#### The two desk inputs", 1)[0]
+        for phrase in ("At t0", "untracked files included", "fsmonitor hook disabled",
+                       "`night_plan_stale`", "`night_probe_error`",
+                       "find what wrote into the", "re-cut it", "Re-arming with a fresh plan"):
+            self.assertIn(phrase, section)
+
     def test_r2_and_per_attempt_custody(self):
         sentence = ("A retry-class abort recorded by a prior activation authorises a successor's ordinary "
                     "fresh-plan arm of the same class without a new cold gate; the predecessor's published "

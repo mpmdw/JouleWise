@@ -223,8 +223,10 @@ def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
 
 
 class ProbeSource:
-    def __init__(self, now_epoch_s: float) -> None:
+    def __init__(self, now_epoch_s: float, measurement_root: str = str(REPO_ROOT)) -> None:
         self.now_epoch_s = now_epoch_s
+        self.measurement_root = measurement_root
+        self.plan_path: Path | None = None
         self.results = _green_results()
         self.census_responses: list[night_gate.ProbeResult] = []
         self.monotonic_calls = 0
@@ -234,10 +236,13 @@ class ProbeSource:
             if self.census_responses:
                 return self.census_responses.pop(0)
             return _probe(argv, exit_code=1)
-        if (argv[:2] == ("/usr/bin/git", "-C") and
-                argv[3:] == ("--no-optional-locks", "status", "--porcelain=v1",
-                             "--untracked-files=all")):
-            return _probe(argv)
+        if argv[:4] == ("/usr/bin/git", "-c", "core.fsmonitor=false", "-C"):
+            measurement_root = (json.loads(self.plan_path.read_text())["measurement_root"]
+                                if self.plan_path is not None else self.measurement_root)
+            if argv == ("/usr/bin/git", "-c", "core.fsmonitor=false", "-C",
+                        measurement_root, "--no-optional-locks", "status",
+                        "--porcelain=v1", "--untracked-files=all"):
+                return _probe(argv)
         return self.results[argv]
 
     def monotonic_ns(self) -> int:
@@ -317,9 +322,10 @@ class NightDriverTests(unittest.TestCase):
         self.registration = self.root / "registration.json"
         self.registration.write_text((REPO_ROOT / night_gate.D166_REGISTRATION_PATH).read_text(), encoding="utf-8")
         self.t0_epoch_s = datetime(2026, 9, 2, 1, 0).timestamp()
-        self.source = ProbeSource(self.t0_epoch_s + 1)
+        self.source = ProbeSource(self.t0_epoch_s + 1, str(self.root))
         self.plan_path = self.root / "plan.json"
         self._write_plan()
+        self.source.plan_path = self.plan_path
         self.courier = self.root / "claude"
         self.courier.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
         self.courier.chmod(0o755)
@@ -360,6 +366,16 @@ class NightDriverTests(unittest.TestCase):
         self.resolve_patch.stop()
         self.registration_hash_patch.stop()
         self.temporary.cleanup()
+
+    def test_status_fake_only_cleans_planned_measurement_root(self) -> None:
+        suffix = ("--no-optional-locks", "status", "--porcelain=v1",
+                  "--untracked-files=all")
+        prefix = ("/usr/bin/git", "-c", "core.fsmonitor=false", "-C")
+        own = prefix + (str(self.root),) + suffix
+        other = prefix + (str(self.root / "other"),) + suffix
+        self.source.results[other] = _probe(other, stdout="?? unexpected.py\n")
+        self.assertEqual("", self.source.run(own).stdout)
+        self.assertEqual("?? unexpected.py\n", self.source.run(other).stdout)
 
     def _write_plan(
         self,
@@ -3153,7 +3169,8 @@ class PackNightProducerTests(unittest.TestCase):
         self.plan_path = write_night_plan(self.custody / "night_plan.json", self.plan)
         self.raw = self.plan_path.read_bytes()
         self.events = []
-        self.probe_source = ProbeSource(self.plan.t0_epoch_s + 1)
+        self.probe_source = ProbeSource(self.plan.t0_epoch_s + 1, self.plan.measurement_root)
+        self.probe_source.plan_path = self.plan_path
         original_probes = self.probe_source.probes()
         def probe(argv):
             self.events.append("census" if argv == night_gate.AGENT_CENSUS_ARGV else "probe")
@@ -3722,7 +3739,8 @@ class WindowDeadlineTests(unittest.TestCase):
         self.courier.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
         self.courier.chmod(0o755)
         self.t0_epoch_s = datetime(2026, 9, 2, 1, 0).timestamp()
-        self.source = ProbeSource(self.t0_epoch_s + 1)
+        self.source = ProbeSource(self.t0_epoch_s + 1, str(self.root))
+        self.source.plan_path = self.plan_path
         for patch in (
             mock.patch.object(self.driver, "observe_identity",
                               return_value=Identity("LIVE", "Tue Sep 8 01:02:03 2026")),

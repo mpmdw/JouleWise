@@ -4,8 +4,10 @@ import copy
 import hashlib
 import inspect
 import json
+import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -71,7 +73,8 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
 
 
 def checkout_status_argv(root: str) -> tuple[str, ...]:
-    return ("/usr/bin/git", "-C", root, "--no-optional-locks", "status",
+    return ("/usr/bin/git", "-c", "core.fsmonitor=false", "-C", root,
+            "--no-optional-locks", "status",
             "--porcelain=v1", "--untracked-files=all")
 
 
@@ -859,9 +862,32 @@ class NightGateTests(unittest.TestCase):
         source = FakeProbeSource()
         receipt = self.evaluate(plan, source)
         self.assertEqual("GO", receipt.verdict)
-        self.assertEqual([], next(row for row in receipt.conditions
-                                  if row.condition_id == "C5").measured["measurement_checkout_porcelain"])
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual([], c5.measured["measurement_checkout_porcelain"])
+        self.assertIn(night_gate._probe_citation(source.results[argv]), c5.evidence)
         self.assertIn(argv, source.status_calls)
+
+    def test_measurement_checkout_detail_shows_only_first_five_lines(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        lines = [f"?? file-{index}.py" for index in range(6)]
+        source.results[argv] = result(argv, stdout="\n".join(lines) + "\n")
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("night_plan_stale", receipt.refusal.reason)
+        self.assertIn("; ".join(lines[:5]), receipt.refusal.detail)
+        self.assertNotIn(lines[5], receipt.refusal.detail)
+
+    def test_measurement_checkout_porcelain_is_capped_at_fifty(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        lines = [f"?? file-{index}.py" for index in range(51)]
+        source.results[argv] = result(argv, stdout="\n".join(lines) + "\n")
+        receipt = self.evaluate(plan, source)
+        measured = next(row for row in receipt.conditions if row.condition_id == "C5").measured
+        self.assertEqual(lines[:50], measured["measurement_checkout_porcelain"])
+        self.assertIs(measured["measurement_checkout_porcelain_truncated"], True)
 
     def test_measurement_checkout_status_exit_128_is_probe_error(self) -> None:
         plan = make_plan()
@@ -871,6 +897,32 @@ class NightGateTests(unittest.TestCase):
         receipt = self.evaluate(plan, source)
         self.assertEqual("night_probe_error", receipt.refusal.reason)
         self.assertIn(source.results[argv], receipt.refusal.evidence)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertIsNone(c5.measured["measurement_checkout_porcelain"])
+        self.assertNotIn("measurement_checkout_porcelain_truncated", c5.measured)
+
+    def test_partial_output_timeout_keeps_status_refusal_evidence(self) -> None:
+        from scripts import run_night
+
+        command = (sys.executable, "-B", "-c",
+                   "import os,time; os.write(1,b'?? partial.py\\n'); "
+                   "os.write(2,b'partial stderr\\n'); time.sleep(2)")
+        with mock.patch.object(run_night, "PROBE_TIMEOUT_S", 0.1):
+            timed_out = run_night._probe_runner(command)
+        self.assertEqual(124, timed_out.exit_code)
+        self.assertIsInstance(timed_out.stdout, str)
+        self.assertIsInstance(timed_out.stderr, str)
+        self.assertIn("?? partial.py", timed_out.stdout)
+        self.assertIn("partial stderr", timed_out.stderr)
+
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        source.results[argv] = replace(timed_out, argv=argv)
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn("?? partial.py", receipt.refusal.evidence[-1].stdout)
+        self.assertIn("partial stderr", receipt.refusal.evidence[-1].stderr)
 
     def test_measurement_checkout_status_exception_is_probe_error(self) -> None:
         plan = make_plan()
@@ -901,9 +953,19 @@ class NightGateTests(unittest.TestCase):
             executed_file.write_text("ORIGINAL = True\n")
             subprocess.run(("git", "-C", str(repository), "add", "."), check=True,
                            capture_output=True, text=True)
+            hooks = Path(temporary) / "hooks"
+            hooks.mkdir()
+            pre_commit = hooks / "pre-commit"
+            pre_commit.write_text("#!/bin/sh\nexit 19\n")
+            pre_commit.chmod(0o755)
+            global_config = Path(temporary) / "hostile-gitconfig"
+            global_config.write_text(f"[commit]\n\tgpgsign = true\n[core]\n\thooksPath = {hooks}\n")
             subprocess.run(("git", "-C", str(repository), "-c", "user.name=Test",
-                            "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"),
-                           check=True, capture_output=True, text=True)
+                            "-c", "user.email=test@example.invalid",
+                            "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                            "commit", "-qm", "fixture"),
+                           check=True, capture_output=True, text=True,
+                           env={**os.environ, "GIT_CONFIG_GLOBAL": str(global_config)})
             production = make_probes()
             head = production.measurement_head(str(repository))
             plan = make_plan("REHEARSAL_STUB", measurement_root=str(repository),
@@ -922,6 +984,37 @@ class NightGateTests(unittest.TestCase):
             clean = night_gate._check_static_start(plan, probes, rows, [])
             self.assertIsNone(clean)
             self.assertEqual([], rows["C5"].measured["measurement_checkout_porcelain"])
+
+    def test_real_git_status_disables_fsmonitor_hook(self) -> None:
+        from scripts.run_night import make_probes
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "measurement"
+            root.mkdir()
+            init_git_fixture(root, "-q")
+            (root / "tracked.txt").write_text("clean\n")
+            subprocess.run(("git", "-C", str(root), "add", "tracked.txt"), check=True,
+                           capture_output=True, text=True)
+            subprocess.run(("git", "-C", str(root), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid",
+                            "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                            "commit", "-qm", "fixture"),
+                           check=True, capture_output=True, text=True)
+            marker = Path(temporary) / "fsmonitor-ran"
+            hook = Path(temporary) / "fsmonitor.sh"
+            hook.write_text(f"#!/bin/sh\ntouch '{marker}'\n")
+            hook.chmod(0o755)
+            subprocess.run(("git", "-C", str(root), "config", "core.fsmonitor", str(hook)),
+                           check=True, capture_output=True, text=True)
+            head = make_probes().measurement_head(str(root))
+            plan = make_plan("REHEARSAL_STUB", measurement_root=str(root),
+                             measurement_head=head)
+            source = FakeProbeSource()
+            probes = replace(source.probes(), run=make_probes().run,
+                             measurement_head=make_probes().measurement_head)
+            rows = night_gate._initial_conditions(plan.receipt_class)
+            self.assertIsNone(night_gate._check_static_start(plan, probes, rows, []))
+            self.assertFalse(marker.exists())
 
     def test_driver_checkout_head_movement_is_informational_and_census_still_runs(self) -> None:
         source = FakeProbeSource(checkout_head="b" * 40)
@@ -1485,6 +1578,10 @@ class QuietGatePhaseTests(unittest.TestCase):
             for row in value["conditions"]:
                 if row["condition_id"] == "C5":
                     row["measured"].pop("measurement_checkout_porcelain", None)
+                    row["measured"].pop("measurement_checkout_porcelain_truncated", None)
+                    row["evidence"] = [citation for citation in row["evidence"]
+                                       if citation != night_gate._probe_citation(
+                                           result(checkout_status_argv("/measurement-checkout")))]
             if value["refusal"] is not None:
                 value["refusal"]["evidence"] = [
                     probe for probe in value["refusal"]["evidence"]

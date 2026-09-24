@@ -412,13 +412,16 @@ class NightKindTests(unittest.TestCase):
         source = ROOT
         if window_max_s is not None:
             source = work / "source"
-            subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(source)], check=True)
+            subprocess.run(["git", "-c", "commit.gpgsign=false", "-c",
+                            "core.hooksPath=/dev/null", "clone", "-q", "--no-hardlinks",
+                            str(ROOT), str(source)], check=True)
             kind_path = source / "joulewise/night_kinds.py"
             original = kind_path.read_text()
             old = "window_max_s=9000,"
             self.assertEqual(original.count(old), 1)
             kind_path.write_text(original.replace(old, f"window_max_s={window_max_s},", 1))
-            subprocess.run(["git", "-C", str(source), "add", "joulewise/night_kinds.py"], check=True)
+            subprocess.run(["git", "-C", str(source), "-c", "core.hooksPath=/dev/null",
+                            "add", "joulewise/night_kinds.py"], check=True)
             commit_fixture(source, "fixture window mutant")
         remote = work / "remote.git"
         subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(source), str(remote)], check=True)
