@@ -245,8 +245,7 @@ def _parent_of(block):
 
 
 def _derived(g, r):
-    blocks = {b['block_id']: b for b in r['blocks']}
-    live = {p['block_id']: p for p in r['placements'] if p['block_id'] in {x for e in r['envelopes'] for x in e['blocks']}}
+    live = {p['block_id']: p for p in r['placements'] if p['block_id'] in r['envelopes'][p['envelope_index']]['blocks']}
     terms = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
     short = {}
     positions = {}
@@ -254,9 +253,12 @@ def _derived(g, r):
         for m in _roles(g):
             pos = []
             occupied = set()
+            nonterminal = 0
             for b in r['blocks']:
                 if b['parent_block_id'] is not None or b['model'] != m or b['level'] != level:
                     continue
+                fully_nonterminal = all((m, item) not in terms for item in b['items'])
+                nonterminal += fully_nonterminal
                 indices = []
                 for item in b['items']:
                     if (m, item) in terms:
@@ -264,15 +266,16 @@ def _derived(g, r):
                     owner = b if not b['superseded'] else next((x for x in r['blocks'] if x['parent_block_id'] == b['block_id'] and x['items'] == [item]), None)
                     if owner is not None and owner['block_id'] in live:
                         indices.append(live[owner['block_id']]['envelope_index'])
-                if len(indices) == len(b['items']):
+                if indices:
                     pos.append(sum(indices) / len(indices))
+                if fully_nonterminal and len(indices) == len(b['items']):
                     occupied.update(indices)
-            short[f'{m}:{level}'] = len(pos) < 5 or len(occupied) < 5
-            positions[(m, level)] = pos
+            short[f'{m}:{level}'] = nonterminal < 5 or len(occupied) < 5
+            positions[(m, level)] = (pos, nonterminal)
     lever = {}
     for level in LEVELS:
-        a, b = (positions[(m, level)] for m in _roles(g))
-        lever[str(level)] = abs(sum(a) / len(a) - sum(b) / len(b)) if a and b else None
+        (a, na), (b, nb) = (positions[(m, level)] for m in _roles(g))
+        lever[str(level)] = abs(sum(a) / len(a) - sum(b) / len(b)) if na and nb else None
     return short, lever
 
 
@@ -795,37 +798,38 @@ def check_executed(registration, roster, predicted_decode_s, captured_window_key
     if violations:
         return {'violations': violations}
     g, r = registration, roster
-    live = {(p['block_id'], p['attempt']): p for p in r['placements'] if p['block_id'] in {x for e in r['envelopes'] for x in e['blocks']}}
-    bm = {b['block_id']: b for b in r['blocks']}
+    live = {p['block_id']: p for p in r['placements'] if p['block_id'] in r['envelopes'][p['envelope_index']]['blocks']}
     spread, positions = {}, {}
     terms = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
     for level in LEVELS:
         for m in _roles(g):
-            pos, occupied = [], set()
+            pos, occupied, fully_counted = [], set(), 0
             for parent in r['blocks']:
                 if parent['parent_block_id'] is not None or parent['model'] != m or parent['level'] != level:
                     continue
                 indices = []
                 for item in parent['items']:
                     if (m, item) in terms:
-                        break
+                        continue
                     owner = parent if not parent['superseded'] else next((b for b in r['blocks'] if b['parent_block_id'] == parent['block_id'] and b['items'] == [item]), None)
                     if owner is None:
-                        break
-                    placement = next((p for (bid, _), p in live.items() if bid == owner['block_id']), None)
+                        continue
+                    placement = live.get(owner['block_id'])
                     if placement is None or (placement['block_id'], placement['attempt']) not in captured_window_keys:
-                        break
+                        continue
                     indices.append(placement['envelope_index'])
-                if len(indices) == len(parent['items']):
+                if indices:
                     pos.append(sum(indices) / len(indices))
+                if len(indices) == len(parent['items']):
+                    fully_counted += 1
                     occupied.update(indices)
-            spread[f'{m}:{level}'] = len(pos) < 5 or len(occupied) < 5
-            positions[(m, level)] = pos
+            spread[f'{m}:{level}'] = fully_counted < 5 or len(occupied) < 5
+            positions[(m, level)] = (pos, fully_counted)
     lever, exceeded = {}, {}
     gap = _gap(g)
     for level in LEVELS:
-        a, b = (positions[(m, level)] for m in _roles(g))
-        value = abs(sum(a) / len(a) - sum(b) / len(b)) if a and b else None
+        (a, na), (b, nb) = (positions[(m, level)] for m in _roles(g))
+        value = abs(sum(a) / len(a) - sum(b) / len(b)) if na and nb else None
         lever[str(level)] = value
         exceeded[str(level)] = bool(value is not None and gap is not None and value > gap)
     return {'spread_exceeded': spread, 'executed_drift_lever_slots': lever, 'drift_exceeded': exceeded}
