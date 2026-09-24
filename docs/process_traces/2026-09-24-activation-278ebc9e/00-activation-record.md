@@ -134,3 +134,10 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
 54. The claim-gate council packet 55 is committed (report 54b). Four blind seats (brief 58) were launched at ≈11:18: Sol 59, Astra 60, Opus 61 and Fable 62, in worktrees `wt-278ebc9e-cg-*`. The 32k desk smoke (brief 56, Sol, worktree `wt-278ebc9e-smoke`) is running.
 55. TIER-01 installation (brief 53, Sol): committed on `feat/2026-09-24-tier01-install` and pushed (report 53b, which carries the draft PR body). V1 `test_check_gate_ledger` OK; the checker was run on the PR's own body. The full-suite run was interrupted, so the magistrate owes a replay. Merge needs the full-tier gate: lenses, a cold Fable final pass on the merge candidate, and CI.
 56. The 32k desk smoke (brief 56) did NOT run. The seat's python has no `mlx`, and the sandbox denies the RAM/swap/process probes. The script (`57-calnight-desk-smoke/smoke.py`) is committed; report 56b. Next step: the magistrate runs it at the bench in an MLX-capable environment that is not the canonical root and not a measurement clone (for example a worktree venv built from the lockfile), or a seat runs it with the environment provided. This is not a quiet measurement.
+57. Cold gate A291-ESC2-01 ruled (48/20, Fable 5.1, rc 0; validator typo REFUSE then PASS; no REFUSE). It reproduced B1/B2, the 237 → 336 seal-gap sweeps, and 0 violations on the 1,868-roster corpus on a /tmp archive of `0fa4e6e3`. The rulings:
+   - K1 AFFIRMS Opus's closed INV-11. Fable's (e1) was executed and is insufficient on B1/B2. The judge also tested the third clause on a 420-roster subset.
+   - K2: the row→boundary map is a 02d addendum table. INV-37's structural clause and full INV-10 formation are mandatory seal rows. No separate `scored_ownership.md`.
+   - K3: `_ownership` lives inside `scored_packer.py`.
+   - K4: P ∥ K, blind, after Gate 0, RED per target.
+   - K5: the forger seat plus a binding stop rule.
+   The BLOCKER stays on the seal until round 3 passes the gate. **Final texts A291-R3** are extracted to record 63. A paired Astra refuter (brief 64) is running on them before any P/K brief, per the paired-refuter rule.
