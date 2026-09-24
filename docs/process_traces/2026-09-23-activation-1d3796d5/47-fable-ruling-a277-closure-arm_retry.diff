@@ -1,0 +1,16 @@
+--- a/joulewise/arm_retry.py	2026-09-23 16:46:56
++++ b/joulewise/arm_retry.py	2026-09-23 17:44:22
+@@ -256,6 +256,13 @@
+     if facts is None or not getattr(facts, "clean", False):
+         return Decision(False, "start_reservation_or_capture_not_absent")
+     try:
++        # Release keeps the receipt's veto-only role (cold ruling, A234 round
++        # 2). The successor route additionally needs the receipt shape the
++        # driver writes (run_night.py ~1869, C1-C5): exactly one C5 row, the
++        # no-retry-bound row D-182 names. An empty conditions list is
++        # malformed and licenses no successor.
++        if sum(1 for row in receipt["conditions"] if row["condition_id"] == "C5") != 1:
++            return Decision(False, "malformed_successor_evidence")
+         if (facts.chain_started or facts.reservation_markers_found
+                 or facts.capture_entries_found or facts.envelopes_captured):
+             return Decision(False, "start_reservation_or_capture_not_absent")

@@ -1,0 +1,81 @@
+diff --git a/Users/edr/code/wt-1d3796d5-fablemath/tests/test_benchmark_import_math.py b/tmp/fablemath/repo/tests/test_benchmark_import_math.py
+index ecbfd979..1308ae91 100644
+--- a/Users/edr/code/wt-1d3796d5-fablemath/tests/test_benchmark_import_math.py
++++ b/tmp/fablemath/repo/tests/test_benchmark_import_math.py
+@@ -177,8 +177,10 @@ class MathImportTests(unittest.TestCase):
+ 
+     def test_golden_pairs(self):
+         # Documented grouping case: 5,120 is accepted as 5120.
+-        correct = [(r"\dfrac{3}{4}", r"\frac34"), ("0.75", r"\frac34"), ("3/4", r"\frac34"), (r"\frac{6}{8}", r"\frac34"), ("2/4", "1/2"), (r"\boxed{\frac{3}{4}}", r"\frac34"), (r"-\frac12", r"-\frac{1}{2}"), ("x=5", "5"), ("10,080", r"10,\!080"), ("5,120", "5120"), (r"90^\circ", "90"), (r"5\text{ cm}", "5"), (r"\$4", "4"), (".5", r"\frac12"), (r"1\:", "1"), (r"1\ ", "1"), ("1~", "1"), (r"50\%", r"50%"), (r"90\degree", "90")]
+-        incorrect = [(r"\sqrt{2}", r"\frac32"), (r"\frac{1}{0}", "0"), ("1,2", "12"), (r"2\frac12", r"\frac52"), ("0.333", r"\frac13"), ("9007199254740993", "9007199254740992"), (r"\frac12\%", r"\frac12"), (r"\frac12", r"\frac12\%")]
++        correct = [(r"\dfrac{3}{4}", r"\frac34"), ("0.75", r"\frac34"), ("3/4", r"\frac34"), (r"\frac{6}{8}", r"\frac34"), ("2/4", "1/2"), (r"\boxed{\frac{3}{4}}", r"\frac34"), (r"-\frac12", r"-\frac{1}{2}"), ("x=5", "5"), ("10,080", r"10,\!080"), ("5,120", "5120"), (r"90^\circ", "90"), (r"5\text{ cm}", "5"), (r"\$4", "4"), (".5", r"\frac12"), (r"1\:", "1"), (r"1\ ", "1"), ("1~", "1"), (r"50\%", r"50%"), (r"90\degree", "90"), (r"44\%", "44"), ("44", r"44\%"), (r"7.2\%", "36/5"), (r"5\text{ mi}", "5")]
++        # Documented known accepted pairs (dangerous direction, disclosed; caught by the per-cell audit, packet A section 3): 5,120 vs 5120 and \frac12\% vs \frac12.
++        correct.append((r"\frac12\%", r"\frac12"))
++        incorrect = [(r"\sqrt{2}", r"\frac32"), (r"\frac{1}{0}", "0"), ("1,2", "12"), (r"2\frac12", r"\frac52"), ("0.333", r"\frac13"), ("9007199254740993", "9007199254740992"), (r"5\text{ million dollars}", "5"), (r"5\text{ millions}", "5"), (r"5 \text{thousands}", "5"), (r"5\text{ dozen eggs}", "5"), (r"5\text{Million}", "5"), (r"5\text{ MILLION}", "5"), (r"5\mathrm{Dozen}", "5"), (r"5\text{I}", "5"), (r"5 i", "5")]
+         for word in ("thousand", "million", "billion", "trillion", "hundred", "dozen"):
+             incorrect.extend([(fr"5\text{{ {word}}}", "5"), (fr"5\mathrm{{{word}}}", "5")])
+         incorrect.extend([(r"5\mathrm{i}", "5"), (r"5\,i", "5"), ("5i", "5")])
+@@ -202,14 +204,21 @@ class MathImportTests(unittest.TestCase):
+     def test_reference_parser_is_independent_of_response_extensions(self):
+         rows, _ = synthetic_records()
+         baseline, stats = math.eligible_records(rows)
+-        original = math.canonical_math_rational
+-        def extended_response(raw):
+-            return "5/2" if raw == r"2\frac12" else original(raw)
+-        with mock.patch.object(math, "canonical_math_rational", side_effect=extended_response):
+-            self.assertEqual(math.score_response(r"\boxed{2\frac12}", "5/2")["outcome"], "correct")
++        with mock.patch.object(math, "response_extension_v1", return_value="1"), mock.patch.object(math, "response_hazard_v1", return_value="deny_everything"):
++            self.assertEqual(math.score_response(r"\boxed{\sqrt{2}}", "1")["outcome"], "incorrect")
+             eligible, changed = math.eligible_records(rows)
+             self.assertEqual(changed, stats)
+             self.assertEqual([row["source_item_id"] for row in eligible], [row["source_item_id"] for row in baseline])
++        with mock.patch.object(math, "response_extension_v1", return_value="1"):
++            self.assertEqual(math.score_response(r"\boxed{\sqrt{2}}", "1")["outcome"], "correct")
++            with self.assertRaisesRegex(ValueError, "not rational"):
++                math.score_response(r"\boxed{1}", r"\sqrt{2}")
++        self.assertIs(math.canonical_math_rational, math.canonical_reference_v1)
++        with self.assertRaisesRegex(ValueError, "not rational"):
++            math.score_response(r"\boxed{1}", r"\sqrt{2}")
++        # self-consistency on the synthetic fixture: every eligible reference scores correct against its own text
++        for row in baseline:
++            self.assertEqual(math.score_response(r"\boxed{" + row["answer"] + "}", row["expected_answer"])["outcome"], "correct", row["answer"])
+ 
+     def test_prompt_template_and_exact_set(self):
+         self.assertEqual(math.PROMPT_TEMPLATE.count("{problem}"), 1)
+@@ -241,6 +250,12 @@ class MathImportTests(unittest.TestCase):
+         responses[0]["status"] = "capped"
+         result = math.score_math_outcome_table(responses, manifest, sidecar)
+         self.assertEqual((result["correct_count"], result["items"][0]["parsed_answer"]), (79, "1"))
++        with mock.patch.object(math, "response_extension_v1", return_value="1"):
++            math.validate_math_annotations(manifest, sidecar)
++            nonrational = json.loads(json.dumps(sidecar))
++            nonrational["annotations"][0]["source_answer"] = r"\sqrt{2}"
++            with self.assertRaisesRegex(ValueError, "answer mismatch"):
++                math.validate_math_annotations(manifest, nonrational)
+         corrupt = json.loads(json.dumps(sidecar))
+         corrupt["annotations"][0]["subject"] = "Precalculus"
+         with self.assertRaisesRegex(ValueError, "source hash mismatch"):
+@@ -282,9 +297,20 @@ class MathImportTests(unittest.TestCase):
+         fixture = json.loads((FIXTURE / "hash_only_manifest.json").read_text())
+         self.assertEqual(hashes, fixture["set_hashes"])
+         self.assertEqual(hashes, {"pilot": "04c04ffec881aed3d970da059945587f1d2abecaf05b7361e05c1babf1b12d53", "n64": "bf94123715a95328fc89bdf6fdbe5388ea803214283d764fd8113aede618b0d2", "n128": "7ebb2d9defaf4d973bd975e7d7e0dcd6862c0fcdf47fec5bb3ac42127ccede92"})
+-        original = math.canonical_math_rational
+-        with mock.patch.object(math, "canonical_math_rational", side_effect=lambda raw: "5/2" if raw == r"2\frac12" else original(raw)):
+-            self.assertEqual(math.score_response(r"\boxed{2\frac12}", "5/2")["outcome"], "correct")
++        for row in eligible:
++            with self.subTest(unique_id=row["unique_id"]):
++                self.assertEqual(math.score_response(r"\boxed{" + row["answer"] + "}", row["expected_answer"])["outcome"], "correct")
++                self.assertEqual(math.score_response(r"\boxed{" + math.last_boxed(row["solution"]) + "}", row["expected_answer"])["outcome"], "correct")
++                self.assertEqual(math.score_response("<think>x</think>" + r"\boxed{" + row["answer"] + "}", row["expected_answer"], enable_thinking=True)["outcome"], "correct")
++        self.assertEqual(sum(math.score_response(r"\boxed{" + row["answer"] + "}", row["expected_answer"])["correct"] for row in eligible), 4040)
++        with mock.patch.object(math, "response_extension_v1", return_value="1"), mock.patch.object(math, "response_hazard_v1", return_value="deny_everything"):
++            self.assertEqual(math.score_response(r"\boxed{\sqrt{2}}", "1")["outcome"], "incorrect")
++            unchanged, unchanged_stats = math.eligible_records(rows)
++            self.assertEqual((len(unchanged), unchanged_stats), (4040, stats))
++            unchanged_pilot = math.select_pilot(unchanged)
++            self.assertEqual({"pilot": math.canonical_json_sha256([r["source_item_id"] for r in unchanged_pilot]), **{f"n{n}": math.canonical_json_sha256([r["source_item_id"] for r in math.select_items(unchanged, unchanged_pilot, n)]) for n in (64, 128)}}, hashes)
++        with mock.patch.object(math, "response_extension_v1", return_value="1"):
++            self.assertEqual(math.score_response(r"\boxed{\sqrt{2}}", "1")["outcome"], "correct")
+             unchanged, unchanged_stats = math.eligible_records(rows)
+             self.assertEqual((len(unchanged), unchanged_stats), (4040, stats))
+             unchanged_pilot = math.select_pilot(unchanged)
