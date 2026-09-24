@@ -37,3 +37,12 @@ Fix, directed by Ed in this session (2026-09-24, interactive) and installed in `
 ## 5. What the resident activation (7370d0fb, launched 03:46 PDT) must do
 
 Directive issue opened by this session (label `directive`, author mpmdw) carries §2 and §3. On reading it: apply E2–E4 as ruled (three-seat council for E2; Opus 5.5 + Astra rulings + Fable 5.1 final pass for E3/E4), hold E1's text commit for Ed's one-word confirmation, hold O-21 for Ed's answer, and send Ed no further email that asks any of E1–E4 again.
+
+## 6. Ed's answers in the interactive session (≈04:45 PDT 2026-09-24), asked in one batch per his instruction "while im at the machine any other decisions are posed to me"
+
+- **E1 / O-20: ids and hashes only.** Ed: "im ok with 1" (option 1 = commit only problem ids and sha256 fingerprints; the MATH text stays in a local hash-bound custody path). The 22:19 "why not publish it?" is superseded. No problem text is committed.
+- **O-21: YES.** A claimed joules-per-correct-answer difference must also exceed the instrument's detection floor F (`|estimate| > F`, single-count discipline from `detection_floor.md`), on top of Holm and the anchor-widened interval test. AP-5M registers the estimate-level floor check.
+- **E8 (branch protection on main): add the missing required checks now.** Ed's condition, verbatim: "just make sure all checks in place are sensible for science reasons, my objective with the orchestration and multi agent communication is preventing bad science, not progress on the paper when models agree, so just be sensible...".
+- **Standing principle from that sentence (binding on every gate design):** the orchestration and the cross-model machinery exist to PREVENT BAD SCIENCE. Agreement among models is not progress; a gate earns its place by catching bad science, and a gate that only slows the paper without protecting the science is not sensible.
+
+Applied by this session: issue #405 comment with E1 and O-21; required status checks on `main` extended (see §7); the three-seat council for E2 and the Opus 5.5 + Astra + Fable rulings for E3/E4 remain the resident magistrate's work.
