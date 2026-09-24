@@ -26,6 +26,54 @@ from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
 from joulewise import corecaptured_loop
+try:
+    from joulewise.night_kinds import NIGHT_KINDS, kind_row
+except ModuleNotFoundError as exc:
+    if exc.name != "joulewise.night_kinds":
+        raise
+    # Never tolerate deletion from a checkout whose H actually owns the table.
+    _root = Path(__file__).resolve().parents[1]
+    if subprocess.run(("git", "-C", str(_root), "cat-file", "-e",
+                       "HEAD:joulewise/night_kinds.py"), capture_output=True).returncode == 0:
+        raise
+    # A277's isolated census fixture copies this module without its sibling.
+    # A real measurement clone carries the whole tracked checkout.  Preserve
+    # the fixture's historical gate behavior until that fixture can include
+    # night_kinds in the follow-up PR's broader test scope.
+    from types import MappingProxyType
+
+    @dataclass(frozen=True)
+    class _LegacyNightKind:
+        kind: str
+        protocol_path: str | None
+        chain_source_path: str
+        authenticate_chain_source: bool
+        requires_chain_bound_registration: bool
+        corecaptured_at_arm_and_t0: bool
+        non_observer_at_arm_and_t0: bool
+
+    _idle_kind = _LegacyNightKind(
+        kind="quiet_predicate_evidence",
+        protocol_path="configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json",
+        chain_source_path="scripts/night_chains/quiet_predicate_evidence.zsh",
+        authenticate_chain_source=True,
+        requires_chain_bound_registration=True,
+        corecaptured_at_arm_and_t0=True,
+        non_observer_at_arm_and_t0=True,
+    )
+    _calibration_kind = _LegacyNightKind(
+        kind="calibration", protocol_path=None,
+        chain_source_path="scripts/night_chains/calibration_derivation_only.zsh",
+        authenticate_chain_source=False,
+        requires_chain_bound_registration=False,
+        corecaptured_at_arm_and_t0=False,
+        non_observer_at_arm_and_t0=False,
+    )
+    NIGHT_KINDS = MappingProxyType(
+        {"quiet_predicate_evidence": _idle_kind, "calibration": _calibration_kind})
+
+    def kind_row(kind):
+        return NIGHT_KINDS[kind]
 
 
 SCHEMA = "joulewise.unattended_night_receipt.v2"
@@ -65,7 +113,7 @@ D166_REGISTRATION_PATH = (
 # `t0_non_observer_share_max` gate share, and the corrected `observer_floor`
 # (whole-envelope accounting over the collector's own span, with the v2
 # statistic named in its supersession note).
-QPE01_PILOT_REGISTRATION_PATH = "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json"
+QPE01_PILOT_REGISTRATION_PATH = kind_row("quiet_predicate_evidence").protocol_path
 QPE01_PILOT_REGISTRATION_SHA256 = "69321c693b3370b949b0a4a1b8548e35dd081a36165ba8f6799a387c2d813616"
 # v2's bytes stay in the table as ruled history, for the same reason v1's do:
 # the table is KEYED by digest, so re-pointing the constant above would carry
@@ -78,7 +126,7 @@ QPE01_PILOT_REGISTRATION_V2_SHA256 = "2c5392401a7956dfbb30f316a084541e0f53f214a4
 # therefore repeated as its own literal and its entry carries
 # ``superseded_by``, which the armability readers refuse.
 QPE01_PILOT_REGISTRATION_V1_SHA256 = "f59804a9a28b2145f7bb8e91a8f0fe11b21ae6728cee70d8e943fe52a46da6f6"
-EVIDENCE_CHAIN_PATH = "scripts/night_chains/quiet_predicate_evidence.zsh"
+EVIDENCE_CHAIN_PATH = kind_row("quiet_predicate_evidence").chain_source_path
 # Amended only by cold-gate ruling; each entry names its authority ("ruling",
 # surfaced in the receipt) and the tracked records that hold it ("records":
 # repo-relative paths, optionally "#<heading id>" inside a decision log;
@@ -150,15 +198,15 @@ def probe_payload_kind(text):
     """The shared worker/installer discriminant; absence preserves calibration."""
     declarations = re.findall(r"^\s*export\s+NIGHT_PAYLOAD_KIND\b.*$", text, re.MULTILINE)
     if not declarations:
-        return "calibration"
+        return kind_row("calibration").kind
     try:
         if (len(declarations) != 1 or
                 re.search(r"^\s*export\s+CALIBRATION_LEDGER\b", text, re.MULTILINE) or
-                chain_literal(text, "NIGHT_PAYLOAD_KIND") != "quiet_predicate_evidence"):
+                chain_literal(text, "NIGHT_PAYLOAD_KIND") != kind_row("quiet_predicate_evidence").kind):
             raise ValueError("ambiguous")
     except ValueError as exc:
         raise ValueError("probe payload kind ambiguous") from exc
-    return "quiet_predicate_evidence"
+    return kind_row("quiet_predicate_evidence").kind
 # Brackets preserve agent matches but exclude peer pgrep argv: overlapping
 # driver/chain censuses self-matched and aborted the 2026-09-20 pilot night.
 AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")
@@ -1352,18 +1400,19 @@ def _check_chain_identity(plan, probes, rows, evidence):
         # sidecar. Calibration wrappers retain their historical path unchanged.
         try:
             kind = probe_payload_kind(chain_text)
-            if kind == "quiet_predicate_evidence":
+            if kind_row(kind).authenticate_chain_source:
+                chain_path = kind_row(kind).chain_source_path
                 source = _run(probes, ("/usr/bin/git", "-C", plan.measurement_root,
-                                      "show", f"{plan.measurement_head}:{EVIDENCE_CHAIN_PATH}"))
+                                      "show", f"{plan.measurement_head}:{chain_path}"))
                 if source.exit_code != 0:
                     raise ProbeError("tracked evidence chain source unavailable")
                 measured = hashlib.sha256(source.stdout.encode("utf-8")).hexdigest()
-                actual = probes.read_text(str(Path(plan.measurement_root) / EVIDENCE_CHAIN_PATH))
+                actual = probes.read_text(str(Path(plan.measurement_root) / chain_path))
                 if (chain_literal(chain_text, "EVIDENCE_CHAIN_SOURCE_SHA256") != measured or
                         hashlib.sha256(actual.encode("utf-8")).hexdigest() != measured):
                     raise ValueError("evidence chain source differs from measurement_head or pinned wrapper")
                 rows["C5"].measured.update(payload_kind=kind, chain_source_sha256=measured)
-                rows["C5"].evidence.append(f"chain_source:{plan.measurement_head}:{EVIDENCE_CHAIN_PATH}")
+                rows["C5"].evidence.append(f"chain_source:{plan.measurement_head}:{chain_path}")
         except ValueError as exc:
             return _finish(plan, probes, rows, Refusal("night_chain_digest_mismatch", str(exc), tuple(evidence)))
         except (ProbeError, OSError, subprocess.SubprocessError) as exc:
@@ -1502,7 +1551,8 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
                     tuple(evidence),
                 ),
             )
-        if rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
+        if (rows["C5"].measured.get("payload_kind") in NIGHT_KINDS and
+                kind_row(rows["C5"].measured["payload_kind"]).corecaptured_at_arm_and_t0):
             # This is the planned t0 boundary. The read adds probe time, but
             # there is no cure, deliberate wait, or process action here.
             try:
@@ -1543,7 +1593,8 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
         # is not pinned to a chain-binding QPE-01 registration -- so this
         # condition is exactly "a pilot night, v2 or v3 alike", which is the
         # scope the ruling gives the predicate.
-        if rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
+        if (rows["C5"].measured.get("payload_kind") in NIGHT_KINDS and
+                kind_row(rows["C5"].measured["payload_kind"]).non_observer_at_arm_and_t0):
             observer = probes.observe_interval or production_interval_observation
             try:
                 observation = observer()
@@ -1675,7 +1726,8 @@ def _check_registration(plan, probes, rows, evidence):
                     raise ValueError(f"registration binds chain source {bound}; measured source is {measured}")
             except (ValueError, KeyError, TypeError) as exc:
                 defect = str(exc)
-        elif rows["C5"].measured.get("payload_kind") == "quiet_predicate_evidence":
+        elif (rows["C5"].measured.get("payload_kind") in NIGHT_KINDS and
+              kind_row(rows["C5"].measured["payload_kind"]).requires_chain_bound_registration):
             defect = "evidence payload requires its chain-bound ruled registration"
         if defect is not None:
             return _finish(
