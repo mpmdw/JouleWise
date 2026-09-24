@@ -355,11 +355,17 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
             monotonic_ns=time.monotonic_ns(),
         )
     except subprocess.TimeoutExpired as error:
+        stdout = error.stdout or ""
+        stderr = error.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode("utf-8", errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
         return ProbeResult(
             argv=command,
             exit_code=124,
-            stdout=error.stdout or "",
-            stderr=(error.stderr or "") + f"ProbeError: timeout after {PROBE_TIMEOUT_S} s",
+            stdout=stdout,
+            stderr=stderr + f"ProbeError: timeout after {PROBE_TIMEOUT_S} s",
             monotonic_ns=time.monotonic_ns(),
         )
     except OSError as error:
