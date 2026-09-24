@@ -920,7 +920,8 @@ class DetectorTests(unittest.TestCase):
 class EvidenceTests(unittest.TestCase):
     def make_detection(self):
         true_pulses = [
-            (on_s + 10.0, off_s + 10.0) for on_s, off_s in pulse_schedule(3)
+            (on_s + 10.0, off_s + 10.0)
+            for on_s, off_s in pulse_schedule(3, duration_s=1.0)
         ]
         trace = synthetic_trace(true_pulses, end_s=true_pulses[-1][1] + 10.0)
         # These synthetic detector fixtures model a retained v2 calibration

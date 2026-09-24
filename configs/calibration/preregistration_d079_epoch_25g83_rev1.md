@@ -642,6 +642,8 @@ The disclosed observations are:
 These observations informed protocol and diagnostic rules only; none enters
 the new corpus.
 
+Anchor-failure rate: 2 of 24 n1/n2 captures were `clock_anchor_unresolved` (n1-d07 `wall_minus_monotonic_span_exceeded`, n1-d10 `affine_clock_fit_empty`); pulse duration is not an input to the anchor, so v4 leaves this rate unchanged. Expected per-slot valid rate under v4 ≈ 0.92 (point), ≥ 0.76 (95 % pessimistic); at both rates P(W1 futility) ≤ 0.14 and P(fewer than 12 valid in 24) ≤ 0.002. The futility threshold 8/12, two windows and the count-only W3 are unchanged.
+
 Revision 1's screen challenge against 0.032898493715362 does not apply to this epoch. Record the count above that threshold and the r6-maximum-plus-range comparison as diagnostics only. Count members with B > 0.075 s; at count ≥ 2 label the artifact `excursion_limited` and open an estimator lane comparing common shift with per-pulse jitter before any phase-split claim. A member with B > 0.25 s, more than one native sample interval, refuses issuance and names that mechanism. These diagnostics never exclude a member.
 
 S = max(corpus range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818 s). C = max(predecessor C, Q99, S). If C = S, record `max_budgetable_excess_s = 0` and `zero_headroom`, and issue; drift above S refuses under the operative bracket. Never lower S. D-125's dated addendum governs this epoch. The level screen remains the quantized corpus maximum. The analysis and quantile proof rules of Revision 1 remain in force.

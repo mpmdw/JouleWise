@@ -1291,9 +1291,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     distinct_nights = len(set(session_ids))
     permitted_nights = {2, 3} if revision_four else {PREREGISTERED_NIGHT_COUNT}
     if distinct_nights not in permitted_nights and not args.nights_ruling:
+        registered_shape = (
+            str(sorted(permitted_nights)) if revision_four
+            else str(PREREGISTERED_NIGHT_COUNT)
+        )
         raise PrepareRefusal(
             f"registration names {distinct_nights} sessions, not the "
-            f"pre-registered {sorted(permitted_nights)}; --nights-ruling must "
+            f"pre-registered {registered_shape}; --nights-ruling must "
             "name a written ruling to depart"
         )
     if revision_four and list(session_ids) != sorted(

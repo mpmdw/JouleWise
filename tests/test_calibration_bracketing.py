@@ -25,6 +25,7 @@ from joulewise.calibration_bracketing import (
     BRACKET_SCREEN_QUANTUM_S,
     D125_SCREEN_FLOOR_S,
     ENVELOPE_MINIMUM_CORPUS_N,
+    REV4_ENVELOPE_MINIMUM_CORPUS_N,
     PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,
     SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
     SESSION_KIND_BRACKET,
@@ -63,6 +64,8 @@ from joulewise.calibration_bracketing import (
     _observation_session_kind,
     _prior_set_matches_import_cutoff_prefix,
     _valid_acceptance_bound,
+    _is_revision_four_epoch,
+    _registered_generation_row_is_complete,
     acceptance_generation_operatives,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
@@ -94,6 +97,7 @@ from joulewise.powermetrics_fiducial import (
     PROTOCOL_ID,
     PROTOCOL_V2_ID,
     PROTOCOL_V3_SHA256,
+    protocol_sha256,
     PULSE_COUNT,
     REGION_COVERAGE_RESOLUTION_S,
     RESIDUAL_REGION_METHOD,
@@ -4091,6 +4095,25 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                 with _registered_generation(acceptance_id, row):
                     self.assertEqual(_valid_acceptance_bound(artifact), admitted)
 
+    def test_revision_four_full_artifact_admits_twelve_and_zero_headroom(self) -> None:
+        acceptance_id, row, artifact = self._floored_envelope_case(member_count=12)
+        identity = dict(artifact["identity_epoch"])
+        identity["pulse_protocol_id"] = PROTOCOL_ID
+        artifact["identity_epoch"] = identity
+        artifact["prior_observation_set"]["epoch_catalog"][_LIVE_EPOCH_CATALOG_ID] = identity
+        artifact["prospective_rederivation"]["protocol_sha256"] = protocol_sha256(PROTOCOL_ID)
+        row["prediction_99_two_draw_s"] = "0.010000"
+        row["operatives"].update({
+            "maximum_budgetable_drift_s": "0.010818",
+            "max_budgetable_excess_s": "0",
+        })
+        artifact["decimal_derivation"]["source_statistics"]["prediction_99_two_draw_s"] = "0.010000"
+        artifact["decimal_derivation"]["ratified_operatives"].update(row["operatives"])
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(_reseal(artifact)))
+            row["corpus_n"] = 11
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
     def test_envelope_screen_is_the_range_once_the_range_exceeds_the_floor(
         self,
     ) -> None:
@@ -4272,3 +4295,34 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         )
         with _registered_generation(acceptance_id, exempt):
             self.assertTrue(_valid_acceptance_bound(_reseal(live_artifact)))
+
+
+class RevisionFourEnvelopeValidatorTests(unittest.TestCase):
+    def test_floor_and_zero_headroom_are_epoch_scoped(self) -> None:
+        identity = {
+            "os_build": "25G83", "hardware_model": "Mac15,9",
+            "power_policy": "ac_high_power", "sampling_interval_ms": 100,
+            "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+            "pulse_protocol_id": PROTOCOL_ID,
+        }
+        self.assertTrue(_is_revision_four_epoch(identity))
+        self.assertFalse(_is_revision_four_epoch({**identity, "pulse_protocol_id": "powermetrics_pulse_fiducial_v3"}))
+        row = copy.deepcopy(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R7_ACCEPTANCE_ID])
+        row["corpus_n"] = REV4_ENVELOPE_MINIMUM_CORPUS_N
+        row["screen_rule"] = SCREEN_RULE_FLOORED_RANGE_ENVELOPE
+        row["d125_ruling"] = "D-125 2026-09-24 addendum"
+        row["prediction_99_two_draw_s"] = "0.010000"
+        row["operatives"] = {
+            **row["operatives"],
+            "bracket_screen_s": "0.010818",
+            "maximum_budgetable_drift_s": "0.010818",
+            "max_budgetable_excess_s": "0",
+        }
+        self.assertTrue(_registered_generation_row_is_complete(row, revision_four=True))
+        self.assertFalse(_registered_generation_row_is_complete(row))
+        row["corpus_n"] = 11
+        self.assertFalse(_registered_generation_row_is_complete(row, revision_four=True))
+
+    def test_historical_v3_protocol_pin_is_still_admitted(self) -> None:
+        path = Path(__file__).resolve().parents[1] / "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
+        self.assertTrue(_valid_acceptance_bound(json.loads(path.read_text())))

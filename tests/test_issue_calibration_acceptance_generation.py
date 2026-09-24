@@ -341,6 +341,12 @@ class DeskEpochWatchTests(unittest.TestCase):
         # Real probes, fixture ledger and pin: the only non-deterministic input
         # is this machine's own identity, and every assertion is derived from
         # the live reading rather than pinned to one build.
+        probe = subprocess.run(
+            [str(issuer.SYSCTL_PATH), "-n", "kern.osversion"],
+            capture_output=True, text=True, check=False,
+        )
+        if probe.returncode != 0 or not probe.stdout.strip():
+            self.skipTest("macOS identity sysctl unavailable in this sandbox")
         live = issuer.observe_machine()
         rc, output = self.invoke_check()
         rows = parse_watch_table(output)

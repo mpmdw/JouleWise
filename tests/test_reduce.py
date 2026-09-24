@@ -4105,8 +4105,15 @@ class D078R01RegressionTests(unittest.TestCase):
             self.FIXTURE, reducer_version="0.5.2"
         )
         payload = summary.to_dict()
+        cadence = payload["window_evidence_precheck"]["native_frame_cadence"]
+        self.assertIn("measured_interior_median_s", cadence)
+        self.assertIn("measured_interior_max_s", cadence)
+        # The historical golden seals the physics and evidence fields. The
+        # new flag is additive and has no effect on that sealed projection.
+        legacy_payload = json.loads(json.dumps(payload))
+        del legacy_payload["window_evidence_precheck"]["native_frame_cadence"]
         self.assertEqual(
-            (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(),
+            (json.dumps(legacy_payload, indent=2, sort_keys=True) + "\n").encode(),
             golden_path.read_bytes(),
         )
         self.assertAlmostEqual(payload["gross_energy_j"], 7.664158853340149)

@@ -35,6 +35,7 @@ from joulewise.powermetrics_fiducial import (
     MAX_AGE_S,
     PROTOCOL_ID,
     PROTOCOL_V2_ID,
+    PROTOCOL_V3_ID,
     REGION_COVERAGE_RESOLUTION_S,
     RESIDUAL_REGION_METHOD,
     V2_BINDING_FIELDS,
@@ -266,15 +267,37 @@ PREFLIGHT_LEVEL_SCREEN_QUANTUM_S = Decimal("0.000000000000001")
 # is absent.  It is NOT unconditionally required: the six issued rows predate
 # the envelope and carry none.
 _D125_RULING_REQUIRED_SCREEN_RULES = frozenset({SCREEN_RULE_FLOORED_RANGE_ENVELOPE})
-# D-126 cl.2's corpus-SIZE floor, as amended by cold gate 46 addendum A-2.  The
-# ratified floor is 19; the ONLY departure below it that has ever been ruled is
-# the n=17 anchor-v3 arc, so 17 is the hard bound a row may not go under.  This
-# guards the df = n-1 tail: at n=17 the 99 % two-draw prediction already rests
-# on df=16, and below that the Student-t quantile grows fast enough that a
-# ceiling derived from it stops meaning what the artifact says it means.  The
-# floor applies to ENVELOPE generations, which are the ones still to be issued;
-# the six already-issued rows carry n=17 or n=19 and are unaffected either way.
+# D-126 cl.2's envelope floor remains 17 for historical generations.  Its
+# 2026-09-24 addendum registers 12 only for the 25G83/v4 Revision 4 epoch.
 ENVELOPE_MINIMUM_CORPUS_N = 17
+REV4_ENVELOPE_MINIMUM_CORPUS_N = 12
+
+
+def _is_revision_four_epoch(identity: Any) -> bool:
+    """The exact epoch for which D-125/D-126 Revision 4 amendments apply."""
+
+    return isinstance(identity, Mapping) and dict(identity) == {
+        "os_build": "25G83",
+        "hardware_model": "Mac15,9",
+        "power_policy": "ac_high_power",
+        "sampling_interval_ms": 100,
+        "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+        "pulse_protocol_id": PROTOCOL_ID,
+    }
+
+
+def _registered_protocol_pin_matches(identity: Any, pin: Any) -> bool:
+    """Admit historical v3 bytes and the ruled v3-identity/v4-pin r8 reissue."""
+
+    if not isinstance(identity, Mapping):
+        return False
+    protocol_id = identity.get("pulse_protocol_id")
+    if protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
+        return False
+    admitted = {protocol_sha256(protocol_id)}
+    if protocol_id == PROTOCOL_V3_ID:
+        admitted.add(protocol_sha256(PROTOCOL_ID))
+    return pin in admitted
 # Mechanism-named, outcome-independent corpus exclusions (ruling 46 §R-a A6).
 # Today's only registered class is `affine_clock_fit_empty`: the anchor-v3
 # replay found NO feasible affine wall-versus-monotonic clock fit for that
@@ -381,7 +404,9 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
 }
 
 
-def _registered_generation_row_is_complete(generation: Any) -> bool:
+def _registered_generation_row_is_complete(
+    generation: Any, *, revision_four: bool = False
+) -> bool:
     """Whether a registered generation row carries every fence it must.
 
     The validator reads its epoch catalog, prior-set size, cutoff sequence,
@@ -405,12 +430,9 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     would take the no-predecessor arm and switch the lineage fence off by
     emptying a field, so it refuses.
 
-    The operative screen must additionally sit strictly BELOW that ceiling, in
-    every case: D-102 cl.3 spends the allowance
-    ``max(observed_drift_s, bracket_screen_s)`` against it, and
-    ``screen + excess == maximum`` at the bottom of ``_valid_acceptance_bound``
-    would otherwise demand a zero or negative budgetable excess.  That is the
-    shape of D-125's ``successor_screen_exceeds_budget_ceiling`` refusal.
+    Historical generations require strict headroom. Revision 4's exact
+    25G83/v4 epoch includes the screen in the ceiling max, so equality is
+    admitted with zero budgetable excess.
     """
 
     if not isinstance(generation, Mapping):
@@ -464,13 +486,20 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
     prediction = _decimal(generation["prediction_99_two_draw_s"])
     screen = _decimal(operatives.get("bracket_screen_s"))
+    expected_ceiling = None
+    if prediction is not None and screen is not None:
+        operands = [prediction]
+        if predecessor is not None:
+            operands.append(predecessor)
+        if revision_four:
+            operands.append(screen)
+        expected_ceiling = max(operands)
     if (
         drift is None
         or prediction is None
         or screen is None
-        or drift
-        != (prediction if predecessor is None else max(predecessor, prediction))
-        or not screen < drift
+        or drift != expected_ceiling
+        or (screen > drift if revision_four else screen >= drift)
     ):
         return False
     if not all(
@@ -505,7 +534,10 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
         )
         and (
             generation["screen_rule"] != SCREEN_RULE_FLOORED_RANGE_ENVELOPE
-            or generation["corpus_n"] >= ENVELOPE_MINIMUM_CORPUS_N
+            or generation["corpus_n"] >= (
+                REV4_ENVELOPE_MINIMUM_CORPUS_N if revision_four
+                else ENVELOPE_MINIMUM_CORPUS_N
+            )
         )
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
@@ -765,7 +797,10 @@ def _valid_acceptance_bound(value: Any) -> bool:
     # identity, never by the live default, so every registered generation keeps
     # validating against the member table it was actually derived from.
     generation = _D102_GENERATION_DERIVATIONS.get(value.get("acceptance_id"))
-    if generation is None or not _registered_generation_row_is_complete(generation):
+    revision_four = _is_revision_four_epoch(identity)
+    if generation is None or not _registered_generation_row_is_complete(
+        generation, revision_four=revision_four
+    ):
         return False
     expected_n = generation["corpus_n"]
     operative_values = generation["operatives"]
@@ -809,7 +844,9 @@ def _valid_acceptance_bound(value: Any) -> bool:
         or prospective.get("calendar_expiry") is not None
         or prospective.get("trigger_observation_rule")
         != "judge_under_prior_artifact_never_self_fit"
-        or prospective.get("protocol_sha256") != protocol_sha256(PROTOCOL_ID)
+        or not _registered_protocol_pin_matches(
+            identity, prospective.get("protocol_sha256")
+        )
         or not isinstance(prospective.get("estimator_code_sha256"), Mapping)
         or set(prospective["estimator_code_sha256"]) != set(ESTIMATOR_CODE_PATHS)
         or any(
@@ -1570,7 +1607,7 @@ def _load_calibration_candidate_unbounded(
     bindings = evidence.get("bindings")
     capture = evidence.get(CAPTURE_TIME_FIELD)
     if (
-        protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_ID}
+        protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}
         or evidence.get("schema_version") != "joulewise.instrument_evidence.v1"
         or manifest.get("protocol_id") != protocol_id
         or manifest.get("pulse_count") != protocol_pulse_count(str(protocol_id))
