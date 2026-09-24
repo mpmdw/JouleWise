@@ -116,3 +116,8 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - 46: Astra 6 blind seat on brief 41;
    - 47: B0 fix-round-1 resume, brief 44;
    - 48: v4 PR resume, brief 45 (approved scope expansion to `calibration_bracketing.py` plus tests; 38/20 §3.2; V1 failures classified as r8-pin or real; the replay re-run at head).
+49. #408 fan-out after the Codex reset. Three more Sol seats, seven concurrent Codex seats in total:
+   - 49: the calibration-night registration DRAFT plus the KM003C passive-logger design and the 32k desk-smoke plan (worktree `wt-278ebc9e-calnight`);
+   - 51: the AP-5M v5 draft to R-Q3 plus E1/O-21 (`wt-278ebc9e-ap5m`);
+   - 53: the TIER-01 installation PR (`wt-278ebc9e-tier01`, branch `feat/2026-09-24-tier01-install`). Ed's veto window has run since 05:40 with no reply.
+   The claim-gate redesign council and A243 are next once seats free up.
