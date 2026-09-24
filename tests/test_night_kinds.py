@@ -34,6 +34,8 @@ except ModuleNotFoundError:  # The base archive intentionally predates the table
 from joulewise.night_plan_writer import write_night_plan
 from scripts import gen_evidence_night
 
+from tests.git_fixture import init_git_fixture
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = None
@@ -60,7 +62,7 @@ def ensure_base_source():
             stream.extractall(BASE_SOURCE, filter="data")
         else:
             stream.extractall(BASE_SOURCE)
-    subprocess.run(["git", "-C", str(BASE_SOURCE), "init", "-q"], check=True)
+    init_git_fixture(BASE_SOURCE, "-q")
     subprocess.run(["git", "-C", str(BASE_SOURCE), "-c", "core.autocrlf=false",
                     "add", "-A"], check=True)
     env = dict(os.environ, GIT_AUTHOR_NAME="Fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
