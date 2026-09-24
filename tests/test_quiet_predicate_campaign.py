@@ -95,6 +95,50 @@ def good_round(busy=0):
 
 
 class CampaignTests(unittest.TestCase):
+    def test_summary_text_follows_registration_exclusion_rule(self):
+        v2 = json.loads((ROOT / "configs/campaigns/quiet_predicate_evidence_01"
+                         / "pilot_protocol_v2.json").read_text())
+        for protocol in (PROTOCOL, v2):
+            with self.subTest(rule=campaign.non_observer_rule(protocol)), \
+                    tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                root = Path(tmp) / "evidence"
+                root.mkdir()
+                campaign.pilot_summary(root, protocol, [])
+                memo = (root / "summary.md").read_text()
+                # harvest record 5fe5a59b section 7 item 2: the unfiltered SD is labelled as such
+                self.assertIn("unfiltered single-envelope SD (every envelope with a readable energy value, excluded envelopes included) None J;", memo)
+                if campaign.non_observer_rule(protocol):
+                    self.assertNotIn("never an exclusion input", memo)
+                    rule = campaign.non_observer_rule(protocol)
+                    self.assertIn("Busy cores are recorded covariates. A process outside the measurement apparatus using "
+                                  f'{rule["bar_core_seconds"]:g} or more core-seconds inside an envelope excludes that envelope. ', memo)
+                else:
+                    self.assertEqual(memo,
+                        "# QPE-01 pilot (PROVISIONAL, descriptive)\n\n"
+                        f"Status: INCONCLUSIVE. Retained 0/{protocol['envelopes']} envelopes; 0 disjoint pairs.\n\n"
+                        "Disjoint-pair sample SD: None J (df=None); upper 90% bound: None J. "
+                        "This chi-square construction assumes independent, normally distributed pair differences.\n\n"
+                        "Block-two pairs: None; sizing stop: no decision. No sizing when INCONCLUSIVE.\n\n"
+                        "Diagnostics only: 0 overlapping differences (SD None J); "
+                        "unfiltered single-envelope SD (every envelope with a readable energy value, excluded envelopes included) None J; "
+                        "first-to-last retained drift None J. Overlapping adjacent pairs with |delta| > 3 * s_pair: []. "
+                        "Values are in summary.json.\n\n"
+                        "Busy cores are recorded covariates and never an exclusion input. "
+                        "Every exclusion and partial interior is retained in summary.json. "
+                        "No top-up, cutoff or activation authority. Block two is not authored by this summary.\n")
+
+    def test_unfiltered_sd_label_is_computed_over_every_readable_envelope(self):
+        # The label at quiet_predicate_campaign.pilot_summary promises "every
+        # envelope with a readable energy value, excluded envelopes included";
+        # this binds the NUMBER to that promise.  Envelope 2 is excluded and
+        # carries the only 12 J value: a retained-only computation gives 0.0 J,
+        # the promised computation gives the sample SD over all twelve.
+        energies = [10, 12, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
+        report = self.summarize(energies, excluded=(2,))
+        self.assertEqual(report['retained'], 11)
+        self.assertEqual(report['envelopes'][1]['excluded'], ['census_not_clean_or_unknown'])
+        self.assertAlmostEqual(report['unfiltered_single_envelope_sd_j'], 0.5773502691896257, places=12)
+
     def summarize(self, energies, excluded=(), missing=(), observer_core=None, recorder=False,
                   drift=0, slew=()):
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
