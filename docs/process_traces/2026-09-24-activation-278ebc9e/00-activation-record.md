@@ -158,3 +158,9 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - Of the nine prior findings, only F1 and F5 are cured.
    - The closed predicate again passes all 1,868 legal rosters, and there is no K/P write collision.
    **STANDING ESCALATION TRIGGER on the TEXT GATE itself.** Two consecutive text rounds (R3 → 4 BLOCKERs; R3b → 3 BLOCKERs) failed with the same signature: gate texts meant for verbatim pasting carry implementation contradictions that only execution finds. So the next spend is NOT R3c. It is a consult on the gating method (for example prototype-first, where one seat builds an executable reference that the refuters attack, versus text-first). That consult needs the Fable cold seat, which is out on spend. **A291 is PARKED** until Fable returns or Ed names a substitute. The magistrate does not run a third text round (anti-spiral).
+67. v4 PR Opus contract lens (brief 67; report 69b): no BLOCKER. Findings:
+   - F1 should_fix, the same as Sol's F1: the v3-identity/v4-pin exception applies to r1–r7, not only r8.
+   - F2 should_fix: futility counts "valid and not affine-excluded" and is re-judged at issuance, which is stricter than ruled.
+   - F3 should_fix: the seat's pin-only account skipped `CalibrationBracketingTests`, where 31 tests fail at head and 91/91 pass at base. They are consistent with a stale r7 pin, but they are the claim-bracket gates and must turn green after r8.
+   - Nits F4–F6.
+   The magistrate ruled cures C1–C6 in brief 73. The fix-round seat is launched.
