@@ -79,3 +79,9 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
 
    The magistrate flags the block-drift row as MATERIAL for the cold gate on the v4 PR. If the two derivation windows sit in different drift states, an n = 12 acceptance would refuse nearly every later window: a yield failure, not a false claim. The gate must weigh this against a third window or a drift-spanning design.
 38. A291 integration head `0fa4e6e3` (branch `fix/2026-09-24-a291-fix2-integration`, pushed). The five scored modules at the bench ran 71 tests OK in 1,053 s. The fuzz census now includes `inv_11` (447) and `inv_12` (41); at `20cd29de` it had neither. Stress: 0 violations on both seeds. A delta re-audit follows (brief 39).
+39. Cold Fable replay addendum (38/20, rc 0) ruled J1–J4: **R-ACC-1(b) PASSES** under the corrected criterion 3.1. The two unfitted captures sit on the unanchored fallback timeline, about 0.4–0.6 s off, so no v3 comparison exists for them. The 22 fitted captures match exactly, and v4 has 0 misses in 1,416 pulses. No BLOCKER; four MATERIAL cures:
+   - 3.1: the criterion text;
+   - 3.2: an anchor-failure-rate sentence appended to rev 4 2(f) (P(W1 futility) ≤ 0.14);
+   - 3.3: the jittered r6 diagnostic runs now, and the PR does not wait for it;
+   - 3.4: replay.py pins PROTOCOL_ID and PULSE_DURATION_S, and the README wording is corrected.
+   Items 3.1/3.3/3.4 go to replay-fix seat 40. Item 3.2 goes into the v4 PR (seat 36's fix round or the magistrate's bench).
