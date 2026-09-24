@@ -6,12 +6,12 @@ RESUME PREFACE (activation 278ebc9e). A previous seat on this exact brief was st
  R1. First read `git diff 2ea6a7ec 74b4dc65` in full and list, per brief item 1(a)–1(f), what the draft did, what is missing, and anything in it that violates §2 MUST NOT CHANGE or introduces a second, unauthenticated kind authority. Fix or revert what violates; complete what is missing.
  R2. Commit on top of `74b4dc65` in logical commits (do not rewrite or squash `74b4dc65`; do not push).
  R3. Your report must include the R1 inventory, and V1–V3 executed at your final head against base `2ea6a7ec` (the diff check is `git diff --check 2ea6a7ec HEAD`).
-The original brief follows verbatim; where it says "from main 2ea6a7ec", the branch now also carries `74b4dc65`.
+The original brief follows verbatim except its WRITE_SCOPE line (identical, stated once above); where it says "from main 2ea6a7ec", the branch now also carries `74b4dc65`.
 
 ----- ORIGINAL BRIEF 10 (verbatim) -----
 ROLE: IMPLEMENTATION SEAT for JouleWise lane A280, PR B0: make every remaining idle-only site dispatch on the night-kind table, with the existing idle night BYTE-IDENTICAL. Do not call Claude or any other agent (bridge depth is one hop).
 
-WRITE_SCOPE: ["joulewise/night_kinds.py", "joulewise/evidence_night.py", "scripts/gen_evidence_night.py", "joulewise/night_gate.py", "joulewise/night_agent_install.py", "scripts/run_night.py", "joulewise/zero_capture_facts.py", "tests/test_night_kinds.py", "tests/test_evidence_night.py", "tests/test_gen_evidence_night.py", "tests/test_night_gate.py", "tests/test_night_agent_install.py", "tests/test_run_night.py", "tests/test_zero_capture_facts.py", "tests/test_kind_dispatch_literals.py"]
+(WRITE_SCOPE: identical to the line at the top of this prompt; not repeated so the prompt carries exactly one.)
 
 0. CONTEXT AND FENCES.
 Worktree (yours): /Users/edr/code/wt-7370d0fb-a280b0, branch `feat/2026-09-24-a280-b0-kind-dispatch` from main `2ea6a7ec`. Commit your work on that branch, in logical commits; do not push.
