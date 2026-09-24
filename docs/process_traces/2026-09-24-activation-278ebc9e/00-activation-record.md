@@ -101,3 +101,12 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - The fuzz missed all this because its oracle sits behind replay (`inv_38` masks misses), it uses a single operator, and its alphabet cannot express the forgery.
    - Proposed cure (e): a closed-form INV-11 amendment (the (live, terminal) count per item is (1,0) or (0,1)); one ownership table built once in the packer; a seal-coverage table (every row is either a seal clause or replay-owned with a reason) pinned by an AST test; the checker kept test-only and applied at `_seal`; a composed-operator generator with four new operators and an independent closed-ownership oracle. The closed rule has 0 violations on 1,868 legal rosters.
    - This is a CONTRACT AMENDMENT plus a process design, so it needs the cold gate. Under D-184, the Fable blind seat runs now and the Sol and Astra blind seats after the 10:57 Codex reset. Then the synthesis and the cold Fable ruling.
+45. A291 escalation consult, Fable blind seat (brief 41, rc 0; report 43). It converges with Opus 42 on a structural cure:
+   - a closed INV-11 (e1);
+   - text 3 pastes the 02d:57-64 definitions verbatim;
+   - a row→phase map (seal or replay), added as an addendum table;
+   - one `_ownership` table that INV-10/11/12 and `_parent_facts` consume, with raw `blocks`/`terminal_refusals` subscripts confined to it by an AST rule;
+   - checker (e1) plus a seal-level oracle, a composed generator and the AUD-2 fix;
+   - P and K in different model families.
+   Fable adds a **fresh forger seat** as the final gate: a read-only seat that sees only the contract spends 30 minutes trying to forge ownership past `_seal`. If it succeeds with the same signature, stop patching and rewrite `_structure` wholesale as table-driven. Sol and Astra blind seats follow at the 10:57 Codex reset (D-184; dropped only for usage until then). Then synthesis and a cold Fable gate on the amendment plus the round-3 plan. Implementation must wait for Codex anyway, because P and K must be in different model families.
+46. Holding lean until the Codex reset (≈10:57 PDT). Standing duties continue each slice: the standdown poll, the unread-from-Ed search, and directives.

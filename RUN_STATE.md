@@ -26,7 +26,7 @@ file instead.
 - The replay gate PASSES (38/20).
 
 **SUCCESSOR'S NEXT EXACT ACTION:**
-1. Harvest `/tmp/278ebc9e/42-esc2-opus.md` into record 42. At or after 10:57, run the Sol + Astra blind seats on brief 41, then a synthesis, a cold Fable gate on the fix-round-3 plan, and seats.
+1. The A291 escalation consult has Opus 42 and Fable 43, which converge: a closed INV-11, one ownership table, a seal/replay phase map, a composed fuzz, and a fresh forger-seat gate. At or after 10:57, run the Sol + Astra blind seats on brief 41 (worktrees at `0fa4e6e3`), then a synthesis, then a cold Fable gate on the 02d INV-11 amendment plus the round-3 plan, then P and K seats in different families.
 2. At or after 10:57, resume seat 36 with the approved scope (`codex-run-v3 resume <run_key> --approve-scope-add '["joulewise/calibration_bracketing.py","tests/test_calibration_bracketing.py"]'`; the run_key is in `/tmp/278ebc9e/36-accv4.manifest.jsonl`), or start a fresh seat on the WIP. Then lenses, then the cold gate on the PR (weigh item 37's block-drift yield), then r8, the rev 4 seal and the W1 arm.
 3. At or after 10:57, a fresh B0 seat on WIP `f170af7c` with brief 32 (it reports V1–V4), then a delta re-audit.
 4. #408 fan-out lanes: listed in the previous version of this block and in record 00 item 28 (the calibration-night registration, AP-5M v5 + A291 contract v5, TIER-01 installation, the claim-gate redesign council, A243).
