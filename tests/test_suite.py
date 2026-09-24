@@ -247,6 +247,40 @@ class SuiteManifestTests(unittest.TestCase):
         with self.assertRaisesRegex(SchemaError, "benchmark_import requires suite_manifest.v2"):
             parsed.to_dict(schema_version=LEGACY_SUITE_SCHEMA_VERSION)
 
+    def test_optional_two_file_benchmark_receipts_and_gsm8k_hash_stability(self) -> None:
+        data = json.loads(GSM8K_MANIFEST_PATH.read_text())
+        pinned_hash = "1ad902f8ec64c737ee80f76b9b2dc6989b9e2d49ca267d5cb685b6f4c645c7f5"
+        self.assertEqual(suite_manifest_sha256(data), pinned_hash)
+        self.assertEqual(SuiteManifest.from_mapping(data).to_dict(), data)
+        self.assertEqual(suite_manifest_sha256(SuiteManifest.from_mapping(data).to_dict()), pinned_hash)
+
+        source_files = [
+            {"path": data["benchmark_import"]["file_path"], "sha256": data["benchmark_import"]["file_sha256"], "bytes": 100, "line_count": 5, "git_blob_sha1": data["benchmark_import"]["file_git_blob_sha1"], "lfs_pointer_blob_sha1": None, "license_blob_sha1": data["benchmark_import"]["license_blob_sha1"]},
+            {"path": "prm800k/math_splits/train.jsonl", "sha256": "e" * 64, "bytes": 200, "line_count": 10, "git_blob_sha1": "f" * 40, "lfs_pointer_blob_sha1": "1" * 40, "license_blob_sha1": data["benchmark_import"]["license_blob_sha1"]},
+        ]
+        two_file = copy.deepcopy(data)
+        two_file["benchmark_import"]["source_files"] = source_files
+        parsed = SuiteManifest.from_mapping(two_file)
+        self.assertEqual(parsed.to_dict(), two_file)
+        self.assertEqual(parsed.benchmark_import.source_files, source_files)
+        missing_pointer = copy.deepcopy(two_file)
+        del missing_pointer["benchmark_import"]["source_files"][1]["lfs_pointer_blob_sha1"]
+        with self.assertRaisesRegex(SchemaError, "lfs_pointer_blob_sha1"):
+            SuiteManifest.from_mapping(missing_pointer)
+        for mutation, error in (({"bytes": 0}, "bytes"), ({"sha256": "bad"}, "sha256"), ({"surprise": 1}, "unknown key")):
+            bad = copy.deepcopy(two_file)
+            bad["benchmark_import"]["source_files"][1].update(mutation)
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(SchemaError, error):
+                SuiteManifest.from_mapping(bad)
+        duplicate = copy.deepcopy(two_file)
+        duplicate["benchmark_import"]["source_files"][1]["path"] = source_files[0]["path"]
+        with self.assertRaisesRegex(SchemaError, "path must be unique"):
+            SuiteManifest.from_mapping(duplicate)
+        contradictory = copy.deepcopy(two_file)
+        contradictory["benchmark_import"]["source_files"][0]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(SchemaError, "must match benchmark_import.file_sha256"):
+            SuiteManifest.from_mapping(contradictory)
+
     def test_v1_still_defers_v2_scoring_and_benchmark_import(self) -> None:
         data = manifest_data()
         data["benchmark_import"] = {"dataset": "later"}

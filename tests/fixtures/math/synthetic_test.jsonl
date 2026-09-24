@@ -1,0 +1,5 @@
+{"problem":"Compute 1+1.","solution":"Thus \\boxed{2}.","answer":"2","subject":"Algebra","level":1,"unique_id":"test/algebra/1.json"}
+{"problem":"Compute 3/4.","solution":"Thus \\boxed{\\frac34}.","answer":"\\frac34","subject":"Algebra","level":2,"unique_id":"test/algebra/2.json"}
+{"problem":"Duplicate problem.","solution":"Thus \\boxed{5}.","answer":"5","subject":"Geometry","level":3,"unique_id":"test/geometry/3.json"}
+{"problem":"Symbolic answer.","solution":"Thus \\boxed{\\sqrt{2}}.","answer":"\\sqrt{2}","subject":"Geometry","level":4,"unique_id":"test/geometry/4.json"}
+{"problem":"Ambiguous comma.","solution":"Thus \\boxed{1,200}.","answer":"1,200","subject":"Number Theory","level":5,"unique_id":"test/number_theory/5.json"}
