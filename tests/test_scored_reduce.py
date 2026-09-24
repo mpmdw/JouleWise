@@ -47,6 +47,31 @@ class ScoredReduceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             reduce([self.row("a", "b")], [{"block_id": "b", "gross_j": 1}] * 2)
 
+    def test_x11_capped_correct_refused_and_retry_stage_counts(self):
+        for flag in ({"truncated": True}, {"stop_reason": "length"}):
+            with self.subTest(flag=flag), self.assertRaises(ValueError):
+                reduce([dict(self.row("a", "b"), **flag)], [{"block_id": "b", "gross_j": 10}])
+        rows = [dict(self.row("a", "b", "incorrect"), retry_stage="whole_block"),
+                dict(self.row("c", "b", "incorrect"), retry_stage="single_problem", stop_reason="length")]
+        result = reduce(rows, [{"block_id": "b", "gross_j": 10}])[("8B", "on", 2)]
+        self.assertEqual(result["retry_stage_counts"], {"whole_block": 1, "single_problem": 1})
+        self.assertEqual(result["cap_hits"], 1)
+
+    def test_x14_reducer_alias_negative_and_item_flags(self):
+        alias = {"problem_id": "a", "level": 2, "model": "8B", "arm": "on",
+                 "sub_block_id": "b", "prompt_tokens": 5, "emitted_tokens": 10,
+                 "outcome": "correct"}
+        result = reduce([alias], [{"sub_block_id": "b", "energy_gross_j": 12}])[("8B", "on", 2)]
+        self.assertEqual(result["blocks"][0]["items"][0]["correct"], True)
+        self.assertEqual(result["correct"], 1)
+        with self.assertRaises(ValueError):
+            reduce([dict(alias, outcome="incorrect", stop_reason="length")],
+                   [{"sub_block_id": "b", "gross_j": -1}])
+        uncapped = reduce([dict(alias, outcome="incorrect", stop_reason="stop")],
+                          [{"sub_block_id": "b", "gross_j": 12}])[("8B", "on", 2)]
+        self.assertEqual(uncapped["cap_hits"], 0)
+        self.assertIs(uncapped["blocks"][0]["items"][0]["correct"], False)
+
 
 if __name__ == "__main__":
     unittest.main()

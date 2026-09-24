@@ -47,6 +47,9 @@ def reduce(item_rows, block_windows):
         outcome = _field(row, "outcome")
         if outcome not in OUTCOMES:
             raise ValueError(f"invalid outcome: {outcome!r}")
+        capped = bool(row.get("truncated", False) or row.get("stop_reason") == "length" or outcome == "truncated")
+        if capped and outcome == "correct":
+            raise ValueError("capped attempt cannot be correct")
         if block_id not in windows:
             raise ValueError(f"missing gross block window: {block_id}")
         cell_key = (model, arm, level)
@@ -61,18 +64,23 @@ def reduce(item_rows, block_windows):
         generated = _number(_field(row, "generated_tokens", "emitted_tokens"), "generated_tokens")
         cell = cells.setdefault(cell_key, {"model": model, "arm": arm, "level": level,
                                            "attempts": 0, "correct": 0, "prompt_tokens": 0,
-                                           "generated_tokens": 0, "cap_hits": 0, "blocks": []})
+                                           "generated_tokens": 0, "cap_hits": 0, "blocks": [],
+                                           "retry_stage_counts": {}})
         cell["attempts"] += 1
         cell["correct"] += outcome == "correct"
-        cell["cap_hits"] += outcome == "truncated"
+        cell["cap_hits"] += capped
+        stage = row.get("retry_stage", "initial")
+        cell["retry_stage_counts"][stage] = cell["retry_stage_counts"].get(stage, 0) + 1
         cell["prompt_tokens"] += prompt
         cell["generated_tokens"] += generated
         block = next((b for b in cell["blocks"] if b["block_id"] == block_id), None)
         if block is None:
-            block = {"block_id": block_id, "gross_j": windows[block_id], "level": level, "items": []}
+            block = {"block_id": block_id, "gross_j": windows[block_id], "level": level,
+                     "items": [], "parent_block_id": row.get("parent_block_id")}
             cell["blocks"].append(block)
         block["items"].append({"item_id": item, "correct": outcome == "correct",
-                               "generated_tokens": generated, "outcome": outcome})
+                               "generated_tokens": generated, "outcome": outcome,
+                               "retry_stage": stage})
     if set(windows) != set(block_owner):
         raise ValueError("orphan gross block window")
     for cell in cells.values():

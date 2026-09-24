@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import math
+import random
 
 
 class PackingRefusal(ValueError):
@@ -55,24 +56,66 @@ def _williams_rows(count):
     return rows
 
 
-def _palindrome(buckets, models):
-    """Schedule model buckets symmetrically; empty slots preserve odd parity."""
-    counts = {model: len(buckets[model]) for model in models}
-    odd = [model for model in models if counts[model] % 2]
-    if len(odd) == 2:
-        counts[models[1]] += 1
-    center = next((model for model in models if counts[model] % 2), None)
-    remaining = {model: (counts[model] - (model == center)) // 2 for model in models}
-    half = []
-    while any(remaining.values()):
-        eligible = [model for model in models if remaining[model]]
-        chosen = next((model for model in eligible if not half or model != half[-1]), eligible[0])
-        half.append(chosen)
-        remaining[chosen] -= 1
-    order = half + ([center] if center else []) + list(reversed(half))
+def _balance(buckets, models, blocks, levels):
+    """Place loaded captures to minimize the largest measured-cell mean gap."""
+    lookup = {b["block_id"]: b for b in blocks}
+    labels = [model for model in models for _ in buckets[model]]
+    # An extra capture gives two odd-sized cells an exact common mean.
+    if all(len(buckets[model]) % 2 for model in models):
+        labels.append("idle")
+    rng = random.Random(0)
+
+    def score(order):
+        positions = {model: [] for model in models}
+        for index, label in enumerate(order):
+            if label in positions:
+                positions[label].append(index)
+        gaps = []
+        for level in levels:
+            means = []
+            for model in models:
+                indices = [positions[model][i] for i, bucket in enumerate(buckets[model])
+                           if any(lookup[bid]["level"] == level for bid in bucket)]
+                means.append(sum(indices) / len(indices))
+            gaps.append(abs(means[0] - means[1]))
+        return (max(gaps), sum(gaps)), gaps
+
+    best = None
+    for restart in range(12):
+        order = labels.copy()
+        if restart:
+            rng.shuffle(order)
+        current, _ = score(order)
+        for step in range(2200):
+            i, j = rng.sample(range(len(order)), 2)
+            if order[i] == order[j]:
+                continue
+            order[i], order[j] = order[j], order[i]
+            trial, _ = score(order)
+            temperature = max(0.02, 1.0 - step / 1800)
+            if trial < current or rng.random() < math.exp((current[0] - trial[0]) / temperature):
+                current = trial
+            else:
+                order[i], order[j] = order[j], order[i]
+            if best is None or current < best[0]:
+                best = (current, order.copy())
+            if not best[0][0]:
+                break
+        if not best[0][0]:
+            break
+    order = best[1]
     indexed = {model: iter(buckets[model]) for model in models}
-    return [{"index": index, "model": model, "blocks": next(indexed[model], []),
-             "predicted_s": 0.0} for index, model in enumerate(order)]
+    envelopes = []
+    for index, label in enumerate(order):
+        if label == "idle":
+            # An idle capture retains a loaded worker and a grid position.
+            model = models[1]
+            envelopes.append({"index": index, "model": model, "kind": "idle_slot", "blocks": [], "predicted_s": 0.0})
+        else:
+            envelopes.append({"index": index, "model": label, "kind": "loaded",
+                              "blocks": next(indexed[label]), "predicted_s": 0.0})
+    _, gaps = score(order)
+    return envelopes, {level: gap for level, gap in zip(levels, gaps)}
 
 
 def _arrange(blocks, models, capacity, levels):
@@ -95,14 +138,15 @@ def _arrange(blocks, models, capacity, levels):
                 block = pending[0]
                 raise PackingRefusal((model, block["arm"], block["level"]), "block exceeds envelope capacity")
             buckets[model].append(picked)
-    envelopes = _palindrome(buckets, models)
+    envelopes, gaps = _balance(buckets, models, blocks, levels)
     lookup = {block["block_id"]: block for block in blocks}
     for envelope in envelopes:
         envelope["predicted_s"] = sum(lookup[bid]["predicted_s"] for bid in envelope["blocks"])
-    return envelopes
+    return envelopes, gaps
 
 
-def pack(items_by_level, predicted_decode_s, models, arm, block_size, interior_s, guard_s):
+def pack(items_by_level, predicted_decode_s, models, arm, block_size, interior_s, guard_s, *,
+         registered_levels, cap_tokens_by_arm, envelope_s, offset_s, pitch_s):
     """Return a deterministic, spread-constrained roster or a typed refusal."""
     models = list(models)
     if len(models) != 2 or models[0] == models[1] or any(not isinstance(m, str) or not m for m in models):
@@ -113,6 +157,13 @@ def pack(items_by_level, predicted_decode_s, models, arm, block_size, interior_s
     if not math.isfinite(capacity) or capacity <= 0 or guard_s < 0:
         raise ValueError("invalid interior or guard")
     levels = sorted(items_by_level)
+    if levels != sorted(registered_levels) or len(levels) != len(registered_levels):
+        raise ValueError("items do not match registered levels")
+    if arm not in cap_tokens_by_arm or not isinstance(cap_tokens_by_arm[arm], int) or cap_tokens_by_arm[arm] <= 0:
+        raise ValueError("missing positive per-arm cap")
+    if any(not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0
+           for v in (envelope_s, pitch_s)) or not 0 <= offset_s < envelope_s:
+        raise ValueError("invalid envelope timing")
     if not levels:
         raise ValueError("at least one level is required")
     blocks = []
@@ -132,17 +183,22 @@ def pack(items_by_level, predicted_decode_s, models, arm, block_size, interior_s
                                "arm": arm, "level": level, "items": members,
                                "predicted_s": seconds, "predicted_item_s": [
                                    _duration(predicted_decode_s, model, item) for item in members],
-                               "attempt": 0})
+                               "attempt": 0, "retry_stage": "initial"})
+    envelopes, gaps = _arrange(blocks, models, capacity, levels)
     roster = {"schema": "joulewise.scored_roster.v1", "models": models, "arm": arm,
               "block_size": block_size, "interior_s": interior_s, "guard_s": guard_s,
+              "cap_tokens_by_arm": cap_tokens_by_arm, "envelope_s": envelope_s,
+              "offset_s": offset_s, "pitch_s": pitch_s,
               "capacity_s": capacity, "levels": levels, "blocks": blocks,
-              "envelopes": _arrange(blocks, models, capacity, levels)}
+              "envelopes": envelopes, "drift_lever_slots": gaps}
     return _digest(roster)
 
 
-def requeue_overrun(roster, block_id):
+def requeue_overrun(roster, block_id, *, worst_case_s_per_item=None):
     """Return a new roster; first overrun retries the block, second isolates items."""
     result = copy.deepcopy(roster)
+    result.setdefault("registered_sha256", roster.get("registered_sha256", roster["sha256"]))
+    result["parent_sha256"] = roster["sha256"]
     block = next((b for b in result["blocks"] if b["block_id"] == block_id), None)
     if block is None:
         raise KeyError(block_id)
@@ -159,22 +215,43 @@ def requeue_overrun(roster, block_id):
         block["attempt"] = 1
         additions = [block]
     elif block["attempt"] == 1:
+        if worst_case_s_per_item is None:
+            raise ValueError("worst_case_s_per_item is required for singles")
         block["superseded"] = True
         additions = []
         for index, item in enumerate(block["items"]):
+            worst = worst_case_s_per_item[item]
+            if not isinstance(worst, (int, float)) or not math.isfinite(worst) or worst <= 0 or worst > result["capacity_s"]:
+                raise PackingRefusal((block["model"], block["arm"], block["level"]), "single exceeds envelope capacity")
             split = {**block, "block_id": f"{block_id}:single:{index}", "items": [item],
-                     "predicted_s": block["predicted_item_s"][index],
+                     "parent_block_id": block_id, "predicted_s": float(worst),
                      "predicted_item_s": [block["predicted_item_s"][index]],
                      "attempt": 2, "retry_stage": "single_problem"}
             split.pop("superseded", None)
             result["blocks"].append(split)
             additions.append(split)
-    else:
+    elif block["attempt"] == 2:
+        block["attempt"] = 3
         block["retry_stage"] = "single_problem"
-        block["attempt"] += 1
         additions = [block]
+    else:
+        block["retry_stage"] = "ceiling_violation"
+        block["ceiling_violation"] = True
+        block["attempt"] += 1
+        result.setdefault("terminal_refusals", []).append({
+            "type": "ceiling_violation", "block_id": block_id,
+            "parent_block_id": block.get("parent_block_id"), "item_id": block["items"][0]})
+        additions = []
     # Append only: capture indices already executed remain stable.
+    tail_start = len(result["envelopes"])
     for extra in additions:
-        result["envelopes"].append({"index": len(result["envelopes"]), "model": extra["model"],
-                                    "blocks": [extra["block_id"]], "predicted_s": extra["predicted_s"]})
+        tail = result["envelopes"][-1] if result["envelopes"] else None
+        if (tail and tail["index"] >= tail_start and tail.get("retry_tail") and
+                tail["predicted_s"] + extra["predicted_s"] <= result["capacity_s"]):
+            tail["blocks"].append(extra["block_id"])
+            tail["predicted_s"] += extra["predicted_s"]
+        else:
+            result["envelopes"].append({"index": len(result["envelopes"]), "model": extra["model"],
+                                        "kind": "loaded", "retry_tail": True,
+                                        "blocks": [extra["block_id"]], "predicted_s": extra["predicted_s"]})
     return _digest(result)
