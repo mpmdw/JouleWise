@@ -164,3 +164,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - F3 should_fix: the seat's pin-only account skipped `CalibrationBracketingTests`, where 31 tests fail at head and 91/91 pass at base. They are consistent with a stale r7 pin, but they are the claim-bracket gates and must turn green after r8.
    - Nits F4–F6.
    The magistrate ruled cures C1–C6 in brief 73. The fix-round seat is launched.
+68. Ed's reply was harvested (record 74), then marked read after record 74 was committed (`1d…` push). The evidence scout (brief 75, Sol) was launched ≈12:10. At the bench the magistrate confirms that the adapter's argv (`joulewise/adapters/powermetrics.py:1472-1497`) passes `-b 0 -i <interval_ms> --samplers SAMPLERS --format plist`. So the requested interval IS set by flag. The question is whether the flags or sampler set differ between corpora, or whether the fiducial path builds its own argv.
