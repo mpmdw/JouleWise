@@ -1,0 +1,2 @@
+VERDICT: MERGE — ruling written to `docs/process_traces/2026-09-23-activation-d8cc9c0a/43-a280-pra-fable-final-pass.md` (8.4 KB, 13 min): base-vs-head prepare/chain/notice/manifest/refusals verified identical except the ruled night_kinds.py manifest entry; 425 named tests OK (one pre-existing 23:59 day-boundary flake, passes at base and head in isolation); Sol F1 fails closed (committed 8999 row → refused at the frozen protocol) and F2 is a test-only tautology, exact bench-verified replacement test given as a follow-up commit needing no further delta pass.
+rc=0

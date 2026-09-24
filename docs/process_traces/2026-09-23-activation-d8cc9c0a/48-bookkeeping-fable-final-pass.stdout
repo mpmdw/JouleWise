@@ -1,0 +1,2 @@
+VERDICT: FIX-FIRST — ruling at `/tmp/d8cc9c0a-seat-out/48-bookkeeping-fable-final-pass.md` (5.0 KB): both checks pass (gen_state --check rc 0; 44 tests OK, count 247) and every RUN_STATE and kernel claim traces to the cited records, but README line 13 still says PR #401 "awaits the final-head replay and merge" while the same PR records it merged at 1246b299 (exact replacement paragraph given), plus one wrong evidence citation on A294 (item 14 → item 10 and NEXT EXACT ACTION (4)); no over-claims of landed or claim-ready work found.
+rc=0

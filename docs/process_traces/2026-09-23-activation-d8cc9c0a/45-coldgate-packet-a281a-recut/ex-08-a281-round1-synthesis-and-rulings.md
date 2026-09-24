@@ -1,0 +1,24 @@
+# 08 — A281 round 1: synthesis and magistrate rulings (Opus 5.5 magistrate)
+
+Inputs: Sol execution lens (04, 2 blockers, 3 should-fix) and Opus contract lens (07, 2 blockers, 7 should-fix, 5 nits) on draft `e63fb541`. Both lenses FAIL the draft. Their findings are complementary. The only overlap is "not estimable" (Sol S2 = Opus S3). The Fable final pass will see every ruling below, including where it departs from a proposal in brief 02/03.
+
+## Rulings
+
+**F1 — empty model slot. RULED: captured, and the balance objective moves from labels to cells.** An empty slot is captured as a full-length envelope with its model worker loaded and idle, and is labelled `kind: "idle_slot"` in the roster. It never enters any numerator (M7). It may be used as a covariate. Both lenses agree on capture.
+The magistrate's stated reason in brief 02, "capture preserves drift cancellation", was insufficient. Opus 07 S1 showed the reason: drift cancels in a per-level ratio only when each cell's MEASURED blocks sit at the same mean position in time for both models. A palindrome of model labels does not give that: in the worked example the 8B's blocks average envelope index 5.0 and the 1.7B's 4.2. Sol's "5.0 for both" counts the empty slot, which carries no measurement. Opus's reading is adopted.
+Therefore: the packer's ordering invariant is **equal mean envelope index per cell across the two models**, on a fixed-pitch grid in which idle slots are grid positions. The palindrome is kept only if the balance search wants it; it is no longer a requirement. The per-cell residual gap (`drift_lever_slots` = |mean index 8B − mean index 1.7B| for that level) is recorded in the roster. The claim tolerance on it is registered in AP-5M after the sizing pilot measures drift, not fixed here.
+
+**F2 — overrun tails. RULED: accept append-only tails, with conditions.** Both lenses accept.
+(a) Pairing survives a split: singles carry `parent_block_id`, and the estimator pairs on the parent (Opus B2).
+(b) `retry_stage` is on every item row and flows into cells (Opus S6).
+(c) The single-problem stage is terminal: one single-problem retry, then the item is flagged `ceiling_violation`, a typed refusal for that item, recorded and never silently dropped (Opus S5).
+(d) The paired drop-retried sensitivity analysis is pre-registered, and it is labelled selection-confounded because it removes exactly the long items (Opus). If including versus pairwise excluding retried blocks changes any Holm direction or L\*, that claim is reported unresolved until a balanced recapture (Sol). The paired-retry default is rejected: it doubles cost. The AP-5M drafting lane considers Opus's suggested trigger (retried attempts > 10 % of a headline cell ⇒ the next night re-measures the other model's copies adjacently); no code for it here.
+**M12 amendment (magistrate, design within this lane; Sol dissents).** After a second overrun, the items become single-problem BLOCKS, packed several per envelope, each with its own item edges. They are packed by the item's cap-bounded worst case (cap tokens × upper s/token + prefill; the pure module takes that worst-case seconds as an input), never by the prediction that already failed. M12's purpose was that a long item is never dropped and always fits alone. Worst-case packing preserves that, and under thinking-on it degenerates to one per envelope by itself. Sol 04 read M12's literal wording "single-problem envelopes" as requiring one per envelope unless formally amended. This ruling is that amendment. It is recorded here for the Fable final pass, which may overturn it.
+
+## Crossover (both lenses' B1)
+
+L\* is packet C's definition restricted by M9. Let R = J/correct(8B) / J/correct(1.7B). L\* is the lowest level whose Holm decision is "8B cheaper" (interval wholly below 1), provided some lower level's Holm decision is "1.7B cheaper". If the boundary level, or the lower level that licenses it, is part of a merged group, L\* is undefined with reason `boundary_in_merged_group` (Sol B1). A pooled decision is reported once, on the merged group, and never copied onto its constituent levels as though they were separate decisions.
+
+## Adopted fixes (the fix-round brief 09 carries these as clauses)
+
+Opus S2 (arm/family-validated `decide`, no silent zero widening, no unchecked ready ratio); the not-estimable status (Sol S2 / Opus S3); Sol S3 (the estimator refuses a block window at or below the floor); Opus S4 (digest chain and bound parameters); Opus S7 (`pack` requires the registered level set); Opus S6 (the reducer refuses capped/outcome disagreement); Sol S1 (Holm stop and exact-cutoff tests); Sol B2 (a file-level operand-collapse gate). Nits: N1 made consistent; N4 is subsumed by the balance test; N5 falls back to even allocation across items when a block has zero generated tokens. N2 and N3 are registration text for the AP-5M lane (A282) and change no code here.
