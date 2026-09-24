@@ -165,3 +165,10 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - Nits F4–F6.
    The magistrate ruled cures C1–C6 in brief 73. The fix-round seat is launched.
 68. Ed's reply was harvested (record 74), then marked read after record 74 was committed (`1d…` push). The evidence scout (brief 75, Sol) was launched ≈12:10. At the bench the magistrate confirms that the adapter's argv (`joulewise/adapters/powermetrics.py:1472-1497`) passes `-b 0 -i <interval_ms> --samplers SAMPLERS --format plist`. So the requested interval IS set by flag. The question is whether the flags or sampler set differ between corpora, or whether the fiducial path builds its own argv.
+69. Evidence scout 75 (Sol, rc 0; report 75b) answers Ed's challenge:
+   - The argv was IDENTICAL across the r6/25F84 corpus, the 09-19 25G83 captures and the qpe01 pilots: `-b 0 -i 100 --samplers cpu_power,gpu_power,ane_power,thermal --format plist`.
+   - The delivered medians were 120.3 ms (25F84, 28,190 samples) against 248–249 ms (25G83; the pilots show 240–248 ms).
+   - **The `/usr/bin/powermetrics` sha changed with the OS build**: `d1dccad0…` on 25F84, `b762e5bf…` on 25G83. So the binary changed and the flags did not.
+   - It remains undetermined whether one sampler (the suspect is `thermal`) or the whole binary causes the slowdown. A same-build A/B/A sampler-subset probe settles that.
+   The magistrate's `sudo -n -l` check was DENIED by the harness classifier (credential exploration), and the magistrate does not pursue it. So the probe is an Ed sudo item. Reply to Ed: Gmail `1a0d4d7081f2e57d` (evidence plus three commands; he replies "done").
+   **The acceptance lane is HELD** at its current branch (no r8, no seal, no W1) until the probe result is in. If a sampler subset restores ~120 ms, the premise of ruling ACCEPTANCE-25G83-01 changes (option A, restore the cadence), and the question returns to the council and cold gate. The v4 fix round (brief 73) still completes as code, because it is harmless if unused.
