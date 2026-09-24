@@ -1,244 +1,208 @@
-import ast
 import copy
-import inspect
-import json
-import hashlib
-import random
-import types
 import unittest
 
-import joulewise.scored_packer as scored_packer
-
+from joulewise.scored_registration import Registration
 from joulewise.scored_packer import PackingRefusal, pack, requeue_overrun
+from tests.test_scored_registration import mapping
+
+
+def fixture(mode="pilot", seconds=1, changes=None):
+    source = mapping(mode)
+    if changes:
+        source.update(changes)
+    registration = Registration.from_mapping(source)
+    items = {level: [f"L{level}P{i}" for i in range(source["n_per_level"])] for level in source["levels"]}
+    predicted = {model: {item: seconds for rows in items.values() for item in rows}
+                 for model in source["role_to_model_id"].values()}
+    return registration, items, predicted
 
 
 class ScoredPackerTests(unittest.TestCase):
-    def fixture(self, levels=(1, 2), count=10, block_size=2, seconds=10, interior=70, guard=10):
-        items = {level: [f"L{level}P{i}" for i in range(count)] for level in levels}
-        predictions = {model: {item: seconds for rows in items.values() for item in rows}
-                       for model in ("8B", "1.7B")}
-        return pack(items, predictions, ("8B", "1.7B"), "on", block_size, interior, guard, registered_levels=levels, cap_tokens_by_arm={"on": 100}, envelope_s=600, offset_s=60, pitch_s=600)
-
-    def test_spread_pairing_capacity_digest_and_williams(self):
-        roster = self.fixture()
-        self.assertEqual(roster, self.fixture())
-        self.assertEqual(len(roster["sha256"]), 64)
-        self.assertTrue(all(e["predicted_s"] <= 60 for e in roster["envelopes"]))
-        models = [e["model"] for e in roster["envelopes"]]
-        self.assertEqual(set(models), {"8B", "1.7B"})
-        for level in (1, 2):
-            cell_blocks = {model: [b for b in roster["blocks"] if b["model"] == model and b["level"] == level]
-                           for model in ("8B", "1.7B")}
-            self.assertEqual([b["items"] for b in cell_blocks["8B"]],
-                             [b["items"] for b in cell_blocks["1.7B"]])
-            for model in ("8B", "1.7B"):
-                ids = {b["block_id"] for b in cell_blocks[model]}
-                containing = [e for e in roster["envelopes"] if ids.intersection(e["blocks"])]
-                self.assertEqual(len(containing), 5)
-                self.assertTrue(all(len(ids.intersection(e["blocks"])) == 1 for e in containing))
-        self.assertNotEqual(roster["sha256"], self.fixture(seconds=11)["sha256"])
-        a_envelopes = [e for e in roster["envelopes"] if e["model"] == "8B" and e["blocks"]]
+    def test_g2_registration_binding_pilot_gap_and_spread(self):
+        reg, items, predicted = fixture()
+        roster = pack(reg, items, predicted)
+        self.assertFalse(roster["claim_ready"])
+        self.assertEqual(roster["registration_sha256"], reg.digest)
+        self.assertEqual(set(roster["drift_lever_slots"]), set(reg.levels))
+        self.assertEqual(roster, pack(reg, items, predicted))
+        self.assertEqual(roster["sha256"], "c1ec61e9ff637c9b21ee04994f5e59cee3d050b846c19cf31b3aa415ce8becdd")
+        self.assertTrue(all(e["predicted_s"] <= roster["capacity_s"] for e in roster["envelopes"]))
+        for level in reg.levels:
+            by_model = {model: [b["items"] for b in roster["blocks"] if b["model"] == model and b["level"] == level]
+                        for model in roster["models"]}
+            self.assertEqual(*by_model.values())
+            for model in roster["models"]:
+                ids = {b["block_id"] for b in roster["blocks"] if b["model"] == model and b["level"] == level}
+                self.assertGreaterEqual(sum(bool(ids.intersection(e["blocks"])) for e in roster["envelopes"]), 5)
+        self.assertTrue(any(e["kind"] == "idle_slot" for e in roster["envelopes"]))
         by_id = {b["block_id"]: b for b in roster["blocks"]}
-        self.assertEqual([[by_id[bid]["level"] for bid in e["blocks"]] for e in a_envelopes[:2]],
-                         [[1, 2], [2, 1]])
+        for model in roster["models"]:
+            loaded = [e for e in roster["envelopes"] if e["model"] == model and e["blocks"]]
+            self.assertEqual([[by_id[bid]["level"] for bid in e["blocks"]] for e in loaded[:2]],
+                             [[1, 5, 2, 4, 3], [2, 1, 3, 5, 4]])
 
-    def test_capacity_uses_guard_and_sum_not_each_operand(self):
-        roster = self.fixture(levels=(1,), seconds=25, interior=60, guard=10)
-        self.assertEqual(max(e["predicted_s"] for e in roster["envelopes"]), 50)
-        with self.assertRaises(PackingRefusal) as caught:
-            self.fixture(levels=(1,), seconds=26, interior=60, guard=10)
-        self.assertEqual(caught.exception.cell, ("8B", "on", 1))
+    def test_g2_registered_gap_refusal_and_pilot_recording(self):
+        reg, items, predicted = fixture()
+        for item in predicted["1.7B"]:
+            predicted["1.7B"][item] = 12
+        pilot = pack(reg, items, predicted)
+        self.assertEqual(pilot["sha256"], "9ebd780ff05805689fc8ab5e53c33d1f6ccffccbed6297395204bf11b2546a29")
+        self.assertFalse(pilot["claim_ready"])
+        self.assertGreaterEqual(max(pilot["drift_lever_slots"].values()), 0)
+        strict, _, _ = fixture("registered", changes={"max_drift_lever_slots": .0001, "budget_j": .0005})
+        self.assertGreater(max(pilot["drift_lever_slots"].values()), .0001)
         with self.assertRaises(PackingRefusal):
-            self.fixture(levels=(1,), seconds=25, interior=49, guard=0)
-
-    def test_spread_refusal_names_cell(self):
-        with self.assertRaises(PackingRefusal) as caught:
-            self.fixture(levels=(1,), count=8, block_size=2)
-        self.assertEqual(caught.exception.cell, ("8B", "on", 1))
-
-    def test_overrun_requeue_then_split_never_drops_items(self):
-        roster = self.fixture(levels=(1,), seconds=11)
-        block = roster["blocks"][0]
-        first = requeue_overrun(roster, block["block_id"])
-        self.assertEqual(roster["blocks"][0]["attempt"], 0)
-        self.assertEqual(first["blocks"][0]["attempt"], 1)
-        self.assertEqual(first["envelopes"][-1]["blocks"], [block["block_id"]])
-        second = requeue_overrun(first, block["block_id"], worst_case_s_per_item={item: 11 for item in block["items"]})
-        children = [b for b in second["blocks"] if b["block_id"].startswith(block["block_id"] + ":single:")]
-        self.assertEqual([b["items"][0] for b in children], block["items"])
-        self.assertEqual(len(second["envelopes"]), len(first["envelopes"]) + 1)
-        self.assertEqual(second["envelopes"][len(first["envelopes"]) - 1]["blocks"], [])
-        self.assertTrue(all(b["block_id"] in second["envelopes"][-1]["blocks"] for b in children))
-        self.assertEqual(second["blocks"][0]["superseded"], True)
-        self.assertNotEqual(first["sha256"], second["sha256"])
-        self.assertEqual([e["index"] for e in first["envelopes"][:len(roster["envelopes"])]],
-                         [e["index"] for e in roster["envelopes"]])
-        self.assertEqual(first["envelopes"][-1]["index"], len(roster["envelopes"]))
-        self.assertTrue(any(block["block_id"] in e.get("voided_block_ids", [])
-                            for e in first["envelopes"]))
-
-    def test_cell_specific_overflow(self):
-        items = {1: [f"p{i}" for i in range(5)]}
-        predicted = {"8B": {p: 1 for p in items[1]}, "1.7B": {p: 100 for p in items[1]}}
-        with self.assertRaises(PackingRefusal) as caught:
-            pack(items, predicted, ("8B", "1.7B"), "off", 1, 60, 10, registered_levels=(1,), cap_tokens_by_arm={"off": 100}, envelope_s=600, offset_s=60, pitch_s=600)
-        self.assertEqual(caught.exception.cell, ("1.7B", "off", 1))
-
-    def test_x3_x4_single_retry_terminal_and_worst_case_packing(self):
-        roster = self.fixture(levels=(1,), count=10, block_size=2)
-        parent = roster["blocks"][0]
-        first = requeue_overrun(roster, parent["block_id"])
-        second = requeue_overrun(first, parent["block_id"],
-                                 worst_case_s_per_item={item: 20 for item in parent["items"]})
-        children = [b for b in second["blocks"] if b.get("parent_block_id") == parent["block_id"]]
-        self.assertEqual(len(children), 2)
-        self.assertEqual([b["parent_block_id"] for b in children], [parent["block_id"]] * 2)
-        self.assertEqual(second["envelopes"][-1]["blocks"], [b["block_id"] for b in children])
-        self.assertLessEqual(second["envelopes"][-1]["predicted_s"], second["capacity_s"])
-        separate = requeue_overrun(first, parent["block_id"],
-                                   worst_case_s_per_item={item: 40 for item in parent["items"]})
-        self.assertEqual(len(separate["envelopes"]), len(first["envelopes"]) + 2)
-        self.assertTrue(all(e["predicted_s"] <= separate["capacity_s"]
-                            for e in separate["envelopes"][-2:]))
-        third = requeue_overrun(second, children[0]["block_id"])
-        fourth = requeue_overrun(third, children[0]["block_id"])
-        flagged = next(b for b in fourth["blocks"] if b["block_id"] == children[0]["block_id"])
-        self.assertTrue(flagged["ceiling_violation"])
-        self.assertEqual(flagged["retry_stage"], "ceiling_violation")
-        self.assertEqual(fourth["terminal_refusals"][0]["type"], "ceiling_violation")
-        self.assertFalse(any(flagged["block_id"] in e["blocks"] for e in fourth["envelopes"]))
+            pack(strict, items, predicted)
+        more_envelopes, _, _ = fixture(changes={"min_envelopes_per_cell": 6})
+        crowded = {model: {item: 12 for item in predicted[model]} for model in predicted}
         with self.assertRaises(PackingRefusal):
-            requeue_overrun(first, parent["block_id"],
-                            worst_case_s_per_item={item: 61 for item in parent["items"]})
+            pack(more_envelopes, items, crowded)
+        loose, _, _ = fixture("registered")
+        accepted = pack(loose, items, predicted)
+        self.assertTrue(accepted["claim_ready"])
+        retry = requeue_overrun(loose, accepted, accepted["blocks"][0]["block_id"], 2)
+        self.assertFalse(any(retry["drift_exceeded"].values()))
+        modest, _, _ = fixture("registered", changes={"max_drift_lever_slots": .7, "budget_j": 3.5})
+        accepted = pack(modest, items, predicted)
+        retry = requeue_overrun(modest, accepted, accepted["blocks"][0]["block_id"], 2)
+        self.assertTrue(any(retry["drift_exceeded"].values()))
 
-    def test_x5_cell_balance_grid_and_idle_kind(self):
-        for count in (10, 11, 13, 17):
-            for size in (1, 2, 3, 4):
-                for ratio in (5, 1.5):
-                    with self.subTest(count=count, size=size, ratio=ratio):
-                        if (count + size - 1) // size < 5:
-                            continue
-                        items = {1: [f"a{i}" for i in range(count)],
-                                 2: [f"b{i}" for i in range(count)]}
-                        pred = {model: {item: (2 if model == "8B" else 2 * ratio)
-                                        for values in items.values() for item in values}
-                                for model in ("8B", "1.7B")}
-                        roster = pack(items, pred, ("8B", "1.7B"), "on", size, 60, 0,
-                                      registered_levels=(1, 2), cap_tokens_by_arm={"on": 100},
-                                      envelope_s=600, offset_s=60, pitch_s=600)
-                        self.assertLessEqual(max(roster["drift_lever_slots"].values()), 0.5)
-                        for e in roster["envelopes"]:
-                            self.assertEqual(e["kind"], "loaded" if e["blocks"] else "idle_slot")
-        worked = self.fixture(levels=(1,), count=10, block_size=2)
-        self.assertEqual(len(worked["envelopes"]), 11)
-        self.assertEqual(worked["drift_lever_slots"][1], 0)
-
-    def test_x9_x10_digest_bounds_and_registered_levels(self):
-        roster = self.fixture(levels=(1,))
-        first = requeue_overrun(roster, roster["blocks"][0]["block_id"])
+    def test_g3_digest_derived_worst_and_stages(self):
+        reg, items, predicted = fixture()
+        roster = pack(reg, items, predicted)
+        bid = roster["blocks"][0]["block_id"]
+        tampered = copy.deepcopy(roster)
+        tampered["blocks"][0]["predicted_s"] += 1
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, tampered, bid, 2)
+        changed = mapping()
+        changed["registration_id"] = "R2"
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(Registration.from_mapping(changed), roster, bid, 2)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, roster, bid, 61)
+        first = requeue_overrun(reg, roster, bid, 2)
+        self.assertEqual(first["sha256"], "4cf2bd6cc043886d0d8d2619f4d93653dab9fb68582c59bd46e56df853a5cff3")
         self.assertEqual(first["registered_sha256"], roster["sha256"])
-        self.assertEqual(first["parent_sha256"], roster["sha256"])
-        second = requeue_overrun(first, roster["blocks"][0]["block_id"],
-                                 worst_case_s_per_item={item: 10 for item in roster["blocks"][0]["items"]})
-        self.assertEqual(second["registered_sha256"], roster["sha256"])
-        self.assertEqual(second["parent_sha256"], first["sha256"])
-        self.assertNotEqual(roster["sha256"], self.fixture(levels=(1,), seconds=11)["sha256"])
-        items = {1: [f"p{i}" for i in range(10)]}
-        predictions = {m: {p: 1 for p in items[1]} for m in ("8B", "1.7B")}
-        with self.assertRaises(ValueError):
-            pack(items, predictions, ("8B", "1.7B"), "on", 2, 60, 0,
-                 registered_levels=(1, 2), cap_tokens_by_arm={"on": 100},
-                 envelope_s=600, offset_s=60, pitch_s=600)
-        common = dict(registered_levels=(1,), cap_tokens_by_arm={"on": 100},
-                      envelope_s=600, offset_s=60, pitch_s=600)
-        baseline = pack(items, predictions, ("8B", "1.7B"), "on", 2, 60, 0, **common)
-        for changed in (dict(cap_tokens_by_arm={"on": 101}), dict(envelope_s=601),
-                        dict(offset_s=61), dict(pitch_s=601)):
-            self.assertNotEqual(baseline["sha256"],
-                                pack(items, predictions, ("8B", "1.7B"), "on", 2, 60, 0,
-                                     **{**common, **changed})["sha256"])
-
-    def test_x14_file_behavior_signature(self):
-        """Fixed broad roster signature, independent of the module under test."""
-        rng = random.Random(17)
-        hashes = []
-        for n in (10, 11, 12, 13, 17, 21):
-            for size in (1, 2, 3):
-                if (n + size - 1) // size < 5:
-                    continue
-                for count_levels in (1, 2, 3):
-                    items = {level: [f"{n}-{size}-{count_levels}-{level}-{i}" for i in range(n)]
-                             for level in range(1, count_levels + 1)}
-                    pred = {m: {p: rng.randint(1, 12) for values in items.values() for p in values}
-                            for m in ("8B", "1.7B")}
-                    roster = pack(items, pred, ("8B", "1.7B"), "on", size, 100, 5,
-                                  registered_levels=tuple(items), cap_tokens_by_arm={"on": 100},
-                                  envelope_s=600, offset_s=60, pitch_s=600)
-                    hashes.append(roster["sha256"])
-        self.assertEqual(len(hashes), 45)
-        self.assertEqual(hashlib.sha256(json.dumps(hashes).encode()).hexdigest(),
-                         "e6e4becac264cdac2a48ffabd5c8b9f45532c8118b12ae11d79b34b464445064")
-
-    def test_x14_invalid_inputs_and_digest_replay(self):
-        roster = self.fixture(levels=(1,))
-        with self.assertRaises(KeyError):
-            requeue_overrun(roster, "missing")
-        unscheduled = copy.deepcopy(roster)
-        bid = unscheduled["blocks"][0]["block_id"]
-        for envelope in unscheduled["envelopes"]:
-            if bid in envelope["blocks"]:
-                envelope["blocks"].remove(bid)
-        with self.assertRaises(ValueError):
-            requeue_overrun(unscheduled, bid)
-        first = requeue_overrun(roster, bid)
-        payload = {key: value for key, value in first.items() if key != "sha256"}
-        expected = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"),
-                                            allow_nan=False).encode()).hexdigest()
-        self.assertEqual(first["sha256"], expected)
-        items = {1: [f"p{i}" for i in range(10)]}
-        common = dict(registered_levels=(1,), cap_tokens_by_arm={"on": 100},
-                      envelope_s=600, offset_s=60, pitch_s=600)
-        predictions = {m: {p: 1 for p in items[1]} for m in ("8B", "1.7B")}
-        for duration in (0, -1):
-            bad = copy.deepcopy(predictions)
-            bad["8B"]["p0"] = duration
-            with self.assertRaises(ValueError):
-                pack(items, bad, ("8B", "1.7B"), "on", 2, 60, 0, **common)
-        for args in ((0, 0), (60, -1)):
-            with self.assertRaisesRegex(ValueError, "invalid interior or guard"):
-                pack(items, predictions, ("8B", "1.7B"), "on", 2, *args, **common)
-        for changed in (dict(cap_tokens_by_arm={"on": 0}), dict(offset_s=-1),
-                        dict(offset_s=600), dict(envelope_s=0), dict(pitch_s=0)):
-            with self.assertRaises(ValueError):
-                pack(items, predictions, ("8B", "1.7B"), "on", 2, 60, 0,
-                     **{**common, **changed})
-        with self.assertRaises(ValueError):
-            requeue_overrun(first, bid)
+        broken_chain = copy.deepcopy(first)
+        broken_chain["registered_sha256"] = None
+        from joulewise.scored_packer import _digest
+        _digest(broken_chain)
         with self.assertRaises(PackingRefusal):
-            requeue_overrun(first, bid, worst_case_s_per_item={item: 0 for item in roster["blocks"][0]["items"]})
+            requeue_overrun(reg, broken_chain, bid, 2)
+        parent = next(b for b in first["blocks"] if b["block_id"] == bid)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, first, bid, {item: 31 for item in parent["items"]})
+        second = requeue_overrun(reg, first, bid, {item: 3 for item in parent["items"]})
+        self.assertEqual(second["sha256"], "8ddb0a1ac1fa4f77205c1231ca552977d3565e89afd82ad84307f261eabf6119")
+        children = [b for b in second["blocks"] if b["parent_block_id"] == bid]
+        self.assertEqual({b["retry_stage"] for b in children}, {"single_problem"})
+        self.assertEqual({b["predicted_s"] for b in children}, {30})
+        one = children[0]
+        third = requeue_overrun(reg, second, one["block_id"], {one["items"][0]: 31})
+        self.assertEqual(third["sha256"], "0ec85c6b4b4b4bd8f176dd087a9ba1899986d9dd4b39a35f79531d5fb3ac2e00")
+        progressed = next(b for b in third["blocks"] if b["block_id"] == one["block_id"])
+        self.assertEqual(progressed["retry_stage"], "single_retry")
+        within_bound = requeue_overrun(reg, third, one["block_id"], {one["items"][0]: 5})
+        self.assertEqual(within_bound["terminal_refusals"], [])
+        self.assertEqual(next(b for b in within_bound["blocks"] if b["block_id"] == one["block_id"])["retry_stage"], "single_retry")
+        fourth = requeue_overrun(reg, third, one["block_id"], {one["items"][0]: 31})
+        self.assertEqual(fourth["sha256"], "3fc426283c3fe5688967cd3ab60119ef463606fdbdf2e6e9fe65a13c4b1f7684")
+        terminal = fourth["terminal_refusals"][0]
+        self.assertEqual(terminal["type"], "ceiling_violation")
+        self.assertEqual(terminal["item_id"], one["items"][0])
+        self.assertEqual(fourth["parent_sha256"], third["sha256"])
+        self.assertTrue(all(current["registered_sha256"] == roster["sha256"]
+            for current in (first, second, third, fourth)))
+        self.assertEqual(fourth["registration_sha256"], reg.digest)
+        self.assertEqual(set(fourth["drift_lever_slots"]), set(reg.levels))
 
-    def test_x14_tight_capacity_behavior_signature(self):
-        rng = random.Random(181)
-        chosen = {(10, 2, 4), (13, 2, 3), (13, 3, 2), (17, 3, 4)}
-        hashes = []
-        for n in (10, 11, 13, 17):
-            for size in (1, 2, 3):
-                if (n + size - 1) // size < 5:
-                    continue
-                for count_levels in (2, 3, 4):
-                    items = {level: [f"{n}-{size}-{count_levels}-{level}-{i}" for i in range(n)]
-                             for level in range(1, count_levels + 1)}
-                    pred = {m: {p: rng.randint(1, 12) for values in items.values() for p in values}
-                            for m in ("8B", "1.7B")}
-                    if (n, size, count_levels) in chosen:
-                        roster = pack(items, pred, ("8B", "1.7B"), "on", size, 40, 0,
-                                      registered_levels=tuple(items), cap_tokens_by_arm={"on": 100},
-                                      envelope_s=600, offset_s=60, pitch_s=600)
-                        hashes.append(roster["sha256"])
-        self.assertEqual(hashlib.sha256(json.dumps(hashes).encode()).hexdigest(),
-                         "e15f23c06752c646379ebc81faa6b701e7866a8cb97a91369a63a214f3a77804")
+    def test_g3_innocent_envelope_mate_keeps_retry_budget(self):
+        reg, items, predicted = fixture(changes={
+            "s_per_token_upper": {"8B": {"on": .2}, "1.7B": {"on": .2}},
+            "ceiling_s": {"8B": {"on": 20}, "1.7B": {"on": 20}}})
+        roster = pack(reg, items, predicted)
+        bid = roster["blocks"][0]["block_id"]
+        parent = roster["blocks"][0]
+        first = requeue_overrun(reg, roster, bid, 2)
+        second = requeue_overrun(reg, first, bid, {item: 3 for item in parent["items"]})
+        children = [b for b in second["blocks"] if b["parent_block_id"] == bid]
+        self.assertEqual(len(children), 2)
+        self.assertTrue(any(set(e["blocks"]) == {b["block_id"] for b in children} for e in second["envelopes"]))
+        bad, mate = children
+        third = requeue_overrun(reg, second, bad["block_id"], {bad["items"][0]: 21, mate["items"][0]: 5})
+        stages = {b["block_id"]: b["retry_stage"] for b in third["blocks"]}
+        self.assertEqual(stages[bad["block_id"]], "single_retry")
+        self.assertEqual(stages[mate["block_id"]], "single_problem")
+        fourth = requeue_overrun(reg, third, bad["block_id"], {bad["items"][0]: 21, mate["items"][0]: 5})
+        self.assertEqual({r["item_id"] for r in fourth["terminal_refusals"]}, {bad["items"][0]})
+        self.assertEqual(next(b for b in fourth["blocks"] if b["block_id"] == mate["block_id"])["retry_stage"], "single_problem")
+        reversed_target = requeue_overrun(reg, second, mate["block_id"],
+            {bad["items"][0]: 21, mate["items"][0]: 5})
+        self.assertEqual(next(b for b in reversed_target["blocks"] if b["block_id"] == bad["block_id"])["retry_stage"], "single_retry")
+        self.assertEqual(next(b for b in reversed_target["blocks"] if b["block_id"] == mate["block_id"])["retry_stage"], "single_problem")
+        only_bad = requeue_overrun(reg, second, bad["block_id"], {bad["items"][0]: 21})
+        self.assertEqual(next(b for b in only_bad["blocks"] if b["block_id"] == mate["block_id"])["retry_stage"], "single_problem")
+        self.assertTrue(any(mate["block_id"] in e["blocks"] for e in only_bad["envelopes"]))
 
+    def test_g5_roster_record_key_sweep(self):
+        reg, items, predicted = fixture()
+        roster = pack(reg, items, predicted)
+        bid = roster["blocks"][0]["block_id"]
+        from joulewise.scored_packer import _digest
+        for key in roster:
+            broken = copy.deepcopy(roster)
+            del broken[key]
+            if key != "sha256":
+                _digest(broken)
+            with self.subTest(field="roster", key=key), self.assertRaises(PackingRefusal):
+                requeue_overrun(reg, broken, bid, 2)
+        broken = copy.deepcopy(roster)
+        broken["unknown"] = 1
+        _digest(broken)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, broken, bid, 2)
+        for field, index in (("blocks", 0), ("envelopes", 0)):
+            for key in roster[field][index]:
+                broken = copy.deepcopy(roster)
+                del broken[field][index][key]
+                # Re-hash to test the record schema, not just the digest.
+                _digest(broken)
+                with self.subTest(field=field, key=key), self.assertRaises(PackingRefusal):
+                    requeue_overrun(reg, broken, bid, 2)
+            broken = copy.deepcopy(roster)
+            broken[field][index]["unknown"] = 1
+            _digest(broken)
+            with self.assertRaises(PackingRefusal):
+                requeue_overrun(reg, broken, bid, 2)
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_g5_invalid_predictions_and_requeue_inputs(self):
+        reg, items, predicted = fixture()
+        for value in (0, -1, True):
+            bad = copy.deepcopy(predicted)
+            bad["8B"][items[1][0]] = value
+            with self.assertRaises(PackingRefusal):
+                pack(reg, items, bad)
+        with self.assertRaises(PackingRefusal):
+            pack(reg, items, {(model, item): 1 for model in predicted for item in predicted[model]})
+        roster = pack(reg, items, predicted)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, roster, "missing", 2)
+        bid = roster["blocks"][0]["block_id"]
+        unscheduled = copy.deepcopy(roster)
+        source = next(e for e in unscheduled["envelopes"] if bid in e["blocks"])
+        source["blocks"].remove(bid)
+        from joulewise.scored_packer import _digest
+        _digest(unscheduled)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, unscheduled, bid, 2)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, roster, bid, 0)
+        first = requeue_overrun(reg, roster, bid, 2)
+        block = next(b for b in first["blocks"] if b["block_id"] == bid)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, first, bid, {item: 0 for item in block["items"]})
+        second = requeue_overrun(reg, first, bid, {item: 3 for item in block["items"]})
+        child = next(b for b in second["blocks"] if b["parent_block_id"] == bid)
+        with self.assertRaises(PackingRefusal):
+            requeue_overrun(reg, second, child["block_id"], {child["items"][0]: 0})
