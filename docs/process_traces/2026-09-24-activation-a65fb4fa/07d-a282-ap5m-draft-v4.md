@@ -3,22 +3,20 @@
 ## For Ed, in plain words
 
 This proposes the rules for one experiment, written before any data exist: on the five published difficulty levels of the MATH problem set, does the small model (Qwen3 1.7B) or the larger one (Qwen3 8B) use fewer joules of energy per correct answer?
-If adopted, the project may claim, for this exact problem set, laptop and settings only: at each level, which model used less energy per correct answer, with an uncertainty range, and whether there is a difficulty level where the cheaper model switches from the small one to the large one.
+If adopted, the project may claim, for this exact problem set, laptop and settings only, a result for each level (or group of pooled neighbouring levels) that is one of four: a direction (which model used less energy per correct answer, with an uncertainty range) where the statistical tests support one; not resolved; not estimable; or pooled with its neighbours into a group. Where the supported directions allow it, it may also claim the level at which the cheaper model switches from the small one to the large one. No level is promised a direction.
 It forbids: "harder problems cause more energy", "intelligence per joule", any claim about model ability or ranking, advice on which model to use, and anything beyond these five levels, two models, one machine and the answer-length limits.
-Problems that run long are re-run, never dropped; if one breaks its registered time limit twice, the switch level is withheld until a single re-measurement settles it.
+Problems that run long are retried in stages rather than discarded at the first overrun. A problem that still ends without a valid attempt is removed from both models' counts, and its level is reported as not resolved (not estimable if it broke its registered time limit twice). At most one re-measurement may cure that; if it fails, or the time limit is broken again, the outcome is final and the switch level stays withheld.
 An independent reviewer has ruled on the text twice; nothing binds until you decide. Your decisions:
 
-- E1: Should the MATH problem text itself be committed to the repository? (Recommended: no; commit only problem ids and fingerprints.)
-- E2: Do you adopt these rules, including the new rules the reviewer wrote (listed in section 7)? (Yes or no.)
-- E3: Should the models pick words by seeded random sampling, as the model makers recommend, instead of always taking the most likely word? (Recommended: yes.)
-- E4: How many capture sessions (each a fixed stretch of measurement; 4–5 fit in a day) do you accept: about 14 (64 problems per level, about 3 days) or about 25 (128 per level, about 5–6 days)? (A number; the rules choose 128 only if it fits.)
-- O-21: Should a claimed difference also have to exceed the smallest energy difference the instrument can detect, on top of the statistical test? (Yes or no.)
+- Publishing the problem text: should the MATH problem text itself be committed to the repository? (Recommended: no; commit only problem ids and fingerprints.)
+- Adopting the rules: do you adopt these rules, including the new rules the reviewer wrote (listed in section 7)? (Yes or no.)
+- Decoding rule: should the models choose each next word by seeded random sampling, as the model makers recommend (yes), or always take the most likely word (no)? (Recommended: yes.)
+- Measurement budget: how many capture sessions (each a fixed stretch of measurement; 4–5 fit in a day) do you accept: about 14 (64 problems per level, about 3 days) or about 25 (128 per level, about 5–6 days)? (A number; the rules choose 128 only if it fits.)
+- Instrument-floor check: should a claimed difference also have to exceed the smallest energy difference the instrument can detect, on top of the statistical test? (Yes or no.)
 
-Written 2026-09-24 by an Opus 5.5 drafting subagent (a "seat": one delegated agent session with a bounded task)
-for work item A282 of the project task queue, in the project-loop session identified as activation a65fb4fa. It
-replaces version 3 (record 07c in this folder) completely. It carries the cold-gate ruling on version 2 (record
-30/10, below) as amended by that gate's addendum ruling on its paired refuter's objections (record 30/21), and the
-writing fixes of version 3. Read-only everywhere else.
+Written on 2026-09-24 by a drafting agent working one item of the project's task queue. It replaces the previous
+version of this draft completely. It carries the independent reviewer's first ruling on the draft, as amended by that
+reviewer's second ruling on a paired critic's objections, and the writing fixes of the earlier versions.
 
 ## 1. Status, sources and how to read this file
 
@@ -132,8 +130,9 @@ meetings); each is glossed in one clause where first cited.
   it means the night passed the project's coded agent census, which refuses a night while any process of the
   project's AI agents (command lines matching `codex|claude|t3`) is running, checked when the night is armed and at
   its start (`docs/phase_2/derivation_night_runbook.md` §0.6, "Census clean, and the night is agent-free");
-  machine-activity admission is a separate contract (`docs/contracts/night_quiet_admission.md`). How retries extend
-  a night is fixed in the "Nights and retries" term below (K23).
+  machine-activity admission is a separate contract (`docs/contracts/night_quiet_admission.md`). The next term
+  uses retries, terminal refusals, the drift lever and the K22 recapture, all built further below in this section.
+- **Nights and retries (K23).** Retries and reschedules extend the same night: a "fresh envelope" is appended to that night's schedule up to the registered `max_envelopes_per_night`. Any block unfinished when the night ends is the terminal refusal `night_exhausted` (a `terminal_refusals` entry); its cell is unresolved until the K22 recapture. Envelope indices start at 0 in every night, including a recapture night. A level's drift lever is computed within each night over that night's counted windows of both models, and the level's lever is the largest of its nights' levers; a night holding counted windows of only one model for a level has no lever and is a K22 defect (`recapture_unpaired`).
 - **Instrument floor and anchor bound.** Two different error terms come from the instrument. (i) The *floor*: the smallest energy difference the instrument can distinguish from zero for a given window class, published as `floor_gate_j = max(floor_abs_j, floor_cmp_j)` by the calibration manifest (`docs/phase_2/detection_floor.md`, "Floor Artifact Semantics"): `floor_abs_j` is the larger of the largest absolute residual and the prediction bound `t_0.975 · s_r · √(1 + 1/n)` over repeated identical cells; `floor_cmp_j` is `max(max_i |δ_i|, |mean δ| + t_0.975 · s_δ · √(1 + 1/n))` over same-condition A-B-B-A contrast deltas δ_i (`detection_floor.md`, "Estimator rule"). Floors are calibrated per *window class* (request, phase, level, block …). AP-5M's window class is the block window; its floor row does not yet exist and is a registration prerequisite (row, Floor gate). The published per-phase figures are historical planning context only: an anchor envelope of about 0.7–1.0 J per phase boundary (D-078 clause 11) and operative phase floors of 3.823787 J prefill and 7.377086 J decode gate (D-079 as amended by D-084). No block-window value may be inferred from them. (ii) The *anchor bound* `anchor_j` (`E_clock_anchor_shift_bound_j`): the most energy that can be assigned to the wrong window because the marker clock and the sampler's clock may be offset; it is the only instrument term inside the interval. Under D-078 clause 11 the floor and the anchor bound play separate roles and neither may be dropped as a double count: the floor gates each block window; the anchor bound widens the interval.
   In the floor formulas, n is the number of strict-valid bundles (defined above) in the calibration cell, s_r the
   sample standard deviation of the residuals, δ_i the contrast delta of one A-B-B-A pair and s_δ the sample standard
@@ -161,7 +160,8 @@ meetings); each is glossed in one clause where first cited.
 
 - **Sizing pilot.** Before the test, 16 problems per level (disjoint from test problems) are run on the bench
   without power capture ("bench token pilot") to measure tokens per item, cap hits and rough seconds per token, then
-  one short measured "shakedown" night checks envelope timing (M4 of record 19). Its outputs set only the
+  one measured "shakedown" night per arm (thinking on, thinking off) checks envelope timing (M4 of record 19); each
+  arm's shakedown night gives that arm its own smoke-gate pass (K21) and its own drift derivation (K12). Its outputs set only the
   quantities K2 lists, as extended for this plan by T-24; it is never reported as a result.
 - **Packer, roster, parent block, piece.** The *packer* is the program that assigns blocks to envelopes before the
   night; its output list is the *roster*. A *parent block* is a block placed by this initial packing. A retry can
@@ -181,7 +181,9 @@ meetings); each is glossed in one clause where first cited.
   the time. An *innocent* block was cut off or never started because a culprit used up the time.
 - **Retry stages, terminal states.** Forcing problem: the envelopes have fixed length, and the longest attempts are
   the most expensive, so dropping attempts that overrun would remove exactly the costliest hard problems and bias
-  the hard levels' energy per correct answer downward. So nothing is dropped. A culprit moves through fixed stages: `initial` →
+  the hard levels' energy per correct answer downward. So an overrun never removes a problem at once: it is retried
+  in the stages below, and a problem is removed (from both models' counts, K24) only when it ends in a terminal state
+  without a counted attempt. A culprit moves through fixed stages: `initial` →
   `whole_block` (the whole block re-run alone in a fresh envelope) → `single_problem` (each problem as its own
   single) → `single_retry` (one more attempt of a single that exceeded its worst case) → `ceiling_violation`. A
   *ceiling violation* is a single that exceeds its derived worst case twice; it shows the registered assumption false
@@ -211,7 +213,6 @@ meetings); each is glossed in one clause where first cited.
   absolute difference between the mean position of its 8B parents and that of its 1.7B parents, in envelope slots.
   The registered drift model is: within a night, gross block energy drifts linearly in envelope index with one slope, of magnitude at most δ_upper joules per block per slot, shared by both models; each night has its own intercept, and balance within every night is what cancels it. Under that model a level's between-model bias within a night is at most δ_upper × P × lever, and lever 0 cancels the drift exactly. For any other drift shape this rule bounds nothing; it is the registered tolerance, not a proof. `max_gap` is defined in K12; the packer aims for lever 0 and a roster is accepted if lever ≤ `max_gap`.
   The *drift threshold* is `max_gap = budget_j / (δ_upper · P)`, registered per (arm, level), with P the number of parent blocks per cell per model (the registered n ÷ problems per block). `δ_upper` (joules per block per slot) is registered per arm from that arm's shakedown night: each model runs one fixed block of pilot problems twice, in its first and last envelopes of that night; for each model compute `(|E_last − E_first| + floor_gate_j) ÷ (slot separation)` with the block-window `floor_gate_j` of T-6, and δ_upper is the larger of the two models' values; a shakedown lacking either pair refuses registration. `budget_j` for (arm, level) is 0.01 × the smaller of the two models' projected energies for that cell at the registered n, where a model's projection is its mean pilot generated tokens per problem at that level × n × its shakedown seconds per token × its mean shakedown power; so the admitted bias moves that level's R_L by at most about one percent. δ_upper, every `budget_j` and every `max_gap` are hashed in the registration packet before any test problem runs.
-- **Nights and retries (K23).** Retries and reschedules extend the same night: a "fresh envelope" is appended to that night's schedule up to the registered `max_envelopes_per_night`. Any block unfinished when the night ends is the terminal refusal `night_exhausted` (a `terminal_refusals` entry); its cell is unresolved until the K22 recapture. Envelope indices start at 0 in every night, including a recapture night. A level's drift lever is computed within each night over that night's counted windows of both models, and the level's lever is the largest of its nights' levers; a night holding counted windows of only one model for a level has no lever and is a K22 defect (`recapture_unpaired`).
 
 **Estimation.**
 
@@ -970,7 +971,9 @@ between Levels 1 and 4; Levels 2, 3 and 5 not resolved." `12|3|4|5` with `1n88` 
 on pooled Levels 1–2 to 8B between Levels 2 and 4; Level 3 not resolved." `11e88` → "changed from 1.7B at Level 2 to
 8B between Levels 2 and 4; Level 3 not estimable (sparse_after_merges)."
 
-**S7 — ceiling-violation null.**
+**S7 — ceiling-violation null.** The carry below says L\* is withheld "until a registered recapture resolves the
+item"; S8 and T-15 allow at most one such recapture, and if it fails the withholding is terminal under this
+registration; the item's problem is dropped from both models' counts meanwhile (K24).
 
 > When any item in the family carries a terminal `ceiling_violation`, its group is NE(`ceiling_violation`), every other group is classified and printed, and `crossover_level` is null with reason `ceiling_violation_unresolved` until a registered recapture resolves the item. Pairwise exclusion of the item appears only in the labelled selection-confounded sensitivity.
 
@@ -1076,9 +1079,10 @@ directs.
 > (6) The energy numerator is gross energy between the outer item edges of each block; net-of-idle is never a peer
 > number. (7) A crossover is claimed only where the AP-5M decision table licenses it: a crossover is the first
 > supported switch in which model uses less gross energy per correct answer, and a pooled difficulty group can
-> license only a region statement. (8) No problem is dropped for running long: overruns are retried under AP-5M's
-> retry rules, and a problem that exceeds its registered worst case twice withholds the crossover until one bounded
-> recapture resolves it. (9) For AP-5M, AP-5's envelope-validation smoke gate is replaced by the following clause:
+> license only a region statement. (8) Overruns are retried under AP-5M's retry rules rather than discarded at once; a
+> problem that ends without a counted attempt is removed from both models' counts and its level is not resolved (not
+> estimable after a ceiling violation, which also withholds the crossover); at most one recapture may cure it, and if
+> that fails the outcome is terminal under the registration. (9) For AP-5M, AP-5's envelope-validation smoke gate is replaced by the following clause:
 >
 > **K21 — pre-campaign smoke gate.** AP-5 requires an envelope-validation smoke gate that passes before any scored campaign (`analysis_plans.md:270`). AP-5's defined checks were written for a ladder whose prompts differ by one digit; for MATH, emitted-token mean and distribution and prompt-token count change with level by design, so those checks are not pass conditions here. The AP-5M smoke gate is one shakedown night per arm (M4, M13); each arm's scored campaign waits for its own pass. An arm's gate PASSES only when all of the following hold on every envelope of its shakedown night: (G1) every bundle is strict-valid; (G2) every attempt's `stop_reason` is `eos` (end-of-sequence token) or `length` (cap), `capped := generated_tokens ≥ cap_tokens[arm]` agrees with `stop_reason` on every row, and no attempt ends by runtime error, by kill at `ceiling_s`, or with a missing or unrecognised `stop_reason`; a malformed answer is an outcome (K3), counted incorrect, and does not fail the gate; (G3) every completed block's markers lie inside its envelope's usable interior, and no block's elapsed seconds exceed the sum, over its problems, of `cap_tokens[arm] × s_per_token_upper + prefill_s`. Reported per (model, level) with no pass threshold: emitted-token mean and distribution, prompt-token count, cap-hit fraction beside the registered `cap_bound_fraction` (0.20), and the early-stop-bias descriptor (mean emitted tokens of incorrect minus correct attempts; AP-5's E5). A failed gate records `smoke_failed([reasons])`; no scored campaign starts for that arm; the cause is cured and recorded and that arm's shakedown repeated; no registered value beyond those K2 as extended (T-24) lets the pilot and shakedown set changes on its account. A G3 failure falsifies `s_per_token_upper` for that arm; it is re-derived before any repeat.
 >
@@ -1120,7 +1124,7 @@ text not superseded and every 30/21 text has a location.
 | T-10 | 30/21 (supersedes) | drift threshold term; O-7; K12 | §2.1 drift term; §2.9 K12; O-7 closed (§7) |
 | T-11 | 30/21 (supersedes) | step 12; K16 | §2.2 step 12; §2.9 K16 |
 | T-12 | 30/21 (supersedes) | drift term | §2.1 drift term |
-| T-13 | 30/21 (supersedes) | after the Night term; K23 | §2.1 "Nights and retries (K23)", after the drift term so its terms are built first, with a pointer from the Night term; §2.9 K23; flagged at step 5 |
+| T-13 | 30/21 (supersedes) | after the Night term; K23 | §2.1 "Nights and retries (K23)", directly after the Night term, which glosses its forward uses; §2.9 K23; flagged at step 5 |
 | T-14 | 30/21 (supersedes) | after the voided/counted windows term, as K24 | §2.1 "Counted attempt (K24)"; K24 pointer in §2.9 |
 | T-15 | 30/21 (supersedes) | S8 | §3 S8 |
 | T-16 | 30/10 | O-8 | §7 O-8 |
@@ -1292,8 +1296,9 @@ arm's shakedown night.
   "MATH level", and "difficulty" appears only where defined.
 - **O-18 (Ed, E4).** n per level is chosen mechanically by K2 (c): 128 if the pilot-projected capture fits the
   registered window budget, else 64. Ed's decision is whether the budget is acceptable; planning figures (record 18) are about 12 nights for n = 64 and about 23 for n = 128, plus one shakedown night per arm, at 4–5 nights a day. ("Record 18" in that sentence is record 18i.)
-- **O-19 (Ed, E3).** Decoding: (a) greedy, labelled "under greedy decoding"; (b) the model card's seeded sampling
-  (temperature 0.6, top-p 0.95, top-k 20, one pinned seed per problem and model); or (c) thinking-off as primary.
+- **O-19 (Ed, E3).** Decoding: (a) greedy, labelled "under greedy decoding"; or (b) the model card's seeded sampling
+  (temperature 0.6, top-p 0.95, top-k 20, one pinned seed per problem and model). (The brief emailed to Ed also listed
+  thinking-off as primary; neither ruling 30/10 nor 30/21 offers it, and the row fixes thinking on as primary.)
   Recommendation (record 19): (b), with (a) as fallback if seeded sampling does not reproduce the same tokens. The
   estimand is incomplete until this is decided; under (b), T-14's `attempt_divergence` can occur.
 - **O-20 (Ed, E1).** Whether the problem text is published. Options: commit only ids and hashes, with the text in an
@@ -1318,8 +1323,8 @@ Findings the rulings flag without dictating text, and points this installation c
   observed difference; until that floor row exists (a registration prerequisite, T-6), δ_upper cannot be computed.
 - **K25 is not yet in force for the code.** Until the packer's own gate ratifies T-26, `_seal` refuses
   `night_exhausted` transitions and recapture rosters, so neither the K22 nor the S8 recapture can be produced.
-- **T-13 placement.** Installed as its own Terms entry after the drift term instead of directly after the Night term,
-  so that the terms it uses are built first; the Night term points to it. Wording unchanged.
+- **T-13 placement.** Installed directly after the Night term as ruled; the Night term carries a one-line gloss for
+  the terms T-13 uses before they are built.
 - **T-5's section reference.** T-5 names "§2.5 and §2.6" worked examples; in this file the anchor lines sit in §2.3
   and §2.5 (the version-2 numbering), and both are relabelled.
 - **Naming inside T-3.** T-3 says "AP-5's E5"; this cannot be edited, so K21's lead-in glosses it.
