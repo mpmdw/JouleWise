@@ -67,3 +67,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - 35 n = 12 simulation, `wt-278ebc9e-sims`;
    - 36 the full-tier v4 + rev 4 PR, `wt-278ebc9e-accv4`, branch `feat/2026-09-24-acc-25g83-v4-rev4` from main.
    The r8 reissue follows 36's gates.
+36. Replay gate (brief 33, Sol) came back `blocked`, as ruled: v4 has zero misses in 1,416 pulses, and v3 matches exactly on 22 of 24 captures. The two mismatches, n1-d07 and n1-d10, have `recorded_fit_count` 0 with `clock_anchor_unresolved`: the detector bypassed fitting, so no misses were recorded. The magistrate bench-checked this in `results.json`. The ruling says "stop and return to the council", so a cold Fable addendum on packet 38 (J1–J4) was convened rather than the magistrate reinterpreting the criterion. Trace 34 and report 33b are committed.
