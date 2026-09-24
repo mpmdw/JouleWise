@@ -1266,6 +1266,34 @@ def _check_static_start(plan, probes, rows, evidence):
                 (),
             ),
         )
+    try:
+        checkout_status = _run(
+            probes,
+            ("/usr/bin/git", "-C", plan.measurement_root, "--no-optional-locks",
+             "status", "--porcelain=v1", "--untracked-files=all"),
+        )
+        evidence.append(checkout_status)
+        porcelain = checkout_status.stdout.splitlines()
+        rows["C5"].measured["measurement_checkout_porcelain"] = porcelain
+        if checkout_status.exit_code != 0:
+            raise ProbeError(
+                f"measurement checkout status failed at {plan.measurement_root}: "
+                f"exit {checkout_status.exit_code}: {checkout_status.stderr.strip()}"
+            )
+    except Exception as exc:
+        return _probe_refusal(plan, probes, rows, evidence, exc)
+    if checkout_status.stdout:
+        return _finish(
+            plan,
+            probes,
+            rows,
+            Refusal(
+                "night_plan_stale",
+                f"measurement checkout {plan.measurement_root} has tracked edits or "
+                f"untracked files: {porcelain[:5]}",
+                tuple(evidence),
+            ),
+        )
 
 
 def _check_census(plan, probes, rows, evidence, *, strict=False):

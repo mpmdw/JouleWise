@@ -234,6 +234,10 @@ class ProbeSource:
             if self.census_responses:
                 return self.census_responses.pop(0)
             return _probe(argv, exit_code=1)
+        if (argv[:2] == ("/usr/bin/git", "-C") and
+                argv[3:] == ("--no-optional-locks", "status", "--porcelain=v1",
+                             "--untracked-files=all")):
+            return _probe(argv)
         return self.results[argv]
 
     def monotonic_ns(self) -> int:

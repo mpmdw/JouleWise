@@ -5,7 +5,10 @@ import hashlib
 import inspect
 import json
 import re
+import subprocess
+import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from datetime import datetime
 from unittest import mock
@@ -13,6 +16,7 @@ from unittest import mock
 from joulewise import night_gate
 from joulewise import corecaptured_loop
 from joulewise.night_plan_writer import night_plan_mapping
+from tests.git_fixture import init_git_fixture
 
 
 HEAD = "a" * 40
@@ -35,6 +39,9 @@ def result(
 
 def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
     return {
+        checkout_status_argv("/measurement-checkout"): result(
+            checkout_status_argv("/measurement-checkout")
+        ),
         night_gate.AGENT_CENSUS_ARGV: result(
             night_gate.AGENT_CENSUS_ARGV, exit_code=1
         ),
@@ -61,6 +68,11 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
             night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
         ),
     }
+
+
+def checkout_status_argv(root: str) -> tuple[str, ...]:
+    return ("/usr/bin/git", "-C", root, "--no-optional-locks", "status",
+            "--porcelain=v1", "--untracked-files=all")
 
 
 def interval_observation(*consumers, interval_s: float = 30.4) -> dict:
@@ -112,6 +124,7 @@ class FakeProbeSource:
             "/custody/registration.json": registration_text,
         }
         self.run_calls: list[tuple[str, ...]] = []
+        self.status_calls: list[tuple[str, ...]] = []
         self.read_calls: list[str] = []
         self.now_calls = 0
         self.monotonic_calls = 0
@@ -134,7 +147,10 @@ class FakeProbeSource:
         return self.observation
 
     def run(self, argv: tuple[str, ...]) -> night_gate.ProbeResult:
-        self.run_calls.append(argv)
+        if argv == checkout_status_argv("/measurement-checkout"):
+            self.status_calls.append(argv)
+        else:
+            self.run_calls.append(argv)
         if argv in self.raise_for:
             raise self.raise_for[argv]
         return self.results[argv]
@@ -814,6 +830,99 @@ class NightGateTests(unittest.TestCase):
         )
         self.assertEqual("GO", receipt.verdict)
 
+    def test_dirty_unmanifested_tracked_file_refuses_at_t0(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        porcelain = " M joulewise/corecaptured_loop.py"
+        source.results[argv] = result(argv, stdout=porcelain + "\n")
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("night_plan_stale", receipt.refusal.reason)
+        self.assertIn(plan.measurement_root, receipt.refusal.detail)
+        self.assertIn("joulewise/corecaptured_loop.py", receipt.refusal.detail)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual([porcelain], c5.measured["measurement_checkout_porcelain"])
+        self.assertIn(source.results[argv], receipt.refusal.evidence)
+
+    def test_untracked_shadowing_module_refuses_at_t0(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        source.results[argv] = result(argv, stdout="?? joulewise/shadow.py\n")
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("night_plan_stale", receipt.refusal.reason)
+        self.assertIn("joulewise/shadow.py", receipt.refusal.detail)
+
+    def test_clean_measurement_checkout_proceeds_with_porcelain_evidence(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("GO", receipt.verdict)
+        self.assertEqual([], next(row for row in receipt.conditions
+                                  if row.condition_id == "C5").measured["measurement_checkout_porcelain"])
+        self.assertIn(argv, source.status_calls)
+
+    def test_measurement_checkout_status_exit_128_is_probe_error(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        source.results[argv] = result(argv, exit_code=128, stderr="fatal: unavailable")
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn(source.results[argv], receipt.refusal.evidence)
+
+    def test_measurement_checkout_status_exception_is_probe_error(self) -> None:
+        plan = make_plan()
+        argv = checkout_status_argv(plan.measurement_root)
+        source = FakeProbeSource()
+        source.raise_for[argv] = OSError("status unavailable")
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn("status unavailable", receipt.refusal.detail)
+
+    def test_measurement_head_mismatch_skips_checkout_status(self) -> None:
+        plan = make_plan()
+        source = FakeProbeSource(measurement_head="b" * 40)
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("night_plan_stale", receipt.refusal.reason)
+        self.assertIn("measurement_head", receipt.refusal.detail)
+        self.assertEqual([], source.status_calls)
+
+    def test_real_git_checkout_status_uses_production_runner(self) -> None:
+        from scripts.run_night import make_probes
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "measurement"
+            repository.mkdir()
+            init_git_fixture(repository, "-q")
+            executed_file = repository / "joulewise" / "corecaptured_loop.py"
+            executed_file.parent.mkdir()
+            executed_file.write_text("ORIGINAL = True\n")
+            subprocess.run(("git", "-C", str(repository), "add", "."), check=True,
+                           capture_output=True, text=True)
+            subprocess.run(("git", "-C", str(repository), "-c", "user.name=Test",
+                            "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"),
+                           check=True, capture_output=True, text=True)
+            production = make_probes()
+            head = production.measurement_head(str(repository))
+            plan = make_plan("REHEARSAL_STUB", measurement_root=str(repository),
+                             measurement_head=head)
+            source = FakeProbeSource()
+            probes = replace(source.probes(), run=production.run,
+                             measurement_head=production.measurement_head)
+
+            executed_file.write_text("ORIGINAL = False\n")
+            rows = night_gate._initial_conditions(plan.receipt_class)
+            dirty = night_gate._check_static_start(plan, probes, rows, [])
+            self.assertEqual("night_plan_stale", dirty.refusal.reason, dirty.refusal.detail)
+            self.assertIn("joulewise/corecaptured_loop.py", dirty.refusal.detail)
+            executed_file.write_text("ORIGINAL = True\n")
+            rows = night_gate._initial_conditions(plan.receipt_class)
+            clean = night_gate._check_static_start(plan, probes, rows, [])
+            self.assertIsNone(clean)
+            self.assertEqual([], rows["C5"].measured["measurement_checkout_porcelain"])
+
     def test_driver_checkout_head_movement_is_informational_and_census_still_runs(self) -> None:
         source = FakeProbeSource(checkout_head="b" * 40)
         receipt = self.evaluate(make_plan(), source)
@@ -1372,6 +1481,16 @@ class QuietGatePhaseTests(unittest.TestCase):
         # CENSUS-SELF-MATCH-01 deliberately changes the probe argv. Compare
         # receipt/refusal semantics with that one input aligned in both engines.
         baseline.AGENT_CENSUS_ARGV = night_gate.AGENT_CENSUS_ARGV
+        def legacy_projection(value):
+            for row in value["conditions"]:
+                if row["condition_id"] == "C5":
+                    row["measured"].pop("measurement_checkout_porcelain", None)
+            if value["refusal"] is not None:
+                value["refusal"]["evidence"] = [
+                    probe for probe in value["refusal"]["evidence"]
+                    if probe["argv"] != list(checkout_status_argv("/measurement-checkout"))
+                ]
+            return value
         scenarios = [(None, None, 1005),
             (night_gate.LOAD_AVG_ARGV, '{ 3.70 1.00 1.00 }', 1005),
             (night_gate.PMSET_BATT_ARGV, "Now drawing from 'Battery Power'", 1005),
@@ -1395,7 +1514,7 @@ class QuietGatePhaseTests(unittest.TestCase):
                             receipt = engine.evaluate_night(make_plan(receipt_class), source.probes())
                         receipts.append(receipt.to_json_bytes())
                     # Record 46a R2: admission C1 gains only the ruled metadata.
-                    current = json.loads(receipts[1])
+                    current = legacy_projection(json.loads(receipts[1]))
                     for row in current["conditions"]:
                         if row["condition_id"] == "C1":
                             row["measured"].pop("registration_label", None)
@@ -1416,6 +1535,7 @@ class QuietGatePhaseTests(unittest.TestCase):
                 receipt = engine.evaluate_night(make_plan(), source.probes())
                 self.assertEqual(receipt.refusal.reason, 'night_refused_boot_clock')
                 receipts.append(receipt.to_json_bytes())
+            receipts = [json.loads(receipts[0]), legacy_projection(json.loads(receipts[1]))]
             self.assertEqual(*receipts)
 
     def test_static_and_dynamic_seams_cannot_authorize_v4_without_intervals(self):
@@ -1666,6 +1786,8 @@ class EvidenceRegistrationTests(unittest.TestCase):
         gen_evidence_night.generate(fixture.plan_path)
         source = FakeProbeSource(checkout_head=fixture.head, measurement_head=fixture.head)
         def run(argv):
+            if argv == checkout_status_argv(fixture.plan.measurement_root):
+                return result(argv)
             if argv[0] == "/usr/bin/git":
                 completed = subprocess.run(argv, capture_output=True, text=True)
                 return result(argv, exit_code=completed.returncode,
