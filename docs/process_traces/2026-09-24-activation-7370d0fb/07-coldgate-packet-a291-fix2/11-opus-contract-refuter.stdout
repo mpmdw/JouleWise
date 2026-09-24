@@ -1,0 +1,2 @@
+Wrote `11-opus-contract-refuter.md` (about 14 KB): 1 BLOCKER, 8 MATERIAL, 5 NIT, each with executed evidence and replacement text; Final texts 1 and 5 agreed as written. The BLOCKER is regression R2b: as ruled it can never raise `inv_12` (the probe got `inv_18` or `inv_52`), so it is replaced by a flip-`superseded` mutant.
+rc=0
