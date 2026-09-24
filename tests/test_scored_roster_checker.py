@@ -1,4 +1,5 @@
-"""Hand-built A291 oracle fixtures. No production packer is imported.
+"""Hand-built A291 oracle fixtures. Only the R4d witness test imports the
+packer, and only its public entries (text 7, C5).
 
 # CONTRACT GAPS
 # 1. Root reconstruction does not specify its envelope cutoff. Choice: the
@@ -30,6 +31,10 @@ from tests import scored_roster_checker as c
 
 def sha(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+
+
+def _detail(exc):
+    return str(exc).partition(": ")[2]
 
 
 def seal(r):
@@ -137,41 +142,36 @@ def advance_first(g, r, elapsed=10.0):
 
 
 def refresh_derived(g, r):
-    """Fixture-side arithmetic from visible live item placements, in item order."""
-    live = {}
+    """Fixture-side derived fields, walked envelope by envelope.
+
+    This deliberately differs in shape from the oracle: it first stamps every
+    live item with its envelope index, then reads each registered slice.
+    """
+    stamp = {}
+    kind = {b['block_id']: b for b in r['blocks']}
     for e in r['envelopes']:
         for bid in e['blocks']:
-            live[bid] = e['index']
-    terminal = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
-    pos = {}
-    short = {}
+            if not kind[bid]['superseded']:
+                for item in kind[bid]['items']:
+                    stamp[kind[bid]['model'], item] = e['index']
+    gone = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
+    width = g['block_size'][g['arm']]
+    table, short = {}, {}
     for level in range(1, 6):
-        for model in ('big', 'small'):
-            positions, slots = [], set()
-            nonterminal = 0
-            for parent in r['blocks']:
-                if parent['parent_block_id'] is not None or parent['level'] != level or parent['model'] != model:
-                    continue
-                fully_nonterminal = all((model, item) not in terminal for item in parent['items'])
-                nonterminal += fully_nonterminal
-                indices = []
-                for item in parent['items']:
-                    if (model, item) in terminal:
-                        continue
-                    owner = parent if not parent['superseded'] else next((b for b in r['blocks'] if b['parent_block_id'] == parent['block_id'] and b['items'] == [item]), None)
-                    if owner and owner['block_id'] in live:
-                        indices.append(live[owner['block_id']])
-                if indices:
-                    positions.append(sum(indices) / len(indices))
-                if fully_nonterminal and len(indices) == len(parent['items']):
-                    slots.update(indices)
-            pos[(model, level)] = (positions, nonterminal)
-            short[f'{model}:{level}'] = nonterminal < 5 or len(slots) < 5
-    r['planned_spread_shortfall'] = short
-    r['drift_lever_slots'] = {}
+        ids = g['item_ids_by_level'][str(level)]
+        cuts = [ids[at:at + width] for at in range(0, len(ids), width)]
+        for model in (g['role_to_model_id']['8B'], g['role_to_model_id']['1.7B']):
+            whole = [c for c in cuts if not any((model, x) in gone for x in c)]
+            seen = {stamp[model, x] for c in whole for x in c if (model, x) in stamp}
+            placed = [[stamp[model, x] for x in c if (model, x) in stamp and (model, x) not in gone] for c in cuts]
+            placed = [sum(v) / len(v) for v in placed if v]
+            short[f'{model}:{level}'] = len(whole) < 5 or len(seen) < 5
+            table[model, level] = (sum(placed) / len(placed)) if whole and placed else None
+    lever = {}
     for level in range(1, 6):
-        (a, na), (b, nb) = pos[('big', level)], pos[('small', level)]
-        r['drift_lever_slots'][str(level)] = abs(sum(a)/len(a) - sum(b)/len(b)) if na and nb else None
+        a, b = (table[g['role_to_model_id'][role], level] for role in ('8B', '1.7B'))
+        lever[str(level)] = None if a is None or b is None else abs(a - b)
+    r['planned_spread_shortfall'], r['drift_lever_slots'] = short, lever
     return r
 
 
@@ -828,6 +828,33 @@ class CheckerTests(unittest.TestCase):
         self.assertIsNone(lever['1'])
         refresh_derived(g, roster)
         self.assertIsNone(roster['drift_lever_slots']['1'])
+
+    def test_R4d_empty_parent_reports_INV_10_without_raising(self):
+        from joulewise.scored_packer import pack, requeue_overrun
+        from joulewise.scored_registration import Registration
+        from tests.test_scored_registration import fixture as registration_fixture
+        g, p = registration_fixture(n=5, block_size=1, cap=6.0)
+        reg = Registration.from_mapping(g)
+        z = pack(reg, p)
+        big = g['role_to_model_id']['8B']
+        while any(e['kind'] == 'loaded' and e['observations'] is None for e in z['envelopes']):
+            e = min((e for e in z['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None),
+                    key=lambda e: e['index'])
+            obs = [dict(block_id=bid, status='not_started', elapsed_s=None) if e['model'] == big
+                   else dict(block_id=bid, status='completed', elapsed_s=0.01) for bid in e['blocks']]
+            z = requeue_overrun(reg, z, e['index'], obs)
+        self.assertEqual([], c.check_roster(g, z, p))
+        self.assertIsNone(z['drift_lever_slots']['1'])
+        empty = dict(z['blocks'][0])
+        empty.update(block_id=f"{big}:{g['arm']}:1:999", model=big, level=1, items=[],
+                     predicted_item_s=[], predicted_s=0, attempt=0, retry_stage='initial',
+                     parent_block_id=None, superseded=False, late=False)
+        self.assertEqual('large:decode:1:999', empty['block_id'])
+        z['blocks'].append(empty)
+        d = c.digest(z); z['sha256'] = d; z['events'][-1]['sha256'] = d
+        found = c.check_roster(g, z, p)
+        self.assertIsInstance(found, list)
+        self.assertIn('INV-10', {v.inv_id for v in found})
 
     def test_registered_descendant_requires_claim_ready(self):
         descendant = keep_first(self.g, self.r)

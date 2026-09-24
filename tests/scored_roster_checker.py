@@ -244,39 +244,77 @@ def _parent_of(block):
     return block['parent_block_id'] or block['block_id']
 
 
-def _derived(g, r):
-    live = {p['block_id']: p for p in r['placements'] if p['block_id'] in r['envelopes'][p['envelope_index']]['blocks']}
-    terms = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
-    short = {}
-    positions = {}
+def _window_of(g, r, keys):
+    """Map each registered (model, item) to the envelope index that locates it.
+
+    An item is located by the one live listing of a non-superseded block that
+    holds it.  Terminal items are never located.  With ``keys`` given, the
+    live listing counts only when its (block_id, attempt) is a captured key.
+    Anything other than exactly one live listing leaves the item unlocated;
+    INV-11 reports that roster separately.
+    """
+    holders = {}
+    for block in r['blocks']:
+        if not block['superseded']:
+            for item in block['items']:
+                holders.setdefault((block['model'], item), []).append(block['block_id'])
+    listings = {}
+    for envelope in r['envelopes']:
+        for bid in envelope['blocks']:
+            listings.setdefault(bid, []).append(envelope['index'])
+    attempt_at = {(pl['block_id'], pl['envelope_index']): pl['attempt'] for pl in r['placements']}
+    refused = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
+    located = {}
+    for model in _roles(g):
+        for item in _items(g):
+            if (model, item) in refused:
+                continue
+            spots = [(bid, slot) for bid in holders.get((model, item), []) for slot in listings.get(bid, [])]
+            if len(spots) != 1:
+                continue
+            bid, slot = spots[0]
+            if keys is None or (bid, attempt_at.get((bid, slot))) in keys:
+                located[(model, item)] = slot
+    return located, refused
+
+
+def _derived(g, r, keys=None):
+    """Return (cell flags, lever) from registered items, per A291-POP-1.
+
+    The outer walk is over (model, item).  An item's parent is its registered
+    slice ``position // block_size`` within its level.  Planned mode (keys is
+    None): a parent passes the gate when none of its items is refused; the
+    flags are planned_spread_shortfall.  Executed mode: a parent passes the
+    gate when every item is located by a captured window; the flags are
+    spread_exceeded.  A parent with at least one located item has a position,
+    the mean of its located indices in item order.
+    """
+    located, refused = _window_of(g, r, keys)
+    width = g['block_size'][g['arm']]
+    flags, means, gated = {}, {}, {}
     for level in LEVELS:
-        for m in _roles(g):
-            pos = []
-            occupied = set()
-            nonterminal = 0
-            for b in r['blocks']:
-                if b['parent_block_id'] is not None or b['model'] != m or b['level'] != level:
-                    continue
-                fully_nonterminal = all((m, item) not in terms for item in b['items'])
-                nonterminal += fully_nonterminal
-                indices = []
-                for item in b['items']:
-                    if (m, item) in terms:
-                        continue
-                    owner = b if not b['superseded'] else next((x for x in r['blocks'] if x['parent_block_id'] == b['block_id'] and x['items'] == [item]), None)
-                    if owner is not None and owner['block_id'] in live:
-                        indices.append(live[owner['block_id']]['envelope_index'])
-                if indices:
-                    pos.append(sum(indices) / len(indices))
-                if fully_nonterminal and len(indices) == len(b['items']):
-                    occupied.update(indices)
-            short[f'{m}:{level}'] = nonterminal < 5 or len(occupied) < 5
-            positions[(m, level)] = (pos, nonterminal)
+        ids = g['item_ids_by_level'][str(level)]
+        for model in _roles(g):
+            slices = [[] for _ in range(math.ceil(len(ids) / width))]
+            clean = [True] * len(slices)
+            for q, item in enumerate(ids):
+                if (model, item) in located:
+                    slices[q // width].append(located[(model, item)])
+                if (keys is None and (model, item) in refused) or (keys is not None and (model, item) not in located):
+                    clean[q // width] = False
+            passing = [k for k in range(len(slices)) if clean[k]]
+            occupied = {slot for k in passing for slot in slices[k]}
+            flags[f'{model}:{level}'] = len(passing) < 5 or len(occupied) < 5
+            spots = [sum(s) / len(s) for s in slices if s]
+            means[(model, level)] = sum(spots) / len(spots) if spots else None
+            gated[(model, level)] = bool(passing)
     lever = {}
     for level in LEVELS:
-        (a, na), (b, nb) = (positions[(m, level)] for m in _roles(g))
-        lever[str(level)] = abs(sum(a) / len(a) - sum(b) / len(b)) if na and nb else None
-    return short, lever
+        big, small = (means[(model, level)] for model in _roles(g))
+        both = all(gated[(model, level)] for model in _roles(g))
+        # A gated model without any position exists only when INV-11 fails.
+        lever[str(level)] = abs(big - small) if both and big is not None and small is not None else None
+    return flags, lever
 
 
 def _root_from_final(g, r):
@@ -545,11 +583,18 @@ def _static_checks(g, r, p, out):
     if initial_indices != list(range(len(initial_indices))) or initial_envelopes != sorted(initial_envelopes):
         _bad(out, 'INV-38', 'pack-time placements not first in envelope order')
     terms = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
+    # INV-11 (02d:467-469), read per ruled text 3: (a) exactly one holder that
+    # is not superseded, not terminal and listed in exactly one envelope;
+    # (b) exactly one terminal entry and no holder listed anywhere.
+    listing_count = {x: live_ids.count(x) for x in set(live_ids)}
     for m in models:
         for item in ids:
-            owners = [b for b in r['blocks'] if b['model'] == m and item in b['items'] and not b['superseded'] and b['block_id'] in live_ids]
-            term_count = sum(t['model'] == m and t['item_id'] == item for t in r['terminal_refusals'])
-            if (term_count == 0 and len(owners) != 1) or (term_count == 1 and owners) or term_count > 1:
+            holders = [b for b in r['blocks'] if b['model'] == m and item in b['items']]
+            live_once = [b for b in holders if not b['superseded'] and not all((m, x) in terms for x in b['items']) and listing_count.get(b['block_id']) == 1]
+            named = sum(t['model'] == m and t['item_id'] == item for t in r['terminal_refusals'])
+            owned = len(live_once) == 1
+            refused = named == 1 and not any(b['block_id'] in listing_count for b in holders)
+            if owned == refused:
                 _bad(out, 'INV-11', f'item ownership {m}:{item}')
     for i, e in enumerate(r['envelopes']):
         if e['index'] != i:
@@ -797,41 +842,10 @@ def check_executed(registration, roster, predicted_decode_s, captured_window_key
         _bad(violations, 'INV-52', 'captured window keys must be a set of (block_id, attempt) pairs')
     if violations:
         return {'violations': violations}
-    g, r = registration, roster
-    live = {p['block_id']: p for p in r['placements'] if p['block_id'] in r['envelopes'][p['envelope_index']]['blocks']}
-    spread, positions = {}, {}
-    terms = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
-    for level in LEVELS:
-        for m in _roles(g):
-            pos, occupied, fully_counted = [], set(), 0
-            for parent in r['blocks']:
-                if parent['parent_block_id'] is not None or parent['model'] != m or parent['level'] != level:
-                    continue
-                indices = []
-                for item in parent['items']:
-                    if (m, item) in terms:
-                        continue
-                    owner = parent if not parent['superseded'] else next((b for b in r['blocks'] if b['parent_block_id'] == parent['block_id'] and b['items'] == [item]), None)
-                    if owner is None:
-                        continue
-                    placement = live.get(owner['block_id'])
-                    if placement is None or (placement['block_id'], placement['attempt']) not in captured_window_keys:
-                        continue
-                    indices.append(placement['envelope_index'])
-                if indices:
-                    pos.append(sum(indices) / len(indices))
-                if len(indices) == len(parent['items']):
-                    fully_counted += 1
-                    occupied.update(indices)
-            spread[f'{m}:{level}'] = fully_counted < 5 or len(occupied) < 5
-            positions[(m, level)] = (pos, fully_counted)
-    lever, exceeded = {}, {}
+    g = registration
+    spread, lever = _derived(g, roster, captured_window_keys)
     gap = _gap(g)
-    for level in LEVELS:
-        (a, na), (b, nb) = (positions[(m, level)] for m in _roles(g))
-        value = abs(sum(a) / len(a) - sum(b) / len(b)) if na and nb else None
-        lever[str(level)] = value
-        exceeded[str(level)] = bool(value is not None and gap is not None and value > gap)
+    exceeded = {level: value is not None and gap is not None and value > gap for level, value in lever.items()}
     return {'spread_exceeded': spread, 'executed_drift_lever_slots': lever, 'drift_exceeded': exceeded}
 
 
