@@ -1,0 +1,3 @@
+{"problem":"Duplicate problem.","solution":"Alternative \\boxed{5}.","answer":"5","subject":"Geometry","level":3,"unique_id":"test/geometry/3.json"}
+{"problem":"Compute 7.","solution":"Thus \\boxed{7}.","answer":"7","subject":"Prealgebra","level":5,"unique_id":"test/prealgebra/7.json"}
+{"problem":"Training only.","solution":"Thus \\boxed{9}.","answer":"9","subject":"Algebra","level":1,"unique_id":"train/algebra/9.json"}
