@@ -2787,6 +2787,85 @@ class LifecycleTests(unittest.TestCase):
         self.assertFalse((self.custody.parent / "successor-claims/predecessor.json").exists())
 
 
+    @unittest.skipUnless(shutil.which("launchctl"), "real launchctl required")
+    def test_f1_real_launchctl_under_another_spelling_is_refused_not_rehearsed(self):
+        real = shutil.which("launchctl")
+        link = self.base / "launchctl-alias"
+        link.symlink_to(real)
+        self.released_predecessor()
+        for spelling in (real, str(link), str(Path(real).resolve())):
+            self.kw["launchctl_bin"] = spelling
+            with self.assertRaisesRegex(entry.Refused, "real launchctl must be spelled exactly"):
+                entry.check(**self.kw)
+            self.assertFalse((self.stage / "lifecycle/check.json").exists())
+        self.kw["launchctl_bin"] = "/fixture/launchctl"
+        self.assertTrue(self.checked()["rehearsal_ready"])
+        with self.assertRaisesRegex(entry.Refused, "real launchctl must be spelled exactly"):
+            self.publish(runner=lambda argv, **kw: self.fail("installer ran under a real launchctl path"),
+                         launchctl_bin=real)
+        self.assertFalse((self.custody.parent / "successor-claims/predecessor.json").exists())
+        self.assertFalse(entry.rehearsal_launchctl("launchctl"))
+        self.assertTrue(entry.rehearsal_launchctl("/fixture/launchctl"))
+
+    def test_f2_colon_in_plan_id_keeps_missing_custody_guard(self):
+        root, _ = self.released_predecessor(name="pre:decessor")
+        # A colon id can never name a claim file, so the check says so before publication.
+        self.assertIn("cannot name a successor claim",
+                      self.checked("successor")["checks"]["successor"]["reason"])
+        shutil.rmtree(root)
+        self.assertIn("released predecessor custody is missing",
+                      self.checked("successor")["checks"]["successor"]["reason"])
+        splits = entry._release_key_interpretations("a:b:/x/y:" + "0" * 64)
+        self.assertEqual(splits, [("a", "b:/x/y"), ("a:b", "/x/y")])
+        for bad in ("nocolon", "id:/root:notadigest", ":" + "0" * 64, 7):
+            with self.assertRaisesRegex(entry.Refused, "malformed zero-capture release key"):
+                entry._release_key_interpretations(bad)
+
+    def test_f4_claim_directory_entry_is_fsynced_before_publication(self):
+        self.released_predecessor()
+        row = self.checked()["checks"]["successor"]
+        synced = []
+        original = os.fsync
+        def spy(fd):
+            synced.append(os.fstat(fd).st_ino)
+            return original(fd)
+        with patch.object(os, "fsync", side_effect=spy):
+            entry._create_successor_claim(self.state, row)
+        directory = self.custody.parent / "successor-claims"
+        self.assertIn(directory.stat().st_ino, synced)
+        self.assertIn((directory / "predecessor.json").stat().st_ino, synced)
+
+    def test_f5_active_foreign_claim_binds_after_root_removal_and_key_forgotten(self):
+        root, _ = self.released_predecessor()
+        row = self.checked()["checks"]["successor"]
+        entry._create_successor_claim(self.state, dict(row, candidate_plan_id="other-plan",
+                                                       candidate_sha256="f" * 64))
+        shutil.rmtree(root)
+        # The watchdog forgets the release key once the custody is gone (S3 steady state).
+        (self.custody.parent / "magistrate/state.json").write_text("{}")
+        self.assertIn("successor claim remains active after predecessor removal",
+                      self.checked("successor")["checks"]["successor"]["reason"])
+
+    def test_f5_claim_creation_never_overwrites_a_foreign_final_claim(self):
+        self.released_predecessor()
+        row = self.checked()["checks"]["successor"]
+        directory = self.custody.parent / "successor-claims"
+        directory.mkdir()
+        foreign = directory / "predecessor.json"
+        other = dict(row, candidate_plan_id="other-plan", candidate_sha256="f" * 64)
+        entry._create_successor_claim(self.state, other)
+        before = foreign.read_bytes()
+        with self.assertRaisesRegex(entry.Refused, "successor already claimed by another candidate"):
+            entry._create_successor_claim(self.state, row)
+        self.assertEqual(foreign.read_bytes(), before)
+        # A claim that appears between the read and the link is a lost race, not an overwrite.
+        with patch.object(entry, "_successor_claims", return_value=({}, directory)):
+            with self.assertRaisesRegex(entry.Refused, "concurrent successor claim"):
+                entry._create_successor_claim(self.state, row)
+        self.assertEqual(foreign.read_bytes(), before)
+        self.assertEqual([p.name for p in directory.iterdir()], ["predecessor.json"])
+
+
 @unittest.skipUnless(Path('/bin/zsh').is_file(), 'real installer requires zsh')
 class LifecycleCompositionTests(unittest.TestCase):
     @classmethod

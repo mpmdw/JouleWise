@@ -34,6 +34,13 @@ class ZeroCaptureFactsTests(unittest.TestCase):
         self.assertFalse(zero_capture_facts(SimpleNamespace(custody_root=str(self.root / "missing"),
             chain_path=str(self.chain), plan_id="predecessor")).clean)
 
+    def test_f5_missing_courier_marker_is_a_false_fact_never_clean(self):
+        (self.custody / "night" / "courier.sent").unlink()
+        facts = zero_capture_facts(self.plan)
+        self.assertFalse(facts.courier_sent)
+        self.assertFalse(facts.scan_complete)
+        self.assertFalse(facts.clean)
+
     def test_nested_marker_and_symlinked_directory_are_present(self):
         marker = self.custody / "deep" / "nested" / "one.consumed.json"
         marker.parent.mkdir(parents=True)

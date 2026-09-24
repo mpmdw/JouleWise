@@ -493,6 +493,42 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
         self.assertEqual(arm_retry.successor_license(result, receipt, facts, delivery,
             dict(claims, predecessor_is_successor=True), 160).reason, "successor_already_used")
 
+    def test_f3_receipt_without_c5_row_licenses_nothing(self):
+        result, receipt, facts, delivery, claims = self.evidence()
+        for rows in ([], [dict(condition_id="C4", measured={})],
+                     [dict(condition_id="C5", measured={}), dict(condition_id="C5", measured={})]):
+            with self.subTest(rows=rows):
+                bad = dict(receipt, conditions=rows)
+                # Release keeps the receipt's veto-only role; only the successor route tightens.
+                self.assertTrue(arm_retry.terminal_zero_capture_refusal(result, bad).allowed)
+                self.assertEqual(arm_retry.successor_license(result, bad, facts, delivery,
+                                                             claims, 160).reason,
+                                 "malformed_successor_evidence")
+        five = [dict(condition_id=c, measured={}) for c in ("C1", "C2", "C3", "C4", "C5")]
+        self.assertTrue(arm_retry.successor_license(result, dict(receipt, conditions=five),
+                                                    facts, delivery, claims, 160).allowed)
+
+    def test_f5_each_identity_and_delivery_comparison_refuses(self):
+        result, receipt, facts, delivery, claims = self.evidence()
+        def reason(**overrides):
+            return arm_retry.successor_license(result, receipt, facts,
+                dict(delivery, **overrides.pop("delivery", {})),
+                dict(claims, **overrides), 160).reason
+        self.assertEqual(reason(delivery=dict(plan_id="other")), "handoff_plan_mismatch")
+        self.assertEqual(reason(delivery=dict(message_id="")), "delivery_incomplete")
+        self.assertEqual(reason(delivery=dict(message_id=None)), "delivery_incomplete")
+        self.assertEqual(reason(candidate_plan_id="predecessor"), "predecessor_rearm")
+        self.assertEqual(reason(candidate_sha256="b" * 64), "predecessor_rearm")
+        self.assertEqual(reason(existing_claim=dict(successor_plan_id="successor",
+                                                    successor_sha256="c" * 64)),
+                         "successor_already_used")
+        self.assertEqual(reason(existing_claim=dict(successor_plan_id="other",
+                                                    successor_sha256="a" * 64)),
+                         "successor_already_used")
+        self.assertEqual(reason(existing_claim=dict(successor_plan_id="successor",
+                                                    successor_sha256="a" * 64)),
+                         "new_plan_only")
+
     def test_door_disjointness_and_same_candidate_retry(self):
         result, receipt, facts, delivery, claims = self.evidence()
         result["aborted_reason"] = receipt["refusal"]["reason"] = "non_observer_process_busy"
