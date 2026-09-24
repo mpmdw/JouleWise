@@ -26,54 +26,7 @@ from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
 from joulewise import corecaptured_loop
-try:
-    from joulewise.night_kinds import NIGHT_KINDS, kind_row
-except ModuleNotFoundError as exc:
-    if exc.name != "joulewise.night_kinds":
-        raise
-    # Never tolerate deletion from a checkout whose H actually owns the table.
-    _root = Path(__file__).resolve().parents[1]
-    if subprocess.run(("git", "-C", str(_root), "cat-file", "-e",
-                       "HEAD:joulewise/night_kinds.py"), capture_output=True).returncode == 0:
-        raise
-    # A277's isolated census fixture copies this module without its sibling.
-    # A real measurement clone carries the whole tracked checkout.  Preserve
-    # the fixture's historical gate behavior until that fixture can include
-    # night_kinds in the follow-up PR's broader test scope.
-    from types import MappingProxyType
-
-    @dataclass(frozen=True)
-    class _LegacyNightKind:
-        kind: str
-        protocol_path: str | None
-        chain_source_path: str
-        authenticate_chain_source: bool
-        requires_chain_bound_registration: bool
-        corecaptured_at_arm_and_t0: bool
-        non_observer_at_arm_and_t0: bool
-
-    _idle_kind = _LegacyNightKind(
-        kind="quiet_predicate_evidence",
-        protocol_path="configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json",
-        chain_source_path="scripts/night_chains/quiet_predicate_evidence.zsh",
-        authenticate_chain_source=True,
-        requires_chain_bound_registration=True,
-        corecaptured_at_arm_and_t0=True,
-        non_observer_at_arm_and_t0=True,
-    )
-    _calibration_kind = _LegacyNightKind(
-        kind="calibration", protocol_path=None,
-        chain_source_path="scripts/night_chains/calibration_derivation_only.zsh",
-        authenticate_chain_source=False,
-        requires_chain_bound_registration=False,
-        corecaptured_at_arm_and_t0=False,
-        non_observer_at_arm_and_t0=False,
-    )
-    NIGHT_KINDS = MappingProxyType(
-        {"quiet_predicate_evidence": _idle_kind, "calibration": _calibration_kind})
-
-    def kind_row(kind):
-        return NIGHT_KINDS[kind]
+from joulewise.night_kinds import NIGHT_KINDS, kind_row
 
 
 SCHEMA = "joulewise.unattended_night_receipt.v2"

@@ -83,6 +83,7 @@ def replay_refusal_error(error):
 HARNESS_PATHS = ("scripts/sample_quiet_predicate_evidence.py", "joulewise/quiet_admission.py")
 MANIFEST_PATHS = (PROTOCOL_PATH, CHAIN_PATH, *HARNESS_PATHS,
                   "joulewise/quiet_predicate_campaign.py", "joulewise/night_gate.py",
+                  "joulewise/night_kinds.py",
                   "joulewise/night_agent_install.py", "scripts/run_night.py")
 MANIFEST_SCHEMA = "joulewise.night_evidence_manifest.v1"
 RECEIPT_SCHEMA = "joulewise.night_evidence_probe_receipt.v1"

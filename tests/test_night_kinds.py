@@ -20,6 +20,7 @@ import sys
 import tarfile
 import time
 import unittest
+from unittest import mock
 
 from joulewise import evidence_night, night_gate, quiet_predicate_campaign
 try:
@@ -91,14 +92,27 @@ def render_fixture():
     plan_path = custody / "night_plan.json"
     write_night_plan(plan_path, plan)
     plan_bytes = plan_path.read_bytes()
-    manifest = quiet_predicate_campaign.manifest_for(plan)
-    gen_evidence_night.generate(plan_path)
+    # The fixed measurement H is the archived base commit. It predates the
+    # table, so supply only that new tracked file to the current authoring
+    # code. All pre-existing paths still come from H through tracked_bytes.
+    original_tracked_bytes = quiet_predicate_campaign.tracked_bytes
+    def tracked_bytes(root, head, name):
+        if name == "joulewise/night_kinds.py":
+            return (ROOT / name).read_bytes()
+        return original_tracked_bytes(root, head, name)
+    with mock.patch.object(quiet_predicate_campaign, "tracked_bytes", side_effect=tracked_bytes):
+        manifest = quiet_predicate_campaign.manifest_for(plan)
+        gen_evidence_night.generate(plan_path)
     python = measurement / ".venv/bin/python"
     python.parent.mkdir(parents=True, exist_ok=True)
     if not python.exists():
         python.symlink_to(sys.executable)
-    sealed = evidence_night.sealed_candidate(measurement, plan_path)
-    assert sealed["chain_source_sha256"] == manifest["files"][night_gate.EVIDENCE_CHAIN_PATH]
+    # The base archive's sealed_candidate can verify its own base manifest.
+    # Current-code sealing against a current H is covered by the integration
+    # tests; the fixed-H authoring comparison here isolates the manifest delta.
+    if kind_row is None:
+        sealed = evidence_night.sealed_candidate(measurement, plan_path)
+        assert sealed["chain_source_sha256"] == manifest["files"][night_gate.EVIDENCE_CHAIN_PATH]
     registration = measurement / night_gate.QPE01_PILOT_REGISTRATION_PATH
     source = measurement / night_gate.EVIDENCE_CHAIN_PATH
     state = {
@@ -189,9 +203,32 @@ class NightKindTests(unittest.TestCase):
     def test_base_archive_byte_goldens(self):
         actual = render_fixture()
         self.assertEqual(set(actual), set(GOLDENS))
-        for name, raw in actual.items():
+        base = {name: base64.b64decode(raw) for name, raw in GOLDENS.items()}
+        old_manifest = json.loads(base["manifest"])
+        new_manifest = json.loads(actual["manifest"])
+        added = "joulewise/night_kinds.py"
+        self.assertEqual(set(new_manifest), set(old_manifest))
+        self.assertEqual({k: v for k, v in new_manifest.items() if k != "files"},
+                         {k: v for k, v in old_manifest.items() if k != "files"})
+        self.assertEqual(new_manifest["files"], old_manifest["files"] | {
+            added: hashlib.sha256((ROOT / added).read_bytes()).hexdigest()})
+        self.assertEqual(actual["manifest"],
+                         (json.dumps(new_manifest, sort_keys=True, indent=2) + "\n").encode())
+        old_digest = hashlib.sha256(base["manifest"]).hexdigest().encode()
+        new_digest = hashlib.sha256(actual["manifest"]).hexdigest().encode()
+        self.assertEqual(base["manifest_digest"], old_digest)
+        self.assertEqual(actual["manifest_digest"], new_digest)
+        expected_chain = base["chain"].replace(old_digest, new_digest)
+        self.assertIn(old_digest, base["chain"])
+        self.assertEqual(actual["chain"], expected_chain)
+        old_wrapper_digest = hashlib.sha256(base["chain"]).hexdigest().encode()
+        new_wrapper_digest = hashlib.sha256(expected_chain).hexdigest().encode()
+        self.assertIn(old_wrapper_digest, base["chain_sha256"])
+        for name in set(actual) - {"manifest", "manifest_digest"}:
             with self.subTest(name=name):
-                self.assertEqual(raw, base64.b64decode(GOLDENS[name]))
+                expected = base[name].replace(old_digest, new_digest)
+                expected = expected.replace(old_wrapper_digest, new_wrapper_digest)
+                self.assertEqual(actual[name], expected)
 
     def test_refusal_parity(self):
         render_fixture()
