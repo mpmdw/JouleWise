@@ -365,14 +365,14 @@ class NightKindTests(unittest.TestCase):
         self.assert_prepared_candidate_head()
 
     @unittest.skipUnless(Path("/bin/zsh").is_file(), "candidate sealing requires zsh")
-    def test_k3_kills_prefix_and_suffix_mutations(self):
-        for field in ("plan_id_prefix", "measurement_root_suffix"):
-            with self.subTest(field=field):
-                row = replace(kind_row("quiet_predicate_evidence"), **{field: "mutant-"})
-                table = MappingProxyType(dict(NIGHT_KINDS, quiet_predicate_evidence=row))
-                with mock.patch.object(night_kinds, "NIGHT_KINDS", table):
-                    with self.assertRaises(AssertionError):
-                        self.assert_prepared_candidate_head()
+    def test_prepare_consumes_row_prefix_and_suffix(self):
+        row = replace(kind_row("quiet_predicate_evidence"),
+                      plan_id_prefix="mutant-", measurement_root_suffix="mutantroot")
+        table = MappingProxyType(dict(NIGHT_KINDS, quiet_predicate_evidence=row))
+        with mock.patch.object(night_kinds, "NIGHT_KINDS", table):
+            plan = self.assert_prepared_candidate_head()
+        self.assertTrue(plan["plan_id"].startswith("mutant-"))
+        self.assertTrue(Path(plan["measurement_root"]).name.endswith("-mutantroot"))
 
     def assert_prepared_candidate_head(self):
         # Clone the committed candidate H locally; no network or machine action.
@@ -391,13 +391,15 @@ class NightKindTests(unittest.TestCase):
             builder=builder, lock_verifier=lambda root: None)
         row = kind_row("quiet_predicate_evidence")
         plan = json.loads(Path(state["plan_path"]).read_text())
-        self.assertEqual(row.plan_id_prefix, "qpe01-pilot-n1-")
-        self.assertEqual(row.measurement_root_suffix, "qpe01-pilot-n1")
-        self.assertTrue(plan["plan_id"].startswith("qpe01-pilot-n1-"))
-        self.assertTrue(Path(plan["measurement_root"]).name.endswith("qpe01-pilot-n1"))
+        self.assertTrue(plan["plan_id"].startswith(row.plan_id_prefix))
+        self.assertTrue(Path(plan["measurement_root"]).name.endswith("-" + row.measurement_root_suffix))
+        self.assertEqual(plan["window_max_s"], row.window_max_s)
+        self.assertEqual(plan["receipt_class"], row.receipt_class)
+        self.assertEqual(plan["registration_path"], row.protocol_path)
         self.assertEqual(plan["measurement_head"], head)
         self.assertEqual(state["bindings"], evidence_night.sealed_candidate(
             Path(state["measurement_root"]), Path(state["plan_path"])))
+        return plan
 
 
 if __name__ == "__main__" and "--dump-goldens" in sys.argv:
