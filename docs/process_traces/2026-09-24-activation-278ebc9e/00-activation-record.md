@@ -127,3 +127,7 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - Dependencies still open: the claim-gate redesign (desk simulations), A291 contract v5, and the 25G83 acceptance.
    The E2 council (Fable + Opus + Astra, unanimity) waits for the claim-gate redesign so that it adopts a plan whose gate works.
 52. Claim-gate redesign council packet scout launched (brief 54, Sol, worktree `wt-278ebc9e-claimgate`). It was started from a foreground shell with `&`, so the harness does not track it; the magistrate polls `/tmp/278ebc9e/54-claimgate.status` instead.
+53. The calibration-night registration DRAFT (brief 49, Sol) is committed in trace 50 (report 49b). It contains the registration draft, the KM003C passive-logger design, the 32k desk-smoke plan, and a 16-item docket. Two items are NEEDS_RULING:
+   - Item 5: adjacent idle brackets cannot separate prefill from decode without breaking KV continuity. The recommendation is shared bookends, marked as shared.
+   - Item 12: the ruled bytes-law form is inconsistent at L = 512. The recommendation is to fit for L > 512 only, with 512 as the normaliser.
+   PROPOSED numbers: a ±0.10 W stopwatch band, and a ±100 mA battery exclusion. The docket goes to a cold gate once the 25G83 acceptance is on track. The desk smoke loads a model; it is agent-compatible, not quiet work, and can run at the desk.
