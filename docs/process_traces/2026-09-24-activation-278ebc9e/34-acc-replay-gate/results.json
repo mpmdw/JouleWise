@@ -1,0 +1,529 @@
+{
+  "schema": "acceptance-25g83-r-acc-1b-replay/v1",
+  "rule": "production _fit_pulse interior filter, inset 0.25 s",
+  "v4_counterfactual": "recorded command-on and observed duration plus 1.0 s",
+  "captures": [
+    {
+      "capture": "n1-d01",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d01",
+      "source_sha256": {
+        "power_trace.csv": "755b2ebfb4d035c1eb19074caa070c9a81d14fe70dc8201dfc244b2d2b9c42cf",
+        "events.jsonl": "5cf9a4c07a6f1f4e1f3b6d9e89c6163ffc65c9e2cd15961cdfdebc78c585aeeb",
+        "instrument_evidence.json": "171f385511950bb20d11d4e4571e806bd95ec99212a488152e7c52bc72fe8ffd"
+      },
+      "interval_count": 871,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d02",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d02",
+      "source_sha256": {
+        "power_trace.csv": "e494473c6325b81a13f0b3bb80a733eb86d6b4be3553b53bac7b2c7eb3f5a4fe",
+        "events.jsonl": "e1639c5b51d00cfb4c23dba7b458434fbbe22b7177e265669c1bcbee4dfd3344",
+        "instrument_evidence.json": "5006f5ecb57f6358efa5bf2761eaaedfbeddcec02083dafe64629ae47aa71dae"
+      },
+      "interval_count": 850,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        40,
+        54
+      ],
+      "v3_replay_misses": [
+        40,
+        54
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d03",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d03",
+      "source_sha256": {
+        "power_trace.csv": "46e06219ca0e123317c2bb88445ceded0955f466aa065d3c2fbea1d747e837db",
+        "events.jsonl": "8e782a90a6ce32f8b186aac5d817e318c9be843fff26027e2a959d71c2b63711",
+        "instrument_evidence.json": "2a7e162512dd6c8a71fa252d0a00332270d0437de419f9d79ec4a10c3812a687"
+      },
+      "interval_count": 851,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d04",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d04",
+      "source_sha256": {
+        "power_trace.csv": "d3f9a6d7710f25c7775729da753ac2692fc91adf1433c0a5e3917c772a1073fd",
+        "events.jsonl": "249840fe141ad207df59047a2f253e065cecf304d3ba96c495a7cd885925cfd9",
+        "instrument_evidence.json": "e3b0ba16d1b0aeda9b7b8b5a3f98f3f80036e72c29531a2fc77ff20b31861209"
+      },
+      "interval_count": 862,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        10
+      ],
+      "v3_replay_misses": [
+        10
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d05",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d05",
+      "source_sha256": {
+        "power_trace.csv": "564a225044bbe00f588f5dd7d134ace5b827834d4e26cd0e0b399ddfb9f1c8a0",
+        "events.jsonl": "956362b19b3a5d2dc8d4e2176b156a2cc5ee4294b0c16ca975db42135ac2830d",
+        "instrument_evidence.json": "ef53788f1f201a3918793cf98a4d08a9f502876cccde1d15ba608ead919c32d1"
+      },
+      "interval_count": 855,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d06",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d06",
+      "source_sha256": {
+        "power_trace.csv": "97fab3842e18a85a7e19d7931850d2da75aeebd86961200a450ccc5bb50a754f",
+        "events.jsonl": "47a3e57aba35b4c681fa76afbed46b066d5cf634e103c1900bdb8ebd2229ee71",
+        "instrument_evidence.json": "a16f6c12e434dfb05e5ae5f0471160b15c4258f844b32504195109ce9679e18a"
+      },
+      "interval_count": 869,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        58
+      ],
+      "v3_replay_misses": [
+        58
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d07",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d07",
+      "source_sha256": {
+        "power_trace.csv": "c462ac0d5193042f8c64d6a3443f50fca7845d5f890a264429f00024afc2d15e",
+        "events.jsonl": "9cca8fe5bca5cb9642d952b9dad04195d1f9ab4727274001118779a2e309b5c8",
+        "instrument_evidence.json": "7bc11e8774b2fa3211ae50c3b9973f2da321bdd3ca73f4101cdb639042b09b38"
+      },
+      "interval_count": 855,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 0,
+      "recorded_capture_reasons": [
+        "clock_anchor_unresolved",
+        "not_all_pulses_detected",
+        "pulse_count_below_protocol:0!=59"
+      ],
+      "recorded_misses": [],
+      "v3_replay_misses": [
+        13,
+        52
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": false
+    },
+    {
+      "capture": "n1-d08",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d08",
+      "source_sha256": {
+        "power_trace.csv": "a985d79064159bfbae10b6c82159afb8628e5825bea6af22d7a5882a2161397a",
+        "events.jsonl": "9e775a89ca4ce9bf8adbe97fec033901d551a32dc2058e32d47c12063ea0a00e",
+        "instrument_evidence.json": "6fe485e4120b18219fde934ca7e25fdff1f16a487e500241417e2a381f4edb28"
+      },
+      "interval_count": 860,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        41
+      ],
+      "v3_replay_misses": [
+        41
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d09",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d09",
+      "source_sha256": {
+        "power_trace.csv": "7cfb97f0d4b2ffbee4ed8fa04101d828fd4b9b05e7c3e6005ae88151cbde7478",
+        "events.jsonl": "798de064fbbe53e94541f9fb850cc0760782217c14a6088a92e34bea68ac427f",
+        "instrument_evidence.json": "660d3a6c69d13953feb8b512b897802d89cab17f12920dc82d14b4e94058c812"
+      },
+      "interval_count": 862,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        10,
+        34
+      ],
+      "v3_replay_misses": [
+        10,
+        34
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d10",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d10",
+      "source_sha256": {
+        "power_trace.csv": "01629af560d411aec043d54c87b15ebda037e81c6a85f5b2bf6501a9ec4e2fed",
+        "events.jsonl": "de061abbfa70037eb66c99cc2a0a53ba009b70ffc37cf7aa585e65a5ccd7c60c",
+        "instrument_evidence.json": "5ebacf558131057d53620d85ede999ff34c878b2e3e7c48294a322e01109dbff"
+      },
+      "interval_count": 856,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 0,
+      "recorded_capture_reasons": [
+        "clock_anchor_unresolved",
+        "not_all_pulses_detected",
+        "pulse_count_below_protocol:0!=59"
+      ],
+      "recorded_misses": [],
+      "v3_replay_misses": [
+        24,
+        56
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": false
+    },
+    {
+      "capture": "n1-d11",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d11",
+      "source_sha256": {
+        "power_trace.csv": "412713d0b83103e5cb080959f0ad7cadd68c6df4c831dbe93dc70005d56b4ef9",
+        "events.jsonl": "92550bbe12eb0c2a6f76a164f2d49b450ab887ce79993f3865e8411687bc87d2",
+        "instrument_evidence.json": "8eeeb2d60653ddb33d20e88472c86ba9401ca5ba4e84898f420c96f37c579589"
+      },
+      "interval_count": 862,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        44
+      ],
+      "v3_replay_misses": [
+        44
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n1-d12",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n1-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n1-20260919-d12",
+      "source_sha256": {
+        "power_trace.csv": "1e7fd533423aba4383a1c6d6a879038aa551bbbab15c512dfceaba1bab270c50",
+        "events.jsonl": "d6f4f04652888dcd7c50a97a6b00abe7175fd6ec37a84b4bea4f7cd99c95d376",
+        "instrument_evidence.json": "752e13ff838e0b61d9d98b51373b29d708d5602b7d03d1bafa1b6ffb5e35a3e6"
+      },
+      "interval_count": 855,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d01",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d01",
+      "source_sha256": {
+        "power_trace.csv": "4445b991c24bb1fabc2235e14339ed41fe09750344285ee2e81bd78059faedf2",
+        "events.jsonl": "908e50318f0bcaf666f5513162f086a07731fccde8a195df3916c617d36b2669",
+        "instrument_evidence.json": "92122a906d686208a78cde6b60d59ff95b59595df51a78f75e60624641c7e655"
+      },
+      "interval_count": 862,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d02",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d02",
+      "source_sha256": {
+        "power_trace.csv": "f22c9ae5d83f154526832fda31327ad9b1332fa877e630fbbf27cb074b57050d",
+        "events.jsonl": "bedbe179e5d74662f5da0e4e1706df96397560197c0b2ae0b2a3c8470e7b78bd",
+        "instrument_evidence.json": "b84aa0c9cbf8c4e7688ef5067fbe56e28b5a4efc3d948db5055ce666ed0aa2c4"
+      },
+      "interval_count": 860,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        1,
+        6
+      ],
+      "v3_replay_misses": [
+        1,
+        6
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d03",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d03",
+      "source_sha256": {
+        "power_trace.csv": "b4bc234a7cd7262c38d15b2a304bbfd9bc0e20bb247ce7ecac83a62653a45abd",
+        "events.jsonl": "bbfbe0ebe2fa8dfaf02fb002f972b7e3ddb64c5ec8a66333cfd224274e6af4d2",
+        "instrument_evidence.json": "07b9794611f13ad2d8ee18dd2199b613a6682104425a584ab9d446038776c0e0"
+      },
+      "interval_count": 874,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d04",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d04",
+      "source_sha256": {
+        "power_trace.csv": "4f7360bf46b689d81766c69a35ac21a448794ce4b99daa6fb33e393b6ffe8664",
+        "events.jsonl": "bfa09a792d01e76b02742ab94b1e8ef28c7f39a8db3b0c696d7d21f2af71db2f",
+        "instrument_evidence.json": "28cafb456b630fd278a385672817d2b7ae564290e7908c2540db6348dab77719"
+      },
+      "interval_count": 880,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        7,
+        26,
+        29
+      ],
+      "v3_replay_misses": [
+        7,
+        26,
+        29
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d05",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d05",
+      "source_sha256": {
+        "power_trace.csv": "92baaebdf9ea895ecd2f02e233ec3a5a6ddeb5a9ac22fd1c6bea1960baca13c8",
+        "events.jsonl": "8e51196e7b5973537952d7fecc13a394d884581c94809937ad642246dfc45873",
+        "instrument_evidence.json": "fe274e0ee41388ef253f2a9deef0913a5b0ced063ce2fbd58194cb537f32f10b"
+      },
+      "interval_count": 860,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d06",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d06",
+      "source_sha256": {
+        "power_trace.csv": "d35a2244a7538ba3641d4a7b19925d631a9e52618def60fead0d55241d187abf",
+        "events.jsonl": "73ca6f9ecb751445046eb6e0d82e9bd64997cfb55e82f8ede9cce82c09bb9bd0",
+        "instrument_evidence.json": "ccad3a88be8e3d67776ee5efdf6be5875431e675bbd50791ec60652eceaa31ee"
+      },
+      "interval_count": 863,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        19
+      ],
+      "v3_replay_misses": [
+        19
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d07",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d07",
+      "source_sha256": {
+        "power_trace.csv": "b5900bfdba357f5e154a8bfd7448a0166f7b20214c5fb1225fe8e5cdc0423aac",
+        "events.jsonl": "40717dd64d91526e57569ce71558d6e857014973651cbbeb056ff5cd7fabe93c",
+        "instrument_evidence.json": "758b0d10ac8793d8656aa0727f358bf542d5bdfaa14ccde99e093b7ec245edff"
+      },
+      "interval_count": 862,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d08",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d08",
+      "source_sha256": {
+        "power_trace.csv": "c79dc609472671b4b628327241865475dbe8ae6a947333b8b34604df4e281ec4",
+        "events.jsonl": "5fdeae59b1a06265bdf707e115d53a2fe27e3f335cd8879d842eafcf733e8e46",
+        "instrument_evidence.json": "80aa0f4411bd5ce5977d9bb58d1eb4d3cc06fa3581f379848cb4686384b485ac"
+      },
+      "interval_count": 865,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        20,
+        55
+      ],
+      "v3_replay_misses": [
+        20,
+        55
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d09",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d09",
+      "source_sha256": {
+        "power_trace.csv": "96f2fde0838594987a98f4630f892569a6bb9f33b9f0e8058126e41e4905cca0",
+        "events.jsonl": "76bcbfc920cff5cb1f7cb841f1247ebc622a686a783d4825d6728876e1bf522f",
+        "instrument_evidence.json": "d68c0a1f3004df0eb6f07c3dfd2cd0b1a32532c246101f7a52b2b8f6fdeae7f1"
+      },
+      "interval_count": 843,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d10",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d10",
+      "source_sha256": {
+        "power_trace.csv": "e8a2761c61192ec0c3d900ba2569c47d9de0489904cf7352edcbf7fe32484ce8",
+        "events.jsonl": "2bc5525e2ce14fc28fd9901b09bdca5d10592e5c3e3f86e226d7c6563e869ff8",
+        "instrument_evidence.json": "62830226f6ca4685614026814692e995f7d7e01138e33825c671e71216b9d3c6"
+      },
+      "interval_count": 845,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [
+        "not_all_pulses_detected",
+        "pulse_detection_incomplete"
+      ],
+      "recorded_misses": [
+        31,
+        34
+      ],
+      "v3_replay_misses": [
+        31,
+        34
+      ],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d11",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d11",
+      "source_sha256": {
+        "power_trace.csv": "ea6f489f7a5335aa7811f7d7c3197c78b7c1b2a1cc9cc07503cd7b79cb56d48d",
+        "events.jsonl": "6bbd34884d26d0de2a4a9279451dc32ce245af9d574b0aec4accb542fc4fe1be",
+        "instrument_evidence.json": "b4985a7002a5cf0dc0a735905dce129f24628abf8887d840e8857aa9c73597b5"
+      },
+      "interval_count": 846,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    },
+    {
+      "capture": "n2-d12",
+      "archive": "/Users/edr/night-archive/d079-epoch-25g83-derivation-n2-20260919-harvest-20260919/runs/instrument_validation/d079-epoch-25g83-derivation-n2-20260919-d12",
+      "source_sha256": {
+        "power_trace.csv": "5ac9378a9d6acec1468dc224d7b10570e9492a2737ef80929d3722f7877588e7",
+        "events.jsonl": "7783a9011bbb2e8123658398bcc8296ae741bb2119f6b673c7fd67f9d9e40fc7",
+        "instrument_evidence.json": "16e4a1789fb45f4e49a9fc6662e81c9d98ffb2820e0c76234fb18c50a1494d39"
+      },
+      "interval_count": 837,
+      "commanded_pulses": 59,
+      "recorded_fit_count": 59,
+      "recorded_capture_reasons": [],
+      "recorded_misses": [],
+      "v3_replay_misses": [],
+      "v4_replay_misses": [],
+      "v3_exact_match": true
+    }
+  ],
+  "summary": {
+    "capture_count": 24,
+    "pulse_count": 1416,
+    "recorded_miss_count": 18,
+    "v3_replay_miss_count": 22,
+    "v4_replay_miss_count": 0,
+    "v3_exact_capture_count": 22,
+    "verdict": "FAIL"
+  }
+}
