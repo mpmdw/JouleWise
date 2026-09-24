@@ -126,3 +126,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - R-Q3(7) leaves the exact budget-pair log contrast unspecified, and how the O-21 floor applies to it; v5 labels its formula PROPOSED.
    - Dependencies still open: the claim-gate redesign (desk simulations), A291 contract v5, and the 25G83 acceptance.
    The E2 council (Fable + Opus + Astra, unanimity) waits for the claim-gate redesign so that it adopts a plan whose gate works.
+52. Claim-gate redesign council packet scout launched (brief 54, Sol, worktree `wt-278ebc9e-claimgate`). It was started from a foreground shell with `&`, so the harness does not track it; the magistrate polls `/tmp/278ebc9e/54-claimgate.status` instead.
