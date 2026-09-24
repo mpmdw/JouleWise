@@ -58,3 +58,7 @@ Ed, verbatim: "ok can i leave? you relaunch the magisrate with the new version o
 - D-184 recorded in `docs/decision_log.md` (row and section), folded into the relaunch prompt's topology line, and into `CLAUDE.local.md` rule 11.
 - Versions at the bench: `/Users/edr/.local/bin/claude` symlink → 2.1.281 (changed 04:12 PDT by Ed); resident 7370d0fb (pid 7743) started 03:46 on the previous binary; `~/.codex/config.toml` model `gpt-6-sol`, CLI 0.156.1. No watchdog state is touched: directive issue #406 tells the resident to exit at its next slice boundary; the watchdog then spawns the successor from the symlink, on Opus 5.5.
 - This interactive session ends right after the hand-off so the census is clear of interactive claude windows before any t0.
+
+## 9. Hold lifted (≈04:40 PDT)
+
+Asked: lift the 09-23 "wait on major decisions" hold so the D-184 council decides experiment-design changes and Ed is informed after? Ed: "Yes, council decides, inform me after". Remaining owner-only items: hardware, sudo, a notice NO, publishing claims. Recorded as the D-184 addendum.
