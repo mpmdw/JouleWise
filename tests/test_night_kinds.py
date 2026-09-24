@@ -66,13 +66,17 @@ def ensure_base_source():
     init_git_fixture(BASE_SOURCE, "-q")
     subprocess.run(["git", "-C", str(BASE_SOURCE), "-c", "core.autocrlf=false",
                     "add", "-A"], check=True)
+    commit_fixture(BASE_SOURCE, "fixture")
+
+
+def commit_fixture(source, message):
     env = dict(os.environ, GIT_AUTHOR_NAME="Fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
                GIT_COMMITTER_NAME="Fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid",
                GIT_AUTHOR_DATE="2026-09-23T00:00:00+00:00",
                GIT_COMMITTER_DATE="2026-09-23T00:00:00+00:00")
-    subprocess.run(["git", "-C", str(BASE_SOURCE), "-c", "commit.gpgsign=false",
+    subprocess.run(["git", "-C", str(source), "-c", "commit.gpgsign=false",
                     "-c", "core.hooksPath=/dev/null",
-                    "commit", "-qm", "fixture"], check=True, env=env)
+                    "commit", "-qm", message], check=True, env=env)
 
 
 def render_fixture():
@@ -389,15 +393,36 @@ class NightKindTests(unittest.TestCase):
         self.assertTrue(plan["plan_id"].startswith("mutant-"))
         self.assertTrue(Path(plan["measurement_root"]).name.endswith("-mutantroot"))
 
-    def assert_prepared_candidate_head(self):
+    @unittest.skipUnless(Path("/bin/zsh").is_file(), "candidate sealing requires zsh")
+    def test_committed_window_mutant_refused_by_real_prepare(self):
+        with self.assertRaises(evidence_night.Refused) as refusal:
+            self.prepare_candidate_head(window_max_s=8999)
+        self.assertEqual(str(refusal.exception),
+                         "python failed (2): REFUSED: window_max_s must equal the frozen protocol's 9000 s")
+        plan, _ = self.prepare_candidate_head()
+        self.assertEqual(plan["window_max_s"], 9000)
+
+    def prepare_candidate_head(self, *, window_max_s=None):
         # Clone the committed candidate H locally; no network or machine action.
         # Census-clean like the fixture root: a random suffix containing "t3"
         # would make the generator refuse the plan path.
-        self._head_dir = _census_clean_tempdir(prefix="head-", dir=FIXTURE, ignore_cleanup_errors=True)
-        work = Path(self._head_dir.name)
+        head_dir = _census_clean_tempdir(prefix="head-", dir=FIXTURE, ignore_cleanup_errors=True)
+        self.addCleanup(head_dir.cleanup)
+        work = Path(head_dir.name)
+        source = ROOT
+        if window_max_s is not None:
+            source = work / "source"
+            subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(source)], check=True)
+            kind_path = source / "joulewise/night_kinds.py"
+            original = kind_path.read_text()
+            old = "window_max_s=9000,"
+            self.assertEqual(original.count(old), 1)
+            kind_path.write_text(original.replace(old, f"window_max_s={window_max_s},", 1))
+            subprocess.run(["git", "-C", str(source), "add", "joulewise/night_kinds.py"], check=True)
+            commit_fixture(source, "fixture window mutant")
         remote = work / "remote.git"
-        subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(ROOT), str(remote)], check=True)
-        head = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
+        subprocess.run(["git", "clone", "--bare", "-q", "--no-hardlinks", str(source), str(remote)], check=True)
+        head = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
         subprocess.run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", head], check=True)
         t0 = (int(time.time()) // 60 + 90) * 60
         def builder(root):
@@ -407,8 +432,12 @@ class NightKindTests(unittest.TestCase):
             kind=kind_row("quiet_predicate_evidence").kind, t0=str(t0), head=head,
             remote=str(remote), roots_under=work / "roots", staging_under=work / "stages",
             builder=builder, lock_verifier=lambda root: None)
+        return json.loads(Path(state["plan_path"]).read_text()), state
+
+    def assert_prepared_candidate_head(self):
+        plan, state = self.prepare_candidate_head()
+        head = state["head"]
         row = kind_row("quiet_predicate_evidence")
-        plan = json.loads(Path(state["plan_path"]).read_text())
         self.assertTrue(plan["plan_id"].startswith(row.plan_id_prefix))
         self.assertTrue(Path(plan["measurement_root"]).name.endswith("-" + row.measurement_root_suffix))
         self.assertEqual(plan["window_max_s"], row.window_max_s)
