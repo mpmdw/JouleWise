@@ -603,7 +603,7 @@ no window and licenses no measurement.
 
 STATUS: D-184's 2026-09-24 addendum, verbatim: "the 09-23 hold (\"wait on major decisions til i get the reads of the new models\") is LIFTED. The four-model council decides experiment-design changes (block-two redesign, shakedown design, registration text, analysis-plan adoption) and Ed receives an after-the-fact summary by email, not a question. Only hardware, sudo, a notice NO, and publishing claims remain Ed's. Ed chose this over \"keep asking me on major design changes\"." This Revision 4 is the council's registered design under cold gate ACCEPTANCE-25G83-01; it authorizes no window and licenses no measurement. The arm notice remains Ed's notice-NO opportunity. The after-the-fact email states: "V3 for 25G83/v4 is now two 12-slot windows ≥ 6 h apart, retained n ≥ 12, third window only on count; reply NO to stop before W1 is armed."
 
-Authority: cold gate ACCEPTANCE-25G83-01, `docs/process_traces/2026-09-24-activation-278ebc9e/31-coldgate-packet-acceptance/20-coldgate-fable-acceptance-ruling.md`, §3 items 1(a), 2(a)–(j), 2(l), 4, and 7. Revisions 1–3 above retain their bytes as historical records. This revision supersedes their conflicting scientific rules for the following epoch only.
+Authority: cold gate ACCEPTANCE-25G83-01, `docs/process_traces/2026-09-24-activation-278ebc9e/31-coldgate-packet-acceptance/20-coldgate-fable-acceptance-ruling.md`, §3 items 1(a), 2(a)–(l), 4, and 7. Revisions 1–3 above retain their bytes as historical records. This revision supersedes their conflicting scientific rules for the following epoch only.
 
 ## Registered epoch and seal
 
@@ -615,7 +615,7 @@ At sealing, the magistrate records the SHA-256 of this complete Revision 4 regis
 
 W1 and W2 are 12-slot derivation windows whose starts are at least 6 hours apart, at any hour and on any dates. Each uses one 600 s settle and 12 fixed-order slots at 600 s start-to-start cadence, `window_max_s` 9000. The derivation chain digest is re-pinned for v4 before W1. No agent is present during the [QUIET-MAC] window; every slot is used or recorded unused through terminal abort, never compressed or replaced. Protocol v4 uses 59 pulses and its immutable JSON; no capture parameter is tuned between observations.
 
-After W1 is terminal, the check dry run may report counts only. If fewer than 8 of W1's 12 observations are valid and not excluded under `affine_clock_fit_empty`, stop without W2 and return to the council through R-ACC-3. Otherwise run W2. Only if the check dry run after W2 is terminal reports fewer than 12 valid observations not excluded under `affine_clock_fit_empty`, open one W3 with the same 12-slot rules. If W3 is not opened, no W3 ledger session exists and the issuer's registration session list is {W1, W2}; if opened it is {W1, W2, W3}. No other early stop, top-up, or retry is authorized. Retained n ≥ 12 issues under the D-126 clause 2 dated addendum; n < 12 never issues.
+After W1 is terminal, the check dry run may report counts only. If fewer than 8 of W1's 12 observations are valid, stop without W2 and return to the council through R-ACC-3. Otherwise run W2. Only if the check dry run after W2 is terminal reports fewer than 12 valid observations not excluded under `affine_clock_fit_empty`, open one W3 with the same 12-slot rules. If W3 is not opened, no W3 ledger session exists and the issuer's registration session list is {W1, W2}; if opened it is {W1, W2, W3}. No other early stop, top-up, or retry is authorized. Retained n ≥ 12 issues under the D-126 clause 2 dated addendum; n < 12 never issues.
 
 No person or agent reads any B value, screen, or statistic until both W1 and W2 are terminal, or all three sessions are terminal if W3 opened. Revision 1's issuer blindness fence remains in force. The check dry run reports session states, slot counts, and named exclusion counts only.
 
@@ -643,6 +643,8 @@ These observations informed protocol and diagnostic rules only; none enters
 the new corpus.
 
 Anchor-failure rate: 2 of 24 n1/n2 captures were `clock_anchor_unresolved` (n1-d07 `wall_minus_monotonic_span_exceeded`, n1-d10 `affine_clock_fit_empty`); pulse duration is not an input to the anchor, so v4 leaves this rate unchanged. Expected per-slot valid rate under v4 ≈ 0.92 (point), ≥ 0.76 (95 % pessimistic); at both rates P(W1 futility) ≤ 0.14 and P(fewer than 12 valid in 24) ≤ 0.002. The futility threshold 8/12, two windows and the count-only W3 are unchanged.
+
+If the ruling 2(k) simulation admits any false claim, Revision 4 retains n ≥ 19 and three windows; the recorded simulation admitted zero false claims (`docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/README_acc_n12.md`).
 
 Revision 1's screen challenge against 0.032898493715362 does not apply to this epoch. Record the count above that threshold and the r6-maximum-plus-range comparison as diagnostics only. Count members with B > 0.075 s; at count ≥ 2 label the artifact `excursion_limited` and open an estimator lane comparing common shift with per-pulse jitter before any phase-split claim. A member with B > 0.25 s, more than one native sample interval, refuses issuance and names that mechanism. These diagnostics never exclude a member.
 

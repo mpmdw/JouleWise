@@ -164,9 +164,12 @@ class ReissueCalibrationAcceptanceTests(unittest.TestCase):
         )
         authentication = self._authenticate()
         self.assertTrue(authentication.all_authenticated)
-        candidate = reissue.derive_candidate_artifact(
-            self.artifact, authentication
-        )
+        with patch.object(
+            reissue, "PROTOCOL_ID", self.artifact["identity_epoch"]["pulse_protocol_id"]
+        ):
+            candidate = reissue.derive_candidate_artifact(
+                self.artifact, authentication
+            )
         named_path = (
             f"$.derivation_corpus.members[{member_index}].b_fiducial_s"
         )
@@ -283,8 +286,11 @@ class ReissueCalibrationAcceptanceTests(unittest.TestCase):
 
     def test_two_runs_emit_byte_identical_candidates(self) -> None:
         authentication = self._authenticate()
-        first = reissue.derive_candidate_artifact(self.artifact, authentication)
-        second = reissue.derive_candidate_artifact(self.artifact, authentication)
+        with patch.object(
+            reissue, "PROTOCOL_ID", self.artifact["identity_epoch"]["pulse_protocol_id"]
+        ):
+            first = reissue.derive_candidate_artifact(self.artifact, authentication)
+            second = reissue.derive_candidate_artifact(self.artifact, authentication)
         first_path = self.root / "candidate-1.json"
         second_path = self.root / "candidate-2.json"
 

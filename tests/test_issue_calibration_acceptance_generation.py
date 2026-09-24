@@ -1580,6 +1580,20 @@ class PrepareCandidateTest(unittest.TestCase):
         self.assertIn("filled=20", text)
         self.assertIn("admissible for prepare-candidate: yes", text)
 
+    def test_revision_four_dry_run_reports_valid_count_before_exclusions(self) -> None:
+        epoch = {**TARGET_EPOCH, "pulse_protocol_id": issuer.PROTOCOL_ID}
+        slots = [Slot("0.020") for _ in range(7)] + [
+            Slot("0.020", unresolved_detail="affine_clock_fit_empty")
+        ] + [Slot("0.020", disposition="ordinary-invalid") for _ in range(4)]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "v4dryrun", slots, session_epoch=epoch,
+            )
+            code, text = self.dry_run_output(fixture, SESSION)
+        self.assertEqual(code, 0)
+        self.assertIn("valid=8", text)
+        self.assertIn("affine_clock_fit_empty:1", text)
+
     def test_the_dry_run_reports_no_measured_value(self) -> None:
         """Blindness binds the dry run too — it is run BETWEEN nights."""
 

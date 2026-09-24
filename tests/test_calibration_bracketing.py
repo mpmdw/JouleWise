@@ -46,6 +46,7 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R6_ACCEPTANCE_ID,
     ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R7_ACCEPTANCE_ID,
+    R8_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_ID,
     ISSUED_ACCEPTANCE_REGISTRY,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
@@ -66,6 +67,7 @@ from joulewise.calibration_bracketing import (
     _valid_acceptance_bound,
     _is_revision_four_epoch,
     _registered_generation_row_is_complete,
+    _registered_protocol_pin_matches,
     acceptance_generation_operatives,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
@@ -97,6 +99,7 @@ from joulewise.powermetrics_fiducial import (
     PROTOCOL_ID,
     PROTOCOL_V2_ID,
     PROTOCOL_V3_SHA256,
+    PROTOCOL_V3_ID,
     protocol_sha256,
     PULSE_COUNT,
     REGION_COVERAGE_RESOLUTION_S,
@@ -3267,6 +3270,24 @@ def _registered_generation(acceptance_id: str, generation: dict):
 
 class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     """Ruling 46 §R-a A2/A5/A6, §R-b V1/V6/V7, addendum A-3/A-5/A-7."""
+
+    def test_only_r8_v3_identity_admits_v4_protocol_pin(self) -> None:
+        v4_pin = protocol_sha256(PROTOCOL_ID)
+        for acceptance_id in (
+            PREDECESSOR_ACCEPTANCE_ID,
+            ANCHOR_V3_R6_ACCEPTANCE_ID,
+            ANCHOR_V3_R7_ACCEPTANCE_ID,
+        ):
+            with self.subTest(acceptance_id=acceptance_id):
+                path = ISSUED_ACCEPTANCE_REGISTRY[acceptance_id]["path"]
+                artifact = json.loads(path.read_text())
+                self.assertTrue(_valid_acceptance_bound(artifact))
+                changed = copy.deepcopy(artifact)
+                changed["prospective_rederivation"]["protocol_sha256"] = v4_pin
+                self.assertFalse(_valid_acceptance_bound(_reseal(changed)))
+        identity = {"pulse_protocol_id": PROTOCOL_V3_ID}
+        self.assertTrue(_registered_protocol_pin_matches(identity, v4_pin, R8_ACCEPTANCE_ID))
+        self.assertFalse(_registered_protocol_pin_matches(identity, v4_pin, "unissued"))
 
     def test_every_issued_generation_and_genesis_fixture_load_byte_identically(
         self,

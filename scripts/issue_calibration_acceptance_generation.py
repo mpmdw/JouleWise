@@ -224,12 +224,18 @@ def registration_dry_run(
                             f"session {session_id}: unregistered exclusion "
                             f"mechanism {detail!r}"
                         )
+        valid_count_field = (
+            f"valid={sum(row.classification_disposition == 'valid' for row in session.finalized_slots.values())} "
+            if any(row.identity_epoch.get("pulse_protocol_id") == PROTOCOL_ID
+                   for row in session.finalized_slots.values())
+            else ""
+        )
         lines.append(
             f"{session_id}: kind={session.session_kind} state={session.state} "
             f"terminal={'yes' if terminal else 'no'} "
             f"declared={len(session.declared_slots)} "
             f"filled={len(session.finalized_slots)} "
-            f"excluded={_excluded_summary(excluded)}"
+            f"{valid_count_field}excluded={_excluded_summary(excluded)}"
         )
     unresolved = sum(
         1
@@ -1196,6 +1202,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "# Revision 4 (2026-09-24" in preregistration_text
         and "powermetrics_pulse_fiducial_v4" in preregistration_text
     )
+    # This text check is advisory; the registration digest pin below is the seal.
     preregistration_sha256 = hashlib.sha256(preregistration_bytes).hexdigest()
     # B-3: the arm materials carry the digest of the text the campaign was armed
     # under.  Without this pin the tool would derive against whatever the file
@@ -1316,6 +1323,19 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
                     f"pre-registered {PREREGISTERED_SLOTS_PER_NIGHT}; "
                     "--slot-count-ruling must name a written ruling to depart"
                 )
+    if revision_four and len(session_ids) >= 2:
+        # The W1 decision was already made by the counts-only dry run. Check
+        # only whether opening W2 violated that decision, before reading B.
+        w1_valid = sum(
+            row.bracket_session_id == session_ids[0]
+            and row.classification_disposition == "valid"
+            for row in observations
+        )
+        if w1_valid < 8:
+            raise PrepareRefusal(
+                f"W1 futility procedure violation: W2 is present although "
+                f"W1's recorded dry-run valid count was {w1_valid} of 12, below 8"
+            )
     # B-1: a change to either machine fact VOIDS the registration, so the rows
     # this corpus is built from must carry the identity the campaign was
     # registered under -- read from the text, not from a constant here.
@@ -1343,15 +1363,6 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         member_sessions = {
             row.attempt_id: row.bracket_session_id for row in observations
         }
-        w1_retained = sum(
-            member_sessions[member["member_id"]] == session_ids[0]
-            for member in members
-        )
-        if w1_retained < 8:
-            raise PrepareRefusal(
-                f"W1 futility: {w1_retained} of 12 valid and resolved; "
-                "W2 and issuance not authorized"
-            )
         first_two_retained = sum(
             member_sessions[member["member_id"]] in session_ids[:2]
             for member in members
@@ -1645,10 +1656,12 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "quantized_range_s": str(quantized_range),
             "screen_floor_bound": floor_bound,
             "screen_rule": screen_rule,
-            "headroom_status": "zero_headroom" if revision_four and ceiling == screen else "positive_headroom",
-            "excursion_member_count": excursion_count,
-            "excursion_label": "excursion_limited" if revision_four and excursion_count >= 2 else None,
-            "estimator_lane_required_before_phase_split_claim": bool(revision_four and excursion_count >= 2),
+            **({
+                "headroom_status": "zero_headroom" if ceiling == screen else "positive_headroom",
+                "excursion_member_count": excursion_count,
+                "excursion_label": "excursion_limited" if excursion_count >= 2 else None,
+                "estimator_lane_required_before_phase_split_claim": excursion_count >= 2,
+            } if revision_four else {}),
             "screen_challenge_member_count": len(challenged),
             "screen_challenge_threshold_s": str(level_screen_threshold),
             "new_maximum_exceeds_prior_maximum_plus_range": (
@@ -1703,7 +1716,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "triggers": sorted(
                 rederivation_triggers(generation_row["corpus_doubling_trigger"])
             ),
-            "protocol_sha256": protocol_sha256(PROTOCOL_ID),
+            "protocol_sha256": protocol_sha256(identity_epoch["pulse_protocol_id"]),
             "estimator_code_sha256": {
                 path: hashlib.sha256((REPO_ROOT / path).read_bytes()).hexdigest()
                 for path in ESTIMATOR_CODE_PATHS

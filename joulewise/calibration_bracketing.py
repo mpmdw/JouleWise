@@ -139,6 +139,7 @@ ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH = (
     _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r7.json"
 )
 ANCHOR_V3_R7_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r7"
+R8_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r8"
 ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256 = (
     "9c3a29f61a6f72bbe5efdfb0eddd1caa14557595522b2abb093b414380b9fe16"
 )
@@ -286,7 +287,9 @@ def _is_revision_four_epoch(identity: Any) -> bool:
     }
 
 
-def _registered_protocol_pin_matches(identity: Any, pin: Any) -> bool:
+def _registered_protocol_pin_matches(
+    identity: Any, pin: Any, acceptance_id: Any
+) -> bool:
     """Admit historical v3 bytes and the ruled v3-identity/v4-pin r8 reissue."""
 
     if not isinstance(identity, Mapping):
@@ -295,7 +298,7 @@ def _registered_protocol_pin_matches(identity: Any, pin: Any) -> bool:
     if protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_V3_ID, PROTOCOL_ID}:
         return False
     admitted = {protocol_sha256(protocol_id)}
-    if protocol_id == PROTOCOL_V3_ID:
+    if protocol_id == PROTOCOL_V3_ID and acceptance_id == R8_ACCEPTANCE_ID:
         admitted.add(protocol_sha256(PROTOCOL_ID))
     return pin in admitted
 # Mechanism-named, outcome-independent corpus exclusions (ruling 46 §R-a A6).
@@ -845,7 +848,7 @@ def _valid_acceptance_bound(value: Any) -> bool:
         or prospective.get("trigger_observation_rule")
         != "judge_under_prior_artifact_never_self_fit"
         or not _registered_protocol_pin_matches(
-            identity, prospective.get("protocol_sha256")
+            identity, prospective.get("protocol_sha256"), value.get("acceptance_id")
         )
         or not isinstance(prospective.get("estimator_code_sha256"), Mapping)
         or set(prospective["estimator_code_sha256"]) != set(ESTIMATOR_CODE_PATHS)

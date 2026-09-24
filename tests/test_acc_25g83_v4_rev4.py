@@ -87,12 +87,18 @@ class RevisionFourIssuerTests(unittest.TestCase):
         self.t1 = {**T1_BINDINGS, "pulse_protocol_id": PROTOCOL_ID}
 
     def issue(self, values: list[str], *, minimum: int | None = None,
-              historical_shape_ruling: bool = False) -> tuple[int, str, dict | None]:
-        slots = [Slot(value) for value in values]
+              historical_shape_ruling: bool = False,
+              first_slots: list[Slot] | None = None,
+              second_slots: list[Slot] | None = None) -> tuple[int, str, dict | None]:
+        slots = first_slots if first_slots is not None else [Slot(value) for value in values]
         slots += [Slot("0.020", disposition="ordinary-invalid") for _ in range(12 - len(slots))]
+        w2 = second_slots if second_slots is not None else [
+            Slot("0.020", disposition="ordinary-invalid") for _ in range(12)
+        ]
+        w2 += [Slot("0.020", disposition="ordinary-invalid") for _ in range(12 - len(w2))]
         fixture = build_derivation_ledger(
             self.root / "ledger", slots, session_id="w1",
-            second_session=("w2", [Slot("0.020", disposition="ordinary-invalid") for _ in range(12)]),
+            second_session=("w2", w2),
             session_epoch=self.epoch, second_session_epoch=self.epoch,
             t1_bindings=self.t1,
         )
@@ -159,6 +165,42 @@ class RevisionFourIssuerTests(unittest.TestCase):
         self.assertEqual(rc, 3)
         self.assertIn("below the required floor 19", printed)
         self.assertIsNone(payload)
+
+    def test_w1_futility_counts_valid_including_anchor_exclusion(self) -> None:
+        w1 = [Slot("0.020") for _ in range(7)] + [
+            Slot("0.020", unresolved_detail="affine_clock_fit_empty")
+        ]
+        w2 = [Slot("0.020") for _ in range(5)]
+        rc, printed, payload = self.issue([], first_slots=w1, second_slots=w2)
+        self.assertEqual(rc, 0, printed)
+        self.assertEqual(payload["derivation_corpus"]["n"], 12)
+        self.assertEqual(len(payload["derivation_notes"]["excluded_members"]), 1)
+        self.root = self.root / "next"
+        self.root.mkdir()
+        rc, printed, payload = self.issue(
+            [], first_slots=[Slot("0.020") for _ in range(7)],
+            second_slots=[Slot("0.020") for _ in range(12)],
+        )
+        self.assertEqual(rc, 3)
+        self.assertIn("W1 futility procedure violation", printed)
+        self.assertIsNone(payload)
+
+    def test_historical_rule_outcomes_shape_excludes_revision_four_keys(self) -> None:
+        self.epoch = TARGET_EPOCH
+        self.t1 = T1_BINDINGS
+        rc, printed, payload = self.issue(
+            ["0.020"] * 6 + ["0.030"] * 6,
+            historical_shape_ruling=True,
+            second_slots=[Slot("0.020") for _ in range(4)] +
+                         [Slot("0.030") for _ in range(3)],
+        )
+        self.assertEqual(rc, 0, printed)
+        outcomes = payload["derivation_notes"]["rule_outcomes"]
+        for key in (
+            "headroom_status", "excursion_member_count", "excursion_label",
+            "estimator_lane_required_before_phase_split_claim",
+        ):
+            self.assertNotIn(key, outcomes)
 
 
 if __name__ == "__main__":
