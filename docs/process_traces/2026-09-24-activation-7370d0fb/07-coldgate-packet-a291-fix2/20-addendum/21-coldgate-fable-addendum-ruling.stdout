@@ -1,0 +1,8 @@
+The ruling is complete and within budget. Final state:
+
+- **File written**: `docs/process_traces/2026-09-24-activation-7370d0fb/07-coldgate-packet-a291-fix2/20-addendum/21-coldgate-fable-addendum-ruling.md`, 16,382 bytes, the only change in the working tree. The /tmp archive copy and probe were removed.
+- **Validator**: mistyped sha refused as designed; correct sha passed with all six exhibit digests matching.
+- **Outcome**: F1 BLOCKER confirmed by my own probe (deletion variants hit `inv_52`/`inv_18` first; flip-`superseded` gives checker INV-12 only). F2–F9 confirmed MATERIAL, F10–F14 NIT. I accepted the refuter's cures for F1, F2, F4, F5, F8 and the NITs, and wrote different texts for F3 (three handlers in both boundaries), F6 (mechanical one-line-body AST rule), F7(e) (hard failure, exceptions `inv_38`/`inv_39` only) and F9 (pairwise similarity with a control, validated by my own numbers: copy 0.67, independent 0.21, concatenation artefact 0.36). Two additional MATERIAL items: the reseal helper must not refresh derived fields, and the relation check must run regardless of lever nullness. No REFUSE.
+
+Ruling 21 written: F1 BLOCKER confirmed (flip-`superseded` replaces R2b), F2–F9 MATERIAL with cures pinned, Final texts v2 issued, no REFUSE.
+rc=0
