@@ -1,6 +1,6 @@
 # Record 01 — Ed's headline-experiment rulings (email 22:19 PDT 2026-09-23), and why two activations missed them
 
-Interactive Fable session 02a24110, 2026-09-24 ≈04:30 PDT, prompted by Ed: "did you harvest all the decisions i posted via email? you keep emailing me about the decisions but i already emailed about most of them."
+Interactive Fable session 02a24110, 2026-09-24 ≈04:00 PDT, prompted by Ed: "did you harvest all the decisions i posted via email? you keep emailing me about the decisions but i already emailed about most of them."
 
 ## 1. Audit of every reply Ed sent in the last eight days
 
@@ -38,7 +38,7 @@ Fix, directed by Ed in this session (2026-09-24, interactive) and installed in `
 
 Directive issue opened by this session (label `directive`, author mpmdw) carries §2 and §3. On reading it: apply E2–E4 as ruled (three-seat council for E2; Opus 5.5 + Astra rulings + Fable 5.1 final pass for E3/E4), hold E1's text commit for Ed's one-word confirmation, hold O-21 for Ed's answer, and send Ed no further email that asks any of E1–E4 again.
 
-## 6. Ed's answers in the interactive session (≈04:45 PDT 2026-09-24), asked in one batch per his instruction "while im at the machine any other decisions are posed to me"
+## 6. Ed's answers in the interactive session (≈04:15 PDT 2026-09-24), asked in one batch per his instruction "while im at the machine any other decisions are posed to me"
 
 - **E1 / O-20: ids and hashes only.** Ed: "im ok with 1" (option 1 = commit only problem ids and sha256 fingerprints; the MATH text stays in a local hash-bound custody path). The 22:19 "why not publish it?" is superseded. No problem text is committed.
 - **O-21: YES.** A claimed joules-per-correct-answer difference must also exceed the instrument's detection floor F (`|estimate| > F`, single-count discipline from `detection_floor.md`), on top of Holm and the anchor-widened interval test. AP-5M registers the estimate-level floor check.
@@ -47,6 +47,14 @@ Directive issue opened by this session (label `directive`, author mpmdw) carries
 
 Applied by this session: issue #405 comment with E1 and O-21; required status checks on `main` extended (see §7); the three-seat council for E2 and the Opus 5.5 + Astra + Fable rulings for E3/E4 remain the resident magistrate's work.
 
-## 7. E8 applied: required status checks on `main` (04:50 PDT 2026-09-24)
+## 7. E8 applied: required status checks on `main` (04:20 PDT 2026-09-24)
 
 `gh api -X PATCH repos/mpmdw/JouleWise/branches/main/protection/required_status_checks` now requires, with `strict: false`: `quick`, `fences`, `test (3.13, 1..6)`, `calibration-exits-exclusive (3.13)`, `calibration-writer-crash-matrix-exclusive (3.13, 1)` and `(3.13, 2)`, and `gate-ledger`. Chosen on Ed's "sensible for science" condition: the test matrix and the two exclusive calibration jobs are the science-bearing checks, `fences` guards the soundness fences, `quick` is the cheap early failure, `gate-ledger` is the twelve-row PR ledger. `build` and `installed-wheel` (packaging only) are not required. Docs-only pull requests still merge: the test and exclusive jobs are skipped by the `changes` filter, and GitHub counts a skipped required job as satisfied. `enforce_admins` was left off, unchanged: owner and magistrate bookkeeping commits still go straight to `main` as before; turning it on is a separate decision Ed has not made.
+
+## 8. D-184 and the hand-off (≈04:25–04:35 PDT)
+
+Ed, verbatim: "ok can i leave? you relaunch the magisrate with the new version of claude with opus 5.5 and the codex version with sol 6 ? , new policy for major changes, fable 5.1, opus 5.5 , sol 6 and astra 6 are all useful diverse sources of insight for important science, only usage is a block to seeking council all the time from all 4 models".
+
+- D-184 recorded in `docs/decision_log.md` (row and section), folded into the relaunch prompt's topology line, and into `CLAUDE.local.md` rule 11.
+- Versions at the bench: `/Users/edr/.local/bin/claude` symlink → 2.1.281 (changed 04:12 PDT by Ed); resident 7370d0fb (pid 7743) started 03:46 on the previous binary; `~/.codex/config.toml` model `gpt-6-sol`, CLI 0.156.1. No watchdog state is touched: directive issue #406 tells the resident to exit at its next slice boundary; the watchdog then spawns the successor from the symlink, on Opus 5.5.
+- This interactive session ends right after the hand-off so the census is clear of interactive claude windows before any t0.
