@@ -1391,6 +1391,8 @@ def _check_chain_identity(plan, probes, rows, evidence):
             if selected.handler not in ("evidence", "calibration"):
                 raise ValueError("payload kind has no approved gate handler")
             if selected.authenticate_chain_source:
+                if not selected.wrapper_prefix:
+                    raise ValueError("payload kind has no wrapper literal handler")
                 chain_path = selected.chain_source_path
                 source = _run(probes, ("/usr/bin/git", "-C", plan.measurement_root,
                                       "show", f"{plan.measurement_head}:{chain_path}"))

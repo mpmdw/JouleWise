@@ -329,7 +329,7 @@ class NightKindTests(unittest.TestCase):
         plan = night_gate.NightPlan.from_mapping(json.loads(plan_path.read_text()))
         source = BASE_SOURCE / third.chain_source_path
         source.parent.mkdir(parents=True, exist_ok=True)
-        source.write_text("test chain source\n")
+        source.write_text("export NIGHT_PAYLOAD_KIND=test_night\n")
         sha = hashlib.sha256(source.read_bytes()).hexdigest()
         chain = custody / "chain.zsh"
         chain.write_text(f"export NIGHT_PAYLOAD_KIND={third.kind}\n"
@@ -346,6 +346,15 @@ class NightKindTests(unittest.TestCase):
             self.assertEqual(night_gate.probe_payload_kind(chain.read_text()), third.kind)
             with self.assertRaisesRegex(ValueError, "probe payload kind ambiguous"):
                 night_gate.probe_payload_kind("export NIGHT_PAYLOAD_KIND=unknown_test\n")
+            original_chain = chain.read_bytes()
+            chain.write_bytes(original_chain + b"export NIGHT_PAYLOAD_KIND=test_night\n")
+            (custody / "chain.zsh.sha256").write_text(
+                f"{hashlib.sha256(chain.read_bytes()).hexdigest()}  chain.zsh\n")
+            with self.assertRaisesRegex(evidence_night.Refused, "payload kind unreadable"):
+                evidence_night.notice_subject(state)
+            chain.write_bytes(original_chain)
+            (custody / "chain.zsh.sha256").write_text(
+                f"{hashlib.sha256(original_chain).hexdigest()}  chain.zsh\n")
             paths = evidence_night.locations(FIXTURE, FIXTURE / "stages", 1790200800,
                                              "a" * 40, third.kind)
             self.assertTrue(paths["plan_id"].startswith(third.plan_id_prefix))
@@ -374,7 +383,7 @@ class NightKindTests(unittest.TestCase):
                                 str(custody / "chain.zsh.sha256"): "0" * 64,
                                 str(custody / "chain.zsh.chain-source.sha256"): "0" * 64,
                                 str(custody / third.manifest_name): "0" * 64}
-            with self.assertRaisesRegex(evidence_night.Refused, "unknown or missing render output"):
+            with self.assertRaisesRegex(evidence_night.Refused, "no approved evidence handler"):
                 evidence_night.sealed_state(state)
             from tests.test_arm_census import observation, row as census_row
             observed = observation(census_row(20, 1, "/bin/claude"),
@@ -429,25 +438,46 @@ class NightKindTests(unittest.TestCase):
             with mock.patch.object(night_gate, "validate_receipt", return_value=[]):
                 self.assertEqual(run_night._evidence_cleanup_error(plan, night),
                                  "night payload kind has no approved cleanup handler")
+                receipt = json.loads((night / "receipt.json").read_text())
+                receipt["conditions"][0]["measured"]["payload_kind"] = "quiet_predicate_evidence"
+                (night / "receipt.json").write_text(json.dumps(receipt))
+                self.assertEqual(run_night._evidence_cleanup_error(plan, night),
+                                 "night payload kind differs from authenticated receipt")
+                receipt["conditions"][0]["measured"]["payload_kind"] = third.kind
+                (night / "receipt.json").write_text(json.dumps(receipt))
+                chain.unlink()
+                with self.assertRaisesRegex(ValueError, "no approved artifact handler"):
+                    run_night._artifact_list(custody, night, plan)
+                with self.assertRaisesRegex(ValueError, "no approved courier handler"):
+                    run_night._courier_argv(custody, plan, FIXTURE / "courier")
+                self.assertEqual(run_night._evidence_cleanup_error(plan, night),
+                                 "night payload kind has no approved cleanup handler")
             (night / "courier.sent").write_text("delivered")
             (night / "result.json").write_text("{}")
             self.assertFalse(zero_capture_facts.zero_capture_facts(plan).clean)
 
     def test_third_row_notice_text_and_corecaptured_flag(self):
         render_fixture()
+        source_name = "scripts/night_chains/test_notice.zsh"
+        source = BASE_SOURCE / source_name
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("export NIGHT_PAYLOAD_KIND=test_night\n")
         third = replace(kind_row("quiet_predicate_evidence"), kind="test_night",
+                        chain_source_path=source_name,
                         notice_subject_label="TEST", notice_intro="Test-only notice intro.",
                         corecaptured_at_arm_and_t0=False)
         table = MappingProxyType(dict(NIGHT_KINDS, test_night=third))
         custody = FIXTURE / "custody"
         chain = custody / "chain.zsh"
+        old_source = BASE_SOURCE / kind_row("quiet_predicate_evidence").chain_source_path
         chain.write_text(chain.read_text().replace(
-            "NIGHT_PAYLOAD_KIND=quiet_predicate_evidence", "NIGHT_PAYLOAD_KIND=test_night"))
+            "NIGHT_PAYLOAD_KIND=quiet_predicate_evidence", "NIGHT_PAYLOAD_KIND=test_night").replace(
+            hashlib.sha256(old_source.read_bytes()).hexdigest(),
+            hashlib.sha256(source.read_bytes()).hexdigest()))
         (custody / "chain.zsh.sha256").write_text(
             f"{hashlib.sha256(chain.read_bytes()).hexdigest()}  chain.zsh\n")
         plan_path = custody / "night_plan.json"
         plan = json.loads(plan_path.read_text())
-        source = BASE_SOURCE / third.chain_source_path
         registration = BASE_SOURCE / third.protocol_path
         state = dict(plan_id=plan["plan_id"], attempt=1, prior_candidates=[],
                      head=plan["measurement_head"], measurement_root=str(BASE_SOURCE),
@@ -463,6 +493,11 @@ class NightKindTests(unittest.TestCase):
         self.assertIn("(TEST; DIAGNOSTIC_NO_PACK)", notice)
         self.assertIn("Test-only notice intro.", notice)
         self.assertNotIn("At t0 the gate reads launchd's log", notice)
+        source.write_text("export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n")
+        with mock.patch.object(night_kinds, "NIGHT_KINDS", table), \
+                mock.patch.object(night_gate, "NIGHT_KINDS", table), \
+                self.assertRaisesRegex(evidence_night.Refused, "chain source differs"):
+            evidence_night.render_notice(state)
 
     def test_third_row_generator_selects_manifest_executor_and_literals(self):
         render_fixture()
@@ -497,6 +532,54 @@ class NightKindTests(unittest.TestCase):
         self.assertIn("$TEST_CHAIN_SOURCE_SHA256", wrapper)
         self.assertIn("-m joulewise.test_executor refuse", wrapper)
         self.assertTrue((custody / third.manifest_name).is_file())
+
+    def test_generator_refuses_two_rows_for_one_chain_source(self):
+        render_fixture()
+        idle = kind_row("quiet_predicate_evidence")
+        third = replace(idle, kind="test_duplicate")
+        table = MappingProxyType(dict(NIGHT_KINDS, test_duplicate=third))
+        with mock.patch.object(gen_evidence_night, "NIGHT_KINDS", table):
+            with self.assertRaisesRegex(gen_evidence_night.GenerationRefusal,
+                                        "alternate chain refused"):
+                gen_evidence_night.generate(FIXTURE / "custody/night_plan.json")
+
+    def test_gate_refuses_evidence_row_without_wrapper_literals(self):
+        from tests.test_night_gate import FakeProbeSource, make_plan
+        third = replace(kind_row("quiet_predicate_evidence"), kind="test_missing_prefix",
+                        wrapper_prefix=None)
+        table = MappingProxyType(dict(NIGHT_KINDS, test_missing_prefix=third))
+        probe = FakeProbeSource(chain_text="export NIGHT_PAYLOAD_KIND=test_missing_prefix\n")
+        with mock.patch.object(night_kinds, "NIGHT_KINDS", table), \
+                mock.patch.object(night_gate, "NIGHT_KINDS", table):
+            receipt = night_gate.evaluate_night(make_plan(), probe.probes())
+        self.assertEqual(receipt.refusal.reason, "night_chain_digest_mismatch")
+        self.assertIn("no wrapper literal handler", receipt.refusal.detail)
+
+    def test_calibration_keeps_legacy_artifact_and_courier_inventory(self):
+        from scripts import run_night
+        render_fixture()
+        original = night_gate.NightPlan.from_mapping(json.loads(
+            (FIXTURE / "custody/night_plan.json").read_text()))
+        chain = FIXTURE / "calibration-chain.zsh"
+        chain.write_text("#!/bin/zsh\n")
+        plan = replace(original, chain_path=str(chain),
+                       chain_sha256_path=str(chain) + ".sha256")
+        custody = Path(plan.custody_root)
+        night = custody / "night"
+        nested = night / "evidence" / "one"
+        nested.mkdir(parents=True)
+        (night / "evidence_cleanup.json").write_text("{}")
+        (nested / "session.json").write_text("{}")
+        paths = {entry["path"] for entry in run_night._artifact_list(custody, night, plan)}
+        self.assertIn("night/evidence_cleanup.json", paths)
+        self.assertIn("night/evidence/one/session.json", paths)
+        courier = run_night._courier_argv(custody, plan, FIXTURE / "courier")
+        self.assertIn("night/evidence_outcome.json", courier[2])
+        Path(original.chain_path).unlink()
+        idle_paths = {entry["path"] for entry in run_night._artifact_list(custody, night, original)}
+        self.assertIn("night/evidence_cleanup.json", idle_paths)
+        with self.assertRaisesRegex(ValueError, "payload kind unavailable"):
+            run_night._artifact_list(custody, night, replace(original, plan_id="test-night"))
 
     def test_calibration_cannot_supply_preparation_paths(self):
         with self.assertRaisesRegex(evidence_night.Refused, "no preparation path identity"):

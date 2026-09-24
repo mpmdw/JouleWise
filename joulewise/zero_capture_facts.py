@@ -1,7 +1,8 @@
 """Read-only, fail-closed disk facts shared by release and successor admission.
 
-This module uses only the Python standard library. A missing scan root is empty
-only after the real custody root and delivered result/receipt are established.
+The disk scan uses the Python standard library and selects the recognised
+night-kind row. A missing scan root is empty only after the real custody root
+and delivered result/receipt are established.
 """
 
 from dataclasses import dataclass

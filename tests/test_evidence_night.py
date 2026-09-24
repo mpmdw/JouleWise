@@ -50,7 +50,7 @@ class NoticeProtocolTextTests(unittest.TestCase):
         clone = self.addCleanup_path / "clone"
         source = clone / row.chain_source_path
         source.parent.mkdir(parents=True, exist_ok=True)
-        source.write_text("fixture chain source\n")
+        source.write_text(f"export NIGHT_PAYLOAD_KIND={row.kind}\n")
         source_sha = entry.digest(source)
         custody = self.addCleanup_path / "custody"
         custody.mkdir(exist_ok=True)
@@ -891,7 +891,7 @@ class LifecycleTests(unittest.TestCase):
         night_row = entry.kind_row(entry.KIND)
         tracked_chain = self.canonical / night_row.chain_source_path
         tracked_chain.parent.mkdir(parents=True)
-        tracked_chain.write_text("fixture evidence source\n")
+        tracked_chain.write_text(f"export NIGHT_PAYLOAD_KIND={night_row.kind}\n")
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
         if clone_route:

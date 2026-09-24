@@ -1005,15 +1005,33 @@ def _artifact_entry(custody_root: Path, path: Path) -> dict[str, Any] | None:
 def _custody_row(plan):
     try:
         chain = Path(plan.chain_path).read_text(encoding="utf-8")
-    except FileNotFoundError:
-        # Pre-wrapper fixture callers retain the historical idle inventory.
-        return kind_row("quiet_predicate_evidence")
+    except (FileNotFoundError, IsADirectoryError):
+        # A delivered C5 receipt retains the gate's selected identity if its
+        # wrapper was removed before courier repair or artifact inventory.
+        try:
+            receipt = json.loads((Path(plan.custody_root) / "night/receipt.json").read_text())
+            if receipt.get("plan_id") == plan.plan_id and not night_gate.validate_receipt(receipt):
+                c5 = next((item for item in receipt["conditions"]
+                           if item["condition_id"] == "C5"), {})
+                if c5.get("status") == "PASS":
+                    kind = c5.get("measured", {}).get("payload_kind")
+                    return kind_row(kind if kind is not None else "calibration")
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        # A pre-wrapper refusal still inventories the historical idle paths
+        # when the plan's idle identity is complete.
+        idle = kind_row("quiet_predicate_evidence")
+        if (plan.plan_id.startswith(idle.plan_id_prefix)
+                and plan.receipt_class == idle.receipt_class
+                and plan.registration_path == idle.protocol_path):
+            return idle
+        raise ValueError("night payload kind unavailable") from None
     return kind_row(night_gate.probe_payload_kind(chain))
 
 
 def _artifact_list(custody_root: Path, night_dir: Path, plan: NightPlan | None = None) -> list[dict[str, Any]]:
     row = _custody_row(plan) if plan is not None else kind_row("quiet_predicate_evidence")
-    if row.handler not in ("evidence", "calibration"):
+    if row.handler not in ("evidence", "calibration") or not row.artifact_dir:
         raise ValueError("night payload kind has no approved artifact handler")
     paths = [
         custody_root / "night.log",
@@ -1043,7 +1061,7 @@ def _artifact_list(custody_root: Path, night_dir: Path, plan: NightPlan | None =
     ]
     artifacts = [entry for path in paths
                  if (entry := _artifact_entry(custody_root, path)) is not None]
-    evidence = night_dir / (row.artifact_dir or "evidence")
+    evidence = night_dir / row.artifact_dir
 
     def discovery_failed(error):
         raise error
@@ -1111,7 +1129,7 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> str
             source = custody_root / artifact["path"]
             # Preserve repeated envelope basenames; flattening loses all but
             # the final rounds/session/raw-power file.
-            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / (_custody_row(plan).artifact_dir or "evidence")) else Path(source.name)
+            relative = source.relative_to(night_dir) if source.is_relative_to(night_dir / _custody_row(plan).artifact_dir) else Path(source.name)
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
@@ -1206,7 +1224,8 @@ def _courier_argv(
     custody_root: Path, plan: NightPlan, courier_bin: Path
 ) -> tuple[str, ...]:
     row = _custody_row(plan)
-    if row.handler not in ("evidence", "calibration"):
+    if (row.handler not in ("evidence", "calibration") or not row.cleanup_name
+            or not row.outcome_name):
         raise ValueError("night payload kind has no approved courier handler")
     prompt = (REPO_ROOT / "docs" / "process" / "NIGHT_COURIER_PROMPT.md").read_text(
         encoding="utf-8"
@@ -1227,10 +1246,10 @@ def _courier_argv(
         "You must include these watchdog fields in the email body. An age greater "
         "than 900 seconds, or an unavailable age, means the watchdog is dead.\n"
     )
-    cleanup_path = custody_root / "night" / (row.cleanup_name or "evidence_cleanup.json")
+    cleanup_path = custody_root / "night" / row.cleanup_name
     if cleanup_path.exists():
         prompt += (f"\nEvidence cleanup record: {cleanup_path}. Read this existing record and "
-                   f"night/{row.outcome_name or 'evidence_outcome.json'}; report success, partial evidence or refusal, "
+                   f"night/{row.outcome_name}; report success, partial evidence or refusal, "
                    "including unproven cleanup and all refusal documents. Never recreate the record.\n")
     return (
         str(courier_bin),
@@ -1360,7 +1379,9 @@ def _evidence_cleanup_error(plan, night_dir):
         payload_kind = c5.get("measured", {}).get("payload_kind")
         if payload_kind is None:
             return None
-        row = kind_row(payload_kind)
+        row = _custody_row(plan)
+        if row.kind != payload_kind:
+            return "night payload kind differs from authenticated receipt"
         if row.handler != "evidence":
             return "night payload kind has no approved cleanup handler"
         from importlib import import_module
@@ -1620,7 +1641,8 @@ def _write_result(
                              else None),
         "refusal_documents": [str(path.relative_to(custody_root))
                               for path in _refusal_paths(night_dir)],
-        "artifacts": _artifact_list(custody_root, night_dir, plan),
+        "artifacts": _artifact_list(custody_root, night_dir,
+                                    plan if plan.chain_path else None),
     }
     _write_json(night_dir / "result.json", document)
     return document

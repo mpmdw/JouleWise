@@ -240,9 +240,12 @@ def prior_records(stages, roots, kind=KIND):
 
 def sealed_candidate(root, plan):
     from joulewise.night_gate import probe_payload_kind
-    value = json.loads(Path(plan).read_text())
-    chain = Path(value["chain_path"])
-    row = kind_row(probe_payload_kind(chain.read_text()))
+    try:
+        value = json.loads(Path(plan).read_text())
+        chain = Path(value["chain_path"])
+        row = kind_row(probe_payload_kind(chain.read_text()))
+    except (OSError, UnicodeError, ValueError, KeyError) as exc:
+        raise Refused("sealed candidate payload kind unreadable") from exc
     if row.handler != "evidence":
         raise Refused("sealed candidate has no approved evidence handler")
     code = """import hashlib,importlib,json,subprocess,sys
@@ -305,20 +308,28 @@ print(json.dumps({'registration_path':str(registration),'registration_sha256':sh
 def selected_candidate_row(state):
     """Select from the sealed wrapper and its already bound chain source."""
     from joulewise import night_gate
-    chain = safe_path(Path(state["custody_root"]) / "chain.zsh")
-    raw = chain.read_bytes()
-    tokens = safe_path(Path(str(chain) + ".sha256")).read_text().split()
+    try:
+        chain = safe_path(Path(state["custody_root"]) / "chain.zsh")
+        raw = chain.read_bytes()
+        tokens = safe_path(Path(str(chain) + ".sha256")).read_text().split()
+        row = kind_row(night_gate.probe_payload_kind(raw.decode("utf-8")))
+    except (OSError, UnicodeError, ValueError, KeyError) as exc:
+        raise Refused("candidate payload kind unreadable") from exc
     if tokens != [hashlib.sha256(raw).hexdigest(), chain.name]:
         raise Refused("candidate chain digest mismatch")
-    row = kind_row(night_gate.probe_payload_kind(raw.decode("utf-8")))
     if not row.wrapper_prefix:
         raise Refused("candidate kind has no wrapper literal handler")
     source = safe_path(Path(state["measurement_root"]) / row.chain_source_path)
     binding = state["bindings"]
-    if (binding["chain_source_path"] != str(source)
-            or binding["chain_source_sha256"] != digest(source)
-            or night_gate.chain_literal(raw.decode("utf-8"), row.wrapper_prefix + "_CHAIN_SOURCE_SHA256")
-            != binding["chain_source_sha256"]):
+    try:
+        source_raw = source.read_bytes()
+        source_kind = night_gate.probe_payload_kind(source_raw.decode("utf-8"))
+        literal = night_gate.chain_literal(raw.decode("utf-8"), row.wrapper_prefix + "_CHAIN_SOURCE_SHA256")
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise Refused("candidate chain source unreadable") from exc
+    if (source_kind != row.kind or binding["chain_source_path"] != str(source)
+            or binding["chain_source_sha256"] != hashlib.sha256(source_raw).hexdigest()
+            or literal != binding["chain_source_sha256"]):
         raise Refused("candidate chain source differs from sealed binding")
     return row
 

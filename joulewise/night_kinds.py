@@ -121,6 +121,11 @@ NIGHT_KINDS = MappingProxyType({
         notice_work="",
         notice_followup="",
         handler="calibration",
+        # The historical driver inventoried these paths for either night kind.
+        artifact_dir="evidence",
+        artifact_names=("evidence_busy_cores.jsonl", "evidence_processes.jsonl", "evidence_envelopes.jsonl", "evidence_cleanup.json", "evidence_outcome.json"),
+        cleanup_name="evidence_cleanup.json",
+        outcome_name="evidence_outcome.json",
         successor_release=True,
     ),
 })

@@ -18,9 +18,12 @@ from scripts.gen_derivation_night import GenerationRefusal, _quote, _census_clea
 
 
 def generate(plan_path, *, out=None, chain_template=CHAIN_PATH):
-    row = next((item for item in NIGHT_KINDS.values()
-                if item.chain_source_path == chain_template and item.payload_kind), None)
-    if (row is None or row.handler != "evidence" or not row.manifest_for
+    matches = [item for item in NIGHT_KINDS.values()
+               if item.chain_source_path == chain_template and item.payload_kind]
+    if len(matches) != 1:
+        raise GenerationRefusal("calibration/derivation or alternate chain refused")
+    row = matches[0]
+    if (row.handler != "evidence" or not row.manifest_for
             or not row.executor_module or not row.manifest_name or not row.wrapper_prefix):
         raise GenerationRefusal("calibration/derivation or alternate chain refused")
     # Match the basename stem as the original refusal did, including suffix variants.
