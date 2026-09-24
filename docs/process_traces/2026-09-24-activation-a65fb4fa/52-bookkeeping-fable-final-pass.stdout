@@ -1,0 +1,2 @@
+VERDICT: FIX-FIRST — ruling written to `docs/process_traces/2026-09-24-activation-a65fb4fa/52-bookkeeping-fable-final-pass.md` (7.8 KB): every spot-check (PR #403 shas, replay tail, A291 head and delta-50 findings, A282 Gmail id, ledger L-043..L-049 counts, kernel notes, gen_state no-diff, 44 tests OK) matches; the one required fix is a README sentence that omits the delta-50 BLOCKER and consult pause, exact replacement text supplied, then merge without a further cold pass.
+rc=0
