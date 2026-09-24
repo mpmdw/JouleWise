@@ -1,0 +1,134 @@
+--- a/joulewise/evidence_night.py	2026-09-23 16:46:56
++++ b/joulewise/evidence_night.py	2026-09-23 17:40:57
+@@ -761,6 +761,31 @@
+                               evidence=[str(p) for p in markers]))
+     return dict(inventory=inventory, now_epoch_s=now, verdict="pass" if all(
+         row["classification"] == "retained" for row in inventory) else "fail")
++
++
++def rehearsal_launchctl(launchctl_bin):
++    """True only for a fixture launchctl.
++
++    The literal name ``launchctl`` is the one real spelling. Any other spelling
++    that resolves to the real launchctl executable (an absolute path, a symlink
++    or a hard link to it) is refused, so a real publication can never be
++    recorded as a rehearsal and skip the successor claim or the veto gate.
++    """
++    spelled = str(launchctl_bin)
++    if spelled == "launchctl":
++        return False
++    real = shutil.which("launchctl")
++    given = shutil.which(spelled) if not os.path.isabs(spelled) else spelled
++    if real and given:
++        try:
++            same = (os.path.samefile(given, real)
++                    or Path(given).resolve() == Path(real).resolve())
++        except OSError:
++            same = False
++        if same:
++            raise Refused("real launchctl must be spelled exactly 'launchctl'; "
++                          "a path to it is not a rehearsal: " + spelled)
++    return True
+ 
+ 
+ def _successor_claims(state):
+@@ -811,6 +836,17 @@
+     return raw.strip()
+ 
+ 
++def _release_key_interpretations(key):
++    match = re.fullmatch(r"(.+):([0-9a-f]{64})", key) if isinstance(key, str) else None
++    if match is None:
++        raise Refused("malformed zero-capture release key")
++    body = match.group(1)
++    splits = [(body[:i], body[i + 1:]) for i, c in enumerate(body) if c == ":"]
++    if not splits:
++        raise Refused("malformed zero-capture release key")
++    return splits
++
++
+ def successor_check(state, now_epoch_s=None):
+     """Read the retained predecessor and durable claim before any new arm."""
+     from joulewise.night_gate import NightPlan
+@@ -825,14 +861,15 @@
+     root = safe_path(Path(state["roots_under"]) / "night-custody")
+     magistrate = load_state(Storage(root / "magistrate"))
+     for key in magistrate.get("released_zero_capture_refusals", []):
+-        if not isinstance(key, str) or key.count(":") < 2:
+-            raise Refused("malformed zero-capture release key")
+-        prior_id, prior_root, _ = key.split(":", 2)
+-        if (Path(prior_root).expanduser().parent.resolve(strict=False) == root
+-                and not Path(prior_root, "night_plan.json").is_file()
+-                and (prior_id not in claims or now <= claims[prior_id].get(
+-                    "predecessor_completion_epoch_s", float("inf")))):
+-            raise Refused("released predecessor custody is missing")
++        # The watchdog key is plan_id:custody_root:sha256 and neither the id
++        # nor the path is colon-free; every split is an interpretation, and
++        # any interpretation naming a missing custody root here refuses.
++        for prior_id, prior_root in _release_key_interpretations(key):
++            if (Path(prior_root).expanduser().parent.resolve(strict=False) == root
++                    and not Path(prior_root, "night_plan.json").is_file()
++                    and (prior_id not in claims or now <= claims[prior_id].get(
++                        "predecessor_completion_epoch_s", float("inf")))):
++                raise Refused("released predecessor custody is missing")
+     for path in sorted(root.glob("*/night_plan.json")):
+         safe_path(path)
+         if not path.is_file():
+@@ -859,6 +896,8 @@
+         return dict(predecessor_plan_id=None, candidate_plan_id=candidate_id,
+                     candidate_sha256=candidate_sha, claims_seen=len(claims))
+     plan, path, storage = released[0]
++    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", plan.plan_id):
++        raise Refused("predecessor plan id cannot name a successor claim: " + plan.plan_id)
+     facts = zero_capture_facts(plan)
+     if not _delivered_zero_capture_refusal(plan, now, storage):
+         raise Refused("successor refused: released predecessor no longer has delivered zero-capture facts")
+@@ -909,6 +948,12 @@
+             os.fsync(stream.fileno())
+         # Link is create-once at the final name: an existing claim still wins.
+         os.link(temporary, path)
++        # The entry itself must be durable before the plan is published.
++        directory_fd = os.open(directory, os.O_RDONLY)
++        try:
++            os.fsync(directory_fd)
++        finally:
++            os.close(directory_fd)
+     except FileExistsError:
+         raise Refused("concurrent successor claim")
+     finally:
+@@ -1206,7 +1251,7 @@
+         state = candidate_state(candidate)
+         record = dict(schema="joulewise.evidence_check.v1", started_epoch_s=time.time(),
+                       prepare_sha256=digest(Path(candidate) / "prepare.json"), checks={}, armable=False,
+-                      launchctl_bin=str(launchctl_bin), fake_launchctl=str(launchctl_bin) != "launchctl")
++                      launchctl_bin=str(launchctl_bin), fake_launchctl=rehearsal_launchctl(launchctl_bin))
+         checks = record["checks"]
+ 
+         def inspect(name, operation):
+@@ -1355,7 +1400,7 @@
+     jobs = json.loads(run([root / ".venv/bin/python", "-B", "-c", code, plan,
+                            launchctl_bin, Path(state["staging"]) / "render", root / ".venv/bin/python"], cwd=root))
+     return dict(schema="joulewise.evidence_verify.v1", verified_epoch_s=time.time(), jobs=jobs,
+-                launchctl_bin=str(launchctl_bin), fake_launchctl=str(launchctl_bin) != "launchctl",
++                launchctl_bin=str(launchctl_bin), fake_launchctl=rehearsal_launchctl(launchctl_bin),
+                 baseline=baseline_drift(state),
+                 schedule=s, request_epoch_s=s["boundaries"]["REQUEST / exit BEFORE"],
+                 instruction="Exit every owned agent and helper strictly before REQUEST; this command does not terminate them.")
+@@ -1392,7 +1437,7 @@
+ 
+ 
+ def require_fresh_check(state, launchctl_bin, *, command="publish-install"):
+-    fake = str(launchctl_bin) != "launchctl"
++    fake = rehearsal_launchctl(launchctl_bin)
+     checked = require_fresh_record(state, "check", "rehearsal_ready" if fake else "armable", command=command)
+     if (checked.get("launchctl_bin") != str(launchctl_bin)
+             or checked.get("fake_launchctl") is not fake):
+@@ -1571,7 +1616,7 @@
+         plan = sealed_state(state, lock_verifier=lock_verifier)
+         lifecycle = lifecycle_dir(stage)
+         checked = require_fresh_check(state, launchctl_bin)
+-        fake = str(launchctl_bin) != "launchctl"
++        fake = rehearsal_launchctl(launchctl_bin)
+         if not isinstance(notice_accepted, str) or not notice_accepted.strip():
+             raise Refused("notice acceptance message id is required")
+         notice_unused(state, notice_accepted)
