@@ -70,3 +70,10 @@ G2-a (lane V5-G2A-PREFILL-PROBE-01, `TASK_QUEUE.md:702`) is READY and non-claim.
   - M1's replacement lands before any night whose admission uses the equivalence rule.
 - **R-A291.** A291 fix round 2 (the P/K seats on Final texts v4) proceeds now. The defects it cures (a forged roster accepted, the trusted-output cache, mixed parent populations) are structural and survive a roster-role change. The Q3 contract amendment comes after it as a separate A291 contract revision.
 - **R-A280.** A280, the scored night kind, proceeds: B0 is parity-only, and B1/B2 are independent of the headline's independent variable.
+
+## Errata (after cold ruling 13/20 §G8)
+
+- §1 wrongly credits rungs to "Fable, Opus and Sol" and says all four reject the 32k trace as proposed. The Fable seat kept forced continuous 32k traces (3 × 1.7B, 2 × 8B, idle bookends) and changed the estimand to P̄(bin). The rungs come from Opus, Sol and Astra.
+- §2 lists the increment design as unanimous. Astra made gross ratios primary and increments secondary. R-Q2 now reports both.
+- The alternative-attention correction was made by Astra as well as Opus.
+- R-Q3 merged two designs without naming the estimand. It is superseded by the ruling's final text R-Q3.
