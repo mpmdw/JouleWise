@@ -1,0 +1,9 @@
+ROLE: PAIRED DELTA REFUTER (Astra 6) on "Final texts A291-R3b". Read-only with executed probes. Do not call Claude or any other agent.
+
+WRITE_SCOPE: []
+
+You (Astra) refuted Final texts A291-R3 (your report: /Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/64b-a291-r3-refuter-astra.md; 4 BLOCKER F1–F4 and 5 should_fix F5–F9). A cold Fable addendum (/Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/48-coldgate-packet-a291-esc2/30-addendum/21-coldgate-fable-esc2-addendum-ruling.md) accepted all nine findings with its own texts and issued **Final texts A291-R3b** (extracted: /Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/70-a291-final-texts-r3b.md). They will be pasted verbatim into seat K and seat P briefs.
+CHECK (delta scope): D1. For each of F1–F9, is the defect actually cured by R3b's text? Re-run your probes (/tmp/278ebc9e/r3ref/*.py or copies under /Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/48-coldgate-packet-a291-esc2/30-addendum/ex-64-probe-*.py) against scratch models of the R3b texts where needed. D2. Did the new texts introduce a new contradiction, an unfalsifiable RED requirement, an impossible mutation kill, or a scope collision between K and P? D3. Anything a seat would have to resolve by choosing.
+Worktree: /Users/edr/code/wt-278ebc9e-r3ref (detached at 0fa4e6e3). Scratch only under /tmp/278ebc9e/r3bref/. Never launchctl, sudo, powermetrics; never touch /Users/edr/night-custody, /Users/edr/JouleWise-measurement-*, ~/Library/LaunchAgents, /Users/edr/code/JouleWise.
+Severity BLOCKER / MATERIAL / NIT, with exact replacement text for each objection.
+OUTPUT: findings table; one line per F1–F9 (cured / not cured); probe commands with tails.
