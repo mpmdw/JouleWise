@@ -3,13 +3,59 @@ import ast
 import copy
 import inspect
 import unittest
+from unittest.mock import patch
 
 from joulewise import scored_packer as sp, scored_registration as sr
-from tests.scored_roster_checker import check_roster, check_transition, check_executed
+from tests.scored_roster_checker import check_roster, check_transition, check_executed, digest
 from tests.test_scored_registration import fixture
 from tests.test_scored_roster_checker import r2_four_envelope_roster
 from tests.test_scored_packer_stress import run_case
 import random
+
+
+def reseal(r):
+    d = digest(r)
+    r["sha256"] = d
+    (r["events"][-1].__setitem__("sha256", d) if r["events"] else r.__setitem__("registered_sha256", d))
+    return r
+
+
+def _detail(exc):
+    return str(exc).partition(": ")[2]
+
+
+def _split_route():
+    g, p = fixture(n=10, block_size=2, cap=6.0)
+    reg = sr.Registration.from_mapping(g)
+    roster = sp.pack(reg, p)
+    first = roster['envelopes'][0]
+    roster = sp.requeue_overrun(reg, roster, 0, [
+        dict(block_id=bid, status='cut_off' if j == 0 else 'not_started',
+             elapsed_s=1.3 if j == 0 else None)
+        for j, bid in enumerate(first['blocks'])])
+    while not any(o['decision'] == 'split' for o in roster['events'][-1]['observations']):
+        envelope = next(e for e in roster['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
+        stages = {b['block_id']: b['retry_stage'] for b in roster['blocks']}
+        whole = any(stages[bid] == 'whole_block' for bid in envelope['blocks'])
+        observations = [dict(block_id=bid, status='cut_off' if whole else 'completed',
+                             elapsed_s=.1 if whole else .01) for bid in envelope['blocks']]
+        roster = sp.requeue_overrun(reg, roster, envelope['index'], observations)
+    return g, p, reg, roster
+
+
+def _missing_live_roster():
+    g, p = fixture(n=10, block_size=2, cap=6.0)
+    reg = sr.Registration.from_mapping(g)
+    r = sp.pack(reg, p)
+    model = g['role_to_model_id']['8B']
+    targets = {b['block_id'] for b in r['blocks'] if b['model'] == model and b['level'] == 1}
+    for envelope in r['envelopes']:
+        moved = [bid for bid in envelope['blocks'] if bid in targets]
+        envelope['blocks'] = [bid for bid in envelope['blocks'] if bid not in targets]
+        envelope['voided_block_ids'].extend(moved)
+    pending = next(e for e in r['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
+    all_keep = [dict(block_id=bid, status='completed', elapsed_s=.01) for bid in pending['blocks']]
+    return reg, r, pending['index'], all_keep
 
 
 class ScoredPackerTests(unittest.TestCase):
@@ -175,6 +221,7 @@ class ScoredPackerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'unreported_envelope')
         bad = copy.deepcopy(root)
         bad['blocks'][0]['items'] = None
+        reseal(bad)
         with self.assertRaises(sp.PackingRefusal) as caught:
             sp.requeue_overrun(reg, bad, 0, [])
         self.assertEqual(caught.exception.code, 'inv_52')
@@ -193,6 +240,8 @@ class ScoredPackerTests(unittest.TestCase):
             with self.subTest(code=code):
                 bad = copy.deepcopy(root)
                 mutate(bad)
+                if code == 'stale_derived':
+                    reseal(bad)
                 with self.assertRaises(sp.PackingRefusal) as caught:
                     sp.requeue_overrun(reg, bad, 0, [])
                 self.assertEqual(caught.exception.code, code)
@@ -319,6 +368,7 @@ class ScoredPackerTests(unittest.TestCase):
             with self.subTest(code=code):
                 bad = copy.deepcopy(root)
                 mutate(bad)
+                reseal(bad)
                 with self.assertRaises(sp.PackingRefusal) as caught:
                     sp._seal(reg, bad)
                 self.assertEqual(caught.exception.code, code)
@@ -356,6 +406,181 @@ class ScoredPackerTests(unittest.TestCase):
             with self.subTest(code=code):
                 bad = copy.deepcopy(reported)
                 mutate(bad)
+                reseal(bad)
                 with self.assertRaises(sp.PackingRefusal) as caught:
                     sp._seal(reg, bad)
                 self.assertEqual(caught.exception.code, code)
+
+    def test_r1_duplicate_live_placement(self):
+        g, p = fixture(n=10, block_size=2, cap=6.0)
+        reg = sr.Registration.from_mapping(g)
+        r = sp.pack(reg, p)
+        placement0 = r['placements'][0]
+        n = len(r['envelopes'])
+        block = next(b for b in r['blocks'] if b['block_id'] == placement0['block_id'])
+        r['envelopes'].append(dict(index=n, model=block['model'], kind='loaded',
+                                   blocks=[placement0['block_id']], voided_block_ids=[], observations=None))
+        r['placements'].append(dict(placement0, envelope_index=n))
+        reseal(r)
+        pending = next(e for e in r['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
+        all_keep = [dict(block_id=bid, status='completed', elapsed_s=.01) for bid in pending['blocks']]
+        for call in (lambda: sp.requeue_overrun(reg, r, pending['index'], all_keep),
+                     lambda: sp.verify_executed_roster(reg, r, p)):
+            with self.assertRaises(sp.PackingRefusal) as caught:
+                call()
+            self.assertEqual(caught.exception.code, 'inv_11')
+
+    def test_r3_unresealed_missing_live_positions(self):
+        reg, r, pending, all_keep = _missing_live_roster()
+        with self.assertRaises(sp.PackingRefusal) as caught:
+            sp.requeue_overrun(reg, r, pending, all_keep)
+        self.assertEqual(caught.exception.code, 'inv_02')
+
+    def test_r2_resealed_missing_live_positions(self):
+        reg, r, pending, all_keep = _missing_live_roster()
+        reseal(r)
+        with self.assertRaises(sp.PackingRefusal) as caught:
+            sp.requeue_overrun(reg, r, pending, all_keep)
+        self.assertEqual(caught.exception.code, 'inv_11')
+
+    def test_r2b_parent_relation_precedes_derived(self):
+        g, p, reg, r = _split_route()
+        self.assertEqual(len(r['events']), 11)
+        parent_id = next(o['block_id'] for o in r['events'][-1]['observations'] if o['decision'] == 'split')
+        parent = next(b for b in r['blocks'] if b['block_id'] == parent_id)
+        parent['superseded'] = False
+        reseal(r)
+        self.assertIn('INV-12', {v.inv_id for v in check_roster(g, r, p)})
+        self.assertNotIn('INV-11', {v.inv_id for v in check_roster(g, r, p)})
+        with self.assertRaises(sp.PackingRefusal) as caught:
+            sp.requeue_overrun(reg, r, 12, [])
+        self.assertEqual(caught.exception.code, 'inv_12')
+
+    def test_r4a_partly_terminal_parent_uses_live_position(self):
+        g, p, reg, r = _split_route()
+        model = g['role_to_model_id']['8B']
+        while any(e['kind'] == 'loaded' and e['observations'] is None for e in r['envelopes']):
+            envelope = next(e for e in r['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
+            blocks = {b['block_id']: b for b in r['blocks']}
+            observations = []
+            for bid in envelope['blocks']:
+                block = blocks[bid]
+                culprit = bid.endswith(':single:0') and block['retry_stage'] in ('single_problem', 'single_retry')
+                observations.append(dict(block_id=bid, status='completed',
+                                         elapsed_s=reg.worst(block['model']) + .1 if culprit else .01))
+            r = sp.requeue_overrun(reg, r, envelope['index'], observations)
+        self.assertEqual(check_roster(g, r, p), [])
+        self.assertTrue(any(t['type'] == 'ceiling_violation' for t in r['terminal_refusals']))
+        live = {bid: e['index'] for e in r['envelopes'] for bid in e['blocks']}
+        parent = next(b for b in r['blocks'] if b['model'] == model and b['level'] == 1 and b['superseded'])
+        sibling = next(b for b in r['blocks'] if b['parent_block_id'] == parent['block_id'] and b['block_id'].endswith(':single:1'))
+        self.assertEqual(live[sibling['block_id']], 13)
+        fact = next(f for f in sp._parent_facts(reg, r) if f['parent_id'] == parent['block_id'])
+        self.assertEqual(fact['indices'], [13])
+        self.assertEqual((fact['n_items'], fact['n_terminal']), (2, 1))
+        expected = abs(sum([13, 2, 4, 6, 8]) / 5 - sum([1, 3, 5, 7, 9]) / 5)
+        self.assertEqual(expected, 1.5999999999999996)
+        self.assertEqual(r['drift_lever_slots']['1'], expected)
+        self.assertTrue(r['planned_spread_shortfall'][f'{model}:1'])
+
+    def _patched_fact_refusal(self, n_items, code, prefix):
+        g, p = fixture(n=5, block_size=1, cap=6.0)
+        reg = sr.Registration.from_mapping(g)
+        r = sp.pack(reg, p)
+        model = g['role_to_model_id']['8B']
+        pending = next(e for e in r['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
+        observations = [dict(block_id=bid, status='completed', elapsed_s=.01) for bid in pending['blocks']]
+        fact = dict(parent_id='p', model=model, level=1, n_items=n_items, n_terminal=0, indices=[])
+        with patch.object(sp, '_parent_facts', return_value=[fact]):
+            with self.assertRaises(sp.PackingRefusal) as caught:
+                sp.requeue_overrun(reg, r, pending['index'], observations)
+        self.assertEqual(caught.exception.code, code)
+        self.assertTrue(_detail(caught.exception).startswith(prefix))
+
+    def test_r4b_gate_relation(self):
+        self._patched_fact_refusal(2, 'inv_11', 'gate parent without full live positions')
+
+    def test_r4d_empty_fact(self):
+        self._patched_fact_refusal(0, 'inv_10', 'empty parent')
+
+    def test_r4d_empty_block_precondition(self):
+        g, p = fixture(n=5, block_size=1, cap=6.0)
+        reg = sr.Registration.from_mapping(g)
+        z = sp.pack(reg, p)
+        model = g['role_to_model_id']['8B']
+        while any(e['kind'] == 'loaded' and e['observations'] is None for e in z['envelopes']):
+            envelope = next(e for e in z['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
+            observations = [dict(block_id=bid,
+                                 status='not_started' if envelope['model'] == model else 'completed',
+                                 elapsed_s=None if envelope['model'] == model else .01)
+                            for bid in envelope['blocks']]
+            z = sp.requeue_overrun(reg, z, envelope['index'], observations)
+        self.assertEqual(check_roster(g, z, p), [])
+        self.assertIsNone(z['drift_lever_slots']['1'])
+        z['blocks'].append(dict(z['blocks'][0], block_id=f"{model}:{g['arm']}:1:999", model=model,
+                                level=1, items=[], predicted_item_s=[], predicted_s=0, attempt=0,
+                                retry_stage='initial', parent_block_id=None, superseded=False, late=False))
+        reseal(z)
+        self.assertIn('INV-10', {v.inv_id for v in check_roster(g, z, p)})
+        with self.assertRaises(sp.PackingRefusal) as caught:
+            sp.verify_executed_roster(reg, z, p)
+        self.assertEqual(caught.exception.code, 'inv_10')
+        self.assertEqual(_detail(caught.exception), 'empty block')
+
+    def test_r5a_resealed_output_still_replays(self):
+        g, p = fixture(n=5)
+        reg = sr.Registration.from_mapping(g)
+        r = sp.pack(reg, p)
+        r['blocks'][0]['late'] = True
+        r['sha256'] = None
+        sp._seal(reg, r, finalize=True)
+        pending = next(e for e in r['envelopes'] if e['kind'] == 'loaded')
+        observations = [dict(block_id=bid, status='completed', elapsed_s=.01) for bid in pending['blocks']]
+        with self.assertRaises(sp.PackingRefusal) as caught:
+            sp.requeue_overrun(reg, r, pending['index'], observations)
+        self.assertIn(caught.exception.code, ('inv_38', 'inv_39'))
+
+    def test_r4c_derived_structure_ast(self):
+        tree = ast.parse(inspect.getsource(sp))
+        functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+        derived = functions['_derived']
+        self.assertEqual(len(derived.body), 1)
+        self.assertIsInstance(derived.body[0], ast.Return)
+        self.assertIsInstance(derived.body[0].value, ast.Call)
+        self.assertIsInstance(derived.body[0].value.func, ast.Name)
+        self.assertEqual(derived.body[0].value.func.id, '_lever')
+        self.assertNotIn('roster', [a.arg for a in functions['_lever'].args.args])
+        guarded = ('_lever', '_derived', '_checked_derived', '_seal', 'executed_status')
+        keys = {'blocks', 'placements', 'terminal_refusals', 'envelopes'}
+        for name in guarded:
+            for node in ast.walk(functions[name]):
+                if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
+                    self.assertNotIn(node.slice.value, keys, name)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'get' and node.args and isinstance(node.args[0], ast.Constant):
+                    self.assertNotIn(node.args[0].value, keys, name)
+        for name, fn in functions.items():
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Div):
+                    self.assertEqual(name, '_lever')
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in ('_live_index', '_live'):
+                    self.assertEqual(name, '_parent_facts')
+        self.assertFalse(hasattr(sp, '_live'))
+
+    def test_r5b_no_trusted_mutable_cache_ast(self):
+        source = inspect.getsource(sp)
+        self.assertFalse('_TRUSTED_OUTPUTS' in source)
+        tree = ast.parse(source)
+        for node in tree.body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                names = ([t.id for t in node.targets if isinstance(t, ast.Name)] if isinstance(node, ast.Assign)
+                         else [node.target.id] if isinstance(node.target, ast.Name) else [])
+                value = node.value
+                mutable = isinstance(value, (ast.Dict, ast.List, ast.Set)) or (
+                    isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and
+                    value.func.id in ('deque', 'dict', 'list', 'set'))
+                if mutable:
+                    self.assertEqual(names, ['_REPLAYING'])
+            if isinstance(node, ast.FunctionDef):
+                self.assertFalse(any(isinstance(d, ast.Name) and d.id in ('lru_cache', 'cache') for d in node.decorator_list))
+                defaults = list(node.args.defaults) + [d for d in node.args.kw_defaults if d is not None]
+                self.assertFalse(any(isinstance(d, (ast.Dict, ast.List, ast.Set)) for d in defaults))

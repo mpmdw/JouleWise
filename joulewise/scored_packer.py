@@ -5,7 +5,6 @@ import copy
 import hashlib
 import json
 import math
-from collections import deque
 from contextvars import ContextVar
 
 from joulewise.scored_registration import (
@@ -20,7 +19,6 @@ class PackingRefusal(ValueError):
         super().__init__(f"{code}: {detail}")
 
 
-_TRUSTED_OUTPUTS = deque(maxlen=8)
 _REPLAYING = ContextVar("scored_packer_replaying", default=False)
 
 
@@ -69,45 +67,79 @@ def _predictions(registration, predicted):
     _need(expected is None or digest == expected, "inv_08", "prediction digest")
 
 
-def _live(roster):
-    return {p["block_id"]: p for p in roster["placements"]
-            if p["block_id"] in roster["envelopes"][p["envelope_index"]]["blocks"]}
+def _live_index(roster):
+    live = {}
+    for envelope in roster["envelopes"]:
+        for bid in envelope["blocks"]:
+            _need(bid not in live, "inv_11", f"duplicate live placement {bid}")
+            live[bid] = next(p for p in roster["placements"]
+                             if p["block_id"] == bid and p["envelope_index"] == envelope["index"])
+    return live
 
 
-def _derived(registration, roster):
+def _parent_facts(registration, roster, captured_window_keys=None):
     blocks = roster["blocks"]
-    live = _live(roster)
+    live = _live_index(roster)
     terminal = {(t["model"], t["item_id"]) for t in roster["terminal_refusals"]}
-    shortfall = {}
+    facts = []
+    for parent in blocks:
+        if parent["parent_block_id"] is not None:
+            continue
+        model = parent["model"]
+        indices = []
+        n_terminal = 0
+        for item in parent["items"]:
+            if (model, item) in terminal:
+                n_terminal += 1
+                continue
+            owner = parent if not parent["superseded"] else next(
+                (b for b in blocks if b["parent_block_id"] == parent["block_id"] and b["items"] == [item]), None)
+            placement = live.get(owner["block_id"]) if owner is not None else None
+            if placement is not None and (captured_window_keys is None or
+                    (placement["block_id"], placement["attempt"]) in captured_window_keys):
+                indices.append(placement["envelope_index"])
+        facts.append(dict(parent_id=parent["block_id"], model=model, level=parent["level"],
+                          n_items=len(parent["items"]), n_terminal=n_terminal, indices=indices))
+    return facts
+
+
+def _lever(registration, facts, *, executed):
+    for fact in facts:
+        _need(fact["n_items"] != 0, "inv_10", f"empty parent {fact['parent_id']}")
+    for fact in facts:
+        gate = len(fact["indices"]) == fact["n_items"] if executed else fact["n_terminal"] == 0
+        if gate:
+            _need(len(fact["indices"]) == fact["n_items"], "inv_11",
+                  f"gate parent without full live positions {fact['parent_id']}")
+    cell_flags = {}
     positions = {}
     for level in LEVELS:
         for model in _roles(registration):
-            pos = []
-            occupied = set()
-            nonterminal = 0
-            for parent in blocks:
-                if parent["parent_block_id"] is not None or parent["model"] != model or parent["level"] != level:
-                    continue
-                fully_nonterminal = all((model, item) not in terminal for item in parent["items"])
-                nonterminal += fully_nonterminal
-                indices = []
-                for item in parent["items"]:
-                    if (model, item) in terminal:
-                        continue
-                    owner = parent if not parent["superseded"] else next((b for b in blocks if b["parent_block_id"] == parent["block_id"] and b["items"] == [item]), None)
-                    if owner is not None and owner["block_id"] in live:
-                        indices.append(live[owner["block_id"]]["envelope_index"])
-                if indices:
-                    pos.append(sum(indices) / len(indices))
-                if fully_nonterminal and len(indices) == len(parent["items"]):
-                    occupied.update(indices)
-            shortfall[f"{model}:{level}"] = nonterminal < MIN_PARENT_BLOCKS or len(occupied) < MIN_ENVELOPES
-            positions[(model, level)] = (pos, nonterminal)
+            cell = [f for f in facts if f["model"] == model and f["level"] == level]
+            gate = [f for f in cell if (len(f["indices"]) == f["n_items"] if executed else f["n_terminal"] == 0)]
+            occupied = {index for f in gate for index in f["indices"]}
+            cell_flags[f"{model}:{level}"] = len(gate) < MIN_PARENT_BLOCKS or len(occupied) < MIN_ENVELOPES
+            positions[(model, level)] = ([sum(f["indices"]) / len(f["indices"]) for f in cell if f["indices"]], len(gate))
     lever = {}
     for level in LEVELS:
         (first, first_count), (second, second_count) = (positions[(model, level)] for model in _roles(registration))
         lever[str(level)] = abs(sum(first) / len(first) - sum(second) / len(second)) if first_count and second_count else None
-    return shortfall, lever
+    return cell_flags, lever
+
+
+def _derived(registration, roster, captured_window_keys=None):
+    return _lever(registration, _parent_facts(registration, roster, captured_window_keys), executed=captured_window_keys is not None)
+
+
+def _checked_derived(registration, roster, captured_window_keys=None):
+    try:
+        return _derived(registration, roster, captured_window_keys)
+    except PackingRefusal:
+        raise
+    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError) as exc:
+        raise PackingRefusal("inv_52", "malformed roster") from exc
+    except ArithmeticError as exc:
+        raise PackingRefusal("inv_52", f"internal:{type(exc).__name__}") from exc
 
 
 def _structure(registration, roster):
@@ -134,6 +166,7 @@ def _structure(registration, roster):
         bid = block["block_id"]
         _need(type(bid) is str and bid not in bm and block["model"] in models and type(block["level"]) is int and block["level"] in LEVELS, "inv_10", "block identity")
         _need(type(block["items"]) is list and type(block["predicted_item_s"]) is list and len(block["items"]) == len(block["predicted_item_s"]), "inv_52", "block items")
+        _need(len(block["items"]) >= 1, "inv_10", "empty block")
         _need(type(block["attempt"]) is int and block["attempt"] >= 0 and block["retry_stage"] in RETRY_STAGES and type(block["superseded"]) is bool and type(block["late"]) is bool, "inv_52", "block domain")
         bm[bid] = block
         if block["parent_block_id"] is None:
@@ -189,6 +222,30 @@ def _structure(registration, roster):
         _need(rescheduled <= len(event["block_ids"]) - 1, "inv_35c", "reschedule count")
         _need(not rescheduled or any_culprit, "reschedule_without_culprit", "reschedule cause")
         _need(all(type(i) is int and 0 <= i < len(placements) and placements[i]["envelope_index"] > ix for i in event["placements"]), "inv_18", "event placement target")
+    terminal = roster["terminal_refusals"]
+    live_counts = {}
+    for envelope in roster["envelopes"]:
+        for bid in envelope["blocks"]:
+            live_counts[bid] = live_counts.get(bid, 0) + 1
+    for model in models:
+        for item in _items(registration):
+            terminal_count = sum(t["model"] == model and t["item_id"] == item for t in terminal)
+            live_blocks = [b for b in roster["blocks"] if b["model"] == model and item in b["items"] and live_counts.get(b["block_id"], 0)]
+            live_count = sum(not b["superseded"] and not any(t["model"] == model and t["item_id"] == item and t["block_id"] == b["block_id"] for t in terminal) and live_counts[b["block_id"]] == 1 for b in live_blocks)
+            _need((live_count == 1) != (terminal_count == 1 and not live_blocks), "inv_11", "item conservation")
+    children = {}
+    for block in roster["blocks"]:
+        parent_id = block["parent_block_id"]
+        if parent_id is None:
+            continue
+        parent = bm.get(parent_id)
+        _need(parent is not None and block["model"] == parent["model"] and block["level"] == parent["level"] and len(block["items"]) == 1 and parent["superseded"], "inv_12", "single parent")
+        item = block["items"][0]
+        _need(item in parent["items"] and block["block_id"] == f"{parent_id}:single:{parent['items'].index(item)}", "inv_12", "single item")
+        children.setdefault(parent_id, []).append(item)
+    for parent in roster["blocks"]:
+        if parent["parent_block_id"] is None and parent["superseded"]:
+            _need(sorted(children.get(parent["block_id"], [])) == sorted(parent["items"]), "inv_12", "single partition")
 
 
 def _seal(registration, roster, *, finalize=False):
@@ -200,13 +257,21 @@ def _seal(registration, roster, *, finalize=False):
     _need(roster["claim_ready"] == (registration.mode == "registered"), "inv_05", "claim readiness")
     _need(roster["n_per_level"] == registration.n_per_level and roster["item_set_sha256"] == hashlib.sha256(_canon(_items(registration))).hexdigest(), "inv_04", "item identity")
     try:
+        if not finalize:
+            digest = _digest(roster)
+            _need(roster["sha256"] is not None, "inv_02", "input unsealed")
+            _need(roster["sha256"] == digest, "inv_02", "digest mismatch")
+            _need(roster["registered_sha256"] == (digest if not roster["events"] else roster["registered_sha256"]), "inv_38", "root digest")
+            if roster["events"]:
+                _need(roster["events"][-1]["sha256"] == digest, "inv_38", "event digest")
         _structure(registration, roster)
-        short, lever = _derived(registration, roster)
-        digest = _digest(roster)
+        short, lever = _checked_derived(registration, roster)
     except PackingRefusal:
         raise
-    except (KeyError, TypeError, ValueError, IndexError, StopIteration) as exc:
+    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError) as exc:
         raise PackingRefusal("inv_52", "malformed roster") from exc
+    except ArithmeticError as exc:
+        raise PackingRefusal("inv_52", f"internal:{type(exc).__name__}") from exc
     _need(roster["planned_spread_shortfall"] == short and roster["drift_lever_slots"] == lever, "stale_derived", "derived values")
     if not roster["events"]:
         _need(not any(short.values()), "spread_minima", "root spread")
@@ -214,18 +279,12 @@ def _seal(registration, roster, *, finalize=False):
             _need(all(v is not None and v <= registration.max_gap for v in lever.values()), "inv_28", "planned drift")
     if finalize:
         _need(roster["sha256"] is None, "inv_02", "output already sealed")
+        digest = _digest(roster)
         roster["sha256"] = digest
         if not roster["events"]:
             roster["registered_sha256"] = digest
         else:
             roster["events"][-1]["sha256"] = digest
-        _TRUSTED_OUTPUTS.append((registration.digest, hashlib.sha256(_canon(roster)).hexdigest()))
-    else:
-        _need(roster["sha256"] is not None, "inv_02", "input unsealed")
-        _need(roster["sha256"] == digest, "inv_02", "digest mismatch")
-        _need(roster["registered_sha256"] == (digest if not roster["events"] else roster["registered_sha256"]), "inv_38", "root digest")
-        if roster["events"]:
-            _need(roster["events"][-1]["sha256"] == digest, "inv_38", "event digest")
     return roster
 
 
@@ -304,7 +363,7 @@ def pack(registration, predicted_decode_s):
         for bid in e["blocks"]:
             b = byid[bid]
             roster["placements"].append(dict(block_id=bid, attempt=0, stage="initial", reserved_s=b["predicted_s"], envelope_index=e["index"]))
-    roster["planned_spread_shortfall"], roster["drift_lever_slots"] = _derived(registration, roster)
+    roster["planned_spread_shortfall"], roster["drift_lever_slots"] = _checked_derived(registration, roster)
     return _seal(registration, roster, finalize=True)
 
 
@@ -330,8 +389,7 @@ def _observations(registration, roster, envelope_index, observations):
 
 def requeue_overrun(registration, roster, envelope_index, observations):
     _seal(registration, roster)
-    if not _REPLAYING.get() and (registration.digest, hashlib.sha256(_canon(roster)).hexdigest()) not in _TRUSTED_OUTPUTS:
-        _replay_roster(registration, roster)
+    if not _REPLAYING.get(): _replay_roster(registration, roster)
     _observations(registration, roster, envelope_index, observations)
     result = copy.deepcopy(roster)
     e = result["envelopes"][envelope_index]
@@ -382,7 +440,7 @@ def requeue_overrun(registration, roster, envelope_index, observations):
             target = len(result["envelopes"]) if decision == "advance" and b["retry_stage"] == "whole_block" else _eligible(registration, result, envelope_index, b, reserve)
             _place(result, b, target, reserve, created)
     e["observations"] = recorded
-    result["planned_spread_shortfall"], result["drift_lever_slots"] = _derived(registration, result)
+    result["planned_spread_shortfall"], result["drift_lever_slots"] = _checked_derived(registration, result)
     result["events"].append(dict(envelope_index=envelope_index, block_ids=ids, observations=recorded, placements=created, sha256=""))
     result["sha256"] = None
     return _seal(registration, result, finalize=True)
@@ -418,38 +476,6 @@ def verify_executed_roster(registration, roster, predicted_decode_s):
 def executed_status(registration, roster, predicted_decode_s, captured_window_keys):
     verify_executed_roster(registration, roster, predicted_decode_s)
     _need(type(captured_window_keys) in (set, frozenset) and all(type(key) is tuple and len(key) == 2 and type(key[0]) is str and type(key[1]) is int for key in captured_window_keys), "inv_52", "window keys")
-    live = _live(roster)
-    terminal = {(t["model"], t["item_id"]) for t in roster["terminal_refusals"]}
-    positions = {}
-    spread = {}
-    for level in LEVELS:
-        for model in _roles(registration):
-            pos = []
-            occupied = set()
-            fully_counted = 0
-            for parent in roster["blocks"]:
-                if parent["parent_block_id"] is not None or parent["model"] != model or parent["level"] != level:
-                    continue
-                indices = []
-                for item in parent["items"]:
-                    if (model, item) in terminal:
-                        continue
-                    owner = parent if not parent["superseded"] else next((b for b in roster["blocks"] if b["parent_block_id"] == parent["block_id"] and b["items"] == [item]), None)
-                    placement = live.get(owner["block_id"]) if owner else None
-                    if placement and (placement["block_id"], placement["attempt"]) in captured_window_keys:
-                        indices.append(placement["envelope_index"])
-                if indices:
-                    pos.append(sum(indices) / len(indices))
-                if len(indices) == len(parent["items"]):
-                    fully_counted += 1
-                    occupied.update(indices)
-            positions[(model, level)] = (pos, fully_counted)
-            spread[f"{model}:{level}"] = fully_counted < MIN_PARENT_BLOCKS or len(occupied) < MIN_ENVELOPES
-    lever = {}
-    drift = {}
-    for level in LEVELS:
-        (first, first_count), (second, second_count) = (positions[(m, level)] for m in _roles(registration))
-        value = abs(sum(first) / len(first) - sum(second) / len(second)) if first_count and second_count else None
-        lever[str(level)] = value
-        drift[str(level)] = value is not None and registration.max_gap is not None and value > registration.max_gap
+    spread, lever = _checked_derived(registration, roster, captured_window_keys)
+    drift = {str(level): lever[str(level)] is not None and registration.max_gap is not None and lever[str(level)] > registration.max_gap for level in LEVELS}
     return dict(spread_exceeded=spread, executed_drift_lever_slots=lever, drift_exceeded=drift)
