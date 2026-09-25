@@ -295,3 +295,22 @@
    - The relaunch contract binds only directive issue BODIES, and comments are never instructions. So the magistrate keeps the audit as a W1 arm precondition, the conservative reading, until #416's body is edited or a superseding directive is opened.
    - The peer has been asked to arrange that, so headless successors read the same thing.
 92. **#416 body amended** (author `mpmdw`; verified at 13:35 PDT). Binding text: "the audit runs AFTER W1/W2 pass and BEFORE any claim-bearing run. It is NOT a W1 arm precondition." The audit is **removed from W1's arm preconditions**. The handoff is now "CLAIM-RUN WORK COMPLETE" to seat 4b, with the sha, the scope and the W1/W2 bundle paths, after W1/W2 pass and the headline pipeline is frozen. The audit includes an independent re-derivation of the calibration from the raw bundles. The kit is on main at `docs/process_traces/2026-09-24-interactive-4b/30-prearm-audit-kit-416.md`.
+93. **THE MERGE WAVE LANDED** (13:44–13:48 PDT):
+   - **PR #412 (PR-L) → `9b750bf3cb0abc4c0a4474a2b5bb1e1e4ec52c87`**, head H `dc210094` per WAVE-CONFIRM-01, C1-b met (C3 fallback 764 OK; MERGEABLE; 15/15 checks).
+   - **PR #413 (PR-R) → `6c3a63c9`**, head `e77ec15d`, CONFIRMED by C2; 15/15 checks.
+   - **PR #414 (A292) → `c6814dd8`**, head `64dec562`; MERGE-authorized by A292-FINALPASS-01 with code identical to `e144bf07`; 15/15 checks.
+   - Canonical was fast-forwarded to `c6814dd8`, with no `com.joulewise.night*` label or plist present. **This makes the resident supervisor stale:** `scripts/magistrate_watchdog.py` imports `joulewise.night_gate`, `joulewise.arm_retry` and `scripts.run_night`, which PR-L changed. Per the relaunch contract, the magistrate commits, pushes and exits so a fresh successor becomes the resident.
+   - **Seal values for Revision 5** (A-R5a-1), computed at the merge commit:
+     - commit `9b750bf3cb0abc4c0a4474a2b5bb1e1e4ec52c87` (`gh pr view 412 --json mergeCommit`);
+     - `configs/launchd/com.joulewise.night.plist.template` sha256 `e62a461b9f739be6aa57588219674cbb27f574dc40930ee1ee706f230442e5c8`;
+     - `configs/launchd/com.joulewise.night-probe.plist.template` sha256 `1570b74587075445ee64fff9b14b718a4b753ec3432db9363455636a2d2fc1fd`.
+     - The prereg on main still has 1 placeholder line: the seal is owed.
+94. **Successor's next exact actions, in order:**
+   - (1) **Seal PR.** Replace the three literals in `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` with the values in item 93. Replace the header parenthetical "sealing pending PR-L pins" with "sealed 2026-09-2x at PR-L merge 9b750bf3". The placeholder grep must equal 0, and the issuer must accept the sealed text (`tests.test_acc_25g83_rev5`). This is registration text, so take the full gate; TIER-01 is not landed yet.
+   - (2) Land R16-a in the acceptance-rulings record under the heading ruled by PRR-R3-01 Q1, via a bookkeeping PR from this branch, which also carries items 53–94 and RUN_STATE.
+   - (3) `mkdir -p /Users/edr/night-custody/measurement` (PRL NIT-3).
+   - (4) **W1 arm** via NIGHT_HANDBACK.
+     - Preconditions: the calibration-derivation plan authored at or after the cutoff with `measurement_root` under `/Users/edr/night-custody/measurement/`; the R6 probe cadence phase PASS at install; Wispr Flow quit; display state recorded.
+     - **Message seat `joulewise-4b` at least 45 minutes before t0.** The arm notice carries "close interactive Claude session joulewise-4b before t0" and the seal digests.
+     - #416 is NOT a W1 precondition any more: the audit runs after W1/W2 pass, via the "CLAIM-RUN WORK COMPLETE" handoff.
+   - (5) Lanes queued: #415 TIER-01 plus the light-tier path in `scripts/check_gate_ledger.py`; PR-0 (run `--certify` at the bench, then lens and final pass); PRL NITs 2–6 (raw cadence plist retention, rehearsal custody mkdir, R3 regex, installer string, constants); A292-AGGREGATE-OVERFLOW-01 (closed by A292-ESC-01, to be recorded); CLAIMGATE-GOLDEN-SWEEP-OPERATORS-01; V1-ISSUANCE-GATE-EVIDENCE-CLASS-01; JCORRECT-NULL-CALIBRATION-WINDOWS-01; the CG-4 PR; A283 (seeded sampler); A282 (AP-5M v5 amendment carrying census n, A-JC-1, the window class).
