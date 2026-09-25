@@ -55,3 +55,7 @@
    - It downgrades refuter B1/B2 to MATERIAL: the design stays executable once the texts are corrected.
    - It adds two MATERIAL misses: the K24 superseded-row pairing and a per-window anchor bound.
    - **A292 reducer rulings v1.1 (E2)** are the one source for the harness and implementation seats. The harness seat's WRITE_SCOPE is `tests/test_scored_reduce.py` plus `tests/scored_reduce_checker.py` (a stdlib-only oracle, AST-enforced).
+29. PR-0 (WR-7). The Sol seat (rc 0) committed `ab48c5d3` on `test/2026-09-25-claimgate-pr0-golden`: blob `72148bfe`, byte-identical on regeneration, no `joulewise/` change. The seat attempted the forbidden full discovery suite; it was interrupted (rc 130) and no effect remains.
+   - The Opus lens ([12/03](12-pr0/03-opus-lens.md)) returned **2 BLOCKERs**. B-1: the golden barely exercises the v1 code CG-4 edits, and 7 of 9 real mutations survived, including deleting the floor check. B-2: it cannot supply WR-6's `manifest_id` set.
+   - It also returned 4 SHOULD-FIX: nothing stops a same-PR refresh; the mutation test is a tautology; auto-discovery would force refreshes; fixture families are constant.
+   - Fix round 1 was dispositioned (all accepted, closure shapes dictated; [12/04](12-pr0/04-fix1-brief.txt)). Acceptance: the lens's mutation harness must kill M1, M2, M4, M5, M6 and M8.
