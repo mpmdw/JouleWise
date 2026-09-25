@@ -1,0 +1,2 @@
+FIX-FIRST: R1/R2/R5 affirmed on primary evidence (234 tests OK, pinned files and r7 byte-identical, simulation reproduced), R3 REFUSED for missing R16-a text, R4 rejects the rendered-plist seal pin (per-window bytes; R15 says template digests) with exact texts in F1–F3; ruling written at `docs/process_traces/2026-09-25-activation-152c9255/26-finalpass-packet-prr/20-fable-final-pass-prr.md` (16.8 KB).
+rc=0

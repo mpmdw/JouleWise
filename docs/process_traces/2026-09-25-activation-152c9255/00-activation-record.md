@@ -213,3 +213,9 @@
    - Delta re-audit with the M8 sweep (Sol seat 70) and the lead's bench run of reducer plus packer plus fuzz (71) are running.
    - PR #412 (PR-L) is opened with ledger rows cited, and CI is running. It merges only after the integration full suite is green.
    - The PR-R final pass PRR-FINALPASS-01 (packet 26, charge sha `e45e9df3`) is running.
+74. **PR-R final pass PRR-FINALPASS-01 = FIX-FIRST** ([26/20](26-finalpass-packet-prr/20-fable-final-pass-prr.md)).
+   - R1, R2 and R5 are affirmed on primary evidence: 234 tests OK, pinned files and r7 byte-identical, simulation reproduced.
+   - R3 REFUSED: Revision 5 lacks the R16-a text.
+   - R4 rejects the rendered-plist seal pin, because rendered bytes are per-window and R15 says template digests.
+   - The exact texts are F1–F3. MERGE follows once PR #412 is merged first and F1–F3 land verbatim in one commit, re-audited by one lens; no further cold gate is needed.
+   - Seat 72 (Sol) applies F1–F3 verbatim.
