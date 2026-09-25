@@ -194,3 +194,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - CG-3: the equivalence night uses m ≥ 8; location TOST at 3.5·s_old (8.61 ms on r7); a one-sided permutation spread test. It REJECTS ±3 ms (half of unchanged nights would fail) and the night-mean variance ratio (not computable from one night).
    - CG-4: one full-tier PR, with D-083 and D-numbered addenda and AP-5M v5 moving to an additive J/correct estimand.
    Ed must be informed that O-21's F becomes F_est and that the issue-316 night shape is superseded prospectively. Texts are extracted to record 87. The paired Sol refuter (brief 88) is running.
+79. R4-0 done at the bench: `89-a291-contract-v4-1-inv11-closed.md` is contract v4 with ONLY the INV-11 predicate replaced by the ruled closed form, with the glossary pasted above it. The diff is confined to that block, and the source 02d is unchanged.
