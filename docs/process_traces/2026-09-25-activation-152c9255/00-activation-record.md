@@ -255,3 +255,6 @@
    - ERROR `test_g4_real_ruled_census_pgrep_dialect`: real `pgrep` against live processes, where the parse hit `'cat'`. This is the known multi-line-argv census defect (lane CENSUS-MULTILINE-ARGV-01), triggered by concurrent agent processes. It passes alone at the integration head and on main.
    - Neither touches PR-L or PR-R code.
    - Next: the focused re-run on integration tree 2 `integ/2026-09-25-wave2` @ `d9ed116f` (main + PR-L `2e522d1a` + PR-R `2bbcc779` + A292 `f6e6d162`; conflicts checked clean without `-X`), covering every module changed since `d48bd18f`.
+86. **Gate row 9, focused completion** on integration tree 2 `integ/2026-09-25-wave2` @ `d9ed116f` (main + final PR-L `2e522d1a` + PR-R `2bbcc779` + A292 `f6e6d162`). It covers every module changed since the full-suite head `d48bd18f`, plus A292's reducer, packer and fuzz: **Ran 674 tests in 1,968 s, OK (skipped=1)** ([30/02](30-integration/02-focused-integ2-d9ed116f.txt)).
+   - With item 85, row 9 is satisfied for the three-PR wave: a full suite at `d48bd18f`, whose only two red items are known and unrelated and pass alone, plus a focused re-run of every delta module on the final integration tree.
+   - Next: records-only commits into the three heads; a cold confirm of the PR-L and PR-R exact heads; open the PR-R and A292 PRs; merge PR-L, then PR-R, then A292.
