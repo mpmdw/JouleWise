@@ -1903,13 +1903,14 @@ class PrepareCandidateTest(unittest.TestCase):
         lines = text.splitlines()
         self.assertEqual(lines[0], "")
         self.assertEqual(lines[1], issuer.DRY_RUN_HEADER)
-        self.assertIsNotNone(self.DRY_RUN_SESSION_PATTERN.match(lines[2]))
-        self.assertEqual(lines[3], "absent-session: absent")
-        self.assertRegex(lines[4], r"^prefix pending or unresolved rows: \d+$")
+        self.assertEqual(lines[2], f"{SESSION}: battery=pass")
+        self.assertIsNotNone(self.DRY_RUN_SESSION_PATTERN.match(lines[3]))
+        self.assertEqual(lines[4], "absent-session: absent")
+        self.assertRegex(lines[5], r"^prefix pending or unresolved rows: \d+$")
         self.assertRegex(
-            lines[5], r"^registration admissible for prepare-candidate: (yes|no)$"
+            lines[6], r"^registration admissible for prepare-candidate: (yes|no)$"
         )
-        for line in lines[6:]:
+        for line in lines[7:]:
             self.assertRegex(line, r"^  blocker: .+$")
         self.assert_no_measured_value_leaked(text)
 
@@ -2210,3 +2211,89 @@ class PrepareCandidateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatteryFloatRevisionFiveTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls._tmp.cleanup)
+        cls.root = Path(cls._tmp.name)
+        text = PREREGISTRATION.read_text(encoding="utf-8")
+        text = text.replace("<PR-L-MERGE-SHA>", "a" * 40)
+        text = text.replace("<TEMPLATE-SHA256:night>", "b" * 64)
+        text = text.replace("<TEMPLATE-SHA256:probe>", "c" * 64)
+        cls.registration = cls.root / "sealed-revision-5.md"
+        cls.registration.write_text(text, encoding="utf-8")
+        cls.registration_sha = hashlib.sha256(cls.registration.read_bytes()).hexdigest()
+        values = [Slot(v, native_frames=True) for v in _grid(12, "0.0300", "0.0010")]
+        cls.fixture = build_derivation_ledger(
+            cls.root / "confounded", [Slot("0.0300", battery_mode="charging", native_frames=True), *values[1:]],
+            session_id="W1", second_session=("W1-prime", values), third_session=("W2", values),
+        )
+        cls.clean_fixture = build_derivation_ledger(
+            cls.root / "clean", values, session_id="W1",
+            second_session=("W1-prime", values), third_session=("W2", values),
+        )
+
+    def prepare(self, fixture: dict[str, Path], *extra: str) -> tuple[int, str, Path]:
+        out = self.root / f"candidate-{self._testMethodName}.json"
+        argv = [
+            "prepare-candidate", "--ledger", str(fixture["ledger"]),
+            "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+            "--preregistration", str(self.registration),
+            "--preregistration-sha256", self.registration_sha,
+            "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--registration-session-id", "W1-prime", "--registration-session-id", "W2",
+            "--d125-ruling", D125_REFERENCE, "--out", str(out), *extra,
+        ]
+        stream = io.StringIO()
+        with redirect_stdout(stream), mock.patch.object(issuer, "_registered_dispositions", return_value={}):
+            code = issuer.main(argv)
+        return code, stream.getvalue(), out
+
+    def test_replacement_issues_without_reading_confounded_b_or_a7_refusal(self) -> None:
+        code, printed, out = self.prepare(
+            self.fixture, "--battery-confounded-session-id", "W1",
+        )
+        self.assertEqual(code, 0, printed)
+        payload = json.loads(out.read_text())
+        self.assertEqual(payload["derivation_notes"]["battery_confounded_sessions"][0]["session_id"], "W1")
+        self.assertEqual(payload["derivation_notes"]["battery_confounded_sessions"][0]["status"],
+                         "battery_float_confounded")
+        self.assertNotIn("b_fiducial_s", json.dumps(payload["derivation_notes"]["battery_confounded_sessions"]))
+        self.assertEqual(payload["registered_generation_row"]["registration_session_ids"][0], "W1-prime")
+
+    def test_omission_clean_declaration_and_overlap_refuse(self) -> None:
+        code, printed, _ = self.prepare(self.fixture)
+        self.assertEqual(code, 3)
+        self.assertIn("computed non-pass session omitted: W1", printed)
+        code, printed, _ = self.prepare(self.clean_fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 3)
+        self.assertIn("clean session declared confounded", printed)
+        code, printed, _ = self.prepare(self.fixture, "--battery-confounded-session-id", "W1-prime")
+        self.assertEqual(code, 3)
+        self.assertIn("session named both", printed)
+
+    def test_confounded_dry_run_counts_none_and_tampered_raw_is_missing(self) -> None:
+        snapshot = load_calibration_ledger_snapshot(
+            self.fixture["ledger"], self.fixture["pin"],
+            require_committed_pin=True, verify_custody=False,
+            mode="read_replay", repo_root=self.fixture["root"],
+        )
+        code, lines = issuer.registration_dry_run(snapshot, ["W1"])
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertIn("W1: battery=confounded", lines)
+        self.assertTrue(any("valid=0" in line for line in lines))
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "tampered", [Slot("0.03")], session_id="W1",
+            )
+            raw = fixture["runs"] / "instrument_validation/W1-d01/raw/battery_float.pre.ioreg"
+            raw.write_bytes(raw.read_bytes() + b"tampered")
+            snapshot = load_calibration_ledger_snapshot(
+                fixture["ledger"], fixture["pin"], require_committed_pin=True,
+                verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+            )
+            verdict = issuer.battery_float.validate_window(snapshot.bracket_session_by_id["W1"])
+            self.assertEqual(verdict["status"], "battery_float_evidence_missing")

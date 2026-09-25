@@ -212,18 +212,20 @@ def registration_dry_run(
         # non-empty for an open session too, so removing this `if` really does
         # open bundles mid-campaign.
         if terminal:
-            battery = battery_float.validate_window(session)
-            battery_label = battery["status"].removeprefix("battery_float_")
-            if battery["status"] != "pass":
-                lines.append(f"{session_id}: battery={battery_label}")
-                lines.append(
-                    f"{session_id}: kind={session.session_kind} state={session.state} "
-                    f"terminal=yes declared={len(session.declared_slots)} "
-                    f"filled={len(session.finalized_slots)} valid=0 excluded=battery_{battery_label}"
-                )
-                blockers.append(f"session {session_id}: battery={battery_label}")
-                continue
-            lines.append(f"{session_id}: battery=pass")
+            if any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+                   for row in session.finalized_slots.values()):
+                battery = battery_float.validate_window(session)
+                battery_label = battery["status"].removeprefix("battery_float_")
+                if battery["status"] != "pass":
+                    lines.append(f"{session_id}: battery={battery_label}")
+                    lines.append(
+                        f"{session_id}: kind={session.session_kind} state={session.state} "
+                        f"terminal=yes declared={len(session.declared_slots)} "
+                        f"filled={len(session.finalized_slots)} valid=0 excluded=battery_{battery_label}"
+                    )
+                    blockers.append(f"session {session_id}: battery={battery_label}")
+                    continue
+                lines.append(f"{session_id}: battery=pass")
             for observation in session.finalized_slots.values():
                 if observation.classification_disposition != "valid":
                     continue
@@ -1292,17 +1294,18 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     target_epoch = dict(all_observations[0].identity_epoch)
     revision_five = target_epoch == REVISION_FIVE_EPOCH
     # Include A-7 foreign-row owners in the computed set before reading any B.
-    dispositions_for_battery = _registered_dispositions() if revision_five else {}
-    candidates = set(session_ids) | set(named_confounded)
-    candidates.update(
-        observation.bracket_session_id
-        for observation in snapshot.observations
-        if observation.classification_disposition == "valid"
-        and observation.bracket_session_id not in set(session_ids)
-        and dict(observation.identity_epoch) == target_epoch
-        and observation.content_id not in dispositions_for_battery
-        and observation.bracket_session_id is not None
-    )
+    candidates = set(session_ids) | set(named_confounded) if revision_five else set()
+    if revision_five:
+        dispositions_for_battery = _registered_dispositions()
+        candidates.update(
+            observation.bracket_session_id
+            for observation in snapshot.observations
+            if observation.classification_disposition == "valid"
+            and observation.bracket_session_id not in set(session_ids)
+            and dict(observation.identity_epoch) == target_epoch
+            and observation.content_id not in dispositions_for_battery
+            and observation.bracket_session_id is not None
+        )
     battery_results = {}
     for candidate_id in sorted(candidates):
         session = snapshot.bracket_session_by_id.get(candidate_id)
@@ -1685,13 +1688,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         },
     }
     derivation_notes = {
-        "battery_confounded_sessions": [
+        **({"battery_confounded_sessions": [
             {"session_id": candidate_id, "status": battery_results[candidate_id]["status"],
              "slots": [{key: slot[key] for key in (
                  "slot", "attempt_id", "reasons", "pre_raw_sha256", "post_raw_sha256"
              )} for slot in battery_results[candidate_id]["slots"] if slot["verdict"] != "pass"]}
             for candidate_id in sorted(computed_confounded)
-        ],
+        ]} if revision_five else {}),
         "generation": (
             "D-079 epoch bootstrap: the first generation derived from live "
             "derivation-only captures under a new identity epoch."

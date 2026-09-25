@@ -1769,6 +1769,11 @@ class QuietGatePhaseTests(unittest.TestCase):
         baseline.AGENT_CENSUS_ARGV = night_gate.AGENT_CENSUS_ARGV
         def legacy_projection(value):
             for row in value["conditions"]:
+                if row["condition_id"] == "C3":
+                    row["measured"].pop("battery_float", None)
+                    row["evidence"] = [citation for citation in row["evidence"]
+                                       if citation != night_gate._probe_citation(
+                                           green_results()[night_gate.IOREG_BATTERY_ARGV])]
                 if row["condition_id"] == "C5":
                     row["measured"].pop("measurement_checkout_porcelain", None)
                     row["measured"].pop("measurement_checkout_porcelain_truncated", None)
@@ -1778,7 +1783,8 @@ class QuietGatePhaseTests(unittest.TestCase):
             if value["refusal"] is not None:
                 value["refusal"]["evidence"] = [
                     probe for probe in value["refusal"]["evidence"]
-                    if probe["argv"] != list(checkout_status_argv("/measurement-checkout"))
+                    if probe["argv"] not in (list(checkout_status_argv("/measurement-checkout")),
+                                              list(night_gate.IOREG_BATTERY_ARGV))
                 ]
             return value
         scenarios = [(None, None, 1005),

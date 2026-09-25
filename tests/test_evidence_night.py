@@ -1013,6 +1013,23 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
         self.assertFalse(any("launchctl" in str(c) for c in self.calls))
 
+    def test_charging_fails_arm_check_for_unknown_and_calibration_payloads(self):
+        charging = (ROOT / "tests/fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text()
+        for kind in ("unknown", "calibration"):
+            with self.subTest(kind=kind):
+                def runner(argv, **kwargs):
+                    if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                        return subprocess.CompletedProcess(argv, 0, charging.replace(
+                            '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}', 1), "")
+                    return self.runner(argv, **kwargs)
+                with patch.object(entry, "candidate_payload_kind", return_value=kind):
+                    with self.assertRaisesRegex(entry.Refused, "battery_float"):
+                        entry.check(**dict(self.kw, runner=runner))
+                record = json.loads(self.journal("check.json").read_text())
+                self.assertFalse(record["armable"])
+                self.assertFalse(record["rehearsal_ready"])
+                self.assertEqual(record["checks"]["battery_float"]["verdict"], "fail")
+
     def test_corecaptured_arm_toggles_once_and_counts_only_post_toggle_spawns(self):
         raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
         before = "\n".join(raw.splitlines()[:11]) + "\n"  # five real spawn rows
@@ -2119,6 +2136,36 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaisesRegex(entry.Refused, "installer --launchd-probe failed"):
                 self.publish(runner=lambda argv, **kw: subprocess.CompletedProcess(argv, 2, "", "refused"))
         self.assertEqual(len(seen), 1)
+
+    def test_charging_at_publication_preserves_plan_and_successor_claim(self):
+        self.released_predecessor()
+        self.checked()
+        self.vetoed()
+        self.notice_fixture()
+        charging = (ROOT / "tests/fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text()
+        def runner(argv, **kwargs):
+            if argv == list(entry.DIRECTIVES_ARGV):
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                return subprocess.CompletedProcess(argv, 0, charging.replace(
+                    '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}', 1), "")
+            self.fail(f"unexpected publication command: {argv}")
+        original = os.replace
+        moved_plan = []
+        def replace(source, target):
+            if source == self.plan:
+                moved_plan.append(target)
+            return original(source, target)
+        with patch.object(entry.os, "replace", side_effect=replace):
+            with self.assertRaisesRegex(entry.Refused, "battery float at publication"):
+                entry.publish_install(**self.publication_kwargs(),
+                                      notice_accepted="charging-publication", runner=runner)
+        self.assertEqual(moved_plan, [])
+        self.assertTrue(self.plan.exists())
+        self.assertFalse((self.custody.parent / "successor-claims/predecessor.json").exists())
+        attempt = next((self.stage / "lifecycle/arm-attempts").iterdir())
+        observation = json.loads((attempt / "battery-float-at-publication.json").read_text())
+        self.assertFalse(observation["passed"])
 
     def test_b6_clone_old_census_literal_is_reported(self):
         with patch.object(entry, "CENSUS_FIX", self.tip):

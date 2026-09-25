@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 from pathlib import Path
+import plistlib
 import subprocess
 import sys
+from types import SimpleNamespace
 from typing import Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +28,7 @@ from joulewise.calibration_ledger import (
     finalize_bracket_session_slot,
     load_calibration_ledger_snapshot,
 )
+from joulewise import battery_float
 from joulewise.uncertainty_evidence import CLOCK_ANCHOR_UNRESOLVED, CLOCK_METHOD_V3
 from tests.git_fixture import init_git_fixture
 
@@ -73,12 +77,36 @@ class Slot:
     # The method the recorded clock anchor claims.  Anything other than the
     # anchor-v3 method is not an anchor-v3 replay at all.
     anchor_method: str = CLOCK_METHOD_V3
+    battery_mode: str = "pass"
+    native_frames: bool = False
 
 
 def _write_bundle(custody: Path, attempt_id: str, slot: Slot) -> None:
     (custody / "raw").mkdir(parents=True)
-    (custody / "raw" / "powermetrics.plist").write_bytes(b"raw-" + attempt_id.encode())
+    (custody / "raw" / "powermetrics.plist").write_bytes(
+        b"\x00".join(plistlib.dumps({
+            "timestamp": datetime.fromtimestamp(100 + index, timezone.utc),
+            "elapsed_ns": 132_000_000,
+            "processor": {"cpu_power": 10000, "gpu_power": 0, "ane_power": 0,
+                          "cpu_energy": 1320, "gpu_energy": 0, "ane_energy": 0},
+        }) for index in range(4)) + b"\x00"
+        if slot.native_frames else b"raw-" + attempt_id.encode()
+    )
     (custody / "events.jsonl").write_text('{"timestamp_s": 99.0}\n', encoding="utf-8")
+    battery_records = {}
+    if slot.battery_mode != "missing":
+        fixture_name = ("charging-synthetic-from-real.ioreg"
+                        if slot.battery_mode == "charging" else "float.ioreg")
+        raw = (REPO_ROOT / "tests/fixtures/battery_float" / fixture_name).read_bytes()
+        raw = raw.replace(b'"UpdateTime" = 1790373525', b'"UpdateTime" = 100', 1)
+        for phase in ("pre", "post"):
+            raw_path = f"raw/battery_float.{phase}.ioreg"
+            (custody / raw_path).write_bytes(raw)
+            record, _ = battery_float.observe(
+                phase=f"slot_{phase}", wall_time_s=100, raw_path=raw_path,
+                runner=lambda argv: SimpleNamespace(args=argv, stdout=raw, stderr=b"", returncode=0),
+            )
+            battery_records[phase] = record
     if slot.unresolved_detail is None:
         anchor = {
             "method": slot.anchor_method,
@@ -103,7 +131,8 @@ def _write_bundle(custody: Path, attempt_id: str, slot: Slot) -> None:
         f'"validation_id": "{attempt_id}", '
         f'"b_fiducial_s": {slot.evidence_lexeme or slot.b_fiducial_s}, '
         f'"clock_anchor_resolved": {"true" if resolved else "false"}, '
-        f'"clock_anchor": {json.dumps(anchor)}'
+        f'"clock_anchor": {json.dumps(anchor)}, '
+        f'"battery_float": {json.dumps(battery_records)}'
         "}\n",
         encoding="utf-8",
     )
@@ -119,6 +148,7 @@ def build_derivation_ledger(
     session_id: str = SESSION_ID,
     session_kind: str = SESSION_KIND_DERIVATION,
     second_session: tuple[str, Sequence[Slot]] | None = None,
+    third_session: tuple[str, Sequence[Slot]] | None = None,
     fill_slots: int | None = None,
     abort_reason: str | None = None,
     second_session_epoch: Mapping[str, object] | None = None,
@@ -163,6 +193,11 @@ def build_derivation_ledger(
             None,
             second_session_epoch or TARGET_EPOCH,
             t1_bindings or T1_BINDINGS,
+        )
+    if third_session is not None:
+        _write_session(
+            ledger, runs, pin, third_session[0], third_session[1],
+            SESSION_KIND_DERIVATION, None, None, TARGET_EPOCH, t1_bindings or T1_BINDINGS,
         )
     snapshot = load_calibration_ledger_snapshot(
         ledger, pin, require_committed_pin=False, verify_custody=False,

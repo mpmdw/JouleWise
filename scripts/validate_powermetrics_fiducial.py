@@ -1839,6 +1839,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sampler-direct-for-test", action="store_true", help=argparse.SUPPRESS
     )
+    parser.add_argument("--battery-probe-fixture-for-test", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--battery-probe-duration-for-test", type=float, default=0.0,
+                        help=argparse.SUPPRESS)
     parser.add_argument(
         "--time-scale-for-test", type=float, default=1.0, help=argparse.SUPPRESS
     )
@@ -1887,6 +1890,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    if args.battery_probe_fixture_for_test is not None and (
+        not args.sampler_direct_for_test or args.time_scale_for_test == 1
+    ):
+        parser.error("battery probe fixture requires the logical sampler test mode")
+    if (not math.isfinite(args.battery_probe_duration_for_test)
+            or args.battery_probe_duration_for_test < 0
+            or (args.battery_probe_duration_for_test and args.battery_probe_fixture_for_test is None)):
+        parser.error("battery probe test duration requires a fixture and must be nonnegative")
     custody_deadline = None
     ledger_lifecycle = None
 
@@ -2140,6 +2151,26 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     clock = SystemClock() if logical_test_clock is None else logical_test_clock
+    def observe_battery(phase: str):
+        raw_path = f"raw/battery_float.{phase}.ioreg"
+        probe_options = {}
+        if args.battery_probe_fixture_for_test is not None:
+            def fixture_runner(argv):
+                raw = args.battery_probe_fixture_for_test.read_bytes().replace(
+                    b'"UpdateTime" = 1790373525',
+                    f'"UpdateTime" = {int(clock.now())}'.encode(), 1,
+                )
+                logical_test_clock.advance(args.battery_probe_duration_for_test)
+                return subprocess.CompletedProcess(argv, 0, raw, b"")
+            probe_options = {
+                "runner": fixture_runner, "wall_time_s": clock.now(),
+                "monotonic_ns": lambda: int(clock.now() * 1_000_000_000),
+            }
+        return battery_float.observe(
+            phase=f"slot_{phase}", raw_path=raw_path,
+            session_id=args.session_id, slot=args.slot, attempt_id=args.attempt_id,
+            **probe_options,
+        )
     validation_id = (
         args.attempt_id
         if bracket_mode
@@ -2228,10 +2259,7 @@ def main(argv: list[str] | None = None) -> int:
     _writer_stage(WriterStage.AFTER_EXIT_HANDLER_REGISTRATION)
     (out_dir / "raw").mkdir(parents=True, exist_ok=False)
     _writer_stage(WriterStage.AFTER_CUSTODY_DIRECTORY_CREATION)
-    battery_pre, battery_pre_raw = battery_float.observe(
-        phase="slot_pre", raw_path="raw/battery_float.pre.ioreg",
-        session_id=args.session_id, slot=args.slot, attempt_id=args.attempt_id,
-    )
+    battery_pre, battery_pre_raw = observe_battery("pre")
     (out_dir / "raw/battery_float.pre.ioreg").write_bytes(battery_pre_raw)
     capture_path = out_dir / "raw" / "powermetrics.plist"
     events_path = out_dir / "events.jsonl"
@@ -2459,10 +2487,7 @@ def main(argv: list[str] | None = None) -> int:
         post_parse = clock.stamp()
         active_sampler = None
 
-    battery_post, battery_post_raw = battery_float.observe(
-        phase="slot_post", raw_path="raw/battery_float.post.ioreg",
-        session_id=args.session_id, slot=args.slot, attempt_id=args.attempt_id,
-    )
+    battery_post, battery_post_raw = observe_battery("post")
     (out_dir / "raw/battery_float.post.ioreg").write_bytes(battery_post_raw)
 
     if logical_driver is not None:

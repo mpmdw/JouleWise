@@ -1514,7 +1514,7 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
             return battery_result
         battery_record, battery_raw = battery_float.observe(
             phase="t0", runner=battery_runner, wall_time_s=probes.now_epoch_s(),
-            monotonic_ns=probes.monotonic_ns, plan_id=plan.plan_id,
+            plan_id=plan.plan_id,
         )
         if battery_result is not None:
             evidence.append(battery_result)

@@ -273,6 +273,51 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.tmp.cleanup()
 
+    def test_battery_brackets_are_authenticated_and_outside_anchor_spans(self) -> None:
+        captures = []
+        for duration in (0.0, 2.0):
+            self._rekey_acceptance()
+            epoch, t1 = self._epoch("25G83")
+            token = f"battery-duration-{int(duration)}"
+            declared = derivation_session_slots(2)
+            ledger, pin, session_id, custody = self._session(
+                token, slots=declared, session_kind=SESSION_KIND_DERIVATION,
+                epoch=epoch, t1=t1,
+            )
+            completed = self._writer(
+                ledger=ledger, pin=pin, session_id=session_id,
+                slot=declared[0], custody=custody[declared[0]], epoch=epoch,
+                battery_probe_duration_for_test=duration,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            root = custody[declared[0]]
+            evidence = json.loads((root / "instrument_evidence.json").read_text())
+            manifest = json.loads((root / "manifest.json").read_text())
+            expected_artifacts = {"events.jsonl", "power_trace.csv",
+                                  "instrument_evidence.json", "raw/powermetrics.plist"}
+            self.assertEqual(set(manifest["artifacts"]), expected_artifacts)
+            self.assertEqual(set(evidence["artifact_sha256"]), expected_artifacts - {"instrument_evidence.json"})
+            self.assertEqual(set(evidence["battery_float"]), {"pre", "post"})
+            stamps = evidence["clock_anchor"]["clock_stamps"]
+            anchor_start = stamps["pre_spawn"]["monotonic_before_s"]
+            anchor_end = stamps["post_parse"]["monotonic_after_s"]
+            for phase in ("pre", "post"):
+                observation = evidence["battery_float"][phase]
+                raw = (root / observation["raw_path"]).read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), observation["raw_stdout_sha256"])
+                self.assertTrue(observation["passed"])
+                before = observation["monotonic_before_ns"] / 1e9
+                after = observation["monotonic_after_ns"] / 1e9
+                self.assertLessEqual(after, anchor_start) if phase == "pre" else self.assertGreaterEqual(before, anchor_end)
+            self.assertEqual(evidence["battery_float"]["pre"]["monotonic_after_ns"]
+                             - evidence["battery_float"]["pre"]["monotonic_before_ns"],
+                             int(duration * 1e9))
+            deltas = {name: (stamp["monotonic_before_s"] - anchor_start,
+                             stamp["monotonic_after_s"] - anchor_start)
+                      for name, stamp in stamps.items()}
+            captures.append((deltas, evidence["b_fiducial_s"]))
+        self.assertEqual(captures[0], captures[1])
+
     # ---- private-repo acceptance custody ---------------------------------
     def _rekey_acceptance(self) -> dict:
         """Re-key the copied acceptance to THIS synthetic repo's bytes.
@@ -438,6 +483,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         epoch: dict,
         derivation_only: bool = True,
         extra_env: dict[str, str] | None = None,
+        battery_probe_duration_for_test: float | None = None,
     ):
         identity = custody.parent / f"{session_id}-{slot}-identity.json"
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -474,6 +520,12 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         ]
         if derivation_only:
             command.append("--derivation-only")
+        if battery_probe_duration_for_test is not None:
+            command.extend([
+                "--battery-probe-fixture-for-test",
+                str(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg"),
+                "--battery-probe-duration-for-test", str(battery_probe_duration_for_test),
+            ])
         return self.runner.run(
             command,
             cwd=self.repo,

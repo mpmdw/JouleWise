@@ -45,7 +45,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     content_id_from_artifact_hashes, load_calibration_ledger_snapshot,
 )
 from scripts.issue_calibration_acceptance_generation import (  # noqa: E402
-    PrepareRefusal, _read_member_evidence, anchor_v3_replay_outcome,
+    PrepareRefusal, REVISION_FIVE_EPOCH, _read_member_evidence, anchor_v3_replay_outcome,
 )
 
 VERDICT_EXITS = {"pass": 0, "fail": 4, "inconclusive": 5}
@@ -83,8 +83,14 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
     _refuse(session.state not in TERMINAL_STATES, "session_not_terminal")
     _refuse(len(session.declared_slots) != DECLARED_SLOT_COUNT, "session_requires_12_declared_slots")
     _refuse(bool(snapshot.refusal_reasons), "ledger: " + ", ".join(snapshot.refusal_reasons))
-    battery_status = battery_float.validate_window(session)["status"]
-    _refuse(battery_status != "pass", battery_status)
+    if any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+           for row in session.finalized_slots.values()):
+        battery_result = battery_float.validate_window(session)
+        battery_status = battery_result["status"]
+        details = "; ".join(
+            reason for slot in battery_result["slots"] for reason in slot["reasons"]
+        )
+        _refuse(battery_status != "pass", f"{battery_status}: {details}")
     for name, observation in session.finalized_slots.items():
         _refuse(observation.classification_disposition == "systematic-invalid",
                 f"night_contains_systematic_failure: slots.{name}; continuation would be stale on arrival; "
