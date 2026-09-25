@@ -89,3 +89,9 @@
    - PR-L's R16 is committed WIP. Fixture fix seat 34 (Sol) has WRITE_SCOPE `tests/test_night_agent_install.py`: it patches the custody-root constant in the fixture and never weakens the check.
    - Slice checks at 06:15 (clock-read): no unread mail from Ed; no stand-down request; directives #405 and #408 open; heartbeat refreshed.
 39. Time-stamp caveat: the "Assembled ≈HH:MM" lines in cold-gate charges 05–14 were magistrate estimates written without a clock read, and several run ahead of real time. The clock read 06:15 PDT at item 38. The charges are sha-pinned and are not edited. The authoritative times are the git commit times of each packet and the judge stdout mtimes. From here on, every time in this record is clock-read.
+40. **Cold Fable addendum JCORRECT-FLOOR-01-ADD** ([13/30/21](13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md), rc 0, written 06:28 PDT).
+   - Every refuter finding is ruled and none is rejected.
+   - P0-c is settled outright: the population is the level-L eligible pool.
+   - **J/correct floor rulings v1.1:** §A is CG-1 amendment A-JC-1 v1.1, explicitly labelled: a paired-envelope form; SE² = s_d²/k + V_acc, with V_acc from a stratified joint bootstrap over problem ids, carried once; Welch df. §B covers the floor and design: a two-mint floor over 20 null windows and no byte-mismatch ceiling.
+   - **A new science finding for Ed and the council: the headline is underpowered as drafted.** Per-level power at Δ_L = 0.3 is 0.20–0.37 at n_acc = 128 and 0.36–0.63 at 200. It is about 0 at a hard level with a cell near p = 0.05, where that cell alone contributes SD(ln p̂) = 0.39 at n = 128.
+   - This routes to O-18/E4 (n per level; Ed delegated it to the magistrate with Opus, Astra and a Fable final) as new item HEADLINE-POWER-01. It must be decided before the AP-5M v5 registration freezes.
