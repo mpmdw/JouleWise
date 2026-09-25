@@ -1349,6 +1349,13 @@ class TransactionTests(unittest.TestCase):
         self.assert_tuple(fixture, result, 0, LABELS, "published")
         self.assertIn("warning: prior sidecars not removed: cleanup witness", result.stderr)
         self.assertIn("validated pins:", result.stdout)
+        context = next(json.loads(line)["launch_context"] for line in result.stdout.splitlines()
+                       if line.startswith('{"launch_context"'))
+        self.assertEqual(set(context), set(LABELS) | {"com.joulewise.night-probe." + fixture.plan.plan_id})
+        for label in LABELS:
+            self.assertEqual("Interactive", context[label]["ProcessType"])
+            self.assertEqual(hashlib.sha256((fixture.directory / (label + ".plist")).read_bytes()).hexdigest(),
+                             context[label]["rendered_plist_sha256"])
         for label in LABELS:
             prior = fixture.directory / (label + ".plist.prior")
             self.assertEqual(fixture.prior[label], (prior.read_bytes(), prior.stat().st_mtime_ns))
@@ -1800,6 +1807,12 @@ class LaunchdAccessProbeTests(unittest.TestCase):
             courier_path="/usr/bin:/bin:/usr/sbin:/sbin")
         receipt_path = write_matching_probe_receipt(self.fixture.plan_path)
         self.receipt = json.loads(receipt_path.read_text())
+        def launch_context(timeout_s):
+            context = json.loads(json.dumps(self.receipt["launch_context"]))
+            label, payload = engine.render_probe(self.prepared, timeout_s)
+            context[label]["rendered_plist_sha256"] = engine._digest_bytes(payload)
+            return context
+        self.prepared.launch_context = launch_context
         self.receipt.update(chain_pgid=999999, driver_pid=999998)
         self.pending = receipt_path.with_name("night_probe_receipt.pending.json")
         self.label = engine.probe_label(self.fixture.plan.plan_id)
@@ -1858,7 +1871,8 @@ class LaunchdAccessProbeTests(unittest.TestCase):
         self.fake.directive(self.label, "bootstrap")
         self.fake.directive(self.label, "bootout", loaded=True)
         clock = itertools.count(0.0, 5.0)  # only launchd_probe reads this clock
-        with mock.patch.object(self.engine.time, "monotonic", side_effect=lambda: next(clock)):
+        with mock.patch.object(self.engine.time, "monotonic", side_effect=lambda: next(clock)), \
+             mock.patch.object(self.engine, "probe_process_census"):
             with self.assertRaises(self.engine.Refused) as caught:
                 self.engine.launchd_probe(self.prepared, str(self.fake.executable),
                                           self.engine.Shield(), timeout_s=0.5)
@@ -1876,6 +1890,16 @@ class LaunchdAccessProbeTests(unittest.TestCase):
                     return_value=subprocess.CompletedProcess([], rc, stdout, "census fixture")):
                 with self.assertRaisesRegex(self.engine.Refused, "survivor or unknown"):
                     self.engine.probe_process_census(self.label, self.fixture.plan_path, {"chain_pgid": 12345})
+
+    def test_census_checks_powermetrics_group(self):
+        from unittest import mock
+        clear = subprocess.CompletedProcess([], 1, "", "")
+        with mock.patch.object(self.engine.subprocess, "run", return_value=clear) as run:
+            self.engine.probe_process_census(self.label, self.fixture.plan_path,
+                                             {"chain_pgid": 12345, "powermetrics_pgid": 23456})
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(["/usr/bin/pgrep", "-lf", "-g", "12345", "."], commands)
+        self.assertIn(["/usr/bin/pgrep", "-lf", "-g", "23456", "."], commands)
 
 
 class EvidenceRenderOnlyTests(unittest.TestCase):
@@ -2260,6 +2284,52 @@ class EvidenceProbeReceiptTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'ruled registration'):
                 self.engine.evidence_probe_bindings(self.f.plan,self.f.plan_path,sys.executable)
 
+
+
+class RenderedProcessTypeTests(unittest.TestCase):
+    def test_each_label_requires_parsed_interactive_value(self):
+        import plistlib
+        from types import SimpleNamespace
+        from unittest import mock
+        from joulewise import night_agent_install as installer
+
+        repo = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
+            prepared = installer.Prepared(
+                SimpleNamespace(custody_root=str(root), plan_id="test"),
+                root / "night_plan.json", repo, sys.executable,
+                (repo / "configs/launchd/com.joulewise.night.plist.template").read_text(),
+                "/bin/true", "/usr/bin:/bin",
+                {"night_calendar": calendar, "deadman_calendar": calendar}, lambda _: [], 600)
+            regular = list(prepared.render(LABELS))
+            probe = installer.render_probe(prepared)
+            labels = [regular[0][0], regular[1][0], probe[0]]
+            for target in labels:
+                for value in (None, "Background", "Standard", "Adaptive", "Interactive"):
+                    with self.subTest(label=target, ProcessType=value):
+                        payloads = regular + [probe]
+                        changed = []
+                        for label, payload in payloads:
+                            if label == target:
+                                parsed = plistlib.loads(payload)
+                                if value is None:
+                                    parsed.pop("ProcessType", None)
+                                else:
+                                    parsed["ProcessType"] = value
+                                payload = plistlib.dumps(parsed)
+                            changed.append((label, payload))
+                        with mock.patch.object(prepared, "render", return_value=iter(changed[:2])), \
+                             mock.patch.object(installer, "render_probe", return_value=changed[2]):
+                            if value == "Interactive":
+                                context = prepared.launch_context()
+                                self.assertEqual(set(context), set(labels))
+                                self.assertEqual(context[target]["ProcessType"], "Interactive")
+                                self.assertEqual(len(context[target]["rendered_plist_sha256"]), 64)
+                            else:
+                                with self.assertRaisesRegex(installer.Refused, "ProcessType must be exactly Interactive"):
+                                    prepared.launch_context()
 
 
 if __name__ == "__main__":

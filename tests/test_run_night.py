@@ -202,7 +202,14 @@ def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
                   "scripts/validate_powermetrics_fiducial.py", "scripts/run_night.py",
                   "joulewise/calibration_ledger.py", "joulewise/calibration_custody_worker.py")
     stamp = time.time() if now is None else now
-    record = {"schema": "joulewise.night_probe_receipt.v1", "outcome": "ok", "refusal_code": None,
+    labels = ("com.joulewise.night", "com.joulewise.night.deadman",
+              "com.joulewise.night-probe." + plan["plan_id"])
+    record = {"schema": "joulewise.night_probe_receipt.v2", "outcome": "ok", "refusal_code": None,
+              "ProcessType": "Interactive",
+              "launch_context": {label: {"ProcessType": "Interactive", "rendered_plist_sha256": "0" * 64}
+                                 for label in labels},
+              "cadence": {"median_ms": 132, "p95_ms": 132, "max_ms": 132, "count": 300,
+                          "elapsed_s": 39.6, "bound_s": 55, "passed": True},
               "plan_id": plan["plan_id"], "plan_sha256": digest(plan_path),
               "measurement_head": plan["measurement_head"], "ledger_head_sha256": "a" * 64,
               "code_digests": {name: "sha256:" + digest(root / name) for name in code_paths},
@@ -2676,6 +2683,25 @@ class NightProbeTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(dir="/tmp")
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        # Every subprocess probe in this fixture resolves sudo to a fake.
+        # The fake dispatches to a 300-frame plist emitter and never invokes
+        # the machine's sudo or powermetrics binaries.
+        from tests.test_run_night_probe_cadence import FAKE
+        import shlex
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        fake_power = fake_bin / "fake-powermetrics"
+        fake_power.write_text(FAKE.format(interval=132, spike=0, timeout=False))
+        fake_power.chmod(0o755)
+        fake_sudo = fake_bin / "sudo"
+        fake_sudo.write_text("#!/bin/sh\n"
+            "[ \"$1\" = \"-n\" ] || exit 8\nshift\n"
+            "[ \"$1\" = \"/usr/bin/powermetrics\" ] || exit 9\nshift\n"
+            "exec {} \"$@\"\n".format(shlex.quote(str(fake_power))))
+        fake_sudo.chmod(0o755)
+        path_patch = mock.patch.dict(os.environ, {"PATH": str(fake_bin) + ":" + os.environ.get("PATH", "")})
+        path_patch.start()
+        self.addCleanup(path_patch.stop)
         self.plan_path = self.root / "night_plan.json"
         plan = night_gate.NightPlan(plan_id="probe-fixture", receipt_class="DIAGNOSTIC_NO_PACK",
             t0_epoch_s=(int(time.time()) // 60 + 60) * 60, window_max_s=9000,
@@ -2747,6 +2773,29 @@ class NightProbeTests(unittest.TestCase):
         path = write_matching_probe_receipt(self.plan_path, now=time.time() + 30)
         self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
 
+    def test_receipt_requires_cadence_and_process_type(self):
+        from joulewise import night_agent_install as engine
+        prepared = types.SimpleNamespace(plan=self.plan, plan_path=self.plan_path,
+                                         python=sys.executable)
+        path = write_matching_probe_receipt(self.plan_path)
+        original = json.loads(path.read_text())
+        for key in ("median_ms", "p95_ms", "max_ms", "count"):
+            with self.subTest(missing=key):
+                changed = json.loads(json.dumps(original))
+                changed["cadence"].pop(key)
+                path.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(engine.Refused, "cadence"):
+                    engine.validate_probe_receipt(prepared)
+        for value in (None, "Background", "Standard", "Adaptive"):
+            with self.subTest(ProcessType=value):
+                changed = json.loads(json.dumps(original))
+                changed["ProcessType"] = value
+                path.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(engine.Refused, "ProcessType"):
+                    engine.validate_probe_receipt(prepared)
+        path.write_text(json.dumps(original))
+        self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+
     def test_supervised_probe_success_and_refusal_with_fixture_census(self):
         driver = _load_driver()
         # Real subprocess topology and receipt IO; only the unavailable census
@@ -2787,6 +2836,10 @@ class NightProbeTests(unittest.TestCase):
         self.assertEqual(0, rc)
         receipt = json.loads(self.receipt.read_text())
         self.assertEqual("ok", receipt["outcome"])
+        receipt["ProcessType"] = "Interactive"
+        receipt["launch_context"] = {label: {"ProcessType": "Interactive", "rendered_plist_sha256": "0" * 64}
+            for label in ("com.joulewise.night", "com.joulewise.night.deadman", label)}
+        self.receipt.write_text(json.dumps(receipt))
         # The receipt carries the installer's whole binding, not the
         # reservation's partial echo: the driver and the writer are pinned too.
         self.assertEqual(set(receipt["code_digests"]), set(engine.PROBE_CODE_PATHS))
@@ -2915,7 +2968,7 @@ raise SystemExit(run_night.main(sys.argv[3:]))
                   "code_digests", "input_digests", "driver_python", "chain_python", "custody_budget_s", "custody_elapsed_s",
                   "observations", "outcome", "refusal_code", "started_epoch_s", "finished_epoch_s", "launchd_label"}
         self.assertTrue(fields <= receipt.keys())
-        self.assertEqual("joulewise.night_probe_receipt.v1", receipt["schema"])
+        self.assertEqual("joulewise.night_probe_receipt.v2", receipt["schema"])
         self.assertEqual("ok", receipt["outcome"])
         self.assertEqual(38, receipt["observations"])
         self.assertEqual(120, receipt["custody_budget_s"])
@@ -5538,7 +5591,7 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
 
 
 class CalibrationProbeByteCompatibilityTests(unittest.TestCase):
-    def test_calibration_worker_receipt_bytes_match_part1(self):
+    def test_calibration_worker_preserves_part1_fields_with_cadence(self):
         import ast
         from scripts import run_night as driver
         from joulewise import night_agent_install as installer
@@ -5560,7 +5613,14 @@ class CalibrationProbeByteCompatibilityTests(unittest.TestCase):
             with mock.patch.object(driver.time,'time',return_value=1800000000.), mock.patch.dict(os.environ,{'JOULEWISE_LAUNCHD_LABEL':installer.probe_label(fixture.plan.plan_id)}):
                 self.assertEqual(worker(fixture.plan_path,target,fixture.root/'progress.json',time.monotonic()+20),0)
             receipts.append(target.read_bytes())
-        self.assertEqual(receipts[0],receipts[1])
+        baseline_record, current_record = map(json.loads, receipts)
+        self.assertEqual("joulewise.night_probe_receipt.v2", current_record.pop("schema"))
+        cadence = current_record.pop("cadence")
+        self.assertTrue(cadence["passed"])
+        self.assertEqual(300, cadence["count"])
+        self.assertGreater(current_record.pop("powermetrics_pgid"), 1)
+        baseline_record.pop("schema")
+        self.assertEqual(baseline_record, current_record)
 
 
 class EvidenceProbeFailureTests(unittest.TestCase):
