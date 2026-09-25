@@ -274,3 +274,11 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - run 2 log `/tmp/278ebc9e/103b-forger-astra.log`, sha256 `78862c91d2e73908b5769911d73a6c5a5d55be09ba7f41cb27ce004e3f45a86c`, lines 161, 162;
    - the refusal text: "This content was flagged for possible cybersecurity risk…".
    The contract copy the forgers see is git blob `b4b1b176`. F-B was launched ≈20:14 in `/tmp/forger-278ebc9e-fable-b` on brief 102 verbatim.
+102. **Forger F-B** (a fresh Fable 5.1 in `/tmp/forger-278ebc9e-fable-b`, brief 102 verbatim, auto-loaded only the user-global CLAUDE.md) found nine rosters that `_seal(finalize=True)` accepts. The magistrate's adjudication (`adjudicate_fb.py`; results in 106-forger-fable-b/adjudication.jsonl):
+   - All nine show oracle `[]` and no checker INV-10 or INV-11; the rows are among INV-21/23/25/29/32/34/36/37/38/52. They are C2a, C3, C4, C4', C5, C6, C7, C1b and C2b-fixed.
+   - `_replay_roster` at `6e2504b1` REFUSES every one with `inv_38`, which also satisfies the requested replay-conditioned rule of 105/20 §3.4(b).
+   - **F-B = COMPLETED_NO_ESCAPE.**
+   **Gate item (4) = F-B ∧ F-C = COMPLETED_NO_ESCAPE.** F-B's C1b grandchild (a single as parent) is queued with F-C's C1 for the INV-12 reconciliation (the checker gap at `scored_roster_checker.py:558`).
+   Remaining before the final pass:
+   - gate item (2): the full suite, running;
+   - the 105/20 U3/§3.4(c) typed-code line: per INV-23/36/37/38/52, K states the entry-path witness at `requeue_overrun` and its asserted code (brief 107, a light read-only Sol scout).
