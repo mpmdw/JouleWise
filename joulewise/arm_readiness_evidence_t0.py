@@ -23,6 +23,7 @@ import subprocess as _subprocess
 import tempfile as _tempfile
 import time as _time
 from dataclasses import dataclass as _dataclass, field as _field
+from datetime import datetime as _datetime
 from decimal import Decimal as _Decimal
 from pathlib import Path as _Path, PurePosixPath as _PurePosixPath
 from typing import (
@@ -1868,8 +1869,13 @@ def _derive_power(context: _Context) -> _DerivedRow:
     if profiler.exit_code != 0 or not watts or max(watts) <= 0 or not any(value in {"yes", "true", "1"} for value in connected):
         raise _underivable(kind, "fresh supply probe lacks a connected known-wattage adapter")
     battery = _fresh_probe(context, kind, "battery float", _battery_float.IOREG_BATTERY_ARGV)
+    # Staleness is judged against the authoring context's own clock, the
+    # clock every other row of this namespace is derived under.
+    wall_time_s = _datetime.fromisoformat(
+        context.clock.utc_now().replace("Z", "+00:00")
+    ).timestamp()
     battery_observation, _battery_raw = _battery_float.observe(
-        phase="t0_power_row", runner=lambda _argv: battery,
+        phase="t0_power_row", runner=lambda _argv: battery, wall_time_s=wall_time_s,
         monotonic_ns=context.clock.monotonic_ns,
     )
     if battery_observation["probe_error"]:

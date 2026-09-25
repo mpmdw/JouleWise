@@ -737,10 +737,16 @@ def _probe_result(argv, cwd, exit_code=0, stdout="", stderr=""):
     return t0._ProbeResult(tuple(argv), str(Path(cwd).resolve()), exit_code, stdout, stderr)
 
 
-def _float_ioreg(name="float.ioreg") -> str:
-    """The real float capture with a fresh `UpdateTime` (tests/fixtures/battery_float)."""
+def _float_ioreg(name="float.ioreg", *, age_s=0) -> str:
+    """A real capture (tests/fixtures/battery_float) whose `UpdateTime` is
+    `age_s` before the authoring clock's now: fixed under the synthetic clock
+    (so re-authoring stays byte-idempotent), fresh under the real one."""
+    from datetime import datetime
+    now = datetime.fromisoformat(t0._production_clock().utc_now().replace("Z", "+00:00"))
     text = (Path(__file__).parent / "fixtures/battery_float" / name).read_text()
-    return text.replace('"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}', 1)
+    return text.replace(
+        '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(now.timestamp()) - age_s}', 1
+    )
 
 
 def passing_probe(argv, *, cwd):
@@ -2850,18 +2856,17 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
 
     def test_power_row_refuses_charging_and_stale_battery_and_records_float(self) -> None:
         # Final texts v1.1 §5.3 item 5: the t0 power row's own ioreg probe.
-        stale = (Path(__file__).parent / "fixtures/battery_float/float.ioreg").read_text()
         cases = (
-            ("charging", _float_ioreg("charging-synthetic-from-real.ioreg"), "battery not at float"),
-            ("stale", stale, "battery float probe error: .*UpdateTime stale"),
+            ("charging", "charging-synthetic-from-real.ioreg", 0, "battery not at float"),
+            ("stale", "float.ioreg", 181, "battery float probe error: .*UpdateTime stale"),
         )
-        for label, stdout, detail in cases:
+        for label, name, age_s, detail in cases:
             with self.subTest(case=label):
                 temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
                 try:
-                    def probe(argv, *, cwd, stdout=stdout):
+                    def probe(argv, *, cwd, name=name, age_s=age_s):
                         if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
-                            return _probe_result(argv, cwd, stdout=stdout)
+                            return _probe_result(argv, cwd, stdout=_float_ioreg(name, age_s=age_s))
                         return passing_probe(argv, cwd=cwd)
                     with author_environment(repository, probe=probe), self.assertRaises(
                         T0EvidenceAuthoringError
