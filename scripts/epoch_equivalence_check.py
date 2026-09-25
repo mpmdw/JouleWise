@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Apply Ed's fixed EPOCH-EQUIVALENCE rule to one closed derivation night.
+"""Apply the versioned EPOCH-EQUIVALENCE rule to one closed derivation night.
+
+Rule v1 preserves Ed's issue-316 shape for historical replay. Rule v2 is the
+prospective CG-3 rule: a window-level location prediction, median level screen
+and one-sided permutation spread screen. The CLI defaults to v2.
 
 WHAT THIS TOOL IS FOR.  A macOS point release changed one identity field of the
 machine (`os_build`), and the question that change raises is an instrument one:
@@ -57,7 +61,7 @@ artifact's own `ratified_operatives` and the validator's registered generation
 row disagree about any of them, because then there is no single operative value
 to compare against.
 
-EPOCH EQUIVALENCE is the verdict this comparison produces:
+Historical v1 EPOCH EQUIVALENCE is the verdict this comparison produces:
 
   PASS          every retained value <= the level screen AND the night's
                 spread <= the bracket screen.  The new build did not move the
@@ -72,9 +76,9 @@ never writes anywhere under `configs/calibration/`.  It reads, compares, prints
 and writes ONE JSON record to the path the caller names.  Acting on a PASS is a
 separate, reviewed act by a human-authorized transaction.
 
-All arithmetic is Decimal on the stored lexemes.  No value passes through a
-float at any point, because a float round trip changes the seventeenth digit of
-numbers whose comparison turns on it.
+Historical comparisons use Decimal on stored lexemes. V2 uses Decimal for
+location, level, and variance ratios; its Student-t quantile and permutation
+p-value are computed with the governed numerical implementations.
 """
 
 from __future__ import annotations
@@ -84,6 +88,8 @@ from decimal import Decimal, localcontext
 import hashlib
 import json
 from pathlib import Path
+import random
+import statistics
 import sys
 from typing import Any, Mapping
 
@@ -105,6 +111,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     SESSION_KIND_DERIVATION,
     load_calibration_ledger_snapshot,
 )
+from joulewise.analysis_engine.distributions import student_t_quantile  # noqa: E402
 from scripts.issue_calibration_acceptance_generation import (  # noqa: E402
     DECIMAL_WORK_PRECISION,
     PrepareRefusal,
@@ -125,6 +132,9 @@ INCONCLUSIVE_EXIT = 5
 # Issue 316: "If m < 6 the check is INCONCLUSIVE."  Six retained values is the
 # floor at which a spread means anything; below it the night is re-run.
 MINIMUM_RETAINED_M = 6
+V2_MINIMUM_RETAINED_M = 8
+V2_PERMUTATIONS = 2000
+V2_MARGIN_SCALE = Decimal("3.5")
 
 # The three operatives whose two sources must agree before any comparison runs.
 CROSSCHECKED_OPERATIVES = (
@@ -191,7 +201,7 @@ def _refuse_out_path(out: Path, force: bool) -> None:
         )
 
 
-def reference_envelope(acceptance_path: Path) -> dict[str, Any]:
+def reference_envelope(acceptance_path: Path, *, rule_version: str = "v1") -> dict[str, Any]:
     """Read the envelope in force from BOTH of its sources, or refuse.
 
     The artifact is loaded through the production exact-byte loader, so an
@@ -287,7 +297,7 @@ def reference_envelope(acceptance_path: Path) -> dict[str, Any]:
         relative_path = str(resolved_path.relative_to(REPO_ROOT))
     except ValueError:
         relative_path = resolved_path.name
-    return {
+    result = {
         "acceptance_id": acceptance_id,
         # Repo-relative plus the byte digest, never an absolute path: two runs
         # from two checkouts at the same head must produce identical records.
@@ -301,6 +311,59 @@ def reference_envelope(acceptance_path: Path) -> dict[str, Any]:
         "bracket_screen_s": registered["bracket_screen_s"],
         "maximum_budgetable_drift_s": registered["maximum_budgetable_drift_s"],
     }
+    if rule_version == "v2":
+        members = corpus.get("members") if isinstance(corpus, Mapping) else None
+        if not isinstance(members, list) or len(members) != artifact_n:
+            raise EquivalenceRefusal("reference derivation_corpus has no complete members")
+        groups: dict[str, list[Decimal]] = {}
+        old_values: list[Decimal] = []
+        for member in members:
+            if not isinstance(member, Mapping):
+                raise EquivalenceRefusal("reference derivation_corpus member malformed")
+            source = member.get("source_directory")
+            raw = member.get("b_fiducial_s")
+            if not isinstance(source, str) or not isinstance(raw, str):
+                raise EquivalenceRefusal("reference corpus window or value missing")
+            try:
+                value = Decimal(raw)
+            except Exception as exc:
+                raise EquivalenceRefusal("reference corpus value invalid") from exc
+            if not value.is_finite():
+                raise EquivalenceRefusal("reference corpus value nonfinite")
+            window = source.split("/")[0]
+            groups.setdefault(window, []).append(value)
+            old_values.append(value)
+        with localcontext() as context:
+            context.prec = DECIMAL_WORK_PRECISION
+            window_means = [sum(values) / len(values) for values in groups.values()]
+            window_mean = sum(window_means) / len(window_means)
+            window_sd = _sample_sd(window_means)
+            old_sd = _sample_sd(old_values)
+            critical = Decimal(str(student_t_quantile(0.95, len(groups) - 1)))
+            prediction = critical * window_sd * (Decimal(1) + Decimal(1) / len(groups)).sqrt()
+            margin = V2_MARGIN_SCALE * old_sd
+            result["v2_reference"] = {
+                "old_values_s": [str(value) for value in old_values],
+                "window_means_s": {name: str(mean) for name, mean in zip(groups, window_means)},
+                "n_w": len(groups),
+                "w_bar_s": str(window_mean),
+                "s_w_s": str(window_sd),
+                "s_old_s": str(old_sd),
+                "t_0_95_nw_minus_1": str(critical),
+                "sqrt_1_plus_1_over_nw": str((Decimal(1) + Decimal(1) / len(groups)).sqrt()),
+                "prediction_half_width_s": str(prediction),
+                "delta_loc_s": str(margin),
+                "location_radius_s": str(margin - prediction),
+                "source": "authenticated derivation_corpus.members grouped by source_directory window",
+            }
+    return result
+
+
+def _sample_sd(values: list[Decimal]) -> Decimal:
+    if len(values) < 2:
+        raise EquivalenceRefusal("sample standard deviation needs at least two values")
+    mean = sum(values) / len(values)
+    return (sum((value - mean) ** 2 for value in values) / (len(values) - 1)).sqrt()
 
 
 def envelope_lines(envelope: Mapping[str, Any]) -> list[str]:
@@ -346,6 +409,21 @@ def envelope_lines(envelope: Mapping[str, Any]) -> list[str]:
         lines.append(
             "    NOTE: the operative comparators equal the raw statistics for "
             "this generation."
+        )
+    if "v2_reference" in envelope:
+        reference = envelope["v2_reference"]
+        lines.extend(
+            [
+                "  v2 window-level reference (authenticated derivation_corpus.members):",
+                f"    n_old={len(reference['old_values_s'])} n_w={reference['n_w']}",
+                f"    w_bar_s={reference['w_bar_s']} s_w_s={reference['s_w_s']} "
+                f"s_old_s={reference['s_old_s']}",
+                f"    t_0.95,n_w-1={reference['t_0_95_nw_minus_1']} "
+                f"sqrt(1+1/n_w)={reference['sqrt_1_plus_1_over_nw']}",
+                f"    prediction_half_width_s={reference['prediction_half_width_s']} "
+                f"delta_loc_s={reference['delta_loc_s']} "
+                f"location_radius_s={reference['location_radius_s']}",
+            ]
         )
     return lines
 
@@ -458,13 +536,20 @@ def resolve_session(snapshot: Any, session_id: str) -> Any:
 
 
 def evaluate_session(
-    session: Any, session_id: str, envelope: Mapping[str, Any]
+    session: Any, session_id: str, envelope: Mapping[str, Any],
+    *, rule_version: str = "v1",
 ) -> dict[str, Any]:
     """Apply the rule to one resolved, terminal derivation night."""
+
+    if rule_version == "v2":
+        return _evaluate_session_v2(session, session_id, envelope)
+    if rule_version != "v1":
+        raise ValueError("rule_version must be v1 or v2")
 
     outcomes, retained = _slot_outcomes(session)
     record: dict[str, Any] = {
         "schema_version": "joulewise.epoch_equivalence_check.v1",
+        "rule_version": "v1",
         "reference_envelope": dict(envelope),
         "session": {
             "session_id": session_id,
@@ -540,11 +625,128 @@ def evaluate_session(
     return record
 
 
+def _spread_permutation_p(old: list[Decimal], new: list[Decimal]) -> dict[str, Any]:
+    """One-sided increase test; variance ratio is monotone in its log."""
+
+    # The seed is bound to the compared data, so replay is deterministic.
+    seed_input = json.dumps([str(v) for v in old + new], separators=(",", ":"))
+    seed = int(hashlib.sha256(seed_input.encode("utf-8")).hexdigest(), 16)
+    rng = random.Random(seed)
+    pool = old + new
+    hits = 0
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        old_variance = _sample_sd(old) ** 2
+        new_variance = _sample_sd(new) ** 2
+        observed = new_variance / old_variance
+        for _ in range(V2_PERMUTATIONS):
+            rng.shuffle(pool)
+            perm_old_variance = _sample_sd(pool[: len(old)]) ** 2
+            perm_new_variance = _sample_sd(pool[len(old) :]) ** 2
+            if perm_old_variance == 0:
+                hit = perm_new_variance > 0
+            else:
+                hit = perm_new_variance / perm_old_variance >= observed
+            hits += int(hit)
+    return {
+        "old_variance_s2": str(old_variance),
+        "new_variance_s2": str(new_variance),
+        "variance_ratio": str(observed),
+        "statistic": "log(new_variance/old_variance); ratio compared equivalently",
+        "repetitions": V2_PERMUTATIONS,
+        "hits": hits,
+        "p": (hits + 1) / (V2_PERMUTATIONS + 1),
+        "seed_sha256": hashlib.sha256(seed_input.encode("utf-8")).hexdigest(),
+    }
+
+
+def _evaluate_session_v2(
+    session: Any, session_id: str, envelope: Mapping[str, Any]
+) -> dict[str, Any]:
+    reference = envelope.get("v2_reference")
+    if not isinstance(reference, Mapping):
+        raise EquivalenceRefusal("v2 reference corpus is missing")
+    outcomes, retained = _slot_outcomes(session)
+    record: dict[str, Any] = {
+        "schema_version": "joulewise.epoch_equivalence_check.v2",
+        "rule_version": "v2",
+        "reference_envelope": dict(envelope),
+        "session": {
+            "session_id": session_id,
+            "session_kind": session.session_kind,
+            "state": session.state,
+            "abort_reason": session.abort_reason,
+            "declared_slots": list(session.declared_slots),
+        },
+        "slot_outcomes": outcomes,
+        "retained": retained,
+        "m": len(retained),
+    }
+    if len(retained) < V2_MINIMUM_RETAINED_M:
+        record.update({
+            "verdict": VERDICT_INCONCLUSIVE,
+            "verdict_reason": f"m={len(retained)} is below the v2 minimum {V2_MINIMUM_RETAINED_M}",
+            "location_comparison": None,
+            "level_screen_comparison": None,
+            "spread_comparison": None,
+        })
+        return record
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        values = [Decimal(item["b_fiducial_s"]) for item in retained]
+        old = [Decimal(value) for value in reference["old_values_s"]]
+        new_mean = sum(values) / len(values)
+        old_mean = Decimal(reference["w_bar_s"])
+        prediction = Decimal(reference["prediction_half_width_s"])
+        margin = Decimal(reference["delta_loc_s"])
+        location_stat = abs(new_mean - old_mean) + prediction
+        level_screen = Decimal(envelope["level_screen_s"])
+        median = statistics.median(values)
+        spread = max(values) - min(values)
+        permutation = _spread_permutation_p(old, values)
+        location_pass = location_stat < margin
+        level_pass = median <= level_screen
+        spread_pass = permutation["p"] >= 0.05
+        record.update({
+            "new_mean_s": str(new_mean),
+            "new_median_s": str(median),
+            "above_level_count": sum(value > level_screen for value in values),
+            "range_s": str(spread),
+            "bracket_screen_comparison": {
+                "left": str(spread), "left_source": "retained range (max-min)",
+                "operator": "<=", "right": envelope["bracket_screen_s"],
+                "right_source": "operative bracket_screen_s", "holds": spread <= Decimal(envelope["bracket_screen_s"]),
+                "gating": False,
+            },
+            "location_comparison": {
+                "left": str(location_stat),
+                "operands": {"new_mean_s": str(new_mean), "w_bar_s": str(old_mean),
+                             "prediction_half_width_s": str(prediction)},
+                "operator": "<", "right": str(margin), "right_source": "3.5*s_old from authenticated r7 corpus",
+                "holds": location_pass,
+            },
+            "level_screen_comparison": {
+                "left": str(median), "left_source": "median of retained night values",
+                "operator": "<=", "right": envelope["level_screen_s"],
+                "right_source": "operative preflight_level_screen_s", "holds": level_pass,
+            },
+            "spread_comparison": {**permutation, "operator": ">=", "threshold": 0.05,
+                                  "holds": spread_pass, "source": "pooled old and retained member values"},
+            "verdict": VERDICT_PASS if all((location_pass, level_pass, spread_pass)) else VERDICT_FAIL,
+            "verdict_reason": None,
+        })
+    return record
+
+
 def record_lines(record: Mapping[str, Any]) -> list[str]:
     """The fixed-format printed record; every printed number is in the JSON."""
 
     session = record["session"]
-    lines = ["Epoch equivalence check (directive issue 316)"]
+    lines = [
+        "Epoch equivalence check (directive issue 316)"
+        if record.get("rule_version", "v1") == "v1"
+        else "Epoch equivalence check (CG-3 rule v2)"
+    ]
     lines.append(
         "  This tool judges one closed derivation night against the envelope in "
         "force."
@@ -568,8 +770,37 @@ def record_lines(record: Mapping[str, Any]) -> list[str]:
         f"Retained m = {record['m']} "
         "(rows with disposition valid whose stored anchor-v3 replay resolved)"
     )
-    if record["m"] < MINIMUM_RETAINED_M:
+    minimum = V2_MINIMUM_RETAINED_M if record.get("rule_version") == "v2" else MINIMUM_RETAINED_M
+    if record["m"] < minimum:
         lines.append(f"  {record['verdict_reason']}")
+    elif record.get("rule_version") == "v2":
+        location = record["location_comparison"]
+        level = record["level_screen_comparison"]
+        spread = record["spread_comparison"]
+        bracket = record["bracket_screen_comparison"]
+        lines.append(
+            f"  LOCATION: |{location['operands']['new_mean_s']} - "
+            f"{location['operands']['w_bar_s']}| + "
+            f"{location['operands']['prediction_half_width_s']} = {location['left']} "
+            f"{location['operator']} {location['right']} -> "
+            f"{'holds' if location['holds'] else 'VIOLATED'}"
+        )
+        lines.append(
+            f"  LEVEL median: {level['left']} {level['operator']} {level['right']} "
+            f"-> {'holds' if level['holds'] else 'VIOLATED'}; "
+            f"count above screen = {record['above_level_count']} (non-gating)"
+        )
+        lines.append(
+            f"  SPREAD permutation: log variance ratio ({spread['variance_ratio']}) "
+            f"p=({spread['hits']}+1)/({spread['repetitions']}+1)={spread['p']} "
+            f"{spread['operator']} {spread['threshold']} -> "
+            f"{'holds' if spread['holds'] else 'VIOLATED'}"
+        )
+        lines.append(
+            f"  RANGE diagnostic: {bracket['left']} {bracket['operator']} "
+            f"{bracket['right']} -> {'holds' if bracket['holds'] else 'exceeds'} "
+            "(non-gating)"
+        )
     else:
         lines.append(
             f"  maximum retained b_fiducial_s = {record['maximum_s']} "
@@ -607,7 +838,7 @@ VERDICT_EXITS = {
 
 def run(args: argparse.Namespace) -> int:
     if args.print_envelope_only:
-        envelope = reference_envelope(args.acceptance)
+        envelope = reference_envelope(args.acceptance, rule_version=args.rule_version)
         for line in envelope_lines(envelope):
             print(line)
         return 0
@@ -619,7 +850,7 @@ def run(args: argparse.Namespace) -> int:
     # only fired after the work was done would still have told the caller the
     # tool was willing to write there.
     _refuse_out_path(args.out, args.force)
-    envelope = reference_envelope(args.acceptance)
+    envelope = reference_envelope(args.acceptance, rule_version=args.rule_version)
     snapshot = load_calibration_ledger_snapshot(
         args.ledger,
         args.head_pin,
@@ -631,7 +862,7 @@ def run(args: argparse.Namespace) -> int:
     session = resolve_session(snapshot, args.session_id)
     if snapshot.refusal_reasons:
         raise EquivalenceRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
-    record = evaluate_session(session, args.session_id, envelope)
+    record = evaluate_session(session, args.session_id, envelope, rule_version=args.rule_version)
     for line in record_lines(record):
         print(line)
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -644,20 +875,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="epoch_equivalence_check.py",
         description=(
-            "Judge ONE closed derivation night against the acceptance envelope "
-            "already in force, under the rule directive issue 316 fixed before "
-            "any capture. A DERIVATION NIGHT is one derivation-kind ledger "
-            "session of declared capture slots; it is judged only after it "
-            "closes. A capture is RETAINED when its ledger row is `valid` and "
-            "the anchor-v3 replay stored in its own authenticated bytes "
-            "resolved. The REFERENCE ENVELOPE is the acceptance in force; its "
-            "LEVEL SCREEN is the absolute bound above which a single capture is "
-            "refused, and its BRACKET SCREEN is the drift below which a window "
-            "spends no error budget. EPOCH EQUIVALENCE holds (PASS) when every "
-            "retained value is at or below the level screen AND the night's "
-            "spread (largest retained value minus smallest) is at or below the "
-            "bracket screen; FAIL otherwise; INCONCLUSIVE with fewer than "
-            f"{MINIMUM_RETAINED_M} retained captures."
+            "Judge ONE closed derivation night against the acceptance in force. "
+            "A DERIVATION NIGHT is a terminal derivation-kind ledger session. "
+            "RETAINED captures are valid rows with resolved anchor-v3 replay. "
+            "The REFERENCE ENVELOPE is the authenticated acceptance in force. "
+            "The LEVEL SCREEN is its operative preflight level; the BRACKET "
+            "SCREEN is its operative drift screen. EPOCH EQUIVALENCE is the "
+            "PASS/FAIL/INCONCLUSIVE judgment. "
+            "v2 (prospective): m>=8, window-level prediction location within "
+            "3.5 times the old member SD, retained median at or below the "
+            "operative level screen, and one-sided 2000-permutation spread "
+            "p>=0.05. The range/bracket comparison is diagnostic. v1 is the "
+            "historical issue-316 rule: m>=6, every retained value at or below "
+            "the level screen and range at or below the bracket screen."
         ),
         epilog=(
             "This tool NEVER issues an acceptance, never continues one onto a "
@@ -668,6 +898,10 @@ def build_parser() -> argparse.ArgumentParser:
             f"{REFUSAL_EXIT} refusal (nothing written)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--rule-version", choices=("v1", "v2"), default="v2",
+        help="v2 prospective claim gate or v1 historical issue-316 replay",
     )
     parser.add_argument(
         "--session-id", default=None,

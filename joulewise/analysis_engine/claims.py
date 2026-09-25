@@ -102,6 +102,9 @@ ENGINE_REASON_CODES = frozenset(
         "floor_transport_inapplicable",
         "floor_abs_missing",
         "floor_cmp_missing",
+        "floor_class_mismatch",
+        "floor_unit_mismatch",
+        "envelope_term_scope_unknown",
         "effect_not_above_floor",
         "interpolation_bound_exceeds_floor",
         "interpolation_bound_exceeds_half_effect",
@@ -148,6 +151,7 @@ _NOT_ESTIMABLE = frozenset(
         "floor_artifact_invalid",
         "metric_missing_or_nonfinite",
         "insufficient_complete_blocks",
+        "envelope_term_scope_unknown",
         "runtime_token_denominator_required",
         "stop_reason_required",
         "output_policy_required",
@@ -185,6 +189,8 @@ _NOT_RESOLVABLE = frozenset(
         "floor_transport_inapplicable",
         "floor_abs_missing",
         "floor_cmp_missing",
+        "floor_class_mismatch",
+        "floor_unit_mismatch",
         "effect_not_above_floor",
         "interpolation_bound_exceeds_floor",
         "interpolation_bound_exceeds_half_effect",
@@ -255,6 +261,16 @@ def _inside_equivalence(interval: tuple[float, float], margin: float) -> bool:
     return interval[0] > -margin and interval[1] < margin
 
 
+def effective_equivalence_margin(registered_margin: float, resolved_floor: float) -> float:
+    """The one CG-2 v2 margin used by raw TOST, Holm and interval checks."""
+
+    margin = _finite(registered_margin)
+    floor = _finite(resolved_floor)
+    if margin is None or margin <= 0 or floor is None or floor < 0:
+        raise ValueError("registered margin and resolved floor must be finite and valid")
+    return margin - floor
+
+
 def evaluate_claim(
     *,
     estimate: float | None,
@@ -270,6 +286,13 @@ def evaluate_claim(
     sensitivity_blocking: bool = False,
     floor_metadata: Mapping[str, Any] | None = None,
     hypothesized_direction: str | None = None,
+    claim_rule_version: str = "v1",
+    floor_class: str | None = None,
+    floor_unit: str | None = None,
+    estimand_unit: str | None = None,
+    claim_side_bound: float | None = None,
+    registered_claim_shape: str | None = None,
+    evaluated_claim_shape: str | None = None,
 ) -> dict[str, Any]:
     """Apply the adjudicated five-outcome precedence.
 
@@ -280,6 +303,17 @@ def evaluate_claim(
     """
 
     reasons = set(base_reason_codes)
+    if claim_rule_version not in {"v1", "v2"}:
+        raise ValueError("claim_rule_version must be v1 or v2")
+    if claim_rule_version == "v2":
+        if floor_class != "estimate":
+            reasons.add("floor_class_mismatch")
+        if floor_unit not in {"J", "J/correct"} or floor_unit != estimand_unit:
+            reasons.add("floor_unit_mismatch")
+        if registered_claim_shape != evaluated_claim_shape or registered_claim_shape not in {
+            "direction", "magnitude", "equivalence"
+        }:
+            confirmatory_status = "exploratory"
     numeric_estimate = _finite(estimate)
     metrology_interval = _interval(metrology_aware_ci95)
     decision = _interval(decision_interval)
@@ -346,8 +380,15 @@ def evaluate_claim(
             if equivalence is not None:
                 margin = _finite(equivalence.get("margin")) if isinstance(equivalence, Mapping) else None
                 method = equivalence.get("method") if isinstance(equivalence, Mapping) else None
-                if margin is None or margin <= 0.0 or method != "tost_v1":
+                expected_method = "tost_v2" if claim_rule_version == "v2" else "tost_v1"
+                if margin is None or margin <= 0.0 or method != expected_method:
                     reasons.add("equivalence_not_supported")
+                elif claim_rule_version == "v2":
+                    bound = _finite(claim_side_bound)
+                    if bound is None or bound < 0.0:
+                        reasons.add("required_error_term_unknown")
+                    elif effective_equivalence_margin(margin, floor) <= bound:
+                        reasons.add("equivalence_margin_not_above_floor")
                 elif margin <= floor:
                     reasons.add("equivalence_margin_not_above_floor")
 
@@ -357,6 +398,8 @@ def evaluate_claim(
                 outcome = "unresolved"
             elif equivalence is not None:
                 margin = float(equivalence["margin"])
+                if claim_rule_version == "v2":
+                    margin = effective_equivalence_margin(margin, floor)
                 if (
                     not _inside_equivalence(metrology_interval, margin)
                     or not _inside_equivalence(decision, margin)
@@ -392,6 +435,11 @@ def evaluate_claim(
         "loo_verdict_influential",
         "randomization_check_insufficient_blocks",
     }
+    if claim_rule_version == "v2":
+        sensitivity_reasons = sensitivity_reasons - {
+            "randomization_sensitivity_disagrees",
+            "randomization_check_insufficient_blocks",
+        }
     direction_matches_registration = bool(
         hypothesized_direction not in {"positive", "negative"}
         or outcome == "equivalent"
@@ -427,5 +475,6 @@ __all__ = [
     "REASON_CODES",
     "REDUCER_REASON_CODES",
     "evaluate_claim",
+    "effective_equivalence_margin",
     "ordered_reason_codes",
 ]

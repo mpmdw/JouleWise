@@ -78,6 +78,7 @@ __all__ = [
     "FloorEstimate",
     "CommonModeEstimatorRefusal",
     "small_sample_guard_factor",
+    "estimate_scale_floor",
     "admissible_set_uncertainty_dominates_point_floor",
     "attribution_single_count_discipline",
     "attribution_single_count_discipline_is_canonical",
@@ -852,6 +853,30 @@ def small_sample_guard_factor(n: int) -> float:
     if n >= GUARD_REFERENCE_N:
         return 1.0
     return math.sqrt((GUARD_REFERENCE_N - 1) / (n - 1))
+
+
+def estimate_scale_floor(envelope_mean_null_contrasts: Sequence[float]) -> float:
+    """CG-1 F_est for same-epoch envelope-mean calibration contrasts.
+
+    Callers own calibration authentication and unit matching. A calibration
+    with fewer than five complete envelopes has no resolvable estimate floor.
+    """
+
+    values = _clean_values(envelope_mean_null_contrasts, "envelope-mean null contrasts")
+    n = len(values)
+    if n < 5:
+        raise ValueError("estimate-scale floor requires at least five envelopes")
+    mean = math.fsum(values) / n
+    sd = math.sqrt(math.fsum((value - mean) ** 2 for value in values) / (n - 1))
+    # Imported here to avoid a package-initialization cycle with the analysis engine.
+    from joulewise.analysis_engine.distributions import student_t_quantile
+
+    floor = small_sample_guard_factor(n) * (
+        abs(mean) + student_t_quantile(0.975, n - 1) * sd / math.sqrt(n)
+    )
+    if not math.isfinite(floor):
+        raise ValueError("estimate-scale floor must be finite")
+    return floor
 
 
 def _clean_values(values_j: Sequence[float], label: str) -> list:

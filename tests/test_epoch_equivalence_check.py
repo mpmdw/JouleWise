@@ -19,6 +19,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -74,6 +75,7 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
                 "--acceptance", str(DEFAULT_ACCEPTANCE_BOUND_PATH),
                 "--repo-root", str(fixture["root"]),
                 "--out", str(out),
+                "--rule-version", "v1",
                 *extra,
             ]
         )
@@ -94,6 +96,55 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
 
     def build(self, tmp: str, name: str, slots, **kwargs):
         return build_derivation_ledger(Path(tmp) / name, slots, **kwargs)
+
+    def test_v2_location_and_recorded_operands_use_authenticated_r7(self) -> None:
+        reference = checker.reference_envelope(DEFAULT_ACCEPTANCE_BOUND_PATH, rule_version="v2")
+        values = [str(Decimal(reference["v2_reference"]["w_bar_s"]) + Decimal(i - 4) * Decimal("0.00001")) for i in range(8)]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.build(tmp, "v2-pass", [Slot(v) for v in values])
+            code, text, record = self.run_check(fixture, "--rule-version", "v2")
+        self.assertEqual(code, 0)
+        self.assertEqual(record["rule_version"], "v2")
+        self.assertTrue(record["location_comparison"]["holds"])
+        self.assertTrue(record["level_screen_comparison"]["holds"])
+        self.assertTrue(record["spread_comparison"]["holds"])
+        self.assertEqual(record["spread_comparison"]["repetitions"], 2000)
+        self.assertIn("LOCATION:", text)
+        self.assertIn("SPREAD permutation:", text)
+
+    def test_v2_boundary_shift_fails_location_with_eight_retained(self) -> None:
+        reference = checker.reference_envelope(DEFAULT_ACCEPTANCE_BOUND_PATH, rule_version="v2")
+        center = Decimal(reference["v2_reference"]["w_bar_s"]) + Decimal(reference["v2_reference"]["delta_loc_s"])
+        values = [str(center + Decimal(i - 4) * Decimal("0.00001")) for i in range(8)]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.build(tmp, "v2-boundary", [Slot(v) for v in values])
+            code, _, record = self.run_check(fixture, "--rule-version", "v2")
+        self.assertEqual(code, checker.FAIL_EXIT)
+        self.assertFalse(record["location_comparison"]["holds"])
+
+    def test_v1_replays_both_recorded_2026_09_19_nights(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "docs/process_traces"
+        paths = (
+            root / "2026-09-19-activation-b165c535/01-harvest-evidence/epoch-equivalence-record-1.json",
+            root / "2026-09-19-activation-d0b83820/01-harvest-evidence/epoch-equivalence-record-1.json",
+        )
+        for path in paths:
+            with self.subTest(path=path.name, activation=path.parent.parent.name):
+                recorded = json.loads(path.read_text(encoding="utf-8"))
+                session = SimpleNamespace(**recorded["session"])
+                with mock.patch.object(
+                    checker, "_slot_outcomes",
+                    return_value=(recorded["slot_outcomes"], recorded["retained"]),
+                ):
+                    replay = checker.evaluate_session(
+                        session, recorded["session"]["session_id"],
+                        recorded["reference_envelope"], rule_version="v1",
+                    )
+                self.assertEqual(replay["verdict"], recorded["verdict"])
+                self.assertEqual(replay["m"], recorded["m"])
+                self.assertEqual(replay["verdict_reason"], recorded["verdict_reason"])
+                self.assertEqual(replay["level_screen_comparison"], recorded["level_screen_comparison"])
+                self.assertEqual(replay["bracket_screen_comparison"], recorded["bracket_screen_comparison"])
 
     # ---- the PASS arm ---------------------------------------------------
 

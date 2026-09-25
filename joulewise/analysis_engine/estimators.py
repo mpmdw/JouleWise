@@ -34,6 +34,8 @@ __all__ = [
     "RatioObservation",
     "StochasticVarianceTerm",
     "VarianceContribution",
+    "EnvelopeTermScopeUnknown",
+    "aggregate_envelope_observation",
     "estimate_mean_of_request_ratios",
     "estimate_paired_blocks",
     "estimate_ratio_of_totals",
@@ -45,6 +47,10 @@ GROSS_REPETITION_TERM = "E_gross_repetition_j2"
 RUNTIME_TOKEN_SOURCES = frozenset({"runtime_observed", "server_usage"})
 _INDEPENDENT_RUN = "independent_run"
 _VARIANCE_NEGATIVE_TOLERANCE = 1.0e-12
+
+
+class EnvelopeTermScopeUnknown(ValueError):
+    """The registered dependence scope does not license envelope aggregation."""
 
 
 @dataclass(frozen=True)
@@ -162,6 +168,11 @@ class PairedEstimate:
     t_statistic: float | None
     raw_p: float
     jackknife_estimates: tuple[float, ...] = ()
+    interval_confidence: float = 0.95
+    repeat_point_interval: Interval | None = None
+    metrology_aware_interval: Interval | None = None
+    repeat_point_ci90: Interval | None = None
+    metrology_aware_ci90: Interval | None = None
 
 
 def _finite_number(value: object, *, name: str) -> float:
@@ -221,11 +232,13 @@ def _sample_stddev(values: Sequence[float], mean: float) -> float:
     return result
 
 
-def _ci_t_critical(df: int) -> float:
+def _ci_t_critical(df: int, confidence: float = 0.95) -> float:
     # Section 7's normative hand fixtures use the accepted three-decimal
     # criticals.  B4 explicitly permits that table precision for confidence
     # intervals while p-values use the numerically tested Student-t CDF.
-    return round(student_t_quantile(0.975, df), 3)
+    if confidence == 0.95:
+        return round(student_t_quantile(0.975, df), 3)
+    return student_t_quantile((1.0 + confidence) / 2.0, df)
 
 
 def _interval(center: float, standard_error: float, critical: float) -> Interval:
@@ -447,14 +460,74 @@ def _deterministic_bound_totals(
     return tuple(totals), total
 
 
+def aggregate_envelope_observation(
+    envelope_id: str,
+    blocks: Sequence[PairedObservation],
+    *,
+    n_reg: int,
+) -> PairedObservation:
+    """CG-1 envelope mean for the already-ruled independent-run term scope.
+
+    The shared-within-envelope scope needs a frozen wire spelling and an
+    authenticated cross-envelope independence assertion at the registry/input
+    boundary. Until that is installed, this helper refuses it rather than
+    selecting an unruled covariance shortcut.
+    """
+
+    identifier = _nonempty_string(envelope_id, name="envelope_id")
+    if isinstance(n_reg, bool) or not isinstance(n_reg, int) or n_reg < 2:
+        raise ValueError("n_reg must be an integer >= 2")
+    if len(blocks) != n_reg:
+        raise ValueError("envelope must retain exactly n_reg blocks")
+    values, stochastic_names, deterministic_names = _validate_observations(blocks)
+    n_squared = n_reg * n_reg
+    stochastic: list[StochasticVarianceTerm] = []
+    for name in stochastic_names:
+        terms = [next(term for term in block.stochastic_terms if term.name == name) for block in values]
+        if any(term.correlation_scope != _INDEPENDENT_RUN for term in terms):
+            raise EnvelopeTermScopeUnknown("envelope_term_scope_unknown")
+        components = [
+            _variance_components(term, where=f"{identifier}.{name}[{index}]")
+            for index, term in enumerate(terms)
+        ]
+        stochastic.append(StochasticVarianceTerm(
+            name=name,
+            variance_a=_safe_fsum((item[0] for item in components), name=name) / n_squared,
+            variance_b=_safe_fsum((item[1] for item in components), name=name) / n_squared,
+            covariance_ab=_safe_fsum((item[2] for item in components), name=name) / n_squared,
+            correlation_scope=_INDEPENDENT_RUN,
+        ))
+    deterministic: list[DeterministicBoundTerm] = []
+    for name in deterministic_names:
+        terms = [next(term for term in block.deterministic_terms if term.name == name) for block in values]
+        # Store the paired bound as the mean of per-block paired bounds. Its
+        # component A/B split is not separately identified by this operation.
+        bound = _mean(
+            [_deterministic_bound_value(term, where=f"{identifier}.{name}") for term in terms],
+            name=f"{identifier}.{name} bounds",
+        )
+        deterministic.append(DeterministicBoundTerm(name, 0.0, 0.0, contrast_bound=bound))
+    return PairedObservation(
+        block_id=identifier,
+        value_a=_mean([block.value_a for block in values], name="envelope A values"),
+        value_b=_mean([block.value_b for block in values], name="envelope B values"),
+        stochastic_terms=tuple(stochastic),
+        deterministic_terms=tuple(deterministic),
+    )
+
+
 def estimate_paired_blocks(
     observations: Sequence[PairedObservation],
     *,
     estimator: str = "paired_block_mean_difference_t_v1",
+    confidence: float = 0.95,
 ) -> PairedEstimate:
     """Estimate the registered paired mean contrast, always oriented ``B - A``."""
 
     estimator_name = _nonempty_string(estimator, name="estimator")
+    confidence_value = _finite_number(confidence, name="confidence")
+    if confidence_value not in (0.90, 0.95):
+        raise ValueError("confidence must be 0.90 or 0.95")
     values, stochastic_names, deterministic_names = _validate_observations(observations)
     block_ids = tuple(observation.block_id for observation in values)
     paired_values = tuple(
@@ -473,16 +546,23 @@ def estimate_paired_blocks(
     )
     se_metrology = math.sqrt(metrology_variance)
     se_total = math.hypot(se_repeat, se_metrology)
-    critical = _ci_t_critical(df)
-    repeat_ci = _interval(estimate, se_repeat, critical)
-    metrology_ci = _interval(estimate, se_total, critical)
+    critical = _ci_t_critical(df, confidence_value)
+    repeat_interval = _interval(estimate, se_repeat, critical)
+    metrology_interval = _interval(estimate, se_total, critical)
+    if confidence_value == 0.95:
+        repeat_ci95, metrology_ci95 = repeat_interval, metrology_interval
+        repeat_ci90 = metrology_ci90 = None
+    else:
+        repeat_ci95 = _interval(estimate, se_repeat, _ci_t_critical(df))
+        metrology_ci95 = _interval(estimate, se_total, _ci_t_critical(df))
+        repeat_ci90, metrology_ci90 = repeat_interval, metrology_interval
     deterministic_bounds, deterministic_total = _deterministic_bound_totals(
         values,
         deterministic_names,
     )
     decision_interval = Interval(
-        lower=metrology_ci.lower - deterministic_total,
-        upper=metrology_ci.upper + deterministic_total,
+        lower=metrology_interval.lower - deterministic_total,
+        upper=metrology_interval.upper + deterministic_total,
     )
     if not math.isfinite(decision_interval.lower) or not math.isfinite(decision_interval.upper):
         raise ValueError("decision interval must be finite")
@@ -500,8 +580,8 @@ def estimate_paired_blocks(
         se_metrology=se_metrology,
         se_total=se_total,
         t_critical_95=critical,
-        repeat_point_ci95=repeat_ci,
-        metrology_aware_ci95=metrology_ci,
+        repeat_point_ci95=repeat_ci95,
+        metrology_aware_ci95=metrology_ci95,
         variance_contributions=variance_contributions,
         excluded_stochastic_terms=excluded_terms,
         deterministic_bounds=deterministic_bounds,
@@ -509,6 +589,11 @@ def estimate_paired_blocks(
         decision_interval=decision_interval,
         t_statistic=statistic,
         raw_p=raw_p,
+        interval_confidence=confidence_value,
+        repeat_point_interval=repeat_interval,
+        metrology_aware_interval=metrology_interval,
+        repeat_point_ci90=repeat_ci90,
+        metrology_aware_ci90=metrology_ci90,
     )
 
 

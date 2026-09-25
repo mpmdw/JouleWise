@@ -6799,6 +6799,34 @@ after a PASS. Nothing here licenses a window or weakens a physics or evidence
 refusal.
 
 
+### D-102 dated addendum — 2026-09-24: prospective epoch-equivalence rule v2
+
+Cold gate CLAIMGATE-01 and addendum,
+`docs/process_traces/2026-09-24-activation-278ebc9e/66-coldgate-packet-claimgate/`,
+rule CG-3: “INCONCLUSIVE if retained m < 8.” The old issue-316 rule remains
+`rule_version=v1` for historical replay; v2 applies only prospectively. The
+reference acceptance's members are grouped by window, with each window mean
+weighted equally: `n_w` is the number of windows, `w_bar` their mean,
+`s_w` their sample SD, and `s_old` the sample SD of all old members. The
+location gate is strictly
+`abs(new_mean - w_bar) + t(0.95,n_w-1)*s_w*sqrt(1+1/n_w) < 3.5*s_old`.
+The level gate is `median(new_values) <= preflight_level_screen_s`. The
+spread gate is a one-sided, increase-only permutation test of the pooled
+old/new member values' log variance ratio, with at least 2000 permutations,
+`p=(hits+1)/(reps+1)`, and PASS when `p >= 0.05`. All three gates must PASS.
+The retained-above-level count and new range versus bracket screen are printed
+diagnostics only. The fixed-r7, four-generator simulation at `m=8,12` must
+meet <=5% no-change false FAIL and <=5% false PASS at true shift `3.5*s_old`
+before the first v2 night; +3σ, +5σ, ×4, ×16 detection and simulated-old
+corpus sensitivity are reported. Computed from the checked-in r7 operands,
+not rounded inputs (values displayed to 18–20 significant digits): `n_w=10`,
+`n_old=17`, `w_bar=0.02705126130322395995 s`,
+`s_w=0.00270955485752457996 s`, `s_old=0.00246085620769463617 s`,
+prediction half-width `0.00520934969771577647 s`, `3.5*s_old=
+0.00861299672693122658 s`, and strict location radius
+`0.00340364702921545011 s`. This supersedes the issue-316 numerical shape
+for new nights and the ex-20 location test; neither historical verdict changes.
+
 ## D-103: C3 structural cold-gate synthesis — WAL attestation ordering, two named aggregation policies (cold instance overruled on B2 with recorded dissent), reader-tolerant/writer-strict path discipline
 
 - Date: 2026-08-01
@@ -11308,6 +11336,49 @@ Gate records:
 synthesis
 `docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`.
 
+## D-083 dated second addendum (2026-09-24): estimate-scale claim floor
+
+Cold gate CLAIMGATE-01 and addendum,
+`docs/process_traces/2026-09-24-activation-278ebc9e/66-coldgate-packet-claimgate/`,
+rule CG-4(a): “for mean-scale claims the floor role is F_est (CG-1) and the
+conjunction stays `|θ̂| > max(F_est, h+B)` with separate checks; no additive
+gate.” Rule v1 retains the block floor for single-block claims. Rule v2 uses
+the equally weighted means of `k` complete, registered quiet-window envelopes,
+each with exactly `n_reg` blocks; `k<5` is `not_estimable`. An incomplete
+planned envelope is excluded and disclosed; even if five complete envelopes
+remain, a missing planned envelope blocks confirmatory inference with
+`fixed_n_plan_incomplete` and a missing p-value. Only prospectively registered
+technical replacements complete planned `K`; outcomes cannot select extras
+(CG-1 as clarified by refuter R3).
+
+The v2 estimate floor is
+`F_est=g(k_cal)*(abs(mean_cal)+t(0.975,k_cal-1)*s_cal/sqrt(k_cal))`,
+from same-epoch accepted calibration envelope-mean null contrasts in the
+estimand's unit; `k_cal<5` is `not_resolvable`. It contains no timing term.
+The calibration artifact id and floor value are pinned at registration.
+For direction, the frozen family uses Holm two-sided p<0.05, metrology and
+decision intervals exclude zero on the registered side, and `|θ̂|>F_est`
+strictly. The decision interval widens metrology by the claim-side bound B
+once. For equivalence, register `Δ>F_est+B` strictly; the shared resolved
+`Δ_eff=Δ-F_est` governs raw TOST, Holm, 90% interval containment and replay.
+`Δ_eff<=B` refuses as `equivalence_margin_not_above_floor`. A contrast has
+one prospectively frozen confirmatory shape; another shape on the same data
+is exploratory, and a new confirmatory shape requires subsequent observations
+under a fresh frozen registration citing the exploratory artifact (CG-2).
+
+For envelope metrology, independent-run term variances/covariance sum over
+blocks and divide by `n_reg²`. The undivided shared-term shortcut applies
+only to one identical random contribution in every block of an envelope,
+with identical fields and independently drawn contributions across envelopes;
+unequal fields, cross-envelope sharing or unspecified dependence refuse as
+`not_estimable: envelope_term_scope_unknown` (refuter R2). Sign-flip is a
+printed diagnostic at every `k`, with minimum attainable p, and never gates
+admission (refuter R1). Equivalence intervals use confidence 0.90; the v1
+default remains 0.95. The version, floor class and unit, confidence, planned
+`K` and `n_reg`, excluded envelopes, and claim shape are registered or
+recorded as applicable. Refuter's exact replacements: `92b-claimgate-v2-refuter-astra.md`
+in the same activation trace.
+
 ## D-165 dated addendum (magistrate via dictated-fills seat, 2026-09-04): R_cm is a sensitivity diagnostic
 
 Supersede the physical common-time interpretation and R-5's fiducial-shift
@@ -12172,3 +12243,13 @@ Ed, interactive session 02a24110, ≈04:25 PDT 2026-09-24, verbatim: "new policy
 Binding reading: any major change (process rule, registration, analysis-plan adoption, block design, merge of claim-bearing code) and any important-science judgment convenes all four model families when usage allows: Fable 5.1 (final pass and cold gate), Opus 5.5 (magistrate loop, lenses), Sol 6.0 (execution and consult, `codex-run-v3 --effort high`), Astra 6 (cross-family refuter and consult). Fewer seats only when a usage limit blocks a seat, and the record says which seat was dropped and why. Agreement among models is not itself progress; each seat is there to catch bad science. Record: `docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md` §8.
 
 **Addendum (Ed, 2026-09-24 ≈04:40 PDT, same session):** the 09-23 hold ("wait on major decisions til i get the reads of the new models") is LIFTED. The four-model council decides experiment-design changes (block-two redesign, shakedown design, registration text, analysis-plan adoption) and Ed receives an after-the-fact summary by email, not a question. Only hardware, sudo, a notice NO, and publishing claims remain Ed's. Ed chose this over "keep asking me on major design changes".
+
+**D-184 dated note for Ed (2026-09-24; cold gate CLAIMGATE-01 and addendum,
+`docs/process_traces/2026-09-24-activation-278ebc9e/66-coldgate-packet-claimgate/`):**
+The O-21 mean-scale floor F is specified as the estimate-scale `F_est`
+in CG-1 (implementation remains subject to the full claim-gate PR). The issue-316 night verdict shape is superseded
+prospectively by CG-3; v1 remains available for the September 19 recorded
+verdicts. The new night's location test changed between ex-20 and the cold
+gate addendum to one window-level draw against the ten old r7 windows. This
+is the after-the-fact summary text required by CG-4(g); delivery by the lead
+remains a separate action.
