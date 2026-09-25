@@ -3,6 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>@@LABEL@@</string>
+  <key>ProcessType</key><string>Interactive</string>
   <key>ProgramArguments</key>
   <array>
     <string>@@PYTHON@@</string>

@@ -813,6 +813,14 @@ class PrepareCandidateTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._tmp = tempfile.TemporaryDirectory()
         root = Path(cls._tmp.name)
+        cls.historical_preregistration = root / "preregistration_before_revision_5.md"
+        cls.historical_preregistration.write_text(
+            PREREGISTRATION.read_text(encoding="utf-8").split("# Revision 5 (", 1)[0],
+            encoding="utf-8",
+        )
+        cls.historical_preregistration_sha256 = hashlib.sha256(
+            cls.historical_preregistration.read_bytes()
+        ).hexdigest()
         # n = 20 retained, range 0.0114 > the 0.010818 floor, maximum 0.0314
         # below r6's level screen: the ordinary admit case, df 19 (ODD).
         cls.wide = build_derivation_ledger(root / "wide", [Slot(v) for v in _grid(20, "0.0200", "0.0006")])
@@ -866,10 +874,10 @@ class PrepareCandidateTest(unittest.TestCase):
             "--ledger", str(fixture["ledger"]),
             "--head-pin", str(fixture["pin"]),
             "--repo-root", str(fixture["root"]),
-            "--preregistration", str(PREREGISTRATION),
+            "--preregistration", str(self.historical_preregistration),
             "--predecessor-acceptance", str(R6),
             "--registration-session-id", SESSION,
-            "--preregistration-sha256", PREREGISTRATION_SHA256,
+            "--preregistration-sha256", self.historical_preregistration_sha256,
             "--out", str(self.out),
         ]
         # Every fixture but the shape tests is ONE session of N slots, so the
@@ -882,7 +890,7 @@ class PrepareCandidateTest(unittest.TestCase):
         if not omit_d125:
             argv += ["--d125-ruling", D125_REFERENCE]
         stream = io.StringIO()
-        with redirect_stdout(stream):
+        with redirect_stdout(stream), mock.patch.object(issuer, "REVISION_FIVE_EPOCH", {}):
             code = issuer.main(argv + list(extra))
         self.printed = stream.getvalue()
         return code
@@ -1726,7 +1734,8 @@ class PrepareCandidateTest(unittest.TestCase):
     DRY_RUN_SESSION_PATTERN = re.compile(
         r"^(?P<id>[\w-]+): kind=(?P<kind>\w+) state=(?P<state>\w+) "
         r"terminal=(?P<terminal>yes|no) declared=(?P<declared>\d+) "
-        r"filled=(?P<filled>\d+) excluded=(?P<excluded>none|[\w:,]+)$"
+        r"filled=(?P<filled>\d+) valid=(?P<valid>\d+) "
+        r"excluded=(?P<excluded>none|[\w:,]+)$"
     )
 
     # E-1: filled comes from the session record, not from published rows
@@ -1749,6 +1758,7 @@ class PrepareCandidateTest(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match.group("declared"), "20")
         self.assertEqual(match.group("filled"), "6")
+        self.assertEqual(match.group("valid"), "6")
         self.assertEqual(match.group("terminal"), "no")
         self.assert_no_measured_value_leaked(text)
 
@@ -2079,8 +2089,8 @@ class PrepareCandidateTest(unittest.TestCase):
                 "prepare-candidate",
                 "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
                 "--repo-root", str(fixture["root"]),
-                "--preregistration", str(PREREGISTRATION),
-                "--preregistration-sha256", PREREGISTRATION_SHA256,
+                "--preregistration", str(self.historical_preregistration),
+                "--preregistration-sha256", self.historical_preregistration_sha256,
                 "--predecessor-acceptance", str(R6),
                 "--registration-session-id", "derivation-night-1",
                 "--registration-session-id", "derivation-night-2",
@@ -2088,7 +2098,7 @@ class PrepareCandidateTest(unittest.TestCase):
                 "--out", str(self.out),
             ]
             stream = io.StringIO()
-            with redirect_stdout(stream):
+            with redirect_stdout(stream), mock.patch.object(issuer, "REVISION_FIVE_EPOCH", {}):
                 code = issuer.main(argv)
             self.printed = stream.getvalue()
         # Two nights, so the night-count fence fires and the SLOT fence does not:

@@ -1,0 +1,167 @@
+import ast
+import copy
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import sys
+import time
+import unittest
+
+REPO = Path('/Users/edr/code/wt-152c9255-a292m')
+TMP = Path('/tmp/152c9255/a292-round2-sol')
+SOURCE = (REPO / 'joulewise/scored_reduce.py').read_text()
+sys.path.insert(0, str(REPO))
+import tests.test_scored_reduce as test_module
+from tests.test_scored_reduce import ScoredReduceTests
+
+_original_night = test_module._night
+_night_cache = {}
+def _cached_night(n=5, width=1, mode="registered", policy=None, budget_j=None):
+    if policy is not None:
+        return _original_night(n, width, mode, policy, budget_j)
+    key=(n,width,mode,budget_j)
+    if key not in _night_cache:
+        _night_cache[key]=_original_night(n,width,mode,policy,budget_j)
+    g, reg, roster, predictions = _night_cache[key]
+    return copy.deepcopy(g), reg, copy.deepcopy(roster), copy.deepcopy(predictions)
+test_module._night=_cached_night
+
+TREE = ast.parse(SOURCE)
+DEFS = []
+for index, node in enumerate(ast.walk(TREE)):
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ('max', 'min'):
+        for j in range(len(node.args)):
+            DEFS.append(dict(kind='collapse', index=index, operand=j, line=node.lineno, name=f'{node.func.id}→arg{j+1}'))
+    if isinstance(node, ast.Compare):
+        for j, op in enumerate(node.ops):
+            flips = {ast.Gt: ast.GtE, ast.GtE: ast.Gt, ast.Lt: ast.LtE, ast.LtE: ast.Lt}
+            if type(op) in flips:
+                DEFS.append(dict(kind='comparison', index=index, operand=j, line=node.lineno, name=f'{type(op).__name__}→{flips[type(op)].__name__}'))
+    if isinstance(node, ast.BoolOp):
+        for j in range(len(node.values)):
+            DEFS.append(dict(kind='bool_operand', index=index, operand=j, line=node.lineno, name=f'{type(node.op).__name__} drop operand {j+1}/{len(node.values)}'))
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == '_need':
+        DEFS.append(dict(kind='guard', index=index, operand=None, line=node.lineno, name='delete _need guard'))
+for kind, line, name in [
+    ('fraction_literal',280,'sr.CAP_BOUND_FRACTION→0.2'),
+    ('drop_pairing',258,'drop paired filter'),
+    ('parent_energy_per_item',247,'parent window energy per item'),
+    ('cell_energy_per_item',273,'cell window energy per item'),
+]:
+    DEFS.append(dict(kind=kind,index=None,operand=None,line=line,name=name))
+for constant, values in [('ENERGY_MAX_J',(10**11,10**13)), ('INT_MAX',(2**52,2**54))]:
+    for value in values:
+        DEFS.append(dict(kind='bound_literal', index=None, operand=None, line=20 if constant=='ENERGY_MAX_J' else 21, name=f'{constant}→{value}', constant=constant, value=value))
+
+class Replace(ast.NodeTransformer):
+    def __init__(self, target, replacement):
+        self.target=target; self.replacement=replacement
+    def generic_visit(self,node):
+        if node is self.target:
+            return ast.copy_location(self.replacement,node)
+        return super().generic_visit(node)
+
+def mutant_source(d):
+    tree=copy.deepcopy(TREE)
+    if d['index'] is not None:
+        node=list(ast.walk(tree))[d['index']]
+        if d['kind']=='comparison':
+            op=node.ops[d['operand']]
+            node.ops[d['operand']]={ast.Gt:ast.GtE,ast.GtE:ast.Gt,ast.Lt:ast.LtE,ast.LtE:ast.Lt}[type(op)]()
+        elif d['kind']=='bool_operand':
+            vals=[v for j,v in enumerate(node.values) if j!=d['operand']]
+            replacement=vals[0] if len(vals)==1 else ast.BoolOp(op=node.op,values=vals)
+            tree=Replace(node,replacement).visit(tree)
+        elif d['kind']=='guard':
+            tree=Replace(node,ast.Pass()).visit(tree)
+        elif d['kind']=='collapse':
+            tree=Replace(node,node.args[d['operand']]).visit(tree)
+    elif d['kind']=='fraction_literal':
+        node=next(n for n in ast.walk(tree) if isinstance(n,ast.Attribute) and n.lineno==280 and n.attr=='CAP_BOUND_FRACTION')
+        tree=Replace(node,ast.Constant(.2)).visit(tree)
+    elif d['kind']=='drop_pairing':
+        node=next(n for n in ast.walk(tree) if isinstance(n,ast.ListComp) and n.lineno==258)
+        node.generators[0].ifs=[]
+    elif d['kind'] in ('parent_energy_per_item','cell_energy_per_item'):
+        lineno=d['line']
+        node=next(n for n in ast.walk(tree) if isinstance(n,ast.Subscript) and n.lineno==lineno and isinstance(n.value,ast.Subscript) and isinstance(n.value.value,ast.Name) and n.value.value.id=='window_by_key' and isinstance(n.slice,ast.Constant) and n.slice.value=='gross_j')
+        keyvar='k' if lineno==247 else 'key'
+        replacement=ast.BinOp(left=copy.deepcopy(node),op=ast.Mult(),right=ast.Call(func=ast.Name(id='len',ctx=ast.Load()),args=[ast.Subscript(value=ast.Subscript(value=ast.Name(id='blocks',ctx=ast.Load()),slice=ast.Subscript(value=ast.Name(id=keyvar,ctx=ast.Load()),slice=ast.Constant(0),ctx=ast.Load()),ctx=ast.Load()),slice=ast.Constant('items'),ctx=ast.Load())],keywords=[]))
+        tree=Replace(node,replacement).visit(tree)
+    elif d['kind']=='bound_literal':
+        node=next(n for n in ast.walk(tree) if isinstance(n,ast.Assign) and len(n.targets)==1 and isinstance(n.targets[0],ast.Name) and n.targets[0].id==d['constant'])
+        node.value=ast.Constant(d['value'])
+    return ast.unparse(ast.fix_missing_locations(tree))+'\n'
+
+def load_module(path):
+    name='joulewise.scored_reduce'
+    spec=importlib.util.spec_from_file_location(name,path)
+    mod=importlib.util.module_from_spec(spec)
+    sys.modules[name]=mod
+    spec.loader.exec_module(mod)
+    return mod
+
+def run_suite(methods):
+    suite=unittest.TestSuite(ScoredReduceTests(m) for m in methods)
+    out=io.StringIO()
+    result=unittest.TextTestRunner(stream=out,verbosity=0,failfast=True).run(suite)
+    failed=(result.failures or result.errors)
+    first=None
+    if failed:
+        first=dict(test=failed[0][0].id().split('.')[-1],type='failure' if result.failures else 'error',tail=failed[0][1].splitlines()[-5:])
+    return dict(result='pass' if result.wasSuccessful() else 'fail',testsRun=result.testsRun,first=first,tail=out.getvalue().splitlines()[-4:])
+
+OLD_RESULTS=[json.loads(x) for x in Path('/tmp/152c9255/a292-delta-sol/results.jsonl').read_text().splitlines()]
+OLD_KILL={(r['kind'],r['line']+2,r['name'],r['operand']):r['first']['test'].split(' (',1)[0] for r in OLD_RESULTS if r.get('first')}
+
+METHODS=sorted((m for m in dir(ScoredReduceTests) if m.startswith('test_') and m!='test_differential_oracle_200_nights'), key=lambda m: (m=='test_every_a291_provisional_R_witness_at_real_reduce', m not in ('test_output_exact_keys_and_sha256','test_window_domain_zero_negative_nonfinite_bool_anchor','test_row_domain_and_coherence','test_row_tokens_over_cap','test_row_cap_disagreement_both_directions','test_cap_boundary_cap_minus_one_and_cap','test_cap_bound_boundaries_1_5_2_10_3_15_and_null','test_cap_bound_k24_pairing_flip_2_10_to_2_9','test_cap_bound_fraction_consumed_by_patch_on_sr','test_block_energy_summed_once_per_window','test_missing_live_window_names_key','test_anchor_unrecorded_live_refuses_nonlive_null_ok','test_internal_disagreement_exit_injection','test_spread_four_vs_five_parents_by_terminal_degradation'), m))
+def ordered_methods(d):
+    line=d['line']
+    if line <= 56:
+        words=('domain','keys','refuses')
+    elif line <= 88:
+        words=('window_binding','window_envelope','window_unknown','window_unstarted','terminal')
+    elif line <= 108:
+        words=('window_','anchor_','missing_live_')
+    elif line <= 135:
+        words=('row_','cap_boundary')
+    elif line <= 145:
+        words=('cap_boundary','capped_','reduce_input','row_cap_')
+    elif line <= 173:
+        words=('missing_live_','anchor_','row_missing','a291_partial')
+    elif line <= 218:
+        words=('attempt_divergence','k24_','cap_bound_','retry_stage','whole_block','terminal')
+    elif line <= 249:
+        words=('block_energy','partial_parent','whole_block','voided_window','unattributed_multi','k24_')
+    elif line <= 285:
+        words=('cap_bound_','k24_','internal_disagreement','block_energy','spread_','unattributed_count','retry_stage')
+    else:
+        words=('ceiling_terminal','unattributed_multi','output_exact','pilot_max')
+    preferred=OLD_KILL.get((d['kind'],d['line'],d['name'],d['operand']))
+    if d['line'] in (20,21,54,58) and preferred is None:
+        preferred='test_generated_one_fault_domain_witnesses'
+    return sorted(METHODS,key=lambda m:(0 if m==preferred else 1 if m=='test_generated_one_fault_domain_witnesses' else 2 if m=='test_domain_boundaries_accept' else 3, not any(w in m for w in words), m=='test_every_a291_provisional_R_witness_at_real_reduce',m))
+
+if __name__=='__main__':
+    print('MUTANT_COUNT',len(DEFS),'MAX_MIN',sum(d['kind']=='collapse' for d in DEFS),'METHOD_COUNT',len(METHODS),flush=True)
+    path=TMP/'scored_reduce_mutant.py'
+    path.write_text(SOURCE)
+    load_module(path)
+    print('BASELINE must be run separately at current head',flush=True)
+    previous=[json.loads(x) for x in (TMP/'results.jsonl').read_text().splitlines()] if (TMP/'results.jsonl').exists() else []
+    with (TMP/'results.jsonl').open('a') as f:
+        for number,d in enumerate(DEFS,1):
+            if number <= len(previous): continue
+            source=mutant_source(d)
+            path.write_text(source)
+            start=time.time()
+            try:
+                load_module(path)
+                outcome=run_suite(ordered_methods(d))
+            except Exception as e:
+                outcome=dict(result='invalid',error=repr(e))
+            rec=dict(id=f'M{number:03}',**d,**outcome,seconds=round(time.time()-start,2))
+            f.write(json.dumps(rec)+'\n');f.flush()
+            print(rec['id'],d['line'],d['name'],outcome['result'],outcome.get('first',{}),rec['seconds'],flush=True)

@@ -24,6 +24,7 @@ from enum import Enum, auto
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
 import shutil
 import signal
@@ -486,8 +487,11 @@ class Transaction:
             self._enter(State.STAGED)
             self.target.stage()
             self.prepared.custody_night.mkdir(parents=True, exist_ok=True)
+            launch_context = self.prepared.launch_context(require_published=require_published)
             for label, payload in self.prepared.render(
                     self.target.labels, require_published=require_published):
+                if _digest_bytes(payload) != launch_context[label]["rendered_plist_sha256"]:
+                    raise Refused(3, "rendered plist changed during publication: " + label)
                 self._poll()
                 result = self.adapter.write_plist(label, payload)
                 if result.kind is not Kind.SUCCEEDED:
@@ -507,6 +511,7 @@ class Transaction:
                 if any(value.kind is not Kind.LOADED for value in observed):
                     raise Refused(3, "launch agent verification failed")
             self._enter(State.VERIFIED)
+            self.prepared.installed_launch_context = launch_context
             self._commit()
             try:
                 self._say(self.prepared.pins)
@@ -567,6 +572,26 @@ class Prepared:
     schedule: dict
     spans_for_day: object
     probe_timeout_s: float = 600
+    installed_launch_context: object = None
+
+    def launch_context(self, probe_timeout_s=None, require_published=True):
+        """Authenticate the actual bytes used for all three launchd labels."""
+        payloads = list(self.render(LABELS, require_published=require_published))
+        payloads.append(render_probe(self, self.probe_timeout_s if probe_timeout_s is None
+                                     else probe_timeout_s))
+        context = {}
+        for label, payload in payloads:
+            try:
+                process_type = plistlib.loads(payload).get("ProcessType")
+            except (ValueError, TypeError) as exc:
+                raise Refused(2, "rendered plist invalid for {}: {}".format(label, exc))
+            if process_type != "Interactive":
+                raise Refused(2, "ProcessType must be exactly Interactive: " + label)
+            context[label] = {"ProcessType": process_type,
+                              "rendered_plist_sha256": _digest_bytes(payload)}
+        if len({entry["ProcessType"] for entry in context.values()}) != 1:
+            raise Refused(2, "rendered ProcessType mismatch across night, dead-man and probe")
+        return context
 
     @property
     def custody_night(self):
@@ -574,8 +599,9 @@ class Prepared:
 
     @property
     def pins(self):
-        return "validated pins: repo_head={} measurement_root={} measurement_head={}".format(
-            self.plan.repo_head, self.plan.measurement_root, self.plan.measurement_head)
+        return "validated pins: repo_head={} measurement_root={} measurement_head={}\n{}".format(
+            self.plan.repo_head, self.plan.measurement_root, self.plan.measurement_head,
+            json.dumps({"launch_context": self.installed_launch_context or self.launch_context()}, sort_keys=True))
 
     def timing(self, reason, now, detail=""):
         epochs = [("now_epoch_s", now)] + [(name, self.schedule[name]) for name in
@@ -625,8 +651,11 @@ class Prepared:
                       "@@PATH@@": self.courier_path,
                       "@@LOG_STEM@@": "launchd.deadman" if index else "launchd.night"}
             values.update({"@@{}@@".format(key.upper()): str(value) for key, value in calendar.items()})
-            yield label, re.sub(r"com\.joulewise\.night|@@[A-Z_]+@@",
+            payload = re.sub(r"com\.joulewise\.night|@@[A-Z_]+@@",
                 lambda match: escape(values.get(match.group(0), match.group(0))), text).encode("utf-8")
+            if plistlib.loads(payload).get("ProcessType") != "Interactive":
+                raise Refused(3, "ProcessType must be exactly Interactive: " + label)
+            yield label, payload
 
 
 PROBE_RECEIPT_MAX_AGE_S = 6 * 60 * 60
@@ -689,6 +718,11 @@ CUSTODY_HEADROOM_FACTOR = 1.5
 def _digest(path):
     import hashlib
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _digest_bytes(value):
+    import hashlib
+    return hashlib.sha256(value).hexdigest()
 
 
 def interpreter_identity(python):
@@ -806,10 +840,41 @@ def validate_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S, receipt_
         raise Refused(2, "probe receipt missing or invalid: {}: {}".format(path, exc))
     if isinstance(receipt, dict) and receipt.get("schema") == "joulewise.night_evidence_probe_receipt.v1":
         raise Refused(2, "probe receipt kind does not match payload kind")
-    if not isinstance(receipt, dict) or receipt.get("schema") != "joulewise.night_probe_receipt.v1":
+    if not isinstance(receipt, dict) or receipt.get("schema") != "joulewise.night_probe_receipt.v2":
         raise Refused(2, "probe receipt schema mismatch")
     if receipt.get("outcome") != "ok":
-        raise Refused(2, "probe receipt outcome is not ok: {}".format(receipt.get("outcome")))
+        raise Refused(2, "probe receipt outcome is not ok: {}: {}".format(
+            receipt.get("outcome"), receipt.get("detail", "")))
+    cadence = receipt.get("cadence")
+    if not isinstance(cadence, dict):
+        raise Refused(2, "probe receipt cadence missing")
+    for field in ("median_ms", "p95_ms", "max_ms"):
+        number = cadence.get(field)
+        if (isinstance(number, bool) or not isinstance(number, (int, float))
+                or not math.isfinite(number) or number <= 0):
+            raise Refused(2, "probe receipt cadence " + field + " invalid")
+    if type(cadence.get("count")) is not int or cadence["count"] != 300:
+        raise Refused(2, "probe receipt cadence count invalid")
+    duration = cadence.get("elapsed_s")
+    if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+            or not math.isfinite(duration) or not 0 <= duration <= 55
+            or cadence.get("bound_s") != 55 or cadence.get("passed") is not True):
+        raise Refused(2, "probe receipt cadence duration or pass invalid")
+    if cadence["median_ms"] > 150 or cadence["max_ms"] > 200:
+        raise Refused(2, "probe cadence median_ms={:g} p95_ms={:g} max_ms={:g}".format(
+            cadence["median_ms"], cadence["p95_ms"], cadence["max_ms"]))
+    context = receipt.get("launch_context")
+    expected_labels = set(LABELS) | {probe_label(prepared.plan.plan_id)}
+    if not isinstance(context, dict) or set(context) != expected_labels:
+        raise Refused(2, "probe receipt launch_context labels invalid")
+    for label in expected_labels:
+        entry = context[label]
+        if (not isinstance(entry, dict) or entry.get("ProcessType") != "Interactive"
+                or not isinstance(entry.get("rendered_plist_sha256"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", entry["rendered_plist_sha256"])):
+            raise Refused(2, "probe receipt ProcessType or rendered plist digest invalid: " + label)
+    if receipt.get("ProcessType") != "Interactive":
+        raise Refused(2, "probe receipt ProcessType must be exactly Interactive")
     now = time.time()
     if now - path.stat().st_mtime >= max_age_s:
         raise Refused(2, "probe receipt mtime stale (maximum age {} s)".format(max_age_s))
@@ -963,7 +1028,6 @@ def validate_evidence_probe_receipt(prepared, max_age_s=PROBE_RECEIPT_MAX_AGE_S,
 
 
 def render_probe(prepared, timeout_s=600):
-    import plistlib
     template = prepared.repo / "configs/launchd/com.joulewise.night-probe.plist.template"
     values = {"@@LABEL@@": probe_label(prepared.plan.plan_id), "@@PYTHON@@": prepared.python,
               "@@REPO@@": str(prepared.repo), "@@PLAN@@": str(prepared.plan_path),
@@ -974,18 +1038,24 @@ def render_probe(prepared, timeout_s=600):
     value = plistlib.loads(text.encode())
     if "KeepAlive" in value:
         raise Refused(2, "probe template must not contain KeepAlive")
+    if value.get("ProcessType") != "Interactive":
+        raise Refused(2, "ProcessType must be exactly Interactive: " + value["Label"])
     return value["Label"], text.encode()
 
 
 def probe_process_census(label, plan_path, process_record=None):
     """Prove label/argv and the independent chain group have no survivors."""
     pattern = re.escape(label) + "|run_night[.]py probe .*" + re.escape(str(plan_path))
-    commands = [["/usr/bin/pgrep", "-lf", pattern]]
+    commands = [["/usr/bin/pgrep", "-lf", pattern],
+                ["/usr/bin/pgrep", "-lf", "powermetrics.*night-probe-"]]
     if process_record is not None:
-        pgid = process_record.get("chain_pgid")
-        if not isinstance(pgid, int) or pgid <= 1:
-            raise Refused(2, "probe process census invalid chain_pgid")
-        commands.append(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."])
+        for name in ("chain_pgid", "powermetrics_pgid"):
+            pgid = process_record.get(name)
+            if name == "powermetrics_pgid" and pgid is None:
+                continue
+            if type(pgid) is not int or pgid <= 1:
+                raise Refused(2, "probe process census invalid " + name)
+            commands.append(["/usr/bin/pgrep", "-lf", "-g", str(pgid), "."])
     for command in commands:
         result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
         if result.returncode != 1 or result.stdout.strip():
@@ -1041,15 +1111,20 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
                     if process_record.get("launchd_label") != label:
                         raise Refused(2, "probe process label mismatch")
                     pgid = process_record.get("chain_pgid")
-                    if not isinstance(pgid, int) or pgid <= 1:
+                    if type(pgid) is not int or pgid <= 1:
                         raise Refused(2, "probe process chain_pgid invalid")
-                    try:
-                        os.killpg(pgid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    except PermissionError as exc:
-                        # An absent group may also deny signals in a sandbox.
-                        probe_process_census(label, prepared.plan_path, process_record)
+                    for group in (pgid, process_record.get("powermetrics_pgid")):
+                        if group is None:
+                            continue
+                        if type(group) is not int or group <= 1:
+                            raise Refused(2, "probe process powermetrics_pgid invalid")
+                        try:
+                            os.killpg(group, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        except PermissionError:
+                            # An absent group may also deny signals in a sandbox.
+                            probe_process_census(label, prepared.plan_path, process_record)
                 deadline = time.monotonic() + 5
                 while True:
                     try:
@@ -1068,9 +1143,17 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
                     raise
                 raise Refused(cleanup.code, "{} (raised while handling {}: {})".format(
                     cleanup, type(in_flight).__name__, in_flight)) from in_flight
+        receipt = json.loads(receipt_path.read_text())
+        context = prepared.launch_context(timeout_s)
+        if context[label]["rendered_plist_sha256"] != _digest_bytes(payload):
+            raise Refused(2, "probe rendered plist changed during launch")
+        receipt["launch_context"] = context
+        receipt["ProcessType"] = context[label]["ProcessType"]
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
         receipt = validate_probe_receipt(prepared, max_age_s, receipt_path)
         if (receipt.get("chain_pgid") != process_record["chain_pgid"]
-                or receipt.get("driver_pid") != process_record["driver_pid"]):
+                or receipt.get("driver_pid") != process_record["driver_pid"]
+                or receipt.get("powermetrics_pgid") != process_record.get("powermetrics_pgid")):
             raise Refused(2, "probe receipt process identity mismatch")
         # A driver success is only pending until bootout AND census succeed.
         # Interruption (including SIGKILL) before this point leaves no installable
@@ -1127,6 +1210,7 @@ def validate_install(args, repo):
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
                         courier_path, schedule, run_night.install_spans_for_day,
                         getattr(args, "probe_timeout_s", 600))
+    prepared.launch_context()
     # Every refusal document the driver would report from its existence alone
     # (run_night._refusal_paths: refusal.json, refusal-N.json,
     # calibration-refusal.json and its .*.json siblings) refuses admission like
@@ -1198,8 +1282,17 @@ def validate_install(args, repo):
             else:
                 print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
     if args.render_only is None and not getattr(args, "launchd_probe", False):
-        validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
+        receipt = validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
+        _validate_install_launch_context(prepared, receipt)
     return prepared
+
+
+def _validate_install_launch_context(prepared, receipt):
+    context = prepared.launch_context()
+    recorded = receipt.get("launch_context")
+    for label in LABELS:
+        if not isinstance(recorded, dict) or recorded.get(label) != context[label]:
+            raise Refused(2, "probe receipt launch_context differs from install: " + label)
 
 
 def main(argv=None):

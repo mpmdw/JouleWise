@@ -4211,6 +4211,18 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         with _registered_generation(acceptance_id, row):
             self.assertFalse(_valid_acceptance_bound(artifact))
 
+    def test_revision_five_exact_epoch_permits_twelve_and_zero_headroom(self) -> None:
+        acceptance_id, row, artifact, _ = self._envelope_fixture(
+            screen="0.010818", ceiling="0.010818",
+            member_values=self._envelope_member_values(12, "0.000100000000000000"),
+        )
+        row["registration_revision"] = 5
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+            wrong_epoch = copy.deepcopy(artifact)
+            wrong_epoch["identity_epoch"]["os_build"] = "25F84"
+            self.assertFalse(_valid_acceptance_bound(_reseal(wrong_epoch)))
+
     def test_unresolvable_session_is_barred_not_read_as_bracket(self) -> None:
         # S2 refuter 71 F4.  `LedgerObservation` carries no kind of its own, so
         # the session lookup is the only path; a row naming a session the

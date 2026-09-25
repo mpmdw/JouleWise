@@ -3556,12 +3556,9 @@ def _probe_group_absent(pgid: int, timeout_s: float = 1) -> bool:
 
 
 def _stop_probe_group(process: subprocess.Popen[Any]) -> bool:
-    """Reap the supervised probe group within the two-second cleanup allowance."""
+    """Reap the supervised probe group after a bounded TERM grace period."""
+    _term_then_kill_probe_group(process.pid)
     deadline = time.monotonic() + 1.5
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
     try:
         if process.poll() is None:
             process.kill()
@@ -3573,6 +3570,23 @@ def _stop_probe_group(process: subprocess.Popen[Any]) -> bool:
             return True
         time.sleep(0.02)
     return False
+
+
+def _term_then_kill_probe_group(pgid: int) -> None:
+    """Give sudo a chance to relay TERM before a bounded KILL fallback."""
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        if _probe_group_absent(pgid, min(0.2, max(0.01, deadline - time.monotonic()))):
+            return
+        time.sleep(0.02)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def _atomic_probe_json(path: Path, record: dict[str, Any]) -> None:
@@ -3589,7 +3603,7 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
     started, deadline = time.time(), time.monotonic() + timeout_s
     # absolute() performs no input-file read or symlink traversal.
     plan_path, receipt_path = plan_path.absolute(), receipt_path.absolute()
-    record = dict(schema="joulewise.night_probe_receipt.v1", plan_id=None,
+    record = dict(schema="joulewise.night_probe_receipt.v2", plan_id=None,
         plan_sha256=None, measurement_head=None, ledger_head_sha256=None,
         input_digests={}, code_digests={}, driver_python=None, chain_python=None,
         custody_budget_s=None, custody_elapsed_s=0.0, observations=0,
@@ -3615,7 +3629,19 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
         except subprocess.TimeoutExpired:
             timed_out = True
         finally:
+            power_pgid = None
+            if progress.is_file():
+                try:
+                    power_pgid = json.loads(progress.read_text()).get("record", {}).get("powermetrics_pgid")
+                except (OSError, ValueError, AttributeError):
+                    pass
+            if type(power_pgid) is int and power_pgid > 1:
+                identity["powermetrics_pgid"] = power_pgid
+                _atomic_probe_json(receipt_path.with_name(receipt_path.name + ".process.json"), identity)
+                _term_then_kill_probe_group(power_pgid)
             gone = _stop_probe_group(process)
+            if type(power_pgid) is int and power_pgid > 1:
+                gone = gone and _probe_group_absent(power_pgid)
             process.stdout.close()
             process.stderr.close()
         if progress.is_file():
@@ -3633,8 +3659,13 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
             if is_evidence:
                 record.update(outcome="timeout", refusal_code="evidence_probe_timeout")
             else:
+                cadence = record.get("cadence") or {}
                 record.update(outcome="timeout", refusal_code="calibration_ledger_custody_timeout",
-                              custody_elapsed_s=time.monotonic() - (deadline - timeout_s))
+                              custody_elapsed_s=time.monotonic() - (deadline - timeout_s),
+                              detail="probe cadence median_ms={} p95_ms={} max_ms={}: supervisor timeout; "
+                                     "custody_elapsed_s={:g} timeout_s={:g}".format(
+                                         cadence.get("median_ms"), cadence.get("p95_ms"),
+                                         cadence.get("max_ms"), record["custody_elapsed_s"], timeout_s))
         elif not gone:
             record.update(outcome="refused", refusal_code="probe_process_survived")
         elif not output.is_file():
@@ -3678,6 +3709,78 @@ def _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase):
     return 0 if record["outcome"] == "ok" else 2
 
 
+def _probe_cadence(directory: Path, *, executable="/usr/bin/powermetrics",
+                   privilege_prefix=("sudo", "-n"), on_process_started=None,
+                   capture_timeout_s=None) -> dict[str, Any]:
+    """Measure the production 300-frame idle command under the probe job.
+
+    Keep the first frame: production's 55 s bound counts every frame, so
+    omitting it would make this acceptance probe less conservative.
+    """
+    import statistics
+    from types import SimpleNamespace
+    from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter, parse_powermetrics_records
+
+    config = SimpleNamespace(sampling=SimpleNamespace(power_hz=10.0, idle_seconds=30.0))
+    adapter = PowermetricsTelemetryAdapter(None, executable=executable,
+                                  privilege_prefix=tuple(privilege_prefix))
+    count = adapter._idle_count(config)
+    bound = adapter._capture_timeout_s(config, count)
+    output = directory / "powermetrics-idle.plist"
+    command = adapter._command(config, output, count=count)
+    result = {"median_ms": None, "p95_ms": None, "max_ms": None,
+              "count": 0, "elapsed_s": None, "bound_s": bound,
+              "argv": command, "passed": False}
+    started = time.monotonic()
+    process = None
+    try:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=True)
+        if on_process_started is not None:
+            on_process_started(process.pid)
+        _stdout, stderr = process.communicate(timeout=bound if capture_timeout_s is None
+                                               else min(bound, capture_timeout_s))
+        result["elapsed_s"] = time.monotonic() - started
+        if process.returncode != 0:
+            result["detail"] = "powermetrics exited {}: {}".format(
+                process.returncode, stderr.decode(errors="replace").strip())
+        else:
+            result["completed"] = True
+    except subprocess.TimeoutExpired:
+        result["elapsed_s"] = time.monotonic() - started
+        if process is not None:
+            _term_then_kill_probe_group(process.pid)
+            try:
+                process.communicate(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.stdout.close()
+                process.stderr.close()
+        result["detail"] = "powermetrics capture timed out"
+    except (OSError, ValueError) as exc:
+        result["elapsed_s"] = time.monotonic() - started
+        result["detail"] = str(exc)
+    try:
+        records = parse_powermetrics_records(output.read_bytes()) if output.exists() else []
+        values = sorted(record.elapsed_ns / 1_000_000 for record in records)
+        result["count"] = len(values)
+        if values:
+            result.update(median_ms=statistics.median(values),
+                          p95_ms=values[min(len(values) - 1, math.ceil(0.95 * len(values)) - 1)],
+                          max_ms=values[-1])
+        result["passed"] = (result.pop("completed", False) and len(values) == count
+                            and result["elapsed_s"] <= bound
+                            and result["median_ms"] is not None
+                            and result["median_ms"] <= 150 and result["max_ms"] <= 200)
+        if not result["passed"] and "detail" not in result:
+            result["detail"] = "cadence count, duration or interval outside bound"
+    except (OSError, ValueError) as exc:
+        result["detail"] = result.get("detail", "") + "; cadence parse failed: " + str(exc)
+        result.pop("completed", None)
+    if result["elapsed_s"] is None:
+        result["elapsed_s"] = time.monotonic() - started
+    return result
+
+
 def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, deadline: float) -> int:
     """Disposable worker; the supervisor bounds every synchronous read below."""
     import tempfile
@@ -3700,7 +3803,7 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
         return _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase)
     phase("bindings", {"plan_id": plan.plan_id, "measurement_head": plan.measurement_head})
     bindings = probe_bindings(plan, plan_path, sys.executable)
-    record = dict(bindings, schema="joulewise.night_probe_receipt.v1",
+    record = dict(bindings, schema="joulewise.night_probe_receipt.v2",
                   custody_budget_s=float(getattr(plan, "custody_budget_s", 120)),
                   custody_elapsed_s=0.0, observations=0, outcome="refused",
                   refusal_code=None, started_epoch_s=started, finished_epoch_s=None,
@@ -3788,7 +3891,22 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
                     # Publish the installer-side (superset) binding, never the
                     # reservation's partial echo.
                     record["code_digests"] = bindings["code_digests"]
-                    record["outcome"] = "ok"
+                    phase("cadence", record)
+                    def started_powermetrics(pgid):
+                        record["powermetrics_pgid"] = pgid
+                        phase("cadence", record)
+                    cadence = _probe_cadence(night_dir, on_process_started=started_powermetrics)
+                    record["cadence"] = cadence
+                    if not cadence["passed"]:
+                        record["refusal_code"] = "probe_cadence_failed"
+                        record["detail"] = ("probe cadence elapsed_s={} bound_s={} count={} "
+                                            "median_ms={} p95_ms={} max_ms={}: {}"
+                                            .format(cadence["elapsed_s"], cadence["bound_s"],
+                                                    cadence["count"], cadence["median_ms"],
+                                                    cadence["p95_ms"], cadence["max_ms"],
+                                                    cadence.get("detail", "")))
+                    else:
+                        record["outcome"] = "ok"
                 except (KeyError, ValueError, OSError, subprocess.SubprocessError) as exc:
                     record["refusal_code"] = "probe_receipt_invalid"
                     record["detail"] = str(exc)
