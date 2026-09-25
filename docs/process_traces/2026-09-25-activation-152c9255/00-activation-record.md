@@ -188,5 +188,5 @@
    - **Integration tree** `integ/2026-09-25-prl-prr` = main `95521871` + PR-L `1bdbca1d` + PR-R `8cd9e831`: clean merges, CHECK_OK. The gate-row-9 full-suite replay (unpiped discovery) started, logging to `/tmp/152c9255/61-integ-fullsuite.log`, tracked.
 69. A292 delta re-audit with the mutation re-sweep ([16/08](16-a292-impl/08-delta-mutation-sweep.md)): 16 of 19 domain-operand survivors are closed, and Sol F2–F4 and Astra F1–F3 are closed. The two-line reducer diff matches E2, and the oracle is still independent.
    - **3 non-equivalent survivors remain (M033, M045, M050)**: the added witnesses fail the key-set check first. With the first sweep, that is **two rounds with the same signature**, so the escalation trigger fires.
-   - F2: E2's unbounded integers crash in  and in canonical-JSON hashing (untyped).
+   - F2: E2's unbounded integers crash in `math.fsum` and in canonical-JSON hashing (untyped).
    - Escalation cold gate [25](25-coldgate-packet-a292esc/00-charge.md), sha `b7075d351646cf3c850d998b68dfb43753fda27db2716fcaaa8c2b1b8443ccb4`. Proposal P1: generated one-fault witnesses with mechanical acceptance. P2: an instrument-sized domain bound of 0 ≤ E ≤ 1e12 J, refusing `window_domain`.
