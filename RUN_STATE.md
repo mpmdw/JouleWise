@@ -10,6 +10,12 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 817355d2 — from 13:52 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-817355d2/00-activation-record.md) is the running log.
+- **Revision 5 seal:** branch `feat/2026-09-25-rev5-seal`, commit `23dd9909` (values bench-verified; placeholder count 0; 234 tests OK). It is under the full gate: a cold Fable final pass, Opus and Sol lenses, and a full-suite replay.
+- **R16-a** is appended to the acceptance-rulings record as PRR-R3-01 ruled. This bookkeeping branch carries it.
+- **W1 arm procedure:** the derivation runbook still describes the older equivalence-night route. A Sol xhigh scout is mapping W1 under Revision 5.
+- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item.
+
 **▶▶ ACTIVATION 152c9255 — 04:27 → ≈13:55 PDT 09-25 (Opus 5.5; NOTHING ARMED; exited for a fresh supervisor after the merge wave):** [Record 00](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md) items 1–94.
 - **Merged today:**
   - #411 (records): `95521871`.
