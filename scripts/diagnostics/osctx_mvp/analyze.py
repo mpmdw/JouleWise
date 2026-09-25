@@ -14,9 +14,11 @@ import statistics
 import sys
 
 try:
-    from .common import load_config, write_json
+    from .common import blocks, load_config, write_json
+    from . import ledger
 except ImportError:
-    from common import load_config, write_json
+    from common import blocks, load_config, write_json
+    import ledger
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
@@ -307,7 +309,7 @@ def paired_rows(rows, comparison, endpoint):
     left_arm, right_arm = comparison.split("/")
     groups = defaultdict(dict)
     for row in rows:
-        key = (row["stage"], row["block"])
+        key = (row["stage"], row["block"], row.get("attempt", 1))
         if row["context"] in groups[key]:
             raise ValueError(f"duplicate pairing arm: {key} {row['context']}")
         groups[key][row["context"]] = row
@@ -354,7 +356,7 @@ def decision_table(rows, config):
                     arm_a, arm_b = comparison.split("/")
                     groups = defaultdict(dict)
                     for row in eligible:
-                        key_pair = (row["stage"], row["block"])
+                        key_pair = (row["stage"], row["block"], row.get("attempt", 1))
                         if row["context"] in groups[key_pair]:
                             raise ValueError(f"duplicate pairing arm: {key_pair} {row['context']}")
                         groups[key_pair][row["context"]] = row
@@ -639,13 +641,6 @@ def validate_cell(directory: Path, record: dict, schedules: dict, config: dict, 
     stage = owner["stage"]
     if (record.get("stage"), record.get("state"), record.get("context"), record.get("cell_id")) != (stage, action["state"], arm, slot):
         raise ValueError("cell record disagrees with scheduled stage, state, slot, or arm")
-    if attempt > 1:
-        previous = directory.parent / f"{block}.{slot}.{arm}.a{attempt-1}" / "discarded.json"
-        if not previous.is_file():
-            raise ValueError(f"attempt {attempt} has no discarded predecessor")
-        discard = json.loads(previous.read_text())
-        if discard.get("block") != block or discard.get("attempt") != attempt-1:
-            raise ValueError(f"attempt {attempt} has invalid retry predecessor")
     if not verify_runs:
         return action
     runs = record.get("runs", [])
@@ -674,49 +669,116 @@ def validate_cell(directory: Path, record: dict, schedules: dict, config: dict, 
 
 def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_dir: Path | None = None):
     schedules = stage_schedules(out)
-    if not all(owner["stage"] == "rehearsal" for owner in schedules.values()) and any(
-            json.loads(path.read_text()).get("stage") == "rehearsal" for path in out.rglob("cell.json")):
-        raise ValueError("rehearsal cells cannot enter real-stage analysis")
     rows, errors, discarded = [], [], []
     invalid_cell_counts = defaultdict(int)
-    used_bundles, seen_cells = set(), set()
-    for path in sorted(out.rglob("cell.json")):
-        try:
-            record = json.loads(path.read_text())
-            has_discard = (path.parent / "discarded.json").exists()
-            action = validate_cell(path.parent, record, schedules, config, used_bundles,
-                                   verify_runs=not has_discard)
-            match = re.fullmatch(r"(.+)\.(\d+)\.(D|I|SH|B)\.a([1-3])", path.parent.name)
-            key = (record["stage"], match.group(1), int(match.group(2)), int(match.group(4)))
-            if key in seen_cells:
-                raise ValueError(f"duplicate cell attempt: {key}")
-            seen_cells.add(key)
-            if has_discard:
-                discard = json.loads((path.parent / "discarded.json").read_text())
-                discarded.append({"cell": str(path.parent), "reason": discard.get("reason", "unspecified")})
-                if discard.get("reason") == "bundle_invalid":
-                    invalid_cell_counts[(record["stage"], record["context"])] += 1
-                continue
-            row = analyzer_backend(path.parent, config) if analyzer_backend else analyze_cell(path.parent, config)
-            if action["discard"]:
-                discarded.append({"cell": str(path.parent), "reason": "preregistered discard"})
-                continue
-            rows.append(row)
-        except Exception as exc:
-            errors.append({"cell": str(path.parent), "error": str(exc)})
+    used_bundles, listed_dirs = set(), set()
     references = {}
-    for row in rows:
-        if "bundle_invalid" not in row.get("flags", []):
-            for request in row.get("requests", []):
-                if request.get("output_hash"):
-                    references.setdefault(row["stage"], request["output_hash"])
-                    break
+    for location, owner in schedules.items():
+        stage = owner["stage"]
+        expected_blocks = blocks(config, stage)
+        expected_actions = {(block["id"], slot): arm
+                            for block in expected_blocks for slot, arm in enumerate(block["arms"], 1)}
+        if set(owner["actions"]) != set(expected_actions) or any(
+                action["context"] != expected_actions[key] for key, action in owner["actions"].items()):
+            raise ValueError(f"stage schedule disagrees with config: {stage}")
+        history = defaultdict(list)
+        for event in ledger.read(location / "ledger.jsonl", sealed=True):
+            kind = event.get("event")
+            block_id, attempt = event.get("block"), event.get("attempt")
+            matching = next((block for block in expected_blocks if block["id"] == block_id), None)
+            if (kind not in ("block_accepted", "block_discarded") or matching is None or
+                    event.get("stage") != stage or type(attempt) is not int or not 1 <= attempt <= 3 or
+                    event.get("discard") is not matching["discard"] or
+                    type(event.get("wall_ns")) is not int):
+                raise ValueError(f"invalid ledger decision: {stage}/{block_id}/{attempt}")
+            previous = history[block_id]
+            if attempt != len(previous) + 1 or (previous and previous[-1]["event"] == "block_accepted"):
+                raise ValueError(f"invalid attempt history: {stage}/{block_id}/{attempt}")
+            previous.append(event)
+            if kind == "block_discarded" and (not event.get("reason") or not event.get("trigger")):
+                raise ValueError(f"incomplete discard decision: {stage}/{block_id}/{attempt}")
+            cells = event.get("cells")
+            if not isinstance(cells, list):
+                raise ValueError("ledger cells must be a list")
+            if kind == "block_accepted" and [(c.get("slot"), c.get("arm")) for c in cells] != [
+                    (slot, arm) for slot, arm in enumerate(matching["arms"], 1)]:
+                raise ValueError(f"accepted block slots or arms disagree with schedule: {block_id}")
+            local_slots = set()
+            for item in cells:
+                slot, arm = item.get("slot"), item.get("arm")
+                action = owner["actions"].get((block_id, slot))
+                expected_label = action["label"].removesuffix(".a1") + f".a{attempt}" if action else None
+                if action is None or arm != action["context"] or slot in local_slots or item.get("label") != expected_label:
+                    raise ValueError(f"ledger cell disagrees with schedule: {block_id}")
+                local_slots.add(slot)
+                directory = location / f"{block_id}.{slot}.{arm}.a{attempt}"
+                if item.get("dir") != str(directory.resolve()):
+                    raise ValueError(f"ledger cell has foreign dir: {item.get('dir')}")
+                if directory.resolve() in listed_dirs:
+                    raise ValueError(f"duplicate ledgered cell: {directory}")
+                listed_dirs.add(directory.resolve())
+                path = directory / "cell.json"
+                if not path.is_file():
+                    raise ValueError(f"missing_ledgered_cell: {directory}")
+                record = json.loads(path.read_text())
+                expected_runs = [{key: run.get(key) for key in ("run_id", "bundle", "materialized_sha256")}
+                                 for run in record.get("runs", [])]
+                if item.get("runs") != expected_runs:
+                    raise ValueError(f"ledger run mismatch: {directory}")
+                if kind == "block_discarded":
+                    marker = directory / "discarded.json"
+                    if not marker.is_file():
+                        raise ValueError(f"missing discard marker: {directory}")
+                    detail = json.loads(marker.read_text())
+                    if detail.get("block") != block_id or detail.get("attempt") != attempt:
+                        raise ValueError(f"discard marker mismatch: {directory}")
+                    # Failed runs can be incomplete; verify every persisted digest.
+                    for number, run in enumerate(expected_runs, 1):
+                        run_id = f"osctx-{stage.lower()}-{block_id.lower()}-{slot}-{arm.lower()}-r{number}"
+                        bundle = (directory / "runs" / run_id).resolve()
+                        if (run["run_id"] is not None and run["run_id"] != run_id or
+                                run["bundle"] is not None and Path(run["bundle"]).resolve() != bundle):
+                            raise ValueError(f"discarded run custody mismatch: {directory}")
+                        cfg = directory / f"run-r{number}.json"
+                        if run["materialized_sha256"] is not None and (
+                                not cfg.is_file() or hashlib.sha256(cfg.read_bytes()).hexdigest() != run["materialized_sha256"]):
+                            raise ValueError(f"discarded materialized-config sha256 mismatch: {directory}")
+                        metadata = bundle / "metadata.json"
+                        if run["run_id"] is not None and metadata.is_file() and json.loads(metadata.read_text()).get("run_id") != run_id:
+                            raise ValueError(f"discarded bundle run_id mismatch: {directory}")
+                    discarded.append({"cell": str(directory), "reason": detail.get("reason", event["reason"])})
+                    if detail.get("reason") == "bundle_invalid":
+                        invalid_cell_counts[(stage, arm)] += 1
+                    continue
+                if (directory / "discarded.json").exists():
+                    raise ValueError(f"accepted cell has discard marker: {directory}")
+                validate_cell(directory, record, schedules, config, used_bundles)
+                if matching["discard"]:
+                    discarded.append({"cell": str(directory), "reason": "preregistered discard"})
+                    continue
+                row = analyzer_backend(directory, config) if analyzer_backend else analyze_cell(directory, config)
+                row["attempt"] = attempt
+                rows.append(row)
+            if kind == "block_accepted":
+                reference = event.get("reference_hash")
+                if not isinstance(reference, str) or not reference:
+                    if not matching["discard"]:
+                        raise ValueError(f"missing accepted reference_hash: {block_id}")
+                elif stage in references and references[stage] != reference:
+                    raise ValueError(f"reference_hash mismatch: {stage}/{block_id}")
+                elif not matching["discard"]:
+                    references[stage] = reference
+        if set(history) != {block["id"] for block in expected_blocks} or any(
+                len([event for event in history[block["id"]] if event["event"] == "block_accepted"]) != 1
+                for block in expected_blocks if block["id"] in history):
+            raise ValueError(f"incomplete stage ledger: {stage}")
+    orphans = {path.parent.resolve() for path in out.rglob("cell.json")} - listed_dirs
+    if orphans:
+        raise ValueError(f"unledgered_cell: {sorted(orphans)[0]}")
     for row in rows:
         reference = references.get(row["stage"])
         if reference and any(request.get("output_hash") != reference for request in row.get("requests", [])):
-            row["flags"].extend(("output_hash_mismatch", "bundle_invalid"))
-            row["metrics"]["E"] = None
-            row["metrics"]["R"] = None
+            raise ValueError(f"reference_hash mismatch: {row['dir']}")
     decision = decision_table(rows, config)
     for row in rows:
         if "bundle_invalid" in row.get("flags", []):

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import inspect
 import json
 import math
 import os
@@ -13,13 +15,16 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 
 try:
+    from . import ledger
     from .common import blocks, load_config, write_json
     from .cell import display_state, hid_idle_seconds
     from .analyze import (analyze_directory, bundle_evidence, equivalence_power,
                           power_table, stage0_spread, u_replication_spread)
 except ImportError:
+    import ledger
     from common import blocks, load_config, write_json
     from cell import display_state, hid_idle_seconds
     from analyze import (analyze_directory, bundle_evidence, equivalence_power,
@@ -110,8 +115,8 @@ def plan(out: Path, config_path: Path, config: dict, stage: str, python: str) ->
 
 class SystemBackend:
     """Small live boundary; offline tests inject a fake in its place."""
-    def run(self, argv):
-        return subprocess.run(argv, capture_output=True, text=True, check=False)
+    def run(self, argv, *, timeout=None):
+        return subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout)
 
     def spawn_shell(self, argv, directory):
         with (directory / "stdout.log").open("wb") as stdout, (directory / "stderr.log").open("wb") as stderr:
@@ -138,20 +143,32 @@ class SystemBackend:
             return False
 
     def stop_shell(self, process):
-        # macOS returns EPERM from killpg when the group holds only exited
-        # (zombie) members, so a finished SH cell is reaped first and any
-        # survivor is proven by pgrep over the process group, not by killpg.
-        if process.poll() is None:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                pass
+        self.stop_shell_group(process.pid)
         process.wait(timeout=15)
-        survivors = subprocess.run(["/usr/bin/pgrep", "-g", str(process.pid)],
-                                   capture_output=True, text=True, check=False)
-        if survivors.returncode == 1 and not survivors.stdout.strip():
-            return
-        raise RuntimeError(f"shell process-group survivor {process.pid}: {survivors.stdout.strip()}")
+
+    def stop_shell_group(self, pgid):
+        def members():
+            result = self.run(["/usr/bin/pgrep", "-g", str(pgid)], timeout=60)
+            if result.returncode not in (0, 1):
+                raise RuntimeError(f"pgrep failed for shell group {pgid}")
+            return [int(pid) for pid in result.stdout.split()]
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            deadline = time.monotonic() + 15
+            while True:
+                current = members()
+                if not current:
+                    return
+                for pid in current:
+                    try:
+                        os.kill(pid, sig)
+                    except ProcessLookupError:
+                        pass
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(.1)
+        remaining = members()
+        if remaining:
+            raise RuntimeError(f"shell process-group survivor {pgid}: {remaining}")
 
 
 def runner_ancestry() -> list[int]:
@@ -214,17 +231,17 @@ def known_display(backend, config, log):
 
 
 def transition(backend, target: str, config: dict, log):
-    before = backend.run(["/usr/bin/pmset", "-g", "log"])
+    before = bounded_run(backend, ["/usr/bin/pmset", "-g", "log"])
     if before.returncode:
         raise RuntimeError("display transition log unreadable before request")
     argv = ["/usr/bin/pmset", "displaysleepnow"] if target == "asleep" else ["/usr/bin/caffeinate", "-u", "-t", "1"]
-    result = backend.run(argv)
+    result = bounded_run(backend, argv)
     if result.returncode:
         raise RuntimeError(f"display transition failed: {argv}")
     deadline = backend.now() + 30
     unknown_polls = 0
     while True:
-        after = backend.run(["/usr/bin/pmset", "-g", "log"])
+        after = bounded_run(backend, ["/usr/bin/pmset", "-g", "log"])
         try:
             state = backend.display()
         except Exception as exc:
@@ -245,12 +262,57 @@ def transition(backend, target: str, config: dict, log):
 NETWORK_TIME = ["sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime"]
 
 
-def with_network_time(backend, log, body):
+@contextmanager
+def Critical():
+    """Finish a bounded cleanup operation before delivering a signal."""
+    outer = not _critical_stack
+    if outer:
+        previous, pending = {}, []
+        def defer(signum, frame):
+            pending.append(signum)
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            previous[signum] = signal.getsignal(signum)
+            signal.signal(signum, defer)
+        _critical_stack.append((previous, pending))
+    try:
+        yield
+    finally:
+        if outer:
+            previous, pending = _critical_stack.pop()
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
+            if pending:
+                raise KeyboardInterrupt(f"signal {pending[0]}")
+
+
+_critical_stack = []
+
+
+def bounded_run(backend, argv):
+    params = inspect.signature(backend.run).parameters
+    if "timeout" in params or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return backend.run(argv, timeout=60)
+    return backend.run(argv)
+
+
+_active_network_owner = None
+
+
+def with_network_time(backend, log, body, *, ownership_path=None):
     """Fail closed on off; always attempt on, including after off failure."""
+    global _active_network_owner
+    owner = None
+    if ownership_path is not None:
+        if unreleased(ownership_path.parent):
+            raise RuntimeError(f"unreleased ownership; run --recover {ownership_path.parent}")
+        owner = "network_time:" + uuid.uuid4().hex
+        ledger.append(ownership_path, {"event": "acquire", "label": owner,
+                                       "action": {"context": "NETWORK_TIME"}})
+        _active_network_owner = owner
     def toggle(value):
         argv = [*NETWORK_TIME, value]
         try:
-            result = backend.run(argv)
+            result = bounded_run(backend, argv)
         except BaseException as exc:
             log(event="network_time", argv=argv, returncode=None, stderr=str(exc))
             raise RuntimeError(f"network time {value} failed: {exc}") from exc
@@ -261,7 +323,14 @@ def with_network_time(backend, log, body):
         toggle("off")
         return body()
     finally:
-        toggle("on")
+        try:
+            with Critical():
+                toggle("on")
+                if owner is not None:
+                    ledger.append(ownership_path, {"event": "release", "label": owner})
+        finally:
+            if owner is not None:
+                _active_network_owner = None
 
 
 def launch_pid(backend, action, log):
@@ -291,12 +360,12 @@ def launch_pid(backend, action, log):
 
 
 def prove_bootout(backend, action, proof, log):
-    stop = backend.run(action["stop"])
-    registered = backend.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{action['label']}"])
+    stop = bounded_run(backend, action["stop"])
+    registered = bounded_run(backend, ["/bin/launchctl", "print", f"gui/{os.getuid()}/{action['label']}"])
     if proof and proof["pid"] is not None:
         pid = proof["pid"]
-        group = backend.run(["/usr/bin/pgrep", "-g", str(proof["pgid"] or pid)])
-        process = backend.run(["/bin/ps", "-p", str(pid), "-o", "pid="])
+        group = bounded_run(backend, ["/usr/bin/pgrep", "-g", str(proof["pgid"] or pid)])
+        process = bounded_run(backend, ["/bin/ps", "-p", str(pid), "-o", "pid="])
         survivor = (group.returncode != 1 or bool(group.stdout.strip()) or
                     process.returncode != 1 or bool(process.stdout.strip()))
         check = {"pid": pid, "pgid": proof["pgid"], "pgrep_returncode": group.returncode,
@@ -309,7 +378,7 @@ def prove_bootout(backend, action, proof, log):
         literal_dir = re.sub(r"([\\.^$*+?{}\[\]()|])", r"\\\1", action["cell_dir"])
         pattern = (r"^[^[:space:]]+[[:space:]]+[^[:space:]]*/osctx_mvp/cell\.py"
                    r"[[:space:]]+--out[[:space:]]+" + literal_dir + r"([[:space:]]|$)")
-        group = backend.run(["/usr/bin/pgrep", "-f", pattern])
+        group = bounded_run(backend, ["/usr/bin/pgrep", "-f", pattern])
         survivor = group.returncode != 1 or bool(group.stdout.strip())
         check = {"pid": None, "fallback_pattern": pattern,
                  "pgrep_returncode": group.returncode, "pgrep_stdout": group.stdout,
@@ -323,9 +392,23 @@ def prove_bootout(backend, action, proof, log):
         log(event="bootout_unneeded_or_failed", label=action["label"], returncode=stop.returncode)
 
 
+def unreleased(root: Path, *, allow_active_network=False) -> dict[str, dict]:
+    pending = {}
+    for path in [root / "owned.jsonl", *sorted(root.glob("*/owned.jsonl"))]:
+        if path.exists():
+            pending.update(ledger.owned(path))
+    if allow_active_network and _active_network_owner is not None:
+        pending.pop(_active_network_owner, None)
+    return pending
+
+
 def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, python: str,
-                   *, backend, existing_actions=None, extra_allow_pids=None) -> None:
+                   *, backend, existing_actions=None, extra_allow_pids=None,
+                   ownership_path=None) -> None:
     backend = backend or SystemBackend()
+    ownership_path = ownership_path or out / "owned.jsonl"
+    if unreleased(ownership_path.parent, allow_active_network=True):
+        raise RuntimeError(f"unreleased ownership; run --recover {ownership_path.parent}")
     ownership: dict[str, tuple[dict, object | None]] = {}
     launch_proofs = {}
     allow_pids = list(dict.fromkeys((runner_ancestry() if isinstance(backend, SystemBackend) else []) +
@@ -343,15 +426,25 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
         with (out / "events.jsonl").open("a") as stream:
             stream.write(json.dumps({"wall_ns": time.time_ns(), **record}) + "\n")
     def cleanup(action):
-        owned = ownership.pop(action["label"], None)
+        owned = ownership.get(action["label"])
         if owned is None:
             return
         _, process = owned
-        if action["context"] == "SH":
-            backend.stop_shell(process)
-        else:
-            prove_bootout(backend, action, launch_proofs.get(action["label"]), log)
+        with Critical():
+            if action["context"] == "SH":
+                backend.stop_shell(process)
+            else:
+                prove_bootout(backend, action, launch_proofs.get(action["label"]), log)
+            ledger.append(ownership_path, {"event": "release", "label": action["label"]})
+            ownership.pop(action["label"])
         log(event="cleanup_proved", label=action["label"])
+    def ledger_cells(actions):
+        return [ledger.cell_entry(Path(a["cell_dir"]), slot=a["cell_id"], arm=a["context"], label=a["label"])
+                for a in actions if (Path(a["cell_dir"]) / "cell.json").is_file()]
+    def block_record(kind, block, attempt, actions, reference, **extra):
+        ledger.append(out / "ledger.jsonl", {"event": kind, "stage": stage, "block": block["id"],
+                      "attempt": attempt, "discard": block["discard"],
+                      "reference_hash": reference, "cells": ledger_cells(actions), **extra}, sealed=True)
     try:
         previous = "on"
         for block in blocks(config, stage):
@@ -385,14 +478,19 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
                     if (directory / "done.json").exists():
                         raise FileExistsError(directory / "done.json")
                     try:
+                        ledger.append(ownership_path, {"event": "acquire", "label": action["label"], "action": action})
+                        ownership[action["label"]] = action, None
                         if action["context"] == "SH":
                             process = backend.spawn_shell(action["start"], directory)
+                            ledger.append(ownership_path, {"event": "update", "label": action["label"],
+                                                           "pid": process.pid if hasattr(process, "pid") else None})
                         else:
-                            ownership[action["label"]] = action, None
                             result = backend.run(action["start"])
                             if result.returncode:
                                 raise RuntimeError(f"bootstrap failed: {action['label']}")
                             launch_proofs[action["label"]] = launch_pid(backend, action, log)
+                            ledger.append(ownership_path, {"event": "update", "label": action["label"],
+                                                           "proof": launch_proofs[action["label"]]})
                             process = None
                         ownership[action["label"]] = action, process
                         deadline = backend.now() + config["timeout_seconds"]
@@ -428,6 +526,8 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
                                                 "trigger": action["label"], "block": block["id"], "attempt": attempt})
                                 log(event="stage_stopped", reason="arm_invalid_cell_limit",
                                     arm=action["context"], invalid_cells=3, council_review_required=True)
+                                block_record("block_discarded", block, attempt, actions, stage_reference,
+                                             reason="arm_invalid_cell_limit", trigger=action["label"])
                                 raise RuntimeError(f"stage stopped: 3 invalid cells in {action['context']}; council review required")
                         log(event="cell_end", label=action["label"], interrupted=bad,
                             reason=reason, ok=done.get("ok"),
@@ -438,6 +538,7 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
                         break
                 if not bad:
                     stage_reference = pending_reference
+                    block_record("block_accepted", block, attempt, actions, stage_reference)
                     break
                 failed_label = action["label"]
                 for discarded_action in actions:
@@ -445,6 +546,8 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
                                {"reason": reason if discarded_action["label"] == failed_label else "block_peer_discard",
                                 "trigger": failed_label, "block": block["id"], "attempt": attempt})
                 log(event="block_discarded", block=block["id"], attempt=attempt, reason=reason)
+                block_record("block_discarded", block, attempt, actions, stage_reference,
+                             reason=reason, trigger=failed_label)
                 if attempt >= 3:
                     log(event="stage_stopped", reason="block_attempt_limit", block=block["id"], attempts=attempt)
                     raise RuntimeError(f"stage stopped: block {block['id']} failed three times")
@@ -454,30 +557,36 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
         for signum in old_handlers:
             signal.signal(signum, signal.SIG_IGN)
         errors = []
-        for action, _ in list(ownership.values()):
-            try:
-                cleanup(action)
-            except Exception as exc:
-                errors.append(str(exc))
-        if stage == "S":
-            try:
-                if backend.display() == "asleep":
-                    transition(backend, "on", config, log)
-            except Exception as exc:
-                errors.append(str(exc))
-        for signum, handler in old_handlers.items():
-            signal.signal(signum, handler)
+        try:
+            with Critical():
+                for action, _ in list(ownership.values()):
+                    try:
+                        cleanup(action)
+                    except Exception as exc:
+                        errors.append(str(exc))
+                if stage == "S":
+                    try:
+                        if backend.display() == "asleep":
+                            transition(backend, "on", config, log)
+                    except Exception as exc:
+                        errors.append(str(exc))
+        finally:
+            for signum, handler in old_handlers.items():
+                signal.signal(signum, handler)
         if errors:
             raise RuntimeError("cleanup failed: " + "; ".join(errors))
 
 
 def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
             *, backend=None, existing_actions=None, extra_allow_pids=None,
-            manage_network=True) -> None:
+            manage_network=True, ownership_path=None) -> None:
     backend = backend or SystemBackend()
+    if unreleased((ownership_path or out / "owned.jsonl").parent, allow_active_network=not manage_network):
+        raise RuntimeError(f"unreleased ownership; run --recover {(ownership_path or out / 'owned.jsonl').parent}")
     def body():
         return _execute_cells(out, config_path, config, stage, python, backend=backend,
-                              existing_actions=existing_actions, extra_allow_pids=extra_allow_pids)
+                              existing_actions=existing_actions, extra_allow_pids=extra_allow_pids,
+                              ownership_path=ownership_path)
     if not manage_network:
         return body()
     def log(**record):
@@ -491,7 +600,7 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
             old_handlers[signum] = signal.getsignal(signum)
             signal.signal(signum, interrupted_signal)
     try:
-        return with_network_time(backend, log, body)
+        return with_network_time(backend, log, body, ownership_path=ownership_path or out / "owned.jsonl")
     finally:
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
@@ -536,6 +645,8 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
                 extra_allow_pids=None):
     backend = backend or SystemBackend()
     out.mkdir(parents=True, exist_ok=True)
+    if unreleased(out):
+        raise RuntimeError(f"unreleased ownership; run --recover {out}")
     session_path = out / "session.json"
     if session_path.exists() or (out / "freeze.json").exists():
         raise FileExistsError("session or freeze already exists; session cannot overwrite a prior freeze")
@@ -566,7 +677,8 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
         directory = out / name
         actions = plan(directory, active_path, active_config, name, python)
         execute(directory, active_path, active_config, name, python, backend=backend,
-                existing_actions=actions, extra_allow_pids=extra_allow_pids, manage_network=False)
+                existing_actions=actions, extra_allow_pids=extra_allow_pids, manage_network=False,
+                ownership_path=out / "owned.jsonl")
         report = analyze_directory(directory, active_config)
         if report["errors"]:
             raise RuntimeError(f"{name} analysis errors: {report['errors']}")
@@ -625,7 +737,7 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
             old_handlers[signum] = signal.getsignal(signum)
             signal.signal(signum, interrupted_signal)
     try:
-        return with_network_time(backend, log, body)
+        return with_network_time(backend, log, body, ownership_path=out / "owned.jsonl")
     except BaseException as exc:
         session["status"] = "stopped"
         reason = f"{type(exc).__name__}: {exc}"
@@ -638,12 +750,70 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
             signal.signal(signum, handler)
 
 
+def recover(out: Path, *, backend=None):
+    """Replay recorded process ownership, then restore network time."""
+    backend = backend or SystemBackend()
+    paths = [out / "owned.jsonl"] + sorted(out.glob("*/owned.jsonl"))
+    paths = [path for path in paths if path.exists()]
+    def log(**record):
+        ledger.append(out / "recovery.jsonl", record)
+    errors = []
+    network_owners = []
+    with Critical():
+        for path in paths:
+            for label, record in list(ledger.owned(path).items()):
+                action = record["action"]
+                if action["context"] == "NETWORK_TIME":
+                    network_owners.append((path, label))
+                    continue
+                try:
+                    if action["context"] == "SH":
+                        pid = record.get("pid")
+                        if pid is None:
+                            # The spawn may have completed before its PID update was durable.
+                            literal_dir = re.sub(r"([\\.^$*+?{}\[\]()|])", r"\\\1", action["cell_dir"])
+                            pattern = (r"^[^[:space:]]+[[:space:]]+[^[:space:]]*/osctx_mvp/cell\.py"
+                                       r"[[:space:]]+--out[[:space:]]+" + literal_dir + r"([[:space:]]|$)")
+                            found = bounded_run(backend, ["/usr/bin/pgrep", "-f", pattern])
+                            if found.returncode not in (0, 1):
+                                raise RuntimeError(f"SH recovery lookup failed: {label}")
+                            groups = set()
+                            for member in found.stdout.split():
+                                group = bounded_run(backend, ["/bin/ps", "-p", member, "-o", "pgid="])
+                                if group.returncode or not group.stdout.strip().isdigit():
+                                    raise RuntimeError(f"SH recovery PGID unavailable: {label}/{member}")
+                                groups.add(int(group.stdout.strip()))
+                            for group in groups:
+                                backend.stop_shell_group(group)
+                        else:
+                            backend.stop_shell_group(pid)
+                    else:
+                        prove_bootout(backend, action, record.get("proof"), log)
+                    ledger.append(path, {"event": "release", "label": label})
+                except Exception as exc:
+                    errors.append(str(exc))
+        try:
+            result = bounded_run(backend, NETWORK_TIME + ["on"])
+            log(event="network_time", argv=NETWORK_TIME + ["on"], returncode=result.returncode,
+                stderr=result.stderr)
+            if result.returncode:
+                errors.append(f"network time on failed: {result.stderr}")
+            else:
+                for path, label in network_owners:
+                    ledger.append(path, {"event": "release", "label": label})
+        except Exception as exc:
+            errors.append(f"network time on failed: {exc}")
+    if errors:
+        raise RuntimeError("recovery failed: " + "; ".join(errors))
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--render-only", type=Path)
     mode.add_argument("--out", type=Path)
-    scope = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--recover", type=Path)
+    scope = parser.add_mutually_exclusive_group()
     scope.add_argument("--stage", choices=("stage0", "stage0U", "U1", "U2", "S", "rehearsal"))
     scope.add_argument("--session", choices=("U",))
     parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.json"))
@@ -651,6 +821,13 @@ def main(argv=None) -> int:
     parser.add_argument("--u1-summary", type=Path)
     parser.add_argument("--allow-pid", action="append", type=int, default=[])
     args = parser.parse_args(argv)
+    if args.recover:
+        if args.stage or args.session:
+            parser.error("--recover takes no stage or session")
+        recover(args.recover.resolve())
+        return 0
+    if not (args.stage or args.session):
+        parser.error("--stage or --session is required")
     config = load_config(args.config)
     out = (args.render_only or args.out).resolve()
     if args.session:
