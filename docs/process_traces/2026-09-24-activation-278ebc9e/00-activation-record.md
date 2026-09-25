@@ -234,3 +234,10 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - NEEDS_RULING on version placement: `claim_rule_version` is frozen per contrast.
    The resume seat runs on brief 97.
 89. Seat K (brief 96, Sol, rc 0) landed R4-3: commit `36e470ca` on `test/2026-09-24-a291-ownership-harness`, pushed. The RED set at the `0fa4e6e3` packer matches the ruling exactly: 3 failing tests (the named seal regressions, pairwise, triples), 109 pairwise and 287 triple escapes, 0 operator/refresh errors, 0 checker disagreements. The legal corpus passes through the seal. Fuzz, stress and checker suites pass (32 tests). **Bench-verified by the magistrate:** NAMED_SEAL shows AUD-1, B1, B2 and cross-model-reorder accepted and B1-singles-voided and probe-D refused `inv_11`; the oracle's named regressions PASS. Next: seat P (Opus 5.5, Claude family) on a worktree cut from `36e470ca` (brief 98).
+90. The claim-gate resume (brief 97, Sol; report 97b) returned partial again and is committed as WIP. The focused suite passes 276 tests. The simulation checks pass: CG-3 no-change false FAIL is 3.1–4.6 %, and false PASS at the margin is 0.05–0.16 %.
+   New blockers:
+   - The manifest validators reject the v2 contrast fields (a second scope request, for 4 manifest files).
+   - No authenticated same-epoch F_est source exists.
+   - Per-contrast versioning versus the single shared floor selector is unresolved.
+   - 19 paper-custody tests have stale receipt digests, a consequence of the validator source changes.
+   **The magistrate STOPS the claim-gate implementation here (anti-spiral).** A second scope request of the same shape, plus design questions about wiring F_est provenance through the custody chain, are integration design, not implementation. They go to a design consult and cold gate on "end-to-end v2 wiring": where F_est is minted and authenticated; the manifest v2 schema; mixed v1/v2 contracts; paper-custody receipt refresh. Nothing is urgent: no claim-bearing data can exist before the instrument acceptance. The branch `feat/2026-09-24-claimgate-v2` holds the WIP.
