@@ -243,3 +243,4 @@
      3. Records-only commits carry the evidence into each head.
      4. A cold confirm of the exact PR-L and PR-R heads follows. A292 needs none, per its ruling.
      5. Merge order: PR-L, then PR-R, then A292.
+83. PR-0 A1 (seat 78): commit on `test/2026-09-25-claimgate-pr0-golden`. The golden blob is `caa18e15`, byte-identical twice, and all four targeted mutants are KILLED by the real-wire rows. The certificate pin test errors only because the full `--certify` sweep has not run yet. **Next:** the lead runs `--certify` at the bench after the integration suite, then a delta lens, then the final pass.
