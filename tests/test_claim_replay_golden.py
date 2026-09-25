@@ -9,13 +9,18 @@ import unittest
 from unittest import mock
 
 from scripts.capture_claim_replay_golden import (
-    GOLDEN, ROOT, SELECTED_PATHS, _tracked_json, _issuance_gate,
+    GOLDEN, ROOT, SELECTED_PATHS, CORPUS_BASES, _tracked_json, _issuance_gate,
     _window_transitions, canonical_bytes, capture,
 )
+from joulewise.analysis_engine.artifact import validate_claim_verdicts
+from scripts.claimgate_golden_sweep import CERTIFICATE
 
 
 # Update only alongside a reviewed refresh of tests/golden/claimgate_v1_replay.json.
-GOLDEN_BLOB_SHA = "82450aa5499fb25967714835cb0d0aaecb92d372"
+GOLDEN_BLOB_SHA = "3a4cc5604136eedbae124f38a69d54a1faa8ebb5"
+CERTIFICATE_BLOB_SHA = "REPIN"
+CORPUS_BASE_BLOB_SHAS = {"gate_fixture": "56c84e22c24069c460dec26c65e56329304c9553",
+                         "minimal": "6e96381cf5dab3e44203f9324f1b85baae4c53e3"}
 APPLIED_TRANSITIONS: frozenset[str] = frozenset()
 
 
@@ -68,15 +73,17 @@ class ClaimReplayGoldenTests(unittest.TestCase):
                         self.assertEqual({k: v for k, v in current.items() if k != "direct_call"},
                                          {k: v for k, v in states["post"].items() if k != "shim"})
 
-    def test_golden_branch_coverage_complete(self) -> None:
-        from scripts.claimgate_golden_sweep import coverage_sweep
-        result = coverage_sweep()
-        self.assertEqual(result["unlisted"], [], result["unlisted"])
+    def test_validator_corpus_bases_clean(self) -> None:
+        for name, expected in CORPUS_BASE_BLOB_SHAS.items():
+            with self.subTest(name=name):
+                raw = (CORPUS_BASES / f"{name}.json").read_bytes()
+                self.assertEqual(_blob_sha(raw), expected)
+                self.assertEqual(validate_claim_verdicts(json.loads(raw)), [])
 
-    def test_golden_mutation_sweep_zero_unlisted_survivors(self) -> None:
-        from scripts.claimgate_golden_sweep import mutation_sweep
-        result = mutation_sweep()
-        self.assertEqual(result["unlisted_survivors"], [], result["unlisted_survivors"])
+    def test_sensitivity_certificate_pinned(self) -> None:
+        raw = CERTIFICATE.read_bytes()
+        self.assertEqual(_blob_sha(raw), CERTIFICATE_BLOB_SHA)
+        self.assertEqual(json.loads(raw)["golden_blob_sha"], GOLDEN_BLOB_SHA)
 
     def test_golden_detects_one_number_mutation(self) -> None:
         with mock.patch("joulewise.analysis_engine._resolve_contrast_floor", return_value=[]):

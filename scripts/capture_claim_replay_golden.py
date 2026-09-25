@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from concurrent.futures import ProcessPoolExecutor
 import dataclasses
 from contextlib import nullcontext
 import base64
@@ -29,8 +30,8 @@ if str(ROOT) not in sys.path:
 
 from joulewise import paper_custody as custody
 from joulewise.analysis_engine.artifact import validate_claim_verdicts
-from joulewise.analysis_engine.claims import evaluate_claim
-from joulewise.analysis_engine.multiplicity import holm_adjust
+from joulewise.analysis_engine.claims import evaluate_claim, ordered_reason_codes
+from joulewise.analysis_engine.multiplicity import adjust_p_values, holm_adjust
 from joulewise.analysis_engine.registry import validate_analysis_manifest_v2, validate_analysis_registry_v2
 from joulewise.analysis_manifest import validate_analysis_manifest, validate_analysis_registry
 from joulewise.analysis_manifest_v3 import (
@@ -41,6 +42,7 @@ from joulewise.analysis_manifest_v3 import (
 from scripts import epoch_equivalence_check as epoch
 
 GOLDEN = ROOT / "tests/golden/claimgate_v1_replay.json"
+CORPUS_BASES = ROOT / "tests/golden/claimgate_v1_corpus_bases"
 SELECTED_PATHS = (
     "configs/analysis_registry/ap_spec_draft_front.v2.json",
     "configs/analysis_registry/ap_spec_native_mtp_front.v2.json",
@@ -60,6 +62,91 @@ SELECTED_PATHS = (
 def canonical_bytes(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, indent=1,
                        ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+
+
+def _blob_sha(raw: bytes) -> str:
+    return hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest()
+
+
+def _record(call, *args, **kwargs) -> dict[str, object]:
+    try:
+        return {"result": call(*args, **kwargs)}
+    except Exception as exc:
+        return {"raised": type(exc).__name__, "message": str(exc)}
+
+
+def _corpus_batch(task) -> dict[str, list[str]]:
+    name, raw, descriptors = task
+    base = json.loads(raw)
+    cases = {}
+    for pointer, route, value in descriptors:
+        operations = []
+        if route:
+            operations.append(("drop", None, True))
+        if value is None:
+            pass
+        elif isinstance(value, bool):
+            operations.extend((("null", None, False), ("wrong_type", "true", False)))
+        elif isinstance(value, (int, float)):
+            operations.extend((("null", None, False), ("wrong_type", "x", False),
+                               ("nan", float("nan"), False)))
+            if value != 0:
+                operations.append(("sign_flip", -value, False))
+            operations.append(("off_by_one", value + 1, False))
+        elif isinstance(value, str):
+            operations.extend((("null", None, False), ("wrong_type", 0, False),
+                               ("off_by_one", value + "x", False), ("empty", "", False),
+                               ("swap_enum", "__not_an_enum__", False)))
+        elif isinstance(value, list):
+            operations.extend((("null", None, False), ("wrong_type", {}, False),
+                               ("empty", [], False)))
+        elif isinstance(value, dict):
+            operations.extend((("null", None, False), ("wrong_type", [], False),
+                               ("empty", {}, False)))
+        for op, replacement, drop in operations:
+            if not drop and replacement == value:
+                continue
+            candidate = copy.deepcopy(base)
+            if route:
+                parent = candidate
+                for step in route[:-1]:
+                    parent = parent[step]
+                if drop:
+                    del parent[route[-1]]
+                else:
+                    parent[route[-1]] = replacement
+            else:
+                candidate = replacement
+            cases[f"{name}|{pointer}|{op}"] = _errors(validate_claim_verdicts, candidate)
+    return cases
+
+
+def _validator_corpus() -> dict[str, object]:
+    """Enumerate deterministic mutations of the two tracked, clean bases."""
+    cases: dict[str, list[str]] = {}
+    bases: dict[str, str] = {}
+    def pointer_part(part: object) -> str:
+        return str(part).replace("~", "~0").replace("/", "~1")
+    def nodes(value, pointer="", route=()):
+        yield pointer, route, value
+        if isinstance(value, dict):
+            for key in sorted(value):
+                yield from nodes(value[key], pointer + "/" + pointer_part(key), route + (key,))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                yield from nodes(item, pointer + "/" + str(index), route + (index,))
+    tasks = []
+    for name in ("gate_fixture", "minimal"):
+        raw = (CORPUS_BASES / f"{name}.json").read_bytes()
+        bases[name] = _blob_sha(raw)
+        base = json.loads(raw)
+        descriptors = list(nodes(base))
+        for start in range(0, len(descriptors), 250):
+            tasks.append((name, raw, descriptors[start:start + 250]))
+    with ProcessPoolExecutor(max_workers=8) as pool:
+        for batch in pool.map(_corpus_batch, tasks):
+            cases.update(batch)
+    return {"bases": bases, "spec_version": 1, "case_count": len(cases), "cases": cases}
 
 
 def _tracked_json() -> list[Path]:
@@ -254,6 +341,16 @@ def _epoch_replays() -> dict[str, object]:
             result["invalid_decimal"] = {"raised": type(exc).__name__}
         else:
             result["invalid_decimal"] = {"raised": None}
+    minimum_retained = copy.deepcopy(invalid["retained"][:epoch.MINIMUM_RETAINED_M])
+    with mock.patch.object(epoch, "_slot_outcomes", return_value=(invalid["slot_outcomes"], minimum_retained)):
+        result["at_minimum_m"] = _record(epoch.evaluate_session, session, session.session_id,
+                                          invalid["reference_envelope"])
+    edge = copy.deepcopy(invalid)
+    values = [epoch.Decimal(item["b_fiducial_s"]) for item in edge["retained"]]
+    edge["reference_envelope"]["bracket_screen_s"] = str(max(values) - min(values))
+    with mock.patch.object(epoch, "_slot_outcomes", return_value=(edge["slot_outcomes"], edge["retained"])):
+        result["bracket_at_edge"] = _record(epoch.evaluate_session, session, session.session_id,
+                                             edge["reference_envelope"])
     return result
 
 
@@ -288,6 +385,16 @@ def _claim_matrix() -> dict[str, object]:
         "floor_negative": {"floor_gate_j": -1.0},
         "metrology_straddles_zero": {"metrology_aware_ci95": {"lower": -0.1, "upper": 2.5}},
         "metrology_bad_lower": {"metrology_aware_ci95": {"lower": "invalid", "upper": 2.5}},
+        "metrology_lower_zero": {"metrology_aware_ci95": {"lower": 0.0, "upper": 2.5}},
+        "metrology_upper_zero": {"estimate": -2.0, "metrology_aware_ci95": {"lower": -2.5, "upper": 0.0},
+                                 "decision_interval": {"lower": -2.75, "upper": -1.25}},
+        "decision_lower_zero": {"decision_interval": {"lower": 0.0, "upper": 2.75}},
+        "decision_upper_zero": {"estimate": -2.0, "metrology_aware_ci95": {"lower": -2.5, "upper": -1.5},
+                                "decision_interval": {"lower": -2.75, "upper": 0.0}},
+        "decision_lower_zero_metrology_clear": {"decision_interval": {"lower": 0.0, "upper": 2.75}},
+        "decision_upper_zero_metrology_clear": {"estimate": -2.0,
+                                                 "metrology_aware_ci95": {"lower": -2.5, "upper": -1.5},
+                                                 "decision_interval": {"lower": -2.75, "upper": 0.0}},
         "decision_straddles_zero_metrology_clear": {"decision_interval": {"lower": -0.1, "upper": 2.75}},
         "decision_straddles_metrology_negative": {
             "metrology_aware_ci95": {"lower": -2.5, "upper": -1.5},
@@ -297,6 +404,8 @@ def _claim_matrix() -> dict[str, object]:
         "floor_metadata_bad_discipline": {"floor_metadata": {**valid_metadata, "single_count_discipline": {}}},
         "floor_metadata_not_mapping": {"floor_metadata": "invalid"},
         "floor_metadata_missing_key": {"floor_metadata": {"floor_source": ATTRIBUTION_FLOOR_SOURCE}},
+        "floor_metadata_keys_as_list": {"floor_metadata": list(valid_metadata)},
+        "floor_metadata_extra_key": {"floor_metadata": {**valid_metadata, "extra": True}},
         "floor_metadata_bad_limit": {"floor_metadata": {**valid_metadata, "floor_limit_class": "wrong"}},
         "floor_metadata_bad_point": {"floor_metadata": {**valid_metadata, "point_floor_diagnostics": "invalid"}},
         "interval_inverted": {"decision_interval": {"lower": 3.0, "upper": 2.0}},
@@ -304,10 +413,12 @@ def _claim_matrix() -> dict[str, object]:
         "interval_bad_upper": {"decision_interval": {"lower": 1.0, "upper": "invalid"}},
         "estimate_bool": {"estimate": True},
         "base_not_resolvable": {"base_reason_codes": ["floor_row_missing"]},
+        "base_reason_not_resolvable": {"base_reason_codes": ["floor_row_missing"]},
         "base_unresolved": {"base_reason_codes": ["multiplicity_not_rejected"]},
         "base_sensitivity": {"base_reason_codes": ["randomization_sensitivity_disagrees"]},
         "claim_role_other": {"claim_role": "exploratory"},
         "equivalence_margin_at_floor_inside": {"equivalence": {"method": "tost_v1", "margin": 1.0}, "metrology_aware_ci95": {"lower": -0.5, "upper": 0.5}, "decision_interval": {"lower": -0.75, "upper": 0.75}},
+        "equivalence_present_below_floor": {"estimate": 0.5, "equivalence": {"method": "tost_v1", "margin": 3.0}},
         "equivalence_margin_at_floor_outside": {"equivalence": {"method": "tost_v1", "margin": 1.0}},
         "equivalence_margin_above_floor_inside": {"equivalence": {"method": "tost_v1", "margin": 3.0}},
         "equivalence_registered_direction": {"equivalence": {"method": "tost_v1", "margin": 3.0},
@@ -325,6 +436,45 @@ def _claim_matrix() -> dict[str, object]:
     result = {name: {"inputs": arguments, "output": evaluate_claim(**arguments)}
             for name, override in cases.items()
             for arguments in [{**base, **override}]}
+    for name in ("floor_metadata_keys_as_list", "floor_metadata_extra_key",
+                 "base_reason_not_resolvable", "equivalence_present_below_floor",
+                 "metrology_lower_zero", "metrology_upper_zero", "decision_lower_zero",
+                 "decision_upper_zero", "decision_lower_zero_metrology_clear",
+                 "decision_upper_zero_metrology_clear"):
+        result[name] = _record(evaluate_claim, **{**base, **cases[name]})
+    result["ordered_reason_codes"] = {"unknown_code": _record(ordered_reason_codes, ["not_a_code"])}
+    multiplicity_cases = {
+        "holm_valid": ({"a": .01, "b": .04, "c": .03}, "holm", 3, .05, None),
+        "bh_valid": ({"a": .01, "b": .04, "c": .03}, "benjamini_hochberg", 3, None, .05),
+        "bh_clamp": ({"a": .6, "b": .7}, "benjamini_hochberg", 2, None, .05),
+        "exploratory_valid": ({"a": .01}, "exploratory_none", 1, None, None),
+        "holm_at_threshold": ({"a": .05}, "holm", 1, .05, None),
+        "bh_at_threshold": ({"a": .05}, "benjamini_hochberg", 1, None, .05),
+        "unsupported_method": ({"a": .01}, "unknown", 1, .05, None),
+        "holm_with_q": ({"a": .01}, "holm", 1, .05, .05),
+        "bh_with_alpha": ({"a": .01}, "benjamini_hochberg", 1, .05, .05),
+        "exploratory_with_alpha": ({"a": .01}, "exploratory_none", 1, .05, None),
+        "m_zero": ({"a": .01}, "holm", 0, .05, None),
+        "m_bool": ({"a": .01}, "holm", True, .05, None),
+        "m_mismatch": ({"a": .01}, "holm", 2, .05, None),
+        "p_values_not_mapping": ([.01], "holm", 1, .05, None),
+        "contrast_id_empty": ({"": .01}, "holm", 1, .05, None),
+        "contrast_id_not_str": ({1: .01}, "holm", 1, .05, None),
+        "p_str": ({"a": ".01"}, "holm", 1, .05, None),
+        "p_bool": ({"a": True}, "holm", 1, .05, None),
+        "p_above_one": ({"a": 1.01}, "holm", 1, .05, None),
+        "p_nan": ({"a": float("nan")}, "holm", 1, .05, None),
+        "p_negative": ({"a": -.01}, "holm", 1, .05, None),
+        "threshold_zero": ({"a": .01}, "holm", 1, 0, None),
+        "threshold_above_one": ({"a": .01}, "holm", 1, 1.01, None),
+        "threshold_str": ({"a": .01}, "holm", 1, "0.05", None),
+        "threshold_bool": ({"a": .01}, "holm", 1, True, None),
+        "threshold_nan": ({"a": .01}, "holm", 1, float("nan"), None),
+    }
+    result["multiplicity"] = {
+        name: _record(adjust_p_values, values, method=method, m=m, alpha=alpha, q=q)
+        for name, (values, method, m, alpha, q) in multiplicity_cases.items()
+    }
     result["holm_adjust"] = {}
     from joulewise.analysis_engine.claims import _finite
     result["finite_nonfinite"] = {"input": "Infinity", "output": _finite(float("inf"))}
@@ -429,6 +579,15 @@ def _window_engine() -> dict[str, object]:
         "v3_match": resolved(matching_inputs, lambda *_: matching),
         "v1_match": resolved(v1_inputs, lambda *_: matching),
     }
+    malformed_inputs = dataclasses.replace(inputs, floor_artifact={**floor, "cells": [None, {"cell_id": 7}]})
+    result["request_window_class_mismatch"] = _record(
+        resolved, matching_inputs, lambda *_: dataclasses.replace(matching, window_class="wrong"))
+    result["request_condition_mismatch"] = _record(
+        resolved, matching_inputs, lambda *_: dataclasses.replace(matching, condition_family_id="wrong"))
+    result["binding_seam_differs"] = _record(
+        resolved, matching_inputs, lambda *_: matching,
+        seam=dataclasses.replace(matching, condition_family_id="wrong"))
+    result["malformed_cells"] = _record(resolved, malformed_inputs, lambda *_: matching)
     return result
 
 
@@ -567,7 +726,7 @@ def capture() -> dict[str, object]:
     issuance = _issuance_gate()
     verdicts = _claim_artifacts(paths)
     verdicts["invalid_verdict_wire"] = _invalid_issuance_gate()
-    return {"schema_version": "joulewise.claimgate_v1_replay_golden.v2",
+    return {"schema_version": "joulewise.claimgate_v1_replay_golden.v3",
             "selected_paths": selected,
             "selection_rules": {
                 "selected_paths": "Pinned checked-in claim-verdict, manifest, and registry JSON paths selected for PR-0; discovery is informational only.",
@@ -584,6 +743,7 @@ def capture() -> dict[str, object]:
                 "window_engine": _window_engine(),
                 "claim_side_bound": _claim_side_bound(),
                 "epoch_replays": _epoch_replays(),
+                "validator_corpus": _validator_corpus(),
             },
             "transitions": {"WR-6": _window_transitions(),
                             "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {
@@ -592,7 +752,8 @@ def capture() -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
+    parser.add_argument("--write-corpus-bases", action="store_true")
+    args = parser.parse_args()
     if subprocess.run(["git", "rev-parse", "--verify", "origin/main"], cwd=ROOT,
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
         print("refusing golden refresh: origin/main absent", file=sys.stderr)
@@ -604,9 +765,21 @@ def main() -> None:
         ["git", "ls-files", "--others", "--exclude-standard", "--", *protected], cwd=ROOT)
     if committed.returncode or working.returncode or untracked:
         raise SystemExit("refusing golden refresh: decision source differs from origin/main")
-    GOLDEN.parent.mkdir(parents=True, exist_ok=True)
-    GOLDEN.write_bytes(canonical_bytes(capture()))
-    print(f"wrote {GOLDEN.relative_to(ROOT)}")
+    if args.write_corpus_bases:
+        from tests.test_analysis_claims import minimal_artifact
+        values = {"gate_fixture": _gate_fixture()[0], "minimal": minimal_artifact()}
+        for name, value in values.items():
+            errors = validate_claim_verdicts(value)
+            if errors:
+                raise SystemExit(f"refusing corpus base {name}: {errors}")
+        CORPUS_BASES.mkdir(parents=True, exist_ok=True)
+        for name, value in values.items():
+            (CORPUS_BASES / f"{name}.json").write_bytes(canonical_bytes(value))
+        print(f"wrote {CORPUS_BASES.relative_to(ROOT)}")
+    else:
+        GOLDEN.parent.mkdir(parents=True, exist_ok=True)
+        GOLDEN.write_bytes(canonical_bytes(capture()))
+        print(f"wrote {GOLDEN.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

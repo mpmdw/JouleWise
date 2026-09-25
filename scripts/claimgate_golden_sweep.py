@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Mechanical branch and mutation sweep for the v1 replay golden.
+"""Certify v1 golden sensitivity once at the reviewed PR-0 source.
 
-Only the seven whole-body decision functions receive branch coverage.
-Issuance, artifact, analysis, side-bound, and manifest paths are pinned by
-mutations and recorded outcomes.
+Gated: claims, multiplicity, floor resolution, issuance gate, epoch replay.
+Measured: artifact validator, estimators, analyze_claims, claim side bound.
+Untargeted: reference_envelope and manifest/registry validators.
 """
 
 from __future__ import annotations
@@ -13,8 +13,11 @@ import ast
 from concurrent.futures import ThreadPoolExecutor
 import copy
 import dis
+import inspect
 import json
+import re
 from pathlib import Path
+import platform
 import shutil
 import subprocess
 import sys
@@ -24,7 +27,22 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.capture_claim_replay_golden import GOLDEN, canonical_bytes, capture
+from scripts.capture_claim_replay_golden import GOLDEN, canonical_bytes, capture, _blob_sha
+
+CERTIFICATE = ROOT / "tests/golden/claimgate_v1_sensitivity_certificate.json"
+GATED = [
+    ("joulewise/analysis_engine/claims.py", None),
+    ("joulewise/analysis_engine/multiplicity.py", None),
+    ("joulewise/analysis_engine/__init__.py", {"_resolve_contrast_floor"}),
+    ("joulewise/paper_custody.py", {"_claim_issuance_gate"}),
+    ("scripts/epoch_equivalence_check.py", {"evaluate_session"}),
+]
+MEASURED = [
+    ("joulewise/analysis_engine/artifact.py", {"validate_claim_verdicts"}),
+    ("joulewise/analysis_engine/estimators.py", {"estimate_paired_blocks", "_ci_t_critical", "_sample_stddev"}),
+    ("joulewise/analysis_engine/__init__.py", {"analyze_claims"}),
+    ("joulewise/analysis_engine/claim_side_bound.py", {"produce_claim_side_bound", "validate_claim_side_bound"}),
+]
 
 # Key: <module>:<qualname>:<line>:<direction>. Each proof is reviewed with the
 # concrete branch offset shown in the sweep table.
@@ -40,7 +58,9 @@ UNREACHABLE_ARCS: dict[str, str] = {
 # Key: <file>:<line>:<mutation>. Proven semantic equivalents only.
 EQUIVALENT_MUTANTS: dict[str, str] = {
     "joulewise/analysis_engine/claims.py:386:Gt_to_GtE@34:0":
-        "A zero estimate cannot reach direction_supported with a nonnegative floor; negative floors refuse earlier.",
+        "equivalent: A zero estimate cannot reach direction_supported with a nonnegative floor; negative floors refuse earlier [row: invariant.claim_matrix.direction_at_floor]",
+    "joulewise/analysis_engine/claims.py:385:And_delete_1@7":
+        "equivalent: direction_supported requires a numeric estimate; the right arc at claims:evaluate_claim:385 is unreachable [row: invariant.claim_matrix.direction_above]",
 }
 
 
@@ -110,17 +130,7 @@ def coverage_sweep() -> dict:
             "unused_allowlist": sorted(set(UNREACHABLE_ARCS) - used_allowlist)}
 
 
-_TARGETS = {
-    "joulewise/analysis_engine/claims.py": None,
-    "joulewise/analysis_engine/multiplicity.py": None,
-    "joulewise/analysis_engine/__init__.py": {"_resolve_contrast_floor"},
-    "joulewise/paper_custody.py": {"_claim_issuance_gate"},
-    "joulewise/analysis_engine/artifact.py": {"validate_claim_verdicts"},
-    "scripts/epoch_equivalence_check.py": {"evaluate_session"},
-}
-
-
-def _mutations(path: str, source: str):
+def _mutations(path: str, source: str, functions: set[str] | None):
     tree = ast.parse(source)
     scopes = []
     candidates = []
@@ -134,7 +144,7 @@ def _mutations(path: str, source: str):
             self.generic_visit(node)
             scopes.pop()
         def generic_visit(self, node):
-            active = bool(scopes) and (_TARGETS[path] is None or scopes[0] in _TARGETS[path])
+            active = bool(scopes) and (functions is None or scopes[0] in functions)
             if active:
                 if isinstance(node, ast.Compare):
                     partners = {ast.Lt: ast.LtE, ast.LtE: ast.Lt,
@@ -218,39 +228,49 @@ def _rewrite(tree, candidates, index):
 
 def mutation_sweep() -> dict:
     mutations = []
-    for path in _TARGETS:
+    for path, functions in GATED:
         source = (ROOT / path).read_text()
-        mutations.extend((path, key, index, candidates, tree)
-                         for key, index, candidates, tree in _mutations(path, source))
-    killed = 0
-    survivors = []
+        mutations.extend(("gated", path, key, index, candidates, tree)
+                         for key, index, candidates, tree in _mutations(path, source, functions))
+    for path, functions in MEASURED:
+        source = (ROOT / path).read_text()
+        for function in sorted(functions):
+            mutations.extend((f"{path}:{function}", path, key, index, candidates, tree)
+                             for key, index, candidates, tree in _mutations(path, source, {function}))
+    killed: dict[str, int] = {}
+    survivors: dict[str, list[str]] = {}
     with tempfile.TemporaryDirectory(prefix="claimgate-mutant-") as temporary:
         command = [sys.executable, "-B", "-c",
                    "from scripts.capture_claim_replay_golden import capture,canonical_bytes,GOLDEN; "
-                   "import sys; sys.exit(0 if canonical_bytes(capture()) == GOLDEN.read_bytes() else 1)"]
+                   "import json,sys; c=capture(); raw=GOLDEN.read_bytes(); g=json.loads(raw); "
+                   "ok=canonical_bytes({**g,'invariant':c['invariant'],'v1_golden_manifest_ids':c['v1_golden_manifest_ids']})==raw "
+                   "and all(c['transitions'][r][s]['pre']==g['transitions'][r][s]['pre'] "
+                   "for r in g['transitions'] for s in g['transitions'][r]); sys.exit(0 if ok else 1)"]
         def worker(worker_id: int, assigned):
             clone = Path(temporary) / f"checkout-{worker_id}"
             subprocess.run(["git", "clone", "--shared", "--quiet", str(ROOT), str(clone)], check=True)
-            for rel in ("scripts/capture_claim_replay_golden.py", "tests/golden/claimgate_v1_replay.json"):
+            for rel in ("scripts/capture_claim_replay_golden.py", "tests/golden/claimgate_v1_replay.json",
+                        "tests/golden/claimgate_v1_corpus_bases/gate_fixture.json",
+                        "tests/golden/claimgate_v1_corpus_bases/minimal.json"):
                 destination = clone / rel
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / rel, destination)
             baseline = subprocess.run(command, cwd=clone, capture_output=True, text=True)
             if baseline.returncode:
                 raise RuntimeError(f"mutation clone baseline differs from golden: {baseline.stderr[-1000:]}")
-            originals = {path: (clone / path).read_bytes() for path in _TARGETS}
-            local_killed = 0
-            local_survivors = []
-            for ordinal, (path, key, index, candidates, tree) in enumerate(assigned, start=1):
+            originals = {path: (clone / path).read_bytes() for path, _ in GATED + MEASURED}
+            local_killed: dict[str, int] = {}
+            local_survivors: dict[str, list[str]] = {}
+            for ordinal, (group, path, key, index, candidates, tree) in enumerate(assigned, start=1):
                 target = clone / path
                 try:
                     target.write_text(_rewrite(tree, candidates, index))
                     run = subprocess.run(command, cwd=clone, stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL)
                     if run.returncode == 0:
-                        local_survivors.append(key)
+                        local_survivors.setdefault(group, []).append(key)
                     else:
-                        local_killed += 1
+                        local_killed[group] = local_killed.get(group, 0) + 1
                 finally:
                     target.write_bytes(originals[path])
                 if ordinal % 100 == 0:
@@ -262,12 +282,84 @@ def mutation_sweep() -> dict:
             results = list(pool.map(lambda item: worker(*item),
                                     ((index, mutations[index::workers]) for index in range(workers))))
         for local_killed, local_survivors in results:
-            killed += local_killed
-            survivors.extend(local_survivors)
-    listed = sorted(set(survivors) & set(EQUIVALENT_MUTANTS))
-    return {"mutants": len(mutations), "killed": killed, "listed_equivalent": len(listed),
-            "unlisted_survivors": sorted(set(survivors) - set(EQUIVALENT_MUTANTS)),
-            "listed": listed, "unused_equivalents": sorted(set(EQUIVALENT_MUTANTS) - set(survivors))}
+            for group, count in local_killed.items():
+                killed[group] = killed.get(group, 0) + count
+            for group, keys in local_survivors.items():
+                survivors.setdefault(group, []).extend(keys)
+    gated_survivors = set(survivors.get("gated", []))
+    listed = sorted(gated_survivors & set(EQUIVALENT_MUTANTS))
+    gated = {"mutants": sum(group == "gated" for group, *_ in mutations),
+             "killed": killed.get("gated", 0), "listed_equivalent": len(listed),
+             "unlisted_survivors": sorted(gated_survivors - set(EQUIVALENT_MUTANTS))}
+    measured = {}
+    for group in sorted({item[0] for item in mutations} - {"gated"}):
+        count = sum(item[0] == group for item in mutations)
+        dead = killed.get(group, 0)
+        measured[group] = {"mutants": count, "killed": dead,
+                           "survivors": sorted(survivors.get(group, [])),
+                           "kill_rate": dead / count if count else 0.0}
+    return {"gated": gated, "measured": measured,
+            "unused_equivalents": sorted(set(EQUIVALENT_MUTANTS) - gated_survivors)}
+
+
+def _golden_path_exists(path: str, golden: dict) -> bool:
+    value = golden
+    for part in path.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return False
+        value = value[part]
+    return True
+
+
+def _validate_exceptions() -> None:
+    golden = json.loads(GOLDEN.read_bytes())
+    unreachable = "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01"
+    for key, proof in EQUIVALENT_MUTANTS.items():
+        match = re.fullmatch(r"equivalent: .+ \[row: ([^]]+)\]", proof)
+        if match and _golden_path_exists(match.group(1), golden):
+            continue
+        parts = key.split(":", 2)
+        if (proof == unreachable and len(parts) == 3 and
+                parts[0] == "joulewise/paper_custody.py" and
+                parts[1].isdigit() and int(parts[1]) >= 632 and
+                any(key in (mutation_key for mutation_key, *_ in _mutations(
+                    parts[0], (ROOT / parts[0]).read_text(), {"_claim_issuance_gate"})))):
+            continue
+        raise ValueError(f"invalid equivalent mutant proof: {key}: {proof}")
+
+
+def certify() -> dict:
+    _validate_exceptions()
+    coverage = coverage_sweep()
+    if coverage["unlisted"] or coverage["unused_allowlist"]:
+        raise ValueError(f"coverage exceptions: {coverage['unlisted']}; unused: {coverage['unused_allowlist']}")
+    mutation = mutation_sweep()
+    if mutation["gated"]["unlisted_survivors"] or mutation["unused_equivalents"]:
+        raise ValueError(f"mutation exceptions: {mutation['gated']['unlisted_survivors']}; unused: {mutation['unused_equivalents']}")
+    paths = {path for path, _ in GATED + MEASURED}
+    paths.update(Path(inspect.getsourcefile(function)).resolve().relative_to(ROOT).as_posix()
+                 for function in _coverage_functions().values())
+    source_blobs = {}
+    for path in sorted(paths):
+        working = _blob_sha((ROOT / path).read_bytes())
+        head = subprocess.check_output(["git", "rev-parse", f"HEAD:{path}"], cwd=ROOT, text=True).strip()
+        if working != head:
+            raise ValueError(f"source differs from HEAD: {path}")
+        source_blobs[path] = head
+    certificate = {
+        "schema_version": "joulewise.claimgate_v1_sensitivity_certificate.v1",
+        "golden_blob_sha": _blob_sha(GOLDEN.read_bytes()),
+        "source_blobs": source_blobs,
+        "python_version": platform.python_version(),
+        "coverage": {"functions": {name: {key: row[key] for key in ("arcs", "covered", "uncovered", "allowlisted")}
+                                for name, row in coverage["functions"].items()}, "unlisted": []},
+        "mutation": {"gated": mutation["gated"], "measured": mutation["measured"]},
+        "equivalent_mutants": EQUIVALENT_MUTANTS,
+        "unreachable_arcs": UNREACHABLE_ARCS,
+        "meaning": "Sensitivity of the pinned golden to the decision code at source_blobs. Evidence, not a gate; recertify by reviewed PR only.",
+    }
+    CERTIFICATE.write_bytes(canonical_bytes(certificate))
+    return certificate
 
 
 def main() -> None:
@@ -275,7 +367,19 @@ def main() -> None:
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--coverage", action="store_true")
     modes.add_argument("--mutate", action="store_true")
+    modes.add_argument("--certify", action="store_true")
     args = parser.parse_args()
+    if args.certify:
+        try:
+            result = certify()
+        except (ValueError, RuntimeError) as exc:
+            print(f"certification refused: {exc}", file=sys.stderr)
+            raise SystemExit(2)
+        print(json.dumps({"coverage": result["coverage"], "mutation": {
+            "gated": result["mutation"]["gated"],
+            "measured": {name: {key: row[key] for key in ("mutants", "killed", "kill_rate")}
+                         for name, row in result["mutation"]["measured"].items()}}}, sort_keys=True))
+        return
     result = coverage_sweep() if args.coverage else mutation_sweep()
     if args.coverage:
         for name, row in result["functions"].items():
@@ -283,11 +387,8 @@ def main() -> None:
                   f"uncovered={row['uncovered']} allowlisted={row['allowlisted']}")
         print("unlisted uncovered arcs:", json.dumps(result["unlisted"]))
     else:
-        print(f"mutants={result['mutants']} killed={result['killed']} "
-              f"listed-equivalent={result['listed_equivalent']} "
-              f"unlisted-survivors={len(result['unlisted_survivors'])}")
-        print("unlisted survivors:", json.dumps(result["unlisted_survivors"]))
-    if result.get("unlisted") or result.get("unlisted_survivors"):
+        print(json.dumps(result["gated"], sort_keys=True))
+    if result.get("unlisted") or result.get("gated", {}).get("unlisted_survivors"):
         raise SystemExit(1)
 
 

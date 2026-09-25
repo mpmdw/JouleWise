@@ -1,0 +1,4282 @@
+{
+ "bundle_audit": [
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b01",
+   "bundle_id": "swdec-contrast-b01-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "1041e07b81831e88cbdd717fca69ca87a8304339db6ed805c04cceb67cf11228",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b01-a1",
+   "expected_config_sha256": "1041e07b81831e88cbdd717fca69ca87a8304339db6ed805c04cceb67cf11228",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "1041e07b81831e88cbdd717fca69ca87a8304339db6ed805c04cceb67cf11228",
+   "relative_path": "swdec-contrast-b01-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b01",
+   "bundle_id": "swdec-contrast-b01-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "90895771bd798a01fe738c1a0f680dd7485714f4e6d01f69792b435ed54df062",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b01-a2",
+   "expected_config_sha256": "90895771bd798a01fe738c1a0f680dd7485714f4e6d01f69792b435ed54df062",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "90895771bd798a01fe738c1a0f680dd7485714f4e6d01f69792b435ed54df062",
+   "relative_path": "swdec-contrast-b01-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b01",
+   "bundle_id": "swdec-contrast-b01-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "913cd1fd0971f4ae5a3ede9d1f377a259e8d7b28a237d6118439d29577308ae4",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b01-b1",
+   "expected_config_sha256": "913cd1fd0971f4ae5a3ede9d1f377a259e8d7b28a237d6118439d29577308ae4",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "913cd1fd0971f4ae5a3ede9d1f377a259e8d7b28a237d6118439d29577308ae4",
+   "relative_path": "swdec-contrast-b01-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b01",
+   "bundle_id": "swdec-contrast-b01-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "50899ed905974a96cb69ea62291dc4f7209a10b479aa71ea9c73cc4cea78a921",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b01-b2",
+   "expected_config_sha256": "50899ed905974a96cb69ea62291dc4f7209a10b479aa71ea9c73cc4cea78a921",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "50899ed905974a96cb69ea62291dc4f7209a10b479aa71ea9c73cc4cea78a921",
+   "relative_path": "swdec-contrast-b01-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b02",
+   "bundle_id": "swdec-contrast-b02-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "7aa24511f1314d5589dae3b8fe7cbf3745aa7e8fb39540d01fabeb6aa082c666",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b02-a1",
+   "expected_config_sha256": "7aa24511f1314d5589dae3b8fe7cbf3745aa7e8fb39540d01fabeb6aa082c666",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "7aa24511f1314d5589dae3b8fe7cbf3745aa7e8fb39540d01fabeb6aa082c666",
+   "relative_path": "swdec-contrast-b02-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b02",
+   "bundle_id": "swdec-contrast-b02-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "baa7990e323b25226191778010b13774d15daf8f11dd0802a6e62e927174873b",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b02-a2",
+   "expected_config_sha256": "baa7990e323b25226191778010b13774d15daf8f11dd0802a6e62e927174873b",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "baa7990e323b25226191778010b13774d15daf8f11dd0802a6e62e927174873b",
+   "relative_path": "swdec-contrast-b02-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b02",
+   "bundle_id": "swdec-contrast-b02-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "b1ff18ee9426345d8f2c50a127fee3b6b7c83acdc6d763ae20be308ac6a07a90",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b02-b1",
+   "expected_config_sha256": "b1ff18ee9426345d8f2c50a127fee3b6b7c83acdc6d763ae20be308ac6a07a90",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "b1ff18ee9426345d8f2c50a127fee3b6b7c83acdc6d763ae20be308ac6a07a90",
+   "relative_path": "swdec-contrast-b02-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b02",
+   "bundle_id": "swdec-contrast-b02-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "adf32ce9afb7015c70112eded96737b1181e8b53dd78920850d0307c23c6103e",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b02-b2",
+   "expected_config_sha256": "adf32ce9afb7015c70112eded96737b1181e8b53dd78920850d0307c23c6103e",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "adf32ce9afb7015c70112eded96737b1181e8b53dd78920850d0307c23c6103e",
+   "relative_path": "swdec-contrast-b02-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b03",
+   "bundle_id": "swdec-contrast-b03-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "f890fb39043a541d29dacf5bac6c6e554d7151e84492d171db4f08235a339a31",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b03-a1",
+   "expected_config_sha256": "f890fb39043a541d29dacf5bac6c6e554d7151e84492d171db4f08235a339a31",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "f890fb39043a541d29dacf5bac6c6e554d7151e84492d171db4f08235a339a31",
+   "relative_path": "swdec-contrast-b03-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b03",
+   "bundle_id": "swdec-contrast-b03-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "8ec397f8b180163a5dd3e7e0d3773f7953979d4a7a4ebc31a46ecbb56f09b1cc",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b03-a2",
+   "expected_config_sha256": "8ec397f8b180163a5dd3e7e0d3773f7953979d4a7a4ebc31a46ecbb56f09b1cc",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "8ec397f8b180163a5dd3e7e0d3773f7953979d4a7a4ebc31a46ecbb56f09b1cc",
+   "relative_path": "swdec-contrast-b03-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b03",
+   "bundle_id": "swdec-contrast-b03-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "da46190328ea8a58fff04ab1d34927e1b6304b80313ab5c4d6e6c40fa4859c19",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b03-b1",
+   "expected_config_sha256": "da46190328ea8a58fff04ab1d34927e1b6304b80313ab5c4d6e6c40fa4859c19",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "da46190328ea8a58fff04ab1d34927e1b6304b80313ab5c4d6e6c40fa4859c19",
+   "relative_path": "swdec-contrast-b03-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b03",
+   "bundle_id": "swdec-contrast-b03-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "7e81379121528e83ad0a18b9c363eb5fc70e409cc44d1a97532c354509ca476d",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b03-b2",
+   "expected_config_sha256": "7e81379121528e83ad0a18b9c363eb5fc70e409cc44d1a97532c354509ca476d",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "7e81379121528e83ad0a18b9c363eb5fc70e409cc44d1a97532c354509ca476d",
+   "relative_path": "swdec-contrast-b03-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b04",
+   "bundle_id": "swdec-contrast-b04-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "f2c07fabe0ecb964ec47dbe4735264969467a41c365f8cf727d77b404592a068",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b04-a1",
+   "expected_config_sha256": "f2c07fabe0ecb964ec47dbe4735264969467a41c365f8cf727d77b404592a068",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "f2c07fabe0ecb964ec47dbe4735264969467a41c365f8cf727d77b404592a068",
+   "relative_path": "swdec-contrast-b04-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b04",
+   "bundle_id": "swdec-contrast-b04-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "e577d2392bfa8546cd71da3dd741bea5e9c233478739140bdee2b577f485fde2",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b04-a2",
+   "expected_config_sha256": "e577d2392bfa8546cd71da3dd741bea5e9c233478739140bdee2b577f485fde2",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "e577d2392bfa8546cd71da3dd741bea5e9c233478739140bdee2b577f485fde2",
+   "relative_path": "swdec-contrast-b04-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b04",
+   "bundle_id": "swdec-contrast-b04-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "4c34260488027c02295ca057c5ab3fec815aecfb5b4dcaacfe6ee48c0620552b",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b04-b1",
+   "expected_config_sha256": "4c34260488027c02295ca057c5ab3fec815aecfb5b4dcaacfe6ee48c0620552b",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "4c34260488027c02295ca057c5ab3fec815aecfb5b4dcaacfe6ee48c0620552b",
+   "relative_path": "swdec-contrast-b04-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b04",
+   "bundle_id": "swdec-contrast-b04-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "c7dc7d599de8368086e152a1d47da15ff458db509f289c3dfc080234b9d50f6b",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b04-b2",
+   "expected_config_sha256": "c7dc7d599de8368086e152a1d47da15ff458db509f289c3dfc080234b9d50f6b",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "c7dc7d599de8368086e152a1d47da15ff458db509f289c3dfc080234b9d50f6b",
+   "relative_path": "swdec-contrast-b04-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b05",
+   "bundle_id": "swdec-contrast-b05-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "96d497acda8a6ab9a49b7f665c5b06b5757cf73f92ae023cffcbf611a9e6dcbc",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b05-a1",
+   "expected_config_sha256": "96d497acda8a6ab9a49b7f665c5b06b5757cf73f92ae023cffcbf611a9e6dcbc",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "96d497acda8a6ab9a49b7f665c5b06b5757cf73f92ae023cffcbf611a9e6dcbc",
+   "relative_path": "swdec-contrast-b05-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b05",
+   "bundle_id": "swdec-contrast-b05-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "af202fabc0c0523b237cacc0e9607406cd2733706063cbbb297fd393c68e8b22",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b05-a2",
+   "expected_config_sha256": "af202fabc0c0523b237cacc0e9607406cd2733706063cbbb297fd393c68e8b22",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "af202fabc0c0523b237cacc0e9607406cd2733706063cbbb297fd393c68e8b22",
+   "relative_path": "swdec-contrast-b05-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b05",
+   "bundle_id": "swdec-contrast-b05-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "7243b9916cdbb716e920346c628287ed39015b0403da76d339dbce6e36bfb633",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b05-b1",
+   "expected_config_sha256": "7243b9916cdbb716e920346c628287ed39015b0403da76d339dbce6e36bfb633",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "7243b9916cdbb716e920346c628287ed39015b0403da76d339dbce6e36bfb633",
+   "relative_path": "swdec-contrast-b05-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b05",
+   "bundle_id": "swdec-contrast-b05-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "4eb5d1189ffe224ce2404b6b0b044209905bac00adf1efb9d77a46bf3c0f7a5b",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b05-b2",
+   "expected_config_sha256": "4eb5d1189ffe224ce2404b6b0b044209905bac00adf1efb9d77a46bf3c0f7a5b",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "4eb5d1189ffe224ce2404b6b0b044209905bac00adf1efb9d77a46bf3c0f7a5b",
+   "relative_path": "swdec-contrast-b05-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b06",
+   "bundle_id": "swdec-contrast-b06-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "54719452e790b50371cb68904df04a8f500558271f9e63dbe1046bc1d54fe9d3",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b06-a1",
+   "expected_config_sha256": "54719452e790b50371cb68904df04a8f500558271f9e63dbe1046bc1d54fe9d3",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "54719452e790b50371cb68904df04a8f500558271f9e63dbe1046bc1d54fe9d3",
+   "relative_path": "swdec-contrast-b06-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b06",
+   "bundle_id": "swdec-contrast-b06-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "ea2e20483d536a65285fd35e6057c2ef8b63d7a2e874b4f542af2a4bcc67c88f",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b06-a2",
+   "expected_config_sha256": "ea2e20483d536a65285fd35e6057c2ef8b63d7a2e874b4f542af2a4bcc67c88f",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "ea2e20483d536a65285fd35e6057c2ef8b63d7a2e874b4f542af2a4bcc67c88f",
+   "relative_path": "swdec-contrast-b06-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b06",
+   "bundle_id": "swdec-contrast-b06-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "731fafd285a5883a7060965004f45e8b2659f1d0fd4b1c80ed9f312ceac7b85e",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b06-b1",
+   "expected_config_sha256": "731fafd285a5883a7060965004f45e8b2659f1d0fd4b1c80ed9f312ceac7b85e",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "731fafd285a5883a7060965004f45e8b2659f1d0fd4b1c80ed9f312ceac7b85e",
+   "relative_path": "swdec-contrast-b06-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b06",
+   "bundle_id": "swdec-contrast-b06-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "85968d44c41cb10dbb56a07acf3c613b83ee7cee9b91177a9d2ffa3e5fc856af",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b06-b2",
+   "expected_config_sha256": "85968d44c41cb10dbb56a07acf3c613b83ee7cee9b91177a9d2ffa3e5fc856af",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "85968d44c41cb10dbb56a07acf3c613b83ee7cee9b91177a9d2ffa3e5fc856af",
+   "relative_path": "swdec-contrast-b06-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b07",
+   "bundle_id": "swdec-contrast-b07-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "eab098dc11d78e9df8575014dca56aa62f3f310d972d8634b2af015b27557ffc",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b07-a1",
+   "expected_config_sha256": "eab098dc11d78e9df8575014dca56aa62f3f310d972d8634b2af015b27557ffc",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "eab098dc11d78e9df8575014dca56aa62f3f310d972d8634b2af015b27557ffc",
+   "relative_path": "swdec-contrast-b07-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b07",
+   "bundle_id": "swdec-contrast-b07-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "1acb138ffc4662a5f5050fff4d41e5aad95bb48f979ed34a73ab0c40a85425b6",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b07-a2",
+   "expected_config_sha256": "1acb138ffc4662a5f5050fff4d41e5aad95bb48f979ed34a73ab0c40a85425b6",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "1acb138ffc4662a5f5050fff4d41e5aad95bb48f979ed34a73ab0c40a85425b6",
+   "relative_path": "swdec-contrast-b07-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b07",
+   "bundle_id": "swdec-contrast-b07-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "f57cf09eb866e105aa1a05e4cf5c3f8c45b30930d7d8474746f4814b0af69726",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b07-b1",
+   "expected_config_sha256": "f57cf09eb866e105aa1a05e4cf5c3f8c45b30930d7d8474746f4814b0af69726",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "f57cf09eb866e105aa1a05e4cf5c3f8c45b30930d7d8474746f4814b0af69726",
+   "relative_path": "swdec-contrast-b07-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b07",
+   "bundle_id": "swdec-contrast-b07-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "66687b6541c20cbc00cf237f6452104696f234d6337951a1fb7be1eb8f1b1831",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b07-b2",
+   "expected_config_sha256": "66687b6541c20cbc00cf237f6452104696f234d6337951a1fb7be1eb8f1b1831",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "66687b6541c20cbc00cf237f6452104696f234d6337951a1fb7be1eb8f1b1831",
+   "relative_path": "swdec-contrast-b07-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b08",
+   "bundle_id": "swdec-contrast-b08-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "7f1dcc1473f5c57d93911cb3b6c6fccb0b71a79561f04400978c8e34f09d125b",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b08-a1",
+   "expected_config_sha256": "7f1dcc1473f5c57d93911cb3b6c6fccb0b71a79561f04400978c8e34f09d125b",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "7f1dcc1473f5c57d93911cb3b6c6fccb0b71a79561f04400978c8e34f09d125b",
+   "relative_path": "swdec-contrast-b08-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b08",
+   "bundle_id": "swdec-contrast-b08-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "7cfce1809f3c41b36568db2724be3e626d52a63edb3d2a954b38638b029e6d21",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b08-a2",
+   "expected_config_sha256": "7cfce1809f3c41b36568db2724be3e626d52a63edb3d2a954b38638b029e6d21",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "7cfce1809f3c41b36568db2724be3e626d52a63edb3d2a954b38638b029e6d21",
+   "relative_path": "swdec-contrast-b08-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b08",
+   "bundle_id": "swdec-contrast-b08-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "2212e40dc7504beb13bc3bbee09cb70964e848b1deba71977036cb1aa8876387",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b08-b1",
+   "expected_config_sha256": "2212e40dc7504beb13bc3bbee09cb70964e848b1deba71977036cb1aa8876387",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "2212e40dc7504beb13bc3bbee09cb70964e848b1deba71977036cb1aa8876387",
+   "relative_path": "swdec-contrast-b08-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b08",
+   "bundle_id": "swdec-contrast-b08-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "98162bc3ce3afe5b6c9d7ee9f23876c4bcf90da28dce9441b83bec885363375e",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b08-b2",
+   "expected_config_sha256": "98162bc3ce3afe5b6c9d7ee9f23876c4bcf90da28dce9441b83bec885363375e",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "98162bc3ce3afe5b6c9d7ee9f23876c4bcf90da28dce9441b83bec885363375e",
+   "relative_path": "swdec-contrast-b08-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b09",
+   "bundle_id": "swdec-contrast-b09-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "04c266c1124e3029b503574fbbbca84b5a4de22204a7603ea5f43153e1a66535",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b09-a1",
+   "expected_config_sha256": "04c266c1124e3029b503574fbbbca84b5a4de22204a7603ea5f43153e1a66535",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "04c266c1124e3029b503574fbbbca84b5a4de22204a7603ea5f43153e1a66535",
+   "relative_path": "swdec-contrast-b09-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b09",
+   "bundle_id": "swdec-contrast-b09-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "7d1f0453a30493b300f031a5215caedd1e92a787f5f20791503bce4bf39d047a",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b09-a2",
+   "expected_config_sha256": "7d1f0453a30493b300f031a5215caedd1e92a787f5f20791503bce4bf39d047a",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "7d1f0453a30493b300f031a5215caedd1e92a787f5f20791503bce4bf39d047a",
+   "relative_path": "swdec-contrast-b09-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b09",
+   "bundle_id": "swdec-contrast-b09-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "d5716bb162e66a40850088e74fa38c222f41956ef37a077e392507b83069a9fd",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b09-b1",
+   "expected_config_sha256": "d5716bb162e66a40850088e74fa38c222f41956ef37a077e392507b83069a9fd",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "d5716bb162e66a40850088e74fa38c222f41956ef37a077e392507b83069a9fd",
+   "relative_path": "swdec-contrast-b09-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b09",
+   "bundle_id": "swdec-contrast-b09-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "a1b416964afbd308c6d672cc0f0f16d962465bab8d4a5126ab83db3a31591b12",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b09-b2",
+   "expected_config_sha256": "a1b416964afbd308c6d672cc0f0f16d962465bab8d4a5126ab83db3a31591b12",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "a1b416964afbd308c6d672cc0f0f16d962465bab8d4a5126ab83db3a31591b12",
+   "relative_path": "swdec-contrast-b09-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b10",
+   "bundle_id": "swdec-contrast-b10-a1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "f93fea5058fddcf9f45d57960ab496c07d5b615e43f261684ce3d9fbf6d202f6",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b10-a1",
+   "expected_config_sha256": "f93fea5058fddcf9f45d57960ab496c07d5b615e43f261684ce3d9fbf6d202f6",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "f93fea5058fddcf9f45d57960ab496c07d5b615e43f261684ce3d9fbf6d202f6",
+   "relative_path": "swdec-contrast-b10-a1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b10",
+   "bundle_id": "swdec-contrast-b10-a2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+   "condition_id": "sw-decode-a-qwen25-1p5b",
+   "config_sha256": "74feaa0dca373538ea6d1c2b2da4f924bdd8c19acd07736c826df75b63decd60",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b10-a2",
+   "expected_config_sha256": "74feaa0dca373538ea6d1c2b2da4f924bdd8c19acd07736c826df75b63decd60",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "74feaa0dca373538ea6d1c2b2da4f924bdd8c19acd07736c826df75b63decd60",
+   "relative_path": "swdec-contrast-b10-a2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+     "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b10",
+   "bundle_id": "swdec-contrast-b10-b1",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "46805e92e429601e40b5ed94bf2a07d69ba3402efb5c033f67a5ae85055140d2",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b10-b1",
+   "expected_config_sha256": "46805e92e429601e40b5ed94bf2a07d69ba3402efb5c033f67a5ae85055140d2",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "46805e92e429601e40b5ed94bf2a07d69ba3402efb5c033f67a5ae85055140d2",
+   "relative_path": "swdec-contrast-b10-b1",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  },
+  {
+   "base_reason_codes": [],
+   "block_id": "sw-decode-contrast-b10",
+   "bundle_id": "swdec-contrast-b10-b2",
+   "campaign_cooldown": null,
+   "cell_id": "sw-decode-arm-b-qwen25-7b",
+   "condition_id": "sw-decode-b-qwen25-7b",
+   "config_sha256": "bf87a438a8eae12b380d357b612efc6211b427b389eadafd9d5b7340138976fc",
+   "cooldown_cap_hit": false,
+   "entry_id": "entry-swdec-contrast-b10-b2",
+   "expected_config_sha256": "bf87a438a8eae12b380d357b612efc6211b427b389eadafd9d5b7340138976fc",
+   "idle_window_suspect": false,
+   "inclusion_status": "included",
+   "manifest_config_sha256": "bf87a438a8eae12b380d357b612efc6211b427b389eadafd9d5b7340138976fc",
+   "relative_path": "swdec-contrast-b10-b2",
+   "replacement_classification": "registered",
+   "scientific_identity": {
+    "device_boundary": {
+     "boundary": "Apple SoC CPU + GPU + ANE package power",
+     "device": "macbook_m3_max",
+     "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+     ],
+     "telemetry": "powermetrics"
+    },
+    "model": {
+     "context_window": 32768,
+     "family": "qwen2.5",
+     "name": "Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "weight_format": "mlx"
+    },
+    "model_artifact": {
+     "algorithm": "sha256",
+     "kind": "file_set",
+     "sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+    },
+    "quantization": {
+     "bits": 4,
+     "group_size": null,
+     "name": "int4"
+    },
+    "runtime": {
+     "adapter": "mlx_runtime",
+     "name": "mlx",
+     "version": null
+    },
+    "telemetry": {
+     "name": "powermetrics"
+    },
+    "tokenizer": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "strict_problems": [],
+   "strict_status": "valid",
+   "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "summary_status": "succeeded",
+   "token_provenance": {
+    "output_policy": {
+     "emitted_tokens": 64,
+     "name": "fixed_budget_exact",
+     "requested_tokens": 64,
+     "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+     }
+    },
+    "output_tokens": 64,
+    "stop_reason": "requested_tokens_emitted",
+    "token_count_source": null,
+    "tokenizer_identity": {
+     "backend": "mlx",
+     "class": "TokenizerWrapper",
+     "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+     "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+     "vocab_size": 151643
+    }
+   },
+   "window_prechecks": {}
+  }
+ ],
+ "claim_verdicts_id": "cv-8d492559cb47433757db6e8393c29971f565865317aea4d085ac8bd110b3e492",
+ "contrasts": [
+  {
+   "bundle_blocks": {
+    "blocks": [
+     {
+      "block_id": "sw-decode-contrast-b01",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b01-a1",
+       "A2": "swdec-contrast-b01-a2",
+       "B1": "swdec-contrast-b01-b1",
+       "B2": "swdec-contrast-b01-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b02",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b02-a1",
+       "A2": "swdec-contrast-b02-a2",
+       "B1": "swdec-contrast-b02-b1",
+       "B2": "swdec-contrast-b02-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b03",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b03-a1",
+       "A2": "swdec-contrast-b03-a2",
+       "B1": "swdec-contrast-b03-b1",
+       "B2": "swdec-contrast-b03-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b04",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b04-a1",
+       "A2": "swdec-contrast-b04-a2",
+       "B1": "swdec-contrast-b04-b1",
+       "B2": "swdec-contrast-b04-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b05",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b05-a1",
+       "A2": "swdec-contrast-b05-a2",
+       "B1": "swdec-contrast-b05-b1",
+       "B2": "swdec-contrast-b05-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b06",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b06-a1",
+       "A2": "swdec-contrast-b06-a2",
+       "B1": "swdec-contrast-b06-b1",
+       "B2": "swdec-contrast-b06-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b07",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b07-a1",
+       "A2": "swdec-contrast-b07-a2",
+       "B1": "swdec-contrast-b07-b1",
+       "B2": "swdec-contrast-b07-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b08",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b08-a1",
+       "A2": "swdec-contrast-b08-a2",
+       "B1": "swdec-contrast-b08-b1",
+       "B2": "swdec-contrast-b08-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b09",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b09-a1",
+       "A2": "swdec-contrast-b09-a2",
+       "B1": "swdec-contrast-b09-b1",
+       "B2": "swdec-contrast-b09-b2"
+      },
+      "reason_codes": []
+     },
+     {
+      "block_id": "sw-decode-contrast-b10",
+      "bundle_a_id": null,
+      "bundle_b_id": null,
+      "included": true,
+      "position_bundle_ids": {
+       "A1": "swdec-contrast-b10-a1",
+       "A2": "swdec-contrast-b10-a2",
+       "B1": "swdec-contrast-b10-b1",
+       "B2": "swdec-contrast-b10-b2"
+      },
+      "reason_codes": []
+     }
+    ],
+    "included_bundle_ids": [
+     "swdec-contrast-b01-a1",
+     "swdec-contrast-b01-a2",
+     "swdec-contrast-b01-b1",
+     "swdec-contrast-b01-b2",
+     "swdec-contrast-b02-a1",
+     "swdec-contrast-b02-a2",
+     "swdec-contrast-b02-b1",
+     "swdec-contrast-b02-b2",
+     "swdec-contrast-b03-a1",
+     "swdec-contrast-b03-a2",
+     "swdec-contrast-b03-b1",
+     "swdec-contrast-b03-b2",
+     "swdec-contrast-b04-a1",
+     "swdec-contrast-b04-a2",
+     "swdec-contrast-b04-b1",
+     "swdec-contrast-b04-b2",
+     "swdec-contrast-b05-a1",
+     "swdec-contrast-b05-a2",
+     "swdec-contrast-b05-b1",
+     "swdec-contrast-b05-b2",
+     "swdec-contrast-b06-a1",
+     "swdec-contrast-b06-a2",
+     "swdec-contrast-b06-b1",
+     "swdec-contrast-b06-b2",
+     "swdec-contrast-b07-a1",
+     "swdec-contrast-b07-a2",
+     "swdec-contrast-b07-b1",
+     "swdec-contrast-b07-b2",
+     "swdec-contrast-b08-a1",
+     "swdec-contrast-b08-a2",
+     "swdec-contrast-b08-b1",
+     "swdec-contrast-b08-b2",
+     "swdec-contrast-b09-a1",
+     "swdec-contrast-b09-a2",
+     "swdec-contrast-b09-b1",
+     "swdec-contrast-b09-b2",
+     "swdec-contrast-b10-a1",
+     "swdec-contrast-b10-a2",
+     "swdec-contrast-b10-b1",
+     "swdec-contrast-b10-b2"
+    ],
+    "planned_block_ids": [
+     "sw-decode-contrast-b01",
+     "sw-decode-contrast-b02",
+     "sw-decode-contrast-b03",
+     "sw-decode-contrast-b04",
+     "sw-decode-contrast-b05",
+     "sw-decode-contrast-b06",
+     "sw-decode-contrast-b07",
+     "sw-decode-contrast-b08",
+     "sw-decode-contrast-b09",
+     "sw-decode-contrast-b10"
+    ]
+   },
+   "claim_evaluation": {
+    "claim_level_ceiling": "L2",
+    "claim_ready_for_l2_l3": true,
+    "direction": "positive",
+    "outcome": "direction_supported",
+    "reason_codes": []
+   },
+   "claim_role": "primary",
+   "conditions": {
+    "cell_a_id": "sw-decode-arm-a-qwen25-1p5b",
+    "cell_b_id": "sw-decode-arm-b-qwen25-7b",
+    "condition_a_id": "sw-decode-a-qwen25-1p5b",
+    "condition_b_id": "sw-decode-b-qwen25-7b",
+    "difference_orientation": "condition_b_minus_condition_a"
+   },
+   "contrast_id": "ctr-sw-decode-qwen25-1p5b-vs-7b",
+   "deterministic_bounds": {
+    "decision_interval": {
+     "lower": 9.7,
+     "upper": 10.3
+    },
+    "terms": [
+     {
+      "bound": 0.2,
+      "name": "E_clock_anchor_shift_bound_j"
+     },
+     {
+      "bound": 0.1,
+      "name": "E_interpolation_joint_edge_bound_j"
+     }
+    ],
+    "total": 0.30000000000000004
+   },
+   "equivalence": null,
+   "estimator": {
+    "SE_metrology": 0.0,
+    "SE_repeat": 0.0,
+    "SE_total": 0.0,
+    "df": 9,
+    "estimate": 10.0,
+    "excluded_stochastic_terms": [],
+    "metrology_aware_CI95": {
+     "lower": 10.0,
+     "upper": 10.0
+    },
+    "n": 10,
+    "name": "abba_block_arm_mean_difference_t_v1",
+    "raw_p": 0.0,
+    "repeat_point_CI95": {
+     "lower": 10.0,
+     "upper": 10.0
+    },
+    "s_d": 0.0,
+    "t_critical_95": 2.262,
+    "variance_contributions": [
+     {
+      "name": "idle",
+      "squared_standard_error": 0.0,
+      "summed_paired_variance": 0.0
+     }
+    ]
+   },
+   "family_instance_id": "fam-splitwise-decode-cross-model-primary",
+   "floor": {
+    "active_floor_j": 1.2,
+    "aggregation": "max_never_sum",
+    "arm_gates": [
+     {
+      "arm_id": "A",
+      "condition_family_id": "sw-decode-a-qwen25-1p5b",
+      "floor_gate_j": 1.0,
+      "status": "exact"
+     },
+     {
+      "arm_id": "B",
+      "condition_family_id": "sw-decode-b-qwen25-7b",
+      "floor_gate_j": 1.2,
+      "status": "exact"
+     }
+    ],
+    "claim_floor_rule": "cross_stack_armwise_max.v1",
+    "floor_abs_j": 0.9,
+    "floor_cmp_j": 1.2,
+    "floor_row_ids": [
+     "cell-1"
+    ],
+    "resolutions": [
+     {
+      "floor_abs_j": 0.8,
+      "floor_cmp_j": 1.0,
+      "floor_gate_j": 1.0,
+      "reason_codes": [],
+      "source_cell_ids": [
+       "cell-1"
+      ],
+      "status": "exact",
+      "transport_group_id": null,
+      "transport_rule_id": null
+     },
+     {
+      "floor_abs_j": 0.9,
+      "floor_cmp_j": 1.2,
+      "floor_gate_j": 1.2,
+      "reason_codes": [],
+      "source_cell_ids": [
+       "cell-1"
+      ],
+      "status": "exact",
+      "transport_group_id": null,
+      "transport_rule_id": null
+     }
+    ],
+    "status": "resolved",
+    "transport_verdict": "exact"
+   },
+   "hypothesized_direction": "positive",
+   "loo": {
+    "rows": [
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b01",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b02",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b03",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b04",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b05",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b06",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b07",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b08",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b09",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     },
+     {
+      "adjusted_p": 0.0,
+      "decision_interval": {
+       "lower": 9.7,
+       "upper": 10.3
+      },
+      "df": 8,
+      "estimate": 10.0,
+      "floor_status": "above_floor",
+      "influence_triggers": [],
+      "metrology_aware_ci95": {
+       "lower": 10.0,
+       "upper": 10.0
+      },
+      "n_blocks": 9,
+      "omitted_block_id": "sw-decode-contrast-b10",
+      "outcome": "direction_supported",
+      "raw_p": 0.0
+     }
+    ],
+    "status": "complete"
+   },
+   "mde": null,
+   "metric": {
+    "metric_tag": "phase_decode_energy",
+    "name": "phase_energy_j.decode",
+    "ratio_estimand": null,
+    "unit": "J",
+    "window_class": "phase"
+   },
+   "multiplicity": {
+    "adjusted_p": 0.0,
+    "raw_p": 0.0,
+    "rejected": true
+   },
+   "plan_id": "splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b",
+   "randomization_check": {
+    "exact_two_sided_p": null,
+    "n_blocks": 10,
+    "reason": null,
+    "rejects": null,
+    "status": "not_required"
+   },
+   "sampling": {
+    "confirmatory_status": "confirmatory",
+    "observed_complete_n": 10,
+    "planned_n": 10
+   },
+   "sensitivity_status": "clean"
+  }
+ ],
+ "engine": {
+  "algorithm_version": "1",
+  "difference_orientation": "condition_b_minus_condition_a",
+  "implementation": "joulewise.analysis_engine",
+  "policy_identity": {
+   "campaign_cooldown": "campaign_provenance_v1_hash_bound_per_member_v1",
+   "floor_resolution": "declared_exact_bundle_config_floor_v1",
+   "stochastic_variance": "p2044_reducer_0_4_1_idle_variance_v1"
+  }
+ },
+ "families": [
+  {
+   "adjusted_p_values": {
+    "ctr-sw-decode-qwen25-1p5b-vs-7b": 0.0
+   },
+   "alpha": 0.05,
+   "claim_role": "primary",
+   "contrast_ids": [
+    "ctr-sw-decode-qwen25-1p5b-vs-7b"
+   ],
+   "family_instance_id": "fam-splitwise-decode-cross-model-primary",
+   "finite_test_count": 1,
+   "m": 1,
+   "method": "holm",
+   "missing_test_ids": [],
+   "plan_id": "splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b",
+   "q": null,
+   "raw_ordering": [
+    "ctr-sw-decode-qwen25-1p5b-vs-7b"
+   ],
+   "structural_status": "complete"
+  }
+ ],
+ "inputs": {
+  "analysis_manifest": {
+   "file_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3"
+  },
+  "evidence_class": "current",
+  "floor_artifact": {
+   "artifact_id": "df-v3-test",
+   "embedded_bytes_base64": "ewogICJzY2hlbWFfdmVyc2lvbiI6ICJqb3VsZXdpc2UuZGV0ZWN0aW9uX2Zsb29yX2FydGlmYWN0LnYyIiwKICAiYXJ0aWZhY3RfaWQiOiAiZGYtdjMtdGVzdCIsCiAgImNhbGlicmF0aW9uX3Njb3BlIjogInNtb2tlIiwKICAic291cmNlX2NsYXNzIjogInN5bnRoZXRpYyIsCiAgIm1ldGhvZCI6IHsKICAgICJtZXRob2RfaWQiOiAiZDA1NF9mYWxzZV9lZmZlY3RfZ3VhcmQudjEiLAogICAgInRfcXVhbnRpbGUiOiAwLjk3NSwKICAgICJ0X2NyaXRpY2FsX3NvdXJjZSI6ICJqb3VsZXdpc2UuYWdncmVnYXRlLnN0dWRlbnRfdF9jcml0aWNhbF85NS52MSIsCiAgICAiYWJzb2x1dGVfZm9ybXVsYSI6ICJtYXgobWF4X2Fic19yZXNpZHVhbF9qLHRfY3JpdGljYWwqc2FtcGxlX3N0ZGRldl9qKnNxcnQoMSsxL24pKSIsCiAgICAiY29tcGFyYXRpdmVfZm9ybXVsYSI6ICJtYXgobWF4X2Fic19kZWx0YV9qLGFicyhtZWFuX2RlbHRhX2opK3RfY3JpdGljYWwqc2FtcGxlX3N0ZGRldl9qKnNxcnQoMSsxL24pKSIsCiAgICAiYWJiYV9kZWx0YV9mb3JtdWxhIjogIihCMStCMi1BMS1BMikvMiIsCiAgICAic21hbGxfc2FtcGxlX2d1YXJkIjogewogICAgICAicnVsZV9pZCI6ICJyZXNpZHVhbF9kZl9yYXRpb190b19uMTAudjEiLAogICAgICAiZm9ybXVsYSI6ICJtYXgoMSxzcXJ0KCgxMC0xKS8obi0xKSkpIiwKICAgICAgInJlZmVyZW5jZV9uIjogMTAsCiAgICAgICJtaW5pbXVtX24iOiA1LAogICAgICAibWF4aW11bV9ndWFyZGVkX25fZXhjbHVzaXZlIjogMTAsCiAgICAgICJmcm96ZW5fYmVmb3JlX2NhbGlicmF0aW9uIjogdHJ1ZQogICAgfQogIH0sCiAgInByb3ZlbmFuY2UiOiB7CiAgICAiY2FsaWJyYXRpb25fcGxhbiI6IHsKICAgICAgInBsYW5faWQiOiAicDItMDE1LXdpbmRvdy1hLW0zbWF4LXF3ZW4yNS0xcDViLXYxIiwKICAgICAgImRlY2xhcmVkX2NhbGlicmF0aW9uX3Njb3BlIjogIndpbmRvd19hIiwKICAgICAgInJlbGF0aXZlX3BhdGgiOiAiY29uZmlncy9jYWxpYnJhdGlvbi1wbGFuLmpzb24iLAogICAgICAic2hhMjU2IjogImU1MjlhMDYyNGI3NjE4ZWRhYWRlNTExZGQ2MTBhZTA4MzdmMzFkZTI5OWRkZTY0MmEwNTU5NzRjMzgyNjgxYWIiCiAgICB9LAogICAgIm1pbnRfdG9vbF92ZXJzaW9uIjogImpvdWxld2lzZS5mbG9vcl9taW50LnYxIiwKICAgICJpbXBsZW1lbnRhdGlvbiI6IHsKICAgICAgInByb2plY3RfY29tbWl0IjogIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLAogICAgICAicHJvamVjdF90cmVlX3N0YXRlIjogImNsZWFuIiwKICAgICAgInB5dGhvbl9wYWNrYWdlIjogImpvdWxld2lzZSIKICAgIH0KICB9LAogICJpZGxlX2RyaWZ0X2d1YXJkIjogewogICAgImNhbGlicmF0aW9uX3N0YXR1cyI6ICJwZW5kaW5nX2NhbGlicmF0aW9uIiwKICAgICJtZXRob2QiOiAicDJfMDE1X3ByZWRpY3Rpb25fZ3VhcmRfdjEiLAogICAgImd1YXJkX3ciOiBudWxsLAogICAgIm5fYnVuZGxlcyI6IDAsCiAgICAiYnVuZGxlX3NoYTI1NiI6IFtdLAogICAgImNlbGxfaWQiOiBudWxsLAogICAgImFydGlmYWN0X3NoYTI1NiI6IG51bGwKICB9LAogICJjZWxscyI6IFsKICAgIHsKICAgICAgImNlbGxfaWQiOiAiY2VsbC0xIiwKICAgICAgImtleSI6IHsKICAgICAgICAiYmFja2VuZCI6ICJwb3dlcm1ldHJpY3MiLAogICAgICAgICJtZXRyaWMiOiAiZ3Jvc3NfZW5lcmd5X2oiLAogICAgICAgICJ3aW5kb3dfY2xhc3MiOiAicmVxdWVzdCIsCiAgICAgICAgImNvbmRpdGlvbl9mYW1pbHlfaWQiOiAiY2YtMSIsCiAgICAgICAgImNvbmRpdGlvbl9mYW1pbHlfZGVmaW5pdGlvbiI6IHsKICAgICAgICAgICJjb25kaXRpb25faWQiOiAiY2YtMSIsCiAgICAgICAgICAiY29tcGFyaXNvbl9wb2xpY3kiOiAic2FtZV9jb25kaXRpb25fcmVwZWF0IgogICAgICAgIH0sCiAgICAgICAgImNvbmRpdGlvbl9mYW1pbHlfc2hhMjU2IjogImMxNWMwOGMxMjQyMTEzOWQ5Yzc2YjU4ZTQ2MzRmYjNlNmZjYzAyMTcyOTFmNDlkNzcxNjQxMzlhODYxMTg3NDEiCiAgICAgIH0sCiAgICAgICJlbGlnaWJpbGl0eSI6IHsKICAgICAgICAidXNlX3JvbGUiOiAicHJpbWFyeV9jbGFpbV9nYXRlIiwKICAgICAgICAibWluaW11bV9jbGFpbV9uIjogNSwKICAgICAgICAic3RhdHVzIjogImNsYWltX3JlYWR5IiwKICAgICAgICAiY2xhaW1fdXNhYmxlIjogdHJ1ZSwKICAgICAgICAicmVhc29uX2NvZGVzIjogW10KICAgICAgfSwKICAgICAgImZsb29yX2Fic19qIjogMjAuMzk5MzUwNTc3ODk4MzA0LAogICAgICAiZmxvb3JfY21wX2oiOiA3LjIxMjI1OTU2MjcxNjgwNSwKICAgICAgImZsb29yX2dhdGVfaiI6IDIwLjM5OTM1MDU3Nzg5ODMwNCwKICAgICAgImFic29sdXRlIjogewogICAgICAgICJuIjogNSwKICAgICAgICAibWVhbl9qIjogMTIuMCwKICAgICAgICAicmVzaWR1YWxzX2oiOiBbCiAgICAgICAgICAtMi4wLAogICAgICAgICAgLTIuMCwKICAgICAgICAgIC0yLjAsCiAgICAgICAgICAtMi4wLAogICAgICAgICAgOC4wCiAgICAgICAgXSwKICAgICAgICAic2FtcGxlX3N0ZGRldl9qIjogNC40NzIxMzU5NTQ5OTk1OCwKICAgICAgICAibWF4X2Fic19yZXNpZHVhbF9qIjogOC4wLAogICAgICAgICJ0X2NyaXRpY2FsIjogMi43NzYsCiAgICAgICAgInByZWRpY3Rpb25fY29tcG9uZW50X2oiOiAxMy41OTk1NjcwNTE5MzIyMDMsCiAgICAgICAgInVuZ3VhcmRlZF9mbG9vcl9qIjogMTMuNTk5NTY3MDUxOTMyMjAzLAogICAgICAgICJndWFyZF9mYWN0b3IiOiAxLjUsCiAgICAgICAgImd1YXJkZWRfZmxvb3JfaiI6IDIwLjM5OTM1MDU3Nzg5ODMwNCwKICAgICAgICAiYWRtaXNzaWJsZV9oYWxmX3dpZHRoc19qIjogWwogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wCiAgICAgICAgXSwKICAgICAgICAiY29ybmVyX3dpZGVuZWRfdW5ndWFyZGVkX2Zsb29yX2oiOiAxMy41OTk1NjcwNTE5MzIyMDMsCiAgICAgICAgImNvcm5lcl93aWRlbmVkX2d1YXJkZWRfZmxvb3JfaiI6IDIwLjM5OTM1MDU3Nzg5ODMwNCwKICAgICAgICAiYnVuZGxlX29ic2VydmF0aW9ucyI6IFsKICAgICAgICAgIHsKICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtcjAiLAogICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDEwLjAKICAgICAgICAgIH0sCiAgICAgICAgICB7CiAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLXIxIiwKICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiAxMC4wCiAgICAgICAgICB9LAogICAgICAgICAgewogICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1yMiIsCiAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiY29uZmlnX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogMTAuMAogICAgICAgICAgfSwKICAgICAgICAgIHsKICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtcjMiLAogICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDEwLjAKICAgICAgICAgIH0sCiAgICAgICAgICB7CiAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLXI0IiwKICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiAyMC4wCiAgICAgICAgICB9CiAgICAgICAgXSwKICAgICAgICAid2hvbGVfd2luZG93X2V2YWx1YXRpb25fYmFzaXNfc2hhMjU2IjogImNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MiLAogICAgICAgICJjb25zdW1wdGlvbl9zZW1hbnRpY3NfaWQiOiAiZDA3OF9taW50ZWRfZW52ZWxvcGVzX3YxIiwKICAgICAgICAid2hvbGVfd2luZG93X2RyaWZ0X2FsbG93YW5jZSI6IHsKICAgICAgICAgICJjbGFpbV9mYW1pbHkiOiAiZ3Jvc3NfZW5lcmd5IiwKICAgICAgICAgICJhbGxvd2FuY2VfaiI6IDVlLTMyNCwKICAgICAgICAgICJvYnNlcnZlZF90cmFqZWN0b3J5X2V4Y3Vyc2lvbl9qIjogMC4wLAogICAgICAgICAgImRlcml2ZWRfcmVwZWF0YWJpbGl0eV9ib3VuZF9qIjogNWUtMzI0LAogICAgICAgICAgInByb3ZlbmFuY2UiOiB7CiAgICAgICAgICAgICJib3VuZF9kZXJpdmF0aW9uX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgIm9ic2VydmVkX2NvbXBvbmVudCI6ICJ0cmFqZWN0b3J5X2V4Y3Vyc2lvbl9tYXhfaiIsCiAgICAgICAgICAgICJkZXJpdmVkX2NvbXBvbmVudCI6ICJkZXJpdmVkX3JlcGVhdGFiaWxpdHlfYm91bmRfaiIKICAgICAgICAgIH0sCiAgICAgICAgICAid2hvbGVfd2luZG93X2V2YWx1YXRpb25fYmFzaXNfc2hhMjU2IjogImNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MiCiAgICAgICAgfSwKICAgICAgICAiZHJpZnRfd2lkZW5lZF91bmd1YXJkZWRfZmxvb3JfaiI6IDEzLjU5OTU2NzA1MTkzMjIwMywKICAgICAgICAiZHJpZnRfd2lkZW5lZF9ndWFyZGVkX2Zsb29yX2oiOiAyMC4zOTkzNTA1Nzc4OTgzMDQKICAgICAgfSwKICAgICAgImNvbXBhcmF0aXZlIjogewogICAgICAgICJuX2Jsb2NrcyI6IDUsCiAgICAgICAgIm1lYW5fZGVsdGFfaiI6IDAuMCwKICAgICAgICAiYmxvY2tfZGVsdGFzX2oiOiBbCiAgICAgICAgICAxLjAsCiAgICAgICAgICAtMS4wLAogICAgICAgICAgMi4wLAogICAgICAgICAgLTIuMCwKICAgICAgICAgIDAuMAogICAgICAgIF0sCiAgICAgICAgInNhbXBsZV9zdGRkZXZfaiI6IDEuNTgxMTM4ODMwMDg0MTg5OCwKICAgICAgICAibWF4X2Fic19kZWx0YV9qIjogMi4wLAogICAgICAgICJ0X2NyaXRpY2FsIjogMi43NzYsCiAgICAgICAgInByZWRpY3Rpb25fY29tcG9uZW50X2oiOiA0LjgwODE3MzA0MTgxMTIwMywKICAgICAgICAidW5ndWFyZGVkX2Zsb29yX2oiOiA0LjgwODE3MzA0MTgxMTIwMywKICAgICAgICAiZ3VhcmRfZmFjdG9yIjogMS41LAogICAgICAgICJndWFyZGVkX2Zsb29yX2oiOiA3LjIxMjI1OTU2MjcxNjgwNSwKICAgICAgICAiYWRtaXNzaWJsZV9oYWxmX3dpZHRoc19qIjogWwogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wLAogICAgICAgICAgMC4wCiAgICAgICAgXSwKICAgICAgICAiY29ybmVyX3dpZGVuZWRfdW5ndWFyZGVkX2Zsb29yX2oiOiA0LjgwODE3MzA0MTgxMTIwMywKICAgICAgICAiY29ybmVyX3dpZGVuZWRfZ3VhcmRlZF9mbG9vcl9qIjogNy4yMTIyNTk1NjI3MTY4MDUsCiAgICAgICAgImJsb2NrcyI6IFsKICAgICAgICAgIHsKICAgICAgICAgICAgImJsb2NrX2lkIjogImNlbGwtMS1iMCIsCiAgICAgICAgICAgICJleGVjdXRlZF9sYWJlbHMiOiBbCiAgICAgICAgICAgICAgIkEiLAogICAgICAgICAgICAgICJCIiwKICAgICAgICAgICAgICAiQiIsCiAgICAgICAgICAgICAgIkEiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJtZW1iZXJzIjogWwogICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJwb3NpdGlvbiI6ICJBMSIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1iMC1BMSIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogMTAwLjAsCiAgICAgICAgICAgICAgICAicGxhbl9sYWJlbCI6ICJBIiwKICAgICAgICAgICAgICAgICJwbGFuX3NlcXVlbmNlX2luZGV4IjogMQogICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgInBvc2l0aW9uIjogIkIxIiwKICAgICAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLWIwLUIxIiwKICAgICAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiAxMDEuMCwKICAgICAgICAgICAgICAgICJwbGFuX2xhYmVsIjogIkIiLAogICAgICAgICAgICAgICAgInBsYW5fc2VxdWVuY2VfaW5kZXgiOiAyCiAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAicG9zaXRpb24iOiAiQjIiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtYjAtQjIiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICAgICAiY29uZmlnX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDEwMS4wLAogICAgICAgICAgICAgICAgInBsYW5fbGFiZWwiOiAiQiIsCiAgICAgICAgICAgICAgICAicGxhbl9zZXF1ZW5jZV9pbmRleCI6IDMKICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJwb3NpdGlvbiI6ICJBMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1iMC1BMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogMTAwLjAsCiAgICAgICAgICAgICAgICAicGxhbl9sYWJlbCI6ICJBIiwKICAgICAgICAgICAgICAgICJwbGFuX3NlcXVlbmNlX2luZGV4IjogNAogICAgICAgICAgICAgIH0KICAgICAgICAgICAgXSwKICAgICAgICAgICAgImRlbHRhX2oiOiAxLjAsCiAgICAgICAgICAgICJjYWxpYnJhdGlvbl9wbGFuX3NoYTI1NiI6ICJlNTI5YTA2MjRiNzYxOGVkYWFkZTUxMWRkNjEwYWUwODM3ZjMxZGUyOTlkZGU2NDJhMDU1OTc0YzM4MjY4MWFiIgogICAgICAgICAgfSwKICAgICAgICAgIHsKICAgICAgICAgICAgImJsb2NrX2lkIjogImNlbGwtMS1iMSIsCiAgICAgICAgICAgICJleGVjdXRlZF9sYWJlbHMiOiBbCiAgICAgICAgICAgICAgIkEiLAogICAgICAgICAgICAgICJCIiwKICAgICAgICAgICAgICAiQiIsCiAgICAgICAgICAgICAgIkEiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJtZW1iZXJzIjogWwogICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJwb3NpdGlvbiI6ICJBMSIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1iMS1BMSIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogMTAwLjAsCiAgICAgICAgICAgICAgICAicGxhbl9sYWJlbCI6ICJBIiwKICAgICAgICAgICAgICAgICJwbGFuX3NlcXVlbmNlX2luZGV4IjogMQogICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgInBvc2l0aW9uIjogIkIxIiwKICAgICAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLWIxLUIxIiwKICAgICAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiA5OS4wLAogICAgICAgICAgICAgICAgInBsYW5fbGFiZWwiOiAiQiIsCiAgICAgICAgICAgICAgICAicGxhbl9zZXF1ZW5jZV9pbmRleCI6IDIKICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJwb3NpdGlvbiI6ICJCMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1iMS1CMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogOTkuMCwKICAgICAgICAgICAgICAgICJwbGFuX2xhYmVsIjogIkIiLAogICAgICAgICAgICAgICAgInBsYW5fc2VxdWVuY2VfaW5kZXgiOiAzCiAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAicG9zaXRpb24iOiAiQTIiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtYjEtQTIiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICAgICAiY29uZmlnX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDEwMC4wLAogICAgICAgICAgICAgICAgInBsYW5fbGFiZWwiOiAiQSIsCiAgICAgICAgICAgICAgICAicGxhbl9zZXF1ZW5jZV9pbmRleCI6IDQKICAgICAgICAgICAgICB9CiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJkZWx0YV9qIjogLTEuMCwKICAgICAgICAgICAgImNhbGlicmF0aW9uX3BsYW5fc2hhMjU2IjogImU1MjlhMDYyNGI3NjE4ZWRhYWRlNTExZGQ2MTBhZTA4MzdmMzFkZTI5OWRkZTY0MmEwNTU5NzRjMzgyNjgxYWIiCiAgICAgICAgICB9LAogICAgICAgICAgewogICAgICAgICAgICAiYmxvY2tfaWQiOiAiY2VsbC0xLWIyIiwKICAgICAgICAgICAgImV4ZWN1dGVkX2xhYmVscyI6IFsKICAgICAgICAgICAgICAiQSIsCiAgICAgICAgICAgICAgIkIiLAogICAgICAgICAgICAgICJCIiwKICAgICAgICAgICAgICAiQSIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgIm1lbWJlcnMiOiBbCiAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgInBvc2l0aW9uIjogIkExIiwKICAgICAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLWIyLUExIiwKICAgICAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiAxMDAuMCwKICAgICAgICAgICAgICAgICJwbGFuX2xhYmVsIjogIkEiLAogICAgICAgICAgICAgICAgInBsYW5fc2VxdWVuY2VfaW5kZXgiOiAxCiAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAicG9zaXRpb24iOiAiQjEiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtYjItQjEiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICAgICAiY29uZmlnX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDEwMi4wLAogICAgICAgICAgICAgICAgInBsYW5fbGFiZWwiOiAiQiIsCiAgICAgICAgICAgICAgICAicGxhbl9zZXF1ZW5jZV9pbmRleCI6IDIKICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJwb3NpdGlvbiI6ICJCMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1iMi1CMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogMTAyLjAsCiAgICAgICAgICAgICAgICAicGxhbl9sYWJlbCI6ICJCIiwKICAgICAgICAgICAgICAgICJwbGFuX3NlcXVlbmNlX2luZGV4IjogMwogICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgInBvc2l0aW9uIjogIkEyIiwKICAgICAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLWIyLUEyIiwKICAgICAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiAxMDAuMCwKICAgICAgICAgICAgICAgICJwbGFuX2xhYmVsIjogIkEiLAogICAgICAgICAgICAgICAgInBsYW5fc2VxdWVuY2VfaW5kZXgiOiA0CiAgICAgICAgICAgICAgfQogICAgICAgICAgICBdLAogICAgICAgICAgICAiZGVsdGFfaiI6IDIuMCwKICAgICAgICAgICAgImNhbGlicmF0aW9uX3BsYW5fc2hhMjU2IjogImU1MjlhMDYyNGI3NjE4ZWRhYWRlNTExZGQ2MTBhZTA4MzdmMzFkZTI5OWRkZTY0MmEwNTU5NzRjMzgyNjgxYWIiCiAgICAgICAgICB9LAogICAgICAgICAgewogICAgICAgICAgICAiYmxvY2tfaWQiOiAiY2VsbC0xLWIzIiwKICAgICAgICAgICAgImV4ZWN1dGVkX2xhYmVscyI6IFsKICAgICAgICAgICAgICAiQSIsCiAgICAgICAgICAgICAgIkIiLAogICAgICAgICAgICAgICJCIiwKICAgICAgICAgICAgICAiQSIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgIm1lbWJlcnMiOiBbCiAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgInBvc2l0aW9uIjogIkExIiwKICAgICAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLWIzLUExIiwKICAgICAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiAxMDAuMCwKICAgICAgICAgICAgICAgICJwbGFuX2xhYmVsIjogIkEiLAogICAgICAgICAgICAgICAgInBsYW5fc2VxdWVuY2VfaW5kZXgiOiAxCiAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAicG9zaXRpb24iOiAiQjEiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtYjMtQjEiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICAgICAiY29uZmlnX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDk4LjAsCiAgICAgICAgICAgICAgICAicGxhbl9sYWJlbCI6ICJCIiwKICAgICAgICAgICAgICAgICJwbGFuX3NlcXVlbmNlX2luZGV4IjogMgogICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgInBvc2l0aW9uIjogIkIyIiwKICAgICAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLWIzLUIyIiwKICAgICAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiA5OC4wLAogICAgICAgICAgICAgICAgInBsYW5fbGFiZWwiOiAiQiIsCiAgICAgICAgICAgICAgICAicGxhbl9zZXF1ZW5jZV9pbmRleCI6IDMKICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJwb3NpdGlvbiI6ICJBMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1iMy1BMiIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogMTAwLjAsCiAgICAgICAgICAgICAgICAicGxhbl9sYWJlbCI6ICJBIiwKICAgICAgICAgICAgICAgICJwbGFuX3NlcXVlbmNlX2luZGV4IjogNAogICAgICAgICAgICAgIH0KICAgICAgICAgICAgXSwKICAgICAgICAgICAgImRlbHRhX2oiOiAtMi4wLAogICAgICAgICAgICAiY2FsaWJyYXRpb25fcGxhbl9zaGEyNTYiOiAiZTUyOWEwNjI0Yjc2MThlZGFhZGU1MTFkZDYxMGFlMDgzN2YzMWRlMjk5ZGRlNjQyYTA1NTk3NGMzODI2ODFhYiIKICAgICAgICAgIH0sCiAgICAgICAgICB7CiAgICAgICAgICAgICJibG9ja19pZCI6ICJjZWxsLTEtYjQiLAogICAgICAgICAgICAiZXhlY3V0ZWRfbGFiZWxzIjogWwogICAgICAgICAgICAgICJBIiwKICAgICAgICAgICAgICAiQiIsCiAgICAgICAgICAgICAgIkIiLAogICAgICAgICAgICAgICJBIgogICAgICAgICAgICBdLAogICAgICAgICAgICAibWVtYmVycyI6IFsKICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAicG9zaXRpb24iOiAiQTEiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtYjQtQTEiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICAgICAiY29uZmlnX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDEwMC4wLAogICAgICAgICAgICAgICAgInBsYW5fbGFiZWwiOiAiQSIsCiAgICAgICAgICAgICAgICAicGxhbl9zZXF1ZW5jZV9pbmRleCI6IDEKICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICJwb3NpdGlvbiI6ICJCMSIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX2lkIjogImNlbGwtMS1iNC1CMSIsCiAgICAgICAgICAgICAgICAiYnVuZGxlX3NoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgICAgICJjb25maWdfc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAgICAgIm1ldHJpY192YWx1ZV9qIjogMTAwLjAsCiAgICAgICAgICAgICAgICAicGxhbl9sYWJlbCI6ICJCIiwKICAgICAgICAgICAgICAgICJwbGFuX3NlcXVlbmNlX2luZGV4IjogMgogICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgInBvc2l0aW9uIjogIkIyIiwKICAgICAgICAgICAgICAgICJidW5kbGVfaWQiOiAiY2VsbC0xLWI0LUIyIiwKICAgICAgICAgICAgICAgICJidW5kbGVfc2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAgICAgImNvbmZpZ19zaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsCiAgICAgICAgICAgICAgICAibWV0cmljX3ZhbHVlX2oiOiAxMDAuMCwKICAgICAgICAgICAgICAgICJwbGFuX2xhYmVsIjogIkIiLAogICAgICAgICAgICAgICAgInBsYW5fc2VxdWVuY2VfaW5kZXgiOiAzCiAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAicG9zaXRpb24iOiAiQTIiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9pZCI6ICJjZWxsLTEtYjQtQTIiLAogICAgICAgICAgICAgICAgImJ1bmRsZV9zaGEyNTYiOiAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICAgICAiY29uZmlnX3NoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwKICAgICAgICAgICAgICAgICJtZXRyaWNfdmFsdWVfaiI6IDEwMC4wLAogICAgICAgICAgICAgICAgInBsYW5fbGFiZWwiOiAiQSIsCiAgICAgICAgICAgICAgICAicGxhbl9zZXF1ZW5jZV9pbmRleCI6IDQKICAgICAgICAgICAgICB9CiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJkZWx0YV9qIjogMC4wLAogICAgICAgICAgICAiY2FsaWJyYXRpb25fcGxhbl9zaGEyNTYiOiAiZTUyOWEwNjI0Yjc2MThlZGFhZGU1MTFkZDYxMGFlMDgzN2YzMWRlMjk5ZGRlNjQyYTA1NTk3NGMzODI2ODFhYiIKICAgICAgICAgIH0KICAgICAgICBdLAogICAgICAgICJ3aG9sZV93aW5kb3dfZXZhbHVhdGlvbl9iYXNpc19zaGEyNTYiOiAiY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYyIsCiAgICAgICAgImNvbnN1bXB0aW9uX3NlbWFudGljc19pZCI6ICJkMDc4X21pbnRlZF9lbnZlbG9wZXNfdjEiLAogICAgICAgICJ3aG9sZV93aW5kb3dfZHJpZnRfYWxsb3dhbmNlIjogewogICAgICAgICAgImNsYWltX2ZhbWlseSI6ICJncm9zc19lbmVyZ3kiLAogICAgICAgICAgImFsbG93YW5jZV9qIjogNWUtMzI0LAogICAgICAgICAgIm9ic2VydmVkX3RyYWplY3RvcnlfZXhjdXJzaW9uX2oiOiAwLjAsCiAgICAgICAgICAiZGVyaXZlZF9yZXBlYXRhYmlsaXR5X2JvdW5kX2oiOiA1ZS0zMjQsCiAgICAgICAgICAicHJvdmVuYW5jZSI6IHsKICAgICAgICAgICAgImJvdW5kX2Rlcml2YXRpb25fc2hhMjU2IjogImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLAogICAgICAgICAgICAib2JzZXJ2ZWRfY29tcG9uZW50IjogInRyYWplY3RvcnlfZXhjdXJzaW9uX21heF9qIiwKICAgICAgICAgICAgImRlcml2ZWRfY29tcG9uZW50IjogImRlcml2ZWRfcmVwZWF0YWJpbGl0eV9ib3VuZF9qIgogICAgICAgICAgfSwKICAgICAgICAgICJ3aG9sZV93aW5kb3dfZXZhbHVhdGlvbl9iYXNpc19zaGEyNTYiOiAiY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYyIKICAgICAgICB9LAogICAgICAgICJkcmlmdF93aWRlbmVkX3VuZ3VhcmRlZF9mbG9vcl9qIjogNC44MDgxNzMwNDE4MTEyMDMsCiAgICAgICAgImRyaWZ0X3dpZGVuZWRfZ3VhcmRlZF9mbG9vcl9qIjogNy4yMTIyNTk1NjI3MTY4MDUKICAgICAgfSwKICAgICAgInNvdXJjZV9yZWdpbWUiOiB7CiAgICAgICAgInN0YWNrX2lkZW50aXR5IjogewogICAgICAgICAgImhhcmR3YXJlX3VuaXQiOiAibWFjLXVuaXQtMSAvIEFwcGxlIE0zIE1heCIsCiAgICAgICAgICAib3NfdmVyc2lvbiI6ICJtYWNPUyAxNS41ICgyNEY3NCkiLAogICAgICAgICAgInJ1bnRpbWVfdmVyc2lvbiI6ICJtbHggMS4wIiwKICAgICAgICAgICJrZXJuZWxfbGlicmFyeSI6ICJtZXRhbC9kZWZhdWx0IiwKICAgICAgICAgICJtb2RlbF9hcnRpZmFjdF9zaGEyNTYiOiAiY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYyIsCiAgICAgICAgICAicXVhbnRpemF0aW9uIjogIm5vbmUiLAogICAgICAgICAgInRva2VuaXplcl9pZGVudGl0eSI6ICJxd2VuMi41L3JldmlzaW9uLXRlc3QvY2xhc3MtdGVzdC92b2NhYi10ZXN0IiwKICAgICAgICAgICJzYW1wbGVyX291dHB1dF9wb2xpY3kiOiAiZ3JlZWR5L21heF9uZXdfdG9rZW5zPTY0IiwKICAgICAgICAgICJiYXRjaGluZ19jb25jdXJyZW5jeV9wb2xpY3kiOiAic2luZ2xlLXJlcXVlc3Qgc2VxdWVudGlhbCIsCiAgICAgICAgICAibWVhc3VyZW1lbnRfYm91bmRhcnlfbGFiZWwiOiAid2FsbC1kMDE4IiwKICAgICAgICAgICJ0ZWxlbWV0cnlfYmFja2VuZCI6ICJwb3dlcm1ldHJpY3MgMTQuMCIKICAgICAgICB9LAogICAgICAgICJzdGFja19pZGVudGl0eV9zaGEyNTYiOiAiNDIwZWZhZTEzMDg4ZTA0OWZhYjhmMTQ1NTBmZDE2NTI5YzNlOWJkMDYxMzExZmI1ODdjNzc4NmI1OGJhMzg0MyIsCiAgICAgICAgInN0cmVzc19vYnNlcnZlZCI6IHsKICAgICAgICAgICJtZWFuX3Bvd2VyX3dfbWluIjogNS4wLAogICAgICAgICAgIndpbmRvd19kdXJhdGlvbl9zX21pbiI6IDEuMCwKICAgICAgICAgICJjYWRlbmNlX3JhdGlvX21pbiI6IDIuMCwKICAgICAgICAgICJtZWFuX3Bvd2VyX3dfbWF4IjogMTAuMCwKICAgICAgICAgICJ3aW5kb3dfZHVyYXRpb25fc19tYXgiOiA0LjAsCiAgICAgICAgICAicDk1X3NhbXBsZV9nYXBfc19tYXgiOiAwLjMsCiAgICAgICAgICAiYnJhY2tldGluZ19zYW1wbGVfZ2FwX3NfbWF4IjogMC41LAogICAgICAgICAgImJvdW5kX3Rlcm1zIjogewogICAgICAgICAgICAiY2xvY2tfYW5jaG9yX2JvdW5kX3MiOiB7CiAgICAgICAgICAgICAgImFwcGxpY2FiaWxpdHkiOiAicmVxdWlyZWQiLAogICAgICAgICAgICAgICJtYXhpbXVtIjogMC4wMDIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgImludGVycG9sYXRpb25fYm91bmRfaiI6IHsKICAgICAgICAgICAgICAiYXBwbGljYWJpbGl0eSI6ICJyZXF1aXJlZCIsCiAgICAgICAgICAgICAgIm1heGltdW0iOiAxLjUKICAgICAgICAgICAgfSwKICAgICAgICAgICAgImlkbGVfZHJpZnRfYm91bmRfaiI6IHsKICAgICAgICAgICAgICAiYXBwbGljYWJpbGl0eSI6ICJub3RfYXBwbGljYWJsZSIsCiAgICAgICAgICAgICAgIm1heGltdW0iOiBudWxsCiAgICAgICAgICAgIH0KICAgICAgICAgIH0KICAgICAgICB9CiAgICAgIH0sCiAgICAgICJ0cmFuc3BvcnRfZ3JvdXBfaWQiOiAidGctMSIsCiAgICAgICJwcm92ZW5hbmNlIjogewogICAgICAgICJhYnNvbHV0ZSI6IHsKICAgICAgICAgICJjYWxpYnJhdGlvbl9jZWxsX2lkIjogImNlbGwtMS1hYnMiLAogICAgICAgICAgImV2aWRlbmNlX3Jvb3RfaWQiOiAiYTEwIiwKICAgICAgICAgICJvcmRlcl9tYW5pZmVzdCI6IHsKICAgICAgICAgICAgIm1hbmlmZXN0X2lkIjogImNlbGwtMS1hYnMtb3JkZXIiLAogICAgICAgICAgICAic2hhMjU2IjogImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiCiAgICAgICAgICB9LAogICAgICAgICAgImNhbXBhaWduX2xvZyI6IHsKICAgICAgICAgICAgInNoYTI1NiI6ICJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIgogICAgICAgICAgfSwKICAgICAgICAgICJleHRyYWN0aW9uX3JlcG9ydCI6IHsKICAgICAgICAgICAgInNoYTI1NiI6ICJjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjIgogICAgICAgICAgfSwKICAgICAgICAgICJleHRyYWN0aW9uX3NwZWMiOiB7CiAgICAgICAgICAgICJzaGEyNTYiOiAiZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZCIKICAgICAgICAgIH0sCiAgICAgICAgICAiYnVuZGxlX2lkcyI6IFsKICAgICAgICAgICAgImNlbGwtMS1yMCIsCiAgICAgICAgICAgICJjZWxsLTEtcjEiLAogICAgICAgICAgICAiY2VsbC0xLXIyIiwKICAgICAgICAgICAgImNlbGwtMS1yMyIsCiAgICAgICAgICAgICJjZWxsLTEtcjQiCiAgICAgICAgICBdLAogICAgICAgICAgImJ1bmRsZV9zaGEyNTZzIjogWwogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIgogICAgICAgICAgXSwKICAgICAgICAgICJzb3VyY2VfcmVnaW1lIjogewogICAgICAgICAgICAic3RhY2tfaWRlbnRpdHkiOiB7CiAgICAgICAgICAgICAgImhhcmR3YXJlX3VuaXQiOiAibWFjLXVuaXQtMSAvIEFwcGxlIE0zIE1heCIsCiAgICAgICAgICAgICAgIm9zX3ZlcnNpb24iOiAibWFjT1MgMTUuNSAoMjRGNzQpIiwKICAgICAgICAgICAgICAicnVudGltZV92ZXJzaW9uIjogIm1seCAxLjAiLAogICAgICAgICAgICAgICJrZXJuZWxfbGlicmFyeSI6ICJtZXRhbC9kZWZhdWx0IiwKICAgICAgICAgICAgICAibW9kZWxfYXJ0aWZhY3Rfc2hhMjU2IjogImNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MiLAogICAgICAgICAgICAgICJxdWFudGl6YXRpb24iOiAibm9uZSIsCiAgICAgICAgICAgICAgInRva2VuaXplcl9pZGVudGl0eSI6ICJxd2VuMi41L3JldmlzaW9uLXRlc3QvY2xhc3MtdGVzdC92b2NhYi10ZXN0IiwKICAgICAgICAgICAgICAic2FtcGxlcl9vdXRwdXRfcG9saWN5IjogImdyZWVkeS9tYXhfbmV3X3Rva2Vucz02NCIsCiAgICAgICAgICAgICAgImJhdGNoaW5nX2NvbmN1cnJlbmN5X3BvbGljeSI6ICJzaW5nbGUtcmVxdWVzdCBzZXF1ZW50aWFsIiwKICAgICAgICAgICAgICAibWVhc3VyZW1lbnRfYm91bmRhcnlfbGFiZWwiOiAid2FsbC1kMDE4IiwKICAgICAgICAgICAgICAidGVsZW1ldHJ5X2JhY2tlbmQiOiAicG93ZXJtZXRyaWNzIDE0LjAiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJzdGFja19pZGVudGl0eV9zaGEyNTYiOiAiNDIwZWZhZTEzMDg4ZTA0OWZhYjhmMTQ1NTBmZDE2NTI5YzNlOWJkMDYxMzExZmI1ODdjNzc4NmI1OGJhMzg0MyIsCiAgICAgICAgICAgICJzdHJlc3Nfb2JzZXJ2ZWQiOiB7CiAgICAgICAgICAgICAgIm1lYW5fcG93ZXJfd19taW4iOiA1LjAsCiAgICAgICAgICAgICAgIm1lYW5fcG93ZXJfd19tYXgiOiAxMC4wLAogICAgICAgICAgICAgICJ3aW5kb3dfZHVyYXRpb25fc19taW4iOiAxLjAsCiAgICAgICAgICAgICAgIndpbmRvd19kdXJhdGlvbl9zX21heCI6IDQuMCwKICAgICAgICAgICAgICAicDk1X3NhbXBsZV9nYXBfc19tYXgiOiAwLjMsCiAgICAgICAgICAgICAgImJyYWNrZXRpbmdfc2FtcGxlX2dhcF9zX21heCI6IDAuNSwKICAgICAgICAgICAgICAiY2FkZW5jZV9yYXRpb19taW4iOiAyLjAsCiAgICAgICAgICAgICAgImJvdW5kX3Rlcm1zIjogewogICAgICAgICAgICAgICAgImNsb2NrX2FuY2hvcl9ib3VuZF9zIjogewogICAgICAgICAgICAgICAgICAiYXBwbGljYWJpbGl0eSI6ICJyZXF1aXJlZCIsCiAgICAgICAgICAgICAgICAgICJtYXhpbXVtIjogMC4wMDIKICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICAiaW50ZXJwb2xhdGlvbl9ib3VuZF9qIjogewogICAgICAgICAgICAgICAgICAiYXBwbGljYWJpbGl0eSI6ICJyZXF1aXJlZCIsCiAgICAgICAgICAgICAgICAgICJtYXhpbXVtIjogMS41CiAgICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgICAgImlkbGVfZHJpZnRfYm91bmRfaiI6IHsKICAgICAgICAgICAgICAgICAgImFwcGxpY2FiaWxpdHkiOiAibm90X2FwcGxpY2FibGUiLAogICAgICAgICAgICAgICAgICAibWF4aW11bSI6IG51bGwKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0KICAgICAgICAgIH0KICAgICAgICB9LAogICAgICAgICJjb21wYXJhdGl2ZSI6IHsKICAgICAgICAgICJjYWxpYnJhdGlvbl9jZWxsX2lkIjogImNlbGwtMS1jbXAiLAogICAgICAgICAgImV2aWRlbmNlX3Jvb3RfaWQiOiAid2luZG93X2MiLAogICAgICAgICAgIm9yZGVyX21hbmlmZXN0IjogewogICAgICAgICAgICAibWFuaWZlc3RfaWQiOiAiY2VsbC0xLWNtcC1vcmRlciIsCiAgICAgICAgICAgICJzaGEyNTYiOiAiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIKICAgICAgICAgIH0sCiAgICAgICAgICAiY2FtcGFpZ25fbG9nIjogewogICAgICAgICAgICAic2hhMjU2IjogImNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MiCiAgICAgICAgICB9LAogICAgICAgICAgImV4dHJhY3Rpb25fcmVwb3J0IjogewogICAgICAgICAgICAic2hhMjU2IjogImRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQiCiAgICAgICAgICB9LAogICAgICAgICAgImV4dHJhY3Rpb25fc3BlYyI6IHsKICAgICAgICAgICAgInNoYTI1NiI6ICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIgogICAgICAgICAgfSwKICAgICAgICAgICJidW5kbGVfaWRzIjogWwogICAgICAgICAgICAiY2VsbC0xLWIwLUExIiwKICAgICAgICAgICAgImNlbGwtMS1iMC1CMSIsCiAgICAgICAgICAgICJjZWxsLTEtYjAtQjIiLAogICAgICAgICAgICAiY2VsbC0xLWIwLUEyIiwKICAgICAgICAgICAgImNlbGwtMS1iMS1BMSIsCiAgICAgICAgICAgICJjZWxsLTEtYjEtQjEiLAogICAgICAgICAgICAiY2VsbC0xLWIxLUIyIiwKICAgICAgICAgICAgImNlbGwtMS1iMS1BMiIsCiAgICAgICAgICAgICJjZWxsLTEtYjItQTEiLAogICAgICAgICAgICAiY2VsbC0xLWIyLUIxIiwKICAgICAgICAgICAgImNlbGwtMS1iMi1CMiIsCiAgICAgICAgICAgICJjZWxsLTEtYjItQTIiLAogICAgICAgICAgICAiY2VsbC0xLWIzLUExIiwKICAgICAgICAgICAgImNlbGwtMS1iMy1CMSIsCiAgICAgICAgICAgICJjZWxsLTEtYjMtQjIiLAogICAgICAgICAgICAiY2VsbC0xLWIzLUEyIiwKICAgICAgICAgICAgImNlbGwtMS1iNC1BMSIsCiAgICAgICAgICAgICJjZWxsLTEtYjQtQjEiLAogICAgICAgICAgICAiY2VsbC0xLWI0LUIyIiwKICAgICAgICAgICAgImNlbGwtMS1iNC1BMiIKICAgICAgICAgIF0sCiAgICAgICAgICAiYnVuZGxlX3NoYTI1NnMiOiBbCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLAogICAgICAgICAgICAiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsCiAgICAgICAgICAgICJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwKICAgICAgICAgICAgImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiCiAgICAgICAgICBdLAogICAgICAgICAgInNvdXJjZV9yZWdpbWUiOiB7CiAgICAgICAgICAgICJzdGFja19pZGVudGl0eSI6IHsKICAgICAgICAgICAgICAiaGFyZHdhcmVfdW5pdCI6ICJtYWMtdW5pdC0xIC8gQXBwbGUgTTMgTWF4IiwKICAgICAgICAgICAgICAib3NfdmVyc2lvbiI6ICJtYWNPUyAxNS41ICgyNEY3NCkiLAogICAgICAgICAgICAgICJydW50aW1lX3ZlcnNpb24iOiAibWx4IDEuMCIsCiAgICAgICAgICAgICAgImtlcm5lbF9saWJyYXJ5IjogIm1ldGFsL2RlZmF1bHQiLAogICAgICAgICAgICAgICJtb2RlbF9hcnRpZmFjdF9zaGEyNTYiOiAiY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYyIsCiAgICAgICAgICAgICAgInF1YW50aXphdGlvbiI6ICJub25lIiwKICAgICAgICAgICAgICAidG9rZW5pemVyX2lkZW50aXR5IjogInF3ZW4yLjUvcmV2aXNpb24tdGVzdC9jbGFzcy10ZXN0L3ZvY2FiLXRlc3QiLAogICAgICAgICAgICAgICJzYW1wbGVyX291dHB1dF9wb2xpY3kiOiAiZ3JlZWR5L21heF9uZXdfdG9rZW5zPTY0IiwKICAgICAgICAgICAgICAiYmF0Y2hpbmdfY29uY3VycmVuY3lfcG9saWN5IjogInNpbmdsZS1yZXF1ZXN0IHNlcXVlbnRpYWwiLAogICAgICAgICAgICAgICJtZWFzdXJlbWVudF9ib3VuZGFyeV9sYWJlbCI6ICJ3YWxsLWQwMTgiLAogICAgICAgICAgICAgICJ0ZWxlbWV0cnlfYmFja2VuZCI6ICJwb3dlcm1ldHJpY3MgMTQuMCIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInN0YWNrX2lkZW50aXR5X3NoYTI1NiI6ICI0MjBlZmFlMTMwODhlMDQ5ZmFiOGYxNDU1MGZkMTY1MjljM2U5YmQwNjEzMTFmYjU4N2M3Nzg2YjU4YmEzODQzIiwKICAgICAgICAgICAgInN0cmVzc19vYnNlcnZlZCI6IHsKICAgICAgICAgICAgICAibWVhbl9wb3dlcl93X21pbiI6IDUuMCwKICAgICAgICAgICAgICAibWVhbl9wb3dlcl93X21heCI6IDEwLjAsCiAgICAgICAgICAgICAgIndpbmRvd19kdXJhdGlvbl9zX21pbiI6IDEuMCwKICAgICAgICAgICAgICAid2luZG93X2R1cmF0aW9uX3NfbWF4IjogNC4wLAogICAgICAgICAgICAgICJwOTVfc2FtcGxlX2dhcF9zX21heCI6IDAuMywKICAgICAgICAgICAgICAiYnJhY2tldGluZ19zYW1wbGVfZ2FwX3NfbWF4IjogMC41LAogICAgICAgICAgICAgICJjYWRlbmNlX3JhdGlvX21pbiI6IDIuMCwKICAgICAgICAgICAgICAiYm91bmRfdGVybXMiOiB7CiAgICAgICAgICAgICAgICAiY2xvY2tfYW5jaG9yX2JvdW5kX3MiOiB7CiAgICAgICAgICAgICAgICAgICJhcHBsaWNhYmlsaXR5IjogInJlcXVpcmVkIiwKICAgICAgICAgICAgICAgICAgIm1heGltdW0iOiAwLjAwMgogICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgICJpbnRlcnBvbGF0aW9uX2JvdW5kX2oiOiB7CiAgICAgICAgICAgICAgICAgICJhcHBsaWNhYmlsaXR5IjogInJlcXVpcmVkIiwKICAgICAgICAgICAgICAgICAgIm1heGltdW0iOiAxLjUKICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICAiaWRsZV9kcmlmdF9ib3VuZF9qIjogewogICAgICAgICAgICAgICAgICAiYXBwbGljYWJpbGl0eSI6ICJub3RfYXBwbGljYWJsZSIsCiAgICAgICAgICAgICAgICAgICJtYXhpbXVtIjogbnVsbAogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQogICAgICAgICAgfQogICAgICAgIH0KICAgICAgfQogICAgfQogIF0sCiAgInRyYW5zcG9ydF9ncm91cHMiOiBbCiAgICB7CiAgICAgICJ0cmFuc3BvcnRfZ3JvdXBfaWQiOiAidGctMSIsCiAgICAgICJydWxlX2lkIjogInNhbWVfc3RhY2tfY29tcG9uZW50d2lzZV93b3JzdF9jYXNlLnYxIiwKICAgICAgImJhY2tlbmQiOiAicG93ZXJtZXRyaWNzIiwKICAgICAgIm1ldHJpYyI6ICJncm9zc19lbmVyZ3lfaiIsCiAgICAgICJ3aW5kb3dfY2xhc3MiOiAicmVxdWVzdCIsCiAgICAgICJzdGFja19pZGVudGl0eSI6IHsKICAgICAgICAiaGFyZHdhcmVfdW5pdCI6ICJtYWMtdW5pdC0xIC8gQXBwbGUgTTMgTWF4IiwKICAgICAgICAib3NfdmVyc2lvbiI6ICJtYWNPUyAxNS41ICgyNEY3NCkiLAogICAgICAgICJydW50aW1lX3ZlcnNpb24iOiAibWx4IDEuMCIsCiAgICAgICAgImtlcm5lbF9saWJyYXJ5IjogIm1ldGFsL2RlZmF1bHQiLAogICAgICAgICJtb2RlbF9hcnRpZmFjdF9zaGEyNTYiOiAiY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYyIsCiAgICAgICAgInF1YW50aXphdGlvbiI6ICJub25lIiwKICAgICAgICAidG9rZW5pemVyX2lkZW50aXR5IjogInF3ZW4yLjUvcmV2aXNpb24tdGVzdC9jbGFzcy10ZXN0L3ZvY2FiLXRlc3QiLAogICAgICAgICJzYW1wbGVyX291dHB1dF9wb2xpY3kiOiAiZ3JlZWR5L21heF9uZXdfdG9rZW5zPTY0IiwKICAgICAgICAiYmF0Y2hpbmdfY29uY3VycmVuY3lfcG9saWN5IjogInNpbmdsZS1yZXF1ZXN0IHNlcXVlbnRpYWwiLAogICAgICAgICJtZWFzdXJlbWVudF9ib3VuZGFyeV9sYWJlbCI6ICJ3YWxsLWQwMTgiLAogICAgICAgICJ0ZWxlbWV0cnlfYmFja2VuZCI6ICJwb3dlcm1ldHJpY3MgMTQuMCIKICAgICAgfSwKICAgICAgInN0YWNrX2lkZW50aXR5X3NoYTI1NiI6ICI0MjBlZmFlMTMwODhlMDQ5ZmFiOGYxNDU1MGZkMTY1MjljM2U5YmQwNjEzMTFmYjU4N2M3Nzg2YjU4YmEzODQzIiwKICAgICAgInNvdXJjZV9jZWxsX2lkcyI6IFsKICAgICAgICAiY2VsbC0xIgogICAgICBdLAogICAgICAiYWxsb3dlZF9jb25zdW1lcl9jb25kaXRpb25fZmFtaWxpZXMiOiBbCiAgICAgICAgewogICAgICAgICAgImNvbmRpdGlvbl9mYW1pbHlfaWQiOiAiY2YtMSIsCiAgICAgICAgICAiY29uZGl0aW9uX2ZhbWlseV9kZWZpbml0aW9uIjogewogICAgICAgICAgICAiY29uZGl0aW9uX2lkIjogImNmLTEiLAogICAgICAgICAgICAiY29tcGFyaXNvbl9wb2xpY3kiOiAic2FtZV9jb25kaXRpb25fcmVwZWF0IgogICAgICAgICAgfSwKICAgICAgICAgICJjb25kaXRpb25fZmFtaWx5X3NoYTI1NiI6ICJjMTVjMDhjMTI0MjExMzlkOWM3NmI1OGU0NjM0ZmIzZTZmY2MwMjE3MjkxZjQ5ZDc3MTY0MTM5YTg2MTE4NzQxIgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgImNvbmRpdGlvbl9mYW1pbHlfaWQiOiAiY2YtMiIsCiAgICAgICAgICAiY29uZGl0aW9uX2ZhbWlseV9kZWZpbml0aW9uIjogewogICAgICAgICAgICAiY29uZGl0aW9uX2lkIjogImNmLTIiLAogICAgICAgICAgICAiY29tcGFyaXNvbl9wb2xpY3kiOiAic2FtZV9jb25kaXRpb25fcmVwZWF0IgogICAgICAgICAgfSwKICAgICAgICAgICJjb25kaXRpb25fZmFtaWx5X3NoYTI1NiI6ICIyMDdiYjk4ZGVjMzllYjFhMTNjZDhhZGUyYTg0MTIxOWJjODZjNGRjZWZkMWViZWFkNWQ0NTNmMjY5ZGJhZWZjIgogICAgICAgIH0KICAgICAgXSwKICAgICAgImNvbXBvc2VkX2Zsb29yX2Fic19qIjogMjAuMzk5MzUwNTc3ODk4MzA0LAogICAgICAiY29tcG9zZWRfZmxvb3JfY21wX2oiOiA3LjIxMjI1OTU2MjcxNjgwNSwKICAgICAgImNvbXBvc2VkX2Zsb29yX2dhdGVfaiI6IDIwLjM5OTM1MDU3Nzg5ODMwNCwKICAgICAgInN0cmVzc19lbnZlbG9wZSI6IHsKICAgICAgICAibWVhbl9wb3dlcl93X21pbiI6IDUuMCwKICAgICAgICAid2luZG93X2R1cmF0aW9uX3NfbWluIjogMS4wLAogICAgICAgICJjYWRlbmNlX3JhdGlvX21pbiI6IDIuMCwKICAgICAgICAibWVhbl9wb3dlcl93X21heCI6IDEwLjAsCiAgICAgICAgIndpbmRvd19kdXJhdGlvbl9zX21heCI6IDQuMCwKICAgICAgICAicDk1X3NhbXBsZV9nYXBfc19tYXgiOiAwLjMsCiAgICAgICAgImJyYWNrZXRpbmdfc2FtcGxlX2dhcF9zX21heCI6IDAuNSwKICAgICAgICAiYm91bmRfdGVybV9tYXhpbWEiOiB7CiAgICAgICAgICAiY2xvY2tfYW5jaG9yX2JvdW5kX3MiOiAwLjAwMiwKICAgICAgICAgICJpbnRlcnBvbGF0aW9uX2JvdW5kX2oiOiAxLjUsCiAgICAgICAgICAiaWRsZV9kcmlmdF9ib3VuZF9qIjogbnVsbAogICAgICAgIH0KICAgICAgfQogICAgfQogIF0KfQo=",
+   "file_sha256": "766e1972f4392e47a601244d1392bb5fbaccbd52d6632f0c0a4eb805e380d3f1"
+  },
+  "limitations": [],
+  "runs_root_label": "runs"
+ },
+ "sampling_audit": {
+  "demoted_contrast_ids": [],
+  "design": "fixed_n",
+  "planned_n_blocks": 10,
+  "registered_blocks": [
+   "sw-decode-contrast-b01",
+   "sw-decode-contrast-b02",
+   "sw-decode-contrast-b03",
+   "sw-decode-contrast-b04",
+   "sw-decode-contrast-b05",
+   "sw-decode-contrast-b06",
+   "sw-decode-contrast-b07",
+   "sw-decode-contrast-b08",
+   "sw-decode-contrast-b09",
+   "sw-decode-contrast-b10"
+  ],
+  "top_up_detected": false,
+  "unregistered_matching_bundles": [],
+  "valid_replacements": []
+ },
+ "schema_version": "joulewise.claim_verdicts.v1",
+ "supersession_audit": [
+  {
+   "authenticated_basis": {
+    "kind": "whole_window_evaluation_basis_sha256",
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+   },
+   "evidence_root_id": null,
+   "raw_count": 1,
+   "scope": "analysis_corpus",
+   "status": "clean",
+   "validated_count": 1
+  },
+  {
+   "authenticated_basis": {
+    "kind": "floor_component_campaign_log_sha256",
+    "sha256s": [
+     "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    ]
+   },
+   "evidence_root_id": "a10",
+   "raw_count": 0,
+   "scope": "floor_evidence",
+   "status": "clean",
+   "validated_count": 0
+  },
+  {
+   "authenticated_basis": {
+    "kind": "floor_component_campaign_log_sha256",
+    "sha256s": [
+     "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    ]
+   },
+   "evidence_root_id": "window_c",
+   "raw_count": 0,
+   "scope": "floor_evidence",
+   "status": "clean",
+   "validated_count": 0
+  }
+ ]
+}
