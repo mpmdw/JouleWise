@@ -92,19 +92,14 @@ class PreregistrationChainDigestTests(unittest.TestCase):
 
         self.assertNotIn("--sleep-display-before-capture", "\n".join(invocation_lines))
 
-    def test_issuer_epoch_pins_remain_unique(self):
+    def test_issuer_epoch_pins_agree_across_revisions_one_and_five(self):
         text = PREREGISTRATION.read_text(encoding="utf-8")
-        # Import and call the production parser; no regexes are copied here.
-        # It deduplicates values, so also count its raw matches to reject even
-        # a second identical pin rather than silently accepting repeated text.
-        os_build = _one_match(
-            issuer._PREREGISTRATION_OS_BUILD, text, "preregistration_os_build_unique"
-        )
-        powermetrics = _one_match(
-            issuer._PREREGISTRATION_POWERMETRICS, text,
-            "preregistration_powermetrics_digest_unique",
-        )
-        self.assertEqual(issuer.preregistration_epoch_pins(text), (os_build, powermetrics))
+        os_builds = issuer._PREREGISTRATION_OS_BUILD.findall(text)
+        powermetrics = issuer._PREREGISTRATION_POWERMETRICS.findall(text)
+        self.assertEqual(len(os_builds), 2)
+        self.assertEqual(len(powermetrics), 1)
+        self.assertEqual(len(set(os_builds)), 1)
+        self.assertEqual(issuer.preregistration_epoch_pins(text), (os_builds[0], powermetrics[0]))
 
 
 class DigestSelectionTests(unittest.TestCase):

@@ -238,7 +238,7 @@ _PRIOR_PREFIX_MODES = frozenset(
 # implemented: the rule every issued generation was derived under (the
 # quantized corpus range IS the operative screen) and the D-125 floored
 # envelope rule the 25G83 successor is pre-registered under (below).  The
-# strict screen-below-ceiling relation that is D-125's
+# historical strict screen-below-ceiling relation that is D-125's
 # ``successor_screen_exceeds_budget_ceiling`` refusal lives in
 # ``_registered_generation_row_is_complete``; the issuer refuses by that name
 # before emitting.  Any rule name outside the registered set refuses here
@@ -272,9 +272,18 @@ _D125_RULING_REQUIRED_SCREEN_RULES = frozenset({SCREEN_RULE_FLOORED_RANGE_ENVELO
 # guards the df = n-1 tail: at n=17 the 99 % two-draw prediction already rests
 # on df=16, and below that the Student-t quantile grows fast enough that a
 # ceiling derived from it stops meaning what the artifact says it means.  The
-# floor applies to ENVELOPE generations, which are the ones still to be issued;
+# floor applies to historical ENVELOPE generations; the exact 25G83/v3
+# registration Revision 5 row carries its own 12-member floor and equality rule.
 # the six already-issued rows carry n=17 or n=19 and are unaffected either way.
 ENVELOPE_MINIMUM_CORPUS_N = 17
+REVISION_FIVE_EPOCH = {
+    "os_build": "25G83",
+    "hardware_model": "Mac15,9",
+    "power_policy": "ac_high_power",
+    "sampling_interval_ms": 100,
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "pulse_protocol_id": PROTOCOL_ID,
+}
 # Mechanism-named, outcome-independent corpus exclusions (ruling 46 §R-a A6).
 # Today's only registered class is `affine_clock_fit_empty`: the anchor-v3
 # replay found NO feasible affine wall-versus-monotonic clock fit for that
@@ -381,7 +390,7 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
 }
 
 
-def _registered_generation_row_is_complete(generation: Any) -> bool:
+def _registered_generation_row_is_complete(generation: Any, *, revision_five: bool = False) -> bool:
     """Whether a registered generation row carries every fence it must.
 
     The validator reads its epoch catalog, prior-set size, cutoff sequence,
@@ -464,13 +473,19 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
     prediction = _decimal(generation["prediction_99_two_draw_s"])
     screen = _decimal(operatives.get("bracket_screen_s"))
+    expected_drift = (
+        max((item for item in (predecessor, prediction, screen) if item is not None),
+            default=None)
+        if revision_five else
+        max((item for item in (predecessor, prediction) if item is not None),
+            default=None)
+    )
     if (
         drift is None
         or prediction is None
         or screen is None
-        or drift
-        != (prediction if predecessor is None else max(predecessor, prediction))
-        or not screen < drift
+        or drift != expected_drift
+        or not (screen <= drift if revision_five else screen < drift)
     ):
         return False
     if not all(
@@ -505,7 +520,7 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
         )
         and (
             generation["screen_rule"] != SCREEN_RULE_FLOORED_RANGE_ENVELOPE
-            or generation["corpus_n"] >= ENVELOPE_MINIMUM_CORPUS_N
+            or generation["corpus_n"] >= (12 if revision_five else ENVELOPE_MINIMUM_CORPUS_N)
         )
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
@@ -765,7 +780,12 @@ def _valid_acceptance_bound(value: Any) -> bool:
     # identity, never by the live default, so every registered generation keeps
     # validating against the member table it was actually derived from.
     generation = _D102_GENERATION_DERIVATIONS.get(value.get("acceptance_id"))
-    if generation is None or not _registered_generation_row_is_complete(generation):
+    revision_five = (
+        value.get("identity_epoch") == REVISION_FIVE_EPOCH
+        and isinstance(generation, Mapping)
+        and generation.get("registration_revision") == 5
+    )
+    if generation is None or not _registered_generation_row_is_complete(generation, revision_five=revision_five):
         return False
     expected_n = generation["corpus_n"]
     operative_values = generation["operatives"]
@@ -1864,7 +1884,14 @@ def _prior_set_matches_import_cutoff_prefix(
     if not prefix and artifact.get("artifact_role") == "schema_fixture_unissued":
         return True
     generation = _D102_GENERATION_DERIVATIONS.get(artifact.get("acceptance_id"))
-    if generation is None or not _registered_generation_row_is_complete(generation):
+    revision_five = (
+        artifact.get("identity_epoch") == REVISION_FIVE_EPOCH
+        and isinstance(generation, Mapping)
+        and generation.get("registration_revision") == 5
+    )
+    if generation is None or not _registered_generation_row_is_complete(
+        generation, revision_five=revision_five
+    ):
         return False
     prefix_mode = generation["prior_prefix_mode"]
     live_prefix_allowed = prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE
