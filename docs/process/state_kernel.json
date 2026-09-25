@@ -1660,9 +1660,21 @@
         {
           "evidence": null,
           "kind": "event",
-          "required": "design consult resolves W1-W4 before implementation resumes",
+          "required": "PR-0 (WR-7 v1 replay golden, test/2026-09-25-claimgate-pr0-golden) merges before the one CG-4 PR (WR-10)",
           "scope": "start",
           "state": "pending",
+          "strength": "hard",
+          "target": "CLAIMGATE-PR0-GOLDEN-MERGED"
+        },
+        {
+          "evidence": {
+            "label": "Wiring rulings v1.1 WR-0..WR-10 (cold addendum)",
+            "path": "docs/process_traces/2026-09-25-activation-152c9255/06-coldgate-packet-cgw/30-addendum/21-coldgate-fable-cgw-addendum-ruling.md"
+          },
+          "kind": "event",
+          "required": "design consult resolves W1-W4 before implementation resumes",
+          "scope": "start",
+          "state": "satisfied",
           "strength": "hard",
           "target": "CLAIMGATE-WIRING-01"
         }
@@ -3876,7 +3888,7 @@
       "priority": "p1_phase_gate",
       "rank": 303,
       "status": "active",
-      "status_note": "Registered 2026-09-25; active. Opus and Astra rulings followed by Fable final pass; no n_acc decision recorded yet.",
+      "status_note": "Registered 2026-09-25; active. Opus and Astra rulings followed by Fable final pass; magistrate decision recorded. 2026-09-25 07:05: Magistrate decision 18/10: census, floor 128, Holm m = 5, SESOI Δ_L = 0.3. Opus df rule and FPC on V_acc routed to Fable final pass packet 21 (sha 59aefd07…).",
       "stop_card": null
     },
     "HEADLINE-PURE-MODULES-GATE-01": {

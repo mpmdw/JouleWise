@@ -129,3 +129,11 @@
    - N1 and N2.
    - **Magistrate provisional reading on S1:** R16 does not apply to `T0_REHEARSAL` pack plans. R16's purpose (M3) is Spotlight exclusion for measurement clones, and rehearsals produce no data. The reading is implemented provisionally and put explicitly to PR-L's cold Fable final pass, since the scope of a cold ruling is not the magistrate's to settle alone.
    - Fix round 1 was dispatched with dictated closure shapes ([17/03](17-prl-review/03-fix1-brief.txt)).
+52. Bookkeeping candidate `docs/2026-09-25-152c9255-bk1` @ `b41ccd57`, Opus fidelity lens ([22](22-bk1-fidelity-lens.md)): 0 BLOCKER. The hard checks pass (no MATH problem text; only allowed paths), and about 45 claims were spot-checked correct. 3 SHOULD-FIX and 3 NITs, all applied at the bench:
+   - S1: the scorecard line was overstated. Corrected: only two of the four first cold rulings missed a BLOCKER that the refuter caught.
+   - S2: the top block was stale against items 47–51.
+   - S3: the HEADLINE-POWER-01 note; and the CLAIMGATE-V2-IMPL-01 wiring dependency is now satisfied, with a pending dependency on PR-0 merging added.
+   - N1: items 1–122.
+   - N2: the negative-control capture is committed as `11-prl-bench-smoke/default-context-negative-control.json` (median 173.2, max 262.3, 300 frames).
+   - N3: the hard-level ≈0 power qualifier.
+   - `gen_state --check` rc 0; `tests.test_gen_state` OK.
