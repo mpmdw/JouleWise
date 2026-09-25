@@ -291,3 +291,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - INV-36 (an advanced placement's attempt set to 2): `inv_38`;
    - INV-37 (a terminal refusal for a live item): `inv_11`.
    These differ from the rows' listed codes (`inv_23`, `inv_36`, `inv_37`), which the typed-code line records as ruled. The gate-item (1) defect is closed. The magistrate is re-running the harness module at the bench on the new head.
+105. The A291 merge candidate branch `fix/2026-09-24-a291-merge-candidate` = the round-3 head `3fb98469` with origin/main merged (`e3769062`, no conflicts; 12 files, +4,223 lines against main), pushed. The PR still needs the 12-row gate ledger. Round-3 paired lenses were launched on `3fb98469` (brief 109): Astra contract lens and Sol execution lens, both CPU-light. The bench harness module at `3fb98469` passes 10 tests. The full suite run on `6e2504b1` is still going; the final suite must run on the merge candidate.
