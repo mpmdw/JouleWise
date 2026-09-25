@@ -1,14 +1,19 @@
 {
-  "states": ["A", "U", "S"],
-  "contexts": {"D": null, "I": "Interactive", "B": "Background"},
-  "order": ["D", "I", "B", "I", "D", "B", "D", "I", "B"],
-  "segments": {"idle_seconds": 30, "cpu_iterations": 20000000, "cpu_repeats": 5, "gpu_dimension": 4096, "gpu_matmuls": 40, "gpu_warmups": 1, "gpu_repeats": 5, "lm_warmups": 1, "lm_repeats": 3, "lm_max_tokens": 128},
-  "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
-  "prompt": "Write a long story about a lighthouse keeper.",
+  "seed": 20260924,
+  "stages": ["stage0", "U1", "U2", "S"],
+  "sizes": {"stage0_blocks": 3, "u_warmup_cells": 1, "u_blocks": 6, "background_cells": 2, "sandwich_cells": 3},
+  "contexts": {"D": null, "I": "Interactive", "SH": "shell", "B": "Background"},
+  "segments": {"guard_seconds": 2, "idle_seconds": 30, "cpu_seconds": 5, "cpu_iterations": 400000000, "cpu_repeats": 3, "lm_warmups": 1, "lm_repeats": 3, "lm_tokens": 256},
+  "model": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+  "model_file": "model.safetensors",
+  "prompt": "Explain why a lighthouse keeper records the weather each evening in two paragraphs.",
+  "runtime": {"mlx": "0.31.2", "mlx_lm": "0.31.3"},
   "sampler_interval_ms": 100,
   "timeout_seconds": 900,
   "hid_idle_seconds": 600,
   "hid_poll_seconds": 15,
-  "census_interval_seconds": 20,
-  "thresholds": {"materiality_lower": 0.97, "materiality_upper": 1.03, "background_cpu_ratio": 1.5, "interactive_cadence_ms": 130, "non_os_cpu_percent": 20}
+  "census_interval_seconds": 5,
+  "assertions_interval_seconds": 30,
+  "display_settle_seconds": 120,
+  "thresholds": {"materiality_lower": 0.97, "materiality_upper": 1.03, "confidence": 0.99375, "boundary_fraction": 0.005, "integral_j": 0.1, "census_core_fraction": 0.05, "background_cpu_ratio": 1.5, "interactive_cadence_ms": 130}
 }

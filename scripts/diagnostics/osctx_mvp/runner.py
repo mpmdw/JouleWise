@@ -1,4 +1,4 @@
-"""Render or execute the throwaway launchd OSCTX cell sequence."""
+"""Render and run balanced OSCTX blocks. Live execution belongs to the lead."""
 from __future__ import annotations
 
 import argparse
@@ -6,171 +6,310 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
+import shlex
+import signal
 import subprocess
 import sys
-import threading
 import time
 
 try:
-    from .common import cell_name, cells, load_config, write_json
-    from .cell import hid_idle_seconds
-except ImportError:  # direct CLI execution
-    from common import cell_name, cells, load_config, write_json
-    from cell import hid_idle_seconds
+    from .common import blocks, load_config, write_json
+    from .cell import display_state, hid_idle_seconds
+except ImportError:
+    from common import blocks, load_config, write_json
+    from cell import display_state, hid_idle_seconds
+
+ROOT = Path(__file__).resolve().parents[3]
+PREFIX = "com.joulewise.dummy.osctx."
 
 
-def label(state: str, context: str, number: int) -> str:
-    return f"com.joulewise.dummy.osctx.{state}.{context}.{number}"
+def label(block_id: str, arm: str, attempt: int) -> str:
+    return PREFIX + f"{block_id}.{arm}.a{attempt}"
 
 
-def plist_for(state: str, context: str, number: int, cell_dir: Path, config_path: Path, config: dict, python: str) -> dict:
-    result = {
-        "Label": label(state, context, number),
-        "ProgramArguments": [python, str(Path(__file__).with_name("cell.py")), "--out", str(cell_dir),
-                             "--state", state, "--context", context, "--cell-id", str(number), "--config", str(config_path)],
-        "EnvironmentVariables": {"HF_HUB_OFFLINE": "1", "HOME": os.environ["HOME"]},
-        "StandardOutPath": str(cell_dir / "stdout.log"),
-        "StandardErrorPath": str(cell_dir / "stderr.log"),
-        "RunAtLoad": True,
-    }
-    process_type = config["contexts"][context]
-    if process_type is not None:
+def cell_argv(action: dict, config_path: Path, python: str, allow_pids: list[int]) -> list[str]:
+    result = [python, str(Path(__file__).with_name("cell.py")), "--out", action["cell_dir"],
+              "--state", action["state"], "--context", action["context"],
+              "--cell-id", str(action["cell_id"]), "--stage", action["stage"],
+              "--config", str(config_path)]
+    for pid in allow_pids:
+        result += ["--allow-pid", str(pid)]
+    return result
+
+
+def zsh_exec(argv: list[str]) -> list[str]:
+    return ["/bin/zsh", "-c", "exec " + shlex.join(argv)]
+
+
+def shell_argv(argv: list[str]) -> list[str]:
+    return ["nohup", "caffeinate", "-is", *zsh_exec(argv)]
+
+
+def plist_for(action: dict, argv: list[str], python: str) -> dict:
+    result = {"Label": action["label"], "ProgramArguments": zsh_exec(argv),
+              "EnvironmentVariables": {"PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
+                                       "HF_HUB_OFFLINE": "1", "HOME": os.environ["HOME"]},
+              "WorkingDirectory": str(ROOT), "StandardOutPath": str(Path(action["cell_dir"]) / "stdout.log"),
+              "StandardErrorPath": str(Path(action["cell_dir"]) / "stderr.log"), "RunAtLoad": True}
+    process_type = {"D": None, "I": "Interactive", "B": "Background"}[action["context"]]
+    if process_type:
         result["ProcessType"] = process_type
     return result
 
 
-def plan(out: Path, config_path: Path, config: dict, states: list[str], python: str) -> list[dict]:
-    out.mkdir(parents=True, exist_ok=True)
-    uid = os.getuid()
-    actions = []
-    for state, context, number in cells(config, states):
-        directory = (out / cell_name(state, context, number)).resolve()
+def make_action(out: Path, stage: str, block: dict, slot: int, attempt: int, config_path: Path,
+                python: str, allow_pids: list[int], *, write: bool = True) -> dict:
+    arm = block["arms"][slot]
+    directory = (out / f"{block['id']}.{slot+1}.{arm}.a{attempt}").resolve()
+    action = {"stage": stage, "block": block["id"], "state": block["state"], "phase": block.get("phase"),
+              "context": arm, "cell_id": slot+1, "attempt": attempt, "discard": block["discard"],
+              "cell_dir": str(directory), "label": label(block["id"], arm, attempt)}
+    argv = cell_argv(action, config_path, python, allow_pids)
+    if arm == "SH":
+        action["start"] = shell_argv(argv)
+        action["detached"] = True
+    else:
+        action["start"] = ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(directory / "job.plist")]
+        action["stop"] = ["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(directory / "job.plist")]
+        action["detached"] = False
+    if write:
         directory.mkdir(parents=True, exist_ok=True)
-        plist_path = directory / "job.plist"
-        with plist_path.open("wb") as stream:
-            plistlib.dump(plist_for(state, context, number, directory, config_path, config, python), stream)
-        actions.append({"state": state, "context": context, "cell_id": number, "cell_dir": str(directory),
-                        "label": label(state, context, number), "plist": str(plist_path),
-                        "commands": [["/bin/launchctl", "bootstrap", f"gui/{uid}", str(plist_path)],
-                                     ["/bin/launchctl", "bootout", f"gui/{uid}", str(plist_path)],
-                                     ["/usr/bin/pgrep", "-f", label(state, context, number)],
-                                     ["/usr/bin/pgrep", "-f", str(directory / "powermetrics.plist")]]})
-    sequence = [{"continuous_census": ["/usr/bin/top", "-l", "1", "-o", "cpu", "-n", "15", "-stats", "pid,command,cpu,time"],
-                 "interval_seconds": config["census_interval_seconds"]}]
-    for index, action in enumerate(actions):
-        if action["state"] == "U":
-            sequence.append({"gate": "HIDIdleTime", "minimum_seconds": config["hid_idle_seconds"], "poll_seconds": config["hid_poll_seconds"]})
-        if action["state"] == "S":
-            sequence.append(["/usr/bin/pmset", "displaysleepnow"])
-        sequence.extend(action["commands"])
-        if action["state"] == "S" and (index + 1 == len(actions) or actions[index + 1]["state"] != "S"):
-            sequence.append(["/usr/bin/caffeinate", "-u", "-t", "1"])
-    write_json(out / "command_sequence.json", {"states": states, "actions": actions, "sequence": sequence,
-        "state_U": f"wait HIDIdleTime >= {config['hid_idle_seconds']} s before each cell",
-        "state_S_before_each": ["/usr/bin/pmset", "displaysleepnow"],
-        "state_S_after": ["/usr/bin/caffeinate", "-u", "-t", "1"],
-        "census": ["/usr/bin/top", "-l", "1", "-o", "cpu", "-n", "15", "-stats", "pid,command,cpu,time"]})
-    with (out / "events.jsonl").open("a") as stream:
-        stream.write(json.dumps({"event": "render", "wall_ns": time.time_ns(), "states": states, "cells": len(actions)}) + "\n")
+        if arm != "SH":
+            with (directory / "job.plist").open("wb") as stream:
+                plistlib.dump(plist_for(action, argv, python), stream)
+    return action
+
+
+def plan(out: Path, config_path: Path, config: dict, stage: str, python: str) -> list[dict]:
+    out.mkdir(parents=True, exist_ok=True)
+    actions = [make_action(out, stage, block, slot, 1, config_path, python, [], write=True)
+               for block in blocks(config, stage) for slot in range(len(block["arms"]))]
+    sequence = []
+    previous_state = "on"
+    for block in blocks(config, stage):
+        target = "asleep" if block["state"] == "S" else "on"
+        if stage == "S" and target != previous_state:
+            sequence.append({"transition": "pmset displaysleepnow" if target == "asleep" else "display wake",
+                             "verify": "display state and pmset log", "settle_seconds": config["display_settle_seconds"]})
+        previous_state = target
+        sequence.append({"block": block["id"], "state": block["state"], "phase": block.get("phase"),
+                         "arms": block["arms"], "discard": block["discard"],
+                         "gate": "HIDIdleTime >= 600 s" if block["state"] == "U" and stage != "stage0" else None,
+                         "starts": [a["start"] for a in actions if a["block"] == block["id"]],
+                         "interrupted": "discard entire block and retry in same order"})
+    write_json(out / "command_sequence.json", {"stage": stage, "seed": config["seed"], "actions": actions,
+                                                    "sequence": sequence})
     return actions
 
 
-def wait_for_idle(threshold: float, poll: float, read=hid_idle_seconds, sleep=time.sleep, log=lambda **_: None) -> None:
-    paused = False
-    while True:
-        idle = read()
-        log(event="hid_check", idle_seconds=idle)
-        if idle >= threshold:
-            if paused:
-                log(event="hid_pause_end", idle_seconds=idle)
+class SystemBackend:
+    """Small live boundary; offline tests inject a fake in its place."""
+    def run(self, argv):
+        return subprocess.run(argv, capture_output=True, text=True, check=False)
+
+    def spawn_shell(self, argv, directory):
+        with (directory / "stdout.log").open("wb") as stdout, (directory / "stderr.log").open("wb") as stderr:
+            return subprocess.Popen(argv, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                    stdout=stdout, stderr=stderr, start_new_session=True)
+
+    def idle(self):
+        return hid_idle_seconds()
+
+    def display(self):
+        return display_state()
+
+    def sleep(self, seconds):
+        time.sleep(seconds)
+
+    def now(self):
+        return time.monotonic()
+
+    def process_exists(self, pid):
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+
+    def stop_shell(self, process):
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=15)
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
             return
-        if not paused:
-            log(event="hid_pause_start", idle_seconds=idle)
-            paused = True
-        sleep(poll)
+        raise RuntimeError(f"shell process-group survivor {process.pid}")
 
 
-def run_command(argv: list[str], log) -> subprocess.CompletedProcess:
-    log(event="command", argv=argv)
-    result = subprocess.run(argv, capture_output=True, text=True, check=False)
-    log(event="command_result", argv=argv, returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
-    return result
+def runner_ancestry() -> list[int]:
+    pids = []
+    current = os.getpid()
+    while current > 1 and current not in pids:
+        pids.append(current)
+        result = subprocess.run(["/bin/ps", "-p", str(current), "-o", "ppid="], capture_output=True, text=True)
+        current = int(result.stdout.strip() or 1)
+    return pids
 
 
-def census_loop(path: Path, stop: threading.Event, interval: float, log) -> None:
-    while not stop.is_set():
-        argv = ["/usr/bin/top", "-l", "1", "-o", "cpu", "-n", "15", "-stats", "pid,command,cpu,time"]
-        result = subprocess.run(argv, capture_output=True, text=True, check=False)
-        record = {"wall_ns": time.time_ns(), "returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
-        with path.open("a") as stream:
-            stream.write(json.dumps(record) + "\n")
-        log(event="census", returncode=result.returncode)
-        stop.wait(interval)
+def interrupted(record: dict, state: str, min_idle: float, expected_display: str) -> bool:
+    if state == "U" and record.get("hid_idle_seconds") is not None and record["hid_idle_seconds"] < min_idle:
+        return True
+    actual = record.get("display_state", "unknown")
+    return actual != "unknown" and actual != expected_display
 
 
-def execute(out: Path, actions: list[dict], config: dict) -> None:
-    lock = threading.Lock()
-    def log(**values):
-        with lock, (out / "events.jsonl").open("a") as stream:
-            stream.write(json.dumps({"wall_ns": time.time_ns(), "mono_ns": time.monotonic_ns(), **values}) + "\n")
-    stop = threading.Event()
-    census = threading.Thread(target=census_loop, args=(out / "census.jsonl", stop, config["census_interval_seconds"], log), daemon=True)
-    census.start()
-    log(event="runner_start", cells=len(actions))
-    active_state = None
-    try:
-        for action in actions:
-            state = action["state"]
-            if state != active_state:
-                if active_state == "S":
-                    result = run_command(["/usr/bin/caffeinate", "-u", "-t", "1"], log)
-                    if result.returncode:
-                        raise RuntimeError("display wake failed")
-                active_state = state
-                log(event="state_start", state=state)
-            if state == "U":
-                wait_for_idle(config["hid_idle_seconds"], config["hid_poll_seconds"], log=log)
-            if state == "S":
-                result = run_command(["/usr/bin/pmset", "displaysleepnow"], log)
-                if result.returncode:
-                    raise RuntimeError("display sleep failed")
-            directory = Path(action["cell_dir"])
-            if (directory / "done.json").exists():
-                raise FileExistsError(f"cell already has a done marker: {directory}")
-            booted = False
-            try:
-                result = run_command(action["commands"][0], log)
-                if result.returncode:
-                    raise RuntimeError(f"bootstrap failed: {action['label']}")
-                booted = True
-                deadline = time.monotonic() + config["timeout_seconds"]
-                while not (directory / "done.json").exists():
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError(f"cell timed out: {action['label']}")
-                    time.sleep(.5)
-                done = json.loads((directory / "done.json").read_text())
-                log(event="cell_done", label=action["label"], done=done)
-                if not done["ok"]:
-                    raise RuntimeError(f"cell failed: {action['label']}")
-            finally:
-                if booted:
-                    result = run_command(action["commands"][1], log)
-                    if result.returncode:
-                        log(event="bootout_failure", label=action["label"])
-                for argv in action["commands"][2:]:
-                    survivor = run_command(argv, log)
-                    if survivor.returncode == 0:
-                        raise RuntimeError(f"survivor after bootout: {argv}")
-                    if survivor.returncode != 1:
-                        raise RuntimeError(f"pgrep failed: {argv}")
-        log(event="runner_done")
-    finally:
-        if active_state == "S":
-            result = run_command(["/usr/bin/caffeinate", "-u", "-t", "1"], log)
+def retry_block(block: dict, attempt: int) -> dict:
+    return {**block, "attempt": attempt + 1, "arms": list(block["arms"])}
+
+
+def wait_gate(backend, config, log):
+    while True:
+        idle = backend.idle()
+        log(event="gate", idle_seconds=idle)
+        if idle >= config["hid_idle_seconds"] and backend.display() in ("on", "unknown"):
+            return
+        backend.sleep(config["hid_poll_seconds"])
+
+
+def transition(backend, target: str, config: dict, log):
+    before = backend.run(["/usr/bin/pmset", "-g", "log"])
+    if before.returncode:
+        raise RuntimeError("display transition log unreadable before request")
+    argv = ["/usr/bin/pmset", "displaysleepnow"] if target == "asleep" else ["/usr/bin/caffeinate", "-u", "-t", "1"]
+    result = backend.run(argv)
+    if result.returncode:
+        raise RuntimeError(f"display transition failed: {argv}")
+    deadline = backend.now() + 30
+    while True:
+        after = backend.run(["/usr/bin/pmset", "-g", "log"])
+        state = backend.display()
+        if state == target and after.returncode == 0 and before.stdout != after.stdout:
+            break
+        if backend.now() >= deadline:
+            raise RuntimeError("display transition unverified")
+        backend.sleep(1)
+    log(event="display_transition", target=target, state=state, before=before.stdout, after=after.stdout)
+    backend.sleep(config["display_settle_seconds"])
+
+
+def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
+            *, backend=None, existing_actions=None, extra_allow_pids=None) -> None:
+    backend = backend or SystemBackend()
+    ownership: dict[str, tuple[dict, object | None]] = {}
+    allow_pids = list(dict.fromkeys((runner_ancestry() if isinstance(backend, SystemBackend) else []) +
+                                    (extra_allow_pids or [])))
+    old_handlers = {}
+    if isinstance(backend, SystemBackend):
+        def interrupted_signal(signum, frame):
+            raise KeyboardInterrupt(f"signal {signum}")
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            old_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, interrupted_signal)
+    def log(**record):
+        with (out / "events.jsonl").open("a") as stream:
+            stream.write(json.dumps({"wall_ns": time.time_ns(), **record}) + "\n")
+    def cleanup(action):
+        owned = ownership.pop(action["label"], None)
+        if owned is None:
+            return
+        _, process = owned
+        if action["context"] == "SH":
+            backend.stop_shell(process)
+        else:
+            result = backend.run(action["stop"])
+            registered = backend.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{action['label']}"])
+            survivor = backend.run(["/usr/bin/pgrep", "-f", re.escape(action["cell_dir"])])
+            if registered.returncode == 0:
+                raise RuntimeError(f"launchd job survived bootout: {action['label']}")
+            if survivor.returncode != 1:
+                raise RuntimeError(f"launchd survivor or pgrep error: {action['label']}")
             if result.returncode:
-                log(event="display_wake_failure", returncode=result.returncode)
-        stop.set()
-        census.join(timeout=10)
+                log(event="bootout_unneeded_or_failed", label=action["label"], returncode=result.returncode)
+        log(event="cleanup_proved", label=action["label"])
+    try:
+        previous = "on"
+        for block in blocks(config, stage):
+            state = block["state"]
+            target = "asleep" if state == "S" else "on"
+            if stage == "S" and target != previous:
+                transition(backend, target, config, log)
+            previous = target
+            attempt = 1
+            while True:
+                if stage == "S" and state == "S" and backend.display() != "asleep":
+                    wait_gate(backend, config, log)
+                    transition(backend, "asleep", config, log)
+                actions = [make_action(out, stage, block, slot, attempt, config_path, python, allow_pids,
+                                       write=not (attempt == 1 and existing_actions is not None))
+                           for slot in range(len(block["arms"]))]
+                if attempt == 1 and existing_actions is not None:
+                    # Rendered directories exist. Reuse them, but add the runner PID allowlist to the live argv.
+                    for action in actions:
+                        if action["context"] != "SH":
+                            with (Path(action["cell_dir"]) / "job.plist").open("wb") as stream:
+                                plistlib.dump(plist_for(action, cell_argv(action, config_path, python, allow_pids), python), stream)
+                bad = False
+                for action in actions:
+                    if state == "U" and stage != "stage0":
+                        wait_gate(backend, config, log)
+                    directory = Path(action["cell_dir"])
+                    if (directory / "done.json").exists():
+                        raise FileExistsError(directory / "done.json")
+                    try:
+                        if action["context"] == "SH":
+                            process = backend.spawn_shell(action["start"], directory)
+                        else:
+                            ownership[action["label"]] = action, None
+                            result = backend.run(action["start"])
+                            if result.returncode:
+                                raise RuntimeError(f"bootstrap failed: {action['label']}")
+                            process = None
+                        ownership[action["label"]] = action, process
+                        deadline = backend.now() + config["timeout_seconds"]
+                        while not (directory / "done.json").exists():
+                            if backend.now() >= deadline:
+                                raise TimeoutError(action["label"])
+                            backend.sleep(.5)
+                        done = json.loads((directory / "done.json").read_text())
+                        cell_record = json.loads((directory / "cell.json").read_text())
+                        bad = bool(done.get("interrupted") or cell_record.get("interrupted"))
+                        log(event="cell_end", label=action["label"], interrupted=bad, ok=done.get("ok"))
+                        if not done.get("ok") and not bad:
+                            raise RuntimeError(f"cell failed: {action['label']}")
+                    finally:
+                        cleanup(action)
+                    if bad:
+                        break
+                if not bad:
+                    break
+                for action in actions:
+                    write_json(Path(action["cell_dir"]) / "discarded.json",
+                               {"reason": "interrupted_block", "block": block["id"], "attempt": attempt})
+                log(event="block_discarded", block=block["id"], attempt=attempt, reason="interrupted")
+                attempt = retry_block(block, attempt)["attempt"]
+        log(event="stage_done", stage=stage)
+    finally:
+        for signum in old_handlers:
+            signal.signal(signum, signal.SIG_IGN)
+        errors = []
+        for action, _ in list(ownership.values()):
+            try:
+                cleanup(action)
+            except Exception as exc:
+                errors.append(str(exc))
+        if stage == "S" and backend.display() == "asleep":
+            try:
+                transition(backend, "on", config, log)
+            except Exception as exc:
+                errors.append(str(exc))
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
+        if errors:
+            raise RuntimeError("cleanup failed: " + "; ".join(errors))
 
 
 def main(argv=None) -> int:
@@ -178,15 +317,32 @@ def main(argv=None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--render-only", type=Path)
     mode.add_argument("--out", type=Path)
+    parser.add_argument("--stage", choices=("stage0", "U1", "U2", "S"), required=True)
     parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.json"))
-    parser.add_argument("--state", action="append")
     parser.add_argument("--python", default=sys.executable)
+    parser.add_argument("--u1-summary", type=Path)
+    parser.add_argument("--allow-pid", action="append", type=int, default=[])
     args = parser.parse_args(argv)
     config = load_config(args.config)
+    if args.stage == "U2" and args.out:
+        if not args.u1_summary:
+            parser.error("U2 execution requires --u1-summary")
+        summary = json.loads(args.u1_summary.read_text())
+        verdicts = summary["verdicts"]
+        if summary.get("stage") != "U1" or summary.get("errors"):
+            parser.error("U2 requires a clean U1 analysis")
+        expected_blocks = {block["id"] for block in blocks(config, "U1") if len(block["arms"]) == 3}
+        observed = {block_id: {row["context"] for row in summary["cells"] if row["block"] == block_id}
+                    for block_id in expected_blocks}
+        if any(arms != {"D", "I", "SH"} for arms in observed.values()):
+            parser.error("U2 requires six complete U1 Williams blocks")
+        if "INCONCLUSIVE" not in verdicts.values():
+            parser.error("U2 runs only after an INCONCLUSIVE U1 verdict")
     out = (args.render_only or args.out).resolve()
-    actions = plan(out, args.config.resolve(), config, args.state or config["states"], args.python)
+    actions = plan(out, args.config.resolve(), config, args.stage, args.python)
     if args.out:
-        execute(out, actions, config)
+        execute(out, args.config.resolve(), config, args.stage, args.python,
+                existing_actions=actions, extra_allow_pids=args.allow_pid)
     return 0
 
 

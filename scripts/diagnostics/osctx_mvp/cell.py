@@ -1,9 +1,11 @@
-"""One in-context OSCTX measurement cell. Invoked as a launchd ProgramArgument."""
+"""One OSCTX cell; the workload and system reads are injectable for offline tests."""
 from __future__ import annotations
 
 import argparse
 import ctypes
 import dataclasses
+import hashlib
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -11,13 +13,14 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 import time
 import traceback
 from types import SimpleNamespace
 
 try:
     from .common import load_config, write_json
-except ImportError:  # direct ProgramArguments execution
+except ImportError:
     from common import load_config, write_json
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,14 +28,11 @@ sys.path.insert(0, str(ROOT))
 
 
 def qos_class(libc=None) -> dict:
-    """Read this thread's QoS using pointer-correct Darwin ctypes signatures."""
     if libc is None:
         libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
     libc.pthread_self.argtypes = []
     libc.pthread_self.restype = ctypes.c_void_p
-    libc.pthread_get_qos_class_np.argtypes = [
-        ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_int)
-    ]
+    libc.pthread_get_qos_class_np.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_int)]
     libc.pthread_get_qos_class_np.restype = ctypes.c_int
     qos, relative = ctypes.c_uint(), ctypes.c_int()
     result = libc.pthread_get_qos_class_np(libc.pthread_self(), ctypes.byref(qos), ctypes.byref(relative))
@@ -43,10 +43,10 @@ def qos_class(libc=None) -> dict:
 
 def command_text(argv: list[str]) -> dict:
     try:
-        result = subprocess.run(argv, capture_output=True, text=True, timeout=10, check=False)
-        return {"argv": argv, "returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
+        completed = subprocess.run(argv, capture_output=True, text=True, timeout=10, check=False)
+        return {"argv": argv, "returncode": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr}
     except Exception as exc:
-        return {"argv": argv, "error": str(exc)}
+        return {"argv": argv, "status": "unavailable", "error": str(exc)}
 
 
 def hid_idle_seconds() -> float:
@@ -57,59 +57,56 @@ def hid_idle_seconds() -> float:
     return int(match.group(1)) / 1e9
 
 
-def brightness() -> dict:
-    for argv in (["/usr/libexec/corebrightnessdiag", "status-info"], ["/usr/sbin/ioreg", "-r", "-c", "AppleARMBacklight"]):
+def display_state() -> str:
+    for argv in (["/usr/sbin/ioreg", "-r", "-c", "IODisplayWrangler"],
+                 ["/usr/sbin/ioreg", "-r", "-c", "AppleDisplay"]):
         result = command_text(argv)
-        if result.get("returncode") == 0 and result.get("stdout", "").strip():
-            return result
-    return {"status": "unreadable"}
+        match = re.search(r'"(?:IOPowerManagement|CurrentPowerState)"\s*=\s*(\d+)', result.get("stdout", ""))
+        if match:
+            return "on" if int(match.group(1)) > 0 else "asleep"
+    return "unknown"
 
 
-def snapshot() -> dict:
-    result = {"wall_ns": time.time_ns(), "mono_ns": time.monotonic_ns(), "ppid": os.getppid()}
-    for key, fn in (
-        ("hid_idle_seconds", hid_idle_seconds),
-        ("qos", qos_class),
-        ("nice", lambda: os.getpriority(os.PRIO_PROCESS, 0)),
-    ):
-        try:
-            result[key] = fn()
-        except Exception as exc:
-            result[key] = {"error": str(exc)}
-    result["assertions"] = command_text(["/usr/bin/pmset", "-g", "assertions"])
-    result["thermal"] = command_text(["/usr/bin/pmset", "-g", "therm"])
-    result["processes"] = command_text(["/bin/ps", "-Ao", "pid,ppid,pcpu,pmem,comm", "-r"])
-    if "stdout" in result["processes"]:
-        result["processes"]["stdout"] = "\n".join(result["processes"]["stdout"].splitlines()[:16])
-    result["brightness"] = brightness()
+def ancestry() -> list[dict]:
+    result = []
+    pid = os.getpid()
+    while pid >= 1 and pid not in {item["pid"] for item in result}:
+        info = command_text(["/bin/ps", "-p", str(pid), "-o", "ppid=,comm="])
+        parts = info.get("stdout", "").strip().split(maxsplit=1)
+        ppid = int(parts[0]) if parts and parts[0].isdigit() else 0
+        result.append({"pid": pid, "ppid": ppid, "comm": parts[1] if len(parts) > 1 else "unknown"})
+        if pid == 1 or ppid <= 0:
+            break
+        pid = ppid
     return result
 
 
-def boundary(name: str, repeat: int, edge: str) -> dict:
-    return {"name": name, "repeat": repeat, "edge": edge, "wall_ns": time.time_ns(), "mono_ns": time.monotonic_ns()}
+def model_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
-def measured(name: str, repeat: int, boundaries: list[dict], fn):
-    boundaries.append(boundary(name, repeat, "start"))
-    try:
-        return fn()
-    finally:
-        boundaries.append(boundary(name, repeat, "end"))
+def output_hash(tokens: list[int]) -> str:
+    return hashlib.sha256(json.dumps(tokens, separators=(",", ":")).encode()).hexdigest()
 
 
-def cpu_work(iterations: int) -> int:
-    value = 0
-    for i in range(iterations):
-        value += i
-    return value
+def token_flags(result: dict, expected: int = 256) -> list[str]:
+    flags = []
+    if result["output_tokens"] != expected or len(result["token_ids"]) != expected:
+        flags.append("token_count_mismatch")
+    if result.get("finish_reason") != "length":
+        flags.append("early_finish")
+    return flags
 
 
 def sampler_command(config: dict, output: Path) -> list[str]:
     from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
     from joulewise.clock import SystemClock
     adapter = PowermetricsTelemetryAdapter(SystemClock(), executable="/usr/bin/powermetrics", privilege_prefix=("sudo", "-n"))
-    sampling = SimpleNamespace(power_hz=1000.0 / config["sampler_interval_ms"])
-    return adapter._command(SimpleNamespace(sampling=sampling), output, count=None)
+    return adapter._command(SimpleNamespace(sampling=SimpleNamespace(power_hz=1000.0 / config["sampler_interval_ms"])), output, count=None)
 
 
 def stamp() -> dict:
@@ -117,24 +114,23 @@ def stamp() -> dict:
     return dataclasses.asdict(SystemClock().stamp())
 
 
-def wait_for_first_parse(path: Path, process: subprocess.Popen, timeout: float = 15) -> dict:
+def wait_for_first_parse(path: Path, process, timeout=15) -> dict:
     from joulewise.adapters.powermetrics import parse_powermetrics_records
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if path.exists():
-            data = path.read_bytes()
             try:
-                parse_powermetrics_records(data)
+                parse_powermetrics_records(path.read_bytes())
                 return stamp()
             except ValueError:
                 pass
         if process.poll() is not None:
-            raise RuntimeError(f"powermetrics exited before first record: {process.returncode}")
+            raise RuntimeError("powermetrics exited before first record")
         time.sleep(.05)
     raise TimeoutError("powermetrics produced no parseable record")
 
 
-def stop_sampler(process: subprocess.Popen) -> int:
+def stop_sampler(process) -> int:
     if process.poll() is None:
         process.send_signal(signal.SIGINT)
     try:
@@ -144,17 +140,131 @@ def stop_sampler(process: subprocess.Popen) -> int:
         return process.wait(timeout=5)
 
 
-def run(out: Path, config: dict, state: str, context: str, cell_id: int, *, no_powermetrics: bool = False) -> None:
-    out.mkdir(parents=True, exist_ok=True)
-    config = json.loads(json.dumps(config))
-    seg = config["segments"]
-    metadata = {"state": state, "context": context, "cell_id": cell_id, "config": config,
-                "pid": os.getpid(), "boundaries": [], "repeats": {}, "clock_stamps": {},
-                "powermetrics_enabled": not no_powermetrics}
-    process = None
+class SystemWorkloadBackend:
+    def command(self, argv):
+        process = None
+        try:
+            process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate(timeout=15)
+            result = {"pid": process.pid, "argv": argv, "returncode": process.returncode,
+                      "stdout": stdout, "stderr": stderr}
+            if process.returncode and argv[1:2] == ["procinfo"]:
+                result["status"] = "unavailable"
+            return result
+        except Exception as exc:
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait()
+            return {"argv": argv, "status": "unavailable", "error": str(exc)}
+
+    def idle(self):
+        return hid_idle_seconds()
+
+    def display(self):
+        return display_state()
+
+    def sleep(self, seconds):
+        time.sleep(seconds)
+
+    def prepare_model(self, config):
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        import mlx.core as mx
+        from mlx_lm import load, stream_generate
+        from mlx_lm.models.cache import make_prompt_cache
+        versions = {"mlx": importlib.metadata.version("mlx"), "mlx_lm": importlib.metadata.version("mlx-lm")}
+        if versions != config["runtime"]:
+            raise RuntimeError(f"runtime pin mismatch: {versions}")
+        model, tokenizer = load(config["model"])
+        prompt = tokenizer.apply_chat_template([{"role": "user", "content": config["prompt"]}], tokenize=False, add_generation_prompt=True)
+        return {"mx": mx, "stream": stream_generate, "cache": make_prompt_cache,
+                "model": model, "tokenizer": tokenizer, "prompt": prompt, "versions": versions}
+
+    def generate(self, prepared, max_tokens: int, first_token):
+        mx = prepared["mx"]
+        tokenizer = prepared["tokenizer"]
+        eos = set(getattr(tokenizer, "eos_token_ids", []) or [])
+        if not eos and tokenizer.eos_token_id is not None:
+            eos = {tokenizer.eos_token_id}
+        def mask_eos(tokens, logits):
+            if eos:
+                logits[:, list(eos)] = -float("inf")
+            return logits
+        cache = prepared["cache"](prepared["model"])
+        ids = []
+        final = None
+        for response in prepared["stream"](prepared["model"], tokenizer, prompt=prepared["prompt"],
+                                            max_tokens=max_tokens, sampler=lambda x: mx.argmax(x, axis=-1),
+                                            prompt_cache=cache, logits_processors=[mask_eos]):
+            if not ids:
+                first_token()
+            ids.append(int(response.token))
+            final = response
+        mx.eval([item.state for item in cache])
+        if final is None:
+            raise RuntimeError("LM generated no tokens")
+        return {"token_ids": ids, "output_tokens": len(ids), "prompt_tps": final.prompt_tps,
+                "generation_tps": final.generation_tps, "finish_reason": final.finish_reason,
+                "eos_suppressed": True}
+
+
+def census_sample(backend, state: str, expected_display: str, threshold: float) -> dict:
+    record = {"wall_ns": time.time_ns(), "mono_ns": time.monotonic_ns(),
+              "ps": backend.command(["/bin/ps", "-Ao", "pid,ppid,time,comm"])}
     try:
-        metadata["pre"] = snapshot()
-        write_json(out / "cell.json", metadata)
+        record["hid_idle_seconds"] = backend.idle()
+    except Exception as exc:
+        record["hid_error"] = str(exc)
+    record["display_state"] = backend.display()
+    record["interrupted"] = ((state == "U" and record.get("hid_idle_seconds", float("inf")) < threshold) or
+                             (record["display_state"] != "unknown" and record["display_state"] != expected_display))
+    return record
+
+
+def run(out: Path, config: dict, state: str, context: str, cell_id: int, *, stage: str = "U1",
+        allow_pids: list[int] | None = None, backend=None, no_powermetrics=False) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    backend = backend or SystemWorkloadBackend()
+    seg = config["segments"]
+    metadata = {"state": state, "context": context, "cell_id": cell_id, "stage": stage,
+                "pid": os.getpid(), "ancestry": ancestry(), "allow_pids": allow_pids or [],
+                "boundaries": [], "repeats": {"lm": [], "cpu": []}, "clock_stamps": {},
+                "powermetrics_enabled": not no_powermetrics, "interrupted": False, "flags": []}
+    process = None
+    stop = threading.Event()
+    lock = threading.Lock()
+    census_records = []
+    expected_display = "asleep" if state == "S" else "on"
+    def mark(name, repeat, edge):
+        item = {"name": name, "repeat": repeat, "edge": edge, "wall_ns": time.time_ns(), "mono_ns": time.monotonic_ns()}
+        metadata["boundaries"].append(item)
+        return item
+    def measured(name, repeat, fn):
+        backend.sleep(seg["guard_seconds"])
+        mark(name, repeat, "start")
+        try:
+            return fn()
+        finally:
+            mark(name, repeat, "end")
+            backend.sleep(seg["guard_seconds"])
+    def census_loop():
+        count = 0
+        while not stop.is_set():
+            record = census_sample(backend, state, expected_display, config["hid_idle_seconds"])
+            if count % max(1, round(config["assertions_interval_seconds"] / config["census_interval_seconds"])) == 0:
+                record["assertions"] = backend.command(["/usr/bin/pmset", "-g", "assertions"])
+            with lock:
+                census_records.append(record)
+                if record["interrupted"]:
+                    metadata["interrupted"] = True
+            count += 1
+            stop.wait(config["census_interval_seconds"])
+    census = threading.Thread(target=census_loop, daemon=True)
+    try:
+        metadata["pre"] = {"qos": qos_class() if isinstance(backend, SystemWorkloadBackend) else None,
+                           "display_state": backend.display(), "environment": {k: os.environ.get(k) for k in ("PATH", "HOME", "HF_HUB_OFFLINE")}}
+        brightness_read = backend.command(["/usr/libexec/corebrightnessdiag", "status-info"])
+        metadata["brightness"] = brightness_read if brightness_read.get("returncode") == 0 else {"status": "unreadable"}
+        census.start()
         if not no_powermetrics:
             command = sampler_command(config, out / "powermetrics.plist")
             metadata["powermetrics_argv"] = command
@@ -162,70 +272,78 @@ def run(out: Path, config: dict, state: str, context: str, cell_id: int, *, no_p
             with (out / "powermetrics.stderr").open("wb") as stderr:
                 process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=stderr)
             metadata["powermetrics_pid"] = process.pid
+            metadata["procinfo_powermetrics"] = backend.command(["/bin/launchctl", "procinfo", str(process.pid)])
             metadata["clock_stamps"]["first_parse"] = wait_for_first_parse(out / "powermetrics.plist", process)
+        metadata["procinfo_workload"] = backend.command(["/bin/launchctl", "procinfo", str(os.getpid())])
         metadata["clock_stamps"]["sampling_started"] = stamp()
-        boundaries = metadata["boundaries"]
-        measured("idle", 1, boundaries, lambda: time.sleep(seg["idle_seconds"]))
-        metadata["repeats"]["cpu"] = []
+        def preread():
+            for path in sorted(Path(config["model"]).glob("*.safetensors")):
+                with path.open("rb") as stream:
+                    for _ in iter(lambda: stream.read(1024 * 1024), b""):
+                        pass
+        measured("preread", 1, preread if isinstance(backend, SystemWorkloadBackend) else lambda: backend.preread(config))
+        model_file = Path(config["model"]) / config["model_file"]
+        metadata["model_sha256"] = model_sha256(model_file) if isinstance(backend, SystemWorkloadBackend) else backend.model_sha256(model_file)
+        prepared = measured("model_load", 1, lambda: backend.prepare_model(config))
+        metadata["runtime"] = prepared.get("versions")
+        metadata["prompt"] = prepared.get("prompt")
+        try:
+            metadata["qos_after_mlx_import"] = qos_class()
+        except Exception as exc:
+            metadata["qos_after_mlx_import"] = {"status": "unavailable", "error": str(exc)}
+        measured("idle", 1, lambda: backend.sleep(seg["idle_seconds"]))
+        for repeat in range(seg["lm_warmups"] + seg["lm_repeats"]):
+            timed = repeat >= seg["lm_warmups"]
+            number = repeat - seg["lm_warmups"] + 1 if timed else 0
+            name = "lm" if timed else "lm_warmup"
+            value = measured(name, number, lambda: backend.generate(prepared, seg["lm_tokens"], lambda: mark(name, number, "first_token")))
+            value["output_hash"] = output_hash(value["token_ids"])
+            value["flags"] = token_flags(value, seg["lm_tokens"])
+            value.pop("token_ids")
+            edges = [b for b in metadata["boundaries"] if b["name"] == name and b["repeat"] == number]
+            value.update({"repeat": number, "seconds": (next(b["mono_ns"] for b in edges if b["edge"] == "end") -
+                                                       next(b["mono_ns"] for b in edges if b["edge"] == "start")) / 1e9})
+            metadata["repeats"][name] = metadata["repeats"].get(name, [])
+            metadata["repeats"][name].append(value)
+            metadata["flags"].extend(value["flags"])
         for repeat in range(1, seg["cpu_repeats"] + 1):
-            start = time.perf_counter()
-            value = measured("cpu", repeat, boundaries, lambda: cpu_work(seg["cpu_iterations"]))
-            metadata["repeats"]["cpu"].append({"repeat": repeat, "seconds": time.perf_counter() - start, "checksum": value})
-        import mlx.core as mx
-        matrix = mx.random.normal((seg["gpu_dimension"], seg["gpu_dimension"]), dtype=mx.float16)
-        mx.eval(matrix)
-        def gpu_work():
-            for _ in range(seg["gpu_matmuls"]):
-                result = matrix @ matrix
-                mx.eval(result)
-        for _ in range(seg["gpu_warmups"]):
-            gpu_work()
-        metadata["repeats"]["gpu"] = []
-        for repeat in range(1, seg["gpu_repeats"] + 1):
-            start = time.perf_counter()
-            measured("gpu", repeat, boundaries, gpu_work)
-            metadata["repeats"]["gpu"].append({"repeat": repeat, "seconds": time.perf_counter() - start})
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        from mlx_lm import load, stream_generate
-        model, tokenizer = load(config["model"])
-        def lm_work():
-            final = None
-            for response in stream_generate(model, tokenizer, prompt=config["prompt"], max_tokens=seg["lm_max_tokens"]):
-                final = response
-            if final is None:
-                raise RuntimeError("LM generated no tokens")
-            return {"output_tokens": final.generation_tokens, "prefill_tps": final.prompt_tps,
-                    "decode_tps": final.generation_tps, "finish_reason": final.finish_reason}
-        for _ in range(seg["lm_warmups"]):
-            lm_work()
-        metadata["repeats"]["lm"] = []
-        for repeat in range(1, seg["lm_repeats"] + 1):
-            start = time.perf_counter()
-            value = measured("lm", repeat, boundaries, lm_work)
-            metadata["repeats"]["lm"].append({"repeat": repeat, "seconds": time.perf_counter() - start, **value})
+            def cpu_probe():
+                value = 0
+                for number in range(seg["cpu_iterations"]):
+                    value += number
+                return value
+            checksum = measured("cpu", repeat, cpu_probe if isinstance(backend, SystemWorkloadBackend) else lambda: backend.cpu_probe(seg["cpu_iterations"]))
+            edges = [b for b in metadata["boundaries"] if b["name"] == "cpu" and b["repeat"] == repeat]
+            elapsed = (next(b["mono_ns"] for b in edges if b["edge"] == "end") -
+                       next(b["mono_ns"] for b in edges if b["edge"] == "start")) / 1e9
+            metadata["repeats"]["cpu"].append({"repeat": repeat, "seconds": elapsed, "checksum": checksum})
+            if elapsed < seg["cpu_seconds"]:
+                raise RuntimeError(f"CPU probe below registered {seg['cpu_seconds']} s minimum; increase fixed iterations before capture")
         metadata["clock_stamps"]["sampling_stopped"] = stamp()
         if process:
             if process.poll() is not None:
-                raise RuntimeError(f"powermetrics exited during workloads: {process.returncode}")
-            time.sleep(1)
+                raise RuntimeError("powermetrics exited during cell")
+            metadata["powermetrics_cpu_time"] = backend.command(["/bin/ps", "-p", str(process.pid), "-o", "time="])
+            backend.sleep(1)
             metadata["powermetrics_returncode"] = stop_sampler(process)
             process = None
-            metadata["clock_stamps"]["post_parse"] = stamp()
-        metadata["post"] = snapshot()
-        write_json(out / "cell.json", metadata)
+            metadata["clock_stamps"]["post_stop"] = stamp()
     except BaseException:
-        if process:
-            stop_sampler(process)
-        try:
-            metadata["post"] = snapshot()
-        except Exception as exc:
-            metadata["post"] = {"error": str(exc)}
-        write_json(out / "cell.json", metadata)
         write_json(out / "error.json", {"traceback": traceback.format_exc()})
         raise
     finally:
-        # The runner waits for this marker, including when the cell fails.
-        write_json(out / "done.json", {"ok": not (out / "error.json").exists(), "wall_ns": time.time_ns()})
+        if process:
+            stop_sampler(process)
+        stop.set()
+        if census.is_alive():
+            census.join(timeout=10)
+        with (out / "census.jsonl").open("w") as stream:
+            for record in census_records:
+                stream.write(json.dumps(record) + "\n")
+        metadata["interrupted"] = metadata["interrupted"] or any(x["interrupted"] for x in census_records)
+        write_json(out / "cell.json", metadata)
+        write_json(out / "done.json", {"ok": not (out / "error.json").exists(),
+                                       "interrupted": metadata["interrupted"], "wall_ns": time.time_ns()})
 
 
 def main(argv=None) -> int:
@@ -234,17 +352,15 @@ def main(argv=None) -> int:
     parser.add_argument("--state", required=True)
     parser.add_argument("--context", required=True)
     parser.add_argument("--cell-id", type=int, required=True)
+    parser.add_argument("--stage", required=True)
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--allow-pid", action="append", type=int, default=[])
     parser.add_argument("--no-powermetrics", action="store_true")
-    parser.add_argument("--lm-repeats", type=int)
     args = parser.parse_args(argv)
     config = load_config(args.config)
-    if args.state not in config["states"] or args.context not in config["contexts"]:
-        parser.error("unknown state or context")
-    if args.lm_repeats is not None:
-        config["segments"]["lm_repeats"] = args.lm_repeats
     try:
-        run(args.out, config, args.state, args.context, args.cell_id, no_powermetrics=args.no_powermetrics)
+        run(args.out, config, args.state, args.context, args.cell_id, stage=args.stage,
+            allow_pids=args.allow_pid, no_powermetrics=args.no_powermetrics)
         return 0
     except BaseException:
         traceback.print_exc()
