@@ -665,6 +665,46 @@ def _issuance_gate() -> dict[str, object]:
                      "shim": "top-level evidence_class copied from inputs.evidence_class; validate_claim_verdicts patched to []"}}
 
 
+def _issuance_wire_refusals() -> dict[str, dict[str, object]]:
+    """Pin three real-wire refusals before the v1 evidence-class defect."""
+    from joulewise import analysis_manifest_v3
+
+    expected = {
+        "floor_anchor_mismatch_wire": {
+            "admitted": False, "authentic": False, "grants": [],
+            "validator_codes": ["claim_floor_anchor_mismatch"],
+        },
+        "binding_mismatch_wire": {
+            "raised": "PaperCustodyRefusal", "message": "paper_custody_binding_mismatch",
+        },
+        "empty_subjects_wire": {
+            "raised": "PaperCustodyRefusal", "message": "paper_custody_binding_mismatch",
+        },
+    }
+    result = {}
+    for name in expected:
+        artifact, manifest, floor, sidecar = _gate_fixture()
+        ctx = _claim_gate_context(artifact, manifest, floor, sidecar)
+        if name == "floor_anchor_mismatch_wire":
+            raws = dict(ctx.raws)
+            raws[custody.InputRole.FLOOR_ARTIFACT] += b"\n"
+            ctx = dataclasses.replace(ctx, raws=raws)
+        elif name == "binding_mismatch_wire":
+            ctx = dataclasses.replace(ctx, subjects=("not-a-contrast",))
+        else:
+            ctx = dataclasses.replace(ctx, subjects=())
+        with mock.patch.object(analysis_manifest_v3, "validate_finalized_analysis_manifest_v3", return_value=[]), \
+             mock.patch.object(custody, "_validate_floor_acceptance", return_value=None):
+            try:
+                record = _replay_record(custody._replay_family(ctx))
+            except Exception as exc:
+                record = {"raised": type(exc).__name__, "message": str(exc)}
+        if record != expected[name]:
+            raise RuntimeError(f"{name} protocol failure: {record!r}")
+        result[name] = {"pre": record, "post": record}
+    return result
+
+
 def _invalid_issuance_gate() -> dict[str, object]:
     from joulewise.analysis_engine import claim_side_bound
     from joulewise import analysis_manifest_v3
@@ -747,7 +787,8 @@ def capture() -> dict[str, object]:
             },
             "transitions": {"WR-6": _window_transitions(),
                             "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {
-                                "real_v1_wire": issuance}}}
+                                "real_v1_wire": issuance,
+                                **_issuance_wire_refusals()}}}
 
 
 def main() -> None:

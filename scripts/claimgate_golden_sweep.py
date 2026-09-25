@@ -61,6 +61,22 @@ EQUIVALENT_MUTANTS: dict[str, str] = {
         "equivalent: A zero estimate cannot reach direction_supported with a nonnegative floor; negative floors refuse earlier [row: invariant.claim_matrix.direction_at_floor]",
     "joulewise/analysis_engine/claims.py:385:And_delete_1@7":
         "equivalent: direction_supported requires a numeric estimate; the right arc at claims:evaluate_claim:385 is unreachable [row: invariant.claim_matrix.direction_above]",
+    "joulewise/paper_custody.py:632:if_false@8":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+    "joulewise/paper_custody.py:632:Or_delete_0@11":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+    "joulewise/paper_custody.py:632:Or_delete_1@11":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+    "joulewise/paper_custody.py:644:ifexp_false@28":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+    "joulewise/paper_custody.py:645:LtE_to_Lt@31:0":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+    "joulewise/paper_custody.py:649:if_false@8":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+    "joulewise/paper_custody.py:649:And_delete_0@11":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+    "joulewise/paper_custody.py:649:And_delete_1@11":
+        "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
 }
 
 
@@ -315,15 +331,20 @@ def _validate_exceptions() -> None:
     golden = json.loads(GOLDEN.read_bytes())
     unreachable = "v1-wire-unreachable: reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01"
     for key, proof in EQUIVALENT_MUTANTS.items():
+        parts = key.split(":", 2)
+        if (len(parts) == 3 and parts[0] == "joulewise/paper_custody.py" and
+                parts[1].isdigit() and int(parts[1]) < 632 and
+                key in (mutation_key for mutation_key, *_ in _mutations(
+                    parts[0], (ROOT / parts[0]).read_text(), {"_claim_issuance_gate"}))):
+            raise ValueError(f"pre-632 issuance mutant cannot be equivalent: {key}")
         match = re.fullmatch(r"equivalent: .+ \[row: ([^]]+)\]", proof)
         if match and _golden_path_exists(match.group(1), golden):
             continue
-        parts = key.split(":", 2)
         if (proof == unreachable and len(parts) == 3 and
                 parts[0] == "joulewise/paper_custody.py" and
                 parts[1].isdigit() and int(parts[1]) >= 632 and
-                any(key in (mutation_key for mutation_key, *_ in _mutations(
-                    parts[0], (ROOT / parts[0]).read_text(), {"_claim_issuance_gate"})))):
+                key in (mutation_key for mutation_key, *_ in _mutations(
+                    parts[0], (ROOT / parts[0]).read_text(), {"_claim_issuance_gate"}))):
             continue
         raise ValueError(f"invalid equivalent mutant proof: {key}: {proof}")
 

@@ -10,14 +10,14 @@ from unittest import mock
 
 from scripts.capture_claim_replay_golden import (
     GOLDEN, ROOT, SELECTED_PATHS, CORPUS_BASES, _tracked_json, _issuance_gate,
-    _window_transitions, canonical_bytes, capture,
+    _issuance_wire_refusals, _window_transitions, canonical_bytes, capture,
 )
 from joulewise.analysis_engine.artifact import validate_claim_verdicts
 from scripts.claimgate_golden_sweep import CERTIFICATE
 
 
 # Update only alongside a reviewed refresh of tests/golden/claimgate_v1_replay.json.
-GOLDEN_BLOB_SHA = "3a4cc5604136eedbae124f38a69d54a1faa8ebb5"
+GOLDEN_BLOB_SHA = "caa18e1535b858af393647df79bce61dd25ba3b6"
 CERTIFICATE_BLOB_SHA = "REPIN"
 CORPUS_BASE_BLOB_SHAS = {"gate_fixture": "56c84e22c24069c460dec26c65e56329304c9553",
                          "minimal": "6e96381cf5dab3e44203f9324f1b85baae4c53e3"}
@@ -50,7 +50,8 @@ class ClaimReplayGoldenTests(unittest.TestCase):
     def test_transitions_match_applied_state(self) -> None:
         pinned = json.loads(GOLDEN.read_bytes())["transitions"]
         actual = {"WR-6": _window_transitions(),
-                  "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {"real_v1_wire": _issuance_gate()}}
+                  "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {
+                      "real_v1_wire": _issuance_gate(), **_issuance_wire_refusals()}}
         self.assertEqual(set(actual), set(pinned))
         for ruling_id, scenarios in pinned.items():
             self.assertEqual(set(actual[ruling_id]), set(scenarios))

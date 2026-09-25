@@ -81043,6 +81043,44 @@
  },
  "transitions": {
   "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {
+   "binding_mismatch_wire": {
+    "post": {
+     "message": "paper_custody_binding_mismatch",
+     "raised": "PaperCustodyRefusal"
+    },
+    "pre": {
+     "message": "paper_custody_binding_mismatch",
+     "raised": "PaperCustodyRefusal"
+    }
+   },
+   "empty_subjects_wire": {
+    "post": {
+     "message": "paper_custody_binding_mismatch",
+     "raised": "PaperCustodyRefusal"
+    },
+    "pre": {
+     "message": "paper_custody_binding_mismatch",
+     "raised": "PaperCustodyRefusal"
+    }
+   },
+   "floor_anchor_mismatch_wire": {
+    "post": {
+     "admitted": false,
+     "authentic": false,
+     "grants": [],
+     "validator_codes": [
+      "claim_floor_anchor_mismatch"
+     ]
+    },
+    "pre": {
+     "admitted": false,
+     "authentic": false,
+     "grants": [],
+     "validator_codes": [
+      "claim_floor_anchor_mismatch"
+     ]
+    }
+   },
    "real_v1_wire": {
     "post": {
      "admitted": true,
