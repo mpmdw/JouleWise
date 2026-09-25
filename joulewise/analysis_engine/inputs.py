@@ -398,6 +398,9 @@ class FloorResolution:
     floor_limit_class: str | None = None
     point_floor_diagnostics: Mapping[str, Any] | None = None
     single_count_discipline: Mapping[str, Any] | None = None
+    floor_est: float | None = None
+    floor_unit: str | None = None
+    floor_class: str = "block"
 
 
 @dataclass(frozen=True)

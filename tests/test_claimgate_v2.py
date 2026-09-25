@@ -4,6 +4,8 @@ import math
 import unittest
 
 from joulewise.analysis_engine.claims import effective_equivalence_margin, evaluate_claim
+from joulewise.analysis_engine import _claim_raw_p, _combined_floor, _v2_sign_flip_diagnostic
+from joulewise.analysis_engine.inputs import FloorResolution
 from joulewise.analysis_engine.distributions import student_t_quantile
 from joulewise.analysis_engine.estimators import (
     DeterministicBoundTerm,
@@ -44,6 +46,44 @@ class ClaimGateV2Tests(unittest.TestCase):
         refused = self._equivalence(0.9, 0.01)
         self.assertEqual(refused["outcome"], "not_resolvable")
         self.assertIn("equivalence_margin_not_above_floor", refused["reason_codes"])
+
+    def test_raw_tost_uses_effective_margin_before_holm(self):
+        observations = tuple(
+            PairedObservation(str(index), 0.0, value)
+            for index, value in enumerate((-0.5, -0.25, 0.0, 0.25, 0.5, -0.25, 0.25, 0.0))
+        )
+        estimate = estimate_paired_blocks(observations, confidence=0.90)
+        prepared = {
+            "manifest": {"claim_rule_version": "v2", "equivalence": {"method": "tost_v2", "margin": 2.0}},
+            "floor": {"floor_est": 0.8},
+            "global_reason_codes": (),
+        }
+        from joulewise.analysis_engine.estimators import tost_p_value
+        self.assertAlmostEqual(
+            _claim_raw_p(prepared, estimate),
+            tost_p_value(estimate.estimate, estimate.se_total, estimate.df, 1.2)[2],
+        )
+        self.assertNotAlmostEqual(
+            _claim_raw_p(prepared, estimate),
+            tost_p_value(estimate.estimate, estimate.se_total, estimate.df, 2.0)[2],
+        )
+        self.assertIsNone(_claim_raw_p(prepared, estimate, {"floor_est": None}))
+
+    def test_v2_floor_resolution_and_sign_flip_remain_typed(self):
+        resolution = FloorResolution(
+            status="exact", artifact_id="cal", artifact_sha256="0" * 64,
+            source_cell_ids=("c",), transport_group_id=None, transport_rule_id=None,
+            floor_abs_j=2.0, floor_cmp_j=3.0, floor_gate_j=3.0,
+            reason_codes=(), floor_est=0.8, floor_unit="J", floor_class="estimate",
+        )
+        combined = _combined_floor((resolution,), claim_rule_version="v2")
+        self.assertEqual(combined["active_floor_j"], 0.8)
+        self.assertEqual(combined["floor_class"], "estimate")
+        observations = tuple(PairedObservation(str(i), 0.0, 1.0) for i in range(5))
+        estimate = estimate_paired_blocks(observations)
+        diagnostic = _v2_sign_flip_diagnostic(estimate, 5)
+        self.assertEqual(diagnostic["minimum_attainable_p"], 2 / 2**5)
+        self.assertEqual(diagnostic["exact_two_sided_p"], 2 / 2**5)
 
     def test_floor_mismatch_and_second_shape_fail_closed(self):
         wrong_unit = evaluate_claim(

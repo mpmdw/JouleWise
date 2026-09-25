@@ -92,6 +92,7 @@ CONTRAST_KEYS = {
     "window_class", "cells", "categories", "models", "estimator", "coding",
     "alpha", "q", "multiplicity_method", "multiplicity_m",
 }
+V2_CONTRAST_KEYS = CONTRAST_KEYS | {"claim_rule_version", "claim_shape"}
 MODEL_SCOPE_KEYS = {
     "target_model_artifact_sha256", "enabled_mechanism",
     "enabled_mechanism_identity_sha256",
@@ -104,6 +105,7 @@ FLOOR_KEYS = {
     "status", "source_artifact_id", "backend", "metric", "window_class",
     "floor_field", "condition_family_ids", "transport_rule_id",
 }
+V2_FLOOR_KEYS = FLOOR_KEYS | {"floor_unit", "floor_class"}
 DIVERGENCE_KEYS = {"state", "primary_claim_eligible", "allowed_disposition", "required_wording"}
 
 MANIFEST_KEYS = {
@@ -446,9 +448,23 @@ def validate_analysis_registry_v2(value: Mapping[str, Any]) -> None:
     contrasts = row["contrasts"]
     _expect(isinstance(contrasts, list) and len(contrasts) == 2, "registry.contrasts must contain exactly two rows")
     for index, contrast in enumerate(contrasts):
-        _exact(contrast, CONTRAST_KEYS, f"registry.contrasts[{index}]")
+        version = contrast.get("claim_rule_version", "v1") if isinstance(contrast, Mapping) else None
+        _expect(isinstance(version, str) and version in {"v1", "v2"},
+                f"registry.contrasts[{index}].claim_rule_version invalid")
+        _exact(contrast, V2_CONTRAST_KEYS if version == "v2" else CONTRAST_KEYS,
+               f"registry.contrasts[{index}]")
+        if version == "v2":
+            _expect(isinstance(contrast["claim_shape"], str)
+                    and contrast["claim_shape"] in {"direction", "magnitude", "equivalence"},
+                    f"registry.contrasts[{index}].claim_shape invalid")
     models = _validate_model_scope(contrasts[0]["models"], mechanism, row["family_id"], "registry.contrasts[0].models")
-    _expect(contrasts == _expected_contrasts(row["batch_mode"], row["family_id"], models), "registry contrast freeze mismatch")
+    _expect(
+        [{key: value for key, value in contrast.items()
+          if key not in {"claim_rule_version", "claim_shape"}}
+         for contrast in contrasts]
+        == _expected_contrasts(row["batch_mode"], row["family_id"], models),
+        "registry contrast freeze mismatch",
+    )
 
     _expect(bool(_MANIFEST_ID_RE.fullmatch(str(row["planned_manifest_id"]))), "planned_manifest_id invalid")
     _expect(bool(_SHA_RE.fullmatch(str(row["planned_manifest_sha256"]))), "planned_manifest_sha256 invalid")
@@ -459,11 +475,24 @@ def validate_analysis_registry_v2(value: Mapping[str, Any]) -> None:
         "tokenizer_identity_rule": "exact_name_revision_and_artifact_sha256",
         "text_comparison_rule": "exact_utf8_bytes",
     }, "output identity gate invalid")
-    floor = _exact(row["floor_selector"], FLOOR_KEYS, "registry.floor_selector")
+    versions = {contrast.get("claim_rule_version", "v1") for contrast in contrasts}
+    _expect(len(versions) == 1, "mixed claim rule versions require separate floor selectors")
+    version = versions.pop()
+    floor = _exact(row["floor_selector"], V2_FLOOR_KEYS if version == "v2" else FLOOR_KEYS,
+                   "registry.floor_selector")
     mode_metric = "gross_energy_j" if row["batch_mode"] == "single_request" else "batch_group_gross_energy_j"
     mode_window = "gross_request" if row["batch_mode"] == "single_request" else "gross_batch_group"
     _expect(floor["metric"] == mode_metric and floor["window_class"] == mode_window, "floor metric/window mismatch")
-    _expect(floor["floor_field"] == "max(floor_abs_j,floor_cmp_j)", "floor field invalid")
+    expected_floor_field = "floor_est" if version == "v2" else "max(floor_abs_j,floor_cmp_j)"
+    _expect(floor["floor_field"] == expected_floor_field, "floor field invalid")
+    if version == "v2":
+        _expect(floor["status"] == "bound", "v2 floor must be registered and bound")
+        _expect(floor["floor_class"] == "estimate", "v2 floor class invalid")
+        _expect(isinstance(floor["floor_unit"], str)
+                and floor["floor_unit"] in {"J", "J/correct"}, "v2 floor unit invalid")
+        for contrast in contrasts:
+            estimand = next(item for item in estimands if item["estimand_id"] == contrast["estimand_id"])
+            _expect(floor["floor_unit"] == estimand["unit"], "v2 floor unit/estimand mismatch")
     _expect(floor["condition_family_ids"] == ["spec_off", "spec_on"], "floor condition families invalid")
     if front:
         _expect(floor["status"] == "pending_p2_015", "front registry floor must be pending")

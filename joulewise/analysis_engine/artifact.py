@@ -29,7 +29,7 @@ from joulewise.whole_window import (
     REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
 )
 
-from .claims import CLAIM_OUTCOMES, evaluate_claim, ordered_reason_codes
+from .claims import CLAIM_OUTCOMES, effective_equivalence_margin, evaluate_claim, ordered_reason_codes
 from .distributions import student_t_quantile, two_sided_student_t_p_value
 from .estimators import tost_p_value
 from .inputs import AnalysisInputError, authenticate_floor_artifact_bytes
@@ -187,6 +187,7 @@ _CONTRAST_KEYS = {
     "sensitivity_status",
     "claim_evaluation",
 }
+_V2_CONTRAST_KEYS = _CONTRAST_KEYS | {"claim_rule_version", "claim_shape"}
 _METRIC_KEYS = {"name", "metric_tag", "window_class", "unit", "ratio_estimand"}
 _CONDITION_KEYS = {
     "condition_a_id",
@@ -222,6 +223,7 @@ _ESTIMATOR_KEYS = {
     "excluded_stochastic_terms",
     "raw_p",
 }
+_V2_INTERVAL_KEYS = {"interval_confidence", "repeat_point_CI90", "metrology_aware_CI90"}
 _DETERMINISTIC_KEYS = {"terms", "total", "decision_interval"}
 _DETERMINISTIC_TERM_KEYS = {"name", "bound"}
 _VARIANCE_CONTRIBUTION_KEYS = {
@@ -238,6 +240,7 @@ _FLOOR_KEYS = {
     "transport_verdict",
     "resolutions",
 }
+_V2_FLOOR_KEYS = {"floor_est", "floor_unit", "floor_class"}
 _V3_FLOOR_KEYS = {"claim_floor_rule", "aggregation", "arm_gates"}
 _ARM_GATE_KEYS = {
     "arm_id",
@@ -283,6 +286,7 @@ _RANDOMIZATION_KEYS = {
     "exact_two_sided_p",
     "rejects",
 }
+_V2_RANDOMIZATION_KEYS = _RANDOMIZATION_KEYS | {"minimum_attainable_p"}
 _LOO_KEYS = {"status", "rows"}
 _LOO_ROW_KEYS = {
     "omitted_block_id",
@@ -671,8 +675,13 @@ def _validate_cross_field_claim_semantics(
     assert isinstance(evaluation, Mapping)
     assert isinstance(sampling, Mapping)
 
+    v2_claim = contrast.get("claim_rule_version") == "v2"
     estimate = estimator.get("estimate")
     metrology_ci = _interval_pair(estimator.get("metrology_aware_CI95"))
+    decision_metrology_ci = _interval_pair(estimator.get(
+        "metrology_aware_CI90" if v2_claim and contrast.get("equivalence") is not None
+        else "metrology_aware_CI95"
+    ))
     repeat_ci = _interval_pair(estimator.get("repeat_point_CI95"))
     decision = _interval_pair(deterministic.get("decision_interval"))
     deterministic_total = deterministic.get("total")
@@ -693,14 +702,14 @@ def _validate_cross_field_claim_semantics(
                         f"{where}.estimator.{label}: disagrees with estimate/SE/t critical"
                     )
         if (
-            metrology_ci is not None
+            decision_metrology_ci is not None
             and decision is not None
             and _number(deterministic_total, nonnegative=True)
         ):
             bound = float(deterministic_total)
             if not (
-                math.isclose(decision[0], metrology_ci[0] - bound, rel_tol=1e-12, abs_tol=1e-12)
-                and math.isclose(decision[1], metrology_ci[1] + bound, rel_tol=1e-12, abs_tol=1e-12)
+                math.isclose(decision[0], decision_metrology_ci[0] - bound, rel_tol=1e-12, abs_tol=1e-12)
+                and math.isclose(decision[1], decision_metrology_ci[1] + bound, rel_tol=1e-12, abs_tol=1e-12)
             ):
                 errors.append(
                     f"{where}.deterministic_bounds.decision_interval: must expand the metrology interval by total"
@@ -738,6 +747,32 @@ def _validate_cross_field_claim_semantics(
         )
         if isinstance(multiplicity.get("rejected"), bool) and multiplicity.get("rejected") != expected_rejected:
             errors.append(f"{where}.multiplicity.rejected: disagrees with adjusted p threshold")
+    if v2_claim and isinstance(contrast.get("equivalence"), Mapping) and all(
+        _number(value) for value in (
+            estimator.get("estimate"), estimator.get("SE_total"),
+            contrast["equivalence"].get("margin"), floor.get("floor_est"),
+        )
+    ) and isinstance(estimator.get("df"), int):
+        try:
+            margin = effective_equivalence_margin(
+                float(contrast["equivalence"]["margin"]), float(floor["floor_est"])
+            )
+            bound = deterministic.get("total")
+            blocked = (
+                not _number(bound, nonnegative=True)
+                or margin <= float(bound)
+                or "fixed_n_plan_incomplete" in evaluation.get("reason_codes", ())
+            )
+            if blocked:
+                if multiplicity.get("raw_p") is not None:
+                    errors.append(f"{where}.multiplicity.raw_p: must be missing for refused v2 test")
+            else:
+                expected_raw = tost_p_value(float(estimator["estimate"]),
+                                            float(estimator["SE_total"]), estimator["df"], margin)[2]
+                if not _same_number(multiplicity.get("raw_p"), expected_raw):
+                    errors.append(f"{where}.multiplicity.raw_p: must use v2 effective margin")
+        except ValueError:
+            errors.append(f"{where}.multiplicity.raw_p: invalid v2 effective margin")
 
     reasons = evaluation.get("reason_codes")
     if isinstance(reasons, list):
@@ -758,8 +793,8 @@ def _validate_cross_field_claim_semantics(
             recomputed = evaluate_claim(
                 estimate=float(estimate) if _number(estimate) else None,
                 metrology_aware_ci95=(
-                    estimator.get("metrology_aware_CI95")
-                    if isinstance(estimator.get("metrology_aware_CI95"), Mapping)
+                    estimator.get("metrology_aware_CI90" if v2_claim and contrast.get("equivalence") is not None else "metrology_aware_CI95")
+                    if isinstance(estimator.get("metrology_aware_CI90" if v2_claim and contrast.get("equivalence") is not None else "metrology_aware_CI95"), Mapping)
                     else None
                 ),
                 decision_interval=(
@@ -790,6 +825,14 @@ def _validate_cross_field_claim_semantics(
                     in {"positive", "negative"}
                     else None
                 ),
+                claim_rule_version="v2" if v2_claim else "v1",
+                floor_class=floor.get("floor_class") if v2_claim else None,
+                floor_unit=floor.get("floor_unit") if v2_claim else None,
+                estimand_unit=contrast["metric"].get("unit") if v2_claim else None,
+                claim_side_bound=deterministic.get("total") if v2_claim else None,
+                registered_claim_shape=contrast.get("claim_shape") if v2_claim else None,
+                evaluated_claim_shape=("equivalence" if contrast.get("equivalence") is not None
+                                       else "direction") if v2_claim else None,
             )
         except (TypeError, ValueError):
             recomputed = None
@@ -1697,8 +1740,12 @@ def validate_claim_verdicts(
         where = f"artifact.contrasts[{index}]"
         if isinstance(contrast, Mapping):
             _validate_claim_discipline_cohort(contrast, where, errors)
-        if not _exact_keys(contrast, _CONTRAST_KEYS, where, errors):
+        v2_claim = isinstance(contrast, Mapping) and contrast.get("claim_rule_version") == "v2"
+        if not _exact_keys(contrast, _V2_CONTRAST_KEYS if v2_claim else _CONTRAST_KEYS, where, errors):
             continue
+        if v2_claim and (not isinstance(contrast["claim_shape"], str)
+                         or contrast["claim_shape"] not in {"direction", "magnitude", "equivalence"}):
+            errors.append(f"{where}.claim_shape: invalid")
         contrast_id = contrast["contrast_id"]
         if not isinstance(contrast_id, str) or not contrast_id or contrast_id in contrast_by_id:
             errors.append(f"{where}.contrast_id: invalid or duplicate")
@@ -2045,7 +2092,21 @@ def validate_claim_verdicts(
                         )
 
         estimator = contrast["estimator"]
-        if _exact_keys(estimator, _ESTIMATOR_KEYS, f"{where}.estimator", errors):
+        v2_interval = v2_claim and isinstance(estimator, Mapping) and "interval_confidence" in estimator
+        if v2_claim and contrast.get("equivalence") is not None and not v2_interval:
+            errors.append(f"{where}.estimator.interval_confidence: required for v2 equivalence")
+        if _exact_keys(
+            estimator, _ESTIMATOR_KEYS | (_V2_INTERVAL_KEYS if v2_interval else set()),
+            f"{where}.estimator", errors,
+        ):
+            if v2_interval:
+                if estimator["interval_confidence"] != 0.90:
+                    errors.append(f"{where}.estimator.interval_confidence: must be 0.90")
+                for interval_key in ("repeat_point_CI90", "metrology_aware_CI90"):
+                    _validate_interval(estimator[interval_key], f"{where}.estimator.{interval_key}",
+                                       errors, nullable=isinstance(estimator["n"], int)
+                                       and not isinstance(estimator["n"], bool)
+                                       and estimator["n"] < 2)
             n = estimator["n"]
             valid_n = not isinstance(n, bool) and isinstance(n, int) and n >= 0
             if not valid_n:
@@ -2053,6 +2114,22 @@ def validate_claim_verdicts(
             elif isinstance(sampling_row, Mapping) and sampling_row.get("observed_complete_n") != n:
                 errors.append(f"{where}.estimator.n: disagrees with sampling")
             if valid_n and n >= 2:
+                if v2_interval:
+                    critical_90 = student_t_quantile(0.95, n - 1)
+                    for interval_key, error_key in (
+                        ("repeat_point_CI90", "SE_repeat"),
+                        ("metrology_aware_CI90", "SE_total"),
+                    ):
+                        interval_90 = _interval_pair(estimator[interval_key])
+                        if (interval_90 is not None and _number(estimator["estimate"])
+                                and _number(estimator[error_key], nonnegative=True)):
+                            center = float(estimator["estimate"])
+                            half = critical_90 * float(estimator[error_key])
+                            if not (
+                                math.isclose(interval_90[0], center - half, rel_tol=1e-12, abs_tol=1e-12)
+                                and math.isclose(interval_90[1], center + half, rel_tol=1e-12, abs_tol=1e-12)
+                            ):
+                                errors.append(f"{where}.estimator.{interval_key}: disagrees with estimate/SE/t critical")
                 if estimator["df"] != n - 1:
                     errors.append(f"{where}.estimator.df: must equal n-1")
                 for key in (
@@ -2202,12 +2279,29 @@ def validate_claim_verdicts(
 
         floor = contrast["floor"]
         floor_expected_keys = set(_FLOOR_KEYS)
+        if v2_claim:
+            floor_expected_keys.update(_V2_FLOOR_KEYS)
         if isinstance(floor, Mapping):
             if set(floor) & _ATTRIBUTION_FLOOR_KEYS:
                 floor_expected_keys.update(_ATTRIBUTION_FLOOR_KEYS)
             if set(floor) & _V3_FLOOR_KEYS:
                 floor_expected_keys.update(_V3_FLOOR_KEYS)
         if _exact_keys(floor, floor_expected_keys, f"{where}.floor", errors):
+            if v2_claim:
+                # No authenticated same-epoch calibration wire currently
+                # supplies F_est. Schema acceptance must not turn a caller-
+                # asserted number into claim evidence.
+                errors.append(f"{where}.floor.floor_est: authenticated calibration binding unavailable")
+                if floor["floor_class"] != "estimate":
+                    errors.append(f"{where}.floor.floor_class: must be estimate")
+                if (not isinstance(floor["floor_unit"], str)
+                        or floor["floor_unit"] not in {"J", "J/correct"}
+                        or floor["floor_unit"] != (metric.get("unit") if isinstance(metric, Mapping) else None)):
+                    errors.append(f"{where}.floor.floor_unit: estimand unit mismatch")
+                if floor["floor_est"] is not None and not _number(floor["floor_est"], nonnegative=True):
+                    errors.append(f"{where}.floor.floor_est: invalid")
+                if floor["active_floor_j"] != floor["floor_est"]:
+                    errors.append(f"{where}.floor.active_floor_j: must equal floor_est")
             v3_floor = _V3_FLOOR_KEYS <= set(floor)
             if v3_contract and not v3_floor:
                 errors.append(
@@ -2262,7 +2356,7 @@ def validate_claim_verdicts(
                     resolution_where = f"{where}.floor.resolutions[{resolution_index}]"
                     if not _exact_keys_with_optional_group(
                         resolution,
-                        _FLOOR_RESOLUTION_KEYS,
+                        _FLOOR_RESOLUTION_KEYS | (_V2_FLOOR_KEYS if v2_claim else set()),
                         _ATTRIBUTION_FLOOR_KEYS,
                         resolution_where,
                         errors,
@@ -2296,6 +2390,15 @@ def validate_claim_verdicts(
                         errors,
                     )
                     status = resolution["status"]
+                    if v2_claim:
+                        if resolution["floor_class"] != "estimate":
+                            errors.append(f"{resolution_where}.floor_class: must be estimate")
+                        if resolution["floor_unit"] != floor["floor_unit"]:
+                            errors.append(f"{resolution_where}.floor_unit: mismatch")
+                        if status in {"exact", "transported"} and not _number(
+                            resolution["floor_est"], nonnegative=True
+                        ):
+                            errors.append(f"{resolution_where}.floor_est: usable resolution requires a value")
                     if not isinstance(status, str) or status not in {
                         "exact",
                         "transported",
@@ -2653,6 +2756,16 @@ def validate_claim_verdicts(
                 status in {"exact", "transported"} for status in resolution_statuses
             )
             if floor["status"] == "resolved":
+                if v2_claim and isinstance(resolutions, list):
+                    resolved_estimates = [
+                        row["floor_est"] for row in resolutions
+                        if isinstance(row, Mapping) and _number(row.get("floor_est"), nonnegative=True)
+                    ]
+                    if resolved_estimates and (
+                        any(not _same_number(value, resolved_estimates[0]) for value in resolved_estimates)
+                        or not _same_number(floor["floor_est"], resolved_estimates[0])
+                    ):
+                        errors.append(f"{where}.floor.floor_est: must match every resolution")
                 if not all_usable:
                     errors.append(
                         f"{where}.floor.status: resolved floor requires only usable resolutions"
@@ -2711,7 +2824,7 @@ def validate_claim_verdicts(
                         f"{where}.floor.floor_cmp_j: must equal resolution "
                         f"{'aggregate' if ratio_floor else 'maximum'}"
                     )
-                if expected_gate is not None and not (
+                if not v2_claim and expected_gate is not None and not (
                     _number(floor["active_floor_j"])
                     and math.isclose(
                         float(floor["active_floor_j"]),
@@ -2724,7 +2837,7 @@ def validate_claim_verdicts(
                         f"{where}.floor.active_floor_j: must equal "
                         f"{'component aggregate max' if ratio_floor else 'resolution maximum'}"
                     )
-                if all(
+                if not v2_claim and all(
                     _number(floor[key_name], nonnegative=True)
                     for key_name in ("floor_abs_j", "floor_cmp_j", "active_floor_j")
                 ) and not math.isclose(
@@ -2788,8 +2901,17 @@ def validate_claim_verdicts(
 
         randomization = contrast["randomization_check"]
         if _exact_keys(
-            randomization, _RANDOMIZATION_KEYS, f"{where}.randomization_check", errors
+            randomization, _V2_RANDOMIZATION_KEYS if v2_claim else _RANDOMIZATION_KEYS,
+            f"{where}.randomization_check", errors
         ):
+            if v2_claim and not _probability(randomization["minimum_attainable_p"], nullable=True):
+                errors.append(f"{where}.randomization_check.minimum_attainable_p: invalid")
+            if (v2_claim and isinstance(randomization["n_blocks"], int)
+                    and not isinstance(randomization["n_blocks"], bool)
+                    and randomization["n_blocks"] > 0
+                    and not _same_number(randomization["minimum_attainable_p"],
+                                         2.0 ** (1 - randomization["n_blocks"]))):
+                errors.append(f"{where}.randomization_check.minimum_attainable_p: disagrees with n")
             randomization_status = randomization["status"]
             if not isinstance(randomization_status, str) or randomization_status not in {
                 "not_required",
@@ -2962,7 +3084,8 @@ def validate_claim_verdicts(
                     else None
                 )
                 expected_randomization_disagreement = bool(
-                    randomization_status == "clean"
+                    not v2_claim
+                    and randomization_status == "clean"
                     and isinstance(randomization.get("rejects"), bool)
                     and isinstance(multiplicity_evidence, Mapping)
                     and isinstance(multiplicity_evidence.get("rejected"), bool)

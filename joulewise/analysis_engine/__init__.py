@@ -27,7 +27,8 @@ from joulewise.analysis_manifest_v3 import (
 )
 
 from .artifact import finalize_claim_verdicts, write_claim_verdicts_atomic
-from .claims import evaluate_claim, ordered_reason_codes
+from .claims import effective_equivalence_margin, evaluate_claim, ordered_reason_codes
+from .distributions import exact_sign_flip_p_value
 from .estimators import (
     DeterministicBoundTerm,
     Interval,
@@ -80,6 +81,24 @@ _FloorRequestFactory = Callable[
     [Mapping[str, Any], str, Sequence[BundleEvidence], Mapping[str, Any]],
     FloorRequest | None,
 ]
+
+
+def _v2_sign_flip_diagnostic(estimate: PairedEstimate | None, n: int) -> dict[str, Any]:
+    minimum = 2.0 ** (1 - n) if n else None
+    if estimate is None or n > 20:
+        return {
+            "status": "not_required", "reason": None, "n_blocks": n,
+            "exact_two_sided_p": None, "rejects": None,
+            "minimum_attainable_p": minimum,
+        }
+    p_value = exact_sign_flip_p_value(tuple(estimate.paired_values))
+    return {
+        "status": "clean", "reason": None, "n_blocks": n,
+        "exact_two_sided_p": p_value, "rejects": p_value < 0.05,
+        "minimum_attainable_p": minimum,
+    }
+
+
 _PairStochasticFactory = Callable[
     [BundleEvidence, BundleEvidence, Mapping[str, Any]],
     tuple[tuple[StochasticVarianceTerm, ...], tuple[str, ...]],
@@ -189,7 +208,7 @@ def _empty_estimator(name: str, n: int) -> dict[str, Any]:
 def _estimator_dict(result: PairedEstimate | None, name: str, n: int) -> dict[str, Any]:
     if result is None:
         return _empty_estimator(name, n)
-    return {
+    row = {
         "name": result.estimator,
         "n": result.n,
         "df": result.df,
@@ -205,15 +224,32 @@ def _estimator_dict(result: PairedEstimate | None, name: str, n: int) -> dict[st
         "excluded_stochastic_terms": list(result.excluded_stochastic_terms),
         "raw_p": result.raw_p,
     }
+    if result.interval_confidence == 0.90:
+        row.update({
+            "interval_confidence": 0.90,
+            "repeat_point_CI90": _interval_dict(result.repeat_point_ci90),
+            "metrology_aware_CI90": _interval_dict(result.metrology_aware_ci90),
+        })
+    return row
 
 
-def _floor_engine_reasons(resolutions: Sequence[FloorResolution]) -> list[str]:
+def _floor_engine_reasons(
+    resolutions: Sequence[FloorResolution], *, claim_rule_version: str = "v1"
+) -> list[str]:
     reasons: list[str] = []
     for resolution in resolutions:
-        if resolution.floor_abs_j is None:
-            reasons.append("floor_abs_missing")
-        if resolution.floor_cmp_j is None:
-            reasons.append("floor_cmp_missing")
+        if claim_rule_version == "v2":
+            if resolution.floor_class != "estimate":
+                reasons.append("floor_class_mismatch")
+            if resolution.floor_unit not in {"J", "J/correct"}:
+                reasons.append("floor_unit_mismatch")
+            if resolution.floor_est is None:
+                reasons.extend(("floor_abs_missing", "floor_cmp_missing"))
+        else:
+            if resolution.floor_abs_j is None:
+                reasons.append("floor_abs_missing")
+            if resolution.floor_cmp_j is None:
+                reasons.append("floor_cmp_missing")
         for reason in resolution.reason_codes:
             if reason == "cell_missing":
                 reasons.append("floor_row_missing")
@@ -226,7 +262,7 @@ def _floor_engine_reasons(resolutions: Sequence[FloorResolution]) -> list[str]:
     return ordered_reason_codes(reasons)
 
 
-def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
+def _combined_floor(resolutions: Sequence[FloorResolution], *, claim_rule_version: str = "v1") -> dict[str, Any]:
     try:
         disciplines = [read_floor_resolution_discipline(value) for value in resolutions]
         check_single_count_cohort(disciplines, where="floor resolutions")
@@ -271,6 +307,12 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
             "floor_gate_j": value.floor_gate_j,
             "reason_codes": list(value.reason_codes),
         }
+        if claim_rule_version == "v2":
+            row.update({
+                "floor_est": value.floor_est,
+                "floor_unit": value.floor_unit,
+                "floor_class": value.floor_class,
+            })
         if (
             value.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
             and value.floor_source == ATTRIBUTION_FLOOR_SOURCE
@@ -322,6 +364,19 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
                 "single_count_discipline": disciplines[resolutions.index(limited[0])].copy_wire(),
             }
         )
+    if claim_rule_version == "v2":
+        estimates = [value.floor_est for value in usable]
+        units = {value.floor_unit for value in usable}
+        classes = {value.floor_class for value in usable}
+        result["floor_est"] = (
+            estimates[0] if all_usable and estimates and all(
+                isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0 for value in estimates
+            ) and all(value == estimates[0] for value in estimates) else None
+        )
+        result["floor_unit"] = units.pop() if len(units) == 1 else None
+        result["floor_class"] = classes.pop() if len(classes) == 1 else None
+        result["active_floor_j"] = result["floor_est"]
     return result
 
 
@@ -723,7 +778,7 @@ def _prepare_contrast_v3(
 
     complete_blocks = len(observation_parts)
     planned_n = inputs.manifest["design"]["sampling_plan"]["planned_n_blocks"]
-    if complete_blocks < 2:
+    if complete_blocks < (5 if contrast.get("claim_rule_version") == "v2" else 2):
         global_reasons.append("insufficient_complete_blocks")
     if complete_blocks < planned_n:
         global_reasons.append("fixed_n_plan_incomplete")
@@ -741,7 +796,11 @@ def _prepare_contrast_v3(
         for part in observation_parts
     )
     estimate = (
-        estimate_paired_blocks(observations, estimator=ABBA_ESTIMATOR_ID)
+        estimate_paired_blocks(
+            observations, estimator=ABBA_ESTIMATOR_ID,
+            confidence=0.90 if contrast.get("claim_rule_version") == "v2"
+            and contrast.get("equivalence") is not None else 0.95,
+        )
         if len(observations) >= 2
         else None
     )
@@ -751,7 +810,7 @@ def _prepare_contrast_v3(
     floor = _decorate_v3_floor(
         inputs.manifest,
         contrast,
-        _combined_floor(resolutions),
+        _combined_floor(resolutions, claim_rule_version=contrast.get("claim_rule_version", "v1")),
         resolutions,
     )
 
@@ -769,6 +828,8 @@ def _prepare_contrast_v3(
         "exact_two_sided_p": None,
         "rejects": None,
     }
+    if contrast.get("claim_rule_version") == "v2":
+        randomization = _v2_sign_flip_diagnostic(estimate, len(observations))
     return {
         "manifest": contrast,
         "block_rows": block_rows,
@@ -954,7 +1015,7 @@ def _prepare_contrast(
 
     complete_blocks = len(observation_parts)
     planned_n = inputs.manifest["design"]["sampling_plan"]["planned_n_blocks"]
-    if complete_blocks < 2:
+    if complete_blocks < (5 if contrast.get("claim_rule_version") == "v2" else 2):
         global_reasons.append("insufficient_complete_blocks")
     if complete_blocks < planned_n:
         global_reasons.append("fixed_n_plan_incomplete")
@@ -1037,7 +1098,14 @@ def _prepare_contrast(
             ratio_observations.append(observation)
         observations = tuple(ratio_observations)
     estimate = (
-        estimate_manifest_observations(contrast["metric"], observations)
+        estimate_paired_blocks(
+            observations,
+            estimator=contrast["estimator"],
+            confidence=0.90 if contrast.get("equivalence") is not None else 0.95,
+        )
+        if contrast.get("claim_rule_version") == "v2" and ratio_estimand is None
+        and len(observations) >= 2
+        else estimate_manifest_observations(contrast["metric"], observations)
         if len(observations) >= 2
         else None
     )
@@ -1045,7 +1113,7 @@ def _prepare_contrast(
     resolutions = _resolve_contrast_floor(
         inputs, contrast, included_by_condition, request_factory
     )
-    floor = _combined_floor(resolutions)
+    floor = _combined_floor(resolutions, claim_rule_version=contrast.get("claim_rule_version", "v1"))
     if ratio_estimand is not None:
         floor, floor_conversion_reasons = convert_floor_to_ratio_units(
             contrast["metric"], observations, floor
@@ -1069,16 +1137,19 @@ def _prepare_contrast(
     if evidence_class == "legacy_l1":
         global_reasons.append("legacy_l1_mechanics_only")
 
-    randomization = randomization_check(
-        estimate.paired_values if estimate is not None else (),
-        inputs.manifest["design"]["randomization"],
-        alpha=_randomization_alpha(inputs.manifest, contrast),
-        block_ids=(
-            tuple(observation.block_id for observation in observations)
-            if estimate is not None
-            else ()
-        ),
-    )
+    if contrast.get("claim_rule_version") == "v2":
+        randomization = _v2_sign_flip_diagnostic(estimate, len(observations))
+    else:
+        randomization = randomization_check(
+            estimate.paired_values if estimate is not None else (),
+            inputs.manifest["design"]["randomization"],
+            alpha=_randomization_alpha(inputs.manifest, contrast),
+            block_ids=(
+                tuple(observation.block_id for observation in observations)
+                if estimate is not None
+                else ()
+            ),
+        )
 
     return {
         "manifest": contrast,
@@ -1164,7 +1235,7 @@ def _subset_floor(
     floor = _decorate_v3_floor(
         inputs.manifest,
         contrast,
-        _combined_floor(resolutions),
+        _combined_floor(resolutions, claim_rule_version=contrast.get("claim_rule_version", "v1")),
         resolutions,
     )
     metric = contrast.get("metric")
@@ -1185,7 +1256,17 @@ def _estimate_prepared_observations(
     prepared: Mapping[str, Any], observations: Sequence[PairedObservation]
 ) -> PairedEstimate:
     if is_abba_v3_consumable_schema(prepared.get("manifest_schema_version")):
-        return estimate_paired_blocks(observations, estimator=ABBA_ESTIMATOR_ID)
+        return estimate_paired_blocks(
+            observations, estimator=ABBA_ESTIMATOR_ID,
+            confidence=0.90 if prepared["manifest"].get("claim_rule_version") == "v2"
+            and prepared["manifest"].get("equivalence") is not None else 0.95,
+        )
+    if prepared["manifest"].get("claim_rule_version") == "v2":
+        return estimate_paired_blocks(
+            observations,
+            estimator=prepared["manifest"]["estimator"],
+            confidence=0.90 if prepared["manifest"].get("equivalence") is not None else 0.95,
+        )
     return estimate_manifest_observations(
         prepared["manifest"]["metric"], observations
     )
@@ -1197,6 +1278,8 @@ def _randomization_for_prepared(
     estimate: PairedEstimate | None,
     observations: Sequence[PairedObservation],
 ) -> Mapping[str, Any]:
+    if prepared["manifest"].get("claim_rule_version", "v1") == "v2":
+        return _v2_sign_flip_diagnostic(estimate, len(observations))
     if is_abba_v3_consumable_schema(prepared.get("manifest_schema_version")):
         return {
             "status": "not_required",
@@ -1233,10 +1316,15 @@ def _analysis_reasons(
     omit_block: str | None = None,
 ) -> list[str]:
     reasons = _base_reasons(prepared, omit_block=omit_block)
-    reasons.extend(_floor_engine_reasons(floor_resolutions))
-    reasons.extend(_interpolation_reasons(estimate, floor))
+    reasons.extend(_floor_engine_reasons(
+        floor_resolutions,
+        claim_rule_version=prepared["manifest"].get("claim_rule_version", "v1"),
+    ))
+    if prepared["manifest"].get("claim_rule_version", "v1") != "v2":
+        reasons.extend(_interpolation_reasons(estimate, floor))
     if randomization.get("reason") is not None:
-        reasons.append(randomization["reason"])
+        if prepared["manifest"].get("claim_rule_version", "v1") != "v2":
+            reasons.append(randomization["reason"])
     return ordered_reason_codes(reasons)
 
 
@@ -1255,7 +1343,10 @@ def _evaluation(
     active_randomization = (
         prepared["randomization_check"] if randomization is None else randomization
     )
+    v2 = prepared["manifest"].get("claim_rule_version", "v1") == "v2"
     if (
+        not v2
+        and
         active_randomization["status"] == "clean"
         and active_randomization["rejects"] is not None
         and bool(active_randomization["rejects"]) != bool(multiplicity["rejected"])
@@ -1275,10 +1366,13 @@ def _evaluation(
         }
         if discipline is not None else None
     )
+    metric = prepared["manifest"].get("metric")
+    estimand_unit = metric.get("unit") if isinstance(metric, Mapping) else None
     return evaluate_claim(
         estimate=estimate.estimate if estimate is not None else None,
         metrology_aware_ci95=(
-            _interval_dict(estimate.metrology_aware_ci95) if estimate is not None else None
+            _interval_dict(estimate.metrology_aware_interval if v2 else estimate.metrology_aware_ci95)
+            if estimate is not None else None
         ),
         decision_interval=(
             _interval_dict(estimate.decision_interval) if estimate is not None else None
@@ -1299,10 +1393,21 @@ def _evaluation(
             )
             else None
         ),
+        claim_rule_version="v2" if v2 else "v1",
+        floor_class=active_floor.get("floor_class") if v2 else None,
+        floor_unit=active_floor.get("floor_unit") if v2 else None,
+        estimand_unit=estimand_unit if v2 else None,
+        claim_side_bound=estimate.deterministic_bound_total if v2 and estimate is not None else None,
+        registered_claim_shape=prepared["manifest"].get("claim_shape") if v2 else None,
+        evaluated_claim_shape=("equivalence" if prepared["manifest"].get("equivalence") is not None
+                               else "direction") if v2 else None,
     )
 
 
-def _claim_raw_p(prepared: Mapping[str, Any], estimate: PairedEstimate | None) -> float | None:
+def _claim_raw_p(
+    prepared: Mapping[str, Any], estimate: PairedEstimate | None,
+    floor: Mapping[str, Any] | None = None,
+) -> float | None:
     if estimate is None:
         return None
     if "fixed_n_plan_incomplete" in prepared.get("global_reason_codes", ()):
@@ -1313,18 +1418,31 @@ def _claim_raw_p(prepared: Mapping[str, Any], estimate: PairedEstimate | None) -
     equivalence = prepared["manifest"].get("equivalence")
     if equivalence is None:
         return estimate.raw_p
+    v2 = prepared["manifest"].get("claim_rule_version", "v1") == "v2"
     if (
         not isinstance(equivalence, Mapping)
-        or equivalence.get("method") != "tost_v1"
+        or equivalence.get("method") != ("tost_v2" if v2 else "tost_v1")
         or isinstance(equivalence.get("margin"), bool)
         or not isinstance(equivalence.get("margin"), (int, float))
     ):
         return None
+    margin = float(equivalence["margin"])
+    if v2:
+        active_floor = prepared["floor"] if floor is None else floor
+        resolved = active_floor.get("floor_est")
+        if not isinstance(resolved, (int, float)) or isinstance(resolved, bool):
+            return None
+        try:
+            margin = effective_equivalence_margin(margin, float(resolved))
+        except ValueError:
+            return None
+        if margin <= estimate.deterministic_bound_total:
+            return None
     return tost_p_value(
         estimate.estimate,
         estimate.se_total,
         estimate.df,
-        float(equivalence["margin"]),
+        margin,
     )[2]
 
 
@@ -1485,7 +1603,7 @@ def _loo_family(
                 estimate,
                 observations,
             )
-            raw[contrast_id] = _claim_raw_p(prepared_by_id[contrast_id], estimate)
+            raw[contrast_id] = _claim_raw_p(prepared_by_id[contrast_id], estimate, floor)
         adjusted = adjust_p_values(
             raw,
             method=multiplicity["method"],
@@ -1600,7 +1718,15 @@ def _contrast_row(
         "total": estimate.deterministic_bound_total if estimate is not None else None,
         "decision_interval": _interval_dict(estimate.decision_interval) if estimate else None,
     }
-    return {
+    estimator_row = _estimator_dict(estimate, contrast["estimator"], len(prepared["observations"]))
+    if (estimate is None and contrast.get("claim_rule_version") == "v2"
+            and contrast.get("equivalence") is not None):
+        estimator_row.update({
+            "interval_confidence": 0.90,
+            "repeat_point_CI90": None,
+            "metrology_aware_CI90": None,
+        })
+    row = {
         "contrast_id": contrast["contrast_id"],
         "plan_id": contrast["plan_id"],
         "family_instance_id": contrast["family_instance_id"],
@@ -1630,7 +1756,7 @@ def _contrast_row(
             "planned_n": len(contrast["block_ids"]),
             "observed_complete_n": len(prepared["observations"]),
         },
-        "estimator": _estimator_dict(estimate, contrast["estimator"], len(prepared["observations"])),
+        "estimator": estimator_row,
         "deterministic_bounds": deterministic,
         "floor": dict(prepared["floor"]),
         "multiplicity": {
@@ -1648,6 +1774,10 @@ def _contrast_row(
         "sensitivity_status": sensitivity_status,
         "claim_evaluation": dict(evaluation),
     }
+    if contrast.get("claim_rule_version") == "v2":
+        row["claim_rule_version"] = "v2"
+        row["claim_shape"] = contrast.get("claim_shape")
+    return row
 
 
 def analyze_claims(

@@ -52,6 +52,9 @@ _VARIANCE_NEGATIVE_TOLERANCE = 1.0e-12
 class EnvelopeTermScopeUnknown(ValueError):
     """The registered dependence scope does not license envelope aggregation."""
 
+    reason_code = "envelope_term_scope_unknown"
+    missing_registered_field = "cross_envelope_independence"
+
 
 @dataclass(frozen=True)
 class Interval:
@@ -485,7 +488,10 @@ def aggregate_envelope_observation(
     for name in stochastic_names:
         terms = [next(term for term in block.stochastic_terms if term.name == name) for block in values]
         if any(term.correlation_scope != _INDEPENDENT_RUN for term in terms):
-            raise EnvelopeTermScopeUnknown("envelope_term_scope_unknown")
+            raise EnvelopeTermScopeUnknown(
+                "envelope_term_scope_unknown: missing registered "
+                "cross_envelope_independence field"
+            )
         components = [
             _variance_components(term, where=f"{identifier}.{name}[{index}]")
             for index, term in enumerate(terms)

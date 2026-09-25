@@ -633,9 +633,14 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
             continue
         floor_metadata_keys = {"floor_limit_class", "floor_source", "point_floor_diagnostics", "single_count_discipline"}
         floor_values = contrast["floor"]
+        v2_claim = contrast.get("claim_rule_version") == "v2"
+        estimator_values = contrast["estimator"]
         evaluated = evaluate_claim(
-            estimate=contrast["estimator"]["estimate"],
-            metrology_aware_ci95=contrast["estimator"]["metrology_aware_CI95"],
+            estimate=estimator_values["estimate"],
+            metrology_aware_ci95=estimator_values[
+                "metrology_aware_CI90" if v2_claim and contrast.get("equivalence") is not None
+                else "metrology_aware_CI95"
+            ],
             decision_interval=deterministic["decision_interval"], floor_gate_j=floor_values["active_floor_j"],
             adjusted_rejected=contrast["multiplicity"]["rejected"] is True,
             base_reason_codes=contrast["claim_evaluation"]["reason_codes"], equivalence=contrast.get("equivalence"),
@@ -644,6 +649,14 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
             floor_metadata=({key: floor_values[key] for key in floor_metadata_keys}
                             if floor_metadata_keys <= set(floor_values) else None),
             hypothesized_direction=contrast.get("hypothesized_direction"),
+            claim_rule_version="v2" if v2_claim else "v1",
+            floor_class=floor_values.get("floor_class") if v2_claim else None,
+            floor_unit=floor_values.get("floor_unit") if v2_claim else None,
+            estimand_unit=contrast["metric"].get("unit") if v2_claim else None,
+            claim_side_bound=deterministic.get("total") if v2_claim else None,
+            registered_claim_shape=contrast.get("claim_shape") if v2_claim else None,
+            evaluated_claim_shape=("equivalence" if contrast.get("equivalence") is not None
+                                   else "direction") if v2_claim else None,
         )
         grants.append(_RenderGrant("outcome", subject))
         if evaluated["claim_ready_for_l2_l3"] is True and evaluated["claim_level_ceiling"] in {"L2", "L3"}:

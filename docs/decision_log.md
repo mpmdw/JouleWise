@@ -11371,9 +11371,11 @@ blocks and divide by `n_reg²`. The undivided shared-term shortcut applies
 only to one identical random contribution in every block of an envelope,
 with identical fields and independently drawn contributions across envelopes;
 unequal fields, cross-envelope sharing or unspecified dependence refuse as
-`not_estimable: envelope_term_scope_unknown` (refuter R2). Sign-flip is a
-printed diagnostic at every `k`, with minimum attainable p, and never gates
-admission (refuter R1). Equivalence intervals use confidence 0.90; the v1
+`not_estimable: envelope_term_scope_unknown` (refuter R2). Magistrate ruling
+97 defers shared-term aggregation until a registered cross-envelope
+independence field is ruled; this implementation retains that refusal.
+Sign-flip is a printed diagnostic at every `k`, with minimum attainable p,
+and never gates admission (refuter R1). Equivalence intervals use confidence 0.90; the v1
 default remains 0.95. The version, floor class and unit, confidence, planned
 `K` and `n_reg`, excluded envelopes, and claim shape are registered or
 recorded as applicable. Refuter's exact replacements: `92b-claimgate-v2-refuter-astra.md`
