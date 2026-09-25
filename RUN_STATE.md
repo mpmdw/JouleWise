@@ -10,28 +10,30 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION 278ebc9e — from 04:46 PDT 09-24 (Opus 5.5 on Claude Code 2.1.281; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-24-activation-278ebc9e/00-activation-record.md) is the running log. Its 7370d0fb block below is superseded. **Done:** #406 and #407 are closed.
-- #407 council: ruling [13/20](docs/process_traces/2026-09-24-activation-278ebc9e/13-coldgate-packet-407/20-coldgate-fable-council-ruling.md). The first science night after G2-a is a calibration night: context-position rungs, rails plus USB-C input as an increment ratio. The headline becomes nested thinking budgets. Process rule TIER-01 was adopted with Ed's veto open. R-A280 was refused for want of an exhibit.
-- Instrument acceptance council: ruling [31/20](docs/process_traces/2026-09-24-activation-278ebc9e/31-coldgate-packet-acceptance/20-coldgate-fable-acceptance-ruling.md). **Every science night is blocked on the 25G83 acceptance.** The cure is protocol v4 (2.0 s pulse) plus Revision 4: two windows at least 6 h apart, n ≥ 12, and the r8 reissue first.
-- A291 Final texts v4 ([14](docs/process_traces/2026-09-24-activation-278ebc9e/14-a291-final-texts-v4.md)) were implemented by seats P and K. The integration head `0fa4e6e3` passes 71 tests.
-- The desk simulations ([19](docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/README.md)) show the claim gate is badly underpowered and the equivalence rule false-alarms 58 % of the time. Both need a redesign council before any claim use.
-- Ed was emailed after the fact twice (`1a0d364481dec249`, `1a0d38b0e64ad452`) and asked to turn off macOS auto-updates.
-
-**Codex is out of usage until ≈10:57 PDT 09-24** (the seats report "try again at 10:57 AM"). That time is the #408 reset for Codex.
-
-**State at ≈06:55:**
-- **A291** integration head `0fa4e6e3` passes 71 tests, and the similarity screen and scope predicate pass. But delta re-audit 39b found **AUD-1 BLOCKER: the SAME SIGNATURE as the original escalation** (the seal accepts a two-live-owner forgery; the packer's INV-11 is not the contract's all-items-terminal predicate). The standing escalation trigger and a mandatory cold gate apply, so the next step is a consult (brief 41), not fix round 3. The Opus seat is running (`/tmp/278ebc9e/42-esc2-opus.md`).
-- **B0** fix round 1: UNVERIFIED WIP `f170af7c`; the seat died on the Codex limit.
-- **Acceptance v4 + rev 4** PR: UNREVIEWED WIP `8379b1ea`. NEEDS_SCOPE `joulewise/calibration_bracketing.py` + its tests, which the magistrate approved (record 00 item 42). The 38/20 §3.2 sentence is still owed in rev 4 2(f).
-- The replay gate PASSES (38/20).
-
-**QUIET WINDOW ACTIVE from ≈22:33 PDT 09-24 (peer `joulewise-4b`, OSCTX unattended session, 2–3.5 h). Launch nothing until the peer sends QUIET END.** Then: A291 PR #409 (head `c5cbfd9e`) needs rows 9 (full suite), 11 (CI), 7 (cold Fable final pass per ruling 112 V3; exhibits staged in /tmp/278ebc9e/finalpass) and 12 (terminal review), then merge. **SUCCESSOR'S NEXT EXACT ACTION (as of ≈18:10):** Fable is available again. The interactive seat `joulewise-4b` owns lane OS-LAUNCH-AUDIT-01: arm nothing launchd-launched, keep seat launches light during its idle leg, and defer the acceptance council until it reports.
-- **Owner blockers.** Fable is out on the monthly spend limit (Ed emailed `1a0d4ba304ba9bf7`: add credits or name a substitute). Ed was also asked for a 3-command `sudo powermetrics` sampler probe (`1a0d4d7081f2e57d`; files `/tmp/pm-all-A.plist`, `/tmp/pm-nothermal-B.plist`, `/tmp/pm-cpu-C.plist`). Search `from:claude2.glaring610@passmail.net is:unread` first.
-- **Acceptance lane: PREMISE FALSE** (item 84; main `f416b64f`). The 248 ms cadence comes from launchd ProcessType throttling, not from the 25G83 binary. Reopen the acceptance council (D-184) on option A: `ProcessType=Interactive` in the night-agent plist, plus a check of whether launchd-launched inference is throttled too (a SCIENCE RISK for every launchd-night number). The v4/rev4 PR `ea10e3c8` is HELD and probably superseded. Do NOT wait for Ed's /tmp/pm files: `sudo -n powermetrics` is agent-runnable.
-- **A291 round 3 IN PROGRESS under the harness-as-gate method.** Rulings: 82/20 (R4) and 82/30/21 (R4b); texts in records 85 and 95; R4-0 is the contract v4.1 in record 89. Seat K (brief 96, Sol) is landing R4-3 on `test/2026-09-24-a291-ownership-harness`. Next: verify K's RED set (3 tests, 109 pairwise escapes); then P (Opus, Claude family) on a worktree cut from K's head, WRITE_SCOPE packer + its tests; then R4-5 (full suite, K-run mutation kills m1–m5 incl. m3-term, forger seat of a third family).
-- **B0: HALTED** (item 81). Two text rounds (R2, R2b) ended in BLOCKERs of the same signature: third-row obligations versus exact parity. Resume only via a consult once the scored row's NightKind fields exist (after A291 round 3 and AP-5M v5). Kept: branch `bee658c5` and harness `eb8d745f`.
-- **Claim gate:** ruled (66/20 plus addendum 66/30/21; texts v2 in record 91). The implementation WIP is on `feat/2026-09-24-claimgate-v2` and is STOPPED for an integration-design consult and cold gate (record 00 item 90: F_est provenance, manifest v2, mixed v1/v2, paper-custody receipts).
-- **Ready drafts:** calibration night (50), AP-5M v5 (52), TIER-01 branch. The desk smoke needs an MLX environment.
+**▶▶ ACTIVATION 278ebc9e — 04:46 PDT 09-24 → ≈04:25 PDT 09-25 (Opus 5.5; NOTHING ARMED; PR #409 A291 MERGED `75d04e9e`; exited for a fresh supervisor):** [Record 00](docs/process_traces/2026-09-24-activation-278ebc9e/00-activation-record.md) items 1–121.
+**Landed:**
+- **PR #409, A291 scored-roster packer:** the round-3 ownership view, gated by a harness. Mutation kills, two forger seats and a cold Fable final pass all passed. It also retires ED-BRANCH-PROTECTION-E1-01, which cures main's `gen_state` drift.
+- **Rulings:**
+  - COUNCIL-407-01: the headline and the next nights;
+  - ACCEPTANCE-25G83-01: premise now FALSE, see below;
+  - CLAIMGATE-01 and its addendum: claim gate v2 texts;
+  - A291-ESC2-01/02 and the addenda;
+  - B0-ESC-01 and its addendum. B0 is now HALTED.
+- **Interactive seat `joulewise-4b` (with Ed):**
+  - The 248 ms powermetrics cadence is launchd timer coalescing under the default ProcessType. It is not macOS or the binary.
+  - `ProcessType=Interactive` restores ~130 ms, and the default context does not throttle compute.
+  - The 2 s-pulse acceptance PR `ea10e3c8` is therefore probably superseded.
+  - That seat owns the measurement-clone Spotlight fix (PR #410).
+**SUCCESSOR'S NEXT EXACT ACTION:**
+1. Search Gmail for unread mail from Ed and check directives #405 and #408.
+2. Reopen the acceptance council (D-184) on option A, `ProcessType=Interactive`, with interactive-4b records 21–29 as input. Plan the night-job plist change together with #410.
+3. Do the row-11 post-merge look for #409, then open the follow-up lanes CI-A291-TIMINGS-01, A291-STRUCTURE-INDEX-01, the `_digest` hardening and INV-12 reconciliation.
+4. Claim-gate v2 implementation (WIP `feat/2026-09-24-claimgate-v2`) is STOPPED for an integration-design consult (item 90).
+5. **The R6-1 level/night confound gates the first REGISTERED night.** The proposed rule is unratified and goes to the cold gate or Ed.
+6. Headline redesign: AP-5M v5 draft (52) plus A291 contract v5, then the E2 council.
+7. Calibration-night draft (50): the desk smoke needs an MLX environment.
+8. TIER-01 branch `feat/2026-09-24-tier01-install` awaits its gates.
+9. B0 is HALTED (item 81).
 
 **▶▶ INTERACTIVE 02a24110 (Fable, Ed present) — ≈04:00–04:35 PDT 09-24; NOTHING ARMED:** Ed's 22:19 PDT 09-23 E1–E4 email was missed by two activations; rulings, the search-by-sender fix in the relaunch prompt, Ed's batch answers (E1 ids+hashes only; O-21 YES; E8 required checks on main) and D-184 (four-model council for major changes, usage the only limit) are in [record 01](docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md) and directive issues #405/#406. Claude Code CLI symlink moved to 2.1.281 at 04:12; Codex config is `gpt-6-sol`. **RESIDENT 7370d0fb (launched 03:46 on the older in-memory CLI): at the next slice boundary commit, push, and exit so the watchdog spawns the successor on 2.1.281 (`--model opus`).** Ed has left the machine; every decision he could be asked was asked and answered in this session; no email to Ed asks any of E1–E4 or O-21 again. **HOLD LIFTED (D-184 addendum):** the four-model council decides experiment-design changes (block two, shakedown, registration text, AP-5M adoption); Ed gets an after-the-fact summary, never a question; owner-only = hardware, sudo, notice NO, claim publication. **FAN OUT AFTER THE RESET (Ed, 04:40 PDT 09-24, verbatim: "usage is low, but usage on this acc and codex resets in the next few hours so after that reset do whatever you can to fan out and accelerate the results"):** until the Claude-account and Codex usage windows reset (Ed: within a few hours of 04:40), work lean; from the reset onward, maximal fan-out (multi-Sol seats, Astra, Opus corps, Workflow fleets per the standing authorizations) on the critical path: A3 first model night + B1 meter check (council #407), scored night kind (A280), decoding/runtime (A283), packer (A291 consult), AP-5M adoption (E2 council), estimator (A293).
 

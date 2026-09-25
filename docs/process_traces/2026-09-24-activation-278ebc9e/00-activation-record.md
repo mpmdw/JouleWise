@@ -343,3 +343,10 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - the packet sha is re-pinned to `1d92a428…`;
    - the convene script now validates in the judge worktree before launch (M-2) and anchors code at `c5cbfd9e` (N-1).
    K checks (a) through (c) pass in a fresh judge worktree: every manifest path is tracked, none is ignored, and the validator says PASS. The 98c bench logs were likewise gitignored and are now committed as `.txt`. Run 2 re-convened with a fresh cold seat.
+121. **Cold Fable final pass A291-FINALPASS-01, run 2: MERGE** (ruling 117/20). Items 1–3 were verified by the judge's own execution and items 4–10 were present; 0 BLOCKER. Conditions R-3 (ledger rows 9 and 11) and R-4 (record lines: origin/main at ruling time `7c1c9caf`, merge probe clean, `gen_state --check` rc 0; lane-only diff 3fb98469..S = scored_packer.py 6, test_gen_state.py 9, test_scored_ownership_forgery.py 2, test_scored_packer.py 32) are recorded here. R-5 is recorded too: the R6-1 gate rule is PROPOSED and unratified, and goes to the cold gate or Ed. Then:
+   - the magistrate's terminal review (record 118) rules MERGE;
+   - the PR #409 ledger is 12/12 RUN (local checker and hosted gate-ledger both pass);
+   - **PR #409 was MERGED as `75d04e9e`** with `--match-head-commit c5cbfd9e`;
+   - peer `joulewise-4b` was told #410 is unblocked.
+   The canonical root was fast-forwarded to `75d04e9e`, with no `com.joulewise.night*` label loaded and no such plist on disk. The resident supervisor (started 04:46 09-24) now predates canonical HEAD, so per the relaunch prompt this activation commits, pushes and exits so that a fresh successor is the resident.
+   Post-merge obligations: the row-11 post-merge cross-unit look, and the follow-up lanes CI-A291-TIMINGS-01, A291-STRUCTURE-INDEX-01, `_digest` finalize hardening, INV-12 reconciliation, and the TASK_QUEUE count line.
