@@ -265,3 +265,11 @@
    Each is verified to touch only this activation's trace directory. The gate-ledger checker resolves evidence only in the PR head tree, hence the commits.
    - PR #412's body is updated (12/12 locally, row 12 = `58d9ddc3`). **PR #413 (PR-R)** and **PR #414 (A292)** are opened, each 12/12 locally.
    - Cold confirm WAVE-CONFIRM-01 (packet 31, sha `c4bdec1d`) is running on the exact PR-L and PR-R heads. A292 needs no reconvene per its ruling, since its code tree is unchanged from `e144bf07`.
+88. **Cold confirm WAVE-CONFIRM-01** ([31/20](31-coldgate-packet-confirm/20-coldgate-fable-wave-confirm.md)).
+   - C1: the fixture fix is AFFIRMED, but `58d9ddc3` is NOT CONFIRMED. **BLOCKER-1:** it is unmergeable (an add/add conflict with main on this record file, because PR-L predates #411) and has no hosted check run. The packet omitted the mergeability state, a hygiene defect. The cure is a successor H under C1-a and C1-b.
+   - C2: `e77ec15d` is CONFIRMED, to merge after H.
+   - C3: row 9 is adequate with the judge's added runs. MATERIAL-1: `test_epoch_continuation` and `test_epoch_equivalence_check` were missing from ex-04; the judge ran them, 90 OK.
+   - **C1-a executed:** merging 95521871 into 58d9ddc3 while keeping PR-L's record gives **H = `dc210094`**. The record blob is identical, and C1-b(1) holds.
+   - **C1-b(2) fails as literally written.** Merging main necessarily brings main's own #411 changes (kernel, RUN_STATE, TASK_QUEUE, `tests/test_gen_state.py`) into H relative to `58d9ddc3`. H's non-records diff vs main equals PR-L's code. `gen_state --check` OK.
+   - Per C3's own fallback, the named module set (ex-04's fifteen plus `test_epoch_continuation` and `test_epoch_equivalence_check`) re-runs. Several of those modules exist only with PR-R or A292 present, so they run on wave tree `integ/2026-09-25-wave3` = main + H + PR-R `e77ec15d` + A292 `64dec562`, which merges clean.
+   - C1-b(3)/(4), mergeable and hosted checks green on H, are checked before the merge.
