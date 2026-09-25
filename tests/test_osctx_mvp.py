@@ -1461,5 +1461,54 @@ class DisplayStateTests(unittest.TestCase):
         self.assertEqual(self.run_with({"returncode": 1, "stdout": self.ON}), "unknown")
         self.assertEqual(self.run_with({"returncode": 0, "stdout": "garbage"}), "unknown")
 
+
+class R5RetryHistoryTests(unittest.TestCase):
+    """Audit 6 F14: a failed-then-retried I attempt must fail the R5 cure test."""
+
+    def test_failed_i_attempt_blocks_purpose_based_cure(self):
+        cfg = common.load_config()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            with redirect_stdout(io.StringIO()):
+                runner.main(["--session", "C", "--render-only", str(root)])
+            for stage in ("C1", "P"):
+                for block in common.blocks(cfg, stage):
+                    for arm in block["arms"]:
+                        d = make_cell(root / stage, cfg, stage, block["id"], arm, [1.] * cfg["runs_per_cell"][stage])
+                        for p in d.glob("runs/*/summary_metrics.json"):
+                            x = json.loads(p.read_text())
+                            x["idle_mean_uncertainty"]["median_sample_interval_s"] = .132
+                            x["idle_baseline"]["power_w_mean"] = .5
+                            p.write_text(json.dumps(x))
+                seal_fixture(root / stage, cfg, stage)
+            clean = analyze.analyze_directory(root, cfg, write_outputs=False)
+            self.assertTrue(clean["interpretation"]["purpose_based_cure_test_met"])
+            self.assertEqual(clean["interpretation"]["C1_I_invalid_attempts"], 0)
+            block = common.blocks(cfg, "C1")[1]
+            actions = json.loads((root / "C1" / "command_sequence.json").read_text())["actions"]
+            for arm in block["arms"]:
+                action = next(x for x in actions if x["block"] == block["id"] and x["context"] == arm)
+                d = Path(action["cell_dir"])
+                (d / "discarded.json").write_text(json.dumps({"reason": "bundle_invalid" if arm == "I" else "block_peer_discard",
+                                                             "block": block["id"], "attempt": 1}))
+                if arm == "I":
+                    p = next(d.glob("runs/*/summary_metrics.json"))
+                    x = json.loads(p.read_text())
+                    x["status"] = "failed"
+                    x["window_evidence_precheck"]["idle_subtracted_request"]["clock_anchor_bound_s"] = .1
+                    p.write_text(json.dumps(x))
+                d2 = make_cell(root / "C1", cfg, "C1", block["id"], arm, [1.], attempt=2)
+                p = next(d2.glob("runs/*/summary_metrics.json"))
+                x = json.loads(p.read_text())
+                x["idle_mean_uncertainty"]["median_sample_interval_s"] = .132
+                x["idle_baseline"]["power_w_mean"] = .5
+                p.write_text(json.dumps(x))
+            seal_fixture(root / "C1", cfg, "C1")
+            report = analyze.analyze_directory(root, cfg, write_outputs=False)
+            self.assertEqual(report["invalid_cell_counts_by_stage"]["C1"]["I"], 1)
+            self.assertIs(report["interpretation"]["all_I_runs_valid"], False)
+            self.assertIs(report["interpretation"]["purpose_based_cure_test_met"], False)
+            self.assertEqual(report["interpretation"]["C1_I_invalid_attempts"], 1)
+
 if __name__ == "__main__":
     unittest.main()

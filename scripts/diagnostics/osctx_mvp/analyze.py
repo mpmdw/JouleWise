@@ -956,6 +956,16 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
         for stage in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S", "C1", "P")}
     decision["invalid_cell_counts"] = {arm: sum(counts[arm] for counts in decision["invalid_cell_counts_by_stage"].values())
                                        for arm in ("D", "I", "SH", "B")}
+    # Audit 6 F14: R5 "every I production run valid" is judged over the whole
+    # ledgered C1 attempt history (discarded attempts included), not only the
+    # accepted cells.
+    interpretation = decision.get("interpretation")
+    if isinstance(interpretation, dict) and "all_I_runs_valid" in interpretation:
+        c1_invalid_i = decision["invalid_cell_counts_by_stage"]["C1"]["I"]
+        interpretation["C1_I_invalid_attempts"] = c1_invalid_i
+        if c1_invalid_i:
+            interpretation["all_I_runs_valid"] = False
+            interpretation["purpose_based_cure_test_met"] = False
     report = {"cells": rows, "errors": errors, "discarded": discarded,
               **decision, "stage_references": references}
     if write_outputs:
