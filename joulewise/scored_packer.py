@@ -67,34 +67,65 @@ def _predictions(registration, predicted):
     _need(expected is None or digest == expected, "inv_08", "prediction digest")
 
 
-def _live_index(roster):
+def _ownership(registration, roster):
+    """Rebuild the ownership view from the roster on every call."""
+    blocks = {}
+    for block in roster["blocks"]:
+        blocks.setdefault(block["block_id"], block)
+    placement = {}
+    for p in roster["placements"]:
+        placement.setdefault((p["block_id"], p["envelope_index"]), p)
     live = {}
     for envelope in roster["envelopes"]:
         for bid in envelope["blocks"]:
-            _need(bid not in live, "inv_11", f"duplicate live placement {bid}")
-            live[bid] = next(p for p in roster["placements"]
-                             if p["block_id"] == bid and p["envelope_index"] == envelope["index"])
-    return live
+            block = blocks[bid]
+            for item in dict.fromkeys(block["items"]):
+                live.setdefault((block["model"], item), []).append((bid, envelope["index"]))
+    term = {}
+    for entry in roster["terminal_refusals"]:
+        term.setdefault((entry["model"], entry["item_id"]), []).append(entry)
+    return dict(blocks=blocks, live=live, term=term, placement=placement)
+
+
+def _conserve(registration, view):
+    for model in registration.role_to_model_id.values():
+        for item in _items(registration):
+            live = view["live"].get((model, item), [])
+            term = view["term"].get((model, item), [])
+            counts = (len(live), len(term))
+            held = counts == (1, 0) and not view["blocks"][live[0][0]]["superseded"] and not any(
+                view["term"].get((model, x)) for x in view["blocks"][live[0][0]]["items"])
+            _need(held or counts == (0, 1), "inv_11", "item conservation")
+
+
+def _formation(registration, roster):
+    arm = registration.arm
+    size = registration.block_size[arm]
+    expected = []
+    for level in LEVELS:
+        items = registration.item_ids_by_level[str(level)]
+        for model in _roles(registration):
+            for k, start in enumerate(range(0, len(items), size)):
+                expected.append((f"{model}:{arm}:{level}:{k}", model, level, items[start:start + size]))
+    parents = [(b["block_id"], b["model"], b["level"], b["items"]) for b in roster["blocks"] if b["parent_block_id"] is None]
+    _need(parents == expected, "inv_10", "parent formation and order")
 
 
 def _parent_facts(registration, roster, captured_window_keys=None):
-    blocks = roster["blocks"]
-    live = _live_index(roster)
-    terminal = {(t["model"], t["item_id"]) for t in roster["terminal_refusals"]}
+    view = _ownership(registration, roster)
     facts = []
-    for parent in blocks:
+    for parent in view["blocks"].values():
         if parent["parent_block_id"] is not None:
             continue
         model = parent["model"]
         indices = []
         n_terminal = 0
         for item in parent["items"]:
-            if (model, item) in terminal:
+            if view["term"].get((model, item)):
                 n_terminal += 1
                 continue
-            owner = parent if not parent["superseded"] else next(
-                (b for b in blocks if b["parent_block_id"] == parent["block_id"] and b["items"] == [item]), None)
-            placement = live.get(owner["block_id"]) if owner is not None else None
+            live = view["live"].get((model, item), [])
+            placement = view["placement"].get(live[0]) if len(live) == 1 else None
             if placement is not None and (captured_window_keys is None or
                     (placement["block_id"], placement["attempt"]) in captured_window_keys):
                 indices.append(placement["envelope_index"])
@@ -190,6 +221,8 @@ def _structure(registration, roster):
             parents = {(bm[p["block_id"]]["parent_block_id"] or p["block_id"]) for p in selected if bm[p["block_id"]]["level"] == level}
             _need(len(parents) <= 1, "inv_24", "parent spread")
     _need(all(type(p["attempt"]) is int and p["attempt"] >= 0 and p["stage"] in RETRY_STAGES[:-1] and type(p["reserved_s"]) in (int, float) and math.isfinite(p["reserved_s"]) and p["reserved_s"] > 0 and type(p["envelope_index"]) is int and 0 <= p["envelope_index"] < len(roster["envelopes"]) for p in placements), "inv_52", "placement domain")
+    _conserve(registration, _ownership(registration, roster))
+    _formation(registration, roster)
     loaded = [e["index"] for e in roster["envelopes"] if e["kind"] == "loaded"]
     _need([ev["envelope_index"] for ev in roster["events"]] == loaded[:len(roster["events"])], "report_order", "reported prefix")
     culprits = {}
@@ -222,17 +255,6 @@ def _structure(registration, roster):
         _need(rescheduled <= len(event["block_ids"]) - 1, "inv_35c", "reschedule count")
         _need(not rescheduled or any_culprit, "reschedule_without_culprit", "reschedule cause")
         _need(all(type(i) is int and 0 <= i < len(placements) and placements[i]["envelope_index"] > ix for i in event["placements"]), "inv_18", "event placement target")
-    terminal = roster["terminal_refusals"]
-    live_counts = {}
-    for envelope in roster["envelopes"]:
-        for bid in envelope["blocks"]:
-            live_counts[bid] = live_counts.get(bid, 0) + 1
-    for model in models:
-        for item in _items(registration):
-            terminal_count = sum(t["model"] == model and t["item_id"] == item for t in terminal)
-            live_blocks = [b for b in roster["blocks"] if b["model"] == model and item in b["items"] and live_counts.get(b["block_id"], 0)]
-            live_count = sum(not b["superseded"] and not any(t["model"] == model and t["item_id"] == item and t["block_id"] == b["block_id"] for t in terminal) and live_counts[b["block_id"]] == 1 for b in live_blocks)
-            _need((live_count == 1) != (terminal_count == 1 and not live_blocks), "inv_11", "item conservation")
     children = {}
     for block in roster["blocks"]:
         parent_id = block["parent_block_id"]
