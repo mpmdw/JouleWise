@@ -65,3 +65,11 @@
    - **New science BLOCKER (P-0 / S3):** the Opus seat found, and the subagent verified, that the ruled CG-1 omits the shared accuracy sampling error from its SE. The desk false-admission estimate is ≈0.39–0.81 per level at zero true effect. The proposal is an explicitly labelled CG-1 amendment.
    - Also verified: the runtime at HEAD is greedy at temperature 0, so the A283 seeded sampler is a hard prerequisite. A 600 s slot fits only thinking-off. The floor extractor drops cap-hit blocks, which must not be reused for scored nulls.
    - Cold-gate packet [13](13-coldgate-packet-jc/00-charge.md), sha `64c97214dc175f281d098e580cc91dbcb4d259536153680e28b155d5710dfc0f`.
+33. PR-0 delta re-audit ([12/06](12-pr0/06-delta-reaudit.md)).
+   - Round-1 kills were confounded by the custody digest assertion. Neutralised, 7 of 10 new mutations survive: the same signature as B-1.
+   - **D-1:** the golden's admit path is mocked, and production `_claim_issuance_gate` raises KeyError on real v1 artifacts (`paper_custody.py:632`).
+   - **D-2:** WR-6 versus refresh isolation is a deadlock.
+   - **The standing escalation trigger fired (two same-signature rounds), so there is no round 2.** Escalation cold gate [14](14-coldgate-packet-pr0esc/00-charge.md), sha `fd67f554cf0b4afa080735fb81301594c5d4929729fec4b4dfeef2ac31f985ec`, with magistrate proposal S: mechanical branch coverage plus an operand-collapse sweep with zero survivors, plus D-1 and D-2 via a split golden.
+34. A292 harness seat 20 (rc 0, NEEDS_RULING). It drafted 54 named RED tests, every one red only for the missing module, and an oracle proven live. It is committed as `51522bee` on `test/2026-09-25-a292-reducer-harness`.
+   - **Magistrate errata readings of the cold ruling's own text:** F1, the enumerated nine window keys govern over the "8-key" count typo; F2, the CONSUMED witness patches to 0.30, and 3/10 flips at equality, replacing the impossible 0.25 expectation.
+   - F3, completing the A291 R-column real-entry matrix, is carried by continuation seat 27.
