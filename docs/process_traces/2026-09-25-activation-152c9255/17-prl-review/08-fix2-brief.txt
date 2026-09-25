@@ -1,0 +1,10 @@
+SEAT: Sol 6.0 — FIX ROUND 2 for PR-L, magistrate activation 152c9255. Worktree branch feat/2026-09-25-acc-launch-context at 9500545f. Do NOT commit.
+WRITE_SCOPE: ["tests/test_night_gate.py", "tests/test_run_night.py", "scripts/run_night.py", "joulewise/arm_retry.py", "joulewise/night_agent_install.py", "tests/test_arm_retry.py", "tests/test_night_agent_install.py"]
+Delta re-audit report: /tmp/152c9255/prl-delta-report.md (read fully; its probe script /tmp/152c9255/prl-reaudit-opus/probe_ex.py may be reused as a reference).
+DISPOSITIONS (closure shapes dictated):
+- SF1 ACCEPT all three parts exactly: (1) in the exempt branch of the new T0 test, assertNotEqual("GO", receipt.verdict); (2) an UNMOCKED case writing a real authorization file under Path(tmp).resolve(): correct sha -> R16 skipped; "0"*64 sha -> measurement_root_outside_custody; (3) in test_run_night's pack fixture, a post-cutoff T0 plan whose measurement_root is inside the (patched) custody root refuses rehearsal_roots_not_disjoint end to end through the exemption branch.
+- N-a ACCEPT: remove the duplicate elapsed_s/bound_s (drop the suffix in _probe_cadence's detail, keep the worker's prefix fields).
+- N-b ACCEPT: supervisor-timeout detail carries custody_elapsed_s and timeout_s.
+- N-c ACCEPT: register the new installer refusal string(s) in arm_retry.INSTALLER_REFUSALS with the other N6 strings; test.
+- N-d ACCEPT: the S2 refusal names the label whose launch_context differs.
+VERIFY: tests.test_night_gate tests.test_run_night tests.test_arm_retry tests.test_night_agent_install tests.test_run_night_probe_cadence tests.test_evidence_arm_sequence; python3 scripts/gen_state.py --check. Report exact tails. Never the full discovery suite; never background tasks; never sudo/launchctl/real powermetrics; never touch /Users/edr/code/JouleWise or /Users/edr/night-custody.

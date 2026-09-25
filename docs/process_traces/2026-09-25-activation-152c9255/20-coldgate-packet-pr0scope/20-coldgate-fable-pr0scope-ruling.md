@@ -1,0 +1,89 @@
+# Cold Fable gate ruling — PR0-SCOPE-01 (packet 20/pr0scope)
+
+Judge: Claude Fable 5.1, fresh single session, worktree `JouleWise-wt-coldgate-152c9255-pr0scope` at `f28ec0e9`, 2026-09-25 07:01–07:20 PDT (clock-read). Foreground only; no subagents or background tasks; no sudo/launchctl/powermetrics/systemsetup/pmset; canonical root, custody roots and LaunchAgents untouched. Probes ran in a fresh clone `/tmp/152c9255-cg/pr0scope` at `576f3989` (branch `test/2026-09-25-claimgate-pr0-golden`; diff vs `c034a56f` touches only the four WRITE_SCOPE paths, no `joulewise/` change). No tracked file other than this ruling was written.
+
+## 0. Disclosure and trust anchors
+
+Auto-loaded before any action of mine: `~/.claude/CLAUDE.md`, the worktree `CLAUDE.md`, and the memory index `MEMORY.md` (truncated). None was requested; none is used below. No `CLAUDE.local.md`, run state, queue, council log, run report, memory file or out-of-packet trace file was read.
+
+| Item | Expected | Observed | Method |
+|---|---|---|---|
+| Validator, first run (deliberate typo `…5d82`) | REFUSE | `result: REFUSE`, `reason: charter_trusted_observed_mismatch`, rc=2 | `scripts/validate_gate_packet.py` as charged |
+| Validator, second run (`…5d81`) | PASS | `result: PASS`, rc=0, 4/4 exhibit digests `expected == observed` | same script |
+| Charter sha256 | `099de884…5d81` | `099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81` | `shasum -a 256` |
+| Packet sha256 | `38e42d3c…94ef` | `38e42d3c517938b554e4911f92ac4c0c9d11afb5c4305ed9eefb5b4ecf2794ef` | `shasum -a 256` |
+
+## 1. Packet hygiene (charter §6)
+
+- **H-1 (MATERIAL, affects Q2).** `ex-04` (ii) says "for each checked-in valid artifact". No checked-in artifact validates. The two tracked verdict files (`docs/paper/fill-rehearsal/dominance-*-gamma-claim-verdicts.json`) early-return at `artifact.py:989-995` with `unrecognized key(s): _synthetic_scalars`, and with that key stripped they carry 27 errors (invalid canonical ID, fake hashes, `n<2` nulls; golden field `validator_errors_without_synthetic_scalars`, re-run by me). The only validator-clean artifacts in the capture are builder-constructed: `_gate_fixture()[0]` (`capture…:460-478`, errors `[]`, re-run) and `minimal_artifact()` (`capture…:352`, golden `window_engine.minimal_v1_artifact.validator_errors == []`). Ruled base in Q2.
+- **H-2 (MATERIAL, affects Q2).** `ex-04` (i) says `_claim_issuance_gate` "(with R-4's allowlisted unreachable arcs)". `UNREACHABLE_ARCS` (`claimgate_golden_sweep.py:31-38`) has no `_claim_issuance_gate` entry and the function is not in `_coverage_functions()` (`:47-58`); the parenthetical refers to nothing. Cure: R-6's `EQUIVALENT_MUTANTS` with a named proof class (Q2).
+- **H-3 (MATERIAL, affects Q2).** "every function in `multiplicity.py` that the claim path calls" is not enumerable: neither `evaluate_claim` nor `_claim_issuance_gate` calls any of them; `adjust_p_values` is reached from `validate_claim_verdicts` (`artifact.py:3105, :3227`) and `analyze_claims` (`__init__.py:1347, :1489`); `holm_adjust`/`benjamini_hochberg_adjust` only through it. Ruled list in Q2.
+- **H-4 (NIT).** Operator tally: comparison flips are 39 (LtE→Lt 17, Lt→LtE 12, Gt→GtE 8, GtE→Gt 2), not 37, and 7 `max`/`min` collapses are omitted; the table sums to 840 only with those.
+- **H-5 (NIT).** The charge calls this "the third same-signature round". The failed round is the first under PR0-ESC-01's R-1..R-7; its survivor signature matches rounds one and two of the earlier design. Charter §9 applies either way: what may be licensed is a redesign, not a same-shape round.
+- Otherwise neutral: (B) is stated with its rejection reason labelled as argument; the seat report is complete; the "weakened nothing" claim is verified (`EQUIVALENT_MUTANTS` has exactly the one ruled entry `claims.py:386`, `UNREACHABLE_ARCS` six entries each with a proof, `:31-44`).
+
+## 2. Verified facts (at `576f3989`)
+
+1. **Breakdown reproduced from ex-01's raw list.** 840 survivors parse; mapped by AST function ranges: `validate_claim_verdicts` 770, `_validated_family` 15, `evaluate_claim` 12, `_claim_issuance_gate` 11, `adjust_p_values` 10, `_validated_threshold` 8, `_resolve_contrast_floor` 6, `benjamini_hochberg_adjust` 5, `evaluate_session` 2, `ordered_reason_codes` 1. `validate_claim_verdicts` spans `artifact.py:981-3482` = 2,502 lines. R-4 `UNREACHABLE_ARCS`/coverage claim not re-run (see §7).
+2. **Sweep re-executed in two subsets** (same script, `_TARGETS` filtered in a /tmp driver): non-validator targets 178 mutants, 107 killed, 1 listed-equivalent, **70 unlisted survivors** (list identical to ex-01's non-validator entries), 74 s; validator only 934 mutants, 164 killed, **770 unlisted survivors**, 441 s. Totals 1,112 / 271 / 1 / 840 = ex-01 exactly.
+3. **Validator shape.** Error-accumulating (302 `errors.append` sites, only two early returns, `return errors` at `:3482`); per-call cost on a clean artifact 0.2 ms, so a 2,000-case corpus adds ≈0.4 s per `capture()` and ≈2 min to the 934-mutant validator sweep. Single-field corruptions of the clean gate-fixture artifact produce distinct error lists (probed: drop `engine`, NaN estimate, non-bool `rejected`).
+4. **Gated survivors are reachable-kill or provable.** Sites read: `claims.py:225,303,340,343,370-373,385`; `multiplicity.py:24-43,93,105-114,137-160`; `__init__.py:408,457,464`; `paper_custody.py:620-649`; `epoch_equivalence_check.py:480,510`. Each is either a boundary/refusal branch the golden never exercises (rows below) or a guard already proven redundant (`claims.py:385` `numeric_estimate is not None`, same proof as `UNREACHABLE_ARCS` `claims:evaluate_claim:385:right`). `_claim_issuance_gate:632-649` is reachable only under the shim scenario (`_issuance_gate()`, `capture…:481-506`); the real v1 wire raises `KeyError` at `:632` (golden `transitions…real_v1_wire.pre.direct_call`).
+5. Focused suite not re-run; ex-03 V3 (623 s, one failure = the mutation test) is consistent with facts 2 and 3.
+
+## 3. Q1 — Is zero survivors over `validate_claim_verdicts` achievable in one more round? **REJECT as a one-round gate; AFFIRM ex-04's structural argument, with the base corrected (H-1).**
+
+Deciding evidence: facts 1–3.
+
+- The argument "one crafted invalid input per rejection branch" is verified in mechanism (fact 3) and in magnitude (770 of 934 mutants, of which 361 `if`→False and 400 operand deletions inside 302 append sites).
+- Zero is not reachable in one round because the gap is not only rows but proofs: after a generated corpus kills the input-shaped branches, the residue is `and`-operand deletions of type guards and disjuncts that no well-formed corruption distinguishes, each needing an individual equivalence proof. Sizing that residue requires running the corpus first, so "zero in one round" is a fourth same-signature failure with a different number. Charter §9 forbids licensing it without justification; none exists.
+- Cost if attempted anyway: one seat round plus a proof round over an unknown residue (my estimate from the operator mix: 100–300 entries), each proof a reviewable claim; versus the corpus alone at ≈1 day of seat work, ≈2 min of sweep time, and a disclosed residual. Ruled: corpus now, completeness later (Q2 (iii)).
+- Standing rule (charter §9): PR0-ESC-01 R-6's verdict on this round (FAIL, 840 unlisted) stands as issued. Q2 issues a new acceptance for a new round; it does not convert that FAIL.
+
+## 4. Q2 — Scope. **Rule (A), AMENDED; (B) REJECTED.**
+
+(B) rejected: the 70 gated survivors sit exactly in the functions CG-4 edits (`evaluate_claim`, `_claim_issuance_gate`, `_resolve_contrast_floor`, `evaluate_session`) and are killable in one round (fact 4); disclosing them would leave the golden blind to boundary changes CG-4 is likeliest to make.
+
+**(A)(i) Gated set — exact.** `_TARGETS` splits into `_GATED_TARGETS` = `{"joulewise/analysis_engine/claims.py": None, "joulewise/analysis_engine/multiplicity.py": None, "joulewise/analysis_engine/__init__.py": {"_resolve_contrast_floor"}, "joulewise/paper_custody.py": {"_claim_issuance_gate"}, "scripts/epoch_equivalence_check.py": {"evaluate_session"}}` and `_RESIDUAL_TARGETS` = `{"joulewise/analysis_engine/artifact.py": {"validate_claim_verdicts"}}`. `None` means every function in the file, as the script already does (`:112` scope test). Acceptance on the gated set: zero unlisted survivors. `EQUIVALENT_MUTANTS` entries are allowed in exactly two proof classes, each entry stating its class: `equivalent:` (a one-line semantic proof) and `v1-wire-unreachable:` (only for `paper_custody.py:632-649` sites, text "reachable only under the shim scenario; the v1 wire raises KeyError at :632 before this site; re-examine under lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01"), and a `v1-wire-unreachable` entry is admissible only if the shim rows below also fail to kill it.
+
+**Rows that kill the 70 (executable; a row that does not kill is replaced by an `equivalent:` entry citing the row tried):**
+- `claims.py` 13: `claim_matrix.ordered_reason_codes.unknown_code` = `ordered_reason_codes(["not_a_code"])` recorded as `{"raised": "ValueError"}` (225). Rows `floor_metadata_keys_as_list` (`floor_metadata` = the four key names as a list) and `floor_metadata_extra_key` (`{**valid_metadata, "extra": 1}`) (303). `floor_none` (`floor_gate_j: None`) and `base_reason_not_resolvable` (`base_reason_codes` = one member of `_NOT_RESOLVABLE`) (340). `equivalence_present_below_floor` (a valid `equivalence` mapping, estimate 0.5, floor 1.0) (343). `metrology_lower_zero`, `metrology_upper_zero`, `decision_lower_zero`, `decision_upper_zero`, `decision_lower_zero_metrology_clear`, `decision_upper_zero_metrology_clear` (370, 371, 373). `385:And_delete_1@7` → `equivalent:` entry, proof as `UNREACHABLE_ARCS` 385.
+- `multiplicity.py` 38: new section `claim_matrix.multiplicity`, direct calls to `adjust_p_values` recording `{"result": …}` or `{"raised": <type>}`: `holm_valid` `{a:.01,b:.04,c:.03}` m=3 alpha .05; `bh_valid` same p, q .05; `bh_clamp` `{a:.6,b:.7}` m=2 q .05; `exploratory_valid`; `holm_at_threshold` `{a:.05}` m=1 alpha .05; `bh_at_threshold` `{a:.05}` m=1 q .05; `unsupported_method`; `holm_with_q`; `bh_with_alpha`; `exploratory_with_alpha`; `m_zero`; `m_bool`; `m_mismatch` (3 p for m=2); `p_values_not_mapping`; `contrast_id_empty`; `contrast_id_not_str`; `p_str`; `p_bool`; `p_above_one`; `p_nan`; `p_negative`; `threshold_zero`; `threshold_above_one`; `threshold_str`; `threshold_bool`; `threshold_nan`.
+- `__init__.py` 6: `window_engine` rows `request_window_class_mismatch` and `request_condition_mismatch` via `request_factory` (408); `binding_seam_differs` (a `request_factory` row whose `inputs.floor_binding` metric differs from the request) (457); `malformed_cells` (`floor_artifact.cells` containing a non-mapping entry and a mapping with integer `cell_id`) (464).
+- `paper_custody.py` 11: shim-scenario rows under `transitions…real_v1_wire.post.variants`: `non_confirmatory`, `legacy_evidence_class`, `not_l2_ready` (`multiplicity.rejected` false), `floor_metadata_key_missing`, `subject_missing` (subjects contains an unknown id → `{"raised": "PaperCustodyRefusal", "code": "paper_custody_binding_mismatch"}`), `empty_subjects`; and the `invalid_verdict_wire` scenario additionally records its direct-call result (620).
+- `epoch_equivalence_check.py` 2: `epoch_replays` rows `at_minimum_m` (`len(retained) == MINIMUM_RETAINED_M`) and `bracket_at_edge` (`spread == bracket_screen_s`).
+
+**(A)(ii) Corruption corpus — exact.** Function `_validator_corpus()` in `capture_claim_replay_golden.py`. Bases: exactly `("gate_fixture", _gate_fixture()[0])` and `("minimal", minimal_artifact())`; the golden asserts `validate_claim_verdicts(base) == []` for both. Enumerate every leaf (scalar, empty list, empty mapping) by depth-first traversal in sorted key order and list index order, address = JSON pointer. Operators, applied per leaf in this fixed order and skipped where marked: `drop` (delete the key or list element), `null`, `wrong_type` (str→0, int/float→"x", bool→"true", list→{}, mapping→[]), `nan` (numbers only), `sign_flip` (numbers only, skip 0), `off_by_one` (numbers: +1; strings: append "x"), `empty` (str→"", list→[], mapping→{}), `swap_enum` (strings only, →"__not_an_enum__"). No random seed: the corpus is a pure function of the bases and this list; record `spec_version: 1` and `case_count`. Expected ≈2,000 cases; the actual count is whatever enumeration yields. Record `invariant.validator_corpus = {"bases": {...}, "spec_version": 1, "case_count": N, "cases": {"<base>/<pointer>/<op>": <error list>}}`. Rejected from the proposal: "seeded" (an RNG adds nothing and costs reproducibility); "about 2,000" as a target (the count is derived, not chosen).
+
+**Residual reporting — exact.** `--mutate` prints two tables: `gated: mutants= killed= listed-equivalent= unlisted-survivors=` and `residual(validate_claim_verdicts): mutants= killed= survivors= kill-rate=`. The sweep writes `tests/golden/claimgate_v1_validator_residual.json` = `{"mutants": n, "killed": k, "survivors": [sorted keys]}`. `test_golden_mutation_sweep_zero_unlisted_survivors` asserts on the gated set only. New `test_validator_residual_ratchet` asserts the observed survivor set is a subset of the tracked file (may shrink, never grow) and the counts match. The PR body carries both tables verbatim and the sentence "validate_claim_verdicts mutation completeness is a disclosed residual, not a gate; owner VALIDATOR-MUTATION-COMPLETENESS-01."
+
+**(A)(iii) Owner — exact.** Lane `VALIDATOR-MUTATION-COMPLETENESS-01`, registered by the magistrate in the same bookkeeping commit as the PR-0 merge, text: "Drive `tests/golden/claimgate_v1_validator_residual.json` survivors to zero: extend the corruption operators (cross-field: id/hash recomputation, n-dependent nulls, floor row linkage) and add `equivalent:` proofs for guard deletions. Acceptance: residual file `survivors == []`, then move `artifact.py` into `_GATED_TARGETS`. Not on the CG-4 critical path; entry point after CG-4 lands." 
+
+## 5. Q3 — "PR-0 acceptance v2 (final text)", one round
+
+Seat WRITE_SCOPE: `scripts/capture_claim_replay_golden.py`, `scripts/claimgate_golden_sweep.py`, `tests/test_claim_replay_golden.py`, `tests/golden/`. No `joulewise/` change. PR0-ESC-01 R-1, R-2, R-3, R-4, R-5, R-7 stand unchanged. R-6 is replaced by:
+
+**R-6v2.** (a) `_GATED_TARGETS` / `_RESIDUAL_TARGETS` as ruled in Q2 (A)(i); operators unchanged. (b) The Q2 rows and `claim_matrix.multiplicity` section added; `EQUIVALENT_MUTANTS` entries carry a proof class (`equivalent:` or `v1-wire-unreachable:`) and, for `equivalent:`, the row that was tried. (c) `_validator_corpus()` as ruled in Q2 (A)(ii), recorded under `invariant.validator_corpus`. (d) Residual file, two-table output, `test_validator_residual_ratchet` as ruled. (e) `test_golden_mutation_sweep_zero_unlisted_survivors` fails listing every unlisted gated survivor.
+
+**Acceptance (all mechanical):** (1) `python3 -B -m unittest tests.test_claim_replay_golden -v` green; (2) `python3 -B scripts/claimgate_golden_sweep.py --coverage` → `unlisted uncovered arcs: []`; (3) `--mutate` → gated `unlisted-survivors=0`, residual table printed and tracked; (4) two regenerations byte-identical, blob repinned; (5) `git diff --stat origin/main` touches only the WRITE_SCOPE; (6) the PR body carries the coverage table, both mutation tables, every `EQUIVALENT_MUTANTS` entry with its class and proof, and the residual sentence; (7) the delta re-audit may refute `UNREACHABLE_ARCS`/`EQUIVALENT_MUTANTS` entries, a mis-derived `pre`/`post`, or a corpus operator not applied as specified; it may not add rows by enumeration. If the gated set fails again, the next spend is a consult, not a round.
+
+**Plain summary for Ed (3 lines).** The snapshot test now catches every code change in the small decision functions the rewrite will edit, with a short proof-carrying exception list; that is the gate. The 2,500-line input validator gets a generated set of about two thousand deliberately broken inputs so most of its checks are pinned too, and the checks still not pinned are listed in the PR as known, owned, and to be closed later. Nothing is armed; no measurement is affected.
+
+## 6. Severity ledger
+
+| # | Tier | Finding | Ruled cure |
+|---|---|---|---|
+| 1 | BLOCKER | Third same-signature failure; zero-over-validator is not a one-round gate (fact 2, Q1) | Q2 re-scope; R-6v2 |
+| 2 | MATERIAL | Proposal's corpus base "checked-in valid artifact" does not exist (H-1) | (A)(ii) bases |
+| 3 | MATERIAL | "R-4's allowlisted unreachable arcs" for `_claim_issuance_gate` refers to nothing (H-2) | `v1-wire-unreachable:` proof class |
+| 4 | MATERIAL | Multiplicity function list not enumerable (H-3) | whole-file gated target |
+| 5 | MATERIAL | "Seeded" generator would make the corpus RNG-dependent | deterministic enumeration, `spec_version` |
+| 6 | MATERIAL | Residual had no test-visible form; PR-body text is not a ratchet | tracked residual file + ratchet test |
+| 7 | NIT | Operator tally off by two, max/min omitted (H-4); "third round" wording (H-5) | none |
+
+Disagreements with the labelled disposition: (A)(i) function list (replaced by an exact target map); (A)(ii) base, seed and count (replaced); (A)(ii) "PR body only" residual (tracked file + ratchet added); parenthetical on R-4 arcs (void). Everything else in (A) is affirmed; (B) rejected as the magistrate proposed.
+
+## 7. NOT EXECUTED
+
+- `--coverage` re-run and the focused unit suite: not executed (ex-03 V1/V3 accepted as reported; consistent with my sweep reproduction).
+- The corpus itself and the 70 rows: not prototyped beyond fact 3's three corruptions and fact 4's site reads; residual size after the corpus is an estimate.
+- No refuter output was visible (charter §5).

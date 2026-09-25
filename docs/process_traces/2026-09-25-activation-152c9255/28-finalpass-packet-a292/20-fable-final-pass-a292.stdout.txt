@@ -1,0 +1,2 @@
+Ruling written (17 KB, under the 24 KB cap) at `docs/process_traces/2026-09-25-activation-152c9255/28-finalpass-packet-a292/20-fable-final-pass-a292.md`; A1–A4 AFFIRM, A5 FIX-FIRST (records-only G6(iv) custody copy of the sweep and differential scripts, exact text F1) then MERGE without reconvening; one MATERIAL, no BLOCKER; differential NOT EXECUTED (600 s cap, killed), covered by ex-11/ex-12 on an unchanged code tree.
+rc=0

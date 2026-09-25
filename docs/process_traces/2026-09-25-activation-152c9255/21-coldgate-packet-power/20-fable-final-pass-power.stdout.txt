@@ -1,0 +1,2 @@
+Ruling written (19.4 KB, only file touched): W1 AFFIRM census with replacement text (counts 355–1009 not derivable at HEAD, importer only draws 64/128, AP:31 amendment label), W2 ADOPT min-df addendum with mint-anchored ν_proj and k−1 fallback (Welch hot at census, 0.080/0.063 on 2/6 generators), W3 REJECT FPC (16–92 % false admission under superpopulation truth) plus population-wording addendum, W4 SESOI 0.30 and TOST null wording; no REFUSE.
+rc=0

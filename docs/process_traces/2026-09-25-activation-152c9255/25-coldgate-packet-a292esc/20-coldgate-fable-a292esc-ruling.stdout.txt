@@ -1,0 +1,2 @@
+Ruling written (16 KB, only file touched): Z1 AFFIRM the generator with ruled spec G1–G6; Z2 AFFIRM 1e12 J with a different clause adding `INT_MAX = 2**53` after three uncovered crash inputs were found; Z3 texts issued; no BLOCKER.
+rc=0

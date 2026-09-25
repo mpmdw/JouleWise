@@ -1,0 +1,2 @@
+Ruling written to `docs/process_traces/2026-09-25-activation-152c9255/29-coldgate-packet-pr0f1/20-coldgate-fable-pr0f1-ruling.md` (15 KB): validator PASS on the true charter sha; Q1 REJECT (the mutant is uncovered, not masked by D-1, and three more pre-632 survivors exist at `:626`); Q2 REJECT both the proposal and the wait alternative, ruled amendment A1 adds three prototyped real-wire rows that kill all four and lists the eight ≥632 sites.
+rc=0
