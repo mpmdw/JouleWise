@@ -1,0 +1,14 @@
+{
+  "states": ["A", "U", "S"],
+  "contexts": {"D": null, "I": "Interactive", "B": "Background"},
+  "order": ["D", "I", "B", "I", "D", "B", "D", "I", "B"],
+  "segments": {"idle_seconds": 30, "cpu_iterations": 20000000, "cpu_repeats": 5, "gpu_dimension": 4096, "gpu_matmuls": 40, "gpu_warmups": 1, "gpu_repeats": 5, "lm_warmups": 1, "lm_repeats": 3, "lm_max_tokens": 128},
+  "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+  "prompt": "Write a long story about a lighthouse keeper.",
+  "sampler_interval_ms": 100,
+  "timeout_seconds": 900,
+  "hid_idle_seconds": 600,
+  "hid_poll_seconds": 15,
+  "census_interval_seconds": 20,
+  "thresholds": {"materiality_lower": 0.97, "materiality_upper": 1.03, "background_cpu_ratio": 1.5, "interactive_cadence_ms": 130, "non_os_cpu_percent": 20}
+}
