@@ -79,6 +79,52 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(stale["update_age_s"], 181)
         self.assertTrue(stale["probe_error"])
 
+    def test_any_runner_failure_is_a_recorded_probe_error_never_a_pass(self):
+        # A site's runner may raise its own error type (night_gate.ProbeError
+        # is a RuntimeError); every site must still see a probe error.
+        for error in (night_gate.ProbeError("runner"), FileNotFoundError("/usr/sbin/ioreg"),
+                      RuntimeError("runner")):
+            with self.subTest(error=type(error).__name__):
+                def runner(argv, error=error):
+                    raise error
+                observation, stdout = battery_float.observe(phase="arm_check", runner=runner,
+                                                            wall_time_s=UPDATE + 1)
+                self.assertTrue(observation["probe_error"])
+                self.assertFalse(observation["passed"])
+                self.assertEqual(stdout, b"")
+                with self.assertRaises(battery_float.ProbeError):
+                    battery_float.require_pass(observation)
+        mismatched, _ = battery_float.observe(
+            phase="t0", wall_time_s=UPDATE + 1,
+            runner=lambda argv: subprocess.CompletedProcess(("/bin/echo",), 0, raw(), b""))
+        self.assertTrue(mismatched["probe_error"])
+
+    def test_record_carries_the_ruled_schema_fields(self):
+        observation, _ = battery_float.observe(
+            phase="slot_pre", raw_path="raw/battery_float.pre.ioreg", session_id="s", slot="d01",
+            attempt_id="s-d01", wall_time_s=UPDATE + 38,
+            runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw(), b""))
+        ruled = {
+            "schema", "policy_id", "limit_ma", "max_update_age_s", "phase", "plan_id", "session_id",
+            "slot", "attempt_id", "wall_time_s", "monotonic_before_ns", "monotonic_after_ns", "argv",
+            "exit_code", "timed_out", "stderr", "raw_stdout_sha256", "raw_path", "object_count",
+            "property_lines", "external_connected_raw", "is_charging_raw", "instant_amperage_raw",
+            "update_time_raw", "external_connected", "is_charging", "instant_amperage_ma",
+            "update_time_s", "update_age_s", "amperage_ma", "voltage_mv", "temperature_raw",
+            "fully_charged", "current_capacity_pct", "apple_raw_current_capacity_mah",
+            "apple_raw_max_capacity_mah", "passed", "reasons",
+        }
+        self.assertLessEqual(ruled, set(observation))
+        self.assertEqual(set(observation) - ruled, {"probe_error"})
+        self.assertEqual((observation["schema"], observation["policy_id"], observation["limit_ma"],
+                          observation["max_update_age_s"]), ("joulewise.battery_float.v1", "bfg-01", 200, 180))
+        self.assertEqual(observation["update_age_s"], 38)
+        self.assertEqual(observation["apple_raw_current_capacity_mah"], 7591)
+        self.assertEqual(observation["apple_raw_max_capacity_mah"], 7591)
+        self.assertTrue(observation["passed"])
+        self.assertEqual(observation["argv"], ["/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery"])
+        self.assertEqual(battery_float.PROBE_TIMEOUT_S, 10)
+
 
 class GateTests(unittest.TestCase):
     def evaluate(self, source, *, dynamic=False):

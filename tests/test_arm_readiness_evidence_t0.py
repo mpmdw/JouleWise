@@ -737,6 +737,12 @@ def _probe_result(argv, cwd, exit_code=0, stdout="", stderr=""):
     return t0._ProbeResult(tuple(argv), str(Path(cwd).resolve()), exit_code, stdout, stderr)
 
 
+def _float_ioreg(name="float.ioreg") -> str:
+    """The real float capture with a fresh `UpdateTime` (tests/fixtures/battery_float)."""
+    text = (Path(__file__).parent / "fixtures/battery_float" / name).read_text()
+    return text.replace('"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}', 1)
+
+
 def passing_probe(argv, *, cwd):
     command = tuple(argv)
     joined = " ".join(command)
@@ -763,6 +769,8 @@ def passing_probe(argv, *, cwd):
         return _probe_result(command, cwd, stdout="Now drawing from 'AC Power'\n")
     if command[-2:] == ("-g", "custom"):
         return _probe_result(command, cwd, stdout=" lowpowermode 0\n")
+    if command == t0._battery_float.IOREG_BATTERY_ARGV:
+        return _probe_result(command, cwd, stdout=_float_ioreg())
     if "SPPowerDataType" in command:
         return _probe_result(
             command,
@@ -2839,6 +2847,51 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
                 finally:
                     temporary.cleanup()
+
+    def test_power_row_refuses_charging_and_stale_battery_and_records_float(self) -> None:
+        # Final texts v1.1 §5.3 item 5: the t0 power row's own ioreg probe.
+        stale = (Path(__file__).parent / "fixtures/battery_float/float.ioreg").read_text()
+        cases = (
+            ("charging", _float_ioreg("charging-synthetic-from-real.ioreg"), "battery not at float"),
+            ("stale", stale, "battery float probe error: .*UpdateTime stale"),
+        )
+        for label, stdout, detail in cases:
+            with self.subTest(case=label):
+                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+                try:
+                    def probe(argv, *, cwd, stdout=stdout):
+                        if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
+                            return _probe_result(argv, cwd, stdout=stdout)
+                        return passing_probe(argv, cwd=cwd)
+                    with author_environment(repository, probe=probe), self.assertRaises(
+                        T0EvidenceAuthoringError
+                    ) as caught:
+                        author_arm_readiness_evidence_t0(pack, custody)
+                    self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
+                    self.assertRegex(str(caught.exception), detail)
+                    self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+                finally:
+                    temporary.cleanup()
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        seen = []
+        def recording_probe(argv, *, cwd):
+            seen.append(tuple(argv))
+            return passing_probe(argv, cwd=cwd)
+        with author_environment(repository, probe=recording_probe):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertIn(t0._battery_float.IOREG_BATTERY_ARGV, seen)
+        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {t0._battery_float.IOREG_BATTERY_ARGV: 10})
+        source = json.loads(
+            (custody / pack.name / t0._SOURCE_DIRECTORY / "t0-power-path.json").read_text()
+        )
+        observation = source["derivation"]["battery_float"]
+        self.assertEqual(observation["phase"], "t0_power_row")
+        self.assertTrue(observation["passed"])
+        self.assertIn(
+            list(t0._battery_float.IOREG_BATTERY_ARGV),
+            [probe["argv"] for probe in source["probes"]],
+        )
 
     def test_existing_namespace_is_append_only_boot_bound_and_tamper_evident(self) -> None:
         temporary, repository, pack, custody, _context, inputs = make_t0_fixture()

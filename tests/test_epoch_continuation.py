@@ -251,6 +251,22 @@ class EpochContinuationTests(unittest.TestCase):
         self.assertIn("slots.d12.b_fiducial_s_required_for_valid_row", error)
         self.assertFalse(self.out.exists())
 
+    def test_revision_five_session_is_gated_on_battery_float_like_the_issuer(self):
+        # Lead ruling R1: r7 (25F84) can continue into a 25G83/v3 session, so
+        # the continuation carries the issuer's battery-float gate (A-R5b).
+        for mode, status in (("charging", "battery_float_confounded"),
+                             ("missing", "battery_float_evidence_missing")):
+            with self.subTest(mode=mode):
+                self.fixture = build_derivation_ledger(
+                    self.root / f"battery-{mode}",
+                    [Slot("0.025", battery_mode=mode)] + [Slot("0.025")] * 11,
+                )
+                rc, out, error = self.prepare()
+                self.assertEqual(rc, 3)
+                self.assertEqual(out, "")
+                self.assertIn(status, error)
+                self.assertFalse(self.out.exists())
+
     def test_candidate_recipe_marker_pin_and_check(self):
         payload = self.candidate()
         self.assertTrue(payload["candidate_not_issued"])

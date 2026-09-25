@@ -37,6 +37,7 @@ def _census_clean_tempdir(**kwargs):
 from joulewise import evidence_night as entry
 from joulewise import corecaptured_loop
 from joulewise import night_gate
+from tests import battery_float_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -404,7 +405,7 @@ class PrepareTests(unittest.TestCase):
         def probes(argv, **kwargs):
             if Path(str(argv[0])).name == "pgrep":
                 return subprocess.CompletedProcess(argv, 1, "", "")
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
 
         daemon = ("/System/Library/Frameworks/CoreServices.framework/Versions/A/"
                   "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd", 341, 0.998)
@@ -468,7 +469,7 @@ class PrepareTests(unittest.TestCase):
         def probes(argv, **kwargs):
             if Path(str(argv[0])).name == "pgrep":
                 return subprocess.CompletedProcess(argv, 1, "", "")
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
 
         def sampler_died():
             raise RuntimeError("top died")
@@ -510,7 +511,7 @@ class PrepareTests(unittest.TestCase):
         def probes(argv, **kwargs):
             if Path(str(argv[0])).name == "pgrep":
                 return subprocess.CompletedProcess(argv, 1, "", "")
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
         absent = dict(jobs=[], plists=[], listing=dict(exit_code=0))
         with patch.object(entry, "night_agents", return_value=absent, create=True):
             entry.check(candidate=state["staging"], canonical=state["measurement_root"],
@@ -2567,6 +2568,8 @@ class LifecycleTests(unittest.TestCase):
                 self.assertNotIn("publishing", phases)
                 self.assertTrue(self.plan.is_file())
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if battery_float_fixture.answer(argv):
+                return battery_float_fixture.answer(argv)
             return subprocess.CompletedProcess(argv, 2, "", "fixture probe refusal")
         self.vetoed()
         self.notice_fixture()
@@ -2649,6 +2652,8 @@ class LifecycleTests(unittest.TestCase):
         def runner(argv, **kwargs):
             if argv == list(entry.DIRECTIVES_ARGV):
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if battery_float_fixture.answer(argv):
+                return battery_float_fixture.answer(argv)
             self.assertNotIn("--uninstall", argv, "earlier baseline must not enter recovery")
             if "--launchd-probe" in argv:
                 (self.custody / "night_probe_receipt.json").write_text("fixture receipt")
@@ -3081,7 +3086,7 @@ class LifecycleCompositionTests(unittest.TestCase):
             if tuple(argv) == night_gate.AGENT_CENSUS_ARGV:
                 return subprocess.CompletedProcess(argv, 1, "", "")
             self.assertNotIn(entry.CANONICAL, list(map(str, argv)))
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
         def builder(root):
             # Installer's real shell still dispatches its actual module. Only
             # its host process census is injected, as in the arm-sequence
@@ -3095,8 +3100,10 @@ args=sys.argv[1:]
 if args[:3]==['-B','-m','joulewise.night_agent_install']:
     sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
     from joulewise import night_agent_install
+    from tests import battery_float_fixture
     from unittest.mock import patch
-    with patch.object(night_agent_install,'probe_process_census'):
+    with patch.object(night_agent_install,'probe_process_census'), \\
+            patch.object(night_agent_install,'BATTERY_PROBE_RUNNER',battery_float_fixture.runner()):
         raise SystemExit(night_agent_install.main(args[3:]))
 os.execv(sys.executable,[sys.executable,*args])
 """)
@@ -3146,7 +3153,7 @@ os.execv(sys.executable,[sys.executable,*args])
                     # tests. No chain, sampler, courier or real launchd runs.
                     fake.directive(label, "bootstrap", probe_receipt=receipt,
                                    receipt_path=str(custody / "night_probe_receipt.pending.json"))
-                return entry.probe_command(argv, **kwargs)
+                return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
             installed = entry.publish_install(candidate=stage, notice_accepted="gmail-fixture-id",
                 launchctl_bin=str(fake.executable), runner=real_installer, magistrate=base / "magistrate",
                 lock_verifier=lambda root: None)

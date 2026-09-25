@@ -2209,10 +2209,6 @@ class PrepareCandidateTest(unittest.TestCase):
         self.assert_refused(code, "registration names 1 sessions, not the pre-registered 3")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class BatteryFloatRevisionFiveTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -2227,24 +2223,44 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
         cls.registration.write_text(text, encoding="utf-8")
         cls.registration_sha = hashlib.sha256(cls.registration.read_bytes()).hexdigest()
         values = [Slot(v, native_frames=True) for v in _grid(12, "0.0300", "0.0010")]
+        # The confounded window's B values are 0.999 s, far above
+        # PLATEAU_INSET_S: if the issuer ever read one as a member, issuance
+        # would refuse, so a clean issue proves they were never read.
+        unreadable = [Slot("0.9990", native_frames=True)] * 11
         cls.fixture = build_derivation_ledger(
-            cls.root / "confounded", [Slot("0.0300", battery_mode="charging", native_frames=True), *values[1:]],
+            cls.root / "confounded",
+            [Slot("0.9990", battery_mode="charging", native_frames=True), *unreadable],
             session_id="W1", second_session=("W1-prime", values), third_session=("W2", values),
         )
         cls.clean_fixture = build_derivation_ledger(
             cls.root / "clean", values, session_id="W1",
             second_session=("W1-prime", values), third_session=("W2", values),
         )
+        cls.missing_fixture = build_derivation_ledger(
+            cls.root / "missing",
+            [Slot("0.9990", battery_mode="missing", native_frames=True), *unreadable],
+            session_id="W1", second_session=("W1-prime", values), third_session=("W2", values),
+        )
+        cls.two_non_pass_fixture = build_derivation_ledger(
+            cls.root / "two-non-pass",
+            [Slot("0.9990", battery_mode="charging", native_frames=True), *unreadable],
+            session_id="W1",
+            second_session=("W1-prime", [Slot("0.0300", battery_mode="missing", native_frames=True), *values[1:]]),
+            third_session=("W2", values),
+        )
 
-    def prepare(self, fixture: dict[str, Path], *extra: str) -> tuple[int, str, Path]:
+    def prepare(self, fixture: dict[str, Path], *extra: str,
+                registration: tuple[str, ...] = ("W1-prime", "W2")) -> tuple[int, str, Path]:
         out = self.root / f"candidate-{self._testMethodName}.json"
+        out.unlink(missing_ok=True)
         argv = [
             "prepare-candidate", "--ledger", str(fixture["ledger"]),
             "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
             "--preregistration", str(self.registration),
             "--preregistration-sha256", self.registration_sha,
             "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
-            "--registration-session-id", "W1-prime", "--registration-session-id", "W2",
+            *(item for session_id in registration
+              for item in ("--registration-session-id", session_id)),
             "--d125-ruling", D125_REFERENCE, "--out", str(out), *extra,
         ]
         stream = io.StringIO()
@@ -2263,6 +2279,46 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
                          "battery_float_confounded")
         self.assertNotIn("b_fiducial_s", json.dumps(payload["derivation_notes"]["battery_confounded_sessions"]))
         self.assertEqual(payload["registered_generation_row"]["registration_session_ids"][0], "W1-prime")
+        [disclosed] = payload["derivation_notes"]["battery_confounded_sessions"]
+        [failing] = disclosed["slots"]
+        self.assertEqual(failing["slot"], "d01")
+        self.assertEqual(failing["attempt_id"], "W1-d01")
+        self.assertRegex(failing["pre_raw_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(failing["post_raw_sha256"], r"^[0-9a-f]{64}$")
+        self.assertTrue(any("IsCharging" in reason for reason in failing["reasons"]))
+
+    def test_confounded_session_named_as_registration_session_refuses(self) -> None:
+        code, printed, out = self.prepare(self.fixture, registration=("W1", "W1-prime", "W2"))
+        self.assertEqual(code, 3)
+        self.assertIn("computed non-pass session omitted: W1", printed)
+        self.assertFalse(out.exists())
+        code, printed, out = self.prepare(
+            self.fixture, "--battery-confounded-session-id", "W1",
+            registration=("W1", "W1-prime", "W2"),
+        )
+        self.assertEqual(code, 3)
+        self.assertIn("session named both", printed)
+        self.assertFalse(out.exists())
+
+    def test_evidence_missing_is_excluded_identically_and_a_second_non_pass_window_stops(self) -> None:
+        code, printed, out = self.prepare(
+            self.missing_fixture, "--battery-confounded-session-id", "W1",
+        )
+        self.assertEqual(code, 0, printed)
+        [disclosed] = json.loads(out.read_text())["derivation_notes"]["battery_confounded_sessions"]
+        self.assertEqual(disclosed["status"], "battery_float_evidence_missing")
+        code, printed, out = self.prepare(self.missing_fixture)
+        self.assertEqual(code, 3)
+        self.assertIn("computed non-pass session omitted: W1", printed)
+        code, printed, out = self.prepare(
+            self.two_non_pass_fixture,
+            "--battery-confounded-session-id", "W1",
+            "--battery-confounded-session-id", "W1-prime",
+            registration=("W2",),
+        )
+        self.assertEqual(code, 3)
+        self.assertIn("more than one battery-float non-pass window", printed)
+        self.assertFalse(out.exists())
 
     def test_omission_clean_declaration_and_overlap_refuse(self) -> None:
         code, printed, _ = self.prepare(self.fixture)
@@ -2297,3 +2353,7 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
             )
             verdict = issuer.battery_float.validate_window(snapshot.bracket_session_by_id["W1"])
             self.assertEqual(verdict["status"], "battery_float_evidence_missing")
+
+
+if __name__ == "__main__":
+    unittest.main()
