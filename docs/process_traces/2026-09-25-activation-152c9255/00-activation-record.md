@@ -234,3 +234,12 @@
 79. PR-R one-lens conformance audit ([15/06](15-prr-review/06-final-conformance-lens.md)): **CONFORMS**. F2, F3 and the ratified A-R5a-1 texts are applied exactly, and the erratum is the only, meaning-preserving deviation: a sealed copy passes and greps 0. PR-R now waits only on PR #412 merging first, a records-only head commit, and a cold confirm of the exact heads.
 80. **After-the-fact summary email to Ed** (Gmail `1a0d992604fa5446`, D-184), in plain language and asking nothing. It covers the calibration cure with the required R14 line, the CG-1 accuracy-term correction, the census sample size (E4), and the reducer status.
 81. **Cold gate PR0-F1-01** ([29/20](29-coldgate-packet-pr0f1/20-coldgate-fable-pr0f1-ruling.md)) **REJECTS the magistrate's masking claim**. The mutant is uncovered, not masked by D-1, and three more pre-632 survivors exist at `:626`. It also rejects waiting for D-1. It rules amendment A1: three prototyped real-wire golden rows that kill all four, with the eight sites at or after `:632` listed. Seat 78 (Sol) implements A1 and verifies only the four targeted mutants; the lead runs the full `--certify` after the integration suite, to avoid load-induced flakes. Scorecard: a Fable cold gate corrected a magistrate (Opus) proposal on primary evidence.
+82. **A292 cold Fable final pass A292-FINALPASS-01** ([28/20](28-finalpass-packet-a292/20-fable-final-pass-a292.md)).
+   - A1–A4 AFFIRM. A conservation probe over four nights found no path to a wrong count or a silently dropped item.
+   - A5 FIX-FIRST, records-only: F1, the G6(iv) custody copy of the sweep and differential scripts, was applied at the bench as `f6e6d162`. Both digests match the ruling (`554720d3…`, `4f22e9a0…`), and `git diff e144bf07 HEAD -- joulewise tests` is empty. **A292 is MERGE-authorized without reconvening**, provided no `joulewise/` or `tests/` change.
+   - **Merge-wave plan (row 9):**
+     1. The full suite at `d48bd18f` (PR-L `1bdbca1d` + PR-R `8cd9e831`) is running.
+     2. When it completes, integration tree 2 is built from the final heads (PR-L `99495ba9`, PR-R `2bbcc779`, A292 `f6e6d162`) plus main, and the focused modules for every post-`d48bd18f` delta are re-run there: PR-L's new worker-cadence test; PR-R's issuer, prereg and registration modules; A292's reducer, packer and fuzz; gen_state.
+     3. Records-only commits carry the evidence into each head.
+     4. A cold confirm of the exact PR-L and PR-R heads follows. A292 needs none, per its ruling.
+     5. Merge order: PR-L, then PR-R, then A292.
