@@ -101,6 +101,13 @@ class CheckGateLedgerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "gate-ledger: 4/4 RUN; 8/8 N/A (light tier)\n")
 
+    def test_indented_light_tier_line_reports_full_twelve_rows(self) -> None:
+        # An indented `Tier: light` is not a declaration; the body is checked
+        # as full and the success line must say so (TIER01-GATE-01 F3).
+        result = self.run_checker(" Tier: light\n\n" + self.body())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
     def test_light_na_is_refused_in_full_or_missing_tier(self) -> None:
         for tier in ("full", None):
             for key in CHECKER_MODULE.LIGHT_NA:

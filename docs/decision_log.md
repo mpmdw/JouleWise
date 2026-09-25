@@ -11141,6 +11141,8 @@ the kernel has no `retired` status word), and
 hand on branch protection, not any code. Until Ed makes it required,
 `gate-ledger` stays ADVISORY, exactly as D-170 item 2 specifies.
 
+**Dated addendum (2026-09-25):** `ED-BRANCH-PROTECTION-E1-01` was applied on 2026-09-24 (interactive record 02a24110 §7); `gate-ledger` is a required status check on `main`. `ED-D118-NA-TIER-E2-01` is answered by rule TIER-01 (COUNCIL-407-01 §G5, Ed's issue #415), installed in `docs/orchestration.md` §5.
+
 **Item 4 is closed only in part, and the remainder now has an owner.** The
 executed-evidence duty itself is installed and tested. What D-170 deferred —
 the packet-input-list amendment, which needs a charter digest and Ed's

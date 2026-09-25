@@ -227,7 +227,8 @@ def main(argv: list[str] | None = None) -> int:
     if defects:
         print("\n".join(defects))
         return 1
-    if any(line.strip() == "Tier: light" for line in body.splitlines()):
+    # Same Tier predicate as check(): only an unindented `Tier:` line declares.
+    if [line.strip() for line in body.splitlines() if line.startswith("Tier:")] == ["Tier: light"]:
         print("gate-ledger: 4/4 RUN; 8/8 N/A (light tier)")
     else:
         print("gate-ledger: 12/12 RUN")

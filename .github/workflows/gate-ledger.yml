@@ -1,8 +1,9 @@
 name: gate-ledger
 
 # ==================================================================
-# REQUIRED GATE-LEDGER CHECK on main since Ed's 2026-09-24 branch-protection
-# update (T26 cold gate item 2, D-170; interactive record 02a24110 §7).
+# REQUIRED GATE-LEDGER CHECK on main since 2026-09-24, made required in
+# Ed's interactive session (T26 cold gate item 2, D-170; interactive
+# record 02a24110 §7).
 # Every fresh PR is red by construction because the template seeds an
 # unresolved Tier choice and twelve NOT-RUN rows; that deliberate nudge
 # keeps an incomplete ledger visible.
@@ -25,7 +26,8 @@ name: gate-ledger
 # rounds) and widening ci.yml's untyped `pull_request` trigger would
 # re-run the whole ~17-minute matrix on every body edit.
 #
-# Ed made this a required status check on main on 2026-09-24; the
+# Made a required status check on main on 2026-09-24 in Ed's interactive
+# session (record 02a24110 §7); the
 # D-072 self-merge condition also requires it green on the final head.
 # ==================================================================
 
