@@ -1,0 +1,91 @@
+import importlib.util
+import os
+import json
+import pickle
+from pathlib import Path
+import sys
+import time
+REPO=Path('/Users/edr/code/wt-152c9255-a292m')
+TMP=Path('/tmp/152c9255/a292-round2-sol')
+sys.path.insert(0,str(REPO))
+sys.path.insert(0,str(TMP))
+import sweep
+from tests.test_scored_reduce import _inputs
+from tests.scored_reduce_checker import check_reduction
+import joulewise.scored_packer as sp
+import joulewise.scored_reduce as baseline
+import joulewise.scored_registration as sr
+class FakeRegistration:
+    def __setstate__(self,state): pass
+class CaseUnpickler(pickle.Unpickler):
+    def find_class(self,module,name):
+        if module=="joulewise.scored_registration" and name=="Registration": return FakeRegistration
+        return super().find_class(module,name)
+
+range_start=int(os.environ.get('A292_START','0'))
+range_stop=int(os.environ.get('A292_STOP','200'))
+results=[json.loads(x) for x in (TMP/'results.jsonl').read_text().splitlines()]
+survivors=[r for r in results if r['result']=='pass']
+modules={}
+for r in survivors:
+    ident=r['id']
+    d=sweep.DEFS[int(ident[1:])-1]
+    path=TMP/f'{range_start}_{ident}.py'
+    path.write_text(sweep.mutant_source(d))
+    spec=importlib.util.spec_from_file_location(f'joulewise.scored_reduce_{ident}',path)
+    mod=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    modules[ident]=mod
+
+outcome={r['id']:dict(result='SURVIVED',nights=0) for r in survivors}
+result_path=TMP/f"diff_results_{range_start}_{range_stop}.json"
+start=time.time()
+with (TMP/'cases.pkl').open('rb') as f:
+    for position in range(range_stop):
+        seed,index,case=CaseUnpickler(f).load()
+        if position<range_start: continue
+        g,roster,p=case.g,case.rosters[-1],case.p
+        reg=sr.Registration.from_mapping(g)
+        sp.verify_executed_roster(reg,roster,p)
+        rows,windows=_inputs(g,reg,roster,optional=True,seed=seed*1000+index)
+        target=baseline.reduce(reg,roster,p,rows,windows)
+        errors=check_reduction(g,roster,p,rows,windows,target)
+        if errors: raise AssertionError(('baseline_A',seed,index,errors[:2]))
+        live=[w for w in windows if w['block_id'] in roster['envelopes'][w['envelope_index']]['blocks']]
+        dropped=next(w for w in windows if w is live[(seed+index)%len(live)])
+        variant_b=[w for w in windows if w is not dropped]
+        try: baseline.reduce(reg,roster,p,rows,variant_b)
+        except baseline.ReductionRefusal as e:
+            expected_b=(e.code,e.detail)
+            errors=check_reduction(g,roster,p,rows,variant_b,{'refusal_code':e.code,'detail':e.detail})
+            if errors: raise AssertionError(('baseline_B',seed,index,errors[:2]))
+        else: raise AssertionError(('baseline_B_no_refusal',seed,index))
+        for ident,mod in modules.items():
+            record=outcome[ident]
+            if record['result']!='SURVIVED': continue
+            try:
+                candidate=mod.reduce(reg,roster,p,rows,windows)
+                if candidate!=target:
+                    oracle_errors=check_reduction(g,roster,p,rows,windows,candidate)
+                    record.update(result='KILLED',seed=seed,index=index,variant='A',reason='output differs',oracle_errors=oracle_errors[:2])
+                    continue
+            except Exception as e:
+                record.update(result='KILLED',seed=seed,index=index,variant='A',reason=f'{type(e).__name__}: {getattr(e,"code",str(e))}')
+                continue
+            try: mod.reduce(reg,roster,p,rows,variant_b)
+            except mod.ReductionRefusal as e:
+                if (e.code,e.detail)!=expected_b:
+                    record.update(result='KILLED',seed=seed,index=index,variant='B',reason=f'{e.code}: {e.detail}')
+                    continue
+            except Exception as e:
+                record.update(result='KILLED',seed=seed,index=index,variant='B',reason=f'{type(e).__name__}: {str(e)[:100]}')
+                continue
+            else:
+                record.update(result='KILLED',seed=seed,index=index,variant='B',reason='no refusal')
+                continue
+            record['nights']+=1
+        if (position+1)%10==0:
+            result_path.write_text(json.dumps(outcome,indent=2))
+            print('NIGHTS',position+1,'active',sum(v['result']=='SURVIVED' for v in outcome.values()),'elapsed',round(time.time()-start,1),flush=True)
+result_path.write_text(json.dumps(outcome,indent=2))
+print('FINAL',json.dumps(outcome),flush=True)
