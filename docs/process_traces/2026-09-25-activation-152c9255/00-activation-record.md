@@ -201,3 +201,9 @@
    - The paired refuter's BLOCKER (the JSON crash on `prompt_tokens`) is covered by the INT_MAX clause, so no addendum is needed.
    - Fix round 2: harness seat (Sol) first, then the Opus implementation seat.
    - PR-L head is now `99495ba9` (worker-level cadence text test), and its cold Fable final pass PRL-FINALPASS-01 (packet 24, including the T0 question L2) is running.
+72. **PR-L cold Fable final pass PRL-FINALPASS-01 = MERGE** on `99495ba9` ([24/20](24-finalpass-packet-prl/20-fable-final-pass-prl.md)).
+   - L1 AFFIRM: R1, R2, R3, R6 and R16 implemented; D-138 pins unchanged.
+   - **L2 AFFIRMS the magistrate's T0 reading, with rule text R16-a.** It must be recorded in the acceptance rulings before the W1 arm notice is sealed.
+   - L3: 463 tests OK, plus a clean merge check. L4: no BLOCKER or MATERIAL, six NITs.
+   - NIT-1 (the `sudo -n -l` line in the PR body): the harness classifier blocks `sudo -n -l` (known since 09-24), so the PR body cites the execution proof (ex-11: rc 0, 300 frames), which the judge said satisfies R6 in substance.
+   - NIT-2–6 are post-merge follow-ups. NIT-3 (`mkdir -p /Users/edr/night-custody/measurement` before the W1 plan) belongs in the arm procedure.
