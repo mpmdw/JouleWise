@@ -152,7 +152,7 @@ class OwnershipForgeryTests(unittest.TestCase):
 
     def test_checker_exception_is_failure(self):
         g, p, _, witnesses = _named_witnesses()
-        with patch('tests.test_scored_ownership_forgery.check_roster',
+        with patch(__name__ + '.check_roster',
                    side_effect=TypeError('injected checker crash')):
             with self.assertRaisesRegex(CheckerCrash, 'TypeError: injected checker crash'):
                 _checker_rows(g, witnesses['B1'], p)
