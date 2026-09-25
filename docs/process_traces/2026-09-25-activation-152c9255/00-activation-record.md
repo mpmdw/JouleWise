@@ -207,3 +207,9 @@
    - L3: 463 tests OK, plus a clean merge check. L4: no BLOCKER or MATERIAL, six NITs.
    - NIT-1 (the `sudo -n -l` line in the PR body): the harness classifier blocks `sudo -n -l` (known since 09-24), so the PR body cites the execution proof (ex-11: rc 0, 300 frames), which the judge said satisfies R6 in substance.
    - NIT-2–6 are post-merge follow-ups. NIT-3 (`mkdir -p /Users/edr/night-custody/measurement` before the W1 plan) belongs in the arm procedure.
+73. A292 fix round 2:
+   - The harness (Sol seat 66, `a7d88826`) adds the generated one-fault witnesses per G1–G6 and the bound witnesses, RED only on the bounds.
+   - The implementation (Opus seat 67, `241ea65c`) is a four-line diff: `ENERGY_MAX_J = 10**12` and `INT_MAX = 2**53` in `_int`/`_num`. GREEN on 63 fast tests plus all 200 differential nights.
+   - Delta re-audit with the M8 sweep (Sol seat 70) and the lead's bench run of reducer plus packer plus fuzz (71) are running.
+   - PR #412 (PR-L) is opened with ledger rows cited, and CI is running. It merges only after the integration full suite is green.
+   - The PR-R final pass PRR-FINALPASS-01 (packet 26, charge sha `e45e9df3`) is running.
