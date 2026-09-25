@@ -248,3 +248,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - (2) the full discover suite, deferred until after the peer's OSCTX unattended leg to keep CPU quiet;
    - (3) K-run mutation kills m1–m5 (brief 100, Sol, launched now);
    - (4) the forger seat. R4-5(4) requires a family "neither P's nor K's". Only two families are available: Claude (P) and OpenAI/Codex (K, and Astra). That is unsatisfiable as written, so a cold question goes with the final gate packet. The magistrate does not reinterpret it.
+95. R4-5(3) mutation kills (brief 100, Sol, clean; report 100b). The unmutated control passes: 0 escapes and all named outcomes exact. **All five mutants are killed with the judge's reference counts**: m1 45; m2 2 (B1-singles-voided → stale_derived); m3 276; m4 355; m5 as referenced. R4-5(3) PASS.
