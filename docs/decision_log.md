@@ -12172,3 +12172,34 @@ Ed, interactive session 02a24110, ≈04:25 PDT 2026-09-24, verbatim: "new policy
 Binding reading: any major change (process rule, registration, analysis-plan adoption, block design, merge of claim-bearing code) and any important-science judgment convenes all four model families when usage allows: Fable 5.1 (final pass and cold gate), Opus 5.5 (magistrate loop, lenses), Sol 6.0 (execution and consult, `codex-run-v3 --effort high`), Astra 6 (cross-family refuter and consult). Fewer seats only when a usage limit blocks a seat, and the record says which seat was dropped and why. Agreement among models is not itself progress; each seat is there to catch bad science. Record: `docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md` §8.
 
 **Addendum (Ed, 2026-09-24 ≈04:40 PDT, same session):** the 09-23 hold ("wait on major decisions til i get the reads of the new models") is LIFTED. The four-model council decides experiment-design changes (block-two redesign, shakedown design, registration text, analysis-plan adoption) and Ed receives an after-the-fact summary by email, not a question. Only hardware, sudo, a notice NO, and publishing claims remain Ed's. Ed chose this over "keep asking me on major design changes".
+
+## D-126-disposition-25G83-v3-2026-09-25 — D-126 disposition, epoch 25G83 v3, 2026-09-25
+
+**Authority:** council ACCEPTANCE-25G83-02 under the D-184 addendum, cold ruling
+`docs/process_traces/2026-09-25-activation-152c9255/05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md` §5 R4, R5 and R9. This entry is authored after the values were seen and discloses that timing. The canonical registry is `configs/calibration/observation_dispositions.json`; its decision id is `D-126-disposition-25G83-v3-2026-09-25`.
+
+The following valid 2026-09-19 n1/n2 observations were captured under the default-ProcessType launch context (utility QoS, timer coalescing, median ≈ 248 ms); disposed as diagnostic, never a member; authored after the values were seen and disclosed as such. Content ids are derived from the archived primary evidence and manifest byte hashes by `content_id_from_artifact_hashes`:
+
+| Observation | B (s) | Content id |
+|---|---:|---|
+| n1 d01 | 0.041133514338919874 | `08cf2f19ca7d2b1881e9ed426bbf2c4039e1b425e1ba999a5527bcee4e743cb6` |
+| n1 d03 | 0.04200278099548145 | `697ad07383e83bca6e031dd40708595d1f59227fece3c3eb8e6d04c8c2318dca` |
+| n1 d05 | 0.172710636067422 | `e7e313e191bc844b49f4ddb18cbea5e17ca8367faa097f81aa699fc89a2d81a1` |
+| n1 d12 | 0.03255031906139217 | `a1975da884533272159688d260aa034fe7f4ccfb30e4abaa67cde14977bc38fc` |
+| n2 d01 | 0.04103035733376445 | `7bce01d1490e10190958052c770f790a2ea2733c5091c605f2fdc86a09afb1c2` |
+| n2 d03 | 0.04337273381948624 | `ba83eb6f2b3dfb2e72e5cf37fe25df8d3387e70dafc6e8fe384b1f650003a236` |
+| n2 d05 | 0.028250396657612444 | `fc6e8fb3d3d69ef157407f0ecb565e6952e977e84f637c151c1edcfb402cf57f` |
+| n2 d07 | 0.035576770468514644 | `64fc21fb609d5baba98dc686dff12ab803b6294474639551f23fdb0a078257cd` |
+| n2 d09 | 0.03487995875720681 | `45731bb9943b9f29a3f3d6fc2175c7b66ad11987f88de1868fb79fb8f87d1cdb` |
+| n2 d11 | 0.13333095801710004 | `150e6e9b1c0b04a440a2b9b63f858fd92a8f0e4f858b512ab7d627ced71b82a3` |
+| n2 d12 | 0.036897960254235855 | `748018ce72e41600464dcb9f2fddcc466e2e3c0ebfcf6474828d908239c36b7b` |
+
+The 2026-09-23 qpe01 pilot has no calibration observation rows carrying this six-field target epoch in the inspected archive; no qpe01 content id is disposed here. The successor's prior set must carry these eleven content ids and this decision id at its later ledger cutoff. The issuer's A-7 check is the sole new registry consumer.
+
+## D-125 addendum (2026-09-25): Revision 5 screen and ceiling for epoch 25G83/v3
+
+Under ACCEPTANCE-25G83-02 §5 R5(i) and R9, for epoch 25G83/v3 under registration Revision 5, S = max(corpus range quantized to 1e-6 s, 0.010818 s); C = max(predecessor C, successor Q99, S). If C = S, record `zero_headroom` and issue; drift above S still refuses. This changes no historical generation.
+
+## D-126 addendum (2026-09-25): Revision 5 corpus and equivalence for epoch 25G83/v3
+
+Under ACCEPTANCE-25G83-02 §5 R5(c), R5(g), R5(l), R5(m) and R9, for epoch 25G83/v3 under registration Revision 5, the retained corpus floor is 12, with every valid member retained. The old n ≥ 19 floor, calendar-day spacing, screen challenge as issuance veto, and strict S < C are superseded for this registration only. The comparison against the predecessor screen stays diagnostic. Revision 2's equivalence look is not taken. Revision 4 was drafted but never sealed; its fallback tag is `acc-v4-fallback` at `ea10e3c8`.

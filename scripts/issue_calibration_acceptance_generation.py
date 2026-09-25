@@ -10,7 +10,7 @@ that artifact binds; it does not evaluate a trigger observation and does not
 change the D-102 prior-artifact rule. Given `--session-ids`, it additionally
 prints a REGISTRATION DRY RUN: for each named ledger session, its kind, its
 state and whether that state is terminal, how many slots it declared and how
-many are filled, and how many captures are excluded under each named mechanism;
+many are filled and valid, and how many captures are excluded under each named mechanism;
 then how many prior-set prefix rows are pending or unresolved, and whether the
 registration would be admissible. Every field is a count, a state name or a
 mechanism name. The dry run reports no measured value of any kind, because the
@@ -48,19 +48,21 @@ Decision ids appear in the artifact and in refusals: D-102 is the acceptance
 artifact's own contract (how a generation is derived and what may judge it);
 D-109 is the raw-physics and artifact-hash verification the member table rests
 on; D-125 fixes the envelope rule that carries operatives from one generation to
-the next; D-126 fixes the minimum corpus size and the strict screen-below-ceiling
-rule. A TRIGGER OBSERVATION is a later capture whose result would oblige the
+the next; D-126 fixes the minimum corpus size and the historical strict screen-below-ceiling
+rule. Revision 5 permits zero headroom for its exact epoch. A TRIGGER OBSERVATION is a later capture whose result would oblige the
 generation to be re-derived; the candidate lists the conditions, and this tool
 never evaluates one.
 
 `prepare-candidate` REFUSES, printing its reason and writing nothing, when: any
 registration session is not yet terminal; the `--d125-ruling` reference is
-absent; the retained corpus is below the required size (19, or 17 with
-`--ed-ruling`); a prior-set row is pending or unresolved; a valid same-epoch
-observation lies outside the registration; a member's stored bytes disagree with
-its ledger row; the realized degrees of freedom fail the quantile proof; the
-bracket screen is not strictly below the budget ceiling; or two or more retained
-members exceed the predecessor's level screen.
+absent; the retained corpus is below its registered floor; a prior-set row is
+pending or unresolved; an undisposed valid same-epoch observation lies outside the registration;
+a member's stored bytes disagree with its ledger row; or the realized degrees
+of freedom fail the quantile proof. Historical registrations allow only n=17
+with --ed-ruling and retain the strict bracket-screen-below-budget ceiling
+and predecessor screen-challenge refusals. The exact
+25G83/v3 Revision 5 epoch requires sealed launch-context pins, 12 retained
+members, and the registered W1/W2/W3 count-only stops.
 """
 
 from __future__ import annotations
@@ -73,6 +75,7 @@ import json
 import math
 from pathlib import Path
 import re
+import statistics as std_statistics
 import subprocess
 import sys
 from typing import Any, Iterable, Mapping, Sequence
@@ -92,11 +95,13 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,
     PROTOCOL_ID,
     REGISTERED_CORPUS_EXCLUSION_REASONS,
+    REVISION_FIVE_EPOCH,
     SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
     load_calibration_acceptance_bound,
     protocol_sha256,
 )
 from joulewise.calibration_bracketing import _canonical_sha256  # noqa: E402
+from joulewise.powermetrics_fiducial import PLATEAU_INSET_S  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
@@ -110,6 +115,7 @@ from joulewise.uncertainty_evidence import (  # noqa: E402
     CLOCK_ANCHOR_UNRESOLVED,
     CLOCK_METHOD_V3,
 )
+from joulewise.adapters.powermetrics import parse_powermetrics_records  # noqa: E402
 
 
 WATCH_FIELDS = ("os_build", "hardware_model", "powermetrics_sha256", "mlx_version")
@@ -222,11 +228,15 @@ def registration_dry_run(
                             f"session {session_id}: unregistered exclusion "
                             f"mechanism {detail!r}"
                         )
+        valid_count = sum(
+            row.classification_disposition == "valid"
+            for row in session.finalized_slots.values()
+        )
         lines.append(
             f"{session_id}: kind={session.session_kind} state={session.state} "
             f"terminal={'yes' if terminal else 'no'} "
             f"declared={len(session.declared_slots)} "
-            f"filled={len(session.finalized_slots)} "
+            f"filled={len(session.finalized_slots)} valid={valid_count} "
             f"excluded={_excluded_summary(excluded)}"
         )
     unresolved = sum(
@@ -368,6 +378,14 @@ R6_MAXIMUM_PLUS_RANGE_S = Decimal("0.04262208300415633")
 SCREEN_CHALLENGE_MEMBER_LIMIT = 2
 # D-126 cl.2's SUCCESSOR_MINIMUM_CORPUS_SIZE, a corpus-SIZE floor (addendum A-2).
 SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
+REVISION_FIVE_MINIMUM_CORPUS_SIZE = 12
+DISPOSITION_REGISTRY = REPO_ROOT / "configs/calibration/observation_dispositions.json"
+DISPOSITION_DECISION_ID = "D-126-disposition-25G83-v3-2026-09-25"
+DISPOSITION_MECHANISM = (
+    "captured under the default-ProcessType launch context (utility QoS, "
+    "timer coalescing, median ≈ 248 ms); disposed as diagnostic, never a "
+    "member; authored after the values were seen and disclosed as such"
+)
 # The dispositions an ISSUED artifact's prior set may carry (the validator's
 # `allowed_prior_dispositions` for role `issued`).
 PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
@@ -1097,6 +1115,55 @@ def _select_members(
     return members, excluded, comparisons
 
 
+def _registered_dispositions(path: Path | None = None) -> dict[str, str]:
+    """Read the dated, content-addressed A-7 exemptions fail closed."""
+    path = DISPOSITION_REGISTRY if path is None else path
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise PrepareRefusal(f"observation disposition registry unreadable: {error}") from error
+    if not isinstance(rows, list):
+        raise PrepareRefusal("observation disposition registry must be a list")
+    result: dict[str, str] = {}
+    for row in rows:
+        if (not isinstance(row, dict) or set(row) != {
+            "content_id", "disposing_decision_id", "mechanism"
+        } or not isinstance(row["content_id"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", row["content_id"])
+                or not isinstance(row["disposing_decision_id"], str)
+                or row["disposing_decision_id"] != DISPOSITION_DECISION_ID
+                or not isinstance(row["mechanism"], str)
+                or row["mechanism"] != DISPOSITION_MECHANISM
+                or row["content_id"] in result):
+            raise PrepareRefusal("observation disposition registry has an invalid or duplicate row")
+        result[row["content_id"]] = row["disposing_decision_id"]
+    return result
+
+
+def _derivation_frame_cadence(
+    members: Sequence[Mapping[str, Any]], observations: Sequence[LedgerObservation],
+) -> dict[str, float]:
+    """Summarize authenticated native frames of retained derivation members."""
+    by_id = {row.attempt_id: row for row in observations}
+    lengths: list[float] = []
+    for member in members:
+        observation = by_id[member["member_id"]]
+        raw_path = Path(observation.custody_locator) / "raw/powermetrics.plist"
+        try:
+            raw = raw_path.read_bytes()
+        except OSError as error:
+            raise PrepareRefusal(f"member {observation.attempt_id}: native frames unreadable: {error}") from error
+        if hashlib.sha256(raw).hexdigest() != observation.artifact_sha256.get("raw/powermetrics.plist"):
+            raise PrepareRefusal(f"member {observation.attempt_id}: native frames disagree with ledger hash")
+        try:
+            lengths.extend(record.elapsed_ns / 1_000_000_000 for record in parse_powermetrics_records(raw)[1:])
+        except (ValueError, TypeError) as error:
+            raise PrepareRefusal(f"member {observation.attempt_id}: native frames unparseable: {error}") from error
+    if not lengths:
+        raise PrepareRefusal("derivation corpus has no native frames")
+    return {"median_s": std_statistics.median(lengths), "max_s": max(lengths)}
+
+
 def _corpus_statistics(members: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Decimal statistics exactly as r6, at an explicit working precision."""
 
@@ -1147,30 +1214,12 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     # it the successor derivation would settle D-125 implicitly (ruling 46 V7).
     if not args.d125_ruling:
         raise PrepareRefusal("d125_ruling reference absent; refusing to emit (ruling 46 V7)")
-    minimum = args.minimum_corpus_size
-    # The pre-registration names exactly ONE alternative floor, and CG46 A-2
-    # names the same one: "Ed may instead rule in writing that n = 17 is
-    # acceptable".  A ruling reference is therefore not a licence to pick any
-    # number -- it licenses 17 and nothing else, or an n = 3 corpus would issue
-    # behind a one-word string.
-    if minimum != SUCCESSOR_MINIMUM_CORPUS_SIZE:
-        if minimum != RULED_ALTERNATIVE_CORPUS_SIZE:
-            raise PrepareRefusal(
-                f"--minimum-corpus-size {minimum} is not a ruled floor: the only "
-                f"values are {SUCCESSOR_MINIMUM_CORPUS_SIZE} (default) and "
-                f"{RULED_ALTERNATIVE_CORPUS_SIZE} with --ed-ruling "
-                "(pre-registration Stopping; CG46 addendum A-2)"
-            )
-        if not args.ed_ruling:
-            raise PrepareRefusal(
-                f"corpus-size floor departure to {minimum} requires --ed-ruling "
-                f"(D-126 cl.2 SUCCESSOR_MINIMUM_CORPUS_SIZE = {SUCCESSOR_MINIMUM_CORPUS_SIZE})"
-            )
     preregistration = Path(args.preregistration)
     try:
         preregistration_bytes = preregistration.read_bytes()
     except OSError as error:
         raise PrepareRefusal(f"pre-registration unreadable: {error}") from error
+    preregistration_text = preregistration_bytes.decode("utf-8", errors="replace")
     preregistration_sha256 = hashlib.sha256(preregistration_bytes).hexdigest()
     # B-3: the arm materials carry the digest of the text the campaign was armed
     # under.  Without this pin the tool would derive against whatever the file
@@ -1180,9 +1229,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             f"pre-registration sha256 {preregistration_sha256} does not match the "
             f"pinned {args.preregistration_sha256}; not issued"
         )
-    registered_os_build, registered_powermetrics = preregistration_epoch_pins(
-        preregistration_bytes.decode("utf-8", errors="replace")
-    )
+    registered_os_build, registered_powermetrics = preregistration_epoch_pins(preregistration_text)
 
     snapshot = load_calibration_ledger_snapshot(
         args.ledger,
@@ -1225,6 +1272,28 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     if not observations:
         raise PrepareRefusal("registration: its sessions hold no observations")
     target_epoch = dict(observations[0].identity_epoch)
+    revision_five = target_epoch == REVISION_FIVE_EPOCH
+    if revision_five:
+        if predecessor["acceptance_id"] != ACTIVE_ACCEPTANCE_ID:
+            raise PrepareRefusal(
+                f"registration Revision 5 requires r7 predecessor {ACTIVE_ACCEPTANCE_ID}"
+            )
+        if "# Revision 5 (" not in preregistration_text:
+            raise PrepareRefusal("25G83/v3 identity requires registration Revision 5")
+        if re.search(r"<PR-L-MERGE-SHA>|<RENDERED-PLIST-SHA256:[^>]+>", preregistration_text):
+            raise PrepareRefusal("registration Revision 5 launch-context pins are unsealed placeholders")
+        if not re.search(r"template at commit [0-9a-f]{40}\b", preregistration_text) or not re.search(
+            r"rendered-plist digests [0-9a-f]{64}, [0-9a-f]{64}, and [0-9a-f]{64}\b",
+            preregistration_text,
+        ):
+            raise PrepareRefusal("registration Revision 5 launch-context pins are malformed")
+    required_minimum = REVISION_FIVE_MINIMUM_CORPUS_SIZE if revision_five else SUCCESSOR_MINIMUM_CORPUS_SIZE
+    minimum = required_minimum if args.minimum_corpus_size is None else args.minimum_corpus_size
+    if minimum != required_minimum:
+        if revision_five or minimum != RULED_ALTERNATIVE_CORPUS_SIZE:
+            raise PrepareRefusal(f"--minimum-corpus-size {minimum} is not a ruled floor for this epoch; required {required_minimum}")
+        if not args.ed_ruling:
+            raise PrepareRefusal(f"corpus-size floor departure to {minimum} requires --ed-ruling")
     for observation in observations:
         if dict(observation.identity_epoch) != target_epoch:
             raise PrepareRefusal("registration: rows disagree on the identity epoch")
@@ -1232,12 +1301,18 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     # twelve declared slots -- because a corpus assembled from a different
     # schedule is a different experiment, whatever its statistics say.
     distinct_nights = len(set(session_ids))
-    if distinct_nights != PREREGISTERED_NIGHT_COUNT and not args.nights_ruling:
+    permitted_nights = {2, 3} if revision_five else {PREREGISTERED_NIGHT_COUNT}
+    if distinct_nights not in permitted_nights and not args.nights_ruling:
         raise PrepareRefusal(
             f"registration names {distinct_nights} sessions, not the "
-            f"pre-registered {PREREGISTERED_NIGHT_COUNT}; --nights-ruling must "
+            f"pre-registered {sorted(permitted_nights) if revision_five else PREREGISTERED_NIGHT_COUNT}; --nights-ruling must "
             "name a written ruling to depart"
         )
+    if revision_five and list(session_ids) != sorted(
+        session_ids,
+        key=lambda session_id: snapshot.bracket_session_by_id[session_id].capability_sequence,
+    ):
+        raise PrepareRefusal("Revision 5 sessions must be named in W1/W2/W3 ledger order")
     if not args.slot_count_ruling:
         for session_id in session_ids:
             declared = len(snapshot.bracket_session_by_id[session_id].declared_slots)
@@ -1247,6 +1322,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
                     f"pre-registered {PREREGISTERED_SLOTS_PER_NIGHT}; "
                     "--slot-count-ruling must name a written ruling to depart"
                 )
+    if revision_five and len(session_ids) >= 2:
+        w1_valid = sum(
+            row.bracket_session_id == session_ids[0] and row.classification_disposition == "valid"
+            for row in observations
+        )
+        if w1_valid < 6:
+            raise PrepareRefusal(f"W1 futility procedure violation: W2 present with {w1_valid}/12 valid, below 6")
     # B-1: a change to either machine fact VOIDS the registration, so the rows
     # this corpus is built from must carry the identity the campaign was
     # registered under -- read from the text, not from a constant here.
@@ -1270,18 +1352,28 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         observations, Path(args.repo_root), level_screen_threshold
     )
     n = len(members)
+    if revision_five and len(session_ids) == 3:
+        first_two = set(session_ids[:2])
+        valid_first_two = sum(
+            row.bracket_session_id in first_two and row.classification_disposition == "valid"
+            for row in observations
+        )
+        if valid_first_two >= 12:
+            raise PrepareRefusal("W3 was opened despite at least 12 valid observations after W2")
     # Addendum A-7: a valid row carrying the TARGET epoch that belongs to no
     # session of this registration is not silently left out of the corpus --
     # issuance refuses, because absorbing it would enlarge the corpus past the
     # pre-registration and ignoring it would hide a capture the successor's own
     # epoch produced.  Either way it is Ed's call, not the issuer's.
     registration = set(session_ids)
+    dispositions = _registered_dispositions() if revision_five else {}
     foreign = [
         observation.attempt_id
         for observation in snapshot.observations
         if observation.classification_disposition == "valid"
         and observation.bracket_session_id not in registration
         and dict(observation.identity_epoch) == target_epoch
+        and observation.content_id not in dispositions
     ]
     if foreign:
         raise PrepareRefusal(
@@ -1289,6 +1381,11 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             + ", ".join(sorted(foreign))
             + "; not issued (ruling 46 addendum A-7)"
         )
+    excursion_count = sum(Decimal(row["b_fiducial_s"]) > Decimal("0.075") for row in members)
+    if revision_five:
+        over_inset = [row["member_id"] for row in members if Decimal(row["b_fiducial_s"]) > Decimal(str(PLATEAU_INSET_S))]
+        if over_inset:
+            raise PrepareRefusal(f"member B exceeds PLATEAU_INSET_S = {PLATEAU_INSET_S} s: " + ", ".join(over_inset))
     if n < minimum:
         raise PrepareRefusal(
             f"retained corpus n = {n} is below the required floor {minimum}; not issued"
@@ -1296,7 +1393,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
 
     challenged = [row for row in comparisons if row["exceeds_prior_level_screen"]]
     statistics = _corpus_statistics(members)
-    if len(challenged) >= SCREEN_CHALLENGE_MEMBER_LIMIT:
+    if not revision_five and len(challenged) >= SCREEN_CHALLENGE_MEMBER_LIMIT:
         raise PrepareRefusal(
             f"screen challenge: {len(challenged)} retained members exceed "
             f"{level_screen_threshold}; not issued, Ed rules in writing"
@@ -1329,7 +1426,9 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     ceiling = envelope_ceiling(predecessor_ceiling, Decimal(prediction_99))
     # D-125 / D-126 cl.3: the screen must sit STRICTLY below the ceiling, and
     # the refusal is never cured by lowering the screen (the floor binds it).
-    if not screen < ceiling:
+    if revision_five:
+        ceiling = max(ceiling, screen)
+    if not revision_five and not screen < ceiling:
         raise PrepareRefusal(
             "successor_screen_exceeds_budget_ceiling: screen "
             f"{screen} is not strictly below the budget ceiling {ceiling}; "
@@ -1420,6 +1519,19 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         for observation in snapshot.observations
         if observation.content_id is not None
     ]
+    if revision_five:
+        absent_disposed = set(dispositions) - {
+            row["content_id"] for row in prior_observations
+        }
+        if absent_disposed:
+            raise PrepareRefusal(
+                "registered dispositions absent from the successor prior set: "
+                + ", ".join(sorted(absent_disposed))
+            )
+    disposed_prior_ids = sorted({
+        dispositions[row["content_id"]] for row in prior_observations
+        if row["content_id"] in dispositions
+    }) if revision_five else []
     # The production validator recomputes this inventory over the WHOLE prior
     # set, one entry per admissible disposition INCLUDING the zeros, and
     # compares for equality; a count over the registration alone, or with the
@@ -1462,6 +1574,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "predecessor_acceptance_id": predecessor["acceptance_id"],
         "registration_session_ids": list(session_ids),
         "d125_ruling": args.d125_ruling,
+        **({"registration_revision": 5} if revision_five else {}),
     }
     decimal_derivation = {
         "numeric_semantics": "decimal_source_lexemes",
@@ -1529,6 +1642,8 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         },
         "excluded_members": excluded,
         "prior_screen_comparison": comparisons,
+        **({"native_frame_cadence_s": _derivation_frame_cadence(members, observations)} if revision_five else {}),
+        **({"limitation_label": "excursion_limited"} if revision_five and excursion_count >= 2 else {}),
         "rule_outcomes": {
             "d125_ruling": args.d125_ruling,
             "ed_ruling": args.ed_ruling,
@@ -1537,6 +1652,11 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "quantized_range_s": str(quantized_range),
             "screen_floor_bound": floor_bound,
             "screen_rule": screen_rule,
+            **({
+                "headroom_status": "zero_headroom" if ceiling == screen else "positive_headroom",
+                "excursion_member_count": excursion_count,
+                "excursion_label": "excursion_limited" if excursion_count >= 2 else None,
+            } if revision_five else {}),
             "screen_challenge_member_count": len(challenged),
             "screen_challenge_threshold_s": str(level_screen_threshold),
             "new_maximum_exceeds_prior_maximum_plus_range": (
@@ -1616,6 +1736,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             ),
             "epoch_catalog": epoch_catalog,
             "observations": prior_observations,
+            **({"disposing_decision_ids": disposed_prior_ids} if revision_five else {}),
         },
         "decimal_derivation": decimal_derivation,
         "backfill_candidate": {
@@ -1785,11 +1906,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     prepare.add_argument(
-        "--minimum-corpus-size", type=int, default=SUCCESSOR_MINIMUM_CORPUS_SIZE,
+        "--minimum-corpus-size", type=int, default=None,
         help=(
-            f"how many members the retained corpus must hold: "
-            f"{SUCCESSOR_MINIMUM_CORPUS_SIZE} (the ratified floor) or "
-            f"{RULED_ALTERNATIVE_CORPUS_SIZE} with --ed-ruling; no other value"
+            "registered floor: 12 for exact 25G83/v3 Revision 5, "
+            "19 historically, or historical 17 with --ed-ruling"
         ),
     )
     prepare.add_argument(

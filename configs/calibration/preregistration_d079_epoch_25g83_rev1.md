@@ -596,3 +596,51 @@ start-to-start cadence, fixed order, agent-free), the protocol id, the
 membership, exclusion, stopping and analysis rules, V3, the known-conditions
 section, revision 2's equivalence rule and both of its branches. It authorizes
 no window and licenses no measurement.
+
+# Revision 5 (2026-09-25; sealing pending PR-L pins)
+
+**STATUS:** Revision 4 was drafted, never sealed, and is held at fallback tag `acc-v4-fallback` = `ea10e3c8`. Revision 5 is prospective: no W1 capture may be armed until the literal launch-context placeholders below are replaced with verified values and this whole text's digest is pinned in the arm material. The issuer refuses candidate preparation while any placeholder remains.
+
+**Authority:** council ACCEPTANCE-25G83-02 under D-184 **Addendum (Ed, 2026-09-24 ≈04:40 PDT)**, as finally ruled by `docs/process_traces/2026-09-25-activation-152c9255/05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md` §5 R4, R5, R9, R10, R17. This revision amends Revision 2's `## What replaces it`, `## On PASS`, and `## On FAIL` sections, Revision 1's “Stopping.” and dry-run outputs under “Blindness.”, and drops Revision 1's “Screen challenge.” as an issuance veto for this epoch. Wherever Revision 2 names r6 as the acceptance in force, read `d079_calibration_acceptance_v2_n17_r7`; r6 and r7 operatives are identical. Revision 3's chain digest in force remains unchanged.
+
+## Registered epoch and operating condition
+
+The six identity fields are `os_build` = `25G83`, `hardware_model: Mac15,9`, `power_policy: ac_high_power`, `sampling_interval_ms: 100`, `estimator_revision: joint_loss_sublevel_interval_branch_v2`, and `pulse_protocol_id: powermetrics_pulse_fiducial_v3`. The pinned operating condition is captures launched by a launchd agent with `ProcessType=Interactive`, template at commit <PR-L-MERGE-SHA>, rendered-plist digests <RENDERED-PLIST-SHA256:night>, <RENDERED-PLIST-SHA256:deadman>, and <RENDERED-PLIST-SHA256:probe>. Sealing replaces these literals before W1's arm, after PR-L merges; the placeholder count must be 0 before the arm-notice digest is taken; seal the literal tokens without backticks. Launch context sets the sampler cadence; this condition is part of the registered experiment.
+
+## Sample, stops and blindness
+
+W1 and W2 are derivation-kind windows of 12 declared slots each, at least 6 h apart; each has a 600 s settle and 600 s slot start-to-start cadence. W1 is derivation window one. At W1 harvest, the pin-free cadence report reads raw plists before any B value is read; if the median of the per-capture median native frame lengths is above 150 ms, stop: no W2, return to council. Then the count-only dry run runs before any B value is read. If it reports fewer than 6 valid of 12, stop: no W2, return to council. W2 then runs. W3 is permitted only if the count-only dry run after W2 shows fewer than 12 valid, and is another 12-slot window. Every valid resolved member is retained. Retained n ≥ 12 is the issuance floor; 12/13 order-statistic coverage, the floored S and t(0.995,11) support it. The earlier 0.245 s yield reason no longer applies. No B-based exclusion or outcome-driven top-up is permitted. B values are read only after the terminal session. Rules are fixed here before capture. The dry run may report valid count and “median native frame length,” alongside the existing counts, states and exclusion mechanisms; it reports no B value, screen or comparison.
+
+Revision 2's equivalence look is NOT taken for this epoch. Reason: the r7 envelope's ceiling is its July corpus maximum at ≈120 ms frames; B grows with frame length; a 12-draw look cannot distinguish a +6 % regime from an identical one. W1 is derivation window one. There is no PASS continuation branch or FAIL branch for this epoch.
+
+## Disclosed design inputs
+
+The eleven valid 2026-09-19 n1/n2 B values, seen before this revision and disposed as diagnostics under D-126, are (seconds), in capture order: `0.041133514338919874`, `0.04200278099548145`, `0.172710636067422`, `0.03255031906139217`; `0.04103035733376445`, `0.04337273381948624`, `0.028250396657612444`, `0.035576770468514644`, `0.03487995875720681`, `0.13333095801710004`, `0.036897960254235855`. They are never members of the new registration.
+
+The observed native-frame distributions, in the ruling's I/SH/D order (context; files; intervals; median; p95; maximum; fraction >0.25 s; fraction >0.1833 s), are:
+
+| Context | Files | Intervals | Median | p95 | Maximum | >0.25 s | >0.1833 s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| I, session C | 21 | 6155 | 131.6 ms | 134.8 ms | 140.8 ms | 0 | 0 |
+| I, session 2 | 12 | 3510 | 131.6 ms | 134.8 ms | 143.9 ms | 0 | 0 |
+| SH, session C | 18 | 5496 | 121.2 ms | 125.2 ms | 134.1 ms | 0 | 0 |
+| D, session 2, display ON | 3 | 703 | 243.3 ms | 278.6 ms | 296.4 ms | 43.5 % | 83.2 % |
+| D, n1 night 09-19 | 30 | 10308 | 247.9 ms | 274.1 ms | 353.3 ms | 46.4 % | 82.9 % |
+
+## Issuance arithmetic and barriers
+
+The predecessor screen challenge is recorded as a diagnostic, not an issuance veto for this epoch: on an identical instrument it would falsely refuse 16.3 % of the time. Count retained B > 0.075 s. Two or more mark the candidate `excursion_limited`, requiring the estimator lane before a phase-split claim. Any member B > 0.25 s refuses issuance with the `PLATEAU_INSET_S` mechanism named; 0.25 s is that protocol's plateau inset. No B value is excluded. S = max(corpus range quantized to 1e-6 s, 0.010818 s); C = max(predecessor C, successor Q99, S). If C = S, record `zero_headroom` and proceed with issuance; drift above S is refused by the operative bracket.
+
+The physical barriers are pulse interiors, SNR, detection of all 59 pulses, edge coverage, anchor feasibility, pre/post brackets, settle and slot cadence, blindness, and verified Interactive launch context. Calendar-day spacing, n ≥ 19, the predecessor screen challenge, and strict S < C are not physical barriers for this epoch.
+
+## Stale-number audit from record 37, re-keyed to 25G83/v3 at ≈132 ms
+
+| Historical number | Role | Revision 5 disposition | Reason |
+|---|---|---|---|
+| 0.032898493715362 s | r7 preflight level screen | Replace as operative with new corpus maximum quantized to 1e-15 s; retain count above r7 as diagnostic. | The 132 ms operating condition changes B; r7's 120 ms maximum is not this epoch's screen. |
+| 0.009724 s | r7 bracket screen | Replace with S = max(new quantized range, 0.010818 s). | The successor corpus sets its own range; the D-125 floor remains. |
+| 0.010164834757777545 s (≈0.010165 s) | predecessor drift ceiling | Retain as predecessor-C input, then C = max(predecessor C, new Q99, S). | D-125 lineage monotonicity forbids lowering the ceiling. |
+| 0.010818 s | D-125 genesis S floor | Retain. | It is independent of r7 cadence. |
+| `calibration_bracket_max_drift_s` 0.010 s | production policy | Retain as policy until atomic G2-a re-freeze reconciles it with S and C. | It is a separate, conservative bound, not the new S or C. |
+
+The historical r7 maximum-plus-range 0.04262208300415633 s remains diagnostic only. The simulation of W1 → futility → W2 → count-only W3, with all valid members retained and no equivalence branch, is `docs/calibration/acc_25g83_rev5_simulation.md`; its finite-sample bounds are a desk check, not a release criterion.
