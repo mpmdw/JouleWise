@@ -1,0 +1,10 @@
+Ruling written to `/tmp/817355d2/20-fable-final-pass-seal.md`. The repository was left untouched.
+
+**Verdict: MERGE** for commit 23dd9909, the Revision 5 seal.
+
+- **S1 values pass.** The sealed commit is exactly the merge commit GitHub reports for PR #412. Both digests reproduce from `git show` at that commit, night in the first slot and probe in the second. Templates are unchanged from that commit through the candidate.
+- **S2 procedure pass.** Only two lines changed. Header parenthetical matches the amendment's prescribed form with the correct date. Literals sealed without backticks, punctuation preserved. Placeholder grep count is 0.
+- **S3 consumers pass.** The issuer's placeholder check finds nothing and both format patterns match the sealed sentence. All four requested test modules ran and passed (17 fast, 217 slower). No code or test pins the file's byte digest, so nothing broke. The header string-replace in the Rev5 test is now a no-op, but the test derives fixtures from the live file by regex and still exercises accept and refuse paths. That is a NIT with no science consequence.
+- **S4 one MATERIAL finding, pre-existing and not caused by this diff.** No code consumes the registered template digests. The installer renders from the driver checkout's working tree, pins only the checkout HEAD, and the night gate's clean-tree check covers the measurement checkout rather than the driver checkout. A future template commit or an uncommitted template edit could run a window under an unregistered launch context without refusal. Until the installer compares template digests itself, the W1 arm material should record the repo head, the two template digests at that head, and an empty porcelain status for the launchd directory.
+
+The report also records the new registration file digest that the next issuance must pass, so the arm notice does not take the old one by mistake.
