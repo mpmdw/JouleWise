@@ -56,7 +56,7 @@ EXPECTED_IDS = {
     # 2026-09-23 activation d8cc9c0a: omnibus A281 superseded by cold-gated split; retained as shelved history.
     "HEADLINE-PURE-MODULES-GATE-01",
     # Register A291–A295; A281 stays in the kernel as shelved: 242 + 5 = 247.
-    "HEADLINE-PACKER-RECUT-01",
+    # 2026-09-25 activation 152c9255: HEADLINE-PACKER-RECUT-01 retired after PR #409, merge 75d04e9e.
     "HEADLINE-REDUCER-SEALED-01",
     "HEADLINE-ESTIMATOR-DECISION-TABLE-01",
     # A294/A295 completed in PR #403 (2026-09-24) and moved to the completed queue.
