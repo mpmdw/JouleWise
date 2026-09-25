@@ -1579,7 +1579,9 @@ class CapabilityTests(SignalTestCase):
         prepared = SimpleNamespace(admit=lambda now, require_published=True: 60,
             schedule={"install_close_epoch_s": 60},
             custody_night=self.root / "night", pins="pins",
-            render=lambda labels, require_published=True: ((label, b"published") for label in labels))
+            render=lambda labels, require_published=True: ((label, b"published") for label in labels),
+            launch_context=lambda require_published=True: {
+                label: {"rendered_plist_sha256": e._digest_bytes(b"published")} for label in e.LABELS})
         if refusal:
             prepared.render = mock.Mock(side_effect=e.Refused(3, "render refused"))
         return e.Transaction(self.adapter, lambda: prepared, clock=lambda: 10,
