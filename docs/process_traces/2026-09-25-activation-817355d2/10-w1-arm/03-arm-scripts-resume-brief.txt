@@ -1,0 +1,12 @@
+RESUME ADDENDUM (activation ed17a643, 14:25 PDT 09-25). Read 02-arm-scripts-brief.txt in this directory FIRST; it stays binding in full (C1-C8, VALIDATION, RULES), with these changes:
+
+R0. A previous seat on this brief was killed mid-run at 14:10 when its parent session ran out of usage. Its UNVERIFIED partial output is committed at 1ee4e565 under scripts/ (arm-env.zsh, step0..step5, README-sequence.md). Treat it as a draft by an unknown author: re-check every file against every C-item and against the code, finish what is missing, fix what is wrong. Do not trust any claim it makes.
+
+C9 (new, issue #420, battery charge state). Ed changed the charge limit from 80 % to 100 % today; the harness records is_charging/battery_state (joulewise/environment.py ~:215, ~:878) but no gate refuses on them. Charging during a window adds SoC heat and invalidates wall-meter readings. Add, as a read-only check:
+  (a) a shared zsh function in arm-env.zsh `battery_gate` that reads `ioreg -r -c AppleSmartBattery` and asserts ExternalConnected = Yes, IsCharging = No, |InstantAmperage| <= 200 (mA; InstantAmperage may print as a large unsigned 64-bit value for negative currents: convert two's complement correctly and show the conversion), printing CHECK lines and the raw values;
+  (b) call it in step0 and again in step4 immediately before publication, appending the raw values with an ISO timestamp to "$STAGE/battery-gate.txt"; a failure stops the arm (postpone, not repair);
+  (c) find, by reading code, whether each slot's environment snapshot during the window records is_charging (name the file and the field in the bundle). In README-sequence.md add a HARVEST CHECK: every slot's recorded is_charging must be false; if any is true, W1 is reported as confounded by charging and is not used for derivation (the magistrate disposes it; no repair). If per-slot recording does not exist, say so plainly as NEEDS_RULING in your report;
+  (d) the notice (step3) states in one plain sentence that the arm required the battery to be connected, not charging and within 200 mA of zero current, and that a window in which any slot records charging is not used.
+Also add C9 to the "n1 -> W1 changes" table.
+
+Commit on the current branch with a message starting "W1 arm scripts:" and ending with `Co-Authored-By: Sol 6.0 <noreply@openai.com>`. Do not push. Single foreground session; no subagents, no background jobs, no full test discovery.
