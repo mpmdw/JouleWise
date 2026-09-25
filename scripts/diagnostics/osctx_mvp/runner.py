@@ -147,6 +147,8 @@ class SystemBackend:
         process.wait(timeout=15)
 
     def stop_shell_group(self, pgid):
+        if not isinstance(pgid, int) or pgid <= 1:
+            raise RuntimeError(f"invalid shell process group: {pgid}")
         def members():
             result = self.run(["/usr/bin/pgrep", "-g", str(pgid)], timeout=60)
             if result.returncode not in (0, 1):
@@ -362,27 +364,25 @@ def launch_pid(backend, action, log):
 def prove_bootout(backend, action, proof, log):
     stop = bounded_run(backend, action["stop"])
     registered = bounded_run(backend, ["/bin/launchctl", "print", f"gui/{os.getuid()}/{action['label']}"])
+    descendants = descendant_proof(backend, action)
     if proof and proof["pid"] is not None:
         pid = proof["pid"]
-        group = bounded_run(backend, ["/usr/bin/pgrep", "-g", str(proof["pgid"] or pid)])
+        pgid = proof.get("pgid")
+        group = bounded_run(backend, ["/usr/bin/pgrep", "-g", str(pgid)]) if pgid and pgid > 1 else None
         process = bounded_run(backend, ["/bin/ps", "-p", str(pid), "-o", "pid="])
-        survivor = (group.returncode != 1 or bool(group.stdout.strip()) or
-                    process.returncode != 1 or bool(process.stdout.strip()))
+        survivor = ((group is not None and (group.returncode != 1 or bool(group.stdout.strip()))) or
+                    process.returncode != 1 or bool(process.stdout.strip()) or descendants["survivor"])
         check = {"pid": pid, "pgid": proof["pgid"], "pgrep_returncode": group.returncode,
                  "pgrep_stdout": group.stdout, "pgrep_stderr": group.stderr,
                  "ps_returncode": process.returncode, "ps_stdout": process.stdout,
-                 "ps_stderr": process.stderr}
+                 "ps_stderr": process.stderr} if group is not None else {
+                     "pid": pid, "pgid": pgid, "pgrep_group_skipped": True,
+                     "ps_returncode": process.returncode, "ps_stdout": process.stdout,
+                     "ps_stderr": process.stderr}
     else:
-        # Only our cell command carries this script/--out pair. An arbitrary
-        # cell-directory match could include the runner or a log viewer.
-        literal_dir = re.sub(r"([\\.^$*+?{}\[\]()|])", r"\\\1", action["cell_dir"])
-        pattern = (r"^[^[:space:]]+[[:space:]]+[^[:space:]]*/osctx_mvp/cell\.py"
-                   r"[[:space:]]+--out[[:space:]]+" + literal_dir + r"([[:space:]]|$)")
-        group = bounded_run(backend, ["/usr/bin/pgrep", "-f", pattern])
-        survivor = group.returncode != 1 or bool(group.stdout.strip())
-        check = {"pid": None, "fallback_pattern": pattern,
-                 "pgrep_returncode": group.returncode, "pgrep_stdout": group.stdout,
-                 "pgrep_stderr": group.stderr}
+        survivor = descendants["survivor"]
+        check = {"pid": None}
+    check["descendant_patterns"] = descendants["patterns"]
     log(event="bootout_proof", label=action["label"], bootout_returncode=stop.returncode,
         bootout_stderr=stop.stderr, print_returncode=registered.returncode,
         print_stdout=registered.stdout, print_stderr=registered.stderr, **check)
@@ -390,6 +390,27 @@ def prove_bootout(backend, action, proof, log):
         raise RuntimeError(f"launchd survivor or proof error: {action['label']}")
     if stop.returncode:
         log(event="bootout_unneeded_or_failed", label=action["label"], returncode=stop.returncode)
+
+
+def descendant_proof(backend, action):
+    """Look for this cell's wrapper, production child and sampler argv."""
+    literal_dir = re.escape(action["cell_dir"])
+    patterns = {
+        "cell": (r"^[^[:space:]]+[[:space:]]+[^[:space:]]*/osctx_mvp/cell\.py"
+                 r"[[:space:]]+--out[[:space:]]+" + literal_dir + r"([[:space:]]|$)"),
+        "production": (r"^[^[:space:]]+[[:space:]]+-m[[:space:]]+joulewise"
+                       r"[[:space:]]+run[[:space:]]+" + literal_dir + r"/run-r[0-9]+\.json([[:space:]]|$)"),
+        "powermetrics": (r"^([^[:space:]]+[[:space:]]+)*[^[:space:]]*/powermetrics"
+                         r"([[:space:]]+[^[:space:]]+)*[[:space:]]+-o[[:space:]]+"
+                         + literal_dir + r"/runs/joulewise-powermetrics-[^[:space:]]+\.plist([[:space:]]|$)"),
+    }
+    results = {}
+    for name, pattern in patterns.items():
+        result = bounded_run(backend, ["/usr/bin/pgrep", "-f", pattern])
+        results[name] = {"pattern": pattern, "returncode": result.returncode,
+                         "stdout": result.stdout, "stderr": result.stderr}
+    return {"patterns": results, "survivor": any(
+        item["returncode"] != 1 or bool(item["stdout"].strip()) for item in results.values())}
 
 
 def unreleased(root: Path, *, allow_active_network=False) -> dict[str, dict]:
@@ -433,18 +454,24 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
         with Critical():
             if action["context"] == "SH":
                 backend.stop_shell(process)
+                descendants = descendant_proof(backend, action)
+                log(event="shell_descendant_proof", label=action["label"], **descendants)
+                if descendants["survivor"]:
+                    raise RuntimeError(f"SH descendant survivor: {action['label']}")
             else:
                 prove_bootout(backend, action, launch_proofs.get(action["label"]), log)
             ledger.append(ownership_path, {"event": "release", "label": action["label"]})
             ownership.pop(action["label"])
         log(event="cleanup_proved", label=action["label"])
-    def ledger_cells(actions):
-        return [ledger.cell_entry(Path(a["cell_dir"]), slot=a["cell_id"], arm=a["context"], label=a["label"])
+    def ledger_cells(actions, *, accepted=False):
+        return [ledger.cell_entry(Path(a["cell_dir"]), slot=a["cell_id"], arm=a["context"],
+                                  label=a["label"], require_bundle_files=accepted)
                 for a in actions if (Path(a["cell_dir"]) / "cell.json").is_file()]
     def block_record(kind, block, attempt, actions, reference, **extra):
         ledger.append(out / "ledger.jsonl", {"event": kind, "stage": stage, "block": block["id"],
                       "attempt": attempt, "discard": block["discard"],
-                      "reference_hash": reference, "cells": ledger_cells(actions), **extra}, sealed=True)
+                      "reference_hash": reference, "cells": ledger_cells(actions, accepted=kind == "block_accepted"),
+                      **extra}, sealed=True)
     try:
         previous = "on"
         for block in blocks(config, stage):
@@ -751,22 +778,38 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
 
 
 def recover(out: Path, *, backend=None):
-    """Replay recorded process ownership, then restore network time."""
+    """Restore network time first, then replay every parseable ownership event."""
     backend = backend or SystemBackend()
     paths = [out / "owned.jsonl"] + sorted(out.glob("*/owned.jsonl"))
     paths = [path for path in paths if path.exists()]
     def log(**record):
         ledger.append(out / "recovery.jsonl", record)
     errors = []
-    network_owners = []
     with Critical():
+        network_restored = False
+        try:
+            result = bounded_run(backend, NETWORK_TIME + ["on"])
+            log(event="network_time", argv=NETWORK_TIME + ["on"], returncode=result.returncode,
+                stderr=result.stderr)
+            network_restored = result.returncode == 0
+            if not network_restored:
+                errors.append(f"network time on failed: {result.stderr}")
+        except Exception as exc:
+            errors.append(f"network time on failed: {exc}")
         for path in paths:
-            for label, record in list(ledger.owned(path).items()):
-                action = record["action"]
-                if action["context"] == "NETWORK_TIME":
-                    network_owners.append((path, label))
-                    continue
+            try:
+                pending, journal_errors = ledger.owned_tolerant(path)
+            except OSError as exc:
+                errors.append(f"ownership journal unreadable: {path}: {exc}")
+                continue
+            errors.extend(journal_errors)
+            for label, record in list(pending.items()):
                 try:
+                    action = record["action"]
+                    if action["context"] == "NETWORK_TIME":
+                        if network_restored and not journal_errors:
+                            ledger.append(path, {"event": "release", "label": label})
+                        continue
                     if action["context"] == "SH":
                         pid = record.get("pid")
                         if pid is None:
@@ -787,22 +830,16 @@ def recover(out: Path, *, backend=None):
                                 backend.stop_shell_group(group)
                         else:
                             backend.stop_shell_group(pid)
+                        descendants = descendant_proof(backend, action)
+                        log(event="shell_descendant_proof", label=label, **descendants)
+                        if descendants["survivor"]:
+                            raise RuntimeError(f"SH descendant survivor: {label}")
                     else:
                         prove_bootout(backend, action, record.get("proof"), log)
-                    ledger.append(path, {"event": "release", "label": label})
+                    if not journal_errors:
+                        ledger.append(path, {"event": "release", "label": label})
                 except Exception as exc:
                     errors.append(str(exc))
-        try:
-            result = bounded_run(backend, NETWORK_TIME + ["on"])
-            log(event="network_time", argv=NETWORK_TIME + ["on"], returncode=result.returncode,
-                stderr=result.stderr)
-            if result.returncode:
-                errors.append(f"network time on failed: {result.stderr}")
-            else:
-                for path, label in network_owners:
-                    ledger.append(path, {"event": "release", "label": label})
-        except Exception as exc:
-            errors.append(f"network time on failed: {exc}")
     if errors:
         raise RuntimeError("recovery failed: " + "; ".join(errors))
 

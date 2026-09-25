@@ -8,6 +8,19 @@ from pathlib import Path
 import time
 
 
+# Every bundle path opened by analyze.py, including diagnostic-only inputs.
+BUNDLE_FILES = ("summary_metrics.json", "metadata.json", "outputs/tokens.jsonl",
+                "power_trace.csv", "events.jsonl")
+
+
+def bundle_fingerprint(bundle: Path) -> dict:
+    result = {}
+    for name in BUNDLE_FILES:
+        data = (bundle / name).read_bytes()
+        result[name] = {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+    return result
+
+
 def canonical(record: dict) -> bytes:
     return json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -47,11 +60,63 @@ def read(path: Path, *, sealed: bool = False) -> list[dict]:
     return records
 
 
-def cell_entry(directory: Path, *, slot: int, arm: str, label: str) -> dict:
+def cell_entry(directory: Path, *, slot: int, arm: str, label: str,
+               require_bundle_files: bool = False) -> dict:
     cell = json.loads((directory / "cell.json").read_text())
+    runs = []
+    for run in cell.get("runs", []):
+        entry = {key: run.get(key) for key in ("run_id", "bundle", "materialized_sha256")}
+        bundle = run.get("bundle")
+        if bundle and require_bundle_files:
+            entry["bundle_files"] = bundle_fingerprint(Path(bundle))
+        elif bundle and all((Path(bundle) / name).is_file() for name in BUNDLE_FILES):
+            entry["bundle_files"] = bundle_fingerprint(Path(bundle))
+        elif require_bundle_files:
+            raise ValueError(f"accepted run lacks analyzer bundle files: {bundle}")
+        runs.append(entry)
     return {"slot": slot, "arm": arm, "dir": str(directory.resolve()), "label": label,
-            "runs": [{key: run.get(key) for key in ("run_id", "bundle", "materialized_sha256")}
-                     for run in cell.get("runs", [])]}
+            "runs": runs}
+
+
+def owned_tolerant(path: Path) -> tuple[dict[str, dict], list[str]]:
+    """Recover all parseable ownership events without erasing damaged evidence."""
+    if not path.exists():
+        return {}, []
+    pending, errors = {}, []
+    raw = path.read_bytes()
+    lines = raw.split(b"\n")
+    for number, line in enumerate(lines, 1):
+        if not line:
+            if number != len(lines) or not raw.endswith(b"\n"):
+                errors.append(f"invalid ownership line {number}: empty line")
+            continue
+        if number == len(lines) and not raw.endswith(b"\n"):
+            errors.append(f"torn ownership line {number}: {path}")
+            continue
+        try:
+            record = json.loads(line)
+            if not isinstance(record, dict):
+                raise ValueError("record is not an object")
+            label, event = record["label"], record["event"]
+            if not isinstance(label, str):
+                raise ValueError("label is not a string")
+            if event == "acquire":
+                if label in pending or not isinstance(record.get("action"), dict):
+                    raise ValueError("duplicate or invalid acquisition")
+                pending[label] = record
+            elif event == "update":
+                if label not in pending:
+                    raise ValueError("update without acquisition")
+                pending[label].update(record)
+            elif event == "release":
+                if label not in pending:
+                    raise ValueError("release without acquisition")
+                del pending[label]
+            else:
+                raise ValueError("invalid ownership event")
+        except (ValueError, KeyError, UnicodeDecodeError) as exc:
+            errors.append(f"invalid ownership line {number}: {exc}")
+    return pending, errors
 
 
 def owned(path: Path) -> dict[str, dict]:

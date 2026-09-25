@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import plistlib
 import random
+import re
 import shlex
 import shutil
 import signal
@@ -314,7 +315,8 @@ class OSCTXTests(unittest.TestCase):
             name = bundle.parent.name
             invalid = ".SH.a1" in name
             return {"valid": not invalid, "output_hash": "same"}
-        with tempfile.TemporaryDirectory() as temp, patch.object(runner, "bundle_evidence", side_effect=evidence):
+        with tempfile.TemporaryDirectory() as temp, patch.object(runner, "bundle_evidence", side_effect=evidence), \
+                patch.object(ledger, "bundle_fingerprint", return_value={}):
             out = Path(temp)
             actions = runner.plan(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python")
             with self.assertRaisesRegex(RuntimeError, "3 invalid cells in SH"):
@@ -350,7 +352,8 @@ class OSCTXTests(unittest.TestCase):
                    ("stage0-01" in name and ".SH.a2" in name) or \
                    ("stage0-02" in name and ".SH.a1" in name)
             return {"valid": not fail, "output_hash": "same"}
-        with tempfile.TemporaryDirectory() as temp, patch.object(runner, "bundle_evidence", side_effect=evidence):
+        with tempfile.TemporaryDirectory() as temp, patch.object(runner, "bundle_evidence", side_effect=evidence), \
+                patch.object(ledger, "bundle_fingerprint", return_value={}):
             out = Path(temp)
             actions = runner.plan(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python")
             with self.assertRaisesRegex(RuntimeError, "3 invalid cells in SH"):
@@ -425,6 +428,12 @@ class OSCTXTests(unittest.TestCase):
             invalid = make_cell(root, self.config, "U1", "U1-B-01", "B", [.4], fixture="failed_status")
             make_cell(root, self.config, "U1", "U1-B-02", "B", [.4])
             seal_fixture(root, self.config, "U1")
+            accepted = next(r for r in ledger.read(root / "ledger.jsonl", sealed=True)
+                            if r["event"] == "block_accepted")
+            fingerprint = accepted["cells"][0]["runs"][0]["bundle_files"]
+            self.assertEqual(set(fingerprint), set(ledger.BUNDLE_FILES))
+            self.assertTrue(all(len(item["sha256"]) == 64 and item["size"] > 0
+                                for item in fingerprint.values()))
             report = analyze.analyze_directory(root, self.config)
             self.assertEqual(len(report["cells"]), 20)
             self.assertEqual(report["verdicts"]["D/I:E"], "DIFFERENT")
@@ -436,7 +445,7 @@ class OSCTXTests(unittest.TestCase):
             self.assertIn("Absolute J/token", (root / "summary.md").read_text())
             tokens = root / "U1-B-02.1.B.a1" / "runs" / "osctx-u1-u1-b-02-1-b-r1" / "outputs" / "tokens.jsonl"
             tokens.write_text(tokens.read_text().replace('"token_id": 0', '"token_id": 1', 1))
-            with self.assertRaisesRegex(ValueError, "reference_hash mismatch"):
+            with self.assertRaisesRegex(ValueError, "accepted bundle file sha256 or size mismatch"):
                 analyze.analyze_directory(root, self.config)
 
     def test_schedule_rejects_foreign_bundles_and_config_drift(self):
@@ -566,9 +575,9 @@ class OSCTXTests(unittest.TestCase):
             action = {"cell_dir": str(directory), "label": "com.joulewise.dummy.osctx.test",
                       "stop": ["/bin/launchctl", "bootout", "gui/501", "job.plist"]}
             class Fake:
-                def __init__(self, captured=True, survivor=False, ps_alive=False):
+                def __init__(self, captured=True, survivor=False, ps_alive=False, pgid=9876):
                     self.calls = []
-                    self.captured, self.survivor, self.ps_alive = captured, survivor, ps_alive
+                    self.captured, self.survivor, self.ps_alive, self.pgid = captured, survivor, ps_alive, pgid
                 def run(self, argv):
                     self.calls.append(argv)
                     if argv[0] == "/bin/launchctl" and argv[1] == "print":
@@ -577,10 +586,13 @@ class OSCTXTests(unittest.TestCase):
                             return SimpleNamespace(returncode=0, stdout="state = running\n    pid = 4321\n", stderr="")
                         return SimpleNamespace(returncode=1, stdout="", stderr="not found")
                     if argv[:3] == ["/bin/ps", "-p", "4321"] and argv[-1] == "pgid=":
-                        return SimpleNamespace(returncode=0, stdout="9876\n", stderr="")
+                        return SimpleNamespace(returncode=0, stdout=f"{self.pgid}\n", stderr="")
                     if argv[0] == "/usr/bin/pgrep":
-                        return SimpleNamespace(returncode=0 if self.survivor else 1,
-                                               stdout="4321\n" if self.survivor else "", stderr="")
+                        found = self.survivor is True or (argv[1] == "-f" and
+                                ((self.survivor == "production" and "joulewise" in argv[-1]) or
+                                 (self.survivor == "powermetrics" and "powermetrics" in argv[-1])))
+                        return SimpleNamespace(returncode=0 if found else 1,
+                                               stdout="4321\n" if found else "", stderr="")
                     if argv[:3] == ["/bin/ps", "-p", "4321"] and self.ps_alive:
                         return SimpleNamespace(returncode=0, stdout="4321\n", stderr="")
                     return SimpleNamespace(returncode=1 if argv[0] == "/bin/ps" else 0,
@@ -592,7 +604,7 @@ class OSCTXTests(unittest.TestCase):
             runner.prove_bootout(fake, action, proof, lambda **r: None)
             self.assertIn(["/usr/bin/pgrep", "-g", "9876"], fake.calls)
             self.assertIn(["/bin/ps", "-p", "4321", "-o", "pid="], fake.calls)
-            self.assertFalse(any(call[:2] == ["/usr/bin/pgrep", "-f"] for call in fake.calls))
+            self.assertEqual(len([call for call in fake.calls if call[:2] == ["/usr/bin/pgrep", "-f"]]), 3)
             fake = Fake(survivor=True)
             proof = runner.launch_pid(fake, action, lambda **r: None)
             with self.assertRaisesRegex(RuntimeError, "survivor"):
@@ -601,20 +613,49 @@ class OSCTXTests(unittest.TestCase):
             proof = runner.launch_pid(fake, action, lambda **r: None)
             with self.assertRaisesRegex(RuntimeError, "survivor"):
                 runner.prove_bootout(fake, action, proof, lambda **r: None)
+            for child in ("production", "powermetrics"):
+                fake = Fake(pgid=1, survivor=child)
+                proof = runner.launch_pid(fake, action, lambda **r: None)
+                records = []
+                with self.assertRaisesRegex(RuntimeError, "survivor"):
+                    runner.prove_bootout(fake, action, proof, lambda **r: records.append(r))
+                self.assertFalse(any(call[:2] == ["/usr/bin/pgrep", "-g"] for call in fake.calls))
+                self.assertEqual(set(records[-1]["descendant_patterns"]),
+                                 {"cell", "production", "powermetrics"})
+                self.assertEqual(records[-1]["descendant_patterns"][child]["stdout"], "4321\n")
             (directory / "done.json").write_text("{}")
             fake = Fake(captured=False)
             proof = runner.launch_pid(fake, action, lambda **r: None)
             self.assertIsNone(proof["pid"])
             runner.prove_bootout(fake, action, proof, lambda **r: None)
-            fallback = next(call[-1] for call in fake.calls if call[:2] == ["/usr/bin/pgrep", "-f"])
+            fallback = next(call[-1] for call in fake.calls if call[:2] == ["/usr/bin/pgrep", "-f"]
+                            and "cell\\.py" in call[-1])
             self.assertIn("osctx_mvp/cell\\.py", fallback)
-            self.assertIn(str(directory), fallback)
+            self.assertIn(re.escape(str(directory)), fallback)
             own = f"/python /repo/scripts/diagnostics/osctx_mvp/cell.py --out {directory} --state U\n"
             reviewer = f"/python reviewer.py --path {directory} --note osctx_mvp/cell.py\n"
             matched = subprocess.run(["/usr/bin/grep", "-E", fallback], input=own+reviewer,
                                      text=True, capture_output=True, check=False)
             self.assertEqual(matched.returncode, 0)
             self.assertEqual(matched.stdout, own)
+            patterns = runner.descendant_proof(Fake(captured=False), action)["patterns"]
+            production = f"/python -m joulewise run {directory}/run-r1.json --runs-dir {directory}/runs\n"
+            sampler = f"sudo -n /usr/bin/powermetrics -i 100 -o {directory}/runs/joulewise-powermetrics-abc.plist\n"
+            for name, own_line in (("production", production), ("powermetrics", sampler)):
+                matched = subprocess.run(["/usr/bin/grep", "-E", patterns[name]["pattern"]],
+                                         input=own_line + reviewer, text=True, capture_output=True, check=False)
+                self.assertEqual(matched.stdout, own_line)
+
+    def test_production_sampler_capture_path_is_cell_scoped(self):
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "cell" / "run-r1.log"
+            log.parent.mkdir()
+            process = SimpleNamespace(pid=123, wait=lambda: 0)
+            with patch.object(cell.subprocess, "Popen", return_value=process) as popen, \
+                    patch.object(cell.SystemBackend, "command", return_value={}), \
+                    patch.object(cell, "ancestry", return_value=[]):
+                cell.SystemBackend().production(["/python", "-m", "joulewise"], log)
+            self.assertEqual(popen.call_args.kwargs["env"]["TMPDIR"], str((log.parent / "runs").resolve()))
 
     def test_rehearsal_render_and_real_analysis_refusal(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -837,7 +878,8 @@ class OSCTXTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             runner.plan(root, common.DEFAULT_CONFIG, self.config, "U1", "/python")
-            with patch.object(runner, "bundle_evidence", return_value={"valid": True, "output_hash": "hash"}):
+            with patch.object(runner, "bundle_evidence", return_value={"valid": True, "output_hash": "hash"}), \
+                    patch.object(ledger, "bundle_fingerprint", return_value={}):
                 runner.execute(root, common.DEFAULT_CONFIG, self.config, "U1", "/python",
                                backend=Fake(), manage_network=False)
             records = ledger.read(root / "ledger.jsonl", sealed=True)
@@ -847,11 +889,11 @@ class OSCTXTests(unittest.TestCase):
             self.assertTrue(records[0]["discard"])
             self.assertEqual(len(records[0]["cells"]), 1)
 
-    def test_ledger_property_200_histories_and_seven_mutations(self):
+    def test_ledger_property_200_histories_and_eight_mutations(self):
         seeds = list(range(2026092400, 2026092600))
         print("OSCTX_LEDGER_PROPERTY_SEEDS=" + ",".join(map(str, seeds)))
         mutations = ("drop_discard", "copy_a1_to_a2", "stray_a2", "duplicate_accepted",
-                     "edit_sha", "truncate_last_line", "swap_reference_hashes")
+                     "edit_sha", "truncate_last_line", "swap_reference_hashes", "copy_summary")
         seen_mutations = set()
         class Fake:
             def __init__(self, root, config, fail_count):
@@ -861,7 +903,8 @@ class OSCTXTests(unittest.TestCase):
                 directory = Path(parts[parts.index("--out") + 1])
                 attempt = int(directory.name.rsplit(".a", 1)[1])
                 arm = directory.name.split(".")[2]
-                make_cell(self.root, self.config, "rehearsal", "rehearsal-01", arm, [.4], attempt=attempt)
+                make_cell(self.root, self.config, "rehearsal", "rehearsal-01", arm,
+                          [.42 if arm == "SH" else .4], attempt=attempt)
                 if attempt <= self.fail_count and arm == "I":
                     (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": True}))
             def run(self, argv, **kwargs):
@@ -912,6 +955,10 @@ class OSCTXTests(unittest.TestCase):
                 elif mutation == "swap_reference_hashes":
                     records[0]["reference_hash"], records[-1]["reference_hash"] = (
                         records[-1]["reference_hash"], records[0]["reference_hash"])
+                elif mutation == "copy_summary":
+                    source = Path(records[-1]["cells"][0]["runs"][0]["bundle"])
+                    target = Path(records[-1]["cells"][1]["runs"][0]["bundle"])
+                    shutil.copyfile(source / "summary_metrics.json", target / "summary_metrics.json")
                 if mutation in ("drop_discard", "duplicate_accepted", "edit_sha", "swap_reference_hashes"):
                     ledger_path.unlink()
                     for record in records:
@@ -964,6 +1011,62 @@ class OSCTXTests(unittest.TestCase):
                                backend=fake, manage_network=False)
             runner.recover(root, backend=fake)
             self.assertEqual(ledger.owned(root / "owned.jsonl"), {})
+
+    def test_recovery_torn_and_interior_lines_restore_first_and_preserve_ownership(self):
+        for damage in (b'{"event":"update","label":', b'{"event":oops}\n'):
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                action = {"label": "owned-test", "context": "I", "cell_dir": str(root / "cell"),
+                          "stop": ["/bin/launchctl", "bootout", "gui/501", "job.plist"]}
+                path = root / "owned.jsonl"
+                ledger.append(path, {"event": "acquire", "label": "network_time:crash",
+                                     "action": {"context": "NETWORK_TIME"}})
+                ledger.append(path, {"event": "acquire", "label": action["label"], "action": action})
+                with path.open("ab") as stream:
+                    stream.write(damage)
+                if damage.endswith(b"\n"):
+                    ledger.append(path, {"event": "acquire", "label": "owned-second",
+                                         "action": {**action, "label": "owned-second"}})
+                class Fake:
+                    def __init__(self): self.calls = []
+                    def run(self, argv, **kwargs):
+                        self.calls.append(argv)
+                        return SimpleNamespace(returncode=1 if argv[1:2] in (["print"], ["-f"]) else 0,
+                                               stdout="", stderr="")
+                fake = Fake()
+                with self.assertRaisesRegex(RuntimeError, "ownership line"):
+                    runner.recover(root, backend=fake)
+                self.assertEqual(fake.calls[0], runner.NETWORK_TIME + ["on"])
+                self.assertIn(action["stop"], fake.calls)
+                self.assertEqual(fake.calls.count(action["stop"]), 2 if damage.endswith(b"\n") else 1)
+                pending, journal_errors = ledger.owned_tolerant(path)
+                self.assertIn("network_time:crash", pending)
+                self.assertIn(action["label"], pending)
+                self.assertTrue(journal_errors)
+
+    def test_recovery_shell_group_requires_second_descendant_proof(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            action = {"label": "shell-owned", "context": "SH", "cell_dir": str(root / "cell")}
+            path = root / "owned.jsonl"
+            ledger.append(path, {"event": "acquire", "label": action["label"], "action": action})
+            ledger.append(path, {"event": "update", "label": action["label"], "pid": 8765})
+            class Fake:
+                def __init__(self): self.calls = []
+                def stop_shell_group(self, pgid): self.calls.append(("group", pgid))
+                def run(self, argv, **kwargs):
+                    self.calls.append(argv)
+                    found = argv[:2] == ["/usr/bin/pgrep", "-f"] and "joulewise" in argv[-1]
+                    return SimpleNamespace(returncode=0 if found else 1,
+                                           stdout="7654\n" if found else "", stderr="")
+            fake = Fake()
+            with self.assertRaisesRegex(RuntimeError, "SH descendant survivor"):
+                runner.recover(root, backend=fake)
+            self.assertEqual(fake.calls[0], runner.NETWORK_TIME + ["on"])
+            self.assertLess(fake.calls.index(("group", 8765)),
+                            next(i for i, call in enumerate(fake.calls)
+                                 if isinstance(call, list) and call[:2] == ["/usr/bin/pgrep", "-f"]))
+            self.assertIn(action["label"], ledger.owned(path))
 
     def test_signal_during_bootout_releases_only_after_proof(self):
         with tempfile.TemporaryDirectory() as temp:

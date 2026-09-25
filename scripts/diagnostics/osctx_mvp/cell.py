@@ -123,8 +123,15 @@ class SystemBackend:
         time.sleep(seconds)
 
     def production(self, argv, log):
+        # Powermetrics names its -o capture with tempfile.NamedTemporaryFile.
+        # Keep that path under this cell so an orphaned sampler remains identifiable.
+        capture_dir = log.parent / "runs"
+        capture_dir.mkdir(parents=True, exist_ok=True)
+        environment = os.environ.copy()
+        environment["TMPDIR"] = str(capture_dir.resolve())
         with log.open("w") as stream:
-            process = subprocess.Popen(argv, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
+            process = subprocess.Popen(argv, cwd=ROOT, env=environment,
+                                       stdout=stream, stderr=subprocess.STDOUT)
             child = {"pid": process.pid,
                      "ps": self.command(["/bin/ps", "-p", str(process.pid), "-o", "pid,pri,nice,comm"]),
                      "ancestry": ancestry(process.pid)}

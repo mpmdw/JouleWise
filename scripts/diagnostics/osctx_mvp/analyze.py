@@ -723,7 +723,10 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                 record = json.loads(path.read_text())
                 expected_runs = [{key: run.get(key) for key in ("run_id", "bundle", "materialized_sha256")}
                                  for run in record.get("runs", [])]
-                if item.get("runs") != expected_runs:
+                ledger_runs = item.get("runs")
+                if not isinstance(ledger_runs, list) or [
+                        {key: run.get(key) for key in ("run_id", "bundle", "materialized_sha256")}
+                        for run in ledger_runs if isinstance(run, dict)] != expected_runs or len(ledger_runs) != len(expected_runs):
                     raise ValueError(f"ledger run mismatch: {directory}")
                 if kind == "block_discarded":
                     marker = directory / "discarded.json"
@@ -753,6 +756,14 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                 if (directory / "discarded.json").exists():
                     raise ValueError(f"accepted cell has discard marker: {directory}")
                 validate_cell(directory, record, schedules, config, used_bundles)
+                for number, run in enumerate(ledger_runs, 1):
+                    bundle = (directory / "runs" / run["run_id"]).resolve()
+                    try:
+                        actual = ledger.bundle_fingerprint(bundle)
+                    except OSError as exc:
+                        raise ValueError(f"accepted bundle file missing: {bundle}: {exc}") from exc
+                    if run.get("bundle_files") != actual:
+                        raise ValueError(f"accepted bundle file sha256 or size mismatch: {bundle}")
                 if matching["discard"]:
                     discarded.append({"cell": str(directory), "reason": "preregistered discard"})
                     continue
