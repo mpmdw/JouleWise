@@ -190,3 +190,7 @@
    - **3 non-equivalent survivors remain (M033, M045, M050)**: the added witnesses fail the key-set check first. With the first sweep, that is **two rounds with the same signature**, so the escalation trigger fires.
    - F2: E2's unbounded integers crash in `math.fsum` and in canonical-JSON hashing (untyped).
    - Escalation cold gate [25](25-coldgate-packet-a292esc/00-charge.md), sha `b7075d351646cf3c850d998b68dfb43753fda27db2716fcaaa8c2b1b8443ccb4`. Proposal P1: generated one-fault witnesses with mechanical acceptance. P2: an instrument-sized domain bound of 0 ≤ E ≤ 1e12 J, refusing `window_domain`.
+70. PR-L delta-2 ([17/10](17-prl-review/10-delta2-reaudit.md)): SF1 and N-a–N-d are closed, with no new BLOCKER. Two mutation probes (the exemption skipping the digest; T0 skipping the root rules) are killed by the new tests.
+   - One SHOULD-FIX, S-1: no test asserts the worker's cadence-refusal timing text. It was mutation-proven dead: deleting the fields leaves every test green.
+   - A test-only seat (64) adds a worker-level test, scoped to a new file.
+   - A292 escalation refuter (after the fact, paired; [25/21](25-coldgate-packet-a292esc/21-opus-refuter.md)): P1 is affirmed, since 15 generated witnesses kill M033, M045 and M050. P2: the 1e12 J value is affirmed but the text as written is rejected, because it does not close the crashes. The judge's ruling is pending.
