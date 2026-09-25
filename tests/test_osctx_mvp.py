@@ -1241,5 +1241,30 @@ class OSCTXTests(unittest.TestCase):
                                 (98231, signal.SIGKILL), (98232, signal.SIGKILL)])
 
 
+
+class DisplayStateTests(unittest.TestCase):
+    """Live-verified source (record 21): powerd's display-on assertion."""
+
+    ON = ("2026-09-24 22:40:00 -0700 \nAssertion status system-wide:\n   UserIsActive 0\n"
+          "Listed by owning process:\n   pid 351(powerd): [0x1] 148:54:30 PreventUserIdleSystemSleep "
+          'named: "Powerd - Prevent sleep while display is on"\n')
+    ASLEEP = ("2026-09-24 22:40:08 -0700 \nAssertion status system-wide:\n   UserIsActive 0\n"
+              "Listed by owning process:\n")
+
+    def run_with(self, result):
+        with patch.object(cell, "command_text", return_value=result):
+            return cell.display_state()
+
+    def test_assertion_present_is_on(self):
+        self.assertEqual(self.run_with({"returncode": 0, "stdout": self.ON}), "on")
+
+    def test_assertion_absent_is_asleep(self):
+        self.assertEqual(self.run_with({"returncode": 0, "stdout": self.ASLEEP}), "asleep")
+
+    def test_failed_or_unrecognized_read_is_unknown(self):
+        self.assertEqual(self.run_with({"status": "unavailable", "error": "x"}), "unknown")
+        self.assertEqual(self.run_with({"returncode": 1, "stdout": self.ON}), "unknown")
+        self.assertEqual(self.run_with({"returncode": 0, "stdout": "garbage"}), "unknown")
+
 if __name__ == "__main__":
     unittest.main()

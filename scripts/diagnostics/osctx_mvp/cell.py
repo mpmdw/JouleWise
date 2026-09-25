@@ -55,14 +55,20 @@ def hid_idle_seconds() -> float:
     return int(match.group(1)) / 1e9
 
 
+DISPLAY_ON_ASSERTION = "Prevent sleep while display is on"
+
+
 def display_state() -> str:
-    for argv in (["/usr/sbin/ioreg", "-r", "-c", "IODisplayWrangler"],
-                 ["/usr/sbin/ioreg", "-r", "-c", "AppleDisplay"]):
-        result = command_text(argv)
-        match = re.search(r'"(?:IOPowerManagement|CurrentPowerState)"\s*=\s*(\d+)', result.get("stdout", ""))
-        if match:
-            return "on" if int(match.group(1)) > 0 else "asleep"
-    return "unknown"
+    # Verified live on Mac15,9 / 25G83 (2026-09-24, record 21): the
+    # IOMobileFramebuffer CurrentPowerState stays 1 through display sleep, and
+    # IODisplayWrangler does not exist on Apple silicon. powerd holds this
+    # named assertion exactly while the display is on (present -> absent after
+    # `pmset displaysleepnow` -> present after `caffeinate -u`).
+    result = command_text(["/usr/bin/pmset", "-g", "assertions"])
+    stdout = result.get("stdout", "")
+    if result.get("returncode") != 0 or "Assertion status" not in stdout:
+        return "unknown"
+    return "on" if DISPLAY_ON_ASSERTION in stdout else "asleep"
 
 
 def ancestry(pid=None) -> list[dict]:
