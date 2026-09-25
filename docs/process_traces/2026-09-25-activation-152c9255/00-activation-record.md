@@ -177,3 +177,7 @@
    - F2: the certification run was interrupted, so there is no certificate yet.
    - PR-0 is off the critical path to the first calibration windows (PR-L → PR-R → W1/W2).
    - **Next exact action:** a narrow cold ruling on F1. The magistrate's proposed reading is to list it as masked-by-D-1, with recertification obligated by lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01. Then complete `--certify` at the bench (background, tracked).
+65. A292 harness fix-1 (seat 52, Sol, rc 0): commit `73ac8ddf`. It adds the Sol-lens witnesses and corrects the oracle on Astra F1, F2 and F3. The 200-night differential passes (2,138 s), oracle liveness PASS, and exactly four focused methods are RED on the known reducer defects.
+   - **The seat correctly refused a magistrate brief error:** the brief said positive `10**1000` must refuse, but E2 admits finite nonnegative integers. The seat followed E2, which prevails. The error is recorded here.
+   - The implementation fix went to the Opus seat (56), scoped to the reducer. It must return NEEDS_RULING rather than invent a code if admitting huge integers reaches the unruled aggregate-overflow gap (A292-AGGREGATE-OVERFLOW-01).
+   - PR-R merged main (`8cd9e831`), so the acceptance ruling file its registration cites is now present on the branch.
