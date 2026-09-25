@@ -456,12 +456,16 @@ def power_table(sd_e, sd_r, n_values=(6, 12), *, runs_per_cell_u=1):
     else:
         estimates = sd_e
     table = []
+    power_cache = {}
     for contrast, endpoints in estimates.items():
         for endpoint, sd in endpoints.items():
             for n in n_values:
                 for multiplier in (1., 1.5, 2.):
                     scaled = sd * multiplier
-                    power = equivalence_power(scaled, n)
+                    key = (scaled, n)
+                    if key not in power_cache:
+                        power_cache[key] = equivalence_power(scaled, n)
+                    power = power_cache[key]
                     mde = math.exp(UPPER + (student_t_ppf((1+CONFIDENCE)/2, n-1) +
                                             student_t_ppf(.8, n-1)) * scaled / math.sqrt(n))
                     table.append({"contrast": contrast, "endpoint": endpoint, "n": n,
@@ -488,13 +492,15 @@ def u_replication_spread(stage0, runs_per_cell_u: int, stage0_runs_per_cell: int
 
 
 def stage0_spread(rows):
-    rows = [r for r in rows if r["stage"] == "stage0" and all(r["metrics"].get(k) is not None for k in ("E", "R"))]
-    within, between, bootstrap = {}, {}, {}
+    source_stage = "stage0U" if any(r["stage"] == "stage0U" for r in rows) else "stage0"
+    rows = [r for r in rows if r["stage"] == source_stage and all(r["metrics"].get(k) is not None for k in ("E", "R"))]
+    within, between, bootstrap, paired_counts = {}, {}, {}, {}
     for endpoint in ("E", "R"):
         diffs = [math.log(r["runs"][0]["metrics"][endpoint] / r["runs"][1]["metrics"][endpoint])
                  for r in rows if len(r.get("runs", [])) == 2]
         within[endpoint] = math.sqrt(statistics.mean(d*d / 2 for d in diffs)) if diffs else None
         logs = paired_rows(rows, "SH/I", endpoint)[0]
+        paired_counts[endpoint] = len(logs)
         between[endpoint] = statistics.stdev(logs) if len(logs) >= 2 else None
         if len(logs) >= 2:
             rng = random.Random(f"20260924:{endpoint}")
@@ -505,7 +511,8 @@ def stage0_spread(rows):
             bootstrap[endpoint] = None
     return {"within_run_sd_log": within, "between_cell_paired_sd_log": between,
             "paired_sd_bootstrap_95pct": bootstrap,
-            "paired_block_count": len(paired_rows(rows, "SH/I", "E")[0]),
+            "paired_block_count": paired_counts["E"],
+            "paired_block_count_by_endpoint": paired_counts,
             "max_stage0_drift_ratio": max((r["metrics"].get("drift_ratio") or 0. for r in rows), default=None),
             "max_stage0_attribution_bound_ratio": max((r["metrics"]["attribution_bound_j"] / r["metrics"]["net_j"]
                                                         for r in rows if r["metrics"].get("attribution_bound_j") is not None
@@ -516,7 +523,7 @@ def stage0_spread(rows):
 
 def markdown(rows, decision, errors, discarded):
     lines = ["# OSCTX diagnostic summary", "", "Diagnostic only; not claim-bearing.", ""]
-    for stage in ("stage0", "U1", "U2", "S"):
+    for stage in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S"):
         stage_rows = [r for r in rows if r["stage"] == stage]
         if not stage_rows: continue
         lines += [f"## {stage}", "", "| Block | Arm | E J/token | R token/s | Flags |", "|---|---|---:|---:|---|"]
@@ -585,19 +592,25 @@ def markdown(rows, decision, errors, discarded):
 
 
 def stage_schedules(source: Path) -> dict[Path, dict]:
-    """Only a rendered stage, or the registered U1+U2 parent, is analyzable."""
+    """Only rendered stages, or their registered real-session parent, are analyzable."""
     direct = source / "command_sequence.json"
     if direct.is_file():
         locations = [source]
-    elif (source / "U1" / "command_sequence.json").is_file() and (source / "U2" / "command_sequence.json").is_file():
-        locations = [source / "U1", source / "U2"]
+        rehearsal_only = json.loads(direct.read_text()).get("stage") == "rehearsal"
+    elif (source / "U1" / "command_sequence.json").is_file():
+        locations = [source / name for name in ("stage0U", "U1", "U2", "S")
+                     if (source / name / "command_sequence.json").is_file()]
+        rehearsal_only = False
     else:
-        raise ValueError("analysis requires a stage command_sequence.json or a U1+U2 parent")
+        raise ValueError("analysis requires a real stage command_sequence.json or a U1 session parent")
+    if not rehearsal_only and any(json.loads(path.read_text()).get("stage") == "rehearsal"
+           for path in source.rglob("command_sequence.json")):
+        raise ValueError("rehearsal cells cannot enter real-stage analysis")
     schedules = {}
     for location in locations:
         schedule = json.loads((location / "command_sequence.json").read_text())
         stage = schedule.get("stage")
-        if stage not in ("stage0", "U1", "U2", "S") or (len(locations) == 2 and stage != location.name):
+        if stage not in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S") or (location != source and stage != location.name):
             raise ValueError(f"invalid stage schedule: {location}")
         actions = {}
         for action in schedule["actions"]:
@@ -661,6 +674,9 @@ def validate_cell(directory: Path, record: dict, schedules: dict, config: dict, 
 
 def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_dir: Path | None = None):
     schedules = stage_schedules(out)
+    if not all(owner["stage"] == "rehearsal" for owner in schedules.values()) and any(
+            json.loads(path.read_text()).get("stage") == "rehearsal" for path in out.rglob("cell.json")):
+        raise ValueError("rehearsal cells cannot enter real-stage analysis")
     rows, errors, discarded = [], [], []
     invalid_cell_counts = defaultdict(int)
     used_bundles, seen_cells = set(), set()
@@ -708,7 +724,7 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
     decision["invalid_cell_counts_by_stage"] = {
         stage: {arm: invalid_cell_counts[(stage, arm)]
                 for arm in ("D", "I", "SH", "B")}
-        for stage in ("stage0", "U1", "U2", "S")}
+        for stage in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S")}
     decision["invalid_cell_counts"] = {arm: sum(counts[arm] for counts in decision["invalid_cell_counts_by_stage"].values())
                                        for arm in ("D", "I", "SH", "B")}
     report = {"cells": rows, "errors": errors, "discarded": discarded,

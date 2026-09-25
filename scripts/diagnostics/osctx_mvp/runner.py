@@ -17,11 +17,13 @@ import time
 try:
     from .common import blocks, load_config, write_json
     from .cell import display_state, hid_idle_seconds
-    from .analyze import bundle_evidence
+    from .analyze import (analyze_directory, bundle_evidence, equivalence_power,
+                          power_table, stage0_spread, u_replication_spread)
 except ImportError:
     from common import blocks, load_config, write_json
     from cell import display_state, hid_idle_seconds
-    from analyze import bundle_evidence
+    from analyze import (analyze_directory, bundle_evidence, equivalence_power,
+                         power_table, stage0_spread, u_replication_spread)
 
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = "com.joulewise.dummy.osctx."
@@ -98,7 +100,7 @@ def plan(out: Path, config_path: Path, config: dict, stage: str, python: str) ->
         previous_state = target
         sequence.append({"block": block["id"], "state": block["state"], "phase": block.get("phase"),
                          "arms": block["arms"], "discard": block["discard"],
-                         "gate": "HIDIdleTime >= 600 s" if block["state"] == "U" and stage != "stage0" else None,
+                         "gate": "HIDIdleTime >= 600 s" if block["state"] == "U" else None,
                          "starts": [a["start"] for a in actions if a["block"] == block["id"]],
                          "interrupted": "discard entire block and retry in same order"})
     write_json(out / "command_sequence.json", {"stage": stage, "seed": config["seed"], "actions": actions,
@@ -240,10 +242,92 @@ def transition(backend, target: str, config: dict, log):
     backend.sleep(config["display_settle_seconds"])
 
 
-def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
-            *, backend=None, existing_actions=None, extra_allow_pids=None) -> None:
+NETWORK_TIME = ["sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime"]
+
+
+def with_network_time(backend, log, body):
+    """Fail closed on off; always attempt on, including after off failure."""
+    def toggle(value):
+        argv = [*NETWORK_TIME, value]
+        try:
+            result = backend.run(argv)
+        except BaseException as exc:
+            log(event="network_time", argv=argv, returncode=None, stderr=str(exc))
+            raise RuntimeError(f"network time {value} failed: {exc}") from exc
+        log(event="network_time", argv=argv, returncode=result.returncode, stderr=result.stderr)
+        if result.returncode:
+            raise RuntimeError(f"network time {value} failed ({result.returncode}): {result.stderr}")
+    try:
+        toggle("off")
+        return body()
+    finally:
+        toggle("on")
+
+
+def launch_pid(backend, action, log):
+    """Capture the job PID while registered, before completion can erase it."""
+    target = f"gui/{os.getuid()}/{action['label']}"
+    directory = Path(action["cell_dir"])
+    for attempt in range(50):
+        result = backend.run(["/bin/launchctl", "print", target])
+        match = re.search(r"(?m)^\s*pid = (\d+)\s*$", result.stdout) if result.returncode == 0 else None
+        if match or (directory / "done.json").exists():
+            break
+        if attempt < 49:
+            backend.sleep(.1)
+    if not match and not (directory / "done.json").exists():
+        raise RuntimeError(f"launchd PID unavailable while cell is running: {action['label']}")
+    pid = int(match.group(1)) if match else None
+    pgid = None
+    if pid is not None:
+        group = backend.run(["/bin/ps", "-p", str(pid), "-o", "pgid="])
+        if group.returncode == 0 and group.stdout.strip().isdigit():
+            pgid = int(group.stdout.strip())
+    proof = {"pid": pid, "pgid": pgid, "print_returncode": result.returncode,
+             "print_stderr": result.stderr}
+    write_json(directory / "launch_proof.json", proof)
+    log(event="launch_pid", label=action["label"], **proof)
+    return proof
+
+
+def prove_bootout(backend, action, proof, log):
+    stop = backend.run(action["stop"])
+    registered = backend.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{action['label']}"])
+    if proof and proof["pid"] is not None:
+        pid = proof["pid"]
+        group = backend.run(["/usr/bin/pgrep", "-g", str(proof["pgid"] or pid)])
+        process = backend.run(["/bin/ps", "-p", str(pid), "-o", "pid="])
+        survivor = (group.returncode != 1 or bool(group.stdout.strip()) or
+                    process.returncode != 1 or bool(process.stdout.strip()))
+        check = {"pid": pid, "pgid": proof["pgid"], "pgrep_returncode": group.returncode,
+                 "pgrep_stdout": group.stdout, "pgrep_stderr": group.stderr,
+                 "ps_returncode": process.returncode, "ps_stdout": process.stdout,
+                 "ps_stderr": process.stderr}
+    else:
+        # Only our cell command carries this script/--out pair. An arbitrary
+        # cell-directory match could include the runner or a log viewer.
+        literal_dir = re.sub(r"([\\.^$*+?{}\[\]()|])", r"\\\1", action["cell_dir"])
+        pattern = (r"^[^[:space:]]+[[:space:]]+[^[:space:]]*/osctx_mvp/cell\.py"
+                   r"[[:space:]]+--out[[:space:]]+" + literal_dir + r"([[:space:]]|$)")
+        group = backend.run(["/usr/bin/pgrep", "-f", pattern])
+        survivor = group.returncode != 1 or bool(group.stdout.strip())
+        check = {"pid": None, "fallback_pattern": pattern,
+                 "pgrep_returncode": group.returncode, "pgrep_stdout": group.stdout,
+                 "pgrep_stderr": group.stderr}
+    log(event="bootout_proof", label=action["label"], bootout_returncode=stop.returncode,
+        bootout_stderr=stop.stderr, print_returncode=registered.returncode,
+        print_stdout=registered.stdout, print_stderr=registered.stderr, **check)
+    if registered.returncode == 0 or survivor:
+        raise RuntimeError(f"launchd survivor or proof error: {action['label']}")
+    if stop.returncode:
+        log(event="bootout_unneeded_or_failed", label=action["label"], returncode=stop.returncode)
+
+
+def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, python: str,
+                   *, backend, existing_actions=None, extra_allow_pids=None) -> None:
     backend = backend or SystemBackend()
     ownership: dict[str, tuple[dict, object | None]] = {}
+    launch_proofs = {}
     allow_pids = list(dict.fromkeys((runner_ancestry() if isinstance(backend, SystemBackend) else []) +
                                     (extra_allow_pids or [])))
     old_handlers = {}
@@ -266,15 +350,7 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
         if action["context"] == "SH":
             backend.stop_shell(process)
         else:
-            result = backend.run(action["stop"])
-            registered = backend.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{action['label']}"])
-            survivor = backend.run(["/usr/bin/pgrep", "-f", re.escape(action["cell_dir"])])
-            if registered.returncode == 0:
-                raise RuntimeError(f"launchd job survived bootout: {action['label']}")
-            if survivor.returncode != 1:
-                raise RuntimeError(f"launchd survivor or pgrep error: {action['label']}")
-            if result.returncode:
-                log(event="bootout_unneeded_or_failed", label=action["label"], returncode=result.returncode)
+            prove_bootout(backend, action, launch_proofs.get(action["label"]), log)
         log(event="cleanup_proved", label=action["label"])
     try:
         previous = "on"
@@ -316,6 +392,7 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
                             result = backend.run(action["start"])
                             if result.returncode:
                                 raise RuntimeError(f"bootstrap failed: {action['label']}")
+                            launch_proofs[action["label"]] = launch_pid(backend, action, log)
                             process = None
                         ownership[action["label"]] = action, process
                         deadline = backend.now() + config["timeout_seconds"]
@@ -382,9 +459,10 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
                 cleanup(action)
             except Exception as exc:
                 errors.append(str(exc))
-        if stage == "S" and backend.display() == "asleep":
+        if stage == "S":
             try:
-                transition(backend, "on", config, log)
+                if backend.display() == "asleep":
+                    transition(backend, "on", config, log)
             except Exception as exc:
                 errors.append(str(exc))
         for signum, handler in old_handlers.items():
@@ -393,18 +471,202 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
             raise RuntimeError("cleanup failed: " + "; ".join(errors))
 
 
+def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
+            *, backend=None, existing_actions=None, extra_allow_pids=None,
+            manage_network=True) -> None:
+    backend = backend or SystemBackend()
+    def body():
+        return _execute_cells(out, config_path, config, stage, python, backend=backend,
+                              existing_actions=existing_actions, extra_allow_pids=extra_allow_pids)
+    if not manage_network:
+        return body()
+    def log(**record):
+        with (out / "events.jsonl").open("a") as stream:
+            stream.write(json.dumps({"wall_ns": time.time_ns(), **record}) + "\n")
+    old_handlers = {}
+    if isinstance(backend, SystemBackend):
+        def interrupted_signal(signum, frame):
+            raise KeyboardInterrupt(f"signal {signum}")
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            old_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, interrupted_signal)
+    try:
+        return with_network_time(backend, log, body)
+    finally:
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
+
+
+def freeze_rule(spread: dict, config: dict) -> dict:
+    """Preregistered cheapest eligible U size, using the SH/I D/I proxy."""
+    candidates = []
+    power_cache = {}
+    for block_count in (6, 12):
+        for runs in (1, 2):
+            sd = u_replication_spread(spread, runs, config["runs_per_cell"]["stage0U"])
+            power = {}
+            for endpoint in ("E", "R"):
+                if sd[endpoint] is None or not math.isfinite(sd[endpoint]) or sd[endpoint] < 0:
+                    raise ValueError(f"invalid stage0U paired SD for {endpoint}")
+                key = (sd[endpoint], block_count)
+                if key not in power_cache:
+                    power_cache[key] = equivalence_power(1.5 * sd[endpoint], block_count)
+                for contrast in ("D/I", "SH/I"):
+                    power[f"{contrast}:{endpoint}"] = power_cache[key]
+            cell_minutes = 3.8 if runs == 1 else 6.0
+            wall = (3 * block_count + config["sizes"]["background_cells"] +
+                    config["sizes"]["u_warmup_cells"]) * cell_minutes
+            candidates.append({"blocks": block_count, "runs_per_cell": runs,
+                               "estimated_wall_minutes": wall, "power_at_1p5_sd": power,
+                               "within_budget": wall <= 180,
+                               "powered": all(value >= .80 for value in power.values())})
+    candidates.sort(key=lambda item: item["estimated_wall_minutes"])
+    selected = next((item for item in candidates if item["within_budget"] and item["powered"]), None)
+    reason = "cheapest_powered_within_budget"
+    if selected is None:
+        selected = next(item for item in candidates if (item["blocks"], item["runs_per_cell"]) == (12, 1))
+        reason = "underpowered_by_prereg"
+    return {"total_u_blocks": selected["blocks"], "runs_per_cell": selected["runs_per_cell"],
+            "estimated_wall_minutes": selected["estimated_wall_minutes"],
+            "power_at_1p5_sd": selected["power_at_1p5_sd"], "reason": reason,
+            "candidates": candidates, "D_I_sd_proxy": "SH/I stage0U paired spread"}
+
+
+def run_session(out: Path, config_path: Path, config: dict, python: str, *, backend=None,
+                extra_allow_pids=None):
+    backend = backend or SystemBackend()
+    out.mkdir(parents=True, exist_ok=True)
+    session_path = out / "session.json"
+    if session_path.exists() or (out / "freeze.json").exists():
+        raise FileExistsError("session or freeze already exists; session cannot overwrite a prior freeze")
+    session = {"session": "U", "status": "running", "steps": [], "reason": None}
+    write_json(session_path, session)
+    def log(**record):
+        with (out / "events.jsonl").open("a") as stream:
+            stream.write(json.dumps({"wall_ns": time.time_ns(), **record}) + "\n")
+    def step(name, fn):
+        record = {"step": name, "start_wall_ns": time.time_ns(), "end_wall_ns": None,
+                  "outcome": "running", "reason": None}
+        session["steps"].append(record)
+        write_json(session_path, session)
+        try:
+            result = fn()
+            record["outcome"] = "complete"
+            return result
+        except BaseException as exc:
+            record["outcome"] = "stopped"
+            record["reason"] = f"{type(exc).__name__}: {exc}"
+            session["status"] = "stopped"
+            session["reason"] = record["reason"]
+            raise
+        finally:
+            record["end_wall_ns"] = time.time_ns()
+            write_json(session_path, session)
+    def stage(name, active_config, active_path):
+        directory = out / name
+        actions = plan(directory, active_path, active_config, name, python)
+        execute(directory, active_path, active_config, name, python, backend=backend,
+                existing_actions=actions, extra_allow_pids=extra_allow_pids, manage_network=False)
+        report = analyze_directory(directory, active_config)
+        if report["errors"]:
+            raise RuntimeError(f"{name} analysis errors: {report['errors']}")
+        return report
+    def body():
+        stage0 = step("stage0U", lambda: stage("stage0U", config, config_path))
+        def power_step():
+            spread = stage0_spread(stage0["cells"])
+            if any(spread["paired_block_count_by_endpoint"][e] != config["sizes"]["stage0_blocks"] or
+                   spread["between_cell_paired_sd_log"][e] is None or spread["within_run_sd_log"][e] is None
+                   for e in ("E", "R")):
+                raise RuntimeError("stage0U has insufficient valid paired data for sizing")
+            sizing = freeze_rule(spread, config)
+            table = []
+            for runs in (1, 2):
+                sd = u_replication_spread(spread, runs, config["runs_per_cell"]["stage0U"])
+                estimates = {contrast: sd for contrast in ("D/I", "SH/I")}
+                table.extend(power_table(estimates, None, (6, 12), runs_per_cell_u=runs))
+            write_json(out / "power.json", {"spread": spread, "table": table,
+                                            "candidates": sizing["candidates"]})
+            return sizing
+        sizing = step("analyze_power", power_step)
+        def freeze_step():
+            frozen = json.loads(json.dumps(config))
+            frozen["sizes"]["u_blocks"] = 6
+            frozen["runs_per_cell"]["U1"] = frozen["runs_per_cell"]["U2"] = sizing["runs_per_cell"]
+            with (out / "freeze.json").open("x") as stream:
+                json.dump(sizing, stream, indent=2, sort_keys=True)
+                stream.write("\n")
+            write_json(out / "frozen_config.json", frozen)
+            return frozen
+        frozen = step("freeze", freeze_step)
+        frozen_path = out / "frozen_config.json"
+        u1 = step("U1", lambda: stage("U1", frozen, frozen_path))
+        if sizing["total_u_blocks"] == 12 or any(value.startswith("INCONCLUSIVE") for value in u1["verdicts"].values()):
+            step("U2", lambda: stage("U2", frozen, frozen_path))
+        else:
+            record = {"step": "U2", "start_wall_ns": time.time_ns(), "end_wall_ns": time.time_ns(),
+                      "outcome": "skipped", "reason": "six_block_freeze_and_U1_conclusive"}
+            session["steps"].append(record)
+            write_json(session_path, session)
+        step("S", lambda: stage("S", frozen, frozen_path))
+        def final_analysis():
+            report = analyze_directory(out, frozen)
+            if report["errors"]:
+                raise RuntimeError(f"final analysis errors: {report['errors']}")
+            return report
+        step("final_analyze", final_analysis)
+        session["status"] = "complete"
+        write_json(session_path, session)
+    old_handlers = {}
+    if isinstance(backend, SystemBackend):
+        def interrupted_signal(signum, frame):
+            raise KeyboardInterrupt(f"signal {signum}")
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            old_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, interrupted_signal)
+    try:
+        return with_network_time(backend, log, body)
+    except BaseException as exc:
+        session["status"] = "stopped"
+        reason = f"{type(exc).__name__}: {exc}"
+        session["reason"] = reason if session["reason"] is None else (
+            session["reason"] if session["reason"] == reason else session["reason"] + "; " + reason)
+        write_json(session_path, session)
+        raise
+    finally:
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--render-only", type=Path)
     mode.add_argument("--out", type=Path)
-    parser.add_argument("--stage", choices=("stage0", "U1", "U2", "S"), required=True)
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--stage", choices=("stage0", "stage0U", "U1", "U2", "S", "rehearsal"))
+    scope.add_argument("--session", choices=("U",))
     parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.json"))
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--u1-summary", type=Path)
     parser.add_argument("--allow-pid", action="append", type=int, default=[])
     args = parser.parse_args(argv)
     config = load_config(args.config)
+    out = (args.render_only or args.out).resolve()
+    if args.session:
+        if args.render_only:
+            for name in ("stage0U", "U1", "U2", "S"):
+                plan(out / name, args.config.resolve(), config, name, args.python)
+            write_json(out / "session_plan.json", {"session": "U", "stages": ["stage0U", "U1", "U2", "S"],
+                                                  "network_time": [NETWORK_TIME + ["off"], NETWORK_TIME + ["on"]],
+                                                  "sequence": ["network_time_off", "stage0U",
+                                                               "analyze_power", "freeze_json", "U1",
+                                                               "U2_if_twelve_blocks_or_U1_inconclusive",
+                                                               "S", "final_analyze", "network_time_on"],
+                                                  "U1_U2_templates": "provisional; live session re-renders after freeze"})
+            return 0
+        run_session(out, args.config.resolve(), config, args.python, extra_allow_pids=args.allow_pid)
+        return 0
     if args.stage == "U2" and args.out:
         if not args.u1_summary:
             parser.error("U2 execution requires --u1-summary")
@@ -417,9 +679,10 @@ def main(argv=None) -> int:
                     for block_id in expected_blocks}
         if any(arms != {"D", "I", "SH"} for arms in observed.values()):
             parser.error("U2 requires six complete U1 Williams blocks")
-        if not any(value.startswith("INCONCLUSIVE") for value in verdicts.values()):
+        freeze_path = out.parent / "freeze.json"
+        frozen_twelve = freeze_path.is_file() and json.loads(freeze_path.read_text()).get("total_u_blocks") == 12
+        if not frozen_twelve and not any(value.startswith("INCONCLUSIVE") for value in verdicts.values()):
             parser.error("U2 runs only after an INCONCLUSIVE U1 verdict")
-    out = (args.render_only or args.out).resolve()
     actions = plan(out, args.config.resolve(), config, args.stage, args.python)
     if args.out:
         execute(out, args.config.resolve(), config, args.stage, args.python,

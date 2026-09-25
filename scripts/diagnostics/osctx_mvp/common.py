@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 
 DEFAULT_CONFIG = Path(__file__).with_name("config.json")
-STAGES = ("stage0", "U1", "U2", "S")
+STAGES = ("stage0", "stage0U", "U1", "U2", "S", "rehearsal")
 
 
 def load_config(path: str | Path | None = None) -> dict:
@@ -19,16 +19,22 @@ def load_config(path: str | Path | None = None) -> dict:
         raise ValueError("a Williams stage must contain all six orders per six blocks")
     raw_runs = config.get("runs_per_cell", 2)
     if type(raw_runs) is int:
-        raw_runs = {stage: raw_runs for stage in STAGES}
+        raw_runs = {stage: (1 if stage == "rehearsal" else raw_runs) for stage in STAGES}
     if not isinstance(raw_runs, dict) or set(raw_runs) - set(STAGES):
         raise ValueError("runs_per_cell must be an integer or stage mapping")
-    config["runs_per_cell"] = {stage: raw_runs.get(stage, 2) for stage in STAGES}
+    config["runs_per_cell"] = {stage: raw_runs.get(stage, 1 if stage == "rehearsal" else 2) for stage in STAGES}
     if any(type(n) is not int or n < 1 for n in config["runs_per_cell"].values()):
         raise ValueError("runs_per_cell must contain positive integer counts")
     if config["sizes"]["stage0_blocks"] != 3:
         raise ValueError("stage0 needs three I/SH blocks")
     if config["runs_per_cell"]["stage0"] != 2:
         raise ValueError("stage0 needs two runs per cell")
+    if config["runs_per_cell"]["stage0U"] != 2:
+        raise ValueError("stage0U needs two runs per cell")
+    if config["runs_per_cell"]["rehearsal"] != 1:
+        raise ValueError("rehearsal needs one run per cell")
+    if config.get("rehearsal_state", "A") not in ("A", "U"):
+        raise ValueError("rehearsal_state must be A or U")
     return config
 
 
@@ -40,9 +46,12 @@ def williams_orders(seed: int, stage: str) -> list[tuple[str, ...]]:
 
 def blocks(config: dict, stage: str) -> list[dict]:
     sizes = config["sizes"]
-    if stage == "stage0":
-        return [{"id": f"stage0-{i+1:02}", "state": "A", "arms": ["I", "SH"] if i % 2 == 0 else ["SH", "I"], "discard": False}
+    if stage in ("stage0", "stage0U"):
+        return [{"id": f"{stage}-{i+1:02}", "state": "U" if stage == "stage0U" else "A", "arms": ["I", "SH"] if i % 2 == 0 else ["SH", "I"], "discard": False}
                 for i in range(sizes["stage0_blocks"])]
+    if stage == "rehearsal":
+        return [{"id": "rehearsal-01", "state": config.get("rehearsal_state", "A"),
+                 "arms": ["I", "SH"], "discard": False}]
     if stage in ("U1", "U2"):
         result = []
         if stage == "U1":

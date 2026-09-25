@@ -11,6 +11,7 @@ from pathlib import Path
 import plistlib
 import shlex
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -103,7 +104,8 @@ class OSCTXTests(unittest.TestCase):
             config = copy.deepcopy(self.config)
             config.pop("runs_per_cell")
             path.write_text(json.dumps(config))
-            self.assertEqual(common.load_config(path)["runs_per_cell"], {stage: 2 for stage in common.STAGES})
+            self.assertEqual(common.load_config(path)["runs_per_cell"],
+                             {stage: (1 if stage == "rehearsal" else 2) for stage in common.STAGES})
 
     def test_materialized_config_only_two_edits_and_hashes(self):
         source = cell.ROOT / self.config["source_config"]
@@ -471,6 +473,259 @@ class OSCTXTests(unittest.TestCase):
         self.assertAlmostEqual(scaled["E"], .015 * math.sqrt(2))
         self.assertAlmostEqual(analyze.equivalence_power(scaled["E"], 6), .13745, delta=.01)
         self.assertEqual({row["runs_per_cell_U"] for row in analyze.power_table(scaled["E"], scaled["R"])}, {1})
+
+    def test_network_time_order_and_fail_closed(self):
+        sudoers = (runner.ROOT / "scripts/joulewise-network-time.sudoers").read_text()
+        for setting in ("off", "on"):
+            self.assertIn("/usr/sbin/systemsetup -setusingnetworktime " + setting, sudoers)
+            self.assertEqual(runner.NETWORK_TIME + [setting],
+                             ["sudo", "-n", "/usr/sbin/systemsetup", "-setusingnetworktime", setting])
+        class Fake:
+            def __init__(self, off=0, on=0):
+                self.calls = []
+                self.off, self.on = off, on
+            def run(self, argv):
+                self.calls.append(argv)
+                return SimpleNamespace(returncode=self.off if argv[-1] == "off" else self.on,
+                                       stdout="", stderr=f"{argv[-1]} stderr")
+        records = []
+        fake = Fake()
+        def failure():
+            fake.calls.append("body")
+            raise ValueError("injected")
+        with self.assertRaisesRegex(ValueError, "injected"):
+            runner.with_network_time(fake, lambda **r: records.append(r), failure)
+        self.assertEqual(fake.calls, [runner.NETWORK_TIME + ["off"], "body", runner.NETWORK_TIME + ["on"]])
+        self.assertEqual([(r["argv"][-1], r["returncode"], r["stderr"]) for r in records],
+                         [("off", 0, "off stderr"), ("on", 0, "on stderr")])
+        fake = Fake()
+        with self.assertRaises(KeyboardInterrupt):
+            runner.with_network_time(fake, lambda **r: records.append(r),
+                                     lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
+        self.assertEqual(fake.calls, [runner.NETWORK_TIME + ["off"], runner.NETWORK_TIME + ["on"]])
+        fake = Fake(off=1)
+        with self.assertRaisesRegex(RuntimeError, "network time off failed"):
+            runner.with_network_time(fake, lambda **r: records.append(r),
+                                     lambda: fake.calls.append("body"))
+        self.assertEqual(fake.calls, [runner.NETWORK_TIME + ["off"], runner.NETWORK_TIME + ["on"]])
+        fake = Fake(on=1)
+        with self.assertRaisesRegex(RuntimeError, "network time on failed"):
+            runner.with_network_time(fake, lambda **r: records.append(r), lambda: None)
+
+    def test_launchd_pid_and_survivor_proof(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp) / "cell"
+            directory.mkdir()
+            action = {"cell_dir": str(directory), "label": "com.joulewise.dummy.osctx.test",
+                      "stop": ["/bin/launchctl", "bootout", "gui/501", "job.plist"]}
+            class Fake:
+                def __init__(self, captured=True, survivor=False, ps_alive=False):
+                    self.calls = []
+                    self.captured, self.survivor, self.ps_alive = captured, survivor, ps_alive
+                def run(self, argv):
+                    self.calls.append(argv)
+                    if argv[0] == "/bin/launchctl" and argv[1] == "print":
+                        if self.captured:
+                            self.captured = False
+                            return SimpleNamespace(returncode=0, stdout="state = running\n    pid = 4321\n", stderr="")
+                        return SimpleNamespace(returncode=1, stdout="", stderr="not found")
+                    if argv[:3] == ["/bin/ps", "-p", "4321"] and argv[-1] == "pgid=":
+                        return SimpleNamespace(returncode=0, stdout="9876\n", stderr="")
+                    if argv[0] == "/usr/bin/pgrep":
+                        return SimpleNamespace(returncode=0 if self.survivor else 1,
+                                               stdout="4321\n" if self.survivor else "", stderr="")
+                    if argv[:3] == ["/bin/ps", "-p", "4321"] and self.ps_alive:
+                        return SimpleNamespace(returncode=0, stdout="4321\n", stderr="")
+                    return SimpleNamespace(returncode=1 if argv[0] == "/bin/ps" else 0,
+                                           stdout="", stderr="")
+            fake = Fake()
+            proof = runner.launch_pid(fake, action, lambda **r: None)
+            self.assertEqual((proof["pid"], proof["pgid"]), (4321, 9876))
+            self.assertEqual(json.loads((directory / "launch_proof.json").read_text())["pid"], 4321)
+            runner.prove_bootout(fake, action, proof, lambda **r: None)
+            self.assertIn(["/usr/bin/pgrep", "-g", "9876"], fake.calls)
+            self.assertIn(["/bin/ps", "-p", "4321", "-o", "pid="], fake.calls)
+            self.assertFalse(any(call[:2] == ["/usr/bin/pgrep", "-f"] for call in fake.calls))
+            fake = Fake(survivor=True)
+            proof = runner.launch_pid(fake, action, lambda **r: None)
+            with self.assertRaisesRegex(RuntimeError, "survivor"):
+                runner.prove_bootout(fake, action, proof, lambda **r: None)
+            fake = Fake(ps_alive=True)
+            proof = runner.launch_pid(fake, action, lambda **r: None)
+            with self.assertRaisesRegex(RuntimeError, "survivor"):
+                runner.prove_bootout(fake, action, proof, lambda **r: None)
+            (directory / "done.json").write_text("{}")
+            fake = Fake(captured=False)
+            proof = runner.launch_pid(fake, action, lambda **r: None)
+            self.assertIsNone(proof["pid"])
+            runner.prove_bootout(fake, action, proof, lambda **r: None)
+            fallback = next(call[-1] for call in fake.calls if call[:2] == ["/usr/bin/pgrep", "-f"])
+            self.assertIn("osctx_mvp/cell\\.py", fallback)
+            self.assertIn(str(directory), fallback)
+            own = f"/python /repo/scripts/diagnostics/osctx_mvp/cell.py --out {directory} --state U\n"
+            reviewer = f"/python reviewer.py --path {directory} --note osctx_mvp/cell.py\n"
+            matched = subprocess.run(["/usr/bin/grep", "-E", fallback], input=own+reviewer,
+                                     text=True, capture_output=True, check=False)
+            self.assertEqual(matched.returncode, 0)
+            self.assertEqual(matched.stdout, own)
+
+    def test_rehearsal_render_and_real_analysis_refusal(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(runner.main(["--stage", "rehearsal", "--render-only", str(root / "rehearsal")]), 0)
+            schedule = json.loads((root / "rehearsal" / "command_sequence.json").read_text())
+            self.assertEqual([(a["state"], a["context"]) for a in schedule["actions"]],
+                             [("A", "I"), ("A", "SH")])
+            self.assertTrue(all(item.get("gate") is None for item in schedule["sequence"]))
+            self.assertEqual(self.config["runs_per_cell"]["rehearsal"], 1)
+            u_config = copy.deepcopy(self.config)
+            u_config["rehearsal_state"] = "U"
+            runner.plan(root / "rehearsal_u", common.DEFAULT_CONFIG, u_config, "rehearsal", "/python")
+            u_schedule = json.loads((root / "rehearsal_u" / "command_sequence.json").read_text())
+            self.assertEqual(u_schedule["sequence"][0]["gate"], "HIDIdleTime >= 600 s")
+            runner.plan(root / "U1", common.DEFAULT_CONFIG, self.config, "U1", "/python")
+            rehearsal = make_cell(root / "rehearsal", self.config, "rehearsal",
+                                  "rehearsal-01", "I", [.4])
+            record = json.loads((rehearsal / "cell.json").read_text())
+            record["state"] = "A"
+            (rehearsal / "cell.json").write_text(json.dumps(record))
+            with self.assertRaisesRegex(ValueError, "rehearsal"):
+                analyze.analyze_directory(root, self.config)
+            report = analyze.analyze_directory(root / "rehearsal", self.config)
+            self.assertEqual(len(report["cells"]), 1)
+            self.assertEqual(report["verdicts"], {})
+
+    def test_freeze_rule_constructed_spreads(self):
+        def spread(between, within):
+            return {"between_cell_paired_sd_log": {"E": between, "R": between},
+                    "within_run_sd_log": {"E": within, "R": within}}
+        cases = [((.005, 0.), (6, 1, "cheapest_powered_within_budget")),
+                 ((.006, .006), (6, 2, "cheapest_powered_within_budget")),
+                 ((.009, 0.), (12, 1, "cheapest_powered_within_budget")),
+                 ((.020, 0.), (12, 1, "underpowered_by_prereg"))]
+        for (between, within), expected in cases:
+            with self.subTest(between=between, within=within):
+                frozen = runner.freeze_rule(spread(between, within), self.config)
+                self.assertEqual((frozen["total_u_blocks"], frozen["runs_per_cell"], frozen["reason"]), expected)
+                self.assertEqual(len(frozen["power_at_1p5_sd"]), 4)
+                self.assertEqual([c["estimated_wall_minutes"] for c in frozen["candidates"]],
+                                 [79.8, 126.0, 148.2, 234.0])
+                self.assertFalse(frozen["candidates"][-1]["within_budget"])
+                if expected[2] == "underpowered_by_prereg":
+                    self.assertTrue(all(power < .80 for power in frozen["power_at_1p5_sd"].values()))
+
+    def test_stage0u_is_gated_sizing_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner.plan(root, common.DEFAULT_CONFIG, self.config, "stage0U", "/python")
+            schedule = json.loads((root / "command_sequence.json").read_text())
+            self.assertEqual(len(schedule["actions"]), 6)
+            self.assertTrue(all(block["gate"] == "HIDIdleTime >= 600 s" for block in schedule["sequence"]))
+            for block in common.blocks(self.config, "stage0U"):
+                for arm in block["arms"]:
+                    make_cell(root, self.config, "stage0U", block["id"], arm, [.4, .401])
+            report = analyze.analyze_directory(root, self.config)
+            self.assertEqual(len(report["cells"]), 6)
+            self.assertEqual(report["verdicts"], {})
+            self.assertEqual(analyze.stage0_spread(report["cells"])["paired_block_count_by_endpoint"],
+                             {"E": 3, "R": 3})
+
+    def test_session_chains_once_and_freezes_before_u1(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(runner.main(["--session", "U", "--render-only", str(root / "render")]), 0)
+            self.assertEqual(json.loads((root / "render" / "session_plan.json").read_text())["stages"],
+                             ["stage0U", "U1", "U2", "S"])
+            class Fake:
+                def __init__(self): self.calls = []
+                def run(self, argv):
+                    self.calls.append(argv)
+                    return SimpleNamespace(returncode=0, stdout="", stderr="")
+            fake = Fake()
+            stages = []
+            def execute(out, config_path, config, stage, python, **kwargs):
+                stages.append(stage)
+                self.assertFalse(kwargs["manage_network"])
+                if stage == "U1":
+                    self.assertTrue((out.parent / "freeze.json").is_file())
+                    self.assertEqual(config["runs_per_cell"]["U1"], 1)
+            def analyze_dir(path, config):
+                if path.name == "stage0U": return {"cells": [], "errors": []}
+                if path.name == "U1": return {"stage": "U1", "cells": [], "errors": [],
+                                              "verdicts": {"D/I:E": "EQUIVALENT"}}
+                return {"errors": [], "verdicts": {}}
+            sizing = {"total_u_blocks": 12, "runs_per_cell": 1, "reason": "underpowered_by_prereg",
+                      "candidates": [], "power_at_1p5_sd": {}}
+            with patch.object(runner, "execute", side_effect=execute), \
+                 patch.object(runner, "analyze_directory", side_effect=analyze_dir), \
+                 patch.object(runner, "stage0_spread", return_value={
+                     "paired_block_count": 3, "paired_block_count_by_endpoint": {"E": 3, "R": 3},
+                     "between_cell_paired_sd_log": {"E": .01, "R": .01},
+                     "within_run_sd_log": {"E": 0., "R": 0.}}), \
+                 patch.object(runner, "power_table", return_value=[]), \
+                 patch.object(runner, "freeze_rule", return_value=sizing):
+                runner.run_session(root / "live", common.DEFAULT_CONFIG, self.config, "/python", backend=fake)
+            self.assertEqual(stages, ["stage0U", "U1", "U2", "S"])
+            self.assertEqual(fake.calls, [runner.NETWORK_TIME + ["off"], runner.NETWORK_TIME + ["on"]])
+            session = json.loads((root / "live" / "session.json").read_text())
+            self.assertEqual(session["status"], "complete")
+            self.assertEqual([step["step"] for step in session["steps"]],
+                             ["stage0U", "analyze_power", "freeze", "U1", "U2", "S", "final_analyze"])
+            self.assertTrue(all(step["start_wall_ns"] <= step["end_wall_ns"] for step in session["steps"]))
+            with self.assertRaises(FileExistsError):
+                runner.run_session(root / "live", common.DEFAULT_CONFIG, self.config, "/python", backend=fake)
+
+    def test_six_block_session_skips_or_runs_u2_by_u1_verdict(self):
+        class Fake:
+            def __init__(self): self.calls = []
+            def run(self, argv):
+                self.calls.append(argv[-1])
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+        spread = {"paired_block_count_by_endpoint": {"E": 3, "R": 3},
+                  "between_cell_paired_sd_log": {"E": .005, "R": .005},
+                  "within_run_sd_log": {"E": 0., "R": 0.}}
+        sizing = {"total_u_blocks": 6, "runs_per_cell": 1, "reason": "cheapest_powered_within_budget",
+                  "candidates": [], "power_at_1p5_sd": {}}
+        for verdict, expected in (("EQUIVALENT", ["stage0U", "U1", "S"]),
+                                  ("INCONCLUSIVE", ["stage0U", "U1", "U2", "S"])):
+            with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as temp:
+                stages, fake = [], Fake()
+                def execute(out, config_path, config, stage, python, **kwargs): stages.append(stage)
+                def analyze_dir(path, config):
+                    if path.name == "stage0U": return {"cells": [], "errors": []}
+                    if path.name == "U1": return {"verdicts": {"D/I:E": verdict}, "errors": []}
+                    return {"errors": [], "verdicts": {}}
+                with patch.object(runner, "execute", side_effect=execute), \
+                     patch.object(runner, "analyze_directory", side_effect=analyze_dir), \
+                     patch.object(runner, "stage0_spread", return_value=spread), \
+                     patch.object(runner, "power_table", return_value=[]), \
+                     patch.object(runner, "freeze_rule", return_value=sizing):
+                    runner.run_session(Path(temp), common.DEFAULT_CONFIG, self.config, "/python", backend=fake)
+                self.assertEqual(stages, expected)
+                self.assertEqual(fake.calls, ["off", "on"])
+                session = json.loads((Path(temp) / "session.json").read_text())
+                self.assertEqual(next(s for s in session["steps"] if s["step"] == "U2")["outcome"],
+                                 "skipped" if verdict == "EQUIVALENT" else "complete")
+
+    def test_session_failure_records_reason_and_restores_network_time(self):
+        with tempfile.TemporaryDirectory() as temp:
+            calls = []
+            class Fake:
+                def run(self, argv):
+                    calls.append(argv[-1])
+                    return SimpleNamespace(returncode=0, stdout="", stderr="")
+            def fail_stage(*args, **kwargs):
+                calls.append("stage0U")
+                raise RuntimeError("injected stage failure")
+            with patch.object(runner, "execute", side_effect=fail_stage):
+                with self.assertRaisesRegex(RuntimeError, "injected stage failure"):
+                    runner.run_session(Path(temp), common.DEFAULT_CONFIG, self.config, "/python", backend=Fake())
+            self.assertEqual(calls, ["off", "stage0U", "on"])
+            session = json.loads((Path(temp) / "session.json").read_text())
+            self.assertEqual(session["status"], "stopped")
+            self.assertIn("injected stage failure", session["reason"])
+            self.assertEqual(session["steps"][0]["outcome"], "stopped")
+            self.assertIsNotNone(session["steps"][0]["end_wall_ns"])
 
 
 if __name__ == "__main__":
