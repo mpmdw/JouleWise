@@ -14,6 +14,7 @@ import argparse
 import copy
 import dataclasses
 from contextlib import nullcontext
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -29,6 +30,7 @@ if str(ROOT) not in sys.path:
 from joulewise import paper_custody as custody
 from joulewise.analysis_engine.artifact import validate_claim_verdicts
 from joulewise.analysis_engine.claims import evaluate_claim
+from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.registry import validate_analysis_manifest_v2, validate_analysis_registry_v2
 from joulewise.analysis_manifest import validate_analysis_manifest, validate_analysis_registry
 from joulewise.analysis_manifest_v3 import (
@@ -39,6 +41,20 @@ from joulewise.analysis_manifest_v3 import (
 from scripts import epoch_equivalence_check as epoch
 
 GOLDEN = ROOT / "tests/golden/claimgate_v1_replay.json"
+SELECTED_PATHS = (
+    "configs/analysis_registry/ap_spec_draft_front.v2.json",
+    "configs/analysis_registry/ap_spec_native_mtp_front.v2.json",
+    "configs/analysis_registry/slice_2m_ap2.v1.json",
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/analysis_manifest_v3.json",
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/analysis_manifest_v3.json",
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/analysis_manifest_v3.json",
+    "configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json",
+    "docs/paper/fill-rehearsal/dominance-not-reproduced-gamma-claim-verdicts.json",
+    "docs/paper/fill-rehearsal/dominance-reproduced-gamma-claim-verdicts.json",
+    "tests/fixtures/axi_ap_spec/analysis_manifest.json",
+    "tests/fixtures/axi_ap_spec/draft_analysis_manifest.json",
+    "tests/fixtures/axi_ap_spec/native_analysis_manifest.json",
+)
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -227,6 +243,17 @@ def _epoch_replays() -> dict[str, object]:
                         "recorded": recorded, "replayed": replay}
         if {key: recorded[key] for key in replay} != replay:
             raise ValueError(f"epoch replay disagrees: {name}")
+    invalid = json.loads((ROOT / sources["s9-pass"]).read_bytes())
+    retained = copy.deepcopy(invalid["retained"])
+    retained[0]["b_fiducial_s"] = "invalid-decimal"
+    session = SimpleNamespace(**invalid["session"])
+    with mock.patch.object(epoch, "_slot_outcomes", return_value=(invalid["slot_outcomes"], retained)):
+        try:
+            epoch.evaluate_session(session, session.session_id, invalid["reference_envelope"])
+        except Exception as exc:
+            result["invalid_decimal"] = {"raised": type(exc).__name__}
+        else:
+            result["invalid_decimal"] = {"raised": None}
     return result
 
 
@@ -247,6 +274,9 @@ def _claim_matrix() -> dict[str, object]:
             "adjusted_rejected": True}
     cases = {
         "direction_above": {}, "direction_at_floor": {"estimate": 1.0},
+        "direction_negative": {"estimate": -2.0,
+                               "metrology_aware_ci95": {"lower": -2.5, "upper": -1.5},
+                               "decision_interval": {"lower": -2.75, "upper": -1.25}},
         "direction_below_floor": {"estimate": 0.5},
         "multiplicity_not_rejected": {"adjusted_rejected": False},
         "legacy_l1": {"evidence_class": "legacy_l1"},
@@ -254,29 +284,72 @@ def _claim_matrix() -> dict[str, object]:
         "sensitivity_blocking": {"sensitivity_blocking": True},
         "direction_mismatch": {"hypothesized_direction": "negative"},
         "floor_none": {"floor_gate_j": None},
+        "floor_zero": {"floor_gate_j": 0.0},
         "floor_negative": {"floor_gate_j": -1.0},
+        "metrology_straddles_zero": {"metrology_aware_ci95": {"lower": -0.1, "upper": 2.5}},
+        "metrology_bad_lower": {"metrology_aware_ci95": {"lower": "invalid", "upper": 2.5}},
+        "decision_straddles_zero_metrology_clear": {"decision_interval": {"lower": -0.1, "upper": 2.75}},
+        "decision_straddles_metrology_negative": {
+            "metrology_aware_ci95": {"lower": -2.5, "upper": -1.5},
+            "decision_interval": {"lower": -0.1, "upper": 2.75}},
         "valid_floor_metadata": {"floor_metadata": valid_metadata},
         "invalid_floor_metadata": {"floor_metadata": {**valid_metadata, "floor_source": "wrong"}},
+        "floor_metadata_bad_discipline": {"floor_metadata": {**valid_metadata, "single_count_discipline": {}}},
+        "floor_metadata_not_mapping": {"floor_metadata": "invalid"},
+        "floor_metadata_missing_key": {"floor_metadata": {"floor_source": ATTRIBUTION_FLOOR_SOURCE}},
+        "floor_metadata_bad_limit": {"floor_metadata": {**valid_metadata, "floor_limit_class": "wrong"}},
+        "floor_metadata_bad_point": {"floor_metadata": {**valid_metadata, "point_floor_diagnostics": "invalid"}},
+        "interval_inverted": {"decision_interval": {"lower": 3.0, "upper": 2.0}},
+        "interval_bad_lower": {"decision_interval": {"lower": "invalid", "upper": 2.0}},
+        "interval_bad_upper": {"decision_interval": {"lower": 1.0, "upper": "invalid"}},
+        "estimate_bool": {"estimate": True},
+        "base_not_resolvable": {"base_reason_codes": ["floor_row_missing"]},
+        "base_unresolved": {"base_reason_codes": ["multiplicity_not_rejected"]},
+        "base_sensitivity": {"base_reason_codes": ["randomization_sensitivity_disagrees"]},
+        "claim_role_other": {"claim_role": "exploratory"},
         "equivalence_margin_at_floor_inside": {"equivalence": {"method": "tost_v1", "margin": 1.0}, "metrology_aware_ci95": {"lower": -0.5, "upper": 0.5}, "decision_interval": {"lower": -0.75, "upper": 0.75}},
         "equivalence_margin_at_floor_outside": {"equivalence": {"method": "tost_v1", "margin": 1.0}},
         "equivalence_margin_above_floor_inside": {"equivalence": {"method": "tost_v1", "margin": 3.0}},
+        "equivalence_registered_direction": {"equivalence": {"method": "tost_v1", "margin": 3.0},
+                                             "hypothesized_direction": "positive"},
         "equivalence_margin_above_floor_outside": {"equivalence": {"method": "tost_v1", "margin": 1.5}},
+        "equivalence_lower_outside": {"equivalence": {"method": "tost_v1", "margin": 3.0},
+                                      "metrology_aware_ci95": {"lower": -3.0, "upper": 1.0}},
+        "equivalence_bad_method": {"equivalence": {"method": "other", "margin": 3.0}},
+        "equivalence_zero_margin": {"equivalence": {"method": "tost_v1", "margin": 0.0}},
+        "equivalence_no_margin": {"equivalence": {"method": "tost_v1"}},
+        "equivalence_not_mapping": {"equivalence": "invalid"},
+        "equivalence_inside_not_rejected": {"equivalence": {"method": "tost_v1", "margin": 3.0}, "adjusted_rejected": False},
+        "equivalence_edge_at_margin": {"equivalence": {"method": "tost_v1", "margin": 2.75}},
     }
-    return {name: {"inputs": arguments, "output": evaluate_claim(**arguments)}
+    result = {name: {"inputs": arguments, "output": evaluate_claim(**arguments)}
             for name, override in cases.items()
             for arguments in [{**base, **override}]}
+    result["holm_adjust"] = {}
+    from joulewise.analysis_engine.claims import _finite
+    result["finite_nonfinite"] = {"input": "Infinity", "output": _finite(float("inf"))}
+    for name, values, m in (
+        ("three_complete", {"a": .01, "b": .04, "c": .03}, 3),
+        ("two_for_three_refused", {"a": .6, "b": .7}, 3),
+        ("above_one_clamp", {"a": .6, "b": .7, "c": None}, 3),
+        ("one_missing", {"a": .02, "b": None}, 2),
+    ):
+        try:
+            outcome = {"adjusted": holm_adjust(values, m=m)}
+        except Exception as exc:
+            outcome = {"raised": type(exc).__name__}
+        result["holm_adjust"][name] = {"p_values": values, "m": m, **outcome}
+    return result
 
 
 def _window_engine() -> dict[str, object]:
     """Replay the existing v1 artifact and v3 window test builders."""
     from joulewise.analysis_engine import _resolve_contrast_floor
-    from joulewise.analysis_engine.inputs import FloorRequest
+    from joulewise.analysis_engine.inputs import FloorEvidenceBinding, FloorRequest, LoadedAnalysisInputs
     from tests.test_analysis_claims import minimal_artifact
     from tests.test_analysis_integration import _v3_fixture_artifact
 
-    scenarios = {"minimal_v1_artifact": minimal_artifact(),
-                 "v3_window_clean": _v3_fixture_artifact(),
-                 "v3_window_supersession_diverged": _v3_fixture_artifact(diverged=True)}
+    scenarios = {"minimal_v1_artifact": minimal_artifact()}
     result = {}
     for name, artifact in scenarios.items():
         result[name] = {
@@ -302,91 +375,235 @@ def _window_engine() -> dict[str, object]:
         "resolutions": [{"status": row.status, "reason_codes": list(row.reason_codes)}
                         for row in resolutions],
     }
+    from tests.test_analysis_integration import make_artifact
+    floor = make_artifact()
+    binding = FloorEvidenceBinding(frozenset(), {}, {}, frozenset(), {}, ())
+    manifest = json.loads((ROOT / "configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json").read_bytes())
+    inputs = LoadedAnalysisInputs(
+        manifest=manifest, manifest_sha256="b" * 64, floor_artifact=floor,
+        floor_sha256="a" * 64, registered={}, effective={}, extra_audits=(),
+        valid_replacements=(), unregistered_matching=(), top_up_entry_ids=frozenset())
+    selector = {"floor_selector": {"condition_family_ids": ["condition-a"],
+                                   "metric": "gross_energy_j", "window_class": "request"}}
+    def resolved(current_inputs, factory, included=None, seam=None):
+        try:
+            context = (mock.patch("joulewise.analysis_engine._floor_request_or_refusal", return_value=seam)
+                       if seam is not None else nullcontext())
+            with context:
+                resolutions = _resolve_contrast_floor(current_inputs, selector, included or {}, factory)
+            return [{"status": row.status, "reason_codes": list(row.reason_codes)} for row in resolutions]
+        except Exception as exc:
+            return {"raised": type(exc).__name__}
+    matching = FloorRequest(backend="mlx", metric="gross_energy_j", window_class="request",
+                            condition_family_id="condition-a", condition_family_sha256="b" * 64,
+                            stack_identity_sha256="c" * 64, consumer_stress={})
+    v1_inputs = SimpleNamespace(manifest={"schema_version": "joulewise.analysis_manifest.v1",
+                                "arms": ["malformed"]}, floor_artifact=floor,
+                                floor_binding=binding, floor_sha256="a" * 64)
+    faulty_binding = dataclasses.replace(binding, global_problems=("calibration_plan_bytes_hash_mismatch",))
+    faulty_inputs = SimpleNamespace(manifest=manifest, floor_artifact=floor,
+                                    floor_binding=faulty_binding, floor_sha256="a" * 64)
+    empty_inputs = SimpleNamespace(manifest=manifest, floor_artifact=floor,
+                                   floor_binding=binding, floor_sha256="a" * 64)
+    cell_binding = dataclasses.replace(binding, problems_by_cell={"cell-1": ("calibration_plan_bytes_hash_mismatch",)})
+    cell_inputs = SimpleNamespace(manifest=manifest, floor_artifact=floor,
+                                  floor_binding=cell_binding, floor_sha256="a" * 64)
+    matching_manifest = copy.deepcopy(manifest)
+    matching_manifest["arms"].append({"condition_family_id": "condition-a",
+                                      "condition_family_sha256": "b" * 64})
+    matching_inputs = SimpleNamespace(manifest=matching_manifest, floor_artifact=floor,
+                                      floor_binding=binding, floor_sha256="a" * 64)
+    result["floor_request_refusal"] = {
+        "no_request": resolved(inputs, None),
+        "empty_binding": resolved(empty_inputs, None),
+        "bad_binding": resolved(faulty_inputs, None),
+        "bad_cell_binding": resolved(cell_inputs, None),
+        "no_factory_with_evidence": resolved(inputs, None, {"condition-a": [SimpleNamespace(raw_config={})]}),
+        "request_refused": resolved(inputs, None, seam=("consumer_identity_undeclared",)),
+        "production_request": resolved(matching_inputs, None, seam=matching),
+        "factory_none": resolved(inputs, lambda *_: None),
+        "metric_mismatch": resolved(inputs, lambda *_: dataclasses.replace(matching, metric="wrong")),
+        "window_mismatch": resolved(inputs, lambda *_: dataclasses.replace(matching, window_class="wrong")),
+        "condition_mismatch": resolved(inputs, lambda *_: dataclasses.replace(matching, condition_family_id="wrong")),
+        "hash_mismatch": resolved(inputs, lambda *_: matching),
+        "v3_match": resolved(matching_inputs, lambda *_: matching),
+        "v1_match": resolved(v1_inputs, lambda *_: matching),
+    }
     return result
 
 
-def _issuance_gate() -> dict[str, object]:
-    """Use the existing v1 window builder at the production issuance seam."""
-    import base64
+def _claim_gate_context(artifact: dict, manifest: dict, floor: dict, sidecar: bytes) -> custody._GateContext:
+    supply = json.loads((ROOT / "configs/paper_supply/supply_map.json").read_bytes())
+    role = "fixture.claim_evidence"
+    sources = tuple(custody._BoundFile(
+        row["base"], Path(row["path"]), row["expected_sha256"],
+        custody.InputRole(row["role"]), row["authority"])
+        for row in supply["roles"][role]["inputs"])
+    raws = {
+        custody.InputRole.CLAIM_VERDICTS: canonical_bytes(artifact),
+        custody.InputRole.CLAIM_SIDE_BOUND: sidecar,
+        custody.InputRole.FINALIZED_MANIFEST: canonical_bytes(manifest),
+        custody.InputRole.FLOOR_ARTIFACT: base64.b64decode(
+            artifact["inputs"]["floor_artifact"]["embedded_bytes_base64"]),
+    }
+    return custody._GateContext("claim_evidence", role, "production", "claim-evidence.v1",
+                                (artifact["contrasts"][0]["contrast_id"],), ROOT, ROOT, "",
+                                sources, (), raws, None)
+
+
+def _replay_record(replay: custody._FamilyReplay) -> dict[str, object]:
+    return {"authentic": replay.authentic, "admitted": replay.admitted,
+            "validator_codes": [getattr(code, "reason_code", str(code)) for code in replay.validator_codes],
+            "grants": [{"kind": grant.kind, "subject_id": grant.subject_id} for grant in replay.grants]}
+
+
+def _gate_fixture() -> tuple[dict, dict, dict, bytes]:
     from joulewise.analysis_engine import claim_side_bound
-    from joulewise import analysis_manifest_v3
     from tests.test_analysis_integration import _v3_fixture_artifact
-    from tests.test_paper_custody import RoundFiveTests
 
     artifact = _v3_fixture_artifact()
-    artifact["evidence_class"] = "current"  # Existing custody test's v1 gate wire.
-    manifest_path = ROOT / "configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json"
-    manifest = json.loads(manifest_path.read_bytes())
-    case = RoundFiveTests()
-    ctx = case.context("claim_evidence")
-    floor_raw = base64.b64decode(artifact["inputs"]["floor_artifact"]["embedded_bytes_base64"])
-    ctx.raws[custody.InputRole.FLOOR_ARTIFACT] = floor_raw
-    ctx.raws[custody.InputRole.FINALIZED_MANIFEST] = canonical_bytes(manifest)
-    ctx.raws[custody.InputRole.CLAIM_SIDE_BOUND] = b"{}"
-    ctx = dataclasses.replace(ctx, subjects=(artifact["contrasts"][0]["contrast_id"],))
-    cases = {}
-    for name, value in (("admitting_v1_wire", artifact),
-                        ("invalid_verdict_wire", {**artifact, "claim_verdicts_id": "cv-invalid"})):
-        ctx.raws[custody.InputRole.CLAIM_VERDICTS] = canonical_bytes(value)
-        with mock.patch.object(claim_side_bound, "validate_claim_side_bound", return_value=[]), \
-             mock.patch.object(analysis_manifest_v3, "validate_finalized_analysis_manifest_v3", return_value=[]), \
-             mock.patch.object(custody, "_validate_floor_acceptance", return_value=None), \
-             (mock.patch("joulewise.analysis_engine.artifact.validate_claim_verdicts", return_value=[])
-              if name == "admitting_v1_wire" else nullcontext()):
-            replay = custody._claim_issuance_gate(ctx)
-        cases[name] = {"authentic": replay.authentic, "admitted": replay.admitted,
-                       "validator_codes": [getattr(code, "reason_code", str(code))
-                                           for code in replay.validator_codes],
-                       "grants": [{"kind": grant.kind, "subject_id": grant.subject_id}
-                                  for grant in replay.grants]}
-    return {"manifest_id": artifact["inputs"]["analysis_manifest"]["manifest_id"],
-            "subject": ctx.subjects[0], "scenarios": cases,
-            "test_seams": ["finalized manifest validation", "sidecar validation", "floor acceptance",
-                           "valid case verdict validation (existing custody v1 wire shape)"]}
+    # The integration builder's synthetic resolution names are not cells in
+    # its embedded floor. Bind the synthetic row to the embedded cell so the
+    # production sidecar validator can execute without a seam.
+    for contrast in artifact["contrasts"]:
+        for resolution in contrast["floor"]["resolutions"]:
+            resolution["source_cell_ids"] = ["cell-1"]
+        contrast["floor"]["floor_row_ids"] = ["cell-1"]
+    from joulewise.analysis_engine.artifact import calculate_claim_verdicts_id
+    artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+    manifest = json.loads((ROOT / "configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json").read_bytes())
+    floor = json.loads(base64.b64decode(artifact["inputs"]["floor_artifact"]["embedded_bytes_base64"]))
+    raw = canonical_bytes(artifact)
+    sidecar = claim_side_bound.produce_claim_side_bound(raw, finalized_manifest=manifest, floor_artifact=floor)
+    return artifact, manifest, floor, sidecar
+
+
+def _issuance_gate() -> dict[str, object]:
+    """Pin the real v1 wire at the production replay boundary."""
+    from joulewise.analysis_engine import claim_side_bound
+    from joulewise import analysis_manifest_v3
+    artifact, manifest, floor, sidecar = _gate_fixture()
+    ctx = _claim_gate_context(artifact, manifest, floor, sidecar)
+    seams = (mock.patch.object(analysis_manifest_v3, "validate_finalized_analysis_manifest_v3", return_value=[]),
+             mock.patch.object(custody, "_validate_floor_acceptance", return_value=None))
+    with seams[0], seams[1]:
+        replay = custody._replay_family(ctx)
+        try:
+            custody._claim_issuance_gate(ctx)
+        except KeyError as exc:
+            direct = {"raised": "KeyError", "key": str(exc.args[0])}
+        else:
+            direct = {"raised": None}
+        shim = copy.deepcopy(artifact)
+        shim["evidence_class"] = shim["inputs"]["evidence_class"]
+        shimsidecar = claim_side_bound.produce_claim_side_bound(
+            canonical_bytes(shim), finalized_manifest=manifest, floor_artifact=floor)
+        shimctx = _claim_gate_context(shim, manifest, floor, shimsidecar)
+        with mock.patch("joulewise.analysis_engine.artifact.validate_claim_verdicts", return_value=[]):
+            admitted = custody._replay_family(shimctx)
+    return {"pre": {**_replay_record(replay), "direct_call": direct},
+            "post": {**_replay_record(admitted),
+                     "shim": "top-level evidence_class copied from inputs.evidence_class; validate_claim_verdicts patched to []"}}
+
+
+def _invalid_issuance_gate() -> dict[str, object]:
+    from joulewise.analysis_engine import claim_side_bound
+    from joulewise import analysis_manifest_v3
+    artifact, manifest, floor, _ = _gate_fixture()
+    artifact["claim_verdicts_id"] = "cv-invalid"
+    raw = canonical_bytes(artifact)
+    sidecar = claim_side_bound.produce_claim_side_bound(raw, finalized_manifest=manifest,
+                                                       floor_artifact=floor)
+    ctx = _claim_gate_context(artifact, manifest, floor, sidecar)
+    with mock.patch.object(analysis_manifest_v3, "validate_finalized_analysis_manifest_v3", return_value=[]), \
+         mock.patch.object(custody, "_validate_floor_acceptance", return_value=None):
+        return _replay_record(custody._replay_family(ctx))
+
+
+def _claim_side_bound() -> dict[str, object]:
+    from joulewise.analysis_engine.claim_side_bound import (
+        produce_claim_side_bound, validate_claim_side_bound,
+    )
+    from tests.test_analysis_integration import _v3_fixture_artifact
+    artifact = _v3_fixture_artifact()
+    manifest = json.loads((ROOT / "configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json").read_bytes())
+    floor = json.loads(base64.b64decode(artifact["inputs"]["floor_artifact"]["embedded_bytes_base64"]))
+    raw = canonical_bytes(artifact)
+    try:
+        sidecar = produce_claim_side_bound(raw, finalized_manifest=manifest, floor_artifact=floor)
+        codes = validate_claim_side_bound(sidecar, claim_verdicts_raw=raw,
+                                          finalized_manifest=manifest, floor_artifact=floor)
+        return {"sha256": hashlib.sha256(sidecar).hexdigest(), "validator_codes": list(codes)}
+    except Exception as exc:
+        return {"raised": type(exc).__name__}
+
+
+def _window_transitions() -> dict[str, object]:
+    from tests.test_analysis_integration import _v3_fixture_artifact
+    result = {}
+    for name, artifact in (("v3_window_clean", _v3_fixture_artifact()),
+                           ("v3_window_supersession_diverged", _v3_fixture_artifact(diverged=True))):
+        for row in artifact["contrasts"]:
+            evaluation = row["claim_evaluation"]
+            pre = {"manifest_id": artifact["inputs"]["analysis_manifest"]["manifest_id"],
+                   "validator_errors": validate_claim_verdicts(artifact),
+                   "claim_evaluation": evaluation}
+            post = {"claim_evaluation": {**evaluation,
+                                         "claim_ready_for_l2_l3": False,
+                                         "claim_level_ceiling": "L1"},
+                    "reason_codes_added": ["claim_rule_version_v1_closed"]}
+            result[name] = {"pre": pre, "post": post}
+    return result
 
 
 def capture() -> dict[str, object]:
-    pinned = json.loads(GOLDEN.read_bytes())
-    selected = pinned.get("selected_paths") or sorted(
-        set(pinned["claim_verdicts"])
-        | set(pinned["validator_outcomes"]["manifests"])
-        | set(pinned["validator_outcomes"]["registries"]))
+    selected = list(SELECTED_PATHS)
     paths = [ROOT / rel for rel in selected]
     validators = _validators(paths)
     v1_ids = sorted({row["manifest_id"] for row in validators["manifests"].values()
                      if row["schema_version"] in {"joulewise.analysis_manifest.v1",
                                                   "joulewise.analysis_manifest.v3.finalized"}
                      and not row["validator_errors"] and row["manifest_id"]})
-    return {"schema_version": "joulewise.claimgate_v1_replay_golden.v1",
+    issuance = _issuance_gate()
+    verdicts = _claim_artifacts(paths)
+    verdicts["invalid_verdict_wire"] = _invalid_issuance_gate()
+    return {"schema_version": "joulewise.claimgate_v1_replay_golden.v2",
             "selected_paths": selected,
             "selection_rules": {
                 "selected_paths": "Pinned checked-in claim-verdict, manifest, and registry JSON paths selected for PR-0; discovery is informational only.",
                 "v1_golden_manifest_ids": "Sorted manifest_id values from selected finalized v1 or v3.finalized manifests with no validator errors. No such checked-in finalized manifest exists at PR-0, so the list is empty; drafts and synthetic artifact IDs do not count.",
-                "fixture_families": "Fixture authentication only; the non-issuing mode always refuses admission. No non-fixture replay is available from these checked-in fixture bytes; production issuance is sampled separately below.",
+                "fixture_families": "Fixture authentication only; the non-issuing mode always refuses admission. Production issuance is sampled by the real_v1_wire transition.",
+                "test_seams": ["validate_finalized_analysis_manifest_v3 → []", "_validate_floor_acceptance → None"],
             },
             "v1_golden_manifest_ids": v1_ids,
-            "fixture_families": _families(),
-            "claim_matrix": _claim_matrix(),
-            "claim_verdicts": _claim_artifacts(paths),
-            "validator_outcomes": validators,
-            "window_engine": _window_engine(),
-            "issuance_gate": _issuance_gate(),
-            "epoch_replays": _epoch_replays()}
+            "invariant": {
+                "fixture_families": _families(),
+                "claim_matrix": _claim_matrix(),
+                "claim_verdicts": verdicts,
+                "validator_outcomes": validators,
+                "window_engine": _window_engine(),
+                "claim_side_bound": _claim_side_bound(),
+                "epoch_replays": _epoch_replays(),
+            },
+            "transitions": {"WR-6": _window_transitions(),
+                            "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {
+                                "real_v1_wire": issuance}}}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--allow-dirty-for-tests", action="store_true")
-    args = parser.parse_args()
-    if not args.allow_dirty_for_tests:
-        subprocess.run(["git", "rev-parse", "--verify", "origin/main"],
-                       cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
-        committed = subprocess.run(["git", "diff", "--quiet", "origin/main", "HEAD", "--", "joulewise/"], cwd=ROOT)
-        working = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "joulewise/"], cwd=ROOT)
-        untracked = subprocess.check_output(
-            ["git", "ls-files", "--others", "--exclude-standard", "--", "joulewise/"], cwd=ROOT)
-        if committed.returncode or working.returncode or untracked:
-            raise SystemExit("refusing golden refresh: joulewise/ differs from origin/main")
+    parser.parse_args()
+    if subprocess.run(["git", "rev-parse", "--verify", "origin/main"], cwd=ROOT,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        print("refusing golden refresh: origin/main absent", file=sys.stderr)
+        raise SystemExit(2)
+    protected = ("joulewise/", "scripts/epoch_equivalence_check.py")
+    committed = subprocess.run(["git", "diff", "--quiet", "origin/main", "HEAD", "--", *protected], cwd=ROOT)
+    working = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", *protected], cwd=ROOT)
+    untracked = subprocess.check_output(
+        ["git", "ls-files", "--others", "--exclude-standard", "--", *protected], cwd=ROOT)
+    if committed.returncode or working.returncode or untracked:
+        raise SystemExit("refusing golden refresh: decision source differs from origin/main")
     GOLDEN.parent.mkdir(parents=True, exist_ok=True)
     GOLDEN.write_bytes(canonical_bytes(capture()))
     print(f"wrote {GOLDEN.relative_to(ROOT)}")

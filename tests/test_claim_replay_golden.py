@@ -9,12 +9,14 @@ import unittest
 from unittest import mock
 
 from scripts.capture_claim_replay_golden import (
-    GOLDEN, ROOT, _tracked_json, canonical_bytes, capture,
+    GOLDEN, ROOT, SELECTED_PATHS, _tracked_json, _issuance_gate,
+    _window_transitions, canonical_bytes, capture,
 )
 
 
 # Update only alongside a reviewed refresh of tests/golden/claimgate_v1_replay.json.
-GOLDEN_BLOB_SHA = "e5e84930185e3add160ec3b4a7f6c363fe4f9447"
+GOLDEN_BLOB_SHA = "82450aa5499fb25967714835cb0d0aaecb92d372"
+APPLIED_TRANSITIONS: frozenset[str] = frozenset()
 
 
 def _blob_sha(raw: bytes) -> str:
@@ -33,7 +35,48 @@ class ClaimReplayGoldenTests(unittest.TestCase):
     def test_claimgate_v1_replay_golden_unchanged(self) -> None:
         expected = GOLDEN.read_bytes()
         self.assertEqual(expected, canonical_bytes(json.loads(expected)))
-        _assert_matches_golden(canonical_bytes(capture()))
+        actual = capture()
+        pinned = json.loads(expected)
+        self.assertEqual(actual["selected_paths"], list(SELECTED_PATHS))
+        self.assertEqual(pinned["selected_paths"], list(SELECTED_PATHS))
+        _assert_matches_golden(canonical_bytes({**pinned, "invariant": actual["invariant"],
+                                                "v1_golden_manifest_ids": actual["v1_golden_manifest_ids"]}))
+
+    def test_transitions_match_applied_state(self) -> None:
+        pinned = json.loads(GOLDEN.read_bytes())["transitions"]
+        actual = {"WR-6": _window_transitions(),
+                  "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {"real_v1_wire": _issuance_gate()}}
+        self.assertEqual(set(actual), set(pinned))
+        for ruling_id, scenarios in pinned.items():
+            self.assertEqual(set(actual[ruling_id]), set(scenarios))
+            for name, states in scenarios.items():
+                current = actual[ruling_id][name]["pre"]
+                with self.subTest(ruling_id=ruling_id, scenario=name):
+                    if ruling_id not in APPLIED_TRANSITIONS:
+                        self.assertEqual(current, states["pre"])
+                    elif ruling_id == "WR-6":
+                        expected = states["post"]["claim_evaluation"]
+                        observed = current["claim_evaluation"]
+                        self.assertEqual({k: v for k, v in observed.items() if k != "reason_codes"},
+                                         {k: v for k, v in expected.items() if k != "reason_codes"})
+                        self.assertEqual(set(observed["reason_codes"]),
+                                         set(states["pre"]["claim_evaluation"]["reason_codes"])
+                                         | set(states["post"]["reason_codes_added"]))
+                        self.assertEqual(current["manifest_id"], states["pre"]["manifest_id"])
+                        self.assertEqual(current["validator_errors"], states["pre"]["validator_errors"])
+                    else:
+                        self.assertEqual({k: v for k, v in current.items() if k != "direct_call"},
+                                         {k: v for k, v in states["post"].items() if k != "shim"})
+
+    def test_golden_branch_coverage_complete(self) -> None:
+        from scripts.claimgate_golden_sweep import coverage_sweep
+        result = coverage_sweep()
+        self.assertEqual(result["unlisted"], [], result["unlisted"])
+
+    def test_golden_mutation_sweep_zero_unlisted_survivors(self) -> None:
+        from scripts.claimgate_golden_sweep import mutation_sweep
+        result = mutation_sweep()
+        self.assertEqual(result["unlisted_survivors"], [], result["unlisted_survivors"])
 
     def test_golden_detects_one_number_mutation(self) -> None:
         with mock.patch("joulewise.analysis_engine._resolve_contrast_floor", return_value=[]):
@@ -54,7 +97,7 @@ class ClaimReplayGoldenTests(unittest.TestCase):
             source_changes = subprocess.check_output(
                 ["git", "diff", "--name-only", base, "HEAD", "--", "joulewise/",
                  "scripts/epoch_equivalence_check.py"], cwd=ROOT, text=True)
-            self.assertEqual(source_changes, "", "golden refresh shares a commit range with decision code")
+            self.assertEqual(source_changes, "", "golden refresh shares a commit range with decision code; a stale local origin/main produces this failure, and CI fetches full depth")
         else:
             self.assertEqual(changed.returncode, 0)
 

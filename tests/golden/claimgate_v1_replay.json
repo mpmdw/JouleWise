@@ -1,2714 +1,3698 @@
 {
- "claim_matrix": {
-  "direction_above": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L2",
-    "claim_ready_for_l2_l3": true,
-    "direction": "positive",
-    "outcome": "direction_supported",
-    "reason_codes": []
-   }
-  },
-  "direction_at_floor": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 1.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "not_resolvable",
-    "reason_codes": [
-     "effect_not_above_floor"
-    ]
-   }
-  },
-  "direction_below_floor": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 0.5,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "not_resolvable",
-    "reason_codes": [
-     "effect_not_above_floor"
-    ]
-   }
-  },
-  "direction_mismatch": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "hypothesized_direction": "negative",
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": "positive",
-    "outcome": "direction_supported",
-    "reason_codes": []
-   }
-  },
-  "equivalence_margin_above_floor_inside": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "equivalence": {
-     "margin": 3.0,
-     "method": "tost_v1"
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L2",
-    "claim_ready_for_l2_l3": true,
-    "direction": null,
-    "outcome": "equivalent",
-    "reason_codes": []
-   }
-  },
-  "equivalence_margin_above_floor_outside": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "equivalence": {
-     "margin": 1.5,
-     "method": "tost_v1"
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "unresolved",
-    "reason_codes": [
-     "equivalence_not_supported"
-    ]
-   }
-  },
-  "equivalence_margin_at_floor_inside": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": -0.75,
-     "upper": 0.75
-    },
-    "equivalence": {
-     "margin": 1.0,
-     "method": "tost_v1"
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": -0.5,
-     "upper": 0.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "not_resolvable",
-    "reason_codes": [
-     "equivalence_margin_not_above_floor"
-    ]
-   }
-  },
-  "equivalence_margin_at_floor_outside": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "equivalence": {
-     "margin": 1.0,
-     "method": "tost_v1"
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "not_resolvable",
-    "reason_codes": [
-     "equivalence_margin_not_above_floor"
-    ]
-   }
-  },
-  "floor_negative": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": -1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "not_estimable",
-    "reason_codes": [
-     "floor_artifact_invalid"
-    ]
-   }
-  },
-  "floor_none": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": null,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "not_resolvable",
-    "reason_codes": [
-     "floor_abs_missing",
-     "floor_cmp_missing"
-    ]
-   }
-  },
-  "invalid_floor_metadata": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "floor_metadata": {
-     "floor_limit_class": "attribution_limited",
-     "floor_source": "wrong",
-     "point_floor_diagnostics": {},
-     "single_count_discipline": {
-      "apparent_double_count_removal_forbidden": true,
-      "both_terms_required": true,
-      "claim_side_bound_role": "claim_measurement_uncertainty_bound",
-      "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
-      "floor_role": "calibration_false_effect_bound",
-      "gating": false,
-      "not_an_acceptance_gate": true,
-      "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
-      "planning_sizing_expression": "floor_j + claim_side_bound_j",
-      "role": "prospective_sizing_diagnostic",
-      "rule_id": "attribution_floor_plus_claim_side_bound.v2"
+ "invariant": {
+  "claim_matrix": {
+   "base_not_resolvable": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "base_reason_codes": [
+      "floor_row_missing"
+     ],
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
      }
     },
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "floor_row_missing"
+     ]
     }
    },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "not_estimable",
-    "reason_codes": [
-     "floor_artifact_invalid"
-    ]
-   }
-  },
-  "legacy_l1": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "evidence_class": "legacy_l1",
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": "positive",
-    "outcome": "direction_supported",
-    "reason_codes": []
-   }
-  },
-  "multiplicity_not_rejected": {
-   "inputs": {
-    "adjusted_rejected": false,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": null,
-    "outcome": "unresolved",
-    "reason_codes": [
-     "multiplicity_not_rejected"
-    ]
-   }
-  },
-  "non_confirmatory": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "confirmatory_status": "exploratory",
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    }
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": "positive",
-    "outcome": "direction_supported",
-    "reason_codes": []
-   }
-  },
-  "sensitivity_blocking": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
-    },
-    "sensitivity_blocking": true
-   },
-   "output": {
-    "claim_level_ceiling": "L1",
-    "claim_ready_for_l2_l3": false,
-    "direction": "positive",
-    "outcome": "direction_supported",
-    "reason_codes": []
-   }
-  },
-  "valid_floor_metadata": {
-   "inputs": {
-    "adjusted_rejected": true,
-    "decision_interval": {
-     "lower": 1.25,
-     "upper": 2.75
-    },
-    "estimate": 2.0,
-    "floor_gate_j": 1.0,
-    "floor_metadata": {
-     "floor_limit_class": "attribution_limited",
-     "floor_source": "E_clock_anchor_shift_bound_j",
-     "point_floor_diagnostics": {},
-     "single_count_discipline": {
-      "apparent_double_count_removal_forbidden": true,
-      "both_terms_required": true,
-      "claim_side_bound_role": "claim_measurement_uncertainty_bound",
-      "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
-      "floor_role": "calibration_false_effect_bound",
-      "gating": false,
-      "not_an_acceptance_gate": true,
-      "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
-      "planning_sizing_expression": "floor_j + claim_side_bound_j",
-      "role": "prospective_sizing_diagnostic",
-      "rule_id": "attribution_floor_plus_claim_side_bound.v2"
+   "base_sensitivity": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "base_reason_codes": [
+      "randomization_sensitivity_disagrees"
+     ],
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
      }
     },
-    "metrology_aware_ci95": {
-     "lower": 1.5,
-     "upper": 2.5
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": [
+      "randomization_sensitivity_disagrees"
+     ]
     }
    },
-   "output": {
-    "claim_level_ceiling": "L2",
-    "claim_ready_for_l2_l3": true,
-    "direction": "positive",
-    "floor_limit": {
-     "floor_limit_class": "attribution_limited",
-     "floor_source": "E_clock_anchor_shift_bound_j",
-     "point_floor_diagnostics": {},
-     "published_floor_j": 1.0,
-     "single_count_discipline": {
-      "apparent_double_count_removal_forbidden": true,
-      "both_terms_required": true,
-      "claim_side_bound_role": "claim_measurement_uncertainty_bound",
-      "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
-      "floor_role": "calibration_false_effect_bound",
-      "gating": false,
-      "not_an_acceptance_gate": true,
-      "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
-      "planning_sizing_expression": "floor_j + claim_side_bound_j",
-      "role": "prospective_sizing_diagnostic",
-      "rule_id": "attribution_floor_plus_claim_side_bound.v2"
+   "base_unresolved": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "base_reason_codes": [
+      "multiplicity_not_rejected"
+     ],
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
      }
     },
-    "outcome": "direction_supported",
-    "reason_codes": []
-   }
-  }
- },
- "claim_verdicts": {
-  "docs/paper/fill-rehearsal/dominance-not-reproduced-gamma-claim-verdicts.json": {
-   "evaluations": [
-    {
-     "arguments": {
-      "adjusted_rejected": true,
-      "base_reason_codes": [],
-      "claim_role": "primary",
-      "confirmatory_status": "confirmatory",
-      "decision_interval": {
-       "lower": 999120.5,
-       "upper": 999121.5
-      },
-      "equivalence": null,
-      "estimate": 999109.5,
-      "evidence_class": "current",
-      "floor_gate_j": 999104.5,
-      "floor_metadata": null,
-      "hypothesized_direction": "positive",
-      "metrology_aware_ci95": {
-       "lower": 999117.5,
-       "upper": 999118.5
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "multiplicity_not_rejected"
+     ]
+    }
+   },
+   "claim_role_other": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "claim_role": "exploratory",
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "decision_straddles_metrology_negative": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": -0.1,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": -2.5,
+      "upper": -1.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "deterministic_bound_obscures_direction"
+     ]
+    }
+   },
+   "decision_straddles_zero_metrology_clear": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": -0.1,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "deterministic_bound_obscures_direction"
+     ]
+    }
+   },
+   "direction_above": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L2",
+     "claim_ready_for_l2_l3": true,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "direction_at_floor": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 1.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "effect_not_above_floor"
+     ]
+    }
+   },
+   "direction_below_floor": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 0.5,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "effect_not_above_floor"
+     ]
+    }
+   },
+   "direction_mismatch": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "hypothesized_direction": "negative",
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "direction_negative": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": -2.75,
+      "upper": -1.25
+     },
+     "estimate": -2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": -2.5,
+      "upper": -1.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L2",
+     "claim_ready_for_l2_l3": true,
+     "direction": "negative",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "equivalence_bad_method": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 3.0,
+      "method": "other"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "equivalence_edge_at_margin": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 2.75,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "equivalence_inside_not_rejected": {
+    "inputs": {
+     "adjusted_rejected": false,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 3.0,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "equivalence_lower_outside": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 3.0,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": -3.0,
+      "upper": 1.0
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "equivalence_margin_above_floor_inside": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 3.0,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L2",
+     "claim_ready_for_l2_l3": true,
+     "direction": null,
+     "outcome": "equivalent",
+     "reason_codes": []
+    }
+   },
+   "equivalence_margin_above_floor_outside": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 1.5,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "equivalence_margin_at_floor_inside": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": -0.75,
+      "upper": 0.75
+     },
+     "equivalence": {
+      "margin": 1.0,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": -0.5,
+      "upper": 0.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "equivalence_margin_not_above_floor"
+     ]
+    }
+   },
+   "equivalence_margin_at_floor_outside": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 1.0,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "equivalence_margin_not_above_floor"
+     ]
+    }
+   },
+   "equivalence_no_margin": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "equivalence_not_mapping": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": "invalid",
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "equivalence_registered_direction": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 3.0,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "hypothesized_direction": "positive",
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L2",
+     "claim_ready_for_l2_l3": true,
+     "direction": null,
+     "outcome": "equivalent",
+     "reason_codes": []
+    }
+   },
+   "equivalence_zero_margin": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "equivalence": {
+      "margin": 0.0,
+      "method": "tost_v1"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "equivalence_not_supported"
+     ]
+    }
+   },
+   "estimate_bool": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": true,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "metric_missing_or_nonfinite"
+     ]
+    }
+   },
+   "finite_nonfinite": {
+    "input": "Infinity",
+    "output": null
+   },
+   "floor_metadata_bad_discipline": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "floor_metadata": {
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {},
+      "single_count_discipline": {}
+     },
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "floor_artifact_invalid"
+     ]
+    }
+   },
+   "floor_metadata_bad_limit": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "floor_metadata": {
+      "floor_limit_class": "wrong",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {},
+      "single_count_discipline": {
+       "apparent_double_count_removal_forbidden": true,
+       "both_terms_required": true,
+       "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+       "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+       "floor_role": "calibration_false_effect_bound",
+       "gating": false,
+       "not_an_acceptance_gate": true,
+       "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
+       "planning_sizing_expression": "floor_j + claim_side_bound_j",
+       "role": "prospective_sizing_diagnostic",
+       "rule_id": "attribution_floor_plus_claim_side_bound.v2"
       }
      },
-     "contrast_id": "SYNTHETIC-REHEARSAL-contrast_id",
-     "evaluated": {
-      "claim_level_ceiling": "L2",
-      "claim_ready_for_l2_l3": true,
-      "direction": "positive",
-      "outcome": "direction_supported",
-      "reason_codes": []
-     },
-     "recorded": {
-      "claim_level_ceiling": "L2",
-      "claim_ready_for_l2_l3": true,
-      "direction": "positive",
-      "outcome": "direction_supported",
-      "reason_codes": []
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
      }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "floor_artifact_invalid"
+     ]
     }
-   ],
-   "file_sha256": "6781f26814a7b36610c147f8b80a10ccce413558f2cb35017813793035374fc6",
-   "manifest_id": "SYNTHETIC-REHEARSAL-manifest_id",
-   "validator_errors": [
-    "artifact: unrecognized key(s): _synthetic_scalars"
-   ],
-   "validator_errors_without_synthetic_scalars": [
-    "artifact.claim_verdicts_id: invalid canonical ID",
-    "artifact.inputs.analysis_manifest.file_sha256: must be 64 lowercase hex characters",
-    "artifact.inputs.floor_artifact.file_sha256: must be 64 lowercase hex characters",
-    "artifact.inputs.analysis_manifest.manifest_id: invalid",
-    "artifact.inputs.floor_artifact.embedded_bytes_base64: invalid base64",
-    "artifact.supersession_audit[0].evidence_root_id: analysis corpus must use null",
-    "artifact.supersession_audit[0].authenticated_basis: invalid or unauthenticated",
-    "artifact.supersession_audit[0].status: unauthenticated root cannot be clean",
-    "artifact.sampling_audit.planned_n_blocks: invalid",
-    "artifact.contrasts[0].estimator.df: must be null when n<2",
-    "artifact.contrasts[0].estimator.estimate: must be null when n<2",
-    "artifact.contrasts[0].estimator.s_d: must be null when n<2",
-    "artifact.contrasts[0].estimator.SE_repeat: must be null when n<2",
-    "artifact.contrasts[0].estimator.SE_metrology: must be null when n<2",
-    "artifact.contrasts[0].estimator.SE_total: must be null when n<2",
-    "artifact.contrasts[0].estimator.t_critical_95: must be null when n<2",
-    "artifact.contrasts[0].estimator.repeat_point_CI95: must be null when n<2",
-    "artifact.contrasts[0].estimator.metrology_aware_CI95: must be null when n<2",
-    "artifact.contrasts[0].estimator.raw_p: must be null when n<2",
-    "artifact.contrasts[0].floor.resolutions: must be a nonempty array",
-    "artifact.contrasts[0].floor.floor_row_ids: must exactly match resolution source rows",
-    "artifact.contrasts[0].floor.status: resolved floor requires only usable resolutions",
-    "artifact.contrasts[0].estimator.repeat_point_CI95: disagrees with estimate/SE/t critical",
-    "artifact.contrasts[0].estimator.metrology_aware_CI95: disagrees with estimate/SE/t critical",
-    "artifact.contrasts[0].deterministic_bounds.decision_interval: must expand the metrology interval by total",
-    "artifact.contrasts[0].estimator.SE_total: must combine repeat and metrology variance",
-    "artifact.contrasts[0].multiplicity.raw_p: must be null for an incomplete/non-estimable test"
-   ]
-  },
-  "docs/paper/fill-rehearsal/dominance-reproduced-gamma-claim-verdicts.json": {
-   "evaluations": [
-    {
-     "arguments": {
-      "adjusted_rejected": true,
-      "base_reason_codes": [],
-      "claim_role": "primary",
-      "confirmatory_status": "confirmatory",
-      "decision_interval": {
-       "lower": 999020.5,
-       "upper": 999021.5
-      },
-      "equivalence": null,
-      "estimate": 999009.5,
-      "evidence_class": "current",
-      "floor_gate_j": 999004.5,
-      "floor_metadata": null,
-      "hypothesized_direction": "positive",
-      "metrology_aware_ci95": {
-       "lower": 999017.5,
-       "upper": 999018.5
+   },
+   "floor_metadata_bad_point": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "floor_metadata": {
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": "invalid",
+      "single_count_discipline": {
+       "apparent_double_count_removal_forbidden": true,
+       "both_terms_required": true,
+       "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+       "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+       "floor_role": "calibration_false_effect_bound",
+       "gating": false,
+       "not_an_acceptance_gate": true,
+       "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
+       "planning_sizing_expression": "floor_j + claim_side_bound_j",
+       "role": "prospective_sizing_diagnostic",
+       "rule_id": "attribution_floor_plus_claim_side_bound.v2"
       }
      },
-     "contrast_id": "SYNTHETIC-REHEARSAL-contrast_id",
-     "evaluated": {
-      "claim_level_ceiling": "L2",
-      "claim_ready_for_l2_l3": true,
-      "direction": "positive",
-      "outcome": "direction_supported",
-      "reason_codes": []
-     },
-     "recorded": {
-      "claim_level_ceiling": "L2",
-      "claim_ready_for_l2_l3": true,
-      "direction": "positive",
-      "outcome": "direction_supported",
-      "reason_codes": []
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
      }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "floor_artifact_invalid"
+     ]
     }
-   ],
-   "file_sha256": "13f890f591e05c2f73a5740fcf93c6f2fd32e6beff6cc9690b1af6a2ce5df6ef",
-   "manifest_id": "SYNTHETIC-REHEARSAL-manifest_id",
-   "validator_errors": [
-    "artifact: unrecognized key(s): _synthetic_scalars"
-   ],
-   "validator_errors_without_synthetic_scalars": [
-    "artifact.claim_verdicts_id: invalid canonical ID",
-    "artifact.inputs.analysis_manifest.file_sha256: must be 64 lowercase hex characters",
-    "artifact.inputs.floor_artifact.file_sha256: must be 64 lowercase hex characters",
-    "artifact.inputs.analysis_manifest.manifest_id: invalid",
-    "artifact.inputs.floor_artifact.embedded_bytes_base64: invalid base64",
-    "artifact.supersession_audit[0].evidence_root_id: analysis corpus must use null",
-    "artifact.supersession_audit[0].authenticated_basis: invalid or unauthenticated",
-    "artifact.supersession_audit[0].status: unauthenticated root cannot be clean",
-    "artifact.sampling_audit.planned_n_blocks: invalid",
-    "artifact.contrasts[0].estimator.df: must be null when n<2",
-    "artifact.contrasts[0].estimator.estimate: must be null when n<2",
-    "artifact.contrasts[0].estimator.s_d: must be null when n<2",
-    "artifact.contrasts[0].estimator.SE_repeat: must be null when n<2",
-    "artifact.contrasts[0].estimator.SE_metrology: must be null when n<2",
-    "artifact.contrasts[0].estimator.SE_total: must be null when n<2",
-    "artifact.contrasts[0].estimator.t_critical_95: must be null when n<2",
-    "artifact.contrasts[0].estimator.repeat_point_CI95: must be null when n<2",
-    "artifact.contrasts[0].estimator.metrology_aware_CI95: must be null when n<2",
-    "artifact.contrasts[0].estimator.raw_p: must be null when n<2",
-    "artifact.contrasts[0].floor.resolutions: must be a nonempty array",
-    "artifact.contrasts[0].floor.floor_row_ids: must exactly match resolution source rows",
-    "artifact.contrasts[0].floor.status: resolved floor requires only usable resolutions",
-    "artifact.contrasts[0].estimator.repeat_point_CI95: disagrees with estimate/SE/t critical",
-    "artifact.contrasts[0].estimator.metrology_aware_CI95: disagrees with estimate/SE/t critical",
-    "artifact.contrasts[0].deterministic_bounds.decision_interval: must expand the metrology interval by total",
-    "artifact.contrasts[0].estimator.SE_total: must combine repeat and metrology variance",
-    "artifact.contrasts[0].multiplicity.raw_p: must be null for an incomplete/non-estimable test"
-   ]
-  }
- },
- "epoch_replays": {
-  "09-19-n1": {
-   "recorded": {
-    "bracket_screen_comparison": null,
-    "level_screen_comparison": null,
-    "m": 4,
-    "maximum_s": null,
-    "maximum_slot": null,
-    "minimum_s": null,
-    "minimum_slot": null,
-    "range_s": null,
-    "reference_envelope": {
-     "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385",
-     "screen_rule": "range_equals_screen"
-    },
-    "retained": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
-      "b_fiducial_s": "0.041133514338919874",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
-      "b_fiducial_s": "0.04200278099548145",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
-      "b_fiducial_s": "0.172710636067422",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
-      "b_fiducial_s": "0.03255031906139217",
-      "slot": "d12"
-     }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "d079-epoch-25g83-derivation-n1-20260919",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
-      "b_fiducial_s": "0.041133514338919874",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d02",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
-      "b_fiducial_s": "0.04200278099548145",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d04",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
-      "b_fiducial_s": "0.172710636067422",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d06",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d07",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d08",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d09",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d10",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d11",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
-      "b_fiducial_s": "0.03255031906139217",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "INCONCLUSIVE",
-    "verdict_reason": "m=4 is below the minimum 6; issue 316 directs one more equivalence night"
    },
-   "replayed": {
-    "bracket_screen_comparison": null,
-    "level_screen_comparison": null,
-    "m": 4,
-    "maximum_s": null,
-    "maximum_slot": null,
-    "minimum_s": null,
-    "minimum_slot": null,
-    "range_s": null,
-    "reference_envelope": {
-     "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385",
-     "screen_rule": "range_equals_screen"
-    },
-    "retained": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
-      "b_fiducial_s": "0.041133514338919874",
-      "slot": "d01"
+   "floor_metadata_missing_key": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
      },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
-      "b_fiducial_s": "0.04200278099548145",
-      "slot": "d03"
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "floor_metadata": {
+      "floor_source": "E_clock_anchor_shift_bound_j"
      },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
-      "b_fiducial_s": "0.172710636067422",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
-      "b_fiducial_s": "0.03255031906139217",
-      "slot": "d12"
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
      }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "d079-epoch-25g83-derivation-n1-20260919",
-     "session_kind": "derivation",
-     "state": "finalized"
     },
-    "slot_outcomes": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
-      "b_fiducial_s": "0.041133514338919874",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d02",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
-      "b_fiducial_s": "0.04200278099548145",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d04",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
-      "b_fiducial_s": "0.172710636067422",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d06",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d07",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d08",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d09",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d10",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d11",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
-      "b_fiducial_s": "0.03255031906139217",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "INCONCLUSIVE",
-    "verdict_reason": "m=4 is below the minimum 6; issue 316 directs one more equivalence night"
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "floor_artifact_invalid"
+     ]
+    }
    },
-   "source": "docs/process_traces/2026-09-19-activation-b165c535/01-harvest-evidence/epoch-equivalence-record-2.json",
-   "source_sha256": "8c1d58e4a62aebf9da6c2a442eab6acde07a65f194e21a0cdfe66cdcc91be457"
+   "floor_metadata_not_mapping": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "floor_metadata": "invalid",
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "floor_artifact_invalid"
+     ]
+    }
+   },
+   "floor_negative": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": -1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "floor_artifact_invalid"
+     ]
+    }
+   },
+   "floor_none": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": null,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_resolvable",
+     "reason_codes": [
+      "floor_abs_missing",
+      "floor_cmp_missing"
+     ]
+    }
+   },
+   "floor_zero": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 0.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L2",
+     "claim_ready_for_l2_l3": true,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "holm_adjust": {
+    "above_one_clamp": {
+     "adjusted": {
+      "a": 1.0,
+      "b": 1.0,
+      "c": null
+     },
+     "m": 3,
+     "p_values": {
+      "a": 0.6,
+      "b": 0.7,
+      "c": null
+     }
+    },
+    "one_missing": {
+     "adjusted": {
+      "a": 0.04,
+      "b": null
+     },
+     "m": 2,
+     "p_values": {
+      "a": 0.02,
+      "b": null
+     }
+    },
+    "three_complete": {
+     "adjusted": {
+      "a": 0.03,
+      "b": 0.06,
+      "c": 0.06
+     },
+     "m": 3,
+     "p_values": {
+      "a": 0.01,
+      "b": 0.04,
+      "c": 0.03
+     }
+    },
+    "two_for_three_refused": {
+     "m": 3,
+     "p_values": {
+      "a": 0.6,
+      "b": 0.7
+     },
+     "raised": "ValueError"
+    }
+   },
+   "interval_bad_lower": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": "invalid",
+      "upper": 2.0
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "metric_missing_or_nonfinite"
+     ]
+    }
+   },
+   "interval_bad_upper": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.0,
+      "upper": "invalid"
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "metric_missing_or_nonfinite"
+     ]
+    }
+   },
+   "interval_inverted": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 3.0,
+      "upper": 2.0
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "metric_missing_or_nonfinite"
+     ]
+    }
+   },
+   "invalid_floor_metadata": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "floor_metadata": {
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "wrong",
+      "point_floor_diagnostics": {},
+      "single_count_discipline": {
+       "apparent_double_count_removal_forbidden": true,
+       "both_terms_required": true,
+       "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+       "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+       "floor_role": "calibration_false_effect_bound",
+       "gating": false,
+       "not_an_acceptance_gate": true,
+       "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
+       "planning_sizing_expression": "floor_j + claim_side_bound_j",
+       "role": "prospective_sizing_diagnostic",
+       "rule_id": "attribution_floor_plus_claim_side_bound.v2"
+      }
+     },
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "floor_artifact_invalid"
+     ]
+    }
+   },
+   "legacy_l1": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "evidence_class": "legacy_l1",
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "metrology_bad_lower": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": "invalid",
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "not_estimable",
+     "reason_codes": [
+      "metric_missing_or_nonfinite"
+     ]
+    }
+   },
+   "metrology_straddles_zero": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": -0.1,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": []
+    }
+   },
+   "multiplicity_not_rejected": {
+    "inputs": {
+     "adjusted_rejected": false,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": null,
+     "outcome": "unresolved",
+     "reason_codes": [
+      "multiplicity_not_rejected"
+     ]
+    }
+   },
+   "non_confirmatory": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "confirmatory_status": "exploratory",
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "sensitivity_blocking": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     },
+     "sensitivity_blocking": true
+    },
+    "output": {
+     "claim_level_ceiling": "L1",
+     "claim_ready_for_l2_l3": false,
+     "direction": "positive",
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   },
+   "valid_floor_metadata": {
+    "inputs": {
+     "adjusted_rejected": true,
+     "decision_interval": {
+      "lower": 1.25,
+      "upper": 2.75
+     },
+     "estimate": 2.0,
+     "floor_gate_j": 1.0,
+     "floor_metadata": {
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {},
+      "single_count_discipline": {
+       "apparent_double_count_removal_forbidden": true,
+       "both_terms_required": true,
+       "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+       "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+       "floor_role": "calibration_false_effect_bound",
+       "gating": false,
+       "not_an_acceptance_gate": true,
+       "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
+       "planning_sizing_expression": "floor_j + claim_side_bound_j",
+       "role": "prospective_sizing_diagnostic",
+       "rule_id": "attribution_floor_plus_claim_side_bound.v2"
+      }
+     },
+     "metrology_aware_ci95": {
+      "lower": 1.5,
+      "upper": 2.5
+     }
+    },
+    "output": {
+     "claim_level_ceiling": "L2",
+     "claim_ready_for_l2_l3": true,
+     "direction": "positive",
+     "floor_limit": {
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {},
+      "published_floor_j": 1.0,
+      "single_count_discipline": {
+       "apparent_double_count_removal_forbidden": true,
+       "both_terms_required": true,
+       "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+       "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+       "floor_role": "calibration_false_effect_bound",
+       "gating": false,
+       "not_an_acceptance_gate": true,
+       "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise.",
+       "planning_sizing_expression": "floor_j + claim_side_bound_j",
+       "role": "prospective_sizing_diagnostic",
+       "rule_id": "attribution_floor_plus_claim_side_bound.v2"
+      }
+     },
+     "outcome": "direction_supported",
+     "reason_codes": []
+    }
+   }
   },
-  "09-19-n2": {
-   "recorded": {
-    "bracket_screen_comparison": {
-     "holds": false,
-     "left": "0.105080561359487596",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": false,
-     "left": "0.13333095801710004",
-     "left_source": "retained maximum (d11)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 7,
-    "maximum_s": "0.13333095801710004",
-    "maximum_slot": "d11",
-    "minimum_s": "0.028250396657612444",
-    "minimum_slot": "d05",
-    "range_s": "0.105080561359487596",
-    "reference_envelope": {
-     "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385",
-     "screen_rule": "range_equals_screen"
-    },
-    "retained": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
-      "b_fiducial_s": "0.04103035733376445",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
-      "b_fiducial_s": "0.04337273381948624",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
-      "b_fiducial_s": "0.028250396657612444",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
-      "b_fiducial_s": "0.035576770468514644",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
-      "b_fiducial_s": "0.03487995875720681",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
-      "b_fiducial_s": "0.13333095801710004",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
-      "b_fiducial_s": "0.036897960254235855",
-      "slot": "d12"
-     }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "d079-epoch-25g83-derivation-n2-20260919",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
-      "b_fiducial_s": "0.04103035733376445",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d02",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
-      "b_fiducial_s": "0.04337273381948624",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d04",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
-      "b_fiducial_s": "0.028250396657612444",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d06",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
-      "b_fiducial_s": "0.035576770468514644",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d08",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
-      "b_fiducial_s": "0.03487995875720681",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d10",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
-      "b_fiducial_s": "0.13333095801710004",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
-      "b_fiducial_s": "0.036897960254235855",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "FAIL",
-    "verdict_reason": null
-   },
-   "replayed": {
-    "bracket_screen_comparison": {
-     "holds": false,
-     "left": "0.105080561359487596",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": false,
-     "left": "0.13333095801710004",
-     "left_source": "retained maximum (d11)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 7,
-    "maximum_s": "0.13333095801710004",
-    "maximum_slot": "d11",
-    "minimum_s": "0.028250396657612444",
-    "minimum_slot": "d05",
-    "range_s": "0.105080561359487596",
-    "reference_envelope": {
-     "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385",
-     "screen_rule": "range_equals_screen"
-    },
-    "retained": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
-      "b_fiducial_s": "0.04103035733376445",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
-      "b_fiducial_s": "0.04337273381948624",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
-      "b_fiducial_s": "0.028250396657612444",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
-      "b_fiducial_s": "0.035576770468514644",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
-      "b_fiducial_s": "0.03487995875720681",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
-      "b_fiducial_s": "0.13333095801710004",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
-      "b_fiducial_s": "0.036897960254235855",
-      "slot": "d12"
-     }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "d079-epoch-25g83-derivation-n2-20260919",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
-      "b_fiducial_s": "0.04103035733376445",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d02",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
-      "b_fiducial_s": "0.04337273381948624",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d04",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
-      "b_fiducial_s": "0.028250396657612444",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d06",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
-      "b_fiducial_s": "0.035576770468514644",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d08",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
-      "b_fiducial_s": "0.03487995875720681",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d10",
-      "b_fiducial_s": null,
-      "detail": "ordinary-invalid",
-      "outcome": "disposition",
-      "retained": false,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
-      "b_fiducial_s": "0.13333095801710004",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
-      "b_fiducial_s": "0.036897960254235855",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "FAIL",
-    "verdict_reason": null
-   },
-   "source": "docs/process_traces/2026-09-19-activation-d0b83820/01-harvest-evidence/epoch-equivalence-record-2.json",
-   "source_sha256": "9e73cfd0656afe3d8573887e37df3cdae1a0199e63229ee7e35679d2067ceae6"
+  "claim_side_bound": {
+   "raised": "ClaimSideBoundRefusal"
   },
-  "s9-fail-bracket": {
-   "recorded": {
-    "bracket_screen_comparison": {
-     "holds": false,
-     "left": "0.009724000000001",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": true,
-     "left": "0.032898493715362",
-     "left_source": "retained maximum (d02)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 12,
-    "maximum_s": "0.032898493715362",
-    "maximum_slot": "d02",
-    "minimum_s": "0.023174493715361",
-    "minimum_slot": "d01",
-    "range_s": "0.009724000000001",
-    "reference_envelope": {
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385"
-    },
-    "retained": [
+  "claim_verdicts": {
+   "docs/paper/fill-rehearsal/dominance-not-reproduced-gamma-claim-verdicts.json": {
+    "evaluations": [
      {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.023174493715361",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d12"
+      "arguments": {
+       "adjusted_rejected": true,
+       "base_reason_codes": [],
+       "claim_role": "primary",
+       "confirmatory_status": "confirmatory",
+       "decision_interval": {
+        "lower": 999120.5,
+        "upper": 999121.5
+       },
+       "equivalence": null,
+       "estimate": 999109.5,
+       "evidence_class": "current",
+       "floor_gate_j": 999104.5,
+       "floor_metadata": null,
+       "hypothesized_direction": "positive",
+       "metrology_aware_ci95": {
+        "lower": 999117.5,
+        "upper": 999118.5
+       }
+      },
+      "contrast_id": "SYNTHETIC-REHEARSAL-contrast_id",
+      "evaluated": {
+       "claim_level_ceiling": "L2",
+       "claim_ready_for_l2_l3": true,
+       "direction": "positive",
+       "outcome": "direction_supported",
+       "reason_codes": []
+      },
+      "recorded": {
+       "claim_level_ceiling": "L2",
+       "claim_ready_for_l2_l3": true,
+       "direction": "positive",
+       "outcome": "direction_supported",
+       "reason_codes": []
+      }
      }
     ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "derivation-night-1",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.023174493715361",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
+    "file_sha256": "6781f26814a7b36610c147f8b80a10ccce413558f2cb35017813793035374fc6",
+    "manifest_id": "SYNTHETIC-REHEARSAL-manifest_id",
+    "validator_errors": [
+     "artifact: unrecognized key(s): _synthetic_scalars"
     ],
-    "verdict": "FAIL",
-    "verdict_reason": null
+    "validator_errors_without_synthetic_scalars": [
+     "artifact.claim_verdicts_id: invalid canonical ID",
+     "artifact.inputs.analysis_manifest.file_sha256: must be 64 lowercase hex characters",
+     "artifact.inputs.floor_artifact.file_sha256: must be 64 lowercase hex characters",
+     "artifact.inputs.analysis_manifest.manifest_id: invalid",
+     "artifact.inputs.floor_artifact.embedded_bytes_base64: invalid base64",
+     "artifact.supersession_audit[0].evidence_root_id: analysis corpus must use null",
+     "artifact.supersession_audit[0].authenticated_basis: invalid or unauthenticated",
+     "artifact.supersession_audit[0].status: unauthenticated root cannot be clean",
+     "artifact.sampling_audit.planned_n_blocks: invalid",
+     "artifact.contrasts[0].estimator.df: must be null when n<2",
+     "artifact.contrasts[0].estimator.estimate: must be null when n<2",
+     "artifact.contrasts[0].estimator.s_d: must be null when n<2",
+     "artifact.contrasts[0].estimator.SE_repeat: must be null when n<2",
+     "artifact.contrasts[0].estimator.SE_metrology: must be null when n<2",
+     "artifact.contrasts[0].estimator.SE_total: must be null when n<2",
+     "artifact.contrasts[0].estimator.t_critical_95: must be null when n<2",
+     "artifact.contrasts[0].estimator.repeat_point_CI95: must be null when n<2",
+     "artifact.contrasts[0].estimator.metrology_aware_CI95: must be null when n<2",
+     "artifact.contrasts[0].estimator.raw_p: must be null when n<2",
+     "artifact.contrasts[0].floor.resolutions: must be a nonempty array",
+     "artifact.contrasts[0].floor.floor_row_ids: must exactly match resolution source rows",
+     "artifact.contrasts[0].floor.status: resolved floor requires only usable resolutions",
+     "artifact.contrasts[0].estimator.repeat_point_CI95: disagrees with estimate/SE/t critical",
+     "artifact.contrasts[0].estimator.metrology_aware_CI95: disagrees with estimate/SE/t critical",
+     "artifact.contrasts[0].deterministic_bounds.decision_interval: must expand the metrology interval by total",
+     "artifact.contrasts[0].estimator.SE_total: must combine repeat and metrology variance",
+     "artifact.contrasts[0].multiplicity.raw_p: must be null for an incomplete/non-estimable test"
+    ]
    },
-   "replayed": {
-    "bracket_screen_comparison": {
-     "holds": false,
-     "left": "0.009724000000001",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": true,
-     "left": "0.032898493715362",
-     "left_source": "retained maximum (d02)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 12,
-    "maximum_s": "0.032898493715362",
-    "maximum_slot": "d02",
-    "minimum_s": "0.023174493715361",
-    "minimum_slot": "d01",
-    "range_s": "0.009724000000001",
-    "reference_envelope": {
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385"
-    },
-    "retained": [
+   "docs/paper/fill-rehearsal/dominance-reproduced-gamma-claim-verdicts.json": {
+    "evaluations": [
      {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.023174493715361",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d12"
+      "arguments": {
+       "adjusted_rejected": true,
+       "base_reason_codes": [],
+       "claim_role": "primary",
+       "confirmatory_status": "confirmatory",
+       "decision_interval": {
+        "lower": 999020.5,
+        "upper": 999021.5
+       },
+       "equivalence": null,
+       "estimate": 999009.5,
+       "evidence_class": "current",
+       "floor_gate_j": 999004.5,
+       "floor_metadata": null,
+       "hypothesized_direction": "positive",
+       "metrology_aware_ci95": {
+        "lower": 999017.5,
+        "upper": 999018.5
+       }
+      },
+      "contrast_id": "SYNTHETIC-REHEARSAL-contrast_id",
+      "evaluated": {
+       "claim_level_ceiling": "L2",
+       "claim_ready_for_l2_l3": true,
+       "direction": "positive",
+       "outcome": "direction_supported",
+       "reason_codes": []
+      },
+      "recorded": {
+       "claim_level_ceiling": "L2",
+       "claim_ready_for_l2_l3": true,
+       "direction": "positive",
+       "outcome": "direction_supported",
+       "reason_codes": []
+      }
      }
     ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "derivation-night-1",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.023174493715361",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
+    "file_sha256": "13f890f591e05c2f73a5740fcf93c6f2fd32e6beff6cc9690b1af6a2ce5df6ef",
+    "manifest_id": "SYNTHETIC-REHEARSAL-manifest_id",
+    "validator_errors": [
+     "artifact: unrecognized key(s): _synthetic_scalars"
     ],
-    "verdict": "FAIL",
-    "verdict_reason": null
-   },
-   "source": "tests/fixtures/epoch_continuation/s9-fail-bracket.json",
-   "source_sha256": "c439fa6662d92f7b8d99568b13639634e3a17e261463f1bd09de542523da03cd"
-  },
-  "s9-fail-level": {
-   "recorded": {
-    "bracket_screen_comparison": {
-     "holds": true,
-     "left": "1E-15",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": false,
-     "left": "0.032898493715363",
-     "left_source": "retained maximum (d01)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 12,
-    "maximum_s": "0.032898493715363",
-    "maximum_slot": "d01",
-    "minimum_s": "0.032898493715362",
-    "minimum_slot": "d02",
-    "range_s": "1E-15",
-    "reference_envelope": {
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385"
-    },
-    "retained": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.032898493715363",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d12"
-     }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "derivation-night-1",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.032898493715363",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "FAIL",
-    "verdict_reason": null
-   },
-   "replayed": {
-    "bracket_screen_comparison": {
-     "holds": true,
-     "left": "1E-15",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": false,
-     "left": "0.032898493715363",
-     "left_source": "retained maximum (d01)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 12,
-    "maximum_s": "0.032898493715363",
-    "maximum_slot": "d01",
-    "minimum_s": "0.032898493715362",
-    "minimum_slot": "d02",
-    "range_s": "1E-15",
-    "reference_envelope": {
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385"
-    },
-    "retained": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.032898493715363",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "slot": "d12"
-     }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "derivation-night-1",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.032898493715363",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.032898493715362",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "FAIL",
-    "verdict_reason": null
-   },
-   "source": "tests/fixtures/epoch_continuation/s9-fail-level.json",
-   "source_sha256": "b3a0f94356a7308d11996a41e5e5ab6a8a4a8470e51902d7f636fda5a8912eed"
-  },
-  "s9-pass": {
-   "recorded": {
-    "bracket_screen_comparison": {
-     "holds": true,
-     "left": "0.000",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": true,
-     "left": "0.025",
-     "left_source": "retained maximum (d01)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 12,
-    "maximum_s": "0.025",
-    "maximum_slot": "d01",
-    "minimum_s": "0.025",
-    "minimum_slot": "d01",
-    "range_s": "0.000",
-    "reference_envelope": {
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385"
-    },
-    "retained": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.025",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.025",
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.025",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.025",
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.025",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.025",
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.025",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.025",
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.025",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.025",
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.025",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.025",
-      "slot": "d12"
-     }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "derivation-night-1",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "PASS",
-    "verdict_reason": null
-   },
-   "replayed": {
-    "bracket_screen_comparison": {
-     "holds": true,
-     "left": "0.000",
-     "left_source": "retained range (max - min)",
-     "operator": "<=",
-     "right": "0.009724",
-     "right_source": "operative bracket_screen_s"
-    },
-    "level_screen_comparison": {
-     "holds": true,
-     "left": "0.025",
-     "left_source": "retained maximum (d01)",
-     "operator": "<=",
-     "right": "0.032898493715362",
-     "right_source": "operative preflight_level_screen_s"
-    },
-    "m": 12,
-    "maximum_s": "0.025",
-    "maximum_slot": "d01",
-    "minimum_s": "0.025",
-    "minimum_slot": "d01",
-    "range_s": "0.000",
-    "reference_envelope": {
-     "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
-     "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
-     "bracket_screen_s": "0.009724",
-     "corpus_n": 17,
-     "level_screen_s": "0.032898493715362",
-     "maximum_budgetable_drift_s": "0.010164834757777545",
-     "raw_corpus_maximum_s": "0.03289849371536248",
-     "raw_corpus_range_s": "0.00972358928879385"
-    },
-    "retained": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.025",
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.025",
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.025",
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.025",
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.025",
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.025",
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.025",
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.025",
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.025",
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.025",
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.025",
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.025",
-      "slot": "d12"
-     }
-    ],
-    "schema_version": "joulewise.epoch_equivalence_check.v1",
-    "session": {
-     "abort_reason": null,
-     "declared_slots": [
-      "d01",
-      "d02",
-      "d03",
-      "d04",
-      "d05",
-      "d06",
-      "d07",
-      "d08",
-      "d09",
-      "d10",
-      "d11",
-      "d12"
-     ],
-     "session_id": "derivation-night-1",
-     "session_kind": "derivation",
-     "state": "finalized"
-    },
-    "slot_outcomes": [
-     {
-      "attempt_id": "derivation-night-1-d01",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d01"
-     },
-     {
-      "attempt_id": "derivation-night-1-d02",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d02"
-     },
-     {
-      "attempt_id": "derivation-night-1-d03",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d03"
-     },
-     {
-      "attempt_id": "derivation-night-1-d04",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d04"
-     },
-     {
-      "attempt_id": "derivation-night-1-d05",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d05"
-     },
-     {
-      "attempt_id": "derivation-night-1-d06",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d06"
-     },
-     {
-      "attempt_id": "derivation-night-1-d07",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d07"
-     },
-     {
-      "attempt_id": "derivation-night-1-d08",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d08"
-     },
-     {
-      "attempt_id": "derivation-night-1-d09",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d09"
-     },
-     {
-      "attempt_id": "derivation-night-1-d10",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d10"
-     },
-     {
-      "attempt_id": "derivation-night-1-d11",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d11"
-     },
-     {
-      "attempt_id": "derivation-night-1-d12",
-      "b_fiducial_s": "0.025",
-      "detail": null,
-      "outcome": "valid_resolved",
-      "retained": true,
-      "slot": "d12"
-     }
-    ],
-    "verdict": "PASS",
-    "verdict_reason": null
-   },
-   "source": "tests/fixtures/epoch_continuation/s9-pass.json",
-   "source_sha256": "b79fea19e0f4dac0a981c175dd4f4a49ba01d3dbe1aebbfe785157fbdeff2dcb"
-  }
- },
- "fixture_families": {
-  "claim_evidence": {
-   "admitted": false,
-   "authentic": true,
-   "grants": [],
-   "validator_codes": []
-  },
-  "d165_closeout": {
-   "admitted": false,
-   "authentic": true,
-   "grants": [],
-   "validator_codes": []
-  },
-  "reported_energy_parents": {
-   "admitted": false,
-   "authentic": true,
-   "grants": [],
-   "validator_codes": []
-  },
-  "transfer_projection": {
-   "admitted": false,
-   "authentic": true,
-   "grants": [],
-   "validator_codes": []
-  },
-  "whole_window_verdict": {
-   "admitted": false,
-   "authentic": true,
-   "grants": [],
-   "validator_codes": []
-  }
- },
- "issuance_gate": {
-  "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
-  "scenarios": {
-   "admitting_v1_wire": {
-    "admitted": true,
-    "authentic": true,
-    "grants": [
-     {
-      "kind": "outcome",
-      "subject_id": "ctr-sw-decode-qwen25-1p5b-vs-7b"
-     },
-     {
-      "kind": "l2",
-      "subject_id": "ctr-sw-decode-qwen25-1p5b-vs-7b"
-     }
-    ],
-    "validator_codes": []
+    "validator_errors_without_synthetic_scalars": [
+     "artifact.claim_verdicts_id: invalid canonical ID",
+     "artifact.inputs.analysis_manifest.file_sha256: must be 64 lowercase hex characters",
+     "artifact.inputs.floor_artifact.file_sha256: must be 64 lowercase hex characters",
+     "artifact.inputs.analysis_manifest.manifest_id: invalid",
+     "artifact.inputs.floor_artifact.embedded_bytes_base64: invalid base64",
+     "artifact.supersession_audit[0].evidence_root_id: analysis corpus must use null",
+     "artifact.supersession_audit[0].authenticated_basis: invalid or unauthenticated",
+     "artifact.supersession_audit[0].status: unauthenticated root cannot be clean",
+     "artifact.sampling_audit.planned_n_blocks: invalid",
+     "artifact.contrasts[0].estimator.df: must be null when n<2",
+     "artifact.contrasts[0].estimator.estimate: must be null when n<2",
+     "artifact.contrasts[0].estimator.s_d: must be null when n<2",
+     "artifact.contrasts[0].estimator.SE_repeat: must be null when n<2",
+     "artifact.contrasts[0].estimator.SE_metrology: must be null when n<2",
+     "artifact.contrasts[0].estimator.SE_total: must be null when n<2",
+     "artifact.contrasts[0].estimator.t_critical_95: must be null when n<2",
+     "artifact.contrasts[0].estimator.repeat_point_CI95: must be null when n<2",
+     "artifact.contrasts[0].estimator.metrology_aware_CI95: must be null when n<2",
+     "artifact.contrasts[0].estimator.raw_p: must be null when n<2",
+     "artifact.contrasts[0].floor.resolutions: must be a nonempty array",
+     "artifact.contrasts[0].floor.floor_row_ids: must exactly match resolution source rows",
+     "artifact.contrasts[0].floor.status: resolved floor requires only usable resolutions",
+     "artifact.contrasts[0].estimator.repeat_point_CI95: disagrees with estimate/SE/t critical",
+     "artifact.contrasts[0].estimator.metrology_aware_CI95: disagrees with estimate/SE/t critical",
+     "artifact.contrasts[0].deterministic_bounds.decision_interval: must expand the metrology interval by total",
+     "artifact.contrasts[0].estimator.SE_total: must combine repeat and metrology variance",
+     "artifact.contrasts[0].multiplicity.raw_p: must be null for an incomplete/non-estimable test"
+    ]
    },
    "invalid_verdict_wire": {
     "admitted": false,
     "authentic": false,
     "grants": [],
     "validator_codes": [
-     "artifact: unrecognized key(s): evidence_class"
+     "artifact.claim_verdicts_id: invalid canonical ID"
     ]
    }
   },
-  "subject": "ctr-sw-decode-qwen25-1p5b-vs-7b",
-  "test_seams": [
-   "finalized manifest validation",
-   "sidecar validation",
-   "floor acceptance",
-   "valid case verdict validation (existing custody v1 wire shape)"
-  ]
+  "epoch_replays": {
+   "09-19-n1": {
+    "recorded": {
+     "bracket_screen_comparison": null,
+     "level_screen_comparison": null,
+     "m": 4,
+     "maximum_s": null,
+     "maximum_slot": null,
+     "minimum_s": null,
+     "minimum_slot": null,
+     "range_s": null,
+     "reference_envelope": {
+      "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385",
+      "screen_rule": "range_equals_screen"
+     },
+     "retained": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
+       "b_fiducial_s": "0.041133514338919874",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
+       "b_fiducial_s": "0.04200278099548145",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
+       "b_fiducial_s": "0.172710636067422",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
+       "b_fiducial_s": "0.03255031906139217",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "d079-epoch-25g83-derivation-n1-20260919",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
+       "b_fiducial_s": "0.041133514338919874",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d02",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
+       "b_fiducial_s": "0.04200278099548145",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d04",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
+       "b_fiducial_s": "0.172710636067422",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d06",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d07",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d08",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d09",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d10",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d11",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
+       "b_fiducial_s": "0.03255031906139217",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "INCONCLUSIVE",
+     "verdict_reason": "m=4 is below the minimum 6; issue 316 directs one more equivalence night"
+    },
+    "replayed": {
+     "bracket_screen_comparison": null,
+     "level_screen_comparison": null,
+     "m": 4,
+     "maximum_s": null,
+     "maximum_slot": null,
+     "minimum_s": null,
+     "minimum_slot": null,
+     "range_s": null,
+     "reference_envelope": {
+      "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385",
+      "screen_rule": "range_equals_screen"
+     },
+     "retained": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
+       "b_fiducial_s": "0.041133514338919874",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
+       "b_fiducial_s": "0.04200278099548145",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
+       "b_fiducial_s": "0.172710636067422",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
+       "b_fiducial_s": "0.03255031906139217",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "d079-epoch-25g83-derivation-n1-20260919",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d01",
+       "b_fiducial_s": "0.041133514338919874",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d02",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d03",
+       "b_fiducial_s": "0.04200278099548145",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d04",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d05",
+       "b_fiducial_s": "0.172710636067422",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d06",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d07",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d08",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d09",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d10",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d11",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n1-20260919-d12",
+       "b_fiducial_s": "0.03255031906139217",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "INCONCLUSIVE",
+     "verdict_reason": "m=4 is below the minimum 6; issue 316 directs one more equivalence night"
+    },
+    "source": "docs/process_traces/2026-09-19-activation-b165c535/01-harvest-evidence/epoch-equivalence-record-2.json",
+    "source_sha256": "8c1d58e4a62aebf9da6c2a442eab6acde07a65f194e21a0cdfe66cdcc91be457"
+   },
+   "09-19-n2": {
+    "recorded": {
+     "bracket_screen_comparison": {
+      "holds": false,
+      "left": "0.105080561359487596",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": false,
+      "left": "0.13333095801710004",
+      "left_source": "retained maximum (d11)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 7,
+     "maximum_s": "0.13333095801710004",
+     "maximum_slot": "d11",
+     "minimum_s": "0.028250396657612444",
+     "minimum_slot": "d05",
+     "range_s": "0.105080561359487596",
+     "reference_envelope": {
+      "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385",
+      "screen_rule": "range_equals_screen"
+     },
+     "retained": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
+       "b_fiducial_s": "0.04103035733376445",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
+       "b_fiducial_s": "0.04337273381948624",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
+       "b_fiducial_s": "0.028250396657612444",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
+       "b_fiducial_s": "0.035576770468514644",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
+       "b_fiducial_s": "0.03487995875720681",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
+       "b_fiducial_s": "0.13333095801710004",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
+       "b_fiducial_s": "0.036897960254235855",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "d079-epoch-25g83-derivation-n2-20260919",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
+       "b_fiducial_s": "0.04103035733376445",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d02",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
+       "b_fiducial_s": "0.04337273381948624",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d04",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
+       "b_fiducial_s": "0.028250396657612444",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d06",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
+       "b_fiducial_s": "0.035576770468514644",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d08",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
+       "b_fiducial_s": "0.03487995875720681",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d10",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
+       "b_fiducial_s": "0.13333095801710004",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
+       "b_fiducial_s": "0.036897960254235855",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "FAIL",
+     "verdict_reason": null
+    },
+    "replayed": {
+     "bracket_screen_comparison": {
+      "holds": false,
+      "left": "0.105080561359487596",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": false,
+      "left": "0.13333095801710004",
+      "left_source": "retained maximum (d11)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 7,
+     "maximum_s": "0.13333095801710004",
+     "maximum_slot": "d11",
+     "minimum_s": "0.028250396657612444",
+     "minimum_slot": "d05",
+     "range_s": "0.105080561359487596",
+     "reference_envelope": {
+      "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385",
+      "screen_rule": "range_equals_screen"
+     },
+     "retained": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
+       "b_fiducial_s": "0.04103035733376445",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
+       "b_fiducial_s": "0.04337273381948624",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
+       "b_fiducial_s": "0.028250396657612444",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
+       "b_fiducial_s": "0.035576770468514644",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
+       "b_fiducial_s": "0.03487995875720681",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
+       "b_fiducial_s": "0.13333095801710004",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
+       "b_fiducial_s": "0.036897960254235855",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "d079-epoch-25g83-derivation-n2-20260919",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d01",
+       "b_fiducial_s": "0.04103035733376445",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d02",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d03",
+       "b_fiducial_s": "0.04337273381948624",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d04",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d05",
+       "b_fiducial_s": "0.028250396657612444",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d06",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d07",
+       "b_fiducial_s": "0.035576770468514644",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d08",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d09",
+       "b_fiducial_s": "0.03487995875720681",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d10",
+       "b_fiducial_s": null,
+       "detail": "ordinary-invalid",
+       "outcome": "disposition",
+       "retained": false,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d11",
+       "b_fiducial_s": "0.13333095801710004",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "d079-epoch-25g83-derivation-n2-20260919-d12",
+       "b_fiducial_s": "0.036897960254235855",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "FAIL",
+     "verdict_reason": null
+    },
+    "source": "docs/process_traces/2026-09-19-activation-d0b83820/01-harvest-evidence/epoch-equivalence-record-2.json",
+    "source_sha256": "9e73cfd0656afe3d8573887e37df3cdae1a0199e63229ee7e35679d2067ceae6"
+   },
+   "invalid_decimal": {
+    "raised": "InvalidOperation"
+   },
+   "s9-fail-bracket": {
+    "recorded": {
+     "bracket_screen_comparison": {
+      "holds": false,
+      "left": "0.009724000000001",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": true,
+      "left": "0.032898493715362",
+      "left_source": "retained maximum (d02)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 12,
+     "maximum_s": "0.032898493715362",
+     "maximum_slot": "d02",
+     "minimum_s": "0.023174493715361",
+     "minimum_slot": "d01",
+     "range_s": "0.009724000000001",
+     "reference_envelope": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385"
+     },
+     "retained": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.023174493715361",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "derivation-night-1",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.023174493715361",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "FAIL",
+     "verdict_reason": null
+    },
+    "replayed": {
+     "bracket_screen_comparison": {
+      "holds": false,
+      "left": "0.009724000000001",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": true,
+      "left": "0.032898493715362",
+      "left_source": "retained maximum (d02)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 12,
+     "maximum_s": "0.032898493715362",
+     "maximum_slot": "d02",
+     "minimum_s": "0.023174493715361",
+     "minimum_slot": "d01",
+     "range_s": "0.009724000000001",
+     "reference_envelope": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385"
+     },
+     "retained": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.023174493715361",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "derivation-night-1",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.023174493715361",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "FAIL",
+     "verdict_reason": null
+    },
+    "source": "tests/fixtures/epoch_continuation/s9-fail-bracket.json",
+    "source_sha256": "c439fa6662d92f7b8d99568b13639634e3a17e261463f1bd09de542523da03cd"
+   },
+   "s9-fail-level": {
+    "recorded": {
+     "bracket_screen_comparison": {
+      "holds": true,
+      "left": "1E-15",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": false,
+      "left": "0.032898493715363",
+      "left_source": "retained maximum (d01)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 12,
+     "maximum_s": "0.032898493715363",
+     "maximum_slot": "d01",
+     "minimum_s": "0.032898493715362",
+     "minimum_slot": "d02",
+     "range_s": "1E-15",
+     "reference_envelope": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385"
+     },
+     "retained": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.032898493715363",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "derivation-night-1",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.032898493715363",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "FAIL",
+     "verdict_reason": null
+    },
+    "replayed": {
+     "bracket_screen_comparison": {
+      "holds": true,
+      "left": "1E-15",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": false,
+      "left": "0.032898493715363",
+      "left_source": "retained maximum (d01)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 12,
+     "maximum_s": "0.032898493715363",
+     "maximum_slot": "d01",
+     "minimum_s": "0.032898493715362",
+     "minimum_slot": "d02",
+     "range_s": "1E-15",
+     "reference_envelope": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385"
+     },
+     "retained": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.032898493715363",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "derivation-night-1",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.032898493715363",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.032898493715362",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "FAIL",
+     "verdict_reason": null
+    },
+    "source": "tests/fixtures/epoch_continuation/s9-fail-level.json",
+    "source_sha256": "b3a0f94356a7308d11996a41e5e5ab6a8a4a8470e51902d7f636fda5a8912eed"
+   },
+   "s9-pass": {
+    "recorded": {
+     "bracket_screen_comparison": {
+      "holds": true,
+      "left": "0.000",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": true,
+      "left": "0.025",
+      "left_source": "retained maximum (d01)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 12,
+     "maximum_s": "0.025",
+     "maximum_slot": "d01",
+     "minimum_s": "0.025",
+     "minimum_slot": "d01",
+     "range_s": "0.000",
+     "reference_envelope": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385"
+     },
+     "retained": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.025",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.025",
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.025",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.025",
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.025",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.025",
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.025",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.025",
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.025",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.025",
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.025",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.025",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "derivation-night-1",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "PASS",
+     "verdict_reason": null
+    },
+    "replayed": {
+     "bracket_screen_comparison": {
+      "holds": true,
+      "left": "0.000",
+      "left_source": "retained range (max - min)",
+      "operator": "<=",
+      "right": "0.009724",
+      "right_source": "operative bracket_screen_s"
+     },
+     "level_screen_comparison": {
+      "holds": true,
+      "left": "0.025",
+      "left_source": "retained maximum (d01)",
+      "operator": "<=",
+      "right": "0.032898493715362",
+      "right_source": "operative preflight_level_screen_s"
+     },
+     "m": 12,
+     "maximum_s": "0.025",
+     "maximum_slot": "d01",
+     "minimum_s": "0.025",
+     "minimum_slot": "d01",
+     "range_s": "0.000",
+     "reference_envelope": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+      "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+      "bracket_screen_s": "0.009724",
+      "corpus_n": 17,
+      "level_screen_s": "0.032898493715362",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "raw_corpus_maximum_s": "0.03289849371536248",
+      "raw_corpus_range_s": "0.00972358928879385"
+     },
+     "retained": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.025",
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.025",
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.025",
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.025",
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.025",
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.025",
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.025",
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.025",
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.025",
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.025",
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.025",
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.025",
+       "slot": "d12"
+      }
+     ],
+     "schema_version": "joulewise.epoch_equivalence_check.v1",
+     "session": {
+      "abort_reason": null,
+      "declared_slots": [
+       "d01",
+       "d02",
+       "d03",
+       "d04",
+       "d05",
+       "d06",
+       "d07",
+       "d08",
+       "d09",
+       "d10",
+       "d11",
+       "d12"
+      ],
+      "session_id": "derivation-night-1",
+      "session_kind": "derivation",
+      "state": "finalized"
+     },
+     "slot_outcomes": [
+      {
+       "attempt_id": "derivation-night-1-d01",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d01"
+      },
+      {
+       "attempt_id": "derivation-night-1-d02",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d02"
+      },
+      {
+       "attempt_id": "derivation-night-1-d03",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d03"
+      },
+      {
+       "attempt_id": "derivation-night-1-d04",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d04"
+      },
+      {
+       "attempt_id": "derivation-night-1-d05",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d05"
+      },
+      {
+       "attempt_id": "derivation-night-1-d06",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d06"
+      },
+      {
+       "attempt_id": "derivation-night-1-d07",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d07"
+      },
+      {
+       "attempt_id": "derivation-night-1-d08",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d08"
+      },
+      {
+       "attempt_id": "derivation-night-1-d09",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d09"
+      },
+      {
+       "attempt_id": "derivation-night-1-d10",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d10"
+      },
+      {
+       "attempt_id": "derivation-night-1-d11",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d11"
+      },
+      {
+       "attempt_id": "derivation-night-1-d12",
+       "b_fiducial_s": "0.025",
+       "detail": null,
+       "outcome": "valid_resolved",
+       "retained": true,
+       "slot": "d12"
+      }
+     ],
+     "verdict": "PASS",
+     "verdict_reason": null
+    },
+    "source": "tests/fixtures/epoch_continuation/s9-pass.json",
+    "source_sha256": "b79fea19e0f4dac0a981c175dd4f4a49ba01d3dbe1aebbfe785157fbdeff2dcb"
+   }
+  },
+  "fixture_families": {
+   "claim_evidence": {
+    "admitted": false,
+    "authentic": true,
+    "grants": [],
+    "validator_codes": []
+   },
+   "d165_closeout": {
+    "admitted": false,
+    "authentic": true,
+    "grants": [],
+    "validator_codes": []
+   },
+   "reported_energy_parents": {
+    "admitted": false,
+    "authentic": true,
+    "grants": [],
+    "validator_codes": []
+   },
+   "transfer_projection": {
+    "admitted": false,
+    "authentic": true,
+    "grants": [],
+    "validator_codes": []
+   },
+   "whole_window_verdict": {
+    "admitted": false,
+    "authentic": true,
+    "grants": [],
+    "validator_codes": []
+   }
+  },
+  "validator_outcomes": {
+   "manifests": {
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/analysis_manifest_v3.json": {
+     "file_sha256": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
+     "manifest_id": null,
+     "schema_version": "joulewise.analysis_manifest.v3.prospective",
+     "validator_errors": [
+      "analysis_prospective_schema_invalid",
+      "analysis_prospective_unknown_key",
+      "analysis_prospective_unresolved_slot",
+      "analysis_prospective_not_frozen"
+     ]
+    },
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/analysis_manifest_v3.json": {
+     "file_sha256": "1ddcf0ad94a60ad5ba8d580f9649d6f15d71cea80a30f634ad349cbbbeda9009",
+     "manifest_id": null,
+     "schema_version": "joulewise.analysis_manifest.v3.prospective",
+     "validator_errors": [
+      "analysis_prospective_schema_invalid",
+      "analysis_prospective_unknown_key",
+      "analysis_prospective_unresolved_slot",
+      "analysis_prospective_not_frozen"
+     ]
+    },
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/analysis_manifest_v3.json": {
+     "file_sha256": "749333afdd2d9c3ea44d2cb33720c9ab0d4c9d2cf816d61ff50ba71a262596ee",
+     "manifest_id": null,
+     "schema_version": "joulewise.analysis_manifest.v3.prospective",
+     "validator_errors": [
+      "analysis_prospective_schema_invalid",
+      "analysis_prospective_unknown_key",
+      "analysis_prospective_unresolved_slot",
+      "analysis_prospective_not_frozen"
+     ]
+    },
+    "configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json": {
+     "file_sha256": "6dbc411853d4f7ae5ad7bd1e7f12a6faacb49b28384930272ef8450703d708e2",
+     "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
+     "schema_version": "joulewise.analysis_manifest.v3",
+     "validator_errors": []
+    },
+    "tests/fixtures/axi_ap_spec/analysis_manifest.json": {
+     "file_sha256": "c18a2ef8ce235b32f7c67322fab1838477762ed6d75e3b40b01af987aeec7bf1",
+     "manifest_id": "am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066",
+     "schema_version": "joulewise.analysis_manifest.v2",
+     "validator_errors": []
+    },
+    "tests/fixtures/axi_ap_spec/draft_analysis_manifest.json": {
+     "file_sha256": "c18a2ef8ce235b32f7c67322fab1838477762ed6d75e3b40b01af987aeec7bf1",
+     "manifest_id": "am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066",
+     "schema_version": "joulewise.analysis_manifest.v2",
+     "validator_errors": []
+    },
+    "tests/fixtures/axi_ap_spec/native_analysis_manifest.json": {
+     "file_sha256": "3f15d1a35458cafced68818b39f7824e98c55f8f1a8931cfdc806cdac689eaed",
+     "manifest_id": "am-75373d90dd0fd3cefc04cac98ca94cc5e951848f94d222f149bc82b499f1608c",
+     "schema_version": "joulewise.analysis_manifest.v2",
+     "validator_errors": []
+    }
+   },
+   "registries": {
+    "configs/analysis_registry/ap_spec_draft_front.v2.json": {
+     "file_sha256": "a0de95ea94f1ada51273af712d9e492340121e9a13ba833717fada8440586e46",
+     "schema_version": "joulewise.analysis_registry.v2",
+     "validator_errors": []
+    },
+    "configs/analysis_registry/ap_spec_native_mtp_front.v2.json": {
+     "file_sha256": "769f964e0540d64fc5316f8ac1e28183852611b6306d76e8a2f3774d71250137",
+     "schema_version": "joulewise.analysis_registry.v2",
+     "validator_errors": []
+    },
+    "configs/analysis_registry/slice_2m_ap2.v1.json": {
+     "file_sha256": "9defb37454aec95ff8a40df60f50edcca8e45d17d03f35364f07571d31475b01",
+     "schema_version": "joulewise.analysis_registry.v1",
+     "validator_errors": []
+    }
+   }
+  },
+  "window_engine": {
+   "floor_request_refusal": {
+    "bad_binding": [
+     {
+      "reason_codes": [
+       "artifact_schema_invalid",
+       "calibration_plan_bytes_hash_mismatch"
+      ],
+      "status": "refused"
+     }
+    ],
+    "bad_cell_binding": [
+     {
+      "reason_codes": [
+       "artifact_schema_invalid",
+       "calibration_plan_bytes_hash_mismatch"
+      ],
+      "status": "refused"
+     }
+    ],
+    "condition_mismatch": [
+     {
+      "reason_codes": [
+       "consumer_term_unknown"
+      ],
+      "status": "refused"
+     }
+    ],
+    "empty_binding": [
+     {
+      "reason_codes": [
+       "consumer_term_unknown"
+      ],
+      "status": "refused"
+     }
+    ],
+    "factory_none": [
+     {
+      "reason_codes": [
+       "consumer_term_unknown"
+      ],
+      "status": "refused"
+     }
+    ],
+    "hash_mismatch": [
+     {
+      "reason_codes": [
+       "consumer_term_unknown"
+      ],
+      "status": "refused"
+     }
+    ],
+    "metric_mismatch": [
+     {
+      "reason_codes": [
+       "consumer_term_unknown"
+      ],
+      "status": "refused"
+     }
+    ],
+    "no_factory_with_evidence": [
+     {
+      "reason_codes": [
+       "artifact_schema_invalid"
+      ],
+      "status": "refused"
+     }
+    ],
+    "no_request": [
+     {
+      "reason_codes": [
+       "artifact_schema_invalid"
+      ],
+      "status": "refused"
+     }
+    ],
+    "production_request": [
+     {
+      "reason_codes": [
+       "cell_not_claim_ready"
+      ],
+      "status": "refused"
+     }
+    ],
+    "request_refused": [
+     {
+      "reason_codes": [
+       "consumer_identity_undeclared"
+      ],
+      "status": "refused"
+     }
+    ],
+    "v1_match": [
+     {
+      "reason_codes": [
+       "cell_not_claim_ready"
+      ],
+      "status": "refused"
+     }
+    ],
+    "v3_match": [
+     {
+      "reason_codes": [
+       "cell_not_claim_ready"
+      ],
+      "status": "refused"
+     }
+    ],
+    "window_mismatch": [
+     {
+      "reason_codes": [
+       "consumer_term_unknown"
+      ],
+      "status": "refused"
+     }
+    ]
+   },
+   "metric_selector_mismatch": {
+    "inputs": {
+     "request_metric": "wrong_metric",
+     "selector": {
+      "condition_family_ids": [
+       "condition-a"
+      ],
+      "metric": "gross_energy_j",
+      "window_class": "request"
+     }
+    },
+    "resolutions": [
+     {
+      "reason_codes": [
+       "consumer_term_unknown"
+      ],
+      "status": "refused"
+     }
+    ]
+   },
+   "minimal_v1_artifact": {
+    "contrasts": {
+     "ctr-test": {
+      "claim_level_ceiling": "L2",
+      "claim_ready_for_l2_l3": true,
+      "direction": "positive",
+      "outcome": "direction_supported",
+      "reason_codes": []
+     }
+    },
+    "manifest_id": "am-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "validator_errors": []
+   }
+  }
  },
- "schema_version": "joulewise.claimgate_v1_replay_golden.v1",
+ "schema_version": "joulewise.claimgate_v1_replay_golden.v2",
  "selected_paths": [
   "configs/analysis_registry/ap_spec_draft_front.v2.json",
   "configs/analysis_registry/ap_spec_native_mtp_front.v2.json",
@@ -2724,154 +3708,111 @@
   "tests/fixtures/axi_ap_spec/native_analysis_manifest.json"
  ],
  "selection_rules": {
-  "fixture_families": "Fixture authentication only; the non-issuing mode always refuses admission. No non-fixture replay is available from these checked-in fixture bytes; production issuance is sampled separately below.",
+  "fixture_families": "Fixture authentication only; the non-issuing mode always refuses admission. Production issuance is sampled by the real_v1_wire transition.",
   "selected_paths": "Pinned checked-in claim-verdict, manifest, and registry JSON paths selected for PR-0; discovery is informational only.",
+  "test_seams": [
+   "validate_finalized_analysis_manifest_v3 → []",
+   "_validate_floor_acceptance → None"
+  ],
   "v1_golden_manifest_ids": "Sorted manifest_id values from selected finalized v1 or v3.finalized manifests with no validator errors. No such checked-in finalized manifest exists at PR-0, so the list is empty; drafts and synthetic artifact IDs do not count."
  },
- "v1_golden_manifest_ids": [],
- "validator_outcomes": {
-  "manifests": {
-   "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/analysis_manifest_v3.json": {
-    "file_sha256": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
-    "manifest_id": null,
-    "schema_version": "joulewise.analysis_manifest.v3.prospective",
-    "validator_errors": [
-     "analysis_prospective_schema_invalid",
-     "analysis_prospective_unknown_key",
-     "analysis_prospective_unresolved_slot",
-     "analysis_prospective_not_frozen"
-    ]
-   },
-   "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/analysis_manifest_v3.json": {
-    "file_sha256": "1ddcf0ad94a60ad5ba8d580f9649d6f15d71cea80a30f634ad349cbbbeda9009",
-    "manifest_id": null,
-    "schema_version": "joulewise.analysis_manifest.v3.prospective",
-    "validator_errors": [
-     "analysis_prospective_schema_invalid",
-     "analysis_prospective_unknown_key",
-     "analysis_prospective_unresolved_slot",
-     "analysis_prospective_not_frozen"
-    ]
-   },
-   "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/analysis_manifest_v3.json": {
-    "file_sha256": "749333afdd2d9c3ea44d2cb33720c9ab0d4c9d2cf816d61ff50ba71a262596ee",
-    "manifest_id": null,
-    "schema_version": "joulewise.analysis_manifest.v3.prospective",
-    "validator_errors": [
-     "analysis_prospective_schema_invalid",
-     "analysis_prospective_unknown_key",
-     "analysis_prospective_unresolved_slot",
-     "analysis_prospective_not_frozen"
-    ]
-   },
-   "configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json": {
-    "file_sha256": "6dbc411853d4f7ae5ad7bd1e7f12a6faacb49b28384930272ef8450703d708e2",
-    "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
-    "schema_version": "joulewise.analysis_manifest.v3",
-    "validator_errors": []
-   },
-   "tests/fixtures/axi_ap_spec/analysis_manifest.json": {
-    "file_sha256": "c18a2ef8ce235b32f7c67322fab1838477762ed6d75e3b40b01af987aeec7bf1",
-    "manifest_id": "am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066",
-    "schema_version": "joulewise.analysis_manifest.v2",
-    "validator_errors": []
-   },
-   "tests/fixtures/axi_ap_spec/draft_analysis_manifest.json": {
-    "file_sha256": "c18a2ef8ce235b32f7c67322fab1838477762ed6d75e3b40b01af987aeec7bf1",
-    "manifest_id": "am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066",
-    "schema_version": "joulewise.analysis_manifest.v2",
-    "validator_errors": []
-   },
-   "tests/fixtures/axi_ap_spec/native_analysis_manifest.json": {
-    "file_sha256": "3f15d1a35458cafced68818b39f7824e98c55f8f1a8931cfdc806cdac689eaed",
-    "manifest_id": "am-75373d90dd0fd3cefc04cac98ca94cc5e951848f94d222f149bc82b499f1608c",
-    "schema_version": "joulewise.analysis_manifest.v2",
-    "validator_errors": []
+ "transitions": {
+  "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {
+   "real_v1_wire": {
+    "post": {
+     "admitted": true,
+     "authentic": true,
+     "grants": [
+      {
+       "kind": "outcome",
+       "subject_id": "ctr-sw-decode-qwen25-1p5b-vs-7b"
+      },
+      {
+       "kind": "l2",
+       "subject_id": "ctr-sw-decode-qwen25-1p5b-vs-7b"
+      }
+     ],
+     "shim": "top-level evidence_class copied from inputs.evidence_class; validate_claim_verdicts patched to []",
+     "validator_codes": []
+    },
+    "pre": {
+     "admitted": false,
+     "authentic": false,
+     "direct_call": {
+      "key": "evidence_class",
+      "raised": "KeyError"
+     },
+     "grants": [],
+     "validator_codes": [
+      "KeyError"
+     ]
+    }
    }
   },
-  "registries": {
-   "configs/analysis_registry/ap_spec_draft_front.v2.json": {
-    "file_sha256": "a0de95ea94f1ada51273af712d9e492340121e9a13ba833717fada8440586e46",
-    "schema_version": "joulewise.analysis_registry.v2",
-    "validator_errors": []
+  "WR-6": {
+   "v3_window_clean": {
+    "post": {
+     "claim_evaluation": {
+      "claim_level_ceiling": "L1",
+      "claim_ready_for_l2_l3": false,
+      "direction": "positive",
+      "outcome": "direction_supported",
+      "reason_codes": []
+     },
+     "reason_codes_added": [
+      "claim_rule_version_v1_closed"
+     ]
+    },
+    "pre": {
+     "claim_evaluation": {
+      "claim_level_ceiling": "L2",
+      "claim_ready_for_l2_l3": true,
+      "direction": "positive",
+      "outcome": "direction_supported",
+      "reason_codes": []
+     },
+     "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
+     "validator_errors": []
+    }
    },
-   "configs/analysis_registry/ap_spec_native_mtp_front.v2.json": {
-    "file_sha256": "769f964e0540d64fc5316f8ac1e28183852611b6306d76e8a2f3774d71250137",
-    "schema_version": "joulewise.analysis_registry.v2",
-    "validator_errors": []
-   },
-   "configs/analysis_registry/slice_2m_ap2.v1.json": {
-    "file_sha256": "9defb37454aec95ff8a40df60f50edcca8e45d17d03f35364f07571d31475b01",
-    "schema_version": "joulewise.analysis_registry.v1",
-    "validator_errors": []
+   "v3_window_supersession_diverged": {
+    "post": {
+     "claim_evaluation": {
+      "claim_level_ceiling": "L1",
+      "claim_ready_for_l2_l3": false,
+      "direction": null,
+      "outcome": "not_estimable",
+      "reason_codes": [
+       "insufficient_complete_blocks",
+       "metric_missing_or_nonfinite",
+       "fixed_n_plan_incomplete",
+       "paired_block_incomplete",
+       "whole_window_verdict_conflict"
+      ]
+     },
+     "reason_codes_added": [
+      "claim_rule_version_v1_closed"
+     ]
+    },
+    "pre": {
+     "claim_evaluation": {
+      "claim_level_ceiling": "L1",
+      "claim_ready_for_l2_l3": false,
+      "direction": null,
+      "outcome": "not_estimable",
+      "reason_codes": [
+       "insufficient_complete_blocks",
+       "metric_missing_or_nonfinite",
+       "fixed_n_plan_incomplete",
+       "paired_block_incomplete",
+       "whole_window_verdict_conflict"
+      ]
+     },
+     "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
+     "validator_errors": []
+    }
    }
   }
  },
- "window_engine": {
-  "metric_selector_mismatch": {
-   "inputs": {
-    "request_metric": "wrong_metric",
-    "selector": {
-     "condition_family_ids": [
-      "condition-a"
-     ],
-     "metric": "gross_energy_j",
-     "window_class": "request"
-    }
-   },
-   "resolutions": [
-    {
-     "reason_codes": [
-      "consumer_term_unknown"
-     ],
-     "status": "refused"
-    }
-   ]
-  },
-  "minimal_v1_artifact": {
-   "contrasts": {
-    "ctr-test": {
-     "claim_level_ceiling": "L2",
-     "claim_ready_for_l2_l3": true,
-     "direction": "positive",
-     "outcome": "direction_supported",
-     "reason_codes": []
-    }
-   },
-   "manifest_id": "am-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-   "validator_errors": []
-  },
-  "v3_window_clean": {
-   "contrasts": {
-    "ctr-sw-decode-qwen25-1p5b-vs-7b": {
-     "claim_level_ceiling": "L2",
-     "claim_ready_for_l2_l3": true,
-     "direction": "positive",
-     "outcome": "direction_supported",
-     "reason_codes": []
-    }
-   },
-   "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
-   "validator_errors": []
-  },
-  "v3_window_supersession_diverged": {
-   "contrasts": {
-    "ctr-sw-decode-qwen25-1p5b-vs-7b": {
-     "claim_level_ceiling": "L1",
-     "claim_ready_for_l2_l3": false,
-     "direction": null,
-     "outcome": "not_estimable",
-     "reason_codes": [
-      "insufficient_complete_blocks",
-      "metric_missing_or_nonfinite",
-      "fixed_n_plan_incomplete",
-      "paired_block_incomplete",
-      "whole_window_verdict_conflict"
-     ]
-    }
-   },
-   "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
-   "validator_errors": []
-  }
- }
+ "v1_golden_manifest_ids": []
 }
