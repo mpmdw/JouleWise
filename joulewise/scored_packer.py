@@ -67,7 +67,7 @@ def _predictions(registration, predicted):
     _need(expected is None or digest == expected, "inv_08", "prediction digest")
 
 
-def _ownership(registration, roster):
+def _ownership(registration, roster) -> dict:
     """Rebuild the ownership view from the roster on every call."""
     blocks = {}
     for block in roster["blocks"]:
@@ -167,7 +167,7 @@ def _checked_derived(registration, roster, captured_window_keys=None):
         return _derived(registration, roster, captured_window_keys)
     except PackingRefusal:
         raise
-    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError) as exc:
+    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError, RecursionError) as exc:
         raise PackingRefusal("inv_52", "malformed roster") from exc
     except ArithmeticError as exc:
         raise PackingRefusal("inv_52", f"internal:{type(exc).__name__}") from exc
@@ -290,7 +290,7 @@ def _seal(registration, roster, *, finalize=False):
         short, lever = _checked_derived(registration, roster)
     except PackingRefusal:
         raise
-    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError) as exc:
+    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError, RecursionError) as exc:
         raise PackingRefusal("inv_52", "malformed roster") from exc
     except ArithmeticError as exc:
         raise PackingRefusal("inv_52", f"internal:{type(exc).__name__}") from exc
