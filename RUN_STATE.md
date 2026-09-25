@@ -10,6 +10,20 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 152c9255 — from 04:27 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md) is the running log. Every ruling below came from a four- or three-model council, then a cold Fable judge paired with an Opus contract refuter, then a cold Fable addendum. **All four first cold rulings missed at least one BLOCKER that the paired Opus refuter caught.**
+- **Acceptance, 25G83:** ruled. [Rulings v2.1 R1–R17](docs/process_traces/2026-09-25-activation-152c9255/05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md).
+  - The cure is `ProcessType=Interactive` on the night templates with the original v3 1 s pulses; there is no r8.
+  - The installer refuses a non-Interactive plist, and each arm runs a 300-frame probe (median ≤ 150 ms, max ≤ 200 ms). The probe was bench-proven both ways: default context 173 ms → refuse; Interactive 125.6 ms → pass.
+  - The 09-19 n1/n2 rows are disposed under D-126.
+  - The equivalence path is NOT taken, because B grows with frame length. W1 is derivation window one; W2 follows at least 6 h later; n ≥ 12.
+  - **PR-L** (`feat/2026-09-25-acc-launch-context`) and **PR-R** (`feat/2026-09-25-acc-registration-rev5`) are in review. PR-R merges after PR-L and after this bookkeeping branch lands the ruling file on main.
+- **Claim gate v2 wiring:** ruled. [WR-0..WR-10](docs/process_traces/2026-09-25-activation-152c9255/06-coldgate-packet-cgw/30-addendum/21-coldgate-fable-cgw-addendum-ruling.md). **PR-0** golden (`test/2026-09-25-claimgate-pr0-golden`) escalated after two same-signature rounds; [escalation ruling R-1..R-7](docs/process_traces/2026-09-25-activation-152c9255/14-coldgate-packet-pr0esc/20-coldgate-fable-pr0esc-ruling.md) requires mechanical coverage plus a mutation-sweep acceptance, and one round is running.
+- **A292 reducer:** ruled. [Rulings v1.1](docs/process_traces/2026-09-25-activation-152c9255/09-coldgate-packet-a292/30-addendum/21-coldgate-fable-a292-addendum-ruling.md). The harness is RED `4bcddb49`; the Opus implementation is GREEN `8d06633e`. The lenses found 3 SHOULD-FIX, and the mutation sweep is running.
+- **J/correct floor plus a CG-1 science BLOCKER:** the ruled CG-1 omitted the accuracy sampling error, giving 25–89 % false admission per level. It is cured by the labelled amendment [A-JC-1 v1.1](docs/process_traces/2026-09-25-activation-152c9255/13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md): a paired-envelope Welch SE² = s_d²/k + V_acc. The floor is a log-unit null over 20 windows.
+- **New:** the headline is **underpowered** as drafted (power 0.20–0.37 at Δ_L = 0.3 with n_acc = 128). HEADLINE-POWER-01 has Opus and Astra rulings running, followed by a Fable final pass.
+- **Prerequisites discovered:** A283's seeded sampler (the runtime at HEAD is greedy); a MATH window class longer than 600 s; a production defect V1-ISSUANCE-GATE-EVIDENCE-CLASS-01.
+- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from the last item, then continue the open gates in this order: PR-L → bookkeeping PR → PR-R → A292 → PR-0 → HEADLINE-POWER-01. Every seat and branch is named in the record. No night can be armed before PR-L and PR-R merge and Revision 5 is sealed.
+
 **▶▶ ACTIVATION 278ebc9e — 04:46 PDT 09-24 → ≈04:25 PDT 09-25 (Opus 5.5; NOTHING ARMED; PR #409 A291 MERGED `75d04e9e`; exited for a fresh supervisor):** [Record 00](docs/process_traces/2026-09-24-activation-278ebc9e/00-activation-record.md) items 1–121.
 **Landed:**
 - **PR #409, A291 scored-roster packer:** the round-3 ownership view, gated by a harness. Mutation kills, two forger seats and a cold Fable final pass all passed. It also retires ED-BRANCH-PROTECTION-E1-01, which cures main's `gen_state` drift.
@@ -5416,7 +5430,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance council reopened on the launch-context cause; claim-gate wiring consult](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
 
 ### [ED-EXTERNAL]
 
@@ -5433,6 +5447,8 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 - CONTINUE — A149 `DECISION-LOG-RATIFY`: Install the ruling-43 addenda for D-078, D-083, D-165, D-166, and D-161 plus the new D-174 submission scope freeze in the decision log.
 - CONTINUE — A153 `D166-PROMPT0-01`: Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.
 - CONTINUE — A256 `EVIDENCE-NIGHT-ENTRY-01`: PR 1: deliver tracked python -m joulewise.evidence_night prepare --kind quiet_predicate_evidence --t0 next [--head H] that clones and builds the locked venv at H, authors the v2 plan and renders the wrapper at staging, runs the real installer render-only FROM the clone, resumes idempotently on sealed bytes, and STOPS at the notice boundary. Add a thin evidence lifecycle façade (render/probe/install/uninstall/verify) delegating to existing installer machinery, not a second installer; tests/test_evidence_night.py, extended tests/test_evidence_arm_sequence.py, docs/contracts/evidence_night_entry.md and the handbook/runbook checklist replace per-night script copies. PR 2 later, after lifecycle decision F3: notice → wait → veto → publish → install orchestration through a narrow transport adapter, plus census argv and producer identity provenance in the watchdog’s census events, separately reviewed.
+- CONTINUE — A292 `HEADLINE-REDUCER-SEALED-01`: Build the scored reducer, which reads the sealed capture roster and per-problem score records, attributes gross power energy to each executed problem block, and produces only evidence supported by the recorded captures. It starts after the packer has a gated roster, so the reducer cannot invent missing attempt or score identity.
+- CONTINUE — A303 `HEADLINE-POWER-01`: Decide n_acc per level under Ed’s O-18/E4 delegation before AP-5M v5 registration freezes.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

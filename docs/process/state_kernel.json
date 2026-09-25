@@ -3,7 +3,7 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Activation 152c9255 record: acceptance council reopened on the launch-context cause; claim-gate wiring consult",
+    "label": "Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review",
     "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
@@ -131,7 +131,7 @@
       "priority": "p1_phase_gate",
       "rank": 179,
       "status": "queued",
-      "status_note": "2026-09-10 23:35: Ed's ruling (issue 316) recorded on main (PR #319); night one = epoch-equivalence check; continuation mechanism (S10) in the gate on its branch; arm materials next; 2026-09-25: D-184 council reopened as ACCEPTANCE-25G83-02 because cadence cause is launchd default ProcessType (docs/process_traces/2026-09-24-interactive-4b/01-powermetrics-cadence-launch-context.md, 21-session-results-and-stop.md, 26-continuation-results.md; packet docs/process_traces/2026-09-25-activation-152c9255/01-acceptance-reopen-packet/00-question.md). v4/rev4 branch origin/feat/2026-09-24-acc-25g83-v4-rev4 HELD pending that council.",
+      "status_note": "2026-09-10 23:35: Ed's ruling (issue 316) recorded on main (PR #319); night one = epoch-equivalence check; continuation mechanism (S10) in the gate on its branch; arm materials next; 2026-09-25: D-184 council reopened as ACCEPTANCE-25G83-02 because cadence cause is launchd default ProcessType (docs/process_traces/2026-09-24-interactive-4b/01-powermetrics-cadence-launch-context.md, 21-session-results-and-stop.md, 26-continuation-results.md; packet docs/process_traces/2026-09-25-activation-152c9255/01-acceptance-reopen-packet/00-question.md). v4/rev4 branch origin/feat/2026-09-24-acc-25g83-v4-rev4 HELD pending that council. 2026-09-25: ruled — Acceptance rulings v2.1 R1–R17 (05-coldgate-packet-acc2/30-addendum/21-*): Interactive + v3, equivalence path NOT taken, W1 is derivation window one; PR-L feat/2026-09-25-acc-launch-context and PR-R feat/2026-09-25-acc-registration-rev5 in review",
       "stop_card": null
     },
     "ARM-PACKET-01": {
@@ -1569,6 +1569,75 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "CLAIMGATE-CG1-AMENDMENT-AJC1-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-152c9255/13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CLAIMGATE-CG1-AMENDMENT-AJC1-01/acceptance",
+          "label": "CLAIMGATE-CG1-AMENDMENT-AJC1-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Implement paired envelopes by subset_id, SE² = s_d²/k + V_acc with one stratified joint bootstrap over problem IDs and Welch df; carry ln_ratio J/correct metric rules, the two-mint floor and 20 null windows, the bound accuracy artifact and ruled acceptance simulations. No v2 registration with a shared-accuracy estimand freezes before installation."
+      },
+      "authority": {
+        "label": "J/correct cold-gate addendum A-JC-1 v1.1 and floor rules §B",
+        "path": "docs/process_traces/2026-09-25-activation-152c9255/13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "CG-4 implementation must reach its ruled entry before this amendment can be installed",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CLAIMGATE-V2-IMPL-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Implement the labelled CG-1 amendment A-JC-1 v1.1 and J/correct floor rules in the CG-4 PR or its successor before any shared-accuracy v2 registration freezes.",
+      "id": "CLAIMGATE-CG1-AMENDMENT-AJC1-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 304,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-25; blocked on CLAIMGATE-V2-IMPL-01. Implement in the CG-4 PR or its successor, with the labelled amendment and floor rules before shared-accuracy freeze.",
+      "stop_card": null
+    },
+    "CLAIMGATE-GOLDEN-SWEEP-OPERATORS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-152c9255/14-coldgate-packet-pr0esc/21-opus-refuter.md",
+          "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CLAIMGATE-GOLDEN-SWEEP-OPERATORS-01/acceptance",
+          "label": "CLAIMGATE-GOLDEN-SWEEP-OPERATORS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The sweep covers ==/!=, in/not in and is/is not negation; replaces each if/elif condition with True and False; and swaps every return or outcome string literal for a sibling outcome. The review demonstrates kills or proves each equivalent survivor under the ruled sweep protocol; no PR-0 acceptance is silently expanded."
+      },
+      "authority": {
+        "label": "PR-0 escalation Opus refuter B-2 corrected operator text",
+        "path": "docs/process_traces/2026-09-25-activation-152c9255/14-coldgate-packet-pr0esc/21-opus-refuter.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Extend the PR-0 golden AST mutation sweep with the corrected operator set in its own ruled PR.",
+      "id": "CLAIMGATE-GOLDEN-SWEEP-OPERATORS-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 301,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25 from PR-0 refuter B-2 and activation record item 35; own ruled PR, outside the current PR-0 acceptance.",
+      "stop_card": null
+    },
     "CLAIMGATE-V2-IMPL-01": {
       "acceptance": {
         "evidence": [
@@ -1607,7 +1676,7 @@
       "priority": "p1_phase_gate",
       "rank": 298,
       "status": "blocked",
-      "status_note": "Registered 2026-09-25; stopped for design consult CLAIMGATE-WIRING-01 (docs/process_traces/2026-09-25-activation-152c9255/03-claimgate-wiring-consult/00-question.md); WIP origin/feat/2026-09-24-claimgate-v2 at 3cd00c73; resume report docs/process_traces/2026-09-24-activation-278ebc9e/97b-claimgate-impl-resume-report.md.",
+      "status_note": "Registered 2026-09-25; stopped for design consult CLAIMGATE-WIRING-01 (docs/process_traces/2026-09-25-activation-152c9255/03-claimgate-wiring-consult/00-question.md); WIP origin/feat/2026-09-24-claimgate-v2 at 3cd00c73; resume report docs/process_traces/2026-09-24-activation-278ebc9e/97b-claimgate-impl-resume-report.md. 2026-09-25: design ruled — Wiring rulings v1.1 WR-0..WR-10 (06-coldgate-packet-cgw/30-addendum/21-*); PR-0 golden in review (test/2026-09-25-claimgate-pr0-golden); status stays blocked until PR-0 merges",
       "stop_card": null
     },
     "CLONE-ARM-MDFIND-01": {
@@ -3703,7 +3772,7 @@
       "priority": "p1_phase_gate",
       "rank": 282,
       "status": "queued",
-      "status_note": "No agent action until Ed replies. 2026-09-24 activation a65fb4fa: DRAFT READY [AGENT]; adoption pending Ed. Version 4 of the proposed MATH analysis plan, record 07d at 1f07c4ec, installs all 28 final texts from cold gate A282-AP5M-01 (30/10, 18 questions), as amended by addendum 30/21 after paired refuter 30/11. Installation check 39 found the texts byte-exact; its paraphrase findings were fixed at 1f07c4ec. Ed was emailed five decisions in Gmail thread 1a0d069e15a52ba9, message 1a0d2c87919abfe3: publication of problem text, adoption E2, decoding E3, measurement budget E4, and instrument-floor check O-21. The magistrate does not adopt claim policy. On Ed’s adoption, install the adopted text in docs/contracts/analysis_plans.md through a normal PR.",
+      "status_note": "No agent action until Ed replies. 2026-09-24 activation a65fb4fa: DRAFT READY [AGENT]; adoption pending Ed. Version 4 of the proposed MATH analysis plan, record 07d at 1f07c4ec, installs all 28 final texts from cold gate A282-AP5M-01 (30/10, 18 questions), as amended by addendum 30/21 after paired refuter 30/11. Installation check 39 found the texts byte-exact; its paraphrase findings were fixed at 1f07c4ec. Ed was emailed five decisions in Gmail thread 1a0d069e15a52ba9, message 1a0d2c87919abfe3: publication of problem text, adoption E2, decoding E3, measurement budget E4, and instrument-floor check O-21. The magistrate does not adopt claim policy. On Ed’s adoption, install the adopted text in docs/contracts/analysis_plans.md through a normal PR. 2026-09-25: must absorb J/correct floor rulings v1.1 §B, A-JC-1 v1.1, the MATH window class (a 10-block envelope fits 600 s only with thinking off), HEADLINE-POWER-01's n_acc, and the deferred A292 items (below_floor, attempt_divergence disclosure beyond E2, night_exhausted)",
       "stop_card": null
     },
     "HEADLINE-DECODING-AND-RUNTIME-01": {
@@ -3734,7 +3803,7 @@
       "priority": "p1_phase_gate",
       "rank": 283,
       "status": "queued",
-      "status_note": "2026-09-23 activation 1d3796d5: READY [AGENT], P1 phase gate. Bench work may proceed; merge of the sampler waits on Ed’s E3 reply to Gmail 1a0d069e15a52ba9.",
+      "status_note": "2026-09-23 activation 1d3796d5: READY [AGENT], P1 phase gate. Bench work may proceed; merge of the sampler waits on Ed’s E3 reply to Gmail 1a0d069e15a52ba9. 2026-09-25: hard prerequisite of every null and science envelope (runtime at HEAD is greedy temperature 0, joulewise/adapters/mlx_runtime.py:984-988); seeded-sampling byte reproducibility on Metal must be demonstrated in its gate (13-coldgate-packet-jc rulings)",
       "stop_card": null
     },
     "HEADLINE-ESTIMATOR-DECISION-TABLE-01": {
@@ -3778,6 +3847,36 @@
       "rank": 293,
       "status": "blocked",
       "status_note": "2026-09-24 activation a65fb4fa: BLOCKED on Ed’s AP-5M adoption and installation; P1. The draft at d2f9a273 remains ungated. Consume merge_order, min_correct and holm_m as mandatory rows (cold ruling 15/10 Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A282 AP-5M carrying the table; P1. Draft d2f9a273 remains ungated.",
+      "stop_card": null
+    },
+    "HEADLINE-POWER-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-152c9255/13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md",
+          "docs/process_traces/2026-09-25-activation-152c9255/18-headline-power/00-question.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/HEADLINE-POWER-01/acceptance",
+          "label": "HEADLINE-POWER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Opus and Astra independently assess n_acc per level using A-JC-1 v1.1, including projected per-level and family power, accuracy-run cost, quiet-window cost, smallest effect of interest and falsifiers; the magistrate resolves the recommendation and obtains a Fable final pass before the AP-5M v5 registration freezes."
+      },
+      "authority": {
+        "label": "HEADLINE-POWER-01 O-18/E4 question and delegated ruling route",
+        "path": "docs/process_traces/2026-09-25-activation-152c9255/18-headline-power/00-question.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Decide n_acc per level under Ed’s O-18/E4 delegation before AP-5M v5 registration freezes.",
+      "id": "HEADLINE-POWER-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 303,
+      "status": "active",
+      "status_note": "Registered 2026-09-25; active. Opus and Astra rulings followed by Fable final pass; no n_acc decision recorded yet.",
       "stop_card": null
     },
     "HEADLINE-PURE-MODULES-GATE-01": {
@@ -3857,8 +3956,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 292,
-      "status": "queued",
-      "status_note": "2026-09-25 activation 152c9255: UNBLOCKED — A291 packer merged as PR #409 (75d04e9e). At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). The AP-5M retry sentences that A291 required to land with or before its code are carried by HEADLINE-AP5M-AMENDMENT-01. 2026-09-24 activation a65fb4fa: BLOCKED on A291 gated packer and sealed roster; P1. The stopped c0998fdb draft is not accepted. At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A291 packer gate; P1. The c0998fdb reducer is a stopped draft.",
+      "status": "active",
+      "status_note": "2026-09-25 activation 152c9255: UNBLOCKED — A291 packer merged as PR #409 (75d04e9e). At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). The AP-5M retry sentences that A291 required to land with or before its code are carried by HEADLINE-AP5M-AMENDMENT-01. 2026-09-24 activation a65fb4fa: BLOCKED on A291 gated packer and sealed roster; P1. The stopped c0998fdb draft is not accepted. At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A291 packer gate; P1. The c0998fdb reducer is a stopped draft. 2026-09-25: design ruled (09-coldgate-packet-a292/30-addendum/21-*, rulings v1.1); harness 4bcddb49 RED; implementation 8d06633e GREEN; in review",
       "stop_card": null
     },
     "HEADLINE-SCORED-NIGHT-KIND-01": {
@@ -4230,6 +4329,56 @@
       "rank": 186,
       "status": "queued",
       "status_note": "2026-09-10 23:40: registered from synthesis 153 (deferred item); inert until a continuation is issued.",
+      "stop_card": null
+    },
+    "JCORRECT-NULL-CALIBRATION-WINDOWS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-152c9255/13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/JCORRECT-NULL-CALIBRATION-WINDOWS-01/acceptance",
+          "label": "JCORRECT-NULL-CALIBRATION-WINDOWS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Collect the §B scored MATH null workload with pinned seeds and byte identity: two floor mints (LO and HI), each at least five retained envelope pairs of 10 blocks, totaling 20 null windows at the base count; apply the ruled escalation to 10 pairs per mint if the projected threshold triggers. Mint F_Δ = max(F_lo, F_hi) in ln_ratio units and preserve refusal and replay evidence before freeze."
+      },
+      "authority": {
+        "label": "J/correct cold-gate addendum §B null calibration design",
+        "path": "docs/process_traces/2026-09-25-activation-152c9255/13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "successor acceptance must be established before null calibration",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ACCEPTANCE-EPOCH-25G83-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "seeded sampling and byte reproducibility must pass before null calibration",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "HEADLINE-DECODING-AND-RUNTIME-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run the J/correct null calibration windows after 25G83 successor acceptance and A283 seeded runtime acceptance, before AP-5M v5 freezes.",
+      "id": "JCORRECT-NULL-CALIBRATION-WINDOWS-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 305,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-25; blocked on 25G83 successor acceptance and HEADLINE-DECODING-AND-RUNTIME-01. Quiet-machine collection requires a clean lead-controlled session.",
       "stop_card": null
     },
     "L10-A-G2B-CONTRACT-PREFIX-01": {
@@ -9234,6 +9383,36 @@
       "rank": 163,
       "status": "queued",
       "status_note": "2026-09-08: READY; 99dt recommends shared authority; ratio.validate_metric_unit_and_ratio now exists and S3 consumes it; remaining manifest/verdict integration is the follow-up.",
+      "stop_card": null
+    },
+    "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-152c9255/14-coldgate-packet-pr0esc/20-coldgate-fable-pr0esc-ruling.md",
+          "docs/process_traces/2026-09-25-activation-152c9255/12-pr0/06-delta-reaudit.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V1-ISSUANCE-GATE-EVIDENCE-CLASS-01/acceptance",
+          "label": "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Read artifact[\"inputs\"][\"evidence_class\"] at both issuance-gate sites, move the test fixture key under inputs, and apply the ruled golden transition without refreshing the golden. A validator-passing v1 wire can then reach the intended issuance path; the existing production generic catch is accurately described as a typed paper_custody_validator_refused in the interim."
+      },
+      "authority": {
+        "label": "PR-0 escalation ruling G2 on v1 evidence_class",
+        "path": "docs/process_traces/2026-09-25-activation-152c9255/14-coldgate-packet-pr0esc/20-coldgate-fable-pr0esc-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Repair the v1 claim issuance gate evidence_class lookup in its own gated PR after the CG-4 PR.",
+      "id": "V1-ISSUANCE-GATE-EVIDENCE-CLASS-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 302,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25; G2 rules a separate gated PR after CG-4. Interim production behavior is fail-closed paper_custody_validator_refused with validator code KeyError, not a crash.",
       "stop_card": null
     },
     "V2-SURFACE-GUARD-REKEY-01": {
