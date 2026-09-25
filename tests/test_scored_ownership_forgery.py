@@ -8,12 +8,12 @@ import time
 import unittest
 from unittest.mock import patch
 
-from joulewise.scored_packer import PackingRefusal, _seal
+from joulewise.scored_packer import PackingRefusal, _seal, requeue_overrun
 from tests.scored_case_generator import generate_case
 from tests.scored_ownership_generator import composed_mutants
 from tests.scored_ownership_oracle import ownership_violations
 from tests.scored_roster_checker import check_roster
-from tests.test_scored_packer import _split_route
+from tests.test_scored_packer import _split_route, reseal
 from tests.test_scored_roster_checker import refresh_derived
 
 
@@ -176,6 +176,49 @@ class OwnershipForgeryTests(unittest.TestCase):
             self.assertEqual('refused:inv_11', outcomes[name], name)
         self.assertEqual('refused:inv_10', outcomes['cross-model-reorder'])
         self.assertEqual('accepted', outcomes['legal-contrast'])
+
+    def test_entry_path_witness_inv_23(self):
+        g, p, reg, base = _split_route()
+        self.assertEqual(set(), _checker_rows(g, base, p))
+        roster = deepcopy(base)
+        single = next(b for b in roster['blocks'] if b['parent_block_id'] is not None)
+        single['predicted_s'] = 29.0
+        reseal(roster)
+        self.assertIn('INV-23', _checker_rows(g, roster, p))
+        # Listed code: inv_23; the resealed entry raises inv_38 on event replay.
+        with self.assertRaises(PackingRefusal) as caught:
+            requeue_overrun(reg, roster, 0, [])
+        self.assertEqual('inv_38', caught.exception.code)
+
+    def test_entry_path_witness_inv_36(self):
+        g, p, reg, base = _split_route()
+        self.assertEqual(set(), _checker_rows(g, base, p))
+        roster = deepcopy(base)
+        advanced = next(pl for pl in roster['placements']
+                        if pl['stage'] == 'whole_block' and pl['attempt'] == 1)
+        advanced['attempt'] = 2
+        reseal(roster)
+        self.assertIn('INV-36', _checker_rows(g, roster, p))
+        # Listed code: inv_36; the resealed entry raises inv_38 on event replay.
+        with self.assertRaises(PackingRefusal) as caught:
+            requeue_overrun(reg, roster, 0, [])
+        self.assertEqual('inv_38', caught.exception.code)
+
+    def test_entry_path_witness_inv_37(self):
+        case = generate_case(291013, 0)
+        roster = deepcopy(case.rosters[0])
+        self.assertEqual(set(), _checker_rows(case.g, roster, case.p))
+        block = roster['blocks'][0]
+        roster['terminal_refusals'].append(dict(
+            type='ceiling_violation', block_id=block['block_id'], attempt=0,
+            parent_block_id=None, item_id=block['items'][0],
+            model=block['model'], level=block['level']))
+        reseal(roster)
+        self.assertIn('INV-37', _checker_rows(case.g, roster, case.p))
+        # Listed code: inv_37; the live/terminal ownership conflict raises inv_11.
+        with self.assertRaises(PackingRefusal) as caught:
+            requeue_overrun(case.reg, roster, 0, [])
+        self.assertEqual('inv_11', caught.exception.code)
 
     def test_legal_corpus_seal(self):
         count = 0
