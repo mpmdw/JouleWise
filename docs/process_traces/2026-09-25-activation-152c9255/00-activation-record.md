@@ -87,4 +87,5 @@
    - The A292 harness is committed RED as `4bcddb49` on `test/2026-09-25-a292-reducer-harness`. Bench-verified: 63 errors, all ModuleNotFoundError; the oracle imports no joulewise module; 54 tests.
    - **A292 implementation seat: Opus 5.5** (Claude family, independent of the Sol-written oracle, following the packer precedent). Branch `feat/2026-09-25-a292-scored-reduce`; WRITE_SCOPE `joulewise/scored_reduce.py` only; it must not read the oracle.
    - PR-L's R16 is committed WIP. Fixture fix seat 34 (Sol) has WRITE_SCOPE `tests/test_night_agent_install.py`: it patches the custody-root constant in the fixture and never weakens the check.
-   - Slice checks at ≈06:45: no unread mail from Ed; no stand-down request; directives #405 and #408 open; heartbeat refreshed.
+   - Slice checks at 06:15 (clock-read): no unread mail from Ed; no stand-down request; directives #405 and #408 open; heartbeat refreshed.
+39. Time-stamp caveat: the "Assembled ≈HH:MM" lines in cold-gate charges 05–14 were magistrate estimates written without a clock read, and several run ahead of real time. The clock read 06:15 PDT at item 38. The charges are sha-pinned and are not edited. The authoritative times are the git commit times of each packet and the judge stdout mtimes. From here on, every time in this record is clock-read.
