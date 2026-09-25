@@ -273,3 +273,18 @@
    - **C1-b(2) fails as literally written.** Merging main necessarily brings main's own #411 changes (kernel, RUN_STATE, TASK_QUEUE, `tests/test_gen_state.py`) into H relative to `58d9ddc3`. H's non-records diff vs main equals PR-L's code. `gen_state --check` OK.
    - Per C3's own fallback, the named module set (ex-04's fifteen plus `test_epoch_continuation` and `test_epoch_equivalence_check`) re-runs. Several of those modules exist only with PR-R or A292 present, so they run on wave tree `integ/2026-09-25-wave3` = main + H + PR-R `e77ec15d` + A292 `64dec562`, which merges clean.
    - C1-b(3)/(4), mergeable and hosted checks green on H, are checked before the merge.
+89. **New directives from Ed** (issue bodies authored by `mpmdw`, read at 12:55 PDT, relayed by the interactive seat 4b with Ed present).
+   - **#415** (TIER-01 endorsed). Ed, verbatim: "gates are only meant to keep science defendable, not to overly red-tape dumb stuff like docs changes."
+     - Docs-only, bookkeeping-only and test-only changes (no production code under `joulewise/` or `scripts/` executed by nights, windows, analysis or claims) take a light gate: one fresh non-author review plus green CI.
+     - Measurement, calibration, night, analysis and claim code keeps the full gate. When unsure, use the full gate.
+     - Apply: land TIER-01, plus a light-tier path in the gate-ledger CI checker (a declared `Risk tier: light` validated against the diff's paths).
+     - **Queued behind the current three-PR wave, as a new lane**: its checker change is CI tooling and takes the full gate until TIER-01 itself lands (when unsure, full).
+   - **#416** (pre-arm audit gate). Ed, verbatim: "i want a full multi agent fresh audit of the whole measurement system/codebase by astra 6 xhigh, fable 5.1 xhigh, and opus 5.5 xhigh", clarified as "meant for when all the work before launching the load bearing windows" is done.
+     - The sequence:
+       1. Merge every pre-W1 change (PR-L, PR-R, the sealed Revision 5, anything else on the W1 path).
+       2. Freeze the head.
+       3. Signal "PRE-WINDOW WORK COMPLETE" with the frozen sha and scope to seat 4b.
+       4. A three-family blind audit follows (Astra 6 xhigh, Fable 5.1, Opus 5.5 xhigh), cross-verified, with BLOCKERs refuted by a different family.
+       5. W1 arms only after every verified BLOCKER is fixed or ruled not load-bearing by a cold gate, and the audit record is linked from the arm notice.
+     - The magistrate runs the audit itself if seat 4b is not alive. **Added to W1's arm preconditions and to the next exact action.**
+   - **Peer request (4b):** message it at least 45 minutes before any window t0, since its session must close for the census. Add the line "close interactive Claude session joulewise-4b before t0" to the arm notice.
