@@ -36,6 +36,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import signal
 import stat
 import subprocess
@@ -2156,9 +2157,12 @@ def main(argv: list[str] | None = None) -> int:
         probe_options = {}
         if args.battery_probe_fixture_for_test is not None:
             def fixture_runner(argv):
-                raw = args.battery_probe_fixture_for_test.read_bytes().replace(
-                    b'"UpdateTime" = 1790373525',
-                    f'"UpdateTime" = {int(clock.now())}'.encode(), 1,
+                # The fixture's own UpdateTime line is re-stamped to the
+                # logical clock so the observation is fresh by construction.
+                raw = re.sub(
+                    rb'(?m)^(\s+"UpdateTime" = )[0-9]+$',
+                    lambda match: match.group(1) + str(int(clock.now())).encode(),
+                    args.battery_probe_fixture_for_test.read_bytes(), count=1,
                 )
                 logical_test_clock.advance(args.battery_probe_duration_for_test)
                 return subprocess.CompletedProcess(argv, 0, raw, b"")
