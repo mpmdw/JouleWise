@@ -83,3 +83,8 @@
 37. PR-R lenses ([15/01](15-prr-review/01-opus-contract-lens.md) Opus contract, [15/02](15-prr-review/02-astra-execution-lens.md) Astra execution): **no BLOCKER**. Every dictated clause is present, r7 validation is byte-identical, the 11 content ids were rebuilt from the archive, the cadence report STOPs n1/n2 and passes Interactive, and the simulation's conclusions are seed-stable.
    - Opus S1 and Astra F1 converge on the same fix, an explicit disposition id; S2–S6 and NITs follow.
    - Fix round 1 was dispatched with dictated closure shapes ([15/03](15-prr-review/03-fix1-brief.txt)). S6, landing the ruling file on main before PR-R, belongs to the magistrate's bookkeeping PR.
+38. PR-0 ruled round launched: seat 32 (Sol), with R-1 to R-7 verbatim and mechanical acceptance (coverage and mutation sweep tables, zero unlisted survivors).
+   - The A292 harness is committed RED as `4bcddb49` on `test/2026-09-25-a292-reducer-harness`. Bench-verified: 63 errors, all ModuleNotFoundError; the oracle imports no joulewise module; 54 tests.
+   - **A292 implementation seat: Opus 5.5** (Claude family, independent of the Sol-written oracle, following the packer precedent). Branch `feat/2026-09-25-a292-scored-reduce`; WRITE_SCOPE `joulewise/scored_reduce.py` only; it must not read the oracle.
+   - PR-L's R16 is committed WIP. Fixture fix seat 34 (Sol) has WRITE_SCOPE `tests/test_night_agent_install.py`: it patches the custody-root constant in the fixture and never weakens the check.
+   - Slice checks at ≈06:45: no unread mail from Ed; no stand-down request; directives #405 and #408 open; heartbeat refreshed.
