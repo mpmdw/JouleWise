@@ -428,7 +428,7 @@ def _canonical_object(
     return value, identity, raw
 
 
-def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
+def _execute_probe(argv: _Sequence[str], *, cwd: _Path, timeout_s: int = _PROBE_TIMEOUT_SECONDS) -> _ProbeResult:
     """Execute one bounded probe without a shell or inherited environment."""
 
     environment = {
@@ -450,7 +450,7 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
             )
             timed_out = False
             try:
-                process.wait(timeout=_PROBE_TIMEOUT_SECONDS)
+                process.wait(timeout=timeout_s)
             except _subprocess.TimeoutExpired:
                 timed_out = True
             finally:
@@ -467,7 +467,7 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
     except (OSError, _subprocess.SubprocessError) as exc:
         raise ValueError(f"probe could not execute: {exc}") from exc
     if timed_out:
-        raise ValueError(f"probe timed out after {_PROBE_TIMEOUT_SECONDS} seconds")
+        raise ValueError(f"probe timed out after {timeout_s} seconds")
     return _ProbeResult(
         tuple(argv),
         str(cwd.resolve()),
@@ -482,6 +482,7 @@ def _fresh_probe(
     kind: str,
     label: str,
     argv: _Sequence[str],
+    *, timeout_s: int = _PROBE_TIMEOUT_SECONDS,
 ) -> _ProbeResult:
     if kind in {"MAINTENANCE_CENSUS", "PROCESS_CENSUS"}:
         r1_finished = context.values.get("r1_batch_finished_monotonic_ns")
@@ -494,7 +495,9 @@ def _fresh_probe(
                 "fresh census cannot run before the R1 clock-reference batch completes",
             )
     try:
-        return _execute_probe(argv, cwd=context.repository)
+        if timeout_s == _PROBE_TIMEOUT_SECONDS:
+            return _execute_probe(argv, cwd=context.repository)
+        return _execute_probe(argv, cwd=context.repository, timeout_s=timeout_s)
     except Exception as exc:
         raise _underivable(kind, f"fresh {label} probe could not execute: {exc}") from exc
 
@@ -1837,9 +1840,17 @@ def _recursive_values(value: _Any, token: str) -> list[_Any]:
 
 
 def _derive_power(context: _Context) -> _DerivedRow:
+    from joulewise import battery_float
     kind = "POWER_PREFLIGHT"
     policy = _frozen_power_policy(context, kind=kind)
     batt = _fresh_probe(context, kind, "AC state", ("/usr/bin/pmset", "-g", "batt"))
+    battery_probe = _fresh_probe(context, kind, "battery float", battery_float.IOREG_BATTERY_ARGV, timeout_s=10)
+    battery_observation, _battery_raw = battery_float.observe(
+        phase="t0_power_row", runner=lambda _argv: battery_probe,
+        monotonic_ns=context.clock.monotonic_ns,
+    )
+    if not battery_observation["passed"]:
+        raise _underivable(kind, "battery not at float")
     custom = _fresh_probe(context, kind, "low-power mode", ("/usr/bin/pmset", "-g", "custom"))
     profiler = _fresh_probe(
         context,
@@ -1875,8 +1886,8 @@ def _derive_power(context: _Context) -> _DerivedRow:
             "low_power_mode": "off",
         },
         "PROBE",
-        probes=(batt, custom, profiler),
-        derivation={"frozen_power_policy": policy},
+        probes=(batt, battery_probe, custom, profiler),
+        derivation={"frozen_power_policy": policy, "battery_float": battery_observation},
     )
 
 

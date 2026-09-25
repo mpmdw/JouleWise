@@ -52,6 +52,10 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
             night_gate.PMSET_BATT_ARGV,
             stdout="Now drawing from 'AC Power'\n",
         ),
+        night_gate.IOREG_BATTERY_ARGV: result(
+            night_gate.IOREG_BATTERY_ARGV,
+            stdout=(Path(__file__).parent / "fixtures/battery_float/float.ioreg").read_text(),
+        ),
         night_gate.PMSET_GENERAL_ARGV: result(
             night_gate.PMSET_GENERAL_ARGV,
             stdout="System-wide power settings:\n displaysleep 0\n sleep 0\n",
@@ -1298,7 +1302,12 @@ class NightGateTests(unittest.TestCase):
                 source.results[night_gate.PMSET_BATT_ARGV] = result(
                     night_gate.PMSET_BATT_ARGV, stdout="Now drawing from 'AC Power'\n"
                 )
-            if index > 7:
+            if index == 7:
+                source.results[night_gate.IOREG_BATTERY_ARGV] = result(
+                    night_gate.IOREG_BATTERY_ARGV,
+                    stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text(),
+                )
+            if index > 8:
                 source.results[night_gate.BOOT_SESSION_ARGV] = result(
                     night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
                 )
@@ -1324,6 +1333,7 @@ class NightGateTests(unittest.TestCase):
                 night_gate.AGENT_CENSUS_ARGV,
                 night_gate.HID_IDLE_ARGV,
                 night_gate.PMSET_BATT_ARGV,
+                night_gate.IOREG_BATTERY_ARGV,
                 night_gate.PMSET_GENERAL_ARGV,
                 night_gate.LOAD_AVG_ARGV,
                 night_gate.THERMAL_ARGV,
@@ -1577,6 +1587,7 @@ class NightGateTests(unittest.TestCase):
         expected = {
             "night_refused_agent_present",
             "night_refused_not_quiet",
+            "night_refused_battery_float",
             "night_refused_bind_expired",
             "night_refused_hid_idle",
             "night_refused_boot_clock",
@@ -1597,6 +1608,7 @@ class NightGateTests(unittest.TestCase):
             "night_refused_bind_expired": "test_bind_expiry_code_is_v3_only",
             "night_refused_agent_present": "test_a_census_that_finds_lines_refuses_and_preserves_them",
             "night_refused_not_quiet": "test_each_quiet_predicate_fails_closed_with_its_name_in_detail",
+            "night_refused_battery_float": "test_battery_float_charging_refuses_at_c3",
             "night_refused_hid_idle": "test_hid_idle_requires_the_exact_zero_value",
             "night_refused_boot_clock": "test_boot_clock_uses_a_canonical_uuid_and_never_invokes_sntp",
             "night_refused_registration": "test_a_wrong_registration_hash_refuses_after_every_machine_gate",
@@ -1616,6 +1628,16 @@ class NightGateTests(unittest.TestCase):
         for code, method_name in coverage.items():
             with self.subTest(code=code):
                 self.assertIn(method_name, methods)
+
+    def test_battery_float_charging_refuses_at_c3(self) -> None:
+        source = FakeProbeSource()
+        source.results[night_gate.IOREG_BATTERY_ARGV] = result(
+            night_gate.IOREG_BATTERY_ARGV,
+            stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text(),
+        )
+        receipt = self.evaluate(make_plan(), source)
+        self.assertEqual(receipt.refusal.reason, "night_refused_battery_float")
+        self.assertFalse(receipt.conditions[2].measured["battery_float"]["passed"])
 
     def test_driver_codes_are_registered_here_but_never_emitted_by_the_gate(self) -> None:
         self.assertEqual(

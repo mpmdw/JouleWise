@@ -84,6 +84,7 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise import battery_float  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     ACTIVE_ACCEPTANCE_ID,
     ENVELOPE_MINIMUM_CORPUS_N,
@@ -211,6 +212,18 @@ def registration_dry_run(
         # non-empty for an open session too, so removing this `if` really does
         # open bundles mid-campaign.
         if terminal:
+            battery = battery_float.validate_window(session)
+            battery_label = battery["status"].removeprefix("battery_float_")
+            if battery["status"] != "pass":
+                lines.append(f"{session_id}: battery={battery_label}")
+                lines.append(
+                    f"{session_id}: kind={session.session_kind} state={session.state} "
+                    f"terminal=yes declared={len(session.declared_slots)} "
+                    f"filled={len(session.finalized_slots)} valid=0 excluded=battery_{battery_label}"
+                )
+                blockers.append(f"session {session_id}: battery={battery_label}")
+                continue
+            lines.append(f"{session_id}: battery=pass")
             for observation in session.finalized_slots.values():
                 if observation.classification_disposition != "valid":
                     continue
@@ -1240,8 +1253,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         repo_root=Path(args.repo_root),
     )
     session_ids = tuple(args.registration_session_id)
+    named_confounded = tuple(getattr(args, "battery_confounded_session_id", ()))
     refuse_repeated_sessions(session_ids)
+    refuse_repeated_sessions(named_confounded)
+    if set(session_ids) & set(named_confounded):
+        raise PrepareRefusal("session named both as registration and battery-confounded")
     refuse_open_registration(snapshot, session_ids)
+    refuse_open_registration(snapshot, named_confounded)
     if snapshot.refusal_reasons:
         raise PrepareRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
     predecessor = _authenticated_predecessor(Path(args.predecessor_acceptance))
@@ -1266,13 +1284,58 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "not issued"
         )
 
-    observations = _registration_observations(snapshot, session_ids)
+    all_observations = _registration_observations(snapshot, session_ids)
     # The TARGET epoch is the registration's own, read from its rows before any
     # value is looked at, and it must be unanimous.
-    if not observations:
+    if not all_observations:
         raise PrepareRefusal("registration: its sessions hold no observations")
-    target_epoch = dict(observations[0].identity_epoch)
+    target_epoch = dict(all_observations[0].identity_epoch)
     revision_five = target_epoch == REVISION_FIVE_EPOCH
+    # Include A-7 foreign-row owners in the computed set before reading any B.
+    dispositions_for_battery = _registered_dispositions() if revision_five else {}
+    candidates = set(session_ids) | set(named_confounded)
+    candidates.update(
+        observation.bracket_session_id
+        for observation in snapshot.observations
+        if observation.classification_disposition == "valid"
+        and observation.bracket_session_id not in set(session_ids)
+        and dict(observation.identity_epoch) == target_epoch
+        and observation.content_id not in dispositions_for_battery
+        and observation.bracket_session_id is not None
+    )
+    battery_results = {}
+    for candidate_id in sorted(candidates):
+        session = snapshot.bracket_session_by_id.get(candidate_id)
+        if (session is None or session.session_kind != SESSION_KIND_DERIVATION
+                or session.state not in TERMINAL_SESSION_STATES):
+            if candidate_id in named_confounded:
+                raise PrepareRefusal(f"battery-confounded session {candidate_id} is not terminal derivation")
+            continue
+        battery_results[candidate_id] = battery_float.validate_window(session)
+    computed_confounded = {
+        candidate_id for candidate_id, result in battery_results.items()
+        if result["status"] != "pass"
+    }
+    if revision_five and len(computed_confounded) > 1:
+        raise PrepareRefusal("more than one battery-confounded window in this epoch; return to council")
+    for candidate_id in named_confounded:
+        session = snapshot.bracket_session_by_id.get(candidate_id)
+        if session is not None and any(
+            dict(row.identity_epoch) != target_epoch for row in session.finalized_slots.values()
+        ):
+            raise PrepareRefusal(f"battery-confounded session {candidate_id} is outside target epoch")
+    if set(named_confounded) != computed_confounded:
+        clean_named = set(named_confounded) - computed_confounded
+        omitted = computed_confounded - set(named_confounded)
+        raise PrepareRefusal(
+            "battery-confounded set mismatch: "
+            + ("clean session declared confounded: " + ", ".join(sorted(clean_named)) + "; " if clean_named else "")
+            + ("computed non-pass session omitted: " + ", ".join(sorted(omitted)) if omitted else "")
+        )
+    session_ids = tuple(session_id for session_id in session_ids if session_id not in computed_confounded)
+    observations = _registration_observations(snapshot, session_ids)
+    if not observations:
+        raise PrepareRefusal("registration has no battery-passing observations")
     if revision_five:
         if predecessor["acceptance_id"] != ACTIVE_ACCEPTANCE_ID:
             raise PrepareRefusal(
@@ -1372,6 +1435,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         for observation in snapshot.observations
         if observation.classification_disposition == "valid"
         and observation.bracket_session_id not in registration
+        and observation.bracket_session_id not in computed_confounded
         and dict(observation.identity_epoch) == target_epoch
         and observation.content_id not in dispositions
     ]
@@ -1621,6 +1685,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         },
     }
     derivation_notes = {
+        "battery_confounded_sessions": [
+            {"session_id": candidate_id, "status": battery_results[candidate_id]["status"],
+             "slots": [{key: slot[key] for key in (
+                 "slot", "attempt_id", "reasons", "pre_raw_sha256", "post_raw_sha256"
+             )} for slot in battery_results[candidate_id]["slots"] if slot["verdict"] != "pass"]}
+            for candidate_id in sorted(computed_confounded)
+        ],
         "generation": (
             "D-079 epoch bootstrap: the first generation derived from live "
             "derivation-only captures under a new identity epoch."
@@ -1886,6 +1957,10 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument(
         "--registration-session-id", action="append", default=[],
         help="a derivation-kind ledger session of this registration (repeatable)",
+    )
+    prepare.add_argument(
+        "--battery-confounded-session-id", action="append", default=[],
+        help="excluded battery-confounded derivation session (repeatable; issuer verifies the exact set)",
     )
     # Deliberately NOT `required=True`: an absent D-125 reference must produce
     # the ruled REFUSAL with its reason, not an argparse usage error.

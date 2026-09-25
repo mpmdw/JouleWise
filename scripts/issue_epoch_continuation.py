@@ -33,6 +33,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise import calibration_bracketing as acceptance_module  # noqa: E402
+from joulewise import battery_float  # noqa: E402
 from joulewise.calibration_epoch_continuation import (  # noqa: E402
     CONTINUATION_SCHEMA, DECLARED_SLOT_COUNT, TERMINAL_STATES,
     ContinuationRefusal, _decimal, _json_object, acceptance_judged_epochs,
@@ -82,6 +83,8 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
     _refuse(session.state not in TERMINAL_STATES, "session_not_terminal")
     _refuse(len(session.declared_slots) != DECLARED_SLOT_COUNT, "session_requires_12_declared_slots")
     _refuse(bool(snapshot.refusal_reasons), "ledger: " + ", ".join(snapshot.refusal_reasons))
+    battery_status = battery_float.validate_window(session)["status"]
+    _refuse(battery_status != "pass", battery_status)
     for name, observation in session.finalized_slots.items():
         _refuse(observation.classification_disposition == "systematic-invalid",
                 f"night_contains_systematic_failure: slots.{name}; continuation would be stale on arrival; "

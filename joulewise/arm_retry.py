@@ -19,7 +19,7 @@ RETRY_INTERVAL_S = 60
 NOTICE_LEAD_S = 0
 UNCERTAIN_STATES = ("CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN")
 ZERO_CAPTURE_MACHINE_REFUSALS = frozenset({
-    "night_refused_not_quiet", "night_refused_bind_expired",
+    "night_refused_not_quiet", "night_refused_battery_float", "night_refused_bind_expired",
     "night_refused_agent_present", "night_refused_hid_idle",
     "night_refused_boot_clock",
 })
@@ -34,6 +34,7 @@ RETRY_CAUSES = {
 COLD_GATE_CODES = {
     "night_refused_agent_present": "Production census refusal, including a receipt at t0; never an idle arm event. Zero-capture successor route per D-182.",
     "night_refused_not_quiet": "One-shot load refusal for v2, a terminal power/thermal predicate failure, or one named non-observer process at or above 0.5 busy cores over a single 30 s observation at t0 or at the arm check (registration v3; cold gate QPE01-DAEMON-CONTAMINATION-01 ruling 10 Q2, 2026-09-23). Also: more than two launchd spawns of corecaptured (the Wi-Fi log-capture helper) in the last 10 min at t0, detection only, or new spawns persisting 180 s after the arm check's one licensed Wi-Fi cycle (cold ruling 16 Q2, 2026-09-23). The detail names the process, its pid and its share, and the receipt's C3 row carries top_consumers_at_decision. For v4, load is diagnostic and the CPU cutoff is a sealed plan parameter with a named ruling. Zero-capture successor route per D-182.",
+    "night_refused_battery_float": "Battery-float predicate failed on a successfully observed reading (ExternalConnected/IsCharging/|InstantAmperage| ≤ 200 mA, directive #421); never waived. Zero-capture successor route per D-182.",
     "night_refused_bind_expired": "Bind window expired with every sample recorded. Load is diagnostic; the CPU cutoff is a sealed plan parameter. Zero-capture successor route per D-182.",
     "night_refused_hid_idle": "Screensaver-configuration guard failed; this is not a live inactivity measurement. Zero-capture successor route per D-182.",
     "night_refused_boot_clock": "Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182.",

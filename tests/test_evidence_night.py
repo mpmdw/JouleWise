@@ -875,7 +875,7 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
         (self.canonical / "joulewise").mkdir()
         (self.canonical / "joulewise/__init__.py").write_text("")
-        for name in ("night_gate.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
+        for name in ("night_gate.py", "battery_float.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
@@ -958,6 +958,10 @@ class LifecycleTests(unittest.TestCase):
 
     def runner(self, argv, **kwargs):
         self.calls.append(list(map(str, argv)))
+        if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+            return subprocess.CompletedProcess(argv, 0,
+                (ROOT / "tests/fixtures/battery_float/float.ioreg").read_text().replace(
+                    '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}'), "")
         if str(argv[0]) == "ps":
             return self.ps
         if Path(str(argv[0])).name == "pgrep":
@@ -1796,6 +1800,10 @@ class LifecycleTests(unittest.TestCase):
         def runner(argv, **kw):
             if argv == list(entry.DIRECTIVES_ARGV):
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                return subprocess.CompletedProcess(argv, 0,
+                    (ROOT / "tests/fixtures/battery_float/float.ioreg").read_text().replace(
+                        '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}'), "")
             return installer(argv, **kw)
         return entry.publish_install(notice_accepted="message verbatim ", runner=runner,
                                      **dict(self.publication_kwargs(), **kwargs))

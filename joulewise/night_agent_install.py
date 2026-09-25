@@ -1166,6 +1166,13 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
 def validate_install(args, repo):
     # Import only on the install path, after the shell's MIN_PYTHON probe.
     from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S, PlanError
+    from joulewise import battery_float
+
+    battery_observation, _battery_raw = battery_float.observe(phase="validate_install")
+    try:
+        battery_float.require_pass(battery_observation)
+    except (battery_float.ProbeError, ValueError) as exc:
+        raise Refused(3, "battery not at float: {}".format(exc)) from exc
 
     template_path = repo / "configs/launchd/com.joulewise.night.plist.template"
     if not template_path.is_file():

@@ -54,6 +54,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise.calibration_exits import RefusalCode, emit_calibration_refusal  # noqa: E402
 from joulewise.calibration_epoch_continuation import acceptance_judged_epochs  # noqa: E402
 from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
+from joulewise import battery_float  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,
     SAMPLERS,
@@ -2227,6 +2228,11 @@ def main(argv: list[str] | None = None) -> int:
     _writer_stage(WriterStage.AFTER_EXIT_HANDLER_REGISTRATION)
     (out_dir / "raw").mkdir(parents=True, exist_ok=False)
     _writer_stage(WriterStage.AFTER_CUSTODY_DIRECTORY_CREATION)
+    battery_pre, battery_pre_raw = battery_float.observe(
+        phase="slot_pre", raw_path="raw/battery_float.pre.ioreg",
+        session_id=args.session_id, slot=args.slot, attempt_id=args.attempt_id,
+    )
+    (out_dir / "raw/battery_float.pre.ioreg").write_bytes(battery_pre_raw)
     capture_path = out_dir / "raw" / "powermetrics.plist"
     events_path = out_dir / "events.jsonl"
     events = events_path.open("w", encoding="utf-8")
@@ -2453,6 +2459,12 @@ def main(argv: list[str] | None = None) -> int:
         post_parse = clock.stamp()
         active_sampler = None
 
+    battery_post, battery_post_raw = battery_float.observe(
+        phase="slot_post", raw_path="raw/battery_float.post.ioreg",
+        session_id=args.session_id, slot=args.slot, attempt_id=args.attempt_id,
+    )
+    (out_dir / "raw/battery_float.post.ioreg").write_bytes(battery_post_raw)
+
     if logical_driver is not None:
         logical_driver.acknowledgement_path.unlink(missing_ok=True)
 
@@ -2582,6 +2594,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     evidence_payload["clock_anchor"] = evidence["clock_anchor"]
+    evidence_payload["battery_float"] = {"pre": battery_pre, "post": battery_post}
     evidence_payload["clock_anchor_resolved"] = anchor_resolved
     if not anchor_resolved:
         evidence_payload["status"] = "invalid"
