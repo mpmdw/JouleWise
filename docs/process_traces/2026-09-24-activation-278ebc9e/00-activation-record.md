@@ -350,3 +350,4 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - peer `joulewise-4b` was told #410 is unblocked.
    The canonical root was fast-forwarded to `75d04e9e`, with no `com.joulewise.night*` label loaded and no such plist on disk. The resident supervisor (started 04:46 09-24) now predates canonical HEAD, so per the relaunch prompt this activation commits, pushes and exits so that a fresh successor is the resident.
    Post-merge obligations: the row-11 post-merge cross-unit look, and the follow-up lanes CI-A291-TIMINGS-01, A291-STRUCTURE-INDEX-01, `_digest` finalize hardening, INV-12 reconciliation, and the TASK_QUEUE count line.
+122. Exit summary email to Ed: Gmail `1a0d849df1458977`, asking nothing. The final unread-from-Ed search found none. Children: none running (pgrep clean). The checkpoint memory is updated. The exit is deliberate, for a fresh supervisor after the canonical fast-forward to `75d04e9e`.
