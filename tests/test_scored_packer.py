@@ -584,3 +584,51 @@ class ScoredPackerTests(unittest.TestCase):
                 self.assertFalse(any(isinstance(d, ast.Name) and d.id in ('lru_cache', 'cache') for d in node.decorator_list))
                 defaults = list(node.args.defaults) + [d for d in node.args.kw_defaults if d is not None]
                 self.assertFalse(any(isinstance(d, (ast.Dict, ast.List, ast.Set)) for d in defaults))
+
+    def test_a291_ownership_view_rebuilt_with_multiplicity(self):
+        g, p, reg, r = _split_route()
+        view = sp._ownership(reg, r)
+        self.assertEqual(set(view), {'blocks', 'live', 'term', 'placement'})
+        self.assertIsNot(sp._ownership(reg, r)['live'], view['live'])
+        parent = next(b for b in r['blocks'] if b['superseded'])
+        key = (parent['model'], parent['items'][0])
+        self.assertEqual(len(view['live'][key]), 1)
+        pl = [x for x in r['placements'] if x['block_id'] == parent['block_id']][-1]
+        n = len(r['envelopes'])
+        r['envelopes'].append(dict(index=n, model=parent['model'], kind='loaded',
+                                   blocks=[parent['block_id']], voided_block_ids=[], observations=None))
+        r['placements'].append(dict(pl, envelope_index=n))
+        entry = dict(type='unattributed_overrun', block_id=parent['block_id'], attempt=pl['attempt'],
+                     parent_block_id=None, item_id=parent['items'][0], model=parent['model'], level=parent['level'])
+        r['terminal_refusals'].extend([entry, copy.deepcopy(entry)])
+        view = sp._ownership(reg, r)
+        self.assertEqual(view['live'][key][-1], (parent['block_id'], n))
+        self.assertEqual(len(view['live'][key]), 2)
+        self.assertEqual(len(view['term'][key]), 2)
+        self.assertIs(view['placement'][(parent['block_id'], n)], r['placements'][-1])
+
+    def test_a291_parent_facts_and_conserve_read_the_view_ast(self):
+        tree = ast.parse(inspect.getsource(sp))
+        functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+        first = functions['_parent_facts'].body[0]
+        self.assertIsInstance(first, ast.Assign)
+        self.assertEqual([type(t) for t in first.targets], [ast.Name])
+        self.assertIsInstance(first.value, ast.Call)
+        self.assertIsInstance(first.value.func, ast.Name)
+        self.assertEqual(first.value.func.id, '_ownership')
+        roster = lambda node: isinstance(node, ast.Name) and node.id == 'roster'
+        for name in ('_conserve', '_parent_facts'):
+            for node in ast.walk(functions[name]):
+                if isinstance(node, ast.Subscript):
+                    self.assertFalse(roster(node.value), name)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'get':
+                    self.assertFalse(roster(node.func.value), name)
+
+    def test_a291_packer_imports_nothing_from_tests_ast(self):
+        for node in ast.walk(ast.parse(inspect.getsource(sp))):
+            if isinstance(node, ast.ImportFrom):
+                self.assertEqual(node.level, 0)
+                self.assertNotEqual(node.module.split('.')[0], 'tests')
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    self.assertNotEqual(alias.name.split('.')[0], 'tests')
