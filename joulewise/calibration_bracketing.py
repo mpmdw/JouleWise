@@ -414,12 +414,14 @@ def _registered_generation_row_is_complete(generation: Any, *, revision_five: bo
     would take the no-predecessor arm and switch the lineage fence off by
     emptying a field, so it refuses.
 
-    The operative screen must additionally sit strictly BELOW that ceiling, in
-    every case: D-102 cl.3 spends the allowance
+    For historical generations, the operative screen must additionally sit
+    strictly BELOW that ceiling: D-102 cl.3 spends the allowance
     ``max(observed_drift_s, bracket_screen_s)`` against it, and
     ``screen + excess == maximum`` at the bottom of ``_valid_acceptance_bound``
     would otherwise demand a zero or negative budgetable excess.  That is the
     shape of D-125's ``successor_screen_exceeds_budget_ceiling`` refusal.
+    The exact 25G83/v3 registration Revision 5 permits equality, records
+    ``zero_headroom``, and still refuses drift above the screen.
     """
 
     if not isinstance(generation, Mapping):

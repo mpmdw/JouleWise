@@ -95,11 +95,13 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,
     PROTOCOL_ID,
     REGISTERED_CORPUS_EXCLUSION_REASONS,
+    REVISION_FIVE_EPOCH,
     SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
     load_calibration_acceptance_bound,
     protocol_sha256,
 )
 from joulewise.calibration_bracketing import _canonical_sha256  # noqa: E402
+from joulewise.powermetrics_fiducial import PLATEAU_INSET_S  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
@@ -378,20 +380,12 @@ SCREEN_CHALLENGE_MEMBER_LIMIT = 2
 SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
 REVISION_FIVE_MINIMUM_CORPUS_SIZE = 12
 DISPOSITION_REGISTRY = REPO_ROOT / "configs/calibration/observation_dispositions.json"
-DISPOSITION_DECISION_ID = "D-126"
+DISPOSITION_DECISION_ID = "D-126-disposition-25G83-v3-2026-09-25"
 DISPOSITION_MECHANISM = (
     "captured under the default-ProcessType launch context (utility QoS, "
     "timer coalescing, median ≈ 248 ms); disposed as diagnostic, never a "
     "member; authored after the values were seen and disclosed as such"
 )
-REVISION_FIVE_EPOCH = {
-    "os_build": "25G83",
-    "hardware_model": "Mac15,9",
-    "power_policy": "ac_high_power",
-    "sampling_interval_ms": 100,
-    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
-    "pulse_protocol_id": PROTOCOL_ID,
-}
 # The dispositions an ISSUED artifact's prior set may carry (the validator's
 # `allowed_prior_dispositions` for role `issued`).
 PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
@@ -1280,6 +1274,10 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     target_epoch = dict(observations[0].identity_epoch)
     revision_five = target_epoch == REVISION_FIVE_EPOCH
     if revision_five:
+        if predecessor["acceptance_id"] != ACTIVE_ACCEPTANCE_ID:
+            raise PrepareRefusal(
+                f"registration Revision 5 requires r7 predecessor {ACTIVE_ACCEPTANCE_ID}"
+            )
         if "# Revision 5 (" not in preregistration_text:
             raise PrepareRefusal("25G83/v3 identity requires registration Revision 5")
         if re.search(r"<PR-L-MERGE-SHA>|<RENDERED-PLIST-SHA256:[^>]+>", preregistration_text):
@@ -1368,7 +1366,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     # pre-registration and ignoring it would hide a capture the successor's own
     # epoch produced.  Either way it is Ed's call, not the issuer's.
     registration = set(session_ids)
-    dispositions = _registered_dispositions()
+    dispositions = _registered_dispositions() if revision_five else {}
     foreign = [
         observation.attempt_id
         for observation in snapshot.observations
@@ -1385,9 +1383,9 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         )
     excursion_count = sum(Decimal(row["b_fiducial_s"]) > Decimal("0.075") for row in members)
     if revision_five:
-        over_inset = [row["member_id"] for row in members if Decimal(row["b_fiducial_s"]) > Decimal("0.25")]
+        over_inset = [row["member_id"] for row in members if Decimal(row["b_fiducial_s"]) > Decimal(str(PLATEAU_INSET_S))]
         if over_inset:
-            raise PrepareRefusal("member B exceeds PLATEAU_INSET_S = 0.25 s: " + ", ".join(over_inset))
+            raise PrepareRefusal(f"member B exceeds PLATEAU_INSET_S = {PLATEAU_INSET_S} s: " + ", ".join(over_inset))
     if n < minimum:
         raise PrepareRefusal(
             f"retained corpus n = {n} is below the required floor {minimum}; not issued"
@@ -1533,7 +1531,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     disposed_prior_ids = sorted({
         dispositions[row["content_id"]] for row in prior_observations
         if row["content_id"] in dispositions
-    })
+    }) if revision_five else []
     # The production validator recomputes this inventory over the WHOLE prior
     # set, one entry per admissible disposition INCLUDING the zeros, and
     # compares for equality; a count over the registration alone, or with the
@@ -1738,7 +1736,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             ),
             "epoch_catalog": epoch_catalog,
             "observations": prior_observations,
-            "disposing_decision_ids": disposed_prior_ids,
+            **({"disposing_decision_ids": disposed_prior_ids} if revision_five else {}),
         },
         "decimal_derivation": decimal_derivation,
         "backfill_candidate": {

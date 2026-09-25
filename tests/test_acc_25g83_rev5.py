@@ -6,7 +6,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-import subprocess
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -19,8 +19,30 @@ from tests.fixtures.epoch_bootstrap.build import Slot, build_derivation_ledger
 
 ROOT = Path(__file__).resolve().parents[1]
 PREREG = ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+R7 = ROOT / "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
 R6 = ROOT / "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
 REGISTRY = ROOT / "configs/calibration/observation_dispositions.json"
+DECISION_ID = "D-126-disposition-25G83-v3-2026-09-25"
+LAUNCH_CONDITION = re.compile(
+    r"template at commit \S+, rendered-plist digests \S+, \S+, and \S+\."
+)
+
+
+def registration_with_launch_pins(commit: str, night: str, deadman: str, probe: str) -> str:
+    """Derive each seal fixture from the current registration's operating sentence."""
+    text = PREREG.read_text()
+    condition = (
+        f"template at commit {commit}, rendered-plist digests "
+        f"{night}, {deadman}, and {probe}."
+    )
+    result, count = LAUNCH_CONDITION.subn(condition, text)
+    if count != 1:
+        raise AssertionError(f"expected one launch condition, found {count}")
+    return result
+
+
+def sealed_registration() -> str:
+    return registration_with_launch_pins("a" * 40, "b" * 64, "c" * 64, "d" * 64)
 IDS_AND_VALUES = [
     ("08cf2f19ca7d2b1881e9ed426bbf2c4039e1b425e1ba999a5527bcee4e743cb6", "0.041133514338919874"),
     ("697ad07383e83bca6e031dd40708595d1f59227fece3c3eb8e6d04c8c2318dca", "0.04200278099548145"),
@@ -40,8 +62,19 @@ class RevisionFiveTests(unittest.TestCase):
     def test_registry_tracks_all_archived_valid_observations(self) -> None:
         rows = json.loads(REGISTRY.read_text())
         self.assertEqual({row["content_id"] for row in rows}, {item[0] for item in IDS_AND_VALUES})
-        self.assertEqual({row["disposing_decision_id"] for row in rows}, {"D-126"})
+        self.assertEqual({row["disposing_decision_id"] for row in rows}, {DECISION_ID})
         self.assertIn("# Revision 5 (", PREREG.read_text())
+
+    def test_decision_log_binds_exact_registry_ids(self) -> None:
+        text = (ROOT / "docs/decision_log.md").read_text()
+        heading = f"## {DECISION_ID} — D-126 disposition, epoch 25G83 v3, 2026-09-25"
+        self.assertEqual(text.splitlines().count(heading), 1)
+        entry = text.split(heading, 1)[1].split("\n## ", 1)[0]
+        table_ids = re.findall(r"`([0-9a-f]{64})`", entry)
+        registry_ids = {row["content_id"] for row in json.loads(REGISTRY.read_text())
+                        if row["disposing_decision_id"] == DECISION_ID}
+        self.assertEqual(len(table_ids), 11)
+        self.assertEqual(set(table_ids), registry_ids)
 
     def test_registry_rejects_unruled_or_duplicate_dispositions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -54,6 +87,41 @@ class RevisionFiveTests(unittest.TestCase):
             path.write_text(json.dumps([row]))
             with self.assertRaisesRegex(issuer.PrepareRefusal, "invalid or duplicate"):
                 issuer._registered_dispositions(path)
+
+    def test_sealed_copy_clears_placeholder_refusal_but_malformed_seal_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = build_derivation_ledger(
+                root / "fixture", [Slot("0.025") for _ in range(12)],
+                second_session=("derivation-night-2", [Slot("0.026") for _ in range(12)]),
+            )
+            sealed = root / "sealed.md"
+            sealed.write_text(sealed_registration())
+            malformed = root / "malformed.md"
+            malformed.write_text(registration_with_launch_pins(
+                "not-a-commit", "b" * 64, "c" * 64, "d" * 64,
+            ))
+
+            def args(prereg: Path):
+                return issuer.build_parser().parse_args([
+                    "prepare-candidate", "--ledger", str(fixture["ledger"]),
+                    "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+                    "--preregistration", str(prereg),
+                    "--preregistration-sha256", hashlib.sha256(prereg.read_bytes()).hexdigest(),
+                    "--predecessor-acceptance", str(R7),
+                    "--registration-session-id", "derivation-night-1",
+                    "--registration-session-id", "derivation-night-2",
+                    "--d125-ruling", "D-125 25G83/v3 Revision 5",
+                    "--out", str(root / "candidate.json"),
+                ])
+
+            with patch.object(issuer, "_registered_dispositions", return_value={}), patch.object(
+                issuer, "_derivation_frame_cadence", return_value={"median_s": .132, "max_s": .144}
+            ):
+                with self.assertRaisesRegex(issuer.PrepareRefusal, "pins are malformed"):
+                    issuer._prepare_candidate(args(malformed))
+                candidate = issuer._prepare_candidate(args(sealed))
+            self.assertEqual(candidate["registered_generation_row"]["registration_revision"], 5)
 
     def test_issuer_refuses_unsealed_launch_context_and_disposes_exact_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,14 +141,18 @@ class RevisionFiveTests(unittest.TestCase):
             ) for i, (content_id, value) in enumerate(IDS_AND_VALUES))
             augmented = replace(snapshot, observations=snapshot.observations + foreign)
             sealed = root / "sealed.md"
-            sealed.write_text(PREREG.read_text().replace("<PR-L-MERGE-SHA>", "a" * 40)
-                .replace("<RENDERED-PLIST-SHA256:night>", "b" * 64)
-                .replace("<RENDERED-PLIST-SHA256:deadman>", "c" * 64)
-                .replace("<RENDERED-PLIST-SHA256:probe>", "d" * 64))
+            sealed.write_text(sealed_registration())
+            unsealed = root / "unsealed.md"
+            unsealed.write_text(registration_with_launch_pins(
+                "<PR-L-MERGE-SHA>", "<RENDERED-PLIST-SHA256:night>",
+                "<RENDERED-PLIST-SHA256:deadman>", "<RENDERED-PLIST-SHA256:probe>",
+            ))
             pre_revision = root / "pre_revision_5.md"
             pre_revision.write_text(PREREG.read_text().split("# Revision 5 (", 1)[0])
             malformed = root / "malformed.md"
-            malformed.write_text(sealed.read_text().replace("a" * 40, "not-a-commit"))
+            malformed.write_text(registration_with_launch_pins(
+                "not-a-commit", "b" * 64, "c" * 64, "d" * 64,
+            ))
             registry = root / "registry.json"
             out = root / "candidate.json"
             def args(prereg: Path):
@@ -89,7 +161,7 @@ class RevisionFiveTests(unittest.TestCase):
                     "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
                     "--preregistration", str(prereg),
                     "--preregistration-sha256", hashlib.sha256(prereg.read_bytes()).hexdigest(),
-                    "--predecessor-acceptance", str(R6),
+                    "--predecessor-acceptance", str(R7),
                     "--registration-session-id", "derivation-night-1",
                     "--registration-session-id", "derivation-night-2",
                     "--d125-ruling", "D-125 25G83/v3 Revision 5", "--out", str(out),
@@ -100,9 +172,13 @@ class RevisionFiveTests(unittest.TestCase):
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "requires registration Revision 5"):
                     issuer._prepare_candidate(args(pre_revision))
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "unsealed placeholders"):
-                    issuer._prepare_candidate(args(PREREG))
+                    issuer._prepare_candidate(args(unsealed))
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "pins are malformed"):
                     issuer._prepare_candidate(args(malformed))
+                wrong_predecessor = args(sealed)
+                wrong_predecessor.predecessor_acceptance = R6
+                with self.assertRaisesRegex(issuer.PrepareRefusal, "requires r7 predecessor"):
+                    issuer._prepare_candidate(wrong_predecessor)
                 registry.write_text("[]\n")
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "valid same-epoch observations outside"):
                     issuer._prepare_candidate(args(sealed))
@@ -112,7 +188,7 @@ class RevisionFiveTests(unittest.TestCase):
             self.assertEqual({row["content_id"] for row in prior["observations"]} &
                              {content_id for content_id, _ in IDS_AND_VALUES},
                              {content_id for content_id, _ in IDS_AND_VALUES})
-            self.assertEqual(prior["disposing_decision_ids"], ["D-126"])
+            self.assertEqual(prior["disposing_decision_ids"], [DECISION_ID])
             self.assertEqual(candidate["derivation_corpus"]["n"], 24)
             self.assertEqual(candidate["registered_generation_row"]["registration_revision"], 5)
             issued = copy.deepcopy(candidate)
@@ -140,20 +216,23 @@ class RevisionFiveTests(unittest.TestCase):
                 )
             self.assertEqual(bracket["acceptance"]["freshness"]["status"], "fresh")
 
-    def test_pinned_estimator_files_match_main(self) -> None:
-        paths = ["joulewise/powermetrics_fiducial.py", "joulewise/uncertainty_evidence.py",
-                 "joulewise/adapters/powermetrics.py", "joulewise/reduce.py"]
-        result = subprocess.run(["git", "diff", "--quiet", "origin/main", "--", *paths], cwd=ROOT)
-        self.assertEqual(result.returncode, 0)
+    def test_pinned_estimator_files_match_c034a56f(self) -> None:
+        # SHA-256 of each blob's bytes at c034a56f, before Revision 5.
+        expected = {
+            "joulewise/powermetrics_fiducial.py": "386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92",
+            "joulewise/uncertainty_evidence.py": "b583f35affb33394532424295ac70261b895e1b6f2faa6ec87ee89c79cd94ae8",
+            "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
+            "joulewise/reduce.py": "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc",
+        }
+        for path, digest in expected.items():
+            with self.subTest(path=path):
+                self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), digest)
 
     def test_w1_futility_and_plateau_inset_refuse_by_mechanism(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             sealed = root / "sealed.md"
-            sealed.write_text(PREREG.read_text().replace("<PR-L-MERGE-SHA>", "a" * 40)
-                .replace("<RENDERED-PLIST-SHA256:night>", "b" * 64)
-                .replace("<RENDERED-PLIST-SHA256:deadman>", "c" * 64)
-                .replace("<RENDERED-PLIST-SHA256:probe>", "d" * 64))
+            sealed.write_text(sealed_registration())
             for label, first, reason in (
                 ("futility", [Slot("0.025") for _ in range(5)] +
                  [Slot("0.025", disposition="ordinary-invalid") for _ in range(7)],
@@ -171,7 +250,7 @@ class RevisionFiveTests(unittest.TestCase):
                         "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
                         "--preregistration", str(sealed),
                         "--preregistration-sha256", hashlib.sha256(sealed.read_bytes()).hexdigest(),
-                        "--predecessor-acceptance", str(R6),
+                        "--predecessor-acceptance", str(R7),
                         "--registration-session-id", "derivation-night-1",
                         "--registration-session-id", "derivation-night-2",
                         "--d125-ruling", "D-125 25G83/v3 Revision 5",
@@ -200,16 +279,13 @@ class RevisionFiveTests(unittest.TestCase):
             augmented = replace(snapshot, bracket_sessions=snapshot.bracket_sessions + (third,),
                                 observations=snapshot.observations + (extra,))
             sealed = root / "sealed.md"
-            sealed.write_text(PREREG.read_text().replace("<PR-L-MERGE-SHA>", "a" * 40)
-                .replace("<RENDERED-PLIST-SHA256:night>", "b" * 64)
-                .replace("<RENDERED-PLIST-SHA256:deadman>", "c" * 64)
-                .replace("<RENDERED-PLIST-SHA256:probe>", "d" * 64))
+            sealed.write_text(sealed_registration())
             args = issuer.build_parser().parse_args([
                 "prepare-candidate", "--ledger", str(fixture["ledger"]),
                 "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
                 "--preregistration", str(sealed),
                 "--preregistration-sha256", hashlib.sha256(sealed.read_bytes()).hexdigest(),
-                "--predecessor-acceptance", str(R6),
+                "--predecessor-acceptance", str(R7),
                 "--registration-session-id", "derivation-night-1",
                 "--registration-session-id", "derivation-night-2",
                 "--registration-session-id", "derivation-night-3",

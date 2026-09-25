@@ -102,9 +102,9 @@ def draw_series(rng: random.Random, model: str) -> tuple[list[float], float]:
 def issued_numbers(values: list[float]) -> dict[str, float | bool | int]:
     """Production issuer arithmetic with exactly the two ruled Revision 5 edits.
 
-    The production CLI still refuses n=12 and S=C at this head. Its corpus
-    statistics, prediction, screen and ceiling functions are called directly;
-    the prospective C=max(old,Q99,S) and excursion policy are explicit here.
+    The production CLI permits n=12 and S=C for the exact Revision 5 epoch.
+    Its corpus statistics, prediction, screen and ceiling functions are called
+    directly; this helper applies the same C=max(old,Q99,S) and excursion rules.
     """
     members = [{"member_id": f"d{i:02d}", "b_fiducial_s": repr(value)}
                for i, value in enumerate(values, 1)]

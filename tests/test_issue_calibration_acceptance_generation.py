@@ -345,8 +345,6 @@ class DeskEpochWatchTests(unittest.TestCase):
             [str(issuer.SYSCTL_PATH), "-n", "kern.osversion"],
             capture_output=True, text=True, check=False,
         )
-        if probe.returncode != 0 or not probe.stdout.strip():
-            self.skipTest("macOS identity sysctl unavailable in this sandbox")
         live = issuer.observe_machine()
         rc, output = self.invoke_check()
         rows = parse_watch_table(output)

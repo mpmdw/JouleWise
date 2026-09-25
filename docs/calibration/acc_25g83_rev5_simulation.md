@@ -5,7 +5,7 @@ Authority: ACCEPTANCE-25G83-02 final texts §5 R5(k), R10. Replay: `python3 scri
 Each trial draws 24 prospective B values under one of four models, assigns validity independently at 30/38 (the Interactive-context yield used in the prior desk design), and follows the registered path: W1 count-only futility at fewer than 6 valid, W2, and count-only W3 only when W1+W2 have fewer than 12 valid. Every valid member is retained. The script uses issuer corpus statistics, quantiles, floored S, and C=max(predecessor C,Q99,S), and projects the production bracket allowance through the issued r7 reference. It tests a zero true contrast with an observed timing artifact of 80% of the bracket bound. Gaussian, heavy-tailed with two fixed 0.15 s additions in 24 slots, serial AR(1), and block drift in both 12-slot blocks are run. A later bracket draw supplies the level-screen probe. No equivalence branch exists.
 
 | Model | W1 futility | W3 | Excursion-limited | Zero headroom | Later level-screen refusal (exact 95% interval) | Bracket pass | Floor pass | Decision interval pass | False admission |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Gaussian | 1/200 | 0/200 | 0/200 | 196/200 | 10/200, 5.0% (2.42–9.00%) | 189/200 | 0/200 | 0/200 | 0/200 |
 | Heavy-tailed, two excursions | 1/200 | 0/200 | 118/200 | 72/200 | 9/200, 4.5% (2.08–8.37%) | 190/200 | 0/200 | 0/200 | 0/200 |
 | Serially dependent AR(1) | 0/200 | 0/200 | 0/200 | 195/200 | 6/200, 3.0% (1.11–6.42%) | 194/200 | 0/200 | 0/200 | 0/200 |

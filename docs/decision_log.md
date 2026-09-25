@@ -12173,14 +12173,10 @@ Binding reading: any major change (process rule, registration, analysis-plan ado
 
 **Addendum (Ed, 2026-09-24 ≈04:40 PDT, same session):** the 09-23 hold ("wait on major decisions til i get the reads of the new models") is LIFTED. The four-model council decides experiment-design changes (block-two redesign, shakedown design, registration text, analysis-plan adoption) and Ed receives an after-the-fact summary by email, not a question. Only hardware, sudo, a notice NO, and publishing claims remain Ed's. Ed chose this over "keep asking me on major design changes".
 
-## D-126 disposition, epoch 25G83 v3, 2026-09-25
+## D-126-disposition-25G83-v3-2026-09-25 — D-126 disposition, epoch 25G83 v3, 2026-09-25
 
 **Authority:** council ACCEPTANCE-25G83-02 under the D-184 addendum, cold ruling
-`docs/process_traces/2026-09-25-activation-152c9255/05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md` §5 R4, R5 and R9. This entry is authored after the values were seen and discloses that timing. The canonical registry is `configs/calibration/observation_dispositions.json`; its decision id is `D-126`.
-
-**D-125 dated addendum.** For epoch 25G83/v3 under registration Revision 5, S = max(corpus range quantized to 1e-6 s, 0.010818 s); C = max(predecessor C, successor Q99, S). If C = S, record `zero_headroom` and issue; drift above S still refuses. This changes no historical generation.
-
-**D-126 dated addendum.** For epoch 25G83/v3 under registration Revision 5, the retained corpus floor is 12, with every valid member retained. The old n ≥ 19 floor, calendar-day spacing, screen challenge as issuance veto, and strict S < C are superseded for this registration only. The comparison against the predecessor screen stays diagnostic. Revision 2's equivalence look is not taken. Revision 4 was drafted but never sealed; its fallback tag is `acc-v4-fallback` at `ea10e3c8`.
+`docs/process_traces/2026-09-25-activation-152c9255/05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md` §5 R4, R5 and R9. This entry is authored after the values were seen and discloses that timing. The canonical registry is `configs/calibration/observation_dispositions.json`; its decision id is `D-126-disposition-25G83-v3-2026-09-25`.
 
 The following valid 2026-09-19 n1/n2 observations were captured under the default-ProcessType launch context (utility QoS, timer coalescing, median ≈ 248 ms); disposed as diagnostic, never a member; authored after the values were seen and disclosed as such. Content ids are derived from the archived primary evidence and manifest byte hashes by `content_id_from_artifact_hashes`:
 
@@ -12199,3 +12195,11 @@ The following valid 2026-09-19 n1/n2 observations were captured under the defaul
 | n2 d12 | 0.036897960254235855 | `748018ce72e41600464dcb9f2fddcc466e2e3c0ebfcf6474828d908239c36b7b` |
 
 The 2026-09-23 qpe01 pilot has no calibration observation rows carrying this six-field target epoch in the inspected archive; no qpe01 content id is disposed here. The successor's prior set must carry these eleven content ids and this decision id at its later ledger cutoff. The issuer's A-7 check is the sole new registry consumer.
+
+## D-125 addendum (2026-09-25): Revision 5 screen and ceiling for epoch 25G83/v3
+
+Under ACCEPTANCE-25G83-02 §5 R5(i) and R9, for epoch 25G83/v3 under registration Revision 5, S = max(corpus range quantized to 1e-6 s, 0.010818 s); C = max(predecessor C, successor Q99, S). If C = S, record `zero_headroom` and issue; drift above S still refuses. This changes no historical generation.
+
+## D-126 addendum (2026-09-25): Revision 5 corpus and equivalence for epoch 25G83/v3
+
+Under ACCEPTANCE-25G83-02 §5 R5(c), R5(g), R5(l), R5(m) and R9, for epoch 25G83/v3 under registration Revision 5, the retained corpus floor is 12, with every valid member retained. The old n ≥ 19 floor, calendar-day spacing, screen challenge as issuance veto, and strict S < C are superseded for this registration only. The comparison against the predecessor screen stays diagnostic. Revision 2's equivalence look is not taken. Revision 4 was drafted but never sealed; its fallback tag is `acc-v4-fallback` at `ea10e3c8`.
