@@ -400,7 +400,7 @@ def descendant_proof(backend, action):
                  r"[[:space:]]+--out[[:space:]]+" + literal_dir + r"([[:space:]]|$)"),
         "production": (r"^[^[:space:]]+[[:space:]]+-m[[:space:]]+joulewise"
                        r"[[:space:]]+run[[:space:]]+" + literal_dir + r"/run-r[0-9]+\.json([[:space:]]|$)"),
-        "powermetrics": (r"^([^[:space:]]+[[:space:]]+)*[^[:space:]]*/powermetrics"
+        "powermetrics": (r"^((/usr/bin/sudo|sudo)[[:space:]]+-n[[:space:]]+)?/usr/bin/powermetrics"
                          r"([[:space:]]+[^[:space:]]+)*[[:space:]]+-o[[:space:]]+"
                          + literal_dir + r"/runs/joulewise-powermetrics-[^[:space:]]+\.plist([[:space:]]|$)"),
     }
@@ -466,7 +466,7 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
     def ledger_cells(actions, *, accepted=False):
         return [ledger.cell_entry(Path(a["cell_dir"]), slot=a["cell_id"], arm=a["context"],
                                   label=a["label"], require_bundle_files=accepted)
-                for a in actions if (Path(a["cell_dir"]) / "cell.json").is_file()]
+                for a in actions]
     def block_record(kind, block, attempt, actions, reference, **extra):
         ledger.append(out / "ledger.jsonl", {"event": kind, "stage": stage, "block": block["id"],
                       "attempt": attempt, "discard": block["discard"],
@@ -610,6 +610,11 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
     backend = backend or SystemBackend()
     if unreleased((ownership_path or out / "owned.jsonl").parent, allow_active_network=not manage_network):
         raise RuntimeError(f"unreleased ownership; run --recover {(ownership_path or out / 'owned.jsonl').parent}")
+    stage_ledger = out / "ledger.jsonl"
+    if stage_ledger.exists():
+        raise FileExistsError(f"stage ledger already exists: {stage_ledger}")
+    ledger.append(stage_ledger, {"event": "stage_opened", "stage": stage,
+                                 "binding": ledger.stage_binding(out, config_path, config)}, sealed=True)
     def body():
         return _execute_cells(out, config_path, config, stage, python, backend=backend,
                               existing_actions=existing_actions, extra_allow_pids=extra_allow_pids,
@@ -711,8 +716,9 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
             raise RuntimeError(f"{name} analysis errors: {report['errors']}")
         return report
     def body():
-        stage0 = step("stage0U", lambda: stage("stage0U", config, config_path))
+        step("stage0U", lambda: stage("stage0U", config, config_path))
         def power_step():
+            stage0 = analyze_directory(out / "stage0U", config, write_outputs=False)
             spread = stage0_spread(stage0["cells"])
             if any(spread["paired_block_count_by_endpoint"][e] != config["sizes"]["stage0_blocks"] or
                    spread["between_cell_paired_sd_log"][e] is None or spread["within_run_sd_log"][e] is None
@@ -737,8 +743,9 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
                 stream.write("\n")
             write_json(out / "frozen_config.json", frozen)
             return frozen
-        frozen = step("freeze", freeze_step)
+        step("freeze", freeze_step)
         frozen_path = out / "frozen_config.json"
+        frozen = load_config(frozen_path)
         u1 = step("U1", lambda: stage("U1", frozen, frozen_path))
         if sizing["total_u_blocks"] == 12 or any(value.startswith("INCONCLUSIVE") for value in u1["verdicts"].values()):
             step("U2", lambda: stage("U2", frozen, frozen_path))

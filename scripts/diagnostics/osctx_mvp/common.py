@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -10,9 +11,16 @@ DEFAULT_CONFIG = Path(__file__).with_name("config.json")
 STAGES = ("stage0", "stage0U", "U1", "U2", "S", "rehearsal")
 
 
+class LoadedConfig(dict):
+    """Keep the exact bytes read by load_config available for stage opening."""
+
+
 def load_config(path: str | Path | None = None) -> dict:
-    with (Path(path) if path else DEFAULT_CONFIG).open() as stream:
-        config = json.load(stream)
+    source = Path(path) if path else DEFAULT_CONFIG
+    raw = source.read_bytes()
+    config = LoadedConfig(json.loads(raw))
+    config.loaded_path = source.resolve()
+    config.loaded_fingerprint = {"sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
     if set(config["contexts"]) != {"D", "I", "SH", "B"}:
         raise ValueError("contexts must be D, I, SH, B")
     if config["sizes"]["u_blocks"] < 6 or config["sizes"]["u_blocks"] % 6:

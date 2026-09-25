@@ -667,22 +667,46 @@ def validate_cell(directory: Path, record: dict, schedules: dict, config: dict, 
     return action
 
 
-def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_dir: Path | None = None):
+def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_dir: Path | None = None,
+                      write_outputs: bool = True):
     schedules = stage_schedules(out)
-    rows, errors, discarded = [], [], []
+    rows, errors, discarded, pending_rows = [], [], [], []
     invalid_cell_counts = defaultdict(int)
     used_bundles, listed_dirs = set(), set()
     references = {}
     for location, owner in schedules.items():
         stage = owner["stage"]
-        expected_blocks = blocks(config, stage)
+        records = ledger.read(location / "ledger.jsonl", sealed=True)
+        opened = records[0]
+        if opened.get("event") != "stage_opened" or opened.get("stage") != stage:
+            raise ValueError(f"missing stage_opened binding: {stage}")
+        binding = opened.get("binding")
+        if not isinstance(binding, dict) or not isinstance(binding.get("config_path"), str):
+            raise ValueError(f"invalid stage_opened binding: {stage}")
+        config_path = Path(binding["config_path"])
+        try:
+            stage_config = load_config(config_path)
+            compatible_config = stage_config == config
+            if location != out.resolve() and stage == "stage0U":
+                after_freeze = json.loads(json.dumps(stage_config))
+                after_freeze["sizes"]["u_blocks"] = config["sizes"]["u_blocks"]
+                for frozen_stage in ("U1", "U2"):
+                    after_freeze["runs_per_cell"][frozen_stage] = config["runs_per_cell"][frozen_stage]
+                compatible_config = after_freeze == config
+            valid_binding = (compatible_config and
+                             binding == ledger.stage_binding(location, config_path, stage_config))
+        except (OSError, KeyError, TypeError) as exc:
+            raise ValueError(f"stage binding unreadable: {stage}: {exc}") from exc
+        if not valid_binding:
+            raise ValueError(f"stage binding mismatch: {stage}")
+        expected_blocks = blocks(stage_config, stage)
         expected_actions = {(block["id"], slot): arm
                             for block in expected_blocks for slot, arm in enumerate(block["arms"], 1)}
         if set(owner["actions"]) != set(expected_actions) or any(
                 action["context"] != expected_actions[key] for key, action in owner["actions"].items()):
             raise ValueError(f"stage schedule disagrees with config: {stage}")
         history = defaultdict(list)
-        for event in ledger.read(location / "ledger.jsonl", sealed=True):
+        for event in records[1:]:
             kind = event.get("event")
             block_id, attempt = event.get("block"), event.get("attempt")
             matching = next((block for block in expected_blocks if block["id"] == block_id), None)
@@ -700,9 +724,9 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
             cells = event.get("cells")
             if not isinstance(cells, list):
                 raise ValueError("ledger cells must be a list")
-            if kind == "block_accepted" and [(c.get("slot"), c.get("arm")) for c in cells] != [
+            if [(c.get("slot"), c.get("arm")) for c in cells] != [
                     (slot, arm) for slot, arm in enumerate(matching["arms"], 1)]:
-                raise ValueError(f"accepted block slots or arms disagree with schedule: {block_id}")
+                raise ValueError(f"block slots or arms disagree with schedule: {block_id}")
             local_slots = set()
             for item in cells:
                 slot, arm = item.get("slot"), item.get("arm")
@@ -717,10 +741,12 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                 if directory.resolve() in listed_dirs:
                     raise ValueError(f"duplicate ledgered cell: {directory}")
                 listed_dirs.add(directory.resolve())
+                if not isinstance(item.get("manifest"), dict) or item["manifest"] != ledger.tree_manifest(directory):
+                    raise ValueError(f"cell manifest mismatch: {directory}")
                 path = directory / "cell.json"
-                if not path.is_file():
+                if kind == "block_accepted" and not path.is_file():
                     raise ValueError(f"missing_ledgered_cell: {directory}")
-                record = json.loads(path.read_text())
+                record = json.loads(path.read_text()) if path.is_file() else {}
                 expected_runs = [{key: run.get(key) for key in ("run_id", "bundle", "materialized_sha256")}
                                  for run in record.get("runs", [])]
                 ledger_runs = item.get("runs")
@@ -755,7 +781,7 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                     continue
                 if (directory / "discarded.json").exists():
                     raise ValueError(f"accepted cell has discard marker: {directory}")
-                validate_cell(directory, record, schedules, config, used_bundles)
+                validate_cell(directory, record, schedules, stage_config, used_bundles)
                 for number, run in enumerate(ledger_runs, 1):
                     bundle = (directory / "runs" / run["run_id"]).resolve()
                     try:
@@ -767,9 +793,7 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                 if matching["discard"]:
                     discarded.append({"cell": str(directory), "reason": "preregistered discard"})
                     continue
-                row = analyzer_backend(directory, config) if analyzer_backend else analyze_cell(directory, config)
-                row["attempt"] = attempt
-                rows.append(row)
+                pending_rows.append((directory, attempt, stage_config))
             if kind == "block_accepted":
                 reference = event.get("reference_hash")
                 if not isinstance(reference, str) or not reference:
@@ -783,9 +807,15 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                 len([event for event in history[block["id"]] if event["event"] == "block_accepted"]) != 1
                 for block in expected_blocks if block["id"] in history):
             raise ValueError(f"incomplete stage ledger: {stage}")
-    orphans = {path.parent.resolve() for path in out.rglob("cell.json")} - listed_dirs
+    cell_dir_name = re.compile(r".+\.\d+\.(?:D|I|SH|B)\.a[1-3]")
+    orphans = {path.resolve() for path in out.rglob("*")
+               if path.is_dir() and cell_dir_name.fullmatch(path.name)} - listed_dirs
     if orphans:
         raise ValueError(f"unledgered_cell: {sorted(orphans)[0]}")
+    for directory, attempt, stage_config in pending_rows:
+        row = analyzer_backend(directory, stage_config) if analyzer_backend else analyze_cell(directory, stage_config)
+        row["attempt"] = attempt
+        rows.append(row)
     for row in rows:
         reference = references.get(row["stage"])
         if reference and any(request.get("output_hash") != reference for request in row.get("requests", [])):
@@ -802,10 +832,11 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                                        for arm in ("D", "I", "SH", "B")}
     report = {"cells": rows, "errors": errors, "discarded": discarded,
               **decision, "stage_references": references}
-    destination = output_dir or out
-    destination.mkdir(parents=True, exist_ok=True)
-    write_json(destination / "summary.json", report)
-    (destination / "summary.md").write_text(markdown(rows, decision, errors, discarded))
+    if write_outputs:
+        destination = output_dir or out
+        destination.mkdir(parents=True, exist_ok=True)
+        write_json(destination / "summary.json", report)
+        (destination / "summary.md").write_text(markdown(rows, decision, errors, discarded))
     return report
 
 
@@ -819,9 +850,16 @@ def main(argv=None):
         power.add_argument("--config", type=Path, default=Path(__file__).with_name("config.json"))
         args = power.parse_args(argv[1:])
         if args.stage0_summary:
-            rows = json.loads(args.stage0_summary.read_text())["cells"]
-            spread = stage0_spread(rows)
             config = load_config(args.config)
+            stage_dir = args.stage0_summary.parent
+            schedules = stage_schedules(stage_dir)
+            if len(schedules) != 1 or next(iter(schedules.values()))["stage"] != "stage0U":
+                power.error("--stage0-summary must belong to a stage0U directory")
+            expected = analyze_directory(stage_dir, config, write_outputs=False)
+            if json.loads(args.stage0_summary.read_text()) != expected:
+                power.error("stage0 summary disagrees with bound stage0U evidence")
+            rows = expected["cells"]
+            spread = stage0_spread(rows)
             replication = config["runs_per_cell"]["U1"]
             if config["runs_per_cell"]["U2"] != replication:
                 power.error("U1 and U2 must have equal replication for the combined power table")

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -70,12 +70,14 @@ def make_cell(parent: Path, config, stage, block, arm, energies, rates=None, *, 
     return directory
 
 
-def seal_fixture(root, config, stage):
+def seal_fixture(root, config, stage, config_path=common.DEFAULT_CONFIG):
     """Author explicit runner decisions for hand-built, complete stage fixtures."""
     reference = None
     path = root / "ledger.jsonl"
     if path.exists():
         path.unlink()
+    ledger.append(path, {"event": "stage_opened", "stage": stage,
+                         "binding": ledger.stage_binding(root, config_path, config)}, sealed=True)
     for block in common.blocks(config, stage):
         for attempt in (1, 2, 3):
             actions = [a for a in json.loads((root / "command_sequence.json").read_text())["actions"]
@@ -103,6 +105,68 @@ def seal_fixture(root, config, stage):
 class OSCTXTests(unittest.TestCase):
     def setUp(self):
         self.config = common.load_config()
+
+    def test_stage_opened_binds_schedule_config_source_and_harness(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "production.json"
+            source.write_text('{"source": true}\n')
+            config_path = root / "effective.json"
+            raw = json.loads(common.DEFAULT_CONFIG.read_text())
+            raw["source_config"] = str(source)
+            config_path.write_text(json.dumps(raw))
+            config = common.load_config(config_path)
+            stage = root / "stage0U"
+            runner.plan(stage, config_path, config, "stage0U", "/python")
+            for block in common.blocks(config, "stage0U"):
+                for arm in block["arms"]:
+                    make_cell(stage, config, "stage0U", block["id"], arm, [.4, .41])
+            seal_fixture(stage, config, "stage0U", config_path)
+            report = analyze.analyze_directory(stage, config)
+            self.assertEqual(report["errors"], [])
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(analyze.main(["power", "--stage0-summary", str(stage / "summary.json"),
+                                               "--config", str(config_path)]), 0)
+            opened = ledger.read(stage / "ledger.jsonl", sealed=True)[0]
+            self.assertEqual(opened["event"], "stage_opened")
+            self.assertEqual(set(opened["binding"]["harness"]),
+                             {path.name for path in ledger.HARNESS.glob("*.py")})
+            for path in (stage / "command_sequence.json", config_path, source):
+                original = path.read_bytes()
+                path.write_bytes(original + b" ")
+                with self.assertRaisesRegex(ValueError, "stage binding mismatch"):
+                    analyze.analyze_directory(stage, config)
+                if path == config_path:
+                    with self.assertRaisesRegex(ValueError, "changed since load_config"):
+                        ledger.stage_binding(stage, config_path, config)
+                path.write_bytes(original)
+            summary = stage / "summary.json"
+            original = summary.read_bytes()
+            summary.write_bytes(original.replace(b'"errors": []', b'"errors": ["tampered"]'))
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                analyze.main(["power", "--stage0-summary", str(summary), "--config", str(config_path)])
+
+    def test_synthetic_session_accepts_frozen_u_replication(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            frozen_path = root / "frozen_config.json"
+            frozen = copy.deepcopy(self.config)
+            frozen["runs_per_cell"]["U1"] = frozen["runs_per_cell"]["U2"] = 2
+            common.write_json(frozen_path, frozen)
+            frozen = common.load_config(frozen_path)
+            for stage in ("stage0U", "U1", "U2", "S"):
+                stage_config = self.config if stage == "stage0U" else frozen
+                config_path = common.DEFAULT_CONFIG if stage == "stage0U" else frozen_path
+                directory = root / stage
+                runner.plan(directory, config_path, stage_config, stage, "/python")
+                for block in common.blocks(stage_config, stage):
+                    for arm in block["arms"]:
+                        make_cell(directory, stage_config, stage, block["id"], arm,
+                                  [.4] * stage_config["runs_per_cell"][stage])
+                seal_fixture(directory, stage_config, stage, config_path)
+            report = analyze.analyze_directory(root, frozen)
+            self.assertEqual(report["errors"], [])
+            self.assertEqual(len(report["cells"]), 53)
 
     def test_williams_schedule_and_stage_sizes(self):
         orders = common.williams_orders(self.config["seed"], "U1")
@@ -284,7 +348,8 @@ class OSCTXTests(unittest.TestCase):
             self.assertTrue((out / "stage0-01.1.I.a2" / "done.json").exists())
             self.assertTrue((out / "stage0-01.2.SH.a2" / "done.json").exists())
             decisions = ledger.read(out / "ledger.jsonl", sealed=True)
-            self.assertEqual([(r["event"], r["block"], r["attempt"]) for r in decisions],
+            self.assertEqual(decisions[0]["event"], "stage_opened")
+            self.assertEqual([(r["event"], r["block"], r["attempt"]) for r in decisions[1:]],
                              [("block_discarded", "stage0-01", 1),
                               ("block_accepted", "stage0-01", 2),
                               ("block_accepted", "stage0-02", 1),
@@ -443,9 +508,17 @@ class OSCTXTests(unittest.TestCase):
             interval = report["intervals"]["D/I:E"]
             self.assertGreater(interval["widened_upper_ratio"] - interval["widened_lower_ratio"], 0)
             self.assertIn("Absolute J/token", (root / "summary.md").read_text())
+            b_cell = root / "U1-B-02.1.B.a1" / "cell.json"
+            original_b = b_cell.read_bytes()
+            edited_b = json.loads(original_b)
+            edited_b["cpu"] = [{"seconds": 10.2}]
+            b_cell.write_text(json.dumps(edited_b))
+            with self.assertRaisesRegex(ValueError, "cell manifest mismatch"):
+                analyze.analyze_directory(root, self.config)
+            b_cell.write_bytes(original_b)
             tokens = root / "U1-B-02.1.B.a1" / "runs" / "osctx-u1-u1-b-02-1-b-r1" / "outputs" / "tokens.jsonl"
             tokens.write_text(tokens.read_text().replace('"token_id": 0', '"token_id": 1', 1))
-            with self.assertRaisesRegex(ValueError, "accepted bundle file sha256 or size mismatch"):
+            with self.assertRaisesRegex(ValueError, "cell manifest mismatch"):
                 analyze.analyze_directory(root, self.config)
 
     def test_schedule_rejects_foreign_bundles_and_config_drift(self):
@@ -465,13 +538,13 @@ class OSCTXTests(unittest.TestCase):
                 record = json.loads((directory / "cell.json").read_text())
                 record["runs"][0]["bundle"] = str(foreign)
                 (directory / "cell.json").write_text(json.dumps(record))
-            with self.assertRaisesRegex(ValueError, "ledger run mismatch"):
+            with self.assertRaisesRegex(ValueError, "cell manifest mismatch"):
                 analyze.analyze_directory(root, self.config)
             record = json.loads((cells[0] / "cell.json").read_text())
             record["runs"][0]["bundle"] = str(cells[0] / "runs" / record["runs"][0]["run_id"])
             (cells[0] / "cell.json").write_text(json.dumps(record))
             (cells[0] / "run-r1.json").write_text('{"run_id":"tampered"}')
-            with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
+            with self.assertRaisesRegex(ValueError, "cell manifest mismatch"):
                 analyze.analyze_directory(root, self.config)
 
     def test_pairing_never_crosses_stages(self):
@@ -645,6 +718,18 @@ class OSCTXTests(unittest.TestCase):
                 matched = subprocess.run(["/usr/bin/grep", "-E", patterns[name]["pattern"]],
                                          input=own_line + reviewer, text=True, capture_output=True, check=False)
                 self.assertEqual(matched.stdout, own_line)
+            capture = f"{directory}/runs/joulewise-powermetrics-abc.plist"
+            sampler_pattern = patterns["powermetrics"]["pattern"]
+            accepted = [f"{prefix} -i 100 -o {capture}\n" for prefix in
+                        ("/usr/bin/powermetrics", "sudo -n /usr/bin/powermetrics",
+                         "/usr/bin/sudo -n /usr/bin/powermetrics")]
+            rejected = [f"/python reviewer.py --argv {accepted[0].strip()}\n",
+                        f"/usr/bin/grep -F {accepted[0].strip()} /tmp/review.log\n"]
+            matched = subprocess.run(["/usr/bin/grep", "-E", sampler_pattern],
+                                     input="".join(accepted + rejected), text=True,
+                                     capture_output=True, check=False)
+            self.assertEqual(matched.returncode, 0)
+            self.assertEqual(matched.stdout, "".join(accepted))
 
     def test_production_sampler_capture_path_is_cell_scoped(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -740,7 +825,7 @@ class OSCTXTests(unittest.TestCase):
                 if stage == "U1":
                     self.assertTrue((out.parent / "freeze.json").is_file())
                     self.assertEqual(config["runs_per_cell"]["U1"], 1)
-            def analyze_dir(path, config):
+            def analyze_dir(path, config, **kwargs):
                 if path.name == "stage0U": return {"cells": [], "errors": []}
                 if path.name == "U1": return {"stage": "U1", "cells": [], "errors": [],
                                               "verdicts": {"D/I:E": "EQUIVALENT"}}
@@ -785,7 +870,7 @@ class OSCTXTests(unittest.TestCase):
             with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as temp:
                 stages, fake = [], Fake()
                 def execute(out, config_path, config, stage, python, **kwargs): stages.append(stage)
-                def analyze_dir(path, config):
+                def analyze_dir(path, config, **kwargs):
                     if path.name == "stage0U": return {"cells": [], "errors": []}
                     if path.name == "U1": return {"verdicts": {"D/I:E": verdict}, "errors": []}
                     return {"errors": [], "verdicts": {}}
@@ -842,6 +927,8 @@ class OSCTXTests(unittest.TestCase):
                 action = actions[arm]
                 return ledger.cell_entry(directory, slot=action["cell_id"], arm=arm,
                                          label=action["label"].replace(".a1", f".a{attempt}"))
+            ledger.append(root / "ledger.jsonl", {"event": "stage_opened", "stage": "U1",
+                "binding": ledger.stage_binding(root, common.DEFAULT_CONFIG, self.config)}, sealed=True)
             ledger.append(root / "ledger.jsonl", {"event": "block_discarded", "stage": "U1",
                 "block": block["id"], "attempt": 1, "discard": False, "reference_hash": None,
                 "cells": [entry("D", first["D"], 1)], "reason": "bundle_invalid",
@@ -850,7 +937,7 @@ class OSCTXTests(unittest.TestCase):
                 "block": block["id"], "attempt": 2, "discard": False, "reference_hash": "hash",
                 "cells": [entry(arm, d2 if arm == "D" else first[arm], 2)
                           for arm in block["arms"]]}, sealed=True)
-            with self.assertRaisesRegex(ValueError, "foreign dir"):
+            with self.assertRaisesRegex(ValueError, "block slots or arms disagree"):
                 analyze.analyze_directory(root, self.config)
 
     def test_runner_ledger_includes_warmup_acceptance(self):
@@ -883,17 +970,19 @@ class OSCTXTests(unittest.TestCase):
                 runner.execute(root, common.DEFAULT_CONFIG, self.config, "U1", "/python",
                                backend=Fake(), manage_network=False)
             records = ledger.read(root / "ledger.jsonl", sealed=True)
-            self.assertEqual(len(records), len(common.blocks(self.config, "U1")))
-            self.assertEqual(records[0]["block"], "U1-warmup")
-            self.assertEqual(records[0]["event"], "block_accepted")
-            self.assertTrue(records[0]["discard"])
-            self.assertEqual(len(records[0]["cells"]), 1)
+            self.assertEqual(len(records), len(common.blocks(self.config, "U1")) + 1)
+            self.assertEqual(records[0]["event"], "stage_opened")
+            self.assertEqual(records[1]["block"], "U1-warmup")
+            self.assertEqual(records[1]["event"], "block_accepted")
+            self.assertTrue(records[1]["discard"])
+            self.assertEqual(len(records[1]["cells"]), 1)
 
-    def test_ledger_property_200_histories_and_eight_mutations(self):
+    def test_ledger_property_200_histories_and_ten_mutations(self):
         seeds = list(range(2026092400, 2026092600))
         print("OSCTX_LEDGER_PROPERTY_SEEDS=" + ",".join(map(str, seeds)))
         mutations = ("drop_discard", "copy_a1_to_a2", "stray_a2", "duplicate_accepted",
-                     "edit_sha", "truncate_last_line", "swap_reference_hashes", "copy_summary")
+                     "edit_sha", "truncate_last_line", "swap_reference_hashes", "copy_summary",
+                     "edit_random_cell_file", "add_stray_cell_file")
         seen_mutations = set()
         class Fake:
             def __init__(self, root, config, fail_count):
@@ -933,13 +1022,23 @@ class OSCTXTests(unittest.TestCase):
                                backend=Fake(root, self.config, fail_count), manage_network=False)
                 records = ledger.read(root / "ledger.jsonl", sealed=True)
                 self.assertEqual([r["event"] for r in records],
-                                 ["block_discarded"] * fail_count + ["block_accepted"])
+                                 ["stage_opened"] + ["block_discarded"] * fail_count + ["block_accepted"])
                 report = analyze.analyze_directory(root, self.config)
+                self.assertEqual(report["errors"], [])
+                for event in records[1:]:
+                    for item in event["cells"]:
+                        self.assertEqual(item["manifest"], ledger.tree_manifest(Path(item["dir"])))
+                if fail_count:
+                    discarded_file = Path(records[1]["cells"][-1]["dir"]) / "stray-after-discard.txt"
+                    discarded_file.write_text("unexpected\n")
+                    with self.assertRaisesRegex(ValueError, "cell manifest mismatch"):
+                        analyze.analyze_directory(root, self.config)
+                    discarded_file.unlink()
                 accepted = {c["dir"] for r in records if r["event"] == "block_accepted" for c in r["cells"]}
                 self.assertEqual({r["dir"] for r in report["cells"]}, accepted)
                 ledger_path = root / "ledger.jsonl"
                 if mutation == "drop_discard":
-                    records.pop(0)
+                    records.pop(1)
                 elif mutation in ("copy_a1_to_a2", "stray_a2"):
                     source = root / "rehearsal-01.1.I.a1"
                     target = root / "rehearsal-01.1.I.a2"
@@ -953,12 +1052,20 @@ class OSCTXTests(unittest.TestCase):
                 elif mutation == "edit_sha":
                     records[-1]["cells"][0]["runs"][0]["materialized_sha256"] = "0" * 64
                 elif mutation == "swap_reference_hashes":
-                    records[0]["reference_hash"], records[-1]["reference_hash"] = (
-                        records[-1]["reference_hash"], records[0]["reference_hash"])
+                    records[1]["reference_hash"], records[-1]["reference_hash"] = (
+                        records[-1]["reference_hash"], records[1]["reference_hash"])
                 elif mutation == "copy_summary":
                     source = Path(records[-1]["cells"][0]["runs"][0]["bundle"])
                     target = Path(records[-1]["cells"][1]["runs"][0]["bundle"])
                     shutil.copyfile(source / "summary_metrics.json", target / "summary_metrics.json")
+                elif mutation in ("edit_random_cell_file", "add_stray_cell_file"):
+                    chosen = Path(rng.choice(records[-1]["cells"])["dir"])
+                    if mutation == "edit_random_cell_file":
+                        relative = rng.choice(sorted(ledger.tree_manifest(chosen)))
+                        with (chosen / relative).open("ab") as stream:
+                            stream.write(b"\nmutation\n")
+                    else:
+                        (chosen / "stray-audit-file.txt").write_text("new evidence\n")
                 if mutation in ("drop_discard", "duplicate_accepted", "edit_sha", "swap_reference_hashes"):
                     ledger_path.unlink()
                     for record in records:
@@ -1100,9 +1207,15 @@ class OSCTXTests(unittest.TestCase):
                      for arm in ("I", "SH")]
             seal_fixture(root, self.config, "rehearsal")
             self.assertEqual(len(analyze.analyze_directory(root, self.config)["cells"]), 2)
+            orphan = root / "rehearsal-01.1.I.a2"
+            orphan.mkdir()
+            (orphan / "unlisted.txt").write_text("unlisted\n")
+            with self.assertRaisesRegex(ValueError, "unledgered_cell"):
+                analyze.analyze_directory(root, self.config)
+            shutil.rmtree(orphan)
             marker = (cells[0] / "cell.json").read_bytes()
             (cells[0] / "cell.json").unlink()
-            with self.assertRaisesRegex(ValueError, "missing_ledgered_cell"):
+            with self.assertRaisesRegex(ValueError, "cell manifest mismatch"):
                 analyze.analyze_directory(root, self.config)
             (cells[0] / "cell.json").write_bytes(marker)
             raw = root / "ledger.jsonl"
