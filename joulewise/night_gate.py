@@ -194,6 +194,11 @@ T0_NON_OBSERVER_SHARE_MAX = 0.5
 NON_OBSERVER_OBSERVATION_INTERVAL_S = 30
 NON_OBSERVER_EXCLUSION = "non_observer_process_busy"
 PLAN_MAX_AGE_S = 36 * 60 * 60
+# Acceptance ruling v2.1 R16 (docs/process_traces/2026-09-25-activation-152c9255/
+# 05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md
+# §5 R16): newly authored plans must use the dedicated measurement custody.
+MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S = 1790340000
+MEASUREMENT_ROOT_CUSTODY_ROOT = Path("/Users/edr/night-custody/measurement")
 
 NIGHT_GATE_REASON_CODES = frozenset(
     {
@@ -206,6 +211,7 @@ NIGHT_GATE_REASON_CODES = frozenset(
         "night_window_expired",
         "night_plan_stale",
         "night_plan_malformed",
+        "measurement_root_outside_custody",
         "night_chain_digest_mismatch",
         "launch_go_receipt_missing",
         "launch_go_receipt_invalid",
@@ -1239,6 +1245,27 @@ def _check_static_start(plan, probes, rows, evidence):
             rows,
             Refusal("night_plan_stale", "plan is older than 36 hours", ()),
         )
+    if plan.authored_epoch_s >= MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S:
+        try:
+            custody_root = MEASUREMENT_ROOT_CUSTODY_ROOT.resolve()
+            relative = Path(plan.measurement_root).resolve().relative_to(
+                custody_root
+            )
+            inside_custody = relative != Path(".")
+        except (OSError, RuntimeError, ValueError):
+            inside_custody = False
+        if not inside_custody:
+            return _finish(
+                plan,
+                probes,
+                rows,
+                Refusal(
+                    "measurement_root_outside_custody",
+                    "resolved measurement_root must be strictly inside "
+                    f"{MEASUREMENT_ROOT_CUSTODY_ROOT}",
+                    (),
+                ),
+            )
     try:
         measurement_checkout_head = probes.measurement_head(plan.measurement_root)
         checkout_head = probes.checkout_head()

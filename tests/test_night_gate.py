@@ -833,6 +833,71 @@ class NightGateTests(unittest.TestCase):
         )
         self.assertEqual("GO", receipt.verdict)
 
+    def test_new_plan_accepts_measurement_root_inside_custody_and_legacy_outside(self) -> None:
+        cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+        with tempfile.TemporaryDirectory() as temporary:
+            custody = Path(temporary) / "measurement"
+            inside = custody / "JouleWise-measurement-test-derivation"
+            outside = Path(temporary) / "old-measurement"
+            inside.mkdir(parents=True)
+            outside.mkdir()
+            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody):
+                for root, authored in ((inside, cutoff), (outside, cutoff - 1)):
+                    with self.subTest(root=root, authored=authored):
+                        source = FakeProbeSource(now_epoch_s=cutoff + 5)
+                        argv = checkout_status_argv(str(root))
+                        source.results[argv] = result(argv)
+                        plan = make_plan(
+                            t0_epoch_s=cutoff, authored_epoch_s=authored,
+                            measurement_root=str(root),
+                        )
+                        receipt = self.evaluate(plan, source)
+                        self.assertEqual("GO", receipt.verdict)
+                        self.assertIsNone(receipt.refusal)
+                        self.assertIn(argv, source.run_calls)
+                        self.assertEqual(
+                            [], night_gate.validate_receipt(json.loads(receipt.to_json_bytes()))
+                        )
+
+    def test_new_plan_refuses_roots_outside_measurement_custody(self) -> None:
+        cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+        with tempfile.TemporaryDirectory() as temporary:
+            custody = Path(temporary) / "measurement"
+            custody.mkdir()
+            outside = Path(temporary) / "outside"
+            outside.mkdir()
+            sibling = Path(temporary) / "measurement-evil"
+            sibling.mkdir()
+            escape = custody / "escape"
+            escape.symlink_to(outside, target_is_directory=True)
+            cases = (
+                ("outside", outside, cutoff + 1),
+                ("boundary", outside, cutoff),
+                ("sibling_prefix", sibling, cutoff),
+                ("custody_parent", custody, cutoff),
+                ("symlink_escape", escape, cutoff),
+            )
+            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody):
+                for name, root, authored in cases:
+                    with self.subTest(case=name):
+                        source = FakeProbeSource(now_epoch_s=cutoff + 5)
+                        plan = make_plan(
+                            t0_epoch_s=cutoff, authored_epoch_s=authored,
+                            measurement_root=str(root),
+                        )
+                        receipt = self.evaluate(plan, source)
+                        self.assertEqual("REFUSED", receipt.verdict)
+                        self.assertEqual(
+                            "measurement_root_outside_custody", receipt.refusal.reason
+                        )
+                        self.assertEqual([], source.measurement_calls)
+                        self.assertEqual(0, source.checkout_calls)
+                        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+                        self.assertEqual("FAIL", c5.status)
+                        self.assertEqual(
+                            [], night_gate.validate_receipt(json.loads(receipt.to_json_bytes()))
+                        )
+
     def test_dirty_unmanifested_tracked_file_refuses_at_t0(self) -> None:
         plan = make_plan()
         argv = checkout_status_argv(plan.measurement_root)
@@ -1429,6 +1494,7 @@ class NightGateTests(unittest.TestCase):
             "night_window_expired",
             "night_plan_stale",
             "night_plan_malformed",
+            "measurement_root_outside_custody",
             "night_chain_digest_mismatch",
             "night_refused_class_unbuilt",
             "launch_go_receipt_missing",
@@ -1447,6 +1513,7 @@ class NightGateTests(unittest.TestCase):
             "night_window_expired": "test_window_refusal_performs_no_command_or_file_or_head_probe",
             "night_plan_stale": "test_wrong_measurement_head_is_stale_and_the_36_hour_boundary_is_current",
             "night_plan_malformed": "test_a_direct_plan_with_missing_registration_is_refused_as_malformed",
+            "measurement_root_outside_custody": "test_new_plan_refuses_roots_outside_measurement_custody",
             "night_chain_digest_mismatch": "test_chain_sidecar_refuses_case_name_and_token_count_defects",
             "night_refused_class_unbuilt": "test_a_transaction_plan_is_refused_until_stage_three_exists",
             "night_receipt_class_invalid": "test_c2_pass_or_an_unregistered_basis_is_a_class_invalid_defect",
@@ -1544,6 +1611,7 @@ class NightGateTests(unittest.TestCase):
         ):
             self.assertTrue(all(code.startswith("night_") or code in {
                 "launch_go_receipt_missing", "launch_go_receipt_invalid",
+                "measurement_root_outside_custody",  # Acceptance ruling v2.1 R16.
                 # Ruled vocabulary, not a new convention: the abort's reason is
                 # the registration's own exclusion name (cold gate 10, Q2).
                 night_gate.NON_OBSERVER_EXCLUSION,
