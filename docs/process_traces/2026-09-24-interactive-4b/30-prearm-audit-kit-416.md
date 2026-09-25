@@ -1,6 +1,6 @@
-# Pre-arm full-system audit kit (directive #416)
+# Full-system audit kit (directive #416, amended 2026-09-25: runs AFTER W1/W2 pass, BEFORE any claim-bearing run)
 
-This kit is ready before its trigger. The trigger is the magistrate's message "PRE-WINDOW WORK COMPLETE", carrying the frozen sha **S** and the in-scope list. Directive #416 plus Ed's 2026-09-25 follow-up: "do that unless that limits its audit ability in any way. the auditer should be able to launch subagents to speedily do the audits, with workflows authorized for the audits".
+This kit is ready before its trigger. The trigger is the magistrate's message "CLAIM-RUN WORK COMPLETE" (W1/W2 issued and the headline pipeline frozen), carrying the frozen sha **S**, the in-scope list and the W1/W2 bundle paths. Ed amended the order on 2026-09-25 (issue #416 comment): passing windows are consistency evidence, not correctness evidence, so the audit stays mandatory before claim runs. Auditors must independently re-derive the W1/W2 calibration from the raw bundles. Directive #416 plus Ed's 2026-09-25 follow-up: "do that unless that limits its audit ability in any way. the auditer should be able to launch subagents to speedily do the audits, with workflows authorized for the audits".
 
 ## Seats
 
@@ -30,7 +30,7 @@ Each command runs as its own tracked background job. The three run concurrently.
 
 ## Common brief (identical for every seat apart from its header)
 
-> **ROLE.** An independent, BLIND pre-arm auditor of the JouleWise measurement system at frozen sha S (this worktree). You audit alone: do not read other auditors' outputs, `/tmp/audit416/*` apart from your own brief and scratch, or earlier audit records' conclusions about the areas you audit, before you have formed your own findings. Your findings decide whether the first load-bearing calibration windows (W1/W2, the 25G83 derivation) arm.
+> **ROLE.** An independent, BLIND pre-arm auditor of the JouleWise measurement system at frozen sha S (this worktree). You audit alone: do not read other auditors' outputs, `/tmp/audit416/*` apart from your own brief and scratch, or earlier audit records' conclusions about the areas you audit, before you have formed your own findings. Your findings decide whether the first claim-bearing (headline) runs may start, and whether W1/W2 must be re-run.
 >
 > **SCOPE.** Every path that can change a measured or claimed number, or can let a bad window through:
 > 1. the instrument adapters (powermetrics capture, parsing, clock anchoring, dwell, the cadence probe);
@@ -40,7 +40,7 @@ Each command runs as its own tracked background job. The three run concurrently.
 > 5. analysis and claim code (claim gate v2 wiring, J/correct, the equivalence and power rules);
 > 6. the OS-interaction facts established on 2026-09-24/25: launchd ProcessType, timer coalescing, Spotlight, network time, display state (records in docs/process_traces/2026-09-24-interactive-4b/).
 >
-> The magistrate's in-scope list for S is appended below.
+> The magistrate's in-scope list for S and the W1/W2 bundle paths are appended below. Re-derive the issued calibration from the raw W1/W2 bundles with your own code, and compare it with what the issuer produced.
 >
 > **WHAT TO LOOK FOR.**
 > - Physics and metrology errors.
