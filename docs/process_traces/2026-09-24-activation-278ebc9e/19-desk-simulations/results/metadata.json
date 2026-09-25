@@ -1,0 +1,21 @@
+{
+  "seeds": {
+    "smoke": 278,
+    "floor": 278407,
+    "equivalence": 316407
+  },
+  "models": {
+    "gaussian": "Independent standard Gaussian local errors with one shared night shock across twelve components.",
+    "heavy_t3": "Variance-one Student t with three degrees of freedom, plus one shared night shock.",
+    "linear_drift": "Gaussian local errors plus a centered linear trend across each night's ordered blocks.",
+    "shared_local": "Gaussian error has shared and local terms; timing offset is split into w/2 shared across the night and w/2 local per block."
+  },
+  "floor_trials_per_cell": 30,
+  "equivalence_trials_per_cell": 600,
+  "sigma": 1.0,
+  "dependence": "Each trial shares a night shock across twelve components; joint verdict evaluated directly.",
+  "floor_cells": 144,
+  "equivalence_cells": 768,
+  "old_rule_adapter": "Synthetic retained rows bypass ledger authentication; real evaluate_session makes numerical verdict.",
+  "replacement_status": "PROPOSED; not registered or installed."
+}

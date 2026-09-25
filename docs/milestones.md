@@ -12,6 +12,7 @@ promise.
 |---|---|---|
 | Local Mac authorization needed for privileged `powermetrics` sampling | Closed on 2026-07-06; the privileged sample and restricted permission rule were recorded. | Phase 1 exit checklist; `RUN_STATE.md` project history |
 | Advisor meeting | On 2026-08-28, the meeting was moved one week later. No subsequent meeting outcome or replacement date is recorded in the repository. | `RUN_STATE.md`, T27c |
+| Ed's own working horizon for the paper | Ed, verbatim, 2026-09-23 ≈03:20 PDT: "i technically have til end of november". This is Ed's stated horizon, not the evaluator's or the colloquium's date, which stay with `ED-DATES-01` below. Recorded under cold ruling COUNCIL-407-01 §G8(8) so that night-count arithmetic can be checked. | `docs/process_traces/2026-09-23-interactive-7ec32e8b/01-owner-session-record.md:123-125` |
 | Evaluator acceptance bar, colloquium date, and final report deadline | Not yet recorded. Task `ED-DATES-01` remains the owner; no repository document may infer these dates. | `docs/process/state_kernel.json`, task `ED-DATES-01` |
 
 ## Live `_v5` Campaign Sequence

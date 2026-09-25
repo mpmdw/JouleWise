@@ -1,0 +1,7 @@
+ROLE: FRESH-EYES REVIEWER (Sol 6.0) of post-review commit `b1913497` on the JouleWise A291 merge candidate (gate-ledger row 10). Read-only; light CPU (a full suite is running here: run only the one test named below). Do not call Claude or any other agent.
+
+WRITE_SCOPE: []
+
+OBJECT: `git show b1913497` (worktree /Users/edr/code/wt-278ebc9e-a291mc, read-only for you): one line in tests/test_scored_ownership_forgery.py changes the mock.patch target from 'tests.test_scored_ownership_forgery.check_roster' to `__name__ + '.check_roster'`, because hosted CI imports the module top-level and the old target never applied (CI shard 4 failure). Scratch /tmp/278ebc9e/fresh3/. Fences: never launchctl, sudo, powermetrics; never touch /Users/edr/night-custody, /Users/edr/JouleWise-measurement-*, ~/Library/LaunchAgents, /Users/edr/code/JouleWise.
+CHECK: (1) the diff is exactly that line; (2) under BOTH import styles (`python3 -B -m unittest tests.test_scored_ownership_forgery.OwnershipForgeryTests.test_checker_exception_is_failure` and `python3 -B -m unittest discover -s tests -p test_scored_ownership_forgery.py -k test_checker_exception_is_failure`) the test passes AND still detects what it is meant to (show it fails if `_checker_rows` stops converting checker exceptions — mutate in a /tmp copy); (3) any other test in the lane's new modules patching a hard-coded 'tests.' target that would fail the same way under hosted discovery (grep).
+OUTPUT: CLEAN / FINDINGS with tails.

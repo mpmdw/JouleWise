@@ -1,0 +1,23 @@
+# Q1 — A3 as the first model night
+
+## Review text
+
+Record 02 §3, “Proposed scientific questions,” A3 asks, “Does J/token rise along a long reasoning trace, and by how much?” It specifies about 32k generated tokens, 1k-token bins, the fit E(n) = an + bn², and a different-attention contrast; “Suggested order” puts A3 first (docs/process_traces/2026-09-24-interactive-02a24110/02-fresh-opus-review-verified.md:128-131,162-165). The review's §2 Statistics says premise PC-4 could make J/correct nearly token arithmetic (same file:77). The bench check calls that the principal science risk, without adopting the proposed order (same file:32).
+
+## Existing authority and collision
+
+- D-166 is the adopted workload decision: the current _v5 decode comparison is thinking-off, greedy and forced to 512 output tokens; the _v5 prefill size awaits the G2 probe (docs/decision_log.md:10755-10762). A 32k trace is therefore a new registered workload, not a parameter substitution in that pack.
+- The bank's RQ-KV-GROWTH (key-value cache growth) row allows chunked L1/L2 work and forbids per-token joule claims; the 2026-09-04 capstone coverage cuts it, assigning no collection (docs/research_question_registry.md:55; docs/research_question_coverage-2026-09-04.md:53). The proposed A3 would require a changed scope and analysis plan for a claim.
+- Current work selection has Q2, the _v5 G2-a prefill probe, ready in the quiet-machine lane; A291, the scored MATH packer, is active in the agent lane (RUN_STATE.md:5394-5404; TASK_QUEUE.md:944,1157). Putting A3 before the MATH night changes scientific order; putting it before every model night also displaces Q2.
+- AP-5M (the proposed MATH analysis plan) was described as pending in the draft, but Ed later gave conditional E2 authorization requiring council agreement; no adopted amendment is shown in that draft (docs/process_traces/2026-09-24-activation-a65fb4fa/07d-a282-ap5m-draft-v4.md:23-32; docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md:24-28). The current RQ-KV-GROWTH row names no A3 collection (docs/research_question_registry.md:55).
+
+## Bench feasibility
+
+- The admitted Qwen3 1.7B and 8B 4-bit MLX panel entries each state a 40,960-token context (configs/model_panels/qwen3_4bit.json:5-17,38-50). On-disk trees under /Users/edr/jw_models/mlx-community include Qwen3 1.7B (939M), 4B (2.1G), 8B (4.3G), plus Qwen2.5 0.5B/1.5B/7B and Qwen3.5 122B A10B (65G); inventory command and tail are in 06-open-facts.md. A 32k output plus prompt must fit the actual context and memory budget; panel context alone does not prove a successful 32k run.
+- The runtime accepts a max-token request, can suppress EOS, emits per-token events and token records, and marks the first response as the prefill/decode boundary (joulewise/adapters/mlx_runtime.py:694-701,720-745,765-835,894-908). A3 could bin recorded token timestamps against integrated power samples, but no registered 1k-bin reducer or quadratic fit was found in this path.
+- The current quiet evidence protocol has twelve 600 s captures at 620 s pitch inside a 9,000 s window (configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json:17-18,76,98). The scored-night proposal uses 600 s captures with 480 s interior (docs/process_traces/2026-09-23-activation-1d3796d5/09-headline-packet-b-scored-night.md:7). A continuous 32k trace may need a dedicated longer capture; a 600 s envelope only suffices above 53.3 generated tokens/s, before setup.
+- The local model/cache inventory found no named MLX 4-bit linear, Mamba, hybrid or sliding-window contrast. Two cached 4B DSpark/DFlash draft repos are 2.6G/1.0G but are speculative-decoding assets, not established alternative-attention weight trees (docs/strategy/2026-08-09-extension-axes-roadmap.md:131-144). Availability and size of a suitable candidate remain open; see 06.
+
+## Change surface and schedule facts
+
+An A3 claim path would require a prospective registration/analysis-plan row, named model and tokenizer/weight pins, long-trace night payload and power/event binning, fit and uncertainty code, tests, and a claim renderer. This is at least several files and multiple review sessions, an estimate from the existing registration and night requirements (docs/process_traces/2026-09-23-activation-1d3796d5/09-headline-packet-b-scored-night.md:73-79; docs/orchestration.md:84-99). It could resolve the PC-4 uncertainty before AP-5M interpretation; it would consume a quiet slot before the current Q2 G2-a probe and leave A291/A292/A293's present dependency chain intact until amended (RUN_STATE.md:5394-5404; TASK_QUEUE.md:1157-1159).

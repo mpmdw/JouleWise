@@ -1,0 +1,512 @@
+{
+  "branch": {
+    "argv": [
+      "git",
+      "branch",
+      "--show-current"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "stdout": "docs/2026-09-24-278ebc9e-smoke"
+  },
+  "budget": {
+    "reason": "missing successful rung timings",
+    "status": "unavailable"
+  },
+  "errors": [
+    "ModuleNotFoundError: No module named 'mlx'"
+  ],
+  "excluded_operations": [
+    "powermetrics",
+    "ioreg",
+    "KM003C",
+    "night capture"
+  ],
+  "head": {
+    "argv": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "stdout": "63d67e4a80867a8b69ff52984f5876ff6f322585"
+  },
+  "load_at_end": {
+    "top_cpu": {
+      "argv": [
+        "ps",
+        "-axo",
+        "pid,pcpu,comm",
+        "-r"
+      ],
+      "error": "PermissionError: [Errno 1] Operation not permitted: 'ps'"
+    },
+    "uptime": {
+      "argv": [
+        "uptime"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "11:15  2 users, load averages: 4.60 4.51 3.47"
+    },
+    "utc": "2026-09-24T18:15:50.919586+00:00"
+  },
+  "load_at_start": {
+    "top_cpu": {
+      "argv": [
+        "ps",
+        "-axo",
+        "pid,pcpu,comm",
+        "-r"
+      ],
+      "error": "PermissionError: [Errno 1] Operation not permitted: 'ps'"
+    },
+    "uptime": {
+      "argv": [
+        "uptime"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "11:15  2 users, load averages: 4.60 4.51 3.47"
+    },
+    "utc": "2026-09-24T18:15:50.899982+00:00"
+  },
+  "load_rows": [],
+  "os": {
+    "argv": [
+      "sw_vers"
+    ],
+    "exit_code": 0,
+    "stderr": "",
+    "stdout": "ProductName:\t\tmacOS\nProductVersion:\t\t26.6.2\nBuildVersion:\t\t25G83"
+  },
+  "panel_sha256": "78875a0e8b2c6d9f573cd42b0d27de6498cdfc8de57af4b4a502e1f93a02513a",
+  "physical_bytes": {
+    "argv": [
+      "sysctl",
+      "-n",
+      "hw.memsize"
+    ],
+    "exit_code": 1,
+    "stderr": "sysctl: sysctl fmt -1 1024 1: Operation not permitted",
+    "stdout": ""
+  },
+  "prompt_kind": "provisional repeated token-ID seed, not the final sealed prompt",
+  "python": "/opt/homebrew/opt/python@3.14/bin/python3.14",
+  "python_version": "3.14.7",
+  "rows": [
+    {
+      "L": 512,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 2048,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 8192,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 16384,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 32768,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 512,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 2048,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 8192,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 16384,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 32768,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 1,
+      "success": false
+    },
+    {
+      "L": 512,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 2048,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 8192,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 16384,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 32768,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 512,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 2048,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 8192,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 16384,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 32768,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 2,
+      "success": false
+    },
+    {
+      "L": 512,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 2048,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 8192,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 16384,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 32768,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-1p7b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 512,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 2048,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 8192,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 16384,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    },
+    {
+      "L": 32768,
+      "decode_512_s": null,
+      "decode_tokens_per_s": null,
+      "emitted": null,
+      "max_rss_bytes": null,
+      "metal_peak_bytes": null,
+      "model": "qwen3-8b",
+      "prefill_s": null,
+      "reason": "preflight: ModuleNotFoundError: No module named 'mlx'",
+      "rep": 3,
+      "success": false
+    }
+  ],
+  "schema": "calnight-desk-smoke/v1",
+  "status": "failed",
+  "sustained": [],
+  "swap_after": {
+    "argv": [
+      "sysctl",
+      "vm.swapusage"
+    ],
+    "exit_code": 1,
+    "stderr": "sysctl: sysctl fmt -1 1024 1: Operation not permitted",
+    "stdout": ""
+  },
+  "swap_before": {
+    "argv": [
+      "sysctl",
+      "vm.swapusage"
+    ],
+    "exit_code": 1,
+    "stderr": "sysctl: sysctl fmt -1 1024 1: Operation not permitted",
+    "stdout": ""
+  },
+  "timing_boundary": "first yielded token ends prefill; decode_512_s follows that boundary"
+}
