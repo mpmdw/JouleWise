@@ -1,0 +1,2 @@
+VERDICT: MERGE — ruling written to `docs/process_traces/2026-09-24-activation-a65fb4fa/41-a294-a295-fable-final-pass.md` (9.1 KB; all six real-git scenarios refuse or pass as specified at 69fd5daf and pass silently at base; named modules 133/14/232 OK; bench commit upheld; no fix-first items).
+rc=0

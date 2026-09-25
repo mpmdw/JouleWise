@@ -39,7 +39,7 @@ COLD_GATE_CODES = {
     "night_refused_boot_clock": "Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182.",
     "night_refused_registration": "The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source.",
     "night_window_expired": "Measurement window expired.",
-    "night_plan_stale": "Plan age or pinned head failed; not a stale notice.",
+    "night_plan_stale": "Plan age, pinned head, or a clean measurement clone failed; not a stale notice.",
     "night_plan_malformed": "Plan structure or fields failed their contract.",
     "night_chain_digest_mismatch": "Executable chain bytes differ from their fixed fingerprint.",
     "launch_go_receipt_missing": "Required measurement-pack launch authorization is absent.",

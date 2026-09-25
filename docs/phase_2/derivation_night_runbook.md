@@ -767,19 +767,14 @@ git -C "$MEASUREMENT_ROOT" status --porcelain
 The expected output is **nothing at all**, zero bytes. Any line is a stop:
 stand the night down and re-cut the clone (§0.2).
 
-Why this is a precondition and not a nicety: the night gate binds the clone by
-its committed `HEAD` only — it checks `git rev-parse HEAD` equals the plan's
-`measurement_head` and nothing more (the clone-head condition in
-`joulewise/night_gate.py`, read by the S7 contract refuter, record 105 §5.2).
-Nothing anywhere excludes uncommitted edits. The wrapper of §1.1a closes this
-for exactly one file, the capturing chain, by comparing its bytes against a
-digest baked in at arm time; `recover_calibration_ledger.py`,
-`reserve_calibration_window_bracket.py` and `validate_powermetrics_fiducial.py`
-— the three programs that actually open the session, reserve the slots and
-write the captures — remain bound by `HEAD` alone. So an edited working copy of
-any of them would run all night with no signal. **This check is procedure, not
-code**: no tool enforces it, which is precisely why it is written here and
-recorded in the arm record.
+Keep this arm-time check and its recorded output: it establishes the clone's
+condition before the night is armed. At t0 the night gate checks the planned
+measurement clone again, after confirming its committed `HEAD`. It runs Git
+status with untracked files included and the fsmonitor hook disabled. A dirty
+clone is refused as `night_plan_stale`; a clone whose status cannot be checked
+is refused as `night_probe_error`. If either happens, find what wrote into the
+clone and re-cut it (§0.2). Re-arming with a fresh plan does not repair the
+clone.
 
 #### The two desk inputs, and the desk-inputs writer that produces them
 
@@ -1887,7 +1882,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_refused_boot_clock` | Measurement boot/clock guard failed; not a watchdog uncertainty tick. Zero-capture successor route per D-182. |
 | `night_refused_registration` | The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source. |
 | `night_window_expired` | Measurement window expired. |
-| `night_plan_stale` | Plan age or pinned head failed; not a stale notice. |
+| `night_plan_stale` | Plan age, pinned head, or a clean measurement clone failed; not a stale notice. |
 | `night_plan_malformed` | Plan structure or fields failed their contract. |
 | `night_chain_digest_mismatch` | Executable chain bytes differ from their fixed fingerprint. |
 | `launch_go_receipt_missing` | Required measurement-pack launch authorization is absent. |
