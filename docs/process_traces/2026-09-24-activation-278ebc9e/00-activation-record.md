@@ -217,3 +217,13 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - (2) **SCIENCE RISK:** launchd-launched inference workloads may be CPU-throttled as well. Nothing measured under a launchd night agent may be used in a claim until that is checked.
    - (3) Still open and agent-runnable: whether display-sleep coalescing explains the remaining gap from ~175 to 248 ms, and whether workload children inherit the throttle.
    The next email to Ed leads with this correction.
+85. Cold addendum A291-R4b (82/30/21, Fable, rc 0). S1 affirms that m3 is equivalent (proved and executed) and replaces it with m3-term (276 kills); m1, m2, m4 and m5 are all killed. S2 gives the listing-local witness code. S3 splits P's read set. S4 narrows ESCAPE: a candidate the seal accepts that is flagged only INV-12 is OUT_OF_ROUND, and an INV-12 reconciliation rule is requested. The R4-3 RED/GREEN contract is now exact: 3 failing tests, 109 pairwise escapes. The changed texts are extracted to record 95. The magistrate launches K without another paired refuter. R4b is itself the answer to a refuter, its texts are code-exact, and K's pinned RED set is a mechanical check on them; K returns NEEDS_RULING on any inconsistency. This deviation from the paired-refuter habit is recorded here.
+86. Cross-session message from the interactive seat (`joulewise-4b`, Ed present, 18:05). The seat OWNS both open probes under lane OS-LAUNCH-AUDIT-01. Pilot results with the user active:
+   - The production launchd context is QoS UTILITY (0x11), and its CPU, GPU-matmul and Qwen-0.5B workload times EQUAL the shell's.
+   - Background (0x09) runs CPU 5–6× slower and the LM 3.7× slower.
+   The open question is the unattended, user-idle state. A pre-registered MVP matrix with an idle leg (HIDIdleTime ≥ 600 s) is coming, reviewed by Fable and Astra.
+   Requests, all adopted:
+   - (1) arm nothing launchd-launched until it reports;
+   - (2) keep seat launches light while the idle leg runs (the peer will message at its start and end);
+   - (3) the acceptance council opens with that evidence as input.
+   So the magistrate DEFERS the acceptance council until the matrix reports.
