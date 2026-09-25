@@ -29,8 +29,8 @@ from unittest.mock import patch
 import joulewise.scored_packer as sp
 import joulewise.scored_registration as sr
 from tests.scored_case_generator import generate_case, pending
-from tests.scored_reduce_checker import check_reduction, OUTPUT_KEYS
-from tests.scored_roster_checker import check_executed, check_roster
+from tests.scored_reduce_checker import check_reduction, OUTPUT_KEYS, WINDOW_KEYS
+from tests.scored_roster_checker import check_executed, check_roster, digest
 from tests.test_scored_registration import fixture
 
 
@@ -237,7 +237,14 @@ class ScoredReduceTests(unittest.TestCase):
         self._refuses("reduce_input", windows={})
 
     def test_window_keys(self):
+        self.assertEqual(WINDOW_KEYS, frozenset({
+            "schema", "registration_sha256", "roster_sha256", "block_id", "attempt",
+            "envelope_index", "gross_j", "bundle_sha256", "energy_bound_terms_j",
+        }))
+        self.assertEqual(set(self.windows[0]), WINDOW_KEYS)
         w = deepcopy(self.windows); w[0]["extra"] = 1
+        self._refuses("window_keys", windows=w)
+        w = deepcopy(self.windows); w[0].pop("energy_bound_terms_j")
         self._refuses("window_keys", windows=w)
 
     def test_window_domain_zero_negative_nonfinite_bool_anchor(self):
@@ -595,6 +602,7 @@ class ScoredReduceTests(unittest.TestCase):
         self.assertFalse(full["cells"]["large:1"]["spread_exceeded"])
         g, reg, roster, p = _terminal_night()
         rows, windows = _inputs(g, reg, roster)
+        self.assertTrue(roster["planned_spread_shortfall"]["large:1"])
         degraded = self._accepted(rows, windows, roster, reg, p)
         self.assertEqual(degraded["cells"]["large:1"]["fully_counted_parents"], 4)
         self.assertTrue(degraded["cells"]["large:1"]["spread_exceeded"])
@@ -700,28 +708,105 @@ class ScoredReduceTests(unittest.TestCase):
         for row in [r for r in rows if r["block_id"].startswith("large:") and r["item_id"] in g["item_ids_by_level"]["1"]][:3]:
             row["generated_tokens"] = 5; row["stop_reason"] = "length"
         self.assertTrue(self._accepted(rows, windows, roster, reg, p)["cells"]["large:1"]["cap_bound"])
-        with patch.object(sr, "CAP_BOUND_FRACTION", .25):
+        with patch.object(sr, "CAP_BOUND_FRACTION", .30):
             candidate = self._invoke(rows, windows, roster, reg, p)
         self.assertFalse(candidate["cells"]["large:1"]["cap_bound"])
 
     def test_every_a291_provisional_R_witness_at_real_reduce(self):
         reducer = _reducer()
-        # Q16's entry witnesses: registered binding, re-pack, event replay,
-        # report completeness. S7's two former partial-key cases are rerun
-        # by test_a291_partial_keys_refuse_at_reduce above.
-        cases = []
-        bad = deepcopy(self.roster); bad["registration_sha256"] = "0" * 64
-        cases.append((self.reg, bad, self.predictions, "inv_01"))
+        # Each mutation is a violating A291 §5.3 row presented at the real R
+        # entry.  Resealing preserves the input digest so the seal can reach
+        # the invariant itself; replay then guards against a forged history.
+        mutations = {
+            "INV-01": lambda r: r.update(registration_sha256="0" * 64),
+            "INV-02": lambda r: r.update(sha256="0" * 64),
+            "INV-03": lambda r: r.update(models=[]),
+            "INV-04": lambda r: r.update(n_per_level=6),
+            "INV-05": lambda r: r.update(claim_ready=False),
+            "INV-07": lambda r: r["blocks"][0]["predicted_item_s"].__setitem__(0, 31.0),
+            "INV-08": lambda r: r["blocks"][0]["predicted_item_s"].__setitem__(0, .8),
+            "INV-10": lambda r: r["blocks"][0].update(block_id="foreign"),
+            "INV-11": lambda r: r["envelopes"][0]["blocks"].clear(),
+            "INV-12": lambda r: r["blocks"][0].update(superseded=True),
+            "INV-14": lambda r: r["envelopes"][0].update(model="small"),
+            "INV-15": lambda r: r["envelopes"][0]["blocks"].clear(),
+            "INV-16": lambda r: r["envelopes"][-1].update(observations=[]),
+            "INV-17": lambda r: r["envelopes"][0].update(index=1),
+            "INV-18": lambda r: r["events"][0]["placements"].append(0),
+            "INV-20": lambda r: r["placements"][0].update(reserved_s=101.0),
+            "INV-21": lambda r: r["placements"][0].update(reserved_s=5.0),
+            "INV-24": lambda r: (r["envelopes"][0]["blocks"].append(r["envelopes"][2]["blocks"].pop(0)),
+                                next(p for p in r["placements"] if p["block_id"] == "large:decode:1:1").update(envelope_index=0)),
+            "INV-27": lambda r: r["drift_lever_slots"].__setitem__("1", 999.0),
+            "INV-29": lambda r: r["events"][0]["block_ids"].clear(),
+            "INV-30": lambda r: r["events"][0]["observations"][0].update(decision="advance"),
+            "INV-35": lambda r: r["events"][0]["observations"][0].update(decision="reschedule"),
+            "INV-36": lambda r: r["placements"][0].update(attempt=99),
+            "INV-37": lambda r: r["terminal_refusals"].append(dict(
+                type="ceiling_violation", block_id=r["blocks"][0]["block_id"], attempt=0,
+                parent_block_id=None, item_id=r["blocks"][0]["items"][0], model="large", level=1)),
+            "INV-38": lambda r: r["events"][0].update(sha256="f" * 64),
+            "INV-41": lambda r: r["envelopes"][-1].update(kind="loaded"),
+            "INV-47": lambda r: r["events"][0]["observations"][0].update(status="not_started", elapsed_s=None),
+            "INV-48": lambda r: r["events"][0]["observations"][0].update(elapsed_s=101.0),
+            "INV-49": lambda r: r["planned_spread_shortfall"].__setitem__("large:1", True),
+            "INV-50": lambda r: r["blocks"].__setitem__(slice(0, 6, 5), [r["blocks"][5], r["blocks"][0]]),
+            "INV-52": lambda r: r["blocks"][0].update(late=1),
+        }
+        for row, mutate in mutations.items():
+            with self.subTest(row=row):
+                roster = deepcopy(self.roster)
+                mutate(roster)
+                if row not in {"INV-01", "INV-02", "INV-03", "INV-04", "INV-05", "INV-38"}:
+                    roster["sha256"] = digest(roster)
+                    roster["events"][-1]["sha256"] = roster["sha256"]
+                self.assertIn(row, {v.inv_id for v in check_roster(self.g, roster, self.predictions)})
+                with self.assertRaises(sp.PackingRefusal) as caught:
+                    reducer.reduce(self.reg, roster, self.predictions, [], [])
+                self.assertIsInstance(caught.exception.code, str)
+        g_retry, reg_retry, retry, p_retry = _terminal_night(width=2, kind="ceiling_violation")
+        retry_mutations = {
+            "INV-19": lambda r: next(p for p in r["placements"] if p["stage"] == "single_problem").update(
+                envelope_index=next(e["envelope_index"] for e in r["events"] if any(o["decision"] == "split" for o in e["observations"]))),
+            "INV-22": lambda r: next(p for p in r["placements"] if p["stage"] == "whole_block").update(reserved_s=29.0),
+            "INV-23": lambda r: r["blocks"][-1].update(predicted_s=29.0),
+            "INV-34": lambda r: r["placements"][-1].update(envelope_index=21),
+            "INV-32": lambda r: next(o for e in r["events"] for o in e["observations"] if o["decision"] == "split").update(decision="keep"),
+            "INV-33/43": lambda r: next(b for b in r["blocks"] if b["retry_stage"] == "ceiling_violation").update(late=False),
+        }
+        for row, mutate in retry_mutations.items():
+            with self.subTest(row=row):
+                roster = deepcopy(retry)
+                mutate(roster)
+                roster["sha256"] = digest(roster)
+                roster["events"][-1]["sha256"] = roster["sha256"]
+                self.assertIn(row, {v.inv_id for v in check_roster(g_retry, roster, p_retry)})
+                with self.assertRaises(sp.PackingRefusal) as caught:
+                    reducer.reduce(reg_retry, roster, p_retry, [], [])
+                self.assertIsInstance(caught.exception.code, str)
+        def initial_culprit(roster, env, block):
+            return (("cut_off", 1.1) if block["block_id"] == "large:decode:1:0"
+                    and block["retry_stage"] == "initial" else ("completed", .1))
+        g_res, reg_res, rescheduled, p_res = _night(policy=initial_culprit)
+        wrong_reschedule = deepcopy(rescheduled)
+        next(p for p in wrong_reschedule["placements"] if p["stage"] == "initial" and p["attempt"] > 0)["envelope_index"] = 2
+        wrong_reschedule["sha256"] = digest(wrong_reschedule)
+        wrong_reschedule["events"][-1]["sha256"] = wrong_reschedule["sha256"]
+        self.assertIn("INV-31", {v.inv_id for v in check_roster(g_res, wrong_reschedule, p_res)})
+        with self.subTest(row="INV-31"), self.assertRaises(sp.PackingRefusal):
+            reducer.reduce(reg_res, wrong_reschedule, p_res, [], [])
+        with self.subTest(row="INV-51"), self.assertRaises(sp.PackingRefusal) as caught:
+            reducer.reduce(None, self.roster, self.predictions, [], [])
+        self.assertEqual(caught.exception.code, "inv_51")
         gp, regp, rp, pp = _night(mode="pilot")
         wrong = deepcopy(pp); wrong["large"][gp["item_ids_by_level"]["1"][0]] = .8
-        cases.append((regp, rp, wrong, "inv_39"))
-        bad = deepcopy(self.roster); bad["events"][0]["sha256"] = "0" * 64
-        cases.append((self.reg, bad, self.predictions, "inv_38"))
-        cases.append((self.reg, sp.pack(self.reg, self.predictions), self.predictions, "unreported_envelope"))
-        for reg, roster, p, code in cases:
-            with self.subTest(code=code):
+        for row, reg, roster, predictions, code in (
+            ("INV-39", regp, rp, wrong, "inv_39"),
+            ("INV-46", self.reg, sp.pack(self.reg, self.predictions), self.predictions, "unreported_envelope"),
+        ):
+            with self.subTest(row=row):
                 with self.assertRaises(sp.PackingRefusal) as caught:
-                    reducer.reduce(reg, roster, p, [], [])
+                    reducer.reduce(reg, roster, predictions, [], [])
                 self.assertEqual(caught.exception.code, code)
 
     def test_differential_oracle_200_nights(self):
