@@ -286,3 +286,8 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - INV-38 has entry-path witnesses: `inv_38`, and the `r5a` test accepts `inv_38` or `inv_39`, noted.
    - INV-52 has an entry-path witness: `inv_52`, direct.
    - **INV-23, INV-36 and INV-37 have NO entry-path witness.** They appear only as checker mutations. Under the ruling that is an **open gate-item (1) defect**. It is cured by adding three entry-path witness tests (K scope, tests only; brief 108), after which the harness and module runs repeat.
+104. Entry-path witnesses (brief 108, Sol; report 108b), committed as `3fb98469` on `fix/2026-09-24-a291-r3-packer` and pushed. The public entry `requeue_overrun` refuses all three with these codes:
+   - INV-23 (a split single's `predicted_s` changed): `inv_38`;
+   - INV-36 (an advanced placement's attempt set to 2): `inv_38`;
+   - INV-37 (a terminal refusal for a live item): `inv_11`.
+   These differ from the rows' listed codes (`inv_23`, `inv_36`, `inv_37`), which the typed-code line records as ruled. The gate-item (1) defect is closed. The magistrate is re-running the harness module at the bench on the new head.
