@@ -244,3 +244,8 @@
      4. A cold confirm of the exact PR-L and PR-R heads follows. A292 needs none, per its ruling.
      5. Merge order: PR-L, then PR-R, then A292.
 83. PR-0 A1 (seat 78): commit on `test/2026-09-25-claimgate-pr0-golden`. The golden blob is `caa18e15`, byte-identical twice, and all four targeted mutants are KILLED by the real-wire rows. The certificate pin test errors only because the full `--certify` sweep has not run yet. **Next:** the lead runs `--certify` at the bench after the integration suite, then a delta lens, then the final pass.
+84. **PR #412 hosted CI: a real failure, found only on Linux.** `test_install_night_agent` has two installer tests that fail with "probe receipt launch_context differs from install: com.joulewise.night". Shards 2 and 4 were cancelled by fail-fast.
+   - Root cause (bench-reproduced with `TZ=UTC`): the test fixture writes the probe receipt in-process under the runner's TZ, while the installer subprocess runs with `TZ=America/Los_Angeles`. The rendered `StartCalendarInterval`, and with it the digest, is TZ-dependent. It is a test-only defect: production probe and install share one machine's TZ.
+   - Bench fix in the PR-L head: the fixture renders the receipt under the subprocess's TZ. `tests.test_install_night_agent` is OK under UTC, Los Angeles and Tokyo.
+   - The PR-L modules are running under TZ=UTC at the bench. This post-final-pass commit is covered by the planned cold confirm of the final heads (row 10).
+   - The gate-ledger failure on #412 was expected: evidence paths must exist in the PR head, which the records-only commit cures.
