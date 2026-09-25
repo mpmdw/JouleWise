@@ -1,0 +1,4 @@
+Ruling written at 21 KB, only the ruling file added, within budget. Nothing further is needed.
+
+Ruling written: S3 BLOCKER verified by code and my own simulation (25–89 % false admission per level as ruled), P-0 replaced by amendment A-JC-1 (adds the energy-subsample shared term and a Welch df rule, since P-0's df = k−1 collapses power to ≈0), option (c) with the directly matched two-model null affirmed, 14 null windows, no REFUSE, no question back to the council.
+rc=0

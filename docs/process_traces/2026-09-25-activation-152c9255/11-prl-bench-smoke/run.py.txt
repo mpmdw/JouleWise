@@ -1,0 +1,9 @@
+import sys,json; sys.path.insert(0,'/Users/edr/code/wt-152c9255-prl/scripts'); sys.path.insert(0,'/Users/edr/code/wt-152c9255-prl')
+import run_night, ctypes
+from pathlib import Path
+lib=ctypes.CDLL(None); lib.pthread_self.restype=ctypes.c_void_p
+q=ctypes.c_uint(0); rp=ctypes.c_int(0)
+lib.pthread_get_qos_class_np(ctypes.c_void_p(lib.pthread_self()), ctypes.byref(q), ctypes.byref(rp))
+r=run_night._probe_cadence(Path('/tmp/152c9255/probe-smoke-I'))
+r['qos_class_hex']=hex(q.value)
+open('/tmp/152c9255/probe-smoke-I/result.json','w').write(json.dumps(r))
