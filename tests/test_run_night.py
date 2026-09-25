@@ -202,7 +202,29 @@ def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
                   "scripts/validate_powermetrics_fiducial.py", "scripts/run_night.py",
                   "joulewise/calibration_ledger.py", "joulewise/calibration_custody_worker.py")
     stamp = time.time() if now is None else now
-    record = {"schema": "joulewise.night_probe_receipt.v1", "outcome": "ok", "refusal_code": None,
+    from joulewise import night_agent_install
+    from scripts import run_night
+    parsed_plan = night_gate.NightPlan.from_mapping(plan)
+    fixture_root = (plan_path.parent.parent if plan_path.parent.name.startswith("custody")
+                    else plan_path.parent)
+    courier = fixture_root / "bin/claude"
+    try:
+        fixture_schedule = run_night.schedule(parsed_plan)
+    except night_gate.PlanError:
+        # Malformed-calendar tests only need a receipt to reach the installer's
+        # own timing refusal; these rendering fields are never consumed there.
+        calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
+        fixture_schedule = {"night_calendar": calendar, "deadman_calendar": calendar}
+    prepared = night_agent_install.Prepared(
+        parsed_plan, plan_path.resolve(), REPO_ROOT, str(python),
+        (REPO_ROOT / "configs/launchd/com.joulewise.night.plist.template").read_text(),
+        str(courier.resolve()), str(courier.parent) + ":/usr/bin:/bin:/usr/sbin:/sbin",
+        fixture_schedule, lambda _: [], 600)
+    record = {"schema": "joulewise.night_probe_receipt.v2", "outcome": "ok", "refusal_code": None,
+              "ProcessType": "Interactive",
+              "launch_context": prepared.launch_context(),
+              "cadence": {"median_ms": 132, "p95_ms": 132, "max_ms": 132, "count": 300,
+                          "elapsed_s": 39.6, "bound_s": 55, "passed": True},
               "plan_id": plan["plan_id"], "plan_sha256": digest(plan_path),
               "measurement_head": plan["measurement_head"], "ledger_head_sha256": "a" * 64,
               "code_digests": {name: "sha256:" + digest(root / name) for name in code_paths},
@@ -2274,7 +2296,7 @@ runpy.run_path(script, run_name='__main__')
         path.parent.mkdir()
         path.write_text(json.dumps(plan), encoding="utf-8")
         make_probe_fixture(root, path)
-        write_matching_probe_receipt(path, str(python))
+        write_matching_probe_receipt(path, sys.executable)
         return path
 
     def _installer_environment(self, root: Path) -> tuple[dict[str, str], Path]:
@@ -2627,6 +2649,8 @@ runpy.run_path(script, run_name='__main__')
             str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
             "--plan",
             str(plan),
+            "--python",
+            sys.executable,
             "--launchctl-bin",
             str(launcher),
         ]
@@ -2676,6 +2700,25 @@ class NightProbeTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(dir="/tmp")
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        # Every subprocess probe in this fixture resolves sudo to a fake.
+        # The fake dispatches to a 300-frame plist emitter and never invokes
+        # the machine's sudo or powermetrics binaries.
+        from tests.test_run_night_probe_cadence import FAKE
+        import shlex
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        fake_power = fake_bin / "fake-powermetrics"
+        fake_power.write_text(FAKE.format(interval=132, spike=0, timeout=False))
+        fake_power.chmod(0o755)
+        fake_sudo = fake_bin / "sudo"
+        fake_sudo.write_text("#!/bin/sh\n"
+            "[ \"$1\" = \"-n\" ] || exit 8\nshift\n"
+            "[ \"$1\" = \"/usr/bin/powermetrics\" ] || exit 9\nshift\n"
+            "exec {} \"$@\"\n".format(shlex.quote(str(fake_power))))
+        fake_sudo.chmod(0o755)
+        path_patch = mock.patch.dict(os.environ, {"PATH": str(fake_bin) + ":" + os.environ.get("PATH", "")})
+        path_patch.start()
+        self.addCleanup(path_patch.stop)
         self.plan_path = self.root / "night_plan.json"
         plan = night_gate.NightPlan(plan_id="probe-fixture", receipt_class="DIAGNOSTIC_NO_PACK",
             t0_epoch_s=(int(time.time()) // 60 + 60) * 60, window_max_s=9000,
@@ -2747,6 +2790,29 @@ class NightProbeTests(unittest.TestCase):
         path = write_matching_probe_receipt(self.plan_path, now=time.time() + 30)
         self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
 
+    def test_receipt_requires_cadence_and_process_type(self):
+        from joulewise import night_agent_install as engine
+        prepared = types.SimpleNamespace(plan=self.plan, plan_path=self.plan_path,
+                                         python=sys.executable)
+        path = write_matching_probe_receipt(self.plan_path)
+        original = json.loads(path.read_text())
+        for key in ("median_ms", "p95_ms", "max_ms", "count"):
+            with self.subTest(missing=key):
+                changed = json.loads(json.dumps(original))
+                changed["cadence"].pop(key)
+                path.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(engine.Refused, "cadence"):
+                    engine.validate_probe_receipt(prepared)
+        for value in (None, "Background", "Standard", "Adaptive"):
+            with self.subTest(ProcessType=value):
+                changed = json.loads(json.dumps(original))
+                changed["ProcessType"] = value
+                path.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(engine.Refused, "ProcessType"):
+                    engine.validate_probe_receipt(prepared)
+        path.write_text(json.dumps(original))
+        self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+
     def test_supervised_probe_success_and_refusal_with_fixture_census(self):
         driver = _load_driver()
         # Real subprocess topology and receipt IO; only the unavailable census
@@ -2787,6 +2853,10 @@ class NightProbeTests(unittest.TestCase):
         self.assertEqual(0, rc)
         receipt = json.loads(self.receipt.read_text())
         self.assertEqual("ok", receipt["outcome"])
+        receipt["ProcessType"] = "Interactive"
+        receipt["launch_context"] = {label: {"ProcessType": "Interactive", "rendered_plist_sha256": "0" * 64}
+            for label in ("com.joulewise.night", "com.joulewise.night.deadman", label)}
+        self.receipt.write_text(json.dumps(receipt))
         # The receipt carries the installer's whole binding, not the
         # reservation's partial echo: the driver and the writer are pinned too.
         self.assertEqual(set(receipt["code_digests"]), set(engine.PROBE_CODE_PATHS))
@@ -2884,10 +2954,12 @@ raise SystemExit(run_night.main(sys.argv[3:]))
             # No writer opens the FIFO: after observing bindings, only the
             # production deadline can release this blocked worker.
             try:
-                _, stderr = process.communicate(timeout=max(0, started + budget + 2 - time.monotonic()))
+                # Supervisor allows a two-second TERM relay grace before KILL,
+                # then reaps and censuses the worker group.
+                _, stderr = process.communicate(timeout=max(0, started + budget + 5 - time.monotonic()))
             except subprocess.TimeoutExpired:
                 self.fail("probe exceeded whole deadline during binding read")
-            self.assertLess(time.monotonic() - started, budget + 2)
+            self.assertLess(time.monotonic() - started, budget + 5)
             self.assertEqual(2, process.returncode, stderr)
             record = json.loads(self.receipt.read_text())
             self.assertEqual("timeout", record["outcome"])
@@ -2901,9 +2973,12 @@ raise SystemExit(run_night.main(sys.argv[3:]))
                 if identity.exists():
                     try:
                         os.killpg(json.loads(identity.read_text())["chain_pgid"], signal.SIGKILL)
-                    except ProcessLookupError:
+                    except (ProcessLookupError, PermissionError):
                         pass
-                os.killpg(process.pid, signal.SIGKILL)
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    process.kill()
             process.communicate(timeout=2)
 
     @unittest.skipUnless(probe_census_available(), "process census unavailable in sandbox")
@@ -2915,7 +2990,7 @@ raise SystemExit(run_night.main(sys.argv[3:]))
                   "code_digests", "input_digests", "driver_python", "chain_python", "custody_budget_s", "custody_elapsed_s",
                   "observations", "outcome", "refusal_code", "started_epoch_s", "finished_epoch_s", "launchd_label"}
         self.assertTrue(fields <= receipt.keys())
-        self.assertEqual("joulewise.night_probe_receipt.v1", receipt["schema"])
+        self.assertEqual("joulewise.night_probe_receipt.v2", receipt["schema"])
         self.assertEqual("ok", receipt["outcome"])
         self.assertEqual(38, receipt["observations"])
         self.assertEqual(120, receipt["custody_budget_s"])
@@ -2952,7 +3027,10 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         result = self.run_probe("hang", timeout=3.0)
         self.assertLess(time.monotonic() - started, 8)
         self.assertEqual(2, result.returncode, result.stderr)
-        self.assertEqual("timeout", json.loads(self.receipt.read_text())["outcome"])
+        timeout_receipt = json.loads(self.receipt.read_text())
+        self.assertEqual("timeout", timeout_receipt["outcome"])
+        self.assertIn("custody_elapsed_s=", timeout_receipt["detail"])
+        self.assertIn("timeout_s=3", timeout_receipt["detail"])
         stub_pids = Path(self.plan.measurement_root) / "stub-pids.json"
         deadline = time.monotonic() + 2
         while not stub_pids.exists() and time.monotonic() < deadline:
@@ -3122,6 +3200,25 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         record["observations"] = 0
         path.write_text(json.dumps(record))
         self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+
+
+class ProbeSupervisorDetailTests(unittest.TestCase):
+    def test_timeout_detail_includes_elapsed_custody_and_bound(self):
+        driver = _load_driver()
+        process = mock.Mock(pid=4242, stdout=io.BytesIO(), stderr=io.BytesIO())
+        process.communicate.side_effect = subprocess.TimeoutExpired("fixture probe", 0.25)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            receipt_path = root / "night_probe_receipt.json"
+            with mock.patch.object(driver.subprocess, "Popen", return_value=process), \
+                 mock.patch.object(driver, "_stop_probe_group", return_value=True):
+                code = driver.probe_night(root / "night_plan.json", receipt_path, timeout_s=0.25)
+            self.assertEqual(2, code)
+            receipt = json.loads(receipt_path.read_bytes())
+            self.assertEqual("calibration_ledger_custody_timeout", receipt["refusal_code"])
+            self.assertIn("supervisor timeout; custody_elapsed_s=", receipt["detail"])
+            self.assertIn("timeout_s=0.25", receipt["detail"])
+            self.assertGreaterEqual(receipt["custody_elapsed_s"], 0)
 
 
 class PackNightProducerTests(unittest.TestCase):
@@ -3660,6 +3757,40 @@ class PackNightProducerTests(unittest.TestCase):
                 with self.assertRaisesRegex(self.driver.PackNightRefusal, detail) as caught:
                     self.driver._pack_rehearsal_roots(plan, changed_arm, purpose)
                 self.assertEqual("launch_go_receipt_invalid", caught.exception.reason)
+
+    def test_post_cutoff_t0_inside_measurement_custody_refuses_disjointness_end_to_end(self):
+        case = PackNightProducerTests()
+        case._rehearsal_layout = True
+        case.setUp()
+        try:
+            cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+            custody_root = case.root / "measurement"
+            measurement = custody_root / "JouleWise-rehearsal-inside-custody"
+            measurement.mkdir(parents=True)
+            case._window_id = case.custody.name
+            case.authorization.update(purpose="T0_REHEARSAL", authority="T0-UNATTENDED-01")
+            ref = case.write(case.custody / "authorization.json", case.authorization)
+            case.plan = replace(case.plan, t0_epoch_s=cutoff + 60, authored_epoch_s=cutoff,
+                                measurement_root=str(measurement),
+                                pack_night={**case.plan.pack_night, "authorization_record": ref})
+            case.plan_path = write_night_plan(case.plan_path, case.plan)
+            case.raw = case.plan_path.read_bytes()
+            case.probe_source.now_epoch_s = cutoff + 61
+            inventory = [{"deployment_id": "production", "measurement_root": str(custody_root),
+                          "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody_root), \
+                 mock.patch.object(Path, "home", return_value=case.root / "home"), \
+                 mock.patch.object(case.readiness, "_authenticate_launcher_identity", return_value=measurement), \
+                 mock.patch.object(case.readiness, "_production_inventory", return_value=inventory):
+                code, calls = case.run_driver()
+            self.assertEqual(case.driver.EXIT_REFUSED, code)
+            self.assertEqual([], calls)
+            self.assertFalse((case.custody / "night/go_receipt.json").exists())
+            receipt = json.loads((case.custody / "night/receipt.json").read_bytes())
+            self.assertEqual("launch_go_receipt_invalid", receipt["refusal"]["reason"])
+            self.assertIn("rehearsal_roots_not_disjoint: measurement_root", receipt["refusal"]["detail"])
+        finally:
+            case.doCleanups()
 
     def test_pack_rehearsal_gate_refuses_another_measurement_checkout(self):
         other = self.root / (self.readiness.REHEARSAL_CLONE_PREFIX + "other")
@@ -5538,7 +5669,7 @@ class CourierDeliveryBoundaryTests(unittest.TestCase):
 
 
 class CalibrationProbeByteCompatibilityTests(unittest.TestCase):
-    def test_calibration_worker_receipt_bytes_match_part1(self):
+    def test_calibration_worker_preserves_part1_fields_with_cadence(self):
         import ast
         from scripts import run_night as driver
         from joulewise import night_agent_install as installer
@@ -5560,7 +5691,14 @@ class CalibrationProbeByteCompatibilityTests(unittest.TestCase):
             with mock.patch.object(driver.time,'time',return_value=1800000000.), mock.patch.dict(os.environ,{'JOULEWISE_LAUNCHD_LABEL':installer.probe_label(fixture.plan.plan_id)}):
                 self.assertEqual(worker(fixture.plan_path,target,fixture.root/'progress.json',time.monotonic()+20),0)
             receipts.append(target.read_bytes())
-        self.assertEqual(receipts[0],receipts[1])
+        baseline_record, current_record = map(json.loads, receipts)
+        self.assertEqual("joulewise.night_probe_receipt.v2", current_record.pop("schema"))
+        cadence = current_record.pop("cadence")
+        self.assertTrue(cadence["passed"])
+        self.assertEqual(300, cadence["count"])
+        self.assertGreater(current_record.pop("powermetrics_pgid"), 1)
+        baseline_record.pop("schema")
+        self.assertEqual(baseline_record, current_record)
 
 
 class EvidenceProbeFailureTests(unittest.TestCase):

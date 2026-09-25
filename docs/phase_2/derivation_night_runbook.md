@@ -1737,6 +1737,7 @@ can refuse first.
 | `retained prior plist: <path>; re-run --uninstall` | 3 | A `.prior` sidecar holding the bytes an install replaced already exists. Nothing restores it automatically after the installer exits. Copy it by hand if you need the old plist back; `--uninstall` deletes both the plists and the sidecars. Complete the documented uninstall before trying another install. |
 | `unsupported plist destination: <path>` | 2 | A plist or its `.prior` path is not a regular file, for example a directory or symbolic link. Resolve that destination before retrying. |
 | `--render-only directory must differ from launch_dir` | 2 | The resolved render directory is the installation directory (`launch_dir`). Choose a separate directory for rendered files. |
+| `probe receipt launch_context differs from install: <label>` | 2 | The installed night or dead-man job differs from the verified probe rendering; re-run the probe before installing. |
 
 A plan's `t0` must fall on a whole minute that occurs exactly once in local time.
 
@@ -1883,6 +1884,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_refused_registration` | The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source. |
 | `night_window_expired` | Measurement window expired. |
 | `night_plan_stale` | Plan age, pinned head, or a clean measurement clone failed; not a stale notice. |
+| `measurement_root_outside_custody` | A plan authored at/after 1790340000 whose resolved measurement_root is not strictly inside /Users/edr/night-custody/measurement (acceptance ruling v2.1 R16). Re-author the plan; never a retry cause. |
 | `night_plan_malformed` | Plan structure or fields failed their contract. |
 | `night_chain_digest_mismatch` | Executable chain bytes differ from their fixed fingerprint. |
 | `launch_go_receipt_missing` | Required measurement-pack launch authorization is absent. |
@@ -1919,6 +1921,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `retained prior plist: <path>; re-run --uninstall` | A saved previous job file remains; follow the existing human-resolution/uninstall path. |
 | `unsupported plist destination: <path>` | The job-file destination is not a regular file; resolve it under the existing path. |
 | `--render-only directory must differ from launch_dir` | Use a separate directory for rendered job files. |
+| `probe receipt launch_context differs from install: <label>` | The installed night or dead-man job differs from the verified probe rendering; re-run the probe before installing. |
 
 **Other explicit refusals — cold-gate path.**
 
