@@ -23,6 +23,8 @@ CELL_KEYS = frozenset("model level n_items n_counted n n_correct n_capped n_malf
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 STOP_REASONS = {"stop": False, "length": True}
 CAP_BOUND_FRACTION = 1 / 5  # checked against the supplied contract, never imported
+ENERGY_MAX_J = 10**12  # A292-ESC-01: independent wire limit
+INT_MAX = 2**53  # A292-ESC-01: independent exact-integer limit
 
 
 def _sha(value):
@@ -30,11 +32,11 @@ def _sha(value):
 
 
 def _number(value):
-    return type(value) is int or (type(value) is float and math.isfinite(value))
+    return (type(value) is int or (type(value) is float and math.isfinite(value))) and value <= ENERGY_MAX_J
 
 
 def _integer(value):
-    return type(value) is int and value >= 0
+    return type(value) is int and 0 <= value <= INT_MAX
 
 
 def _string(value):

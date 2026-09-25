@@ -13,6 +13,7 @@ row_tokens_over_cap, anchor, or internal_disagreement guards.
 from __future__ import annotations
 
 import ast
+from collections import OrderedDict
 from contextlib import ExitStack
 from copy import deepcopy
 import hashlib
@@ -29,7 +30,8 @@ from unittest.mock import patch
 import joulewise.scored_packer as sp
 import joulewise.scored_registration as sr
 from tests.scored_case_generator import generate_case, pending
-from tests.scored_reduce_checker import check_reduction, OUTPUT_KEYS, WINDOW_KEYS
+from tests.scored_reduce_checker import (check_reduction, ENERGY_MAX_J, INT_MAX,
+                                         OUTPUT_KEYS, ROW_KEYS, WINDOW_KEYS)
 from tests.scored_roster_checker import check_executed, check_roster, digest
 from tests.test_scored_registration import fixture
 
@@ -162,6 +164,98 @@ def _terminal_night(width=1, kind="unattributed_overrun"):
     return _night(n=10 if width == 2 else 5, width=width, policy=policy)
 
 
+def domain_witnesses():
+    """E2/A292-ESC-01 one-predicate faults, with refusal codes fixed by phase."""
+    g, reg, roster, _ = _night()
+    rows, windows = _inputs(g, reg, roster)
+    bases = {"window": windows[0], "row": rows[0]}
+    keys = {"window": WINDOW_KEYS, "row": ROW_KEYS}
+    codes = {
+        ("window", "container"): "window_keys",
+        ("window", "key_set"): "window_keys",
+        ("window", "field"): "window_domain",
+        ("window", "bound"): "window_domain",
+        ("row", "container"): "row_keys",
+        ("row", "key_set"): "row_keys",
+        ("row", "field"): "row_domain",
+        ("row", "bound"): "row_domain",
+        ("row", "coherence"): "row_domain",
+        ("row", "stop_reason_membership"): "row_stop_reason_unknown",
+    }
+    witnesses = []
+
+    def add(record_type, predicate_id, value):
+        witnesses.append((record_type, predicate_id, value,
+                          codes[(record_type, predicate_id.split(":", 1)[0])]))
+
+    def changed(record_type, field, value):
+        record = deepcopy(bases[record_type])
+        record[field] = value
+        return record
+
+    for record_type in ("window", "row"):
+        key_set = keys[record_type]
+        base = bases[record_type]
+        for value in (list(sorted(key_set)), tuple(sorted(key_set)), frozenset(key_set),
+                      OrderedDict(base), None, "schema", [], {}):
+            add(record_type, "container", value)
+        for key in sorted(key_set):
+            record = deepcopy(base)
+            record.pop(key)
+            add(record_type, "key_set", record)
+        record = deepcopy(base)
+        record["extra"] = 1
+        add(record_type, "key_set", record)
+
+        schema = "joulewise.scored_window.v1" if record_type == "window" else "joulewise.scored_row.v1"
+        for value in ("bad", "", None, 123, _EqualToSchema(schema)):
+            add(record_type, "field:schema", changed(record_type, "schema", value))
+        digests = (123, None, "", "bad", "a" * 63, "a" * 65, "A" * 64)
+        digest_fields = ("registration_sha256", "roster_sha256", "bundle_sha256") if record_type == "window" else ("registration_sha256", "roster_sha256")
+        for field in digest_fields:
+            for value in digests:
+                add(record_type, f"field:{field}", changed(record_type, field, value))
+        text_fields = ("block_id",) if record_type == "window" else ("scorer_id", "block_id", "item_id", "stop_reason")
+        for field in text_fields:
+            for value in (123, "", None, b"x"):
+                add(record_type, f"field:{field}", changed(record_type, field, value))
+        integer_fields = ("attempt", "envelope_index") if record_type == "window" else ("attempt", "prompt_tokens", "generated_tokens")
+        for field in integer_fields:
+            for value in (-1, True, False, 0.0, 1.0, "1", None, INT_MAX + 1):
+                add(record_type, f"bound:{field}", changed(record_type, field, value))
+
+    for value in (0, 0.0, -1, -0.5, -10**1000, float("nan"), float("inf"),
+                  -float("inf"), True, "1", None, ENERGY_MAX_J + 1,
+                  math.nextafter(1e12, math.inf), 10**400, 10**1000,
+                  10**5000, 1e308):
+        add("window", "bound:gross_j", changed("window", "gross_j", value))
+    for value in (["E_clock_anchor_shift_bound_j"], ("E_clock_anchor_shift_bound_j",),
+                  {"E_clock_anchor_shift_bound_j"}, "E_clock_anchor_shift_bound_j",
+                  None, {}, {"E_clock_anchor_shift_bound_j": 0, "extra": 1},
+                  {"other": 0}, OrderedDict({"E_clock_anchor_shift_bound_j": 0.125})):
+        add("window", "field:energy_bound_terms_j", changed("window", "energy_bound_terms_j", value))
+    add("window", "field:whole_record", dict.fromkeys(WINDOW_KEYS))
+    for value in (-1, -0.5, -10**1000, float("nan"), float("inf"), True, "0",
+                  ENERGY_MAX_J + 1, math.nextafter(1e12, math.inf), 10**1000,
+                  10**4300, 1e308):
+        record = deepcopy(bases["window"])
+        record["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = value
+        add("window", "bound:anchor", record)
+
+    for value in ("", 123, b""):
+        add("row", "field:extracted_answer", changed("row", "extracted_answer", value))
+    for value in (1, 0, "true", None):
+        add("row", "field:scorer_match", changed("row", "scorer_match", value))
+    record = deepcopy(bases["row"])
+    record["extracted_answer"] = None
+    record["scorer_match"] = True
+    add("row", "coherence:answer_match", record)
+    add("row", "field:whole_record", dict.fromkeys(ROW_KEYS))
+    for value in ("runtime_failed", "STOP", "stop "):
+        add("row", "stop_reason_membership:stop_reason", changed("row", "stop_reason", value))
+    return witnesses
+
+
 class ScoredReduceTests(unittest.TestCase):
     def setUp(self):
         self.g, self.reg, self.roster, self.predictions = _night()
@@ -282,13 +376,99 @@ class ScoredReduceTests(unittest.TestCase):
         w = deepcopy(self.windows); w[0]["energy_bound_terms_j"] = []
         self._refuses("window_domain", windows=w)
 
-    def test_positive_zero_and_large_integer_anchor(self):
-        for anchor in (0, 10**1000):
-            with self.subTest(anchor="zero" if anchor == 0 else "10**1000"):
+    def test_generated_one_fault_domain_witnesses(self):
+        witnesses = domain_witnesses()
+        self.assertEqual({(record_type, predicate_id) for record_type, predicate_id, _, _ in witnesses},
+                         frozenset({
+                             ("window", "container"), ("window", "key_set"),
+                             ("window", "field:schema"),
+                             ("window", "field:registration_sha256"),
+                             ("window", "field:roster_sha256"),
+                             ("window", "field:bundle_sha256"),
+                             ("window", "field:block_id"),
+                             ("window", "bound:attempt"),
+                             ("window", "bound:envelope_index"),
+                             ("window", "bound:gross_j"),
+                             ("window", "field:energy_bound_terms_j"),
+                             ("window", "field:whole_record"),
+                             ("window", "bound:anchor"),
+                             ("row", "container"), ("row", "key_set"),
+                             ("row", "field:schema"),
+                             ("row", "field:registration_sha256"),
+                             ("row", "field:roster_sha256"),
+                             ("row", "field:scorer_id"), ("row", "field:block_id"),
+                             ("row", "field:item_id"), ("row", "field:stop_reason"),
+                             ("row", "bound:attempt"),
+                             ("row", "bound:prompt_tokens"),
+                             ("row", "bound:generated_tokens"),
+                             ("row", "field:extracted_answer"),
+                             ("row", "field:scorer_match"),
+                             ("row", "coherence:answer_match"),
+                             ("row", "field:whole_record"),
+                             ("row", "stop_reason_membership:stop_reason"),
+                         }))
+        self.assertTrue(any(t == "window" and p == "container" and type(v) is list
+                            and v == list(sorted(WINDOW_KEYS)) for t, p, v, _ in witnesses))
+        self.assertTrue(any(t == "window" and p == "field:energy_bound_terms_j"
+                            and type(v) is dict and v["energy_bound_terms_j"] == ["E_clock_anchor_shift_bound_j"]
+                            for t, p, v, _ in witnesses if type(v) is dict))
+        self.assertTrue(any(t == "row" and p == "container" and type(v) is list
+                            and v == list(sorted(ROW_KEYS)) for t, p, v, _ in witnesses))
+        for index, (record_type, predicate_id, value, expected_code) in enumerate(witnesses):
+            with self.subTest(index=index, record_type=record_type, predicate=predicate_id):
+                rows, windows = deepcopy(self.rows), deepcopy(self.windows)
+                if record_type == "window":
+                    windows[0] = value
+                else:
+                    rows[0] = value
+                self._refuses(expected_code, rows=rows, windows=windows)
+
+    def test_domain_boundaries_accept(self):
+        for value in (1, 0.5, 10**12, 1e12):
+            with self.subTest(field="gross_j", value=value):
                 windows = deepcopy(self.windows)
-                windows[0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = anchor
-                candidate = self._accepted(windows=windows)
-                self.assertEqual(candidate["counted_windows"][0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"], anchor)
+                windows[0]["gross_j"] = value
+                self._accepted(windows=windows)
+        for value in (0, 0.0, 10**12, 1e12):
+            with self.subTest(field="anchor", value=value):
+                windows = deepcopy(self.windows)
+                windows[0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = value
+                self._accepted(windows=windows)
+        for value in (0, 2**53):
+            with self.subTest(field="prompt_tokens", value=value):
+                rows = deepcopy(self.rows)
+                rows[0]["prompt_tokens"] = value
+                self._accepted(rows=rows)
+        rows = deepcopy(self.rows)
+        rows[0]["extracted_answer"] = None
+        rows[0]["scorer_match"] = False
+        self._accepted(rows=rows)
+
+    def test_extreme_values_refuse_not_crash(self):
+        for exponent in (400, 1000, 5000):
+            with self.subTest(field="gross_j", exponent=exponent):
+                windows = deepcopy(self.windows)
+                windows[0]["gross_j"] = 10**exponent
+                self._refuses("window_domain", windows=windows)
+        for exponent in (4300, 5000):
+            with self.subTest(field="anchor", exponent=exponent):
+                windows = deepcopy(self.windows)
+                windows[0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = 10**exponent
+                self._refuses("window_domain", windows=windows)
+        with self.subTest(field="all_windows_gross_j", value="1e308"):
+            windows = deepcopy(self.windows)
+            for window in windows:
+                window["gross_j"] = 1e308
+            self._refuses("window_domain", windows=windows)
+        for field in ("prompt_tokens", "attempt"):
+            with self.subTest(record_type="row", field=field):
+                rows = deepcopy(self.rows)
+                rows[0][field] = 10**5000
+                self._refuses("row_domain", rows=rows)
+        with self.subTest(record_type="window", field="attempt"):
+            windows = deepcopy(self.windows)
+            windows[0]["attempt"] = 10**5000
+            self._refuses("window_domain", windows=windows)
 
     def test_window_unknown_and_idle_slot(self):
         w = deepcopy(self.windows); w[0]["block_id"] = "foreign"
