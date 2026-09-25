@@ -23,6 +23,7 @@ COLD = {
     "night_refused_agent_present", "night_refused_not_quiet", "night_refused_bind_expired",
     "night_refused_hid_idle", "night_refused_boot_clock",
     "night_refused_registration", "night_window_expired", "night_plan_stale",
+    "measurement_root_outside_custody",
     "night_plan_malformed", "night_chain_digest_mismatch",
     "launch_go_receipt_missing", "launch_go_receipt_invalid",
     "night_refused_class_unbuilt", "night_receipt_class_invalid",

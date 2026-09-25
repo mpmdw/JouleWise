@@ -202,12 +202,27 @@ def write_matching_probe_receipt(plan_path, python=sys.executable, *, now=None):
                   "scripts/validate_powermetrics_fiducial.py", "scripts/run_night.py",
                   "joulewise/calibration_ledger.py", "joulewise/calibration_custody_worker.py")
     stamp = time.time() if now is None else now
-    labels = ("com.joulewise.night", "com.joulewise.night.deadman",
-              "com.joulewise.night-probe." + plan["plan_id"])
+    from joulewise import night_agent_install
+    from scripts import run_night
+    parsed_plan = night_gate.NightPlan.from_mapping(plan)
+    fixture_root = (plan_path.parent.parent if plan_path.parent.name.startswith("custody")
+                    else plan_path.parent)
+    courier = fixture_root / "bin/claude"
+    try:
+        fixture_schedule = run_night.schedule(parsed_plan)
+    except night_gate.PlanError:
+        # Malformed-calendar tests only need a receipt to reach the installer's
+        # own timing refusal; these rendering fields are never consumed there.
+        calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
+        fixture_schedule = {"night_calendar": calendar, "deadman_calendar": calendar}
+    prepared = night_agent_install.Prepared(
+        parsed_plan, plan_path.resolve(), REPO_ROOT, str(python),
+        (REPO_ROOT / "configs/launchd/com.joulewise.night.plist.template").read_text(),
+        str(courier.resolve()), str(courier.parent) + ":/usr/bin:/bin:/usr/sbin:/sbin",
+        fixture_schedule, lambda _: [], 600)
     record = {"schema": "joulewise.night_probe_receipt.v2", "outcome": "ok", "refusal_code": None,
               "ProcessType": "Interactive",
-              "launch_context": {label: {"ProcessType": "Interactive", "rendered_plist_sha256": "0" * 64}
-                                 for label in labels},
+              "launch_context": prepared.launch_context(),
               "cadence": {"median_ms": 132, "p95_ms": 132, "max_ms": 132, "count": 300,
                           "elapsed_s": 39.6, "bound_s": 55, "passed": True},
               "plan_id": plan["plan_id"], "plan_sha256": digest(plan_path),
@@ -2281,7 +2296,7 @@ runpy.run_path(script, run_name='__main__')
         path.parent.mkdir()
         path.write_text(json.dumps(plan), encoding="utf-8")
         make_probe_fixture(root, path)
-        write_matching_probe_receipt(path, str(python))
+        write_matching_probe_receipt(path, sys.executable)
         return path
 
     def _installer_environment(self, root: Path) -> tuple[dict[str, str], Path]:
@@ -2634,6 +2649,8 @@ runpy.run_path(script, run_name='__main__')
             str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
             "--plan",
             str(plan),
+            "--python",
+            sys.executable,
             "--launchctl-bin",
             str(launcher),
         ]
@@ -2937,10 +2954,12 @@ raise SystemExit(run_night.main(sys.argv[3:]))
             # No writer opens the FIFO: after observing bindings, only the
             # production deadline can release this blocked worker.
             try:
-                _, stderr = process.communicate(timeout=max(0, started + budget + 2 - time.monotonic()))
+                # Supervisor allows a two-second TERM relay grace before KILL,
+                # then reaps and censuses the worker group.
+                _, stderr = process.communicate(timeout=max(0, started + budget + 5 - time.monotonic()))
             except subprocess.TimeoutExpired:
                 self.fail("probe exceeded whole deadline during binding read")
-            self.assertLess(time.monotonic() - started, budget + 2)
+            self.assertLess(time.monotonic() - started, budget + 5)
             self.assertEqual(2, process.returncode, stderr)
             record = json.loads(self.receipt.read_text())
             self.assertEqual("timeout", record["outcome"])
@@ -2954,9 +2973,12 @@ raise SystemExit(run_night.main(sys.argv[3:]))
                 if identity.exists():
                     try:
                         os.killpg(json.loads(identity.read_text())["chain_pgid"], signal.SIGKILL)
-                    except ProcessLookupError:
+                    except (ProcessLookupError, PermissionError):
                         pass
-                os.killpg(process.pid, signal.SIGKILL)
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    process.kill()
             process.communicate(timeout=2)
 
     @unittest.skipUnless(probe_census_available(), "process census unavailable in sandbox")

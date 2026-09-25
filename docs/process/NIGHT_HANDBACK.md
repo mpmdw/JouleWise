@@ -90,6 +90,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_refused_registration` | The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source. |
 | `night_window_expired` | Measurement window expired. |
 | `night_plan_stale` | Plan age, pinned head, or a clean measurement clone failed; not a stale notice. |
+| `measurement_root_outside_custody` | A plan authored at/after 1790340000 whose resolved measurement_root is not strictly inside /Users/edr/night-custody/measurement (acceptance ruling v2.1 R16). Re-author the plan; never a retry cause. |
 | `night_plan_malformed` | Plan structure or fields failed their contract. |
 | `night_chain_digest_mismatch` | Executable chain bytes differ from their fixed fingerprint. |
 | `launch_go_receipt_missing` | Required measurement-pack launch authorization is absent. |

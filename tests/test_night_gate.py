@@ -898,6 +898,67 @@ class NightGateTests(unittest.TestCase):
                             [], night_gate.validate_receipt(json.loads(receipt.to_json_bytes()))
                         )
 
+    def test_new_pack_rehearsal_exempts_only_authenticated_t0_purpose(self) -> None:
+        cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+        with tempfile.TemporaryDirectory() as temporary:
+            outside = Path(temporary) / "JouleWise-rehearsal-test"
+            outside.mkdir()
+            custody = Path(temporary) / "measurement"
+            custody.mkdir()
+            binding = {"authorization_record": {"path": str(outside / "auth.json"),
+                                                "sha256": "a" * 64}}
+            for purpose, exempt in (("T0_REHEARSAL", True),
+                                    ("CAMPAIGN_TRANSACTION", False),
+                                    ("G2B_SHAKEDOWN", False)):
+                with self.subTest(purpose=purpose), \
+                     mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody), \
+                     mock.patch.object(night_gate, "_pack_object", return_value={"purpose": purpose}):
+                    source = FakeProbeSource(now_epoch_s=cutoff + 5)
+                    plan = make_plan("TRANSACTION_PACK", t0_epoch_s=cutoff,
+                                     authored_epoch_s=cutoff, measurement_root=str(outside),
+                                     pack_night=binding)
+                    receipt = self.evaluate(plan, source)
+                    if exempt:
+                        self.assertNotEqual("measurement_root_outside_custody",
+                                            receipt.refusal.reason if receipt.refusal else None)
+                        self.assertTrue(source.measurement_calls)
+                    else:
+                        self.assertEqual("measurement_root_outside_custody", receipt.refusal.reason)
+                        self.assertEqual([], source.measurement_calls)
+            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody), \
+                 mock.patch.object(night_gate, "_pack_object",
+                                   side_effect=night_gate.PackNightRefusal("auth mismatch")):
+                source = FakeProbeSource(now_epoch_s=cutoff + 5)
+                plan = make_plan("TRANSACTION_PACK", t0_epoch_s=cutoff,
+                                 authored_epoch_s=cutoff, measurement_root=str(outside),
+                                 pack_night=binding)
+                receipt = self.evaluate(plan, source)
+                self.assertEqual("measurement_root_outside_custody", receipt.refusal.reason)
+                self.assertEqual([], source.measurement_calls)
+            # The separate T0 disjointness rule remains exercised by
+            # test_rehearsal_plan_and_arm_context_roots_follow_sibling_child_rule.
+
+    def test_existing_case_alias_inside_custody_is_accepted(self) -> None:
+        cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+        with tempfile.TemporaryDirectory() as temporary:
+            custody = Path(temporary) / "measurement"
+            child = custody / "child"
+            child.mkdir(parents=True)
+            alias = Path(temporary) / "MEASUREMENT" / "child"
+            try:
+                if not os.path.samefile(child, alias):
+                    self.skipTest("temporary filesystem is case-sensitive")
+            except FileNotFoundError:
+                self.skipTest("temporary filesystem is case-sensitive")
+            source = FakeProbeSource(now_epoch_s=cutoff + 5)
+            argv = checkout_status_argv(str(alias))
+            source.results[argv] = result(argv)
+            plan = make_plan(t0_epoch_s=cutoff, authored_epoch_s=cutoff,
+                             measurement_root=str(alias))
+            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody):
+                receipt = self.evaluate(plan, source)
+            self.assertEqual("GO", receipt.verdict)
+
     def test_dirty_unmanifested_tracked_file_refuses_at_t0(self) -> None:
         plan = make_plan()
         argv = checkout_status_argv(plan.measurement_root)

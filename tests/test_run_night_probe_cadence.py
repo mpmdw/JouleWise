@@ -68,6 +68,42 @@ class ProbeCadenceTests(unittest.TestCase):
         self.assertEqual(0, result["count"])
         self.assertIn("timed out", result["detail"])
 
+    def test_timeout_retains_220_complete_slow_frames_after_term_delay(self):
+        fake = self.root / "fake-partial-powermetrics"
+        term_marker = self.root / "term-grace-observed"
+        source = FAKE.format(interval=248, spike=0, timeout=False)
+        source = source.replace("import datetime, plistlib, sys, time",
+            "import datetime, plistlib, sys, time, signal\n"
+            "def on_term(number, frame):\n    time.sleep(0.2)\n"
+            f"    Path({str(term_marker)!r}).write_text('TERM relayed')\n"
+            "    sys.exit(0)\nsignal.signal(signal.SIGTERM, on_term)")
+        source = source.replace("for index in range(300):", "for index in range(220):")
+        source += "\ntime.sleep(5)\n"
+        fake.write_text(source)
+        fake.chmod(0o755)
+        result = _probe_cadence(self.root, executable=str(fake), privilege_prefix=(),
+                                capture_timeout_s=0.5)
+        self.assertFalse(result["passed"])
+        self.assertEqual((220, 248, 248, 248), tuple(result[k] for k in
+            ("count", "median_ms", "p95_ms", "max_ms")))
+        self.assertIn("timed out", result["detail"])
+        self.assertIn("elapsed_s=", result["detail"])
+        self.assertIn("bound_s=55", result["detail"])
+        self.assertEqual("TERM relayed", term_marker.read_text())
+
+    def test_nonzero_exit_retains_complete_frames(self):
+        fake = self.root / "fake-failing-powermetrics"
+        source = FAKE.format(interval=248, spike=0, timeout=False)
+        source = source.replace("for index in range(300):", "for index in range(120):")
+        source += "\nsys.exit(7)\n"
+        fake.write_text(source)
+        fake.chmod(0o755)
+        result = _probe_cadence(self.root, executable=str(fake), privilege_prefix=())
+        self.assertFalse(result["passed"])
+        self.assertEqual(120, result["count"])
+        self.assertEqual(248, result["median_ms"])
+        self.assertIn("exited 7", result["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

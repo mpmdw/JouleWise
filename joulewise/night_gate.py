@@ -1245,13 +1245,31 @@ def _check_static_start(plan, probes, rows, evidence):
             rows,
             Refusal("night_plan_stale", "plan is older than 36 hours", ()),
         )
-    if plan.authored_epoch_s >= MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S:
+    # magistrate provisional reading, activation 152c9255 record 00 item 51,
+    # pending final pass: T0_REHEARSAL measures nothing and retains its
+    # separate production-custody disjointness rule.
+    rehearsal = False
+    if (plan.authored_epoch_s >= MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+            and plan.receipt_class == "TRANSACTION_PACK" and plan.pack_night is not None):
+        locator = plan.pack_night["authorization_record"]
         try:
-            custody_root = MEASUREMENT_ROOT_CUSTODY_ROOT.resolve()
-            relative = Path(plan.measurement_root).resolve().relative_to(
-                custody_root
-            )
-            inside_custody = relative != Path(".")
+            authorization = _pack_object(Path(locator["path"]), "authorization_record",
+                                         locator["sha256"])
+            rehearsal = authorization.get("purpose") == "T0_REHEARSAL"
+        except (PackNightRefusal, OSError, ValueError):
+            pass  # Unauthenticated purpose cannot exempt a pack plan.
+    if plan.authored_epoch_s >= MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S and not rehearsal:
+        try:
+            custody_root = MEASUREMENT_ROOT_CUSTODY_ROOT.resolve(strict=True)
+            measurement_root = Path(plan.measurement_root)
+            try:
+                resolved = measurement_root.resolve(strict=True)
+                # Existing paths can have case-variant spellings on macOS.
+                inside_custody = any(parent.samefile(custody_root)
+                                     for parent in resolved.parents)
+            except FileNotFoundError:
+                relative = measurement_root.resolve().relative_to(custody_root)
+                inside_custody = relative != Path(".")
         except (OSError, RuntimeError, ValueError):
             inside_custody = False
         if not inside_custody:

@@ -1148,7 +1148,7 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
         if context[label]["rendered_plist_sha256"] != _digest_bytes(payload):
             raise Refused(2, "probe rendered plist changed during launch")
         receipt["launch_context"] = context
-        receipt["ProcessType"] = "Interactive"
+        receipt["ProcessType"] = context[label]["ProcessType"]
         receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
         receipt = validate_probe_receipt(prepared, max_age_s, receipt_path)
         if (receipt.get("chain_pgid") != process_record["chain_pgid"]
@@ -1282,8 +1282,16 @@ def validate_install(args, repo):
             else:
                 print(json.dumps({"input_digests": None, "detail": "no reservation inspection surface"}))
     if args.render_only is None and not getattr(args, "launchd_probe", False):
-        validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
+        receipt = validate_probe_receipt(prepared, getattr(args, "probe_max_age_s", PROBE_RECEIPT_MAX_AGE_S))
+        _validate_install_launch_context(prepared, receipt)
     return prepared
+
+
+def _validate_install_launch_context(prepared, receipt):
+    context = prepared.launch_context()
+    recorded = receipt.get("launch_context")
+    if not isinstance(recorded, dict) or any(recorded.get(label) != context[label] for label in LABELS):
+        raise Refused(2, "probe receipt launch_context differs from install")
 
 
 def main(argv=None):

@@ -2289,6 +2289,45 @@ class EvidenceProbeReceiptTests(unittest.TestCase):
 
 
 class RenderedProcessTypeTests(unittest.TestCase):
+    def test_install_context_binds_both_labels_and_changed_template_bytes(self):
+        from types import SimpleNamespace
+        from joulewise import night_agent_install as installer
+
+        repo = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            calendar = {"Month": 9, "Day": 25, "Hour": 22, "Minute": 0}
+            prepared = installer.Prepared(
+                SimpleNamespace(custody_root=str(root), plan_id="test"),
+                root / "night_plan.json", repo, sys.executable,
+                (repo / "configs/launchd/com.joulewise.night.plist.template").read_text(),
+                "/bin/true", "/usr/bin:/bin",
+                {"night_calendar": calendar, "deadman_calendar": calendar}, lambda _: [], 600)
+            context = prepared.launch_context()
+            receipt = {"launch_context": json.loads(json.dumps(context))}
+            installer._validate_install_launch_context(prepared, receipt)
+            with self.assertRaisesRegex(installer.Refused,
+                                        "probe receipt launch_context differs from install"):
+                installer._validate_install_launch_context(prepared, {})
+            for label in LABELS:
+                with self.subTest(label=label):
+                    changed = json.loads(json.dumps(receipt))
+                    changed["launch_context"][label]["rendered_plist_sha256"] = "f" * 64
+                    with self.assertRaisesRegex(installer.Refused,
+                                                "probe receipt launch_context differs from install"):
+                        installer._validate_install_launch_context(prepared, changed)
+            # Probe bytes depend on --probe-timeout-s and are intentionally
+            # excluded from this install-time equality check.
+            probe_label = installer.probe_label("test")
+            changed = json.loads(json.dumps(receipt))
+            changed["launch_context"][probe_label]["rendered_plist_sha256"] = "f" * 64
+            installer._validate_install_launch_context(prepared, changed)
+            prepared.template = prepared.template.replace("</plist>",
+                                                           "<!-- changed after receipt -->\n</plist>")
+            with self.assertRaisesRegex(installer.Refused,
+                                        "probe receipt launch_context differs from install"):
+                installer._validate_install_launch_context(prepared, receipt)
+
     def test_each_label_requires_parsed_interactive_value(self):
         import plistlib
         from types import SimpleNamespace

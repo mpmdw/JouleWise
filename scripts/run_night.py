@@ -3556,12 +3556,9 @@ def _probe_group_absent(pgid: int, timeout_s: float = 1) -> bool:
 
 
 def _stop_probe_group(process: subprocess.Popen[Any]) -> bool:
-    """Reap the supervised probe group within the two-second cleanup allowance."""
+    """Reap the supervised probe group after a bounded TERM grace period."""
+    _term_then_kill_probe_group(process.pid)
     deadline = time.monotonic() + 1.5
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
     try:
         if process.poll() is None:
             process.kill()
@@ -3573,6 +3570,23 @@ def _stop_probe_group(process: subprocess.Popen[Any]) -> bool:
             return True
         time.sleep(0.02)
     return False
+
+
+def _term_then_kill_probe_group(pgid: int) -> None:
+    """Give sudo a chance to relay TERM before a bounded KILL fallback."""
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        if _probe_group_absent(pgid, min(0.2, max(0.01, deadline - time.monotonic()))):
+            return
+        time.sleep(0.02)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def _atomic_probe_json(path: Path, record: dict[str, Any]) -> None:
@@ -3624,10 +3638,7 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
             if type(power_pgid) is int and power_pgid > 1:
                 identity["powermetrics_pgid"] = power_pgid
                 _atomic_probe_json(receipt_path.with_name(receipt_path.name + ".process.json"), identity)
-                try:
-                    os.killpg(power_pgid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass
+                _term_then_kill_probe_group(power_pgid)
             gone = _stop_probe_group(process)
             if type(power_pgid) is int and power_pgid > 1:
                 gone = gone and _probe_group_absent(power_pgid)
@@ -3699,7 +3710,11 @@ def _evidence_probe_worker(plan, plan_path, receipt_path, deadline, phase):
 def _probe_cadence(directory: Path, *, executable="/usr/bin/powermetrics",
                    privilege_prefix=("sudo", "-n"), on_process_started=None,
                    capture_timeout_s=None) -> dict[str, Any]:
-    """Measure the production 300-frame idle command under the probe job."""
+    """Measure the production 300-frame idle command under the probe job.
+
+    Keep the first frame: production's 55 s bound counts every frame, so
+    omitting it would make this acceptance probe less conservative.
+    """
     import statistics
     from types import SimpleNamespace
     from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter, parse_powermetrics_records
@@ -3727,35 +3742,43 @@ def _probe_cadence(directory: Path, *, executable="/usr/bin/powermetrics",
         if process.returncode != 0:
             result["detail"] = "powermetrics exited {}: {}".format(
                 process.returncode, stderr.decode(errors="replace").strip())
-            return result
-        records = parse_powermetrics_records(output.read_bytes())
+        else:
+            result["completed"] = True
+    except subprocess.TimeoutExpired:
+        result["elapsed_s"] = time.monotonic() - started
+        if process is not None:
+            _term_then_kill_probe_group(process.pid)
+            try:
+                process.communicate(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.stdout.close()
+                process.stderr.close()
+        result["detail"] = "powermetrics capture timed out"
+    except (OSError, ValueError) as exc:
+        result["elapsed_s"] = time.monotonic() - started
+        result["detail"] = str(exc)
+    try:
+        records = parse_powermetrics_records(output.read_bytes()) if output.exists() else []
         values = sorted(record.elapsed_ns / 1_000_000 for record in records)
         result["count"] = len(values)
         if values:
             result.update(median_ms=statistics.median(values),
                           p95_ms=values[min(len(values) - 1, math.ceil(0.95 * len(values)) - 1)],
                           max_ms=values[-1])
-        result["passed"] = (len(values) == count and result["elapsed_s"] <= bound
+        result["passed"] = (result.pop("completed", False) and len(values) == count
+                            and result["elapsed_s"] <= bound
                             and result["median_ms"] is not None
                             and result["median_ms"] <= 150 and result["max_ms"] <= 200)
-        if not result["passed"]:
+        if not result["passed"] and "detail" not in result:
             result["detail"] = "cadence count, duration or interval outside bound"
-    except subprocess.TimeoutExpired:
-        if process is not None:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            try:
-                process.communicate(timeout=1)
-            except subprocess.TimeoutExpired:
-                process.stdout.close()
-                process.stderr.close()
-        result["elapsed_s"] = time.monotonic() - started
-        result["detail"] = "powermetrics capture timed out"
     except (OSError, ValueError) as exc:
+        result["detail"] = result.get("detail", "") + "; cadence parse failed: " + str(exc)
+        result.pop("completed", None)
+    if result["elapsed_s"] is None:
         result["elapsed_s"] = time.monotonic() - started
-        result["detail"] = str(exc)
+    if not result["passed"]:
+        result["detail"] = ("{}; elapsed_s={:g} bound_s={:g}".format(
+            result.get("detail", "cadence failed"), result["elapsed_s"], bound))
     return result
 
 
@@ -3877,9 +3900,12 @@ def _probe_worker(plan_path: Path, receipt_path: Path, progress_path: Path, dead
                     record["cadence"] = cadence
                     if not cadence["passed"]:
                         record["refusal_code"] = "probe_cadence_failed"
-                        record["detail"] = ("probe cadence median_ms={} p95_ms={} max_ms={}: {}"
-                                            .format(cadence["median_ms"], cadence["p95_ms"],
-                                                    cadence["max_ms"], cadence.get("detail", "")))
+                        record["detail"] = ("probe cadence elapsed_s={} bound_s={} count={} "
+                                            "median_ms={} p95_ms={} max_ms={}: {}"
+                                            .format(cadence["elapsed_s"], cadence["bound_s"],
+                                                    cadence["count"], cadence["median_ms"],
+                                                    cadence["p95_ms"], cadence["max_ms"],
+                                                    cadence.get("detail", "")))
                     else:
                         record["outcome"] = "ok"
                 except (KeyError, ValueError, OSError, subprocess.SubprocessError) as exc:
