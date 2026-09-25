@@ -19,14 +19,14 @@ The bench fix (commit on the fix branch) uses the powerd assertion, with 3 unit 
 
 The stage0U, analyze_power and freeze steps completed. The freeze chose 6 blocks × 1 run per cell (79.8 min), with power at 1.5 × SD of 0.806 (E) and 1.0 (R).
 
-**U1 stopped under rule C5: 3 invalid cells in arm D** (block U1-01, attempts a1–a3). Every I and SH cell in those attempts was valid.
+**U1 stopped under rule C5: 3 invalid cells in arm D** (block U1-01, attempts a1–a3). **Correction (Fable council seat, bench-verified):** the block order was I → D → SH, and each attempt was discarded at D, so the three SH cells (U1-01.3.SH.a1–a3) never ran; they hold only `discarded.json`. The three I cells were valid (198.9–199.8 J net, consistent with stage0U).
 
 **Mechanism** (bench-read from the bundles):
 - Production's idle-baseline step runs `sudo -n /usr/bin/powermetrics -n 300 -b 0 -i 100 …` under a 55 s bound (`joulewise/adapters/powermetrics.py:1203`).
 - In context D on the quiet machine the delivered cadence was 237–248 ms (p95 277–279 ms). 300 samples then need ≈ 74 s. Each D run failed with `TimeoutExpired … after 55.0 seconds`, having captured only 232–236 samples.
 - The I cells in the same attempts ran at 132 ms (p95 134–135 ms).
 
-**Finding F-A.** On a quiet, unattended machine, the production measurement path **cannot complete** when launched from a launchd job with no ProcessType: its idle baseline times out. This is the same 248 ms timer-coalescing cadence as the September nights, now shown at the production-workload level. It very likely explains the September idle pilots' timing-check failures (2/12, 4/12, 7/12 valid).
+**Finding F-A (scoped per council 22/23).** In session 2, the tested default-launchd configuration **failed closed** on all three D attempts, at production's 55 s idle-baseline bound (`_capture_timeout_s` = max(15, 300 × 0.1 × 1.5 + 10) = 55 s). This establishes that unchanged D is operationally non-viable in that configuration. Whether D would bias E or R when it can complete is **unmeasured**. It is not claim-relevant, because scout 03 found no claim-bearing corpus launched under D. This is the same 248 ms timer-coalescing cadence as the September nights, now shown at the production-workload level. The link to the September idle pilots' timing-check failures (2/12, 4/12, 7/12 valid) is an inference: those nights also had the display asleep, and this session had it on.
 
 ## Stage 0 in state U (sizing-only by pre-registration; descriptive here)
 
