@@ -249,3 +249,4 @@
    - Bench fix in the PR-L head: the fixture renders the receipt under the subprocess's TZ. `tests.test_install_night_agent` is OK under UTC, Los Angeles and Tokyo.
    - The PR-L modules are running under TZ=UTC at the bench. This post-final-pass commit is covered by the planned cold confirm of the final heads (row 10).
    - The gate-ledger failure on #412 was expected: evidence paths must exist in the PR head, which the records-only commit cures.
+   - PR-L modules under TZ=UTC at `2e522d1a`: **Ran 613 tests, OK** (seven modules).
