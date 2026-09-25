@@ -250,3 +250,8 @@
    - The PR-L modules are running under TZ=UTC at the bench. This post-final-pass commit is covered by the planned cold confirm of the final heads (row 10).
    - The gate-ledger failure on #412 was expected: evidence paths must exist in the PR head, which the records-only commit cures.
    - PR-L modules under TZ=UTC at `2e522d1a`: **Ran 613 tests, OK** (seven modules).
+85. **Gate row 9, full-suite replay** on integration tree `integ/2026-09-25-prl-prr` @ `d48bd18f` (main `95521871` + PR-L `1bdbca1d` + PR-R `8cd9e831`), unpiped discovery, 09:05→11:50: **Ran 7,166 tests in 9,886 s: 1 failure, 1 error, 109 skipped** ([30/01](30-integration/01-fullsuite-d48bd18f-summary.txt); full log archived at `~/night-archive/152c9255-integ-fullsuite-d48bd18f.log.gz`).
+   - FAIL `test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child` (-9 vs -15): the same known load-timing flake as #409's full suite. It passes alone at the integration head.
+   - ERROR `test_g4_real_ruled_census_pgrep_dialect`: real `pgrep` against live processes, where the parse hit `'cat'`. This is the known multi-line-argv census defect (lane CENSUS-MULTILINE-ARGV-01), triggered by concurrent agent processes. It passes alone at the integration head and on main.
+   - Neither touches PR-L or PR-R code.
+   - Next: the focused re-run on integration tree 2 `integ/2026-09-25-wave2` @ `d9ed116f` (main + PR-L `2e522d1a` + PR-R `2bbcc779` + A292 `f6e6d162`; conflicts checked clean without `-X`), covering every module changed since `d48bd18f`.
