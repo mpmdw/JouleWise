@@ -194,3 +194,10 @@
    - One SHOULD-FIX, S-1: no test asserts the worker's cadence-refusal timing text. It was mutation-proven dead: deleting the fields leaves every test green.
    - A test-only seat (64) adds a worker-level test, scoped to a new file.
    - A292 escalation refuter (after the fact, paired; [25/21](25-coldgate-packet-a292esc/21-opus-refuter.md)): P1 is affirmed, since 15 generated witnesses kill M033, M045 and M050. P2: the 1e12 J value is affirmed but the text as written is rejected, because it does not close the crashes. The judge's ruling is pending.
+71. **Cold ruling A292-ESC-01** ([25/20](25-coldgate-packet-a292esc/20-coldgate-fable-a292esc-ruling.md)), no BLOCKER:
+   - Z1 affirms the generated one-fault witness mechanism with ruled spec G1–G6.
+   - Z2 affirms 1e12 J (≈226 years at this machine's 140 W ceiling) with a completed clause, **amendment A292-ESC-01**: `ENERGY_MAX_J = 10**12`, `INT_MAX = 2**53` for integer fields, `gross_j > 0` kept. The judge found three more crash inputs (`prompt_tokens`/`attempt` = 10**5000; 1e308 floats overflowing `fsum`).
+   - Z3 issues the round-2 texts.
+   - The paired refuter's BLOCKER (the JSON crash on `prompt_tokens`) is covered by the INT_MAX clause, so no addendum is needed.
+   - Fix round 2: harness seat (Sol) first, then the Opus implementation seat.
+   - PR-L head is now `99495ba9` (worker-level cadence text test), and its cold Fable final pass PRL-FINALPASS-01 (packet 24, including the T0 question L2) is running.
