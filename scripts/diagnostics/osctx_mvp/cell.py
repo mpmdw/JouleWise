@@ -6,6 +6,7 @@ import copy
 import ctypes
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -154,9 +155,16 @@ def census_sample(backend, state: str, expected_display: str, threshold: float) 
         record["hid_idle_seconds"] = backend.idle()
     except Exception as exc:
         record["hid_error"] = str(exc)
-    record["display_state"] = backend.display()
-    record["interrupted"] = ((state == "U" and record.get("hid_idle_seconds", float("inf")) < threshold) or
-                             (record["display_state"] != "unknown" and record["display_state"] != expected_display))
+    try:
+        record["display_state"] = backend.display()
+    except Exception as exc:
+        record["display_state"] = "unknown"
+        record["display_error"] = str(exc)
+    record["interrupted"] = ((state == "U" and
+                              (not isinstance(record.get("hid_idle_seconds"), (int, float)) or
+                               not math.isfinite(record["hid_idle_seconds"]) or
+                               record["hid_idle_seconds"] < threshold)) or
+                             (state in ("U", "S") and record["display_state"] != expected_display))
     return record
 
 
@@ -186,7 +194,14 @@ def run(out: Path, config: dict, state: str, context: str, cell_id: int, *, stag
             stop.wait(config["census_interval_seconds"])
     census = threading.Thread(target=census_loop, daemon=True)
     try:
-        metadata["pre"] = {"display_state": backend.display(),
+        try:
+            initial_display = backend.display()
+        except Exception as exc:
+            initial_display = "unknown"
+            metadata["flags"].append(f"initial_display_unreadable:{exc}")
+        if state in ("U", "S") and initial_display != expected_display:
+            metadata["interrupted"] = True
+        metadata["pre"] = {"display_state": initial_display,
                            "environment": {k: os.environ.get(k) for k in ("PATH", "HOME", "HF_HUB_OFFLINE")}}
         census.start()
         metadata["preread_files"] = backend.preread(config["model"])

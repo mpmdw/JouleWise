@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import plistlib
@@ -158,23 +159,52 @@ def runner_ancestry() -> list[int]:
 
 
 def interrupted(record: dict, state: str, min_idle: float, expected_display: str) -> bool:
-    if state == "U" and record.get("hid_idle_seconds") is not None and record["hid_idle_seconds"] < min_idle:
+    if state == "U" and (not isinstance(record.get("hid_idle_seconds"), (int, float)) or
+                         not math.isfinite(record["hid_idle_seconds"]) or
+                         record["hid_idle_seconds"] < min_idle):
         return True
     actual = record.get("display_state", "unknown")
-    return actual != "unknown" and actual != expected_display
+    return actual != expected_display
 
 
 def retry_block(block: dict, attempt: int) -> dict:
     return {**block, "attempt": attempt + 1, "arms": list(block["arms"])}
 
 
-def wait_gate(backend, config, log):
+def wait_gate(backend, config, log, *, state="U"):
+    unknown_polls = 0
+    expected_display = "asleep" if state == "S" else "on"
     while True:
-        idle = backend.idle()
-        log(event="gate", idle_seconds=idle)
-        if idle >= config["hid_idle_seconds"] and backend.display() in ("on", "unknown"):
+        try:
+            idle = backend.idle() if state == "U" else None
+            display = backend.display()
+            read_error = None
+        except Exception as exc:
+            idle, display, read_error = None, "unknown", str(exc)
+        unknown = (state == "U" and (not isinstance(idle, (int, float)) or not math.isfinite(idle))) or display not in ("on", "asleep")
+        unknown_polls = unknown_polls + 1 if unknown else 0
+        log(event="gate", idle_seconds=idle, display_state=display, read_error=read_error,
+            unknown_polls=unknown_polls)
+        if unknown_polls >= 3:
+            raise RuntimeError(f"stage stopped: {state} admission observation unknown after 3 polls")
+        if display == expected_display and (state != "U" or idle >= config["hid_idle_seconds"]):
             return
         backend.sleep(config["hid_poll_seconds"])
+
+
+def known_display(backend, config, log):
+    for poll in range(1, 4):
+        try:
+            display = backend.display()
+        except Exception as exc:
+            display = "unknown"
+            log(event="display_read_error", poll=poll, error=str(exc))
+        if display in ("on", "asleep"):
+            return display
+        log(event="display_unknown", poll=poll)
+        if poll < 3:
+            backend.sleep(config["hid_poll_seconds"])
+    raise RuntimeError("stage stopped: display observation unknown after 3 polls")
 
 
 def transition(backend, target: str, config: dict, log):
@@ -186,9 +216,17 @@ def transition(backend, target: str, config: dict, log):
     if result.returncode:
         raise RuntimeError(f"display transition failed: {argv}")
     deadline = backend.now() + 30
+    unknown_polls = 0
     while True:
         after = backend.run(["/usr/bin/pmset", "-g", "log"])
-        state = backend.display()
+        try:
+            state = backend.display()
+        except Exception as exc:
+            state = "unknown"
+            log(event="display_read_error", error=str(exc))
+        unknown_polls = unknown_polls + 1 if state not in ("on", "asleep") else 0
+        if unknown_polls >= 3:
+            raise RuntimeError("stage stopped: display transition observation unknown after 3 polls")
         if state == target and after.returncode == 0 and before.stdout != after.stdout:
             break
         if backend.now() >= deadline:
@@ -206,7 +244,7 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
                                     (extra_allow_pids or [])))
     old_handlers = {}
     stage_reference = None
-    invalid_cells = {arm: set() for arm in config["contexts"]}
+    invalid_cells = {arm: 0 for arm in config["contexts"]}
     if isinstance(backend, SystemBackend):
         def interrupted_signal(signum, frame):
             raise KeyboardInterrupt(f"signal {signum}")
@@ -240,13 +278,13 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
             state = block["state"]
             target = "asleep" if state == "S" else "on"
             if stage == "S" and target != previous:
+                known_display(backend, config, log)
                 transition(backend, target, config, log)
             previous = target
             attempt = 1
             while True:
                 pending_reference = stage_reference
-                if stage == "S" and state == "S" and backend.display() != "asleep":
-                    wait_gate(backend, config, log)
+                if stage == "S" and state == "S" and known_display(backend, config, log) != "asleep":
                     transition(backend, "asleep", config, log)
                 actions = [make_action(out, stage, block, slot, attempt, config_path, python, allow_pids,
                                        write=not (attempt == 1 and existing_actions is not None))
@@ -261,6 +299,8 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
                 for action in actions:
                     if state == "U" and stage != "stage0":
                         wait_gate(backend, config, log)
+                    elif state == "S":
+                        wait_gate(backend, config, log, state="S")
                     directory = Path(action["cell_dir"])
                     if (directory / "done.json").exists():
                         raise FileExistsError(directory / "done.json")
@@ -299,14 +339,18 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
                         elif not done.get("ok") and not bad:
                             bad, reason = True, "bundle_invalid"
                         if bad and reason == "bundle_invalid":
-                            invalid_cells[action["context"]].add((block["id"], action["cell_id"]))
-                            if len(invalid_cells[action["context"]]) >= 3:
+                            invalid_cells[action["context"]] += 1
+                            if invalid_cells[action["context"]] >= 3:
+                                for discarded_action in actions:
+                                    write_json(Path(discarded_action["cell_dir"]) / "discarded.json",
+                                               {"reason": "bundle_invalid" if discarded_action["label"] == action["label"] else "block_peer_discard",
+                                                "trigger": action["label"], "block": block["id"], "attempt": attempt})
                                 log(event="stage_stopped", reason="arm_invalid_cell_limit",
                                     arm=action["context"], invalid_cells=3, council_review_required=True)
                                 raise RuntimeError(f"stage stopped: 3 invalid cells in {action['context']}; council review required")
                         log(event="cell_end", label=action["label"], interrupted=bad,
                             reason=reason, ok=done.get("ok"),
-                            invalid_cells={arm: len(cells) for arm, cells in invalid_cells.items()})
+                            invalid_cells=dict(invalid_cells))
                     finally:
                         cleanup(action)
                     if bad:

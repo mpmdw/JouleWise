@@ -32,10 +32,9 @@ def bundle_hash(bundle: Path) -> tuple[str | None, int | None]:
     tokens = bundle / "outputs" / "tokens.jsonl"
     if tokens.exists():
         ids = [json.loads(line)["token_id"] for line in tokens.read_text().splitlines() if line.strip()]
+        if any(type(token_id) is not int for token_id in ids):
+            raise ValueError("output token IDs must be integers")
         return "token_ids:" + hashlib.sha256(json.dumps(ids, separators=(",", ":")).encode()).hexdigest(), len(ids)
-    response = bundle / "outputs" / "response.txt"
-    if response.exists():
-        return "text:" + hashlib.sha256(response.read_bytes()).hexdigest(), None
     return None, None
 
 
@@ -70,9 +69,6 @@ def bundle_evidence(bundle: Path, reference_hash: str | None = None) -> dict:
     precheck = summary.get("window_evidence_precheck", {}).get("idle_subtracted_request") or {}
     reasons = set(precheck.get("reasons", []))
     output_hash, count = bundle_hash(bundle)
-    if count is None:
-        observed = json.loads((bundle / "metadata.json").read_text()).get("workload_observed", {}) if (bundle / "metadata.json").exists() else {}
-        count = observed.get("output_token_count")
     issues = []
     if summary.get("status") != "succeeded": issues.append("status")
     anchor = precheck.get("clock_anchor_bound_s")
@@ -186,6 +182,12 @@ def analyze_cell(directory: Path, config: dict, reference_hash: str | None = Non
             events = [json.loads(line) for line in (Path(run["bundle"]) / "events.jsonl").read_text().splitlines()]
         except (OSError, ValueError):
             events = []
+        idle_starts = [x["timestamp_s"] for x in events if x.get("event_type") == "stage_started" and x.get("phase") == "idle_baseline"]
+        idle_ends = [x["timestamp_s"] for x in events if x.get("event_type") == "stage_completed" and x.get("phase") == "idle_baseline"]
+        if len(idle_starts) == len(idle_ends) == 1 and idle_starts[0] < idle_ends[0]:
+            windows_by_key[("idle", number)] = (idle_starts[0], idle_ends[0])
+        else:
+            flags.append(f"census_idle_window_missing:r{number}")
         starts = [x["timestamp_s"] for x in events if x.get("event_type") == "sampling_started" and x.get("phase") == "measured_run"]
         ends = [x["timestamp_s"] for x in events if x.get("event_type") == "sampling_stopped" and x.get("phase") == "measured_run"]
         if len(starts) == len(ends) == 1:
@@ -305,7 +307,10 @@ def paired_rows(rows, comparison, endpoint):
     left_arm, right_arm = comparison.split("/")
     groups = defaultdict(dict)
     for row in rows:
-        groups[row["block"]][row["context"]] = row
+        key = (row["stage"], row["block"])
+        if row["context"] in groups[key]:
+            raise ValueError(f"duplicate pairing arm: {key} {row['context']}")
+        groups[key][row["context"]] = row
     logs, absolute, flagged = [], [], []
     for block, arms in sorted(groups.items()):
         if left_arm not in arms or right_arm not in arms:
@@ -349,7 +354,10 @@ def decision_table(rows, config):
                     arm_a, arm_b = comparison.split("/")
                     groups = defaultdict(dict)
                     for row in eligible:
-                        groups[row["block"]][row["context"]] = row
+                        key_pair = (row["stage"], row["block"])
+                        if row["context"] in groups[key_pair]:
+                            raise ValueError(f"duplicate pairing arm: {key_pair} {row['context']}")
+                        groups[key_pair][row["context"]] = row
                     pairs = [(arms[arm_a], arms[arm_b]) for arms in groups.values()
                              if arm_a in arms and arm_b in arms and
                              all(arms[arm]["metrics"].get(endpoint) is not None for arm in (arm_a, arm_b))]
@@ -442,7 +450,7 @@ def equivalence_power(sd, n, draws=20000, seed=20260924):
     return wins/draws
 
 
-def power_table(sd_e, sd_r, n_values=(6, 12)):
+def power_table(sd_e, sd_r, n_values=(6, 12), *, runs_per_cell_u=1):
     if isinstance(sd_e, (int, float)):
         estimates = {contrast: {"E": sd_e, "R": sd_r} for contrast in ("D/I", "SH/I")}
     else:
@@ -457,12 +465,26 @@ def power_table(sd_e, sd_r, n_values=(6, 12)):
                     mde = math.exp(UPPER + (student_t_ppf((1+CONFIDENCE)/2, n-1) +
                                             student_t_ppf(.8, n-1)) * scaled / math.sqrt(n))
                     table.append({"contrast": contrast, "endpoint": endpoint, "n": n,
+                                  "runs_per_cell_U": runs_per_cell_u,
                                   "sd_multiplier": multiplier, "sd_log": scaled,
                                   "equivalence_power": power,
                                   "equivalence_power_mc_se": math.sqrt(power*(1-power)/20000),
                                   "approx_80pct_material_difference_mde_ratio": mde,
                                   "method": "20000-draw seeded Gaussian paired simulation"})
     return table
+
+
+def u_replication_spread(stage0, runs_per_cell_u: int, stage0_runs_per_cell: int = 2):
+    """Paired variance = between-block component + 2*within-arm variance / runs per cell."""
+    result = {}
+    for endpoint, observed_sd in stage0["between_cell_paired_sd_log"].items():
+        within_sd = stage0["within_run_sd_log"][endpoint]
+        if observed_sd is None or within_sd is None:
+            result[endpoint] = None
+            continue
+        between_variance = max(0., observed_sd**2 - 2*within_sd**2/stage0_runs_per_cell)
+        result[endpoint] = math.sqrt(between_variance + 2*within_sd**2/runs_per_cell_u)
+    return result
 
 
 def stage0_spread(rows):
@@ -558,24 +580,110 @@ def markdown(rows, decision, errors, discarded):
     if errors:
         lines += ["", "## Cell errors and discarded attempts", ""] + [f"- {e['cell']}: {e['error']}" for e in errors]
     if discarded:
-        lines += ["", "## Discarded attempts", ""] + [f"- {path}" for path in discarded]
+        lines += ["", "## Discarded attempts", ""] + [f"- {item['cell']}: {item['reason']}" for item in discarded]
     return "\n".join(lines) + "\n"
 
 
-def analyze_directory(out: Path, config: dict, *, analyzer_backend=None):
+def stage_schedules(source: Path) -> dict[Path, dict]:
+    """Only a rendered stage, or the registered U1+U2 parent, is analyzable."""
+    direct = source / "command_sequence.json"
+    if direct.is_file():
+        locations = [source]
+    elif (source / "U1" / "command_sequence.json").is_file() and (source / "U2" / "command_sequence.json").is_file():
+        locations = [source / "U1", source / "U2"]
+    else:
+        raise ValueError("analysis requires a stage command_sequence.json or a U1+U2 parent")
+    schedules = {}
+    for location in locations:
+        schedule = json.loads((location / "command_sequence.json").read_text())
+        stage = schedule.get("stage")
+        if stage not in ("stage0", "U1", "U2", "S") or (len(locations) == 2 and stage != location.name):
+            raise ValueError(f"invalid stage schedule: {location}")
+        actions = {}
+        for action in schedule["actions"]:
+            key = (action["block"], action["cell_id"])
+            if (action.get("stage") != stage or action.get("attempt") != 1 or key in actions or
+                Path(action["cell_dir"]).resolve() != (location / f"{action['block']}.{action['cell_id']}.{action['context']}.a1").resolve()):
+                raise ValueError(f"invalid scheduled action: {action}")
+            actions[key] = action
+        schedules[location.resolve()] = {"stage": stage, "actions": actions}
+    return schedules
+
+
+def validate_cell(directory: Path, record: dict, schedules: dict, config: dict, used_bundles: set,
+                  *, verify_runs: bool = True) -> dict:
+    owner = next((data for root, data in schedules.items() if directory.parent.resolve() == root), None)
+    if owner is None:
+        raise ValueError("cell is outside a scheduled stage directory")
+    match = re.fullmatch(r"(.+)\.(\d+)\.(D|I|SH|B)\.a([1-3])", directory.name)
+    if match is None:
+        raise ValueError("cell directory does not identify a scheduled attempt")
+    block, slot_text, arm, attempt_text = match.groups()
+    slot, attempt = int(slot_text), int(attempt_text)
+    action = owner["actions"].get((block, slot))
+    if action is None or action["context"] != arm:
+        raise ValueError("cell is not a scheduled block and slot")
+    stage = owner["stage"]
+    if (record.get("stage"), record.get("state"), record.get("context"), record.get("cell_id")) != (stage, action["state"], arm, slot):
+        raise ValueError("cell record disagrees with scheduled stage, state, slot, or arm")
+    if attempt > 1:
+        previous = directory.parent / f"{block}.{slot}.{arm}.a{attempt-1}" / "discarded.json"
+        if not previous.is_file():
+            raise ValueError(f"attempt {attempt} has no discarded predecessor")
+        discard = json.loads(previous.read_text())
+        if discard.get("block") != block or discard.get("attempt") != attempt-1:
+            raise ValueError(f"attempt {attempt} has invalid retry predecessor")
+    if not verify_runs:
+        return action
+    runs = record.get("runs", [])
+    if len(runs) != config["runs_per_cell"][stage]:
+        raise ValueError("wrong number of production bundles")
+    for number, run in enumerate(runs, 1):
+        run_id = f"osctx-{stage.lower()}-{block.lower()}-{slot}-{arm.lower()}-r{number}"
+        expected_bundle = (directory / "runs" / run_id).resolve()
+        expected_config = (directory / f"run-r{number}.json").resolve()
+        if run.get("run_id") != run_id or Path(run.get("bundle", "")).resolve() != expected_bundle:
+            raise ValueError(f"run r{number} has foreign bundle or run_id")
+        if Path(run.get("config", "")).resolve() != expected_config:
+            raise ValueError(f"run r{number} has foreign materialized config")
+        if not expected_config.is_file() or hashlib.sha256(expected_config.read_bytes()).hexdigest() != run.get("materialized_sha256"):
+            raise ValueError(f"run r{number} materialized-config sha256 mismatch")
+        if json.loads(expected_config.read_text()).get("run_id") != run_id:
+            raise ValueError(f"run r{number} materialized-config run_id mismatch")
+        metadata_path = expected_bundle / "metadata.json"
+        if not metadata_path.is_file() or json.loads(metadata_path.read_text()).get("run_id") != run_id:
+            raise ValueError(f"run r{number} bundle metadata run_id mismatch")
+        if expected_bundle in used_bundles:
+            raise ValueError(f"duplicate bundle: {expected_bundle}")
+        used_bundles.add(expected_bundle)
+    return action
+
+
+def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_dir: Path | None = None):
+    schedules = stage_schedules(out)
     rows, errors, discarded = [], [], []
-    invalid_cell_keys = set()
+    invalid_cell_counts = defaultdict(int)
+    used_bundles, seen_cells = set(), set()
     for path in sorted(out.rglob("cell.json")):
         try:
-            if (path.parent / "discarded.json").exists():
-                discarded.append(str(path.parent))
+            record = json.loads(path.read_text())
+            has_discard = (path.parent / "discarded.json").exists()
+            action = validate_cell(path.parent, record, schedules, config, used_bundles,
+                                   verify_runs=not has_discard)
+            match = re.fullmatch(r"(.+)\.(\d+)\.(D|I|SH|B)\.a([1-3])", path.parent.name)
+            key = (record["stage"], match.group(1), int(match.group(2)), int(match.group(4)))
+            if key in seen_cells:
+                raise ValueError(f"duplicate cell attempt: {key}")
+            seen_cells.add(key)
+            if has_discard:
                 discard = json.loads((path.parent / "discarded.json").read_text())
+                discarded.append({"cell": str(path.parent), "reason": discard.get("reason", "unspecified")})
                 if discard.get("reason") == "bundle_invalid":
-                    record = json.loads(path.read_text())
-                    invalid_cell_keys.add((record["stage"], discard["block"], record["cell_id"], record["context"]))
+                    invalid_cell_counts[(record["stage"], record["context"])] += 1
                 continue
             row = analyzer_backend(path.parent, config) if analyzer_backend else analyze_cell(path.parent, config)
-            if row.get("stage") == "U1" and "warmup" in row.get("block", ""):
+            if action["discard"]:
+                discarded.append({"cell": str(path.parent), "reason": "preregistered discard"})
                 continue
             rows.append(row)
         except Exception as exc:
@@ -596,17 +704,19 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None):
     decision = decision_table(rows, config)
     for row in rows:
         if "bundle_invalid" in row.get("flags", []):
-            invalid_cell_keys.add((row["stage"], row["block"], row.get("cell_id", 1), row["context"]))
+            invalid_cell_counts[(row["stage"], row["context"])] += 1
     decision["invalid_cell_counts_by_stage"] = {
-        stage: {arm: sum(key[0] == stage and key[3] == arm for key in invalid_cell_keys)
+        stage: {arm: invalid_cell_counts[(stage, arm)]
                 for arm in ("D", "I", "SH", "B")}
         for stage in ("stage0", "U1", "U2", "S")}
     decision["invalid_cell_counts"] = {arm: sum(counts[arm] for counts in decision["invalid_cell_counts_by_stage"].values())
                                        for arm in ("D", "I", "SH", "B")}
     report = {"cells": rows, "errors": errors, "discarded": discarded,
               **decision, "stage_references": references}
-    write_json(out / "summary.json", report)
-    (out / "summary.md").write_text(markdown(rows, decision, errors, discarded))
+    destination = output_dir or out
+    destination.mkdir(parents=True, exist_ok=True)
+    write_json(destination / "summary.json", report)
+    (destination / "summary.md").write_text(markdown(rows, decision, errors, discarded))
     return report
 
 
@@ -622,22 +732,31 @@ def main(argv=None):
         if args.stage0_summary:
             rows = json.loads(args.stage0_summary.read_text())["cells"]
             spread = stage0_spread(rows)
-            estimates = {contrast: spread["between_cell_paired_sd_log"] for contrast in ("D/I", "SH/I")}
+            config = load_config(args.config)
+            replication = config["runs_per_cell"]["U1"]
+            if config["runs_per_cell"]["U2"] != replication:
+                power.error("U1 and U2 must have equal replication for the combined power table")
+            u_spread = u_replication_spread(spread, replication, config["runs_per_cell"]["stage0"])
+            spread["U_paired_sd_log"] = u_spread
+            spread["variance_component_formula"] = "max(0, stage0_paired_sd^2 - 2*within_run_sd^2/stage0_runs_per_cell) + 2*within_run_sd^2/runs_per_cell_U"
+            estimates = {contrast: u_spread for contrast in ("D/I", "SH/I")}
             if any(value is None for pair in estimates.values() for value in pair.values()):
                 power.error("stage0 needs at least two valid paired blocks")
         elif args.sd_e is not None and args.sd_r is not None:
             estimates = {contrast: {"E": args.sd_e, "R": args.sd_r} for contrast in ("D/I", "SH/I")}
             spread = None
+            replication = load_config(args.config)["runs_per_cell"]["U1"]
         else:
             power.error("provide --stage0-summary or both paired SDs")
         size = load_config(args.config)["sizes"]["u_blocks"]
-        print(json.dumps({"spread": spread, "table": power_table(estimates, None, (size, size * 2))}, indent=2))
+        print(json.dumps({"spread": spread, "table": power_table(estimates, None, (size, size * 2), runs_per_cell_u=replication)}, indent=2))
         return 0
     parser = argparse.ArgumentParser()
     parser.add_argument("out", type=Path)
+    parser.add_argument("--out", dest="output_dir", type=Path)
     parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.json"))
     args = parser.parse_args(argv)
-    report = analyze_directory(args.out, load_config(args.config))
+    report = analyze_directory(args.out, load_config(args.config), output_dir=args.output_dir)
     return 1 if report["errors"] else 0
 
 

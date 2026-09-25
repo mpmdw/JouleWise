@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 from contextlib import redirect_stderr
+import hashlib
 import io
 import json
 import math
@@ -35,19 +36,30 @@ def make_bundle(parent: Path, name: str, fixture="bench_smoke", *, energy=None, 
     shutil.copy(FIXTURES / "bench_smoke" / "events.jsonl", bundle / "events.jsonl")
     (bundle / "outputs").mkdir()
     (bundle / "outputs" / "tokens.jsonl").write_text("".join(json.dumps({"index": n, "token_id": n + token_offset}) + "\n" for n in range(512)))
+    (bundle / "metadata.json").write_text(json.dumps({"run_id": name, "workload_observed": {"output_token_count": 512}}))
     return bundle
 
 
-def make_cell(parent: Path, config, stage, block, arm, energies, rates=None, *, fixture="bench_smoke", token_offset=0):
-    directory = parent / f"{block}.1.{arm}.a1"
-    directory.mkdir()
+def make_cell(parent: Path, config, stage, block, arm, energies, rates=None, *, fixture="bench_smoke", token_offset=0, attempt=1):
+    scheduled = next((a for a in json.loads((parent / "command_sequence.json").read_text())["actions"]
+                      if a["block"] == block and a["context"] == arm), None)
+    if scheduled is None:
+        raise ValueError("test cell must be scheduled")
+    slot = scheduled["cell_id"]
+    directory = parent / f"{block}.{slot}.{arm}.a{attempt}"
+    directory.mkdir(exist_ok=True)
     runs = []
     for number, energy in enumerate(energies, 1):
-        bundle = make_bundle(directory, f"bundle-{number}", fixture, energy=energy,
+        run_id = f"osctx-{stage.lower()}-{block.lower()}-{slot}-{arm.lower()}-r{number}"
+        bundle = make_bundle(directory / "runs", run_id, fixture, energy=energy,
                              rate=(rates or [84.] * len(energies))[number-1], token_offset=token_offset)
-        runs.append({"bundle": str(bundle), "child": {"pid": 700 + number}})
+        cfg = directory / f"run-r{number}.json"
+        cfg.write_text(json.dumps({"run_id": run_id}))
+        runs.append({"bundle": str(bundle), "run_id": run_id, "config": str(cfg),
+                     "materialized_sha256": hashlib.sha256(cfg.read_bytes()).hexdigest(),
+                     "child": {"pid": 700 + number}})
     record = {"stage": stage, "state": "A" if stage == "stage0" else "U", "context": arm,
-              "pid": 500, "cell_id": 1, "runs": runs, "cpu": [{"seconds": 5.1}], "allow_pids": [], "flags": [], "interrupted": False}
+              "pid": 500, "cell_id": slot, "runs": runs, "cpu": [{"seconds": 5.1}], "allow_pids": [], "flags": [], "interrupted": False}
     (directory / "cell.json").write_text(json.dumps(record))
     (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": False}))
     return directory
@@ -151,6 +163,7 @@ class OSCTXTests(unittest.TestCase):
         self.assertEqual({r["sd_multiplier"] for r in table}, {1., 1.5, 2.})
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
+            runner.plan(root, common.DEFAULT_CONFIG, self.config, "stage0", "/python")
             for i, (a, b) in enumerate(((.40, .41), (.43, .42), (.39, .40)), 1):
                 make_cell(root, self.config, "stage0", f"stage0-{i:02}", "I", [a, a*1.01])
                 make_cell(root, self.config, "stage0", f"stage0-{i:02}", "SH", [b, b*1.02])
@@ -184,7 +197,7 @@ class OSCTXTests(unittest.TestCase):
     def test_interruption_and_same_order_retry(self):
         self.assertTrue(runner.interrupted({"hid_idle_seconds": 599, "display_state": "on"}, "U", 600, "on"))
         self.assertTrue(runner.interrupted({"hid_idle_seconds": 700, "display_state": "asleep"}, "U", 600, "on"))
-        self.assertFalse(runner.interrupted({"hid_idle_seconds": 700, "display_state": "unknown"}, "U", 600, "on"))
+        self.assertTrue(runner.interrupted({"hid_idle_seconds": 700, "display_state": "unknown"}, "U", 600, "on"))
         block = common.blocks(self.config, "U1")[2]
         self.assertEqual(runner.retry_block(block, 1)["arms"], block["arms"])
         self.assertFalse(cell.census_sample(SimpleNamespace(command=lambda argv: {"stdout":""}, idle=lambda:700,
@@ -266,6 +279,52 @@ class OSCTXTests(unittest.TestCase):
                 runner.execute(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python",
                                backend=FakeRunner(), existing_actions=actions)
 
+    def test_two_plus_one_failed_attempts_stop_stage(self):
+        class FakeRunner:
+            def write_cell(self, script):
+                parts = shlex.split(script)
+                directory = Path(parts[parts.index("--out") + 1])
+                block, slot, arm, attempt = directory.name.split(".")
+                (directory / "cell.json").write_text(json.dumps({
+                    "stage": "stage0", "state": "A", "context": arm, "cell_id": int(slot),
+                    "pid": 500, "runs": [{"bundle": str(directory / f"r{n}")} for n in (1, 2)],
+                    "interrupted": False}))
+                (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": False}))
+            def run(self, argv):
+                if argv[1] == "bootstrap":
+                    self.write_cell(plistlib.loads(Path(argv[-1]).read_bytes())["ProgramArguments"][2])
+                return SimpleNamespace(returncode=1 if argv[1] in ("print", "-f") else 0, stdout="", stderr="")
+            def spawn_shell(self, argv, directory): self.write_cell(argv[5]); return object()
+            def stop_shell(self, process): pass
+            def now(self): return 0.
+            def sleep(self, seconds): pass
+            def display(self): return "on"
+            def idle(self): return 700.
+        def evidence(bundle, reference):
+            name = bundle.parent.name
+            fail = ("stage0-01" in name and ".SH.a1" in name) or \
+                   ("stage0-01" in name and ".SH.a2" in name) or \
+                   ("stage0-02" in name and ".SH.a1" in name)
+            return {"valid": not fail, "output_hash": "same"}
+        with tempfile.TemporaryDirectory() as temp, patch.object(runner, "bundle_evidence", side_effect=evidence):
+            out = Path(temp)
+            actions = runner.plan(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python")
+            with self.assertRaisesRegex(RuntimeError, "3 invalid cells in SH"):
+                runner.execute(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python",
+                               backend=FakeRunner(), existing_actions=actions)
+
+    def test_analyzer_counts_failed_attempts_not_slots(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner.plan(root, common.DEFAULT_CONFIG, self.config, "stage0", "/python")
+            for block, attempt in (("stage0-01", 1), ("stage0-01", 2), ("stage0-02", 1)):
+                directory = make_cell(root, self.config, "stage0", block, "SH", [.4, .4], attempt=attempt)
+                (directory / "discarded.json").write_text(json.dumps({"reason": "bundle_invalid", "block": block,
+                                                                       "attempt": attempt}))
+            report = analyze.analyze_directory(root, self.config)
+            self.assertEqual(report["invalid_cell_counts_by_stage"]["stage0"]["SH"], 3)
+            self.assertEqual(len(report["discarded"]), 3)
+
     def test_u2_rejects_non_u1_or_incomplete_summary(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -311,12 +370,13 @@ class OSCTXTests(unittest.TestCase):
     def test_analyzer_synthetic_bundle_cells_and_verdict_gates(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
+            runner.plan(root, common.DEFAULT_CONFIG, self.config, "U1", "/python")
             for block in common.blocks(self.config, "U1"):
                 if block["discard"] or block["arms"] == ["B"]: continue
                 for arm in block["arms"]:
                     value = .42 if arm == "D" else .4
                     make_cell(root, self.config, "U1", block["id"], arm, [value])
-            invalid = make_cell(root, self.config, "U1", "U1-B-extra", "B", [.4], fixture="failed_status")
+            invalid = make_cell(root, self.config, "U1", "U1-B-01", "B", [.4], fixture="failed_status")
             report = analyze.analyze_directory(root, self.config)
             self.assertEqual(len(report["cells"]), 19)
             self.assertEqual(report["verdicts"]["D/I:E"], "DIFFERENT")
@@ -326,9 +386,91 @@ class OSCTXTests(unittest.TestCase):
             interval = report["intervals"]["D/I:E"]
             self.assertGreater(interval["widened_upper_ratio"] - interval["widened_lower_ratio"], 0)
             self.assertIn("Absolute J/token", (root / "summary.md").read_text())
-            make_cell(root, self.config, "U1", "U1-B-other", "B", [.4], token_offset=1)
+            make_cell(root, self.config, "U1", "U1-B-02", "B", [.4], token_offset=1)
             rerun = analyze.analyze_directory(root, self.config)
-            self.assertIn("output_hash_mismatch", next(r for r in rerun["cells"] if "other" in r["block"])["flags"])
+            self.assertIn("output_hash_mismatch", next(r for r in rerun["cells"] if r["block"] == "U1-B-02")["flags"])
+
+    def test_schedule_rejects_foreign_bundles_and_config_drift(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner.plan(root, common.DEFAULT_CONFIG, self.config, "U1", "/python")
+            cells = []
+            for block in common.blocks(self.config, "U1"):
+                if len(block["arms"]) != 3:
+                    continue
+                for arm in block["arms"]:
+                    cells.append(make_cell(root, self.config, "U1", block["id"], arm, [.4]))
+            foreign = make_bundle(root / "foreign", "wrong")
+            for directory in cells:
+                record = json.loads((directory / "cell.json").read_text())
+                record["runs"][0]["bundle"] = str(foreign)
+                (directory / "cell.json").write_text(json.dumps(record))
+            report = analyze.analyze_directory(root, self.config)
+            self.assertEqual(len(report["cells"]), 0)
+            self.assertEqual(len(report["errors"]), 18)
+            self.assertTrue(all("foreign bundle" in error["error"] for error in report["errors"]))
+            record = json.loads((cells[0] / "cell.json").read_text())
+            record["runs"][0]["bundle"] = str(cells[0] / "runs" / record["runs"][0]["run_id"])
+            (cells[0] / "cell.json").write_text(json.dumps(record))
+            (cells[0] / "run-r1.json").write_text('{"run_id":"tampered"}')
+            report = analyze.analyze_directory(root, self.config)
+            self.assertIn("sha256 mismatch", next(e for e in report["errors"] if e["cell"] == str(cells[0]))["error"])
+
+    def test_pairing_never_crosses_stages(self):
+        rows = [{"stage": stage, "block": "same", "context": arm, "metrics": {"E": value}}
+                for stage, arm, value in (("U1", "D", 1.), ("U2", "I", 1.))]
+        self.assertEqual(analyze.paired_rows(rows, "D/I", "E")[0], [])
+        rows.append({"stage": "U1", "block": "same", "context": "D", "metrics": {"E": 1.}})
+        with self.assertRaisesRegex(ValueError, "duplicate pairing arm"):
+            analyze.paired_rows(rows, "D/I", "E")
+
+    def test_unknown_required_observations_interrupt_or_abort(self):
+        backend = SimpleNamespace(command=lambda argv: {"stdout": ""},
+                                  idle=lambda: (_ for _ in ()).throw(RuntimeError("HID unreadable")),
+                                  display=lambda: "unknown")
+        observation = cell.census_sample(backend, "U", "on", 600)
+        self.assertTrue(observation["interrupted"])
+        polls = []
+        backend.sleep = lambda seconds: polls.append(seconds)
+        with self.assertRaisesRegex(RuntimeError, "unknown after 3 polls"):
+            runner.wait_gate(backend, self.config, lambda **record: None)
+        self.assertEqual(len(polls), 2)
+
+    def test_census_idle_baseline_cpu_flag(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner.plan(root, common.DEFAULT_CONFIG, self.config, "U1", "/python")
+            directory = make_cell(root, self.config, "U1", "U1-01", "I", [.4]) if "I" in common.blocks(self.config, "U1")[1]["arms"] else None
+            if directory is None:
+                self.fail("Williams block must contain I")
+            bundle = Path(json.loads((directory / "cell.json").read_text())["runs"][0]["bundle"])
+            with (bundle / "events.jsonl").open("a") as stream:
+                stream.write(json.dumps({"timestamp_s": 1000., "event_type": "stage_started", "phase": "idle_baseline"}) + "\n")
+                stream.write(json.dumps({"timestamp_s": 1010., "event_type": "stage_completed", "phase": "idle_baseline"}) + "\n")
+            def record(t, cpu):
+                return {"wall_ns": int(t*1e9), "ps": {"pid": 999, "stdout": f"PID PPID TIME COMM\n42 1 00:{cpu:05.2f} daemon\n"}}
+            (directory / "census.jsonl").write_text("\n".join(json.dumps(x) for x in (record(1000, 0), record(1005, .5))) + "\n")
+            analyzed = analyze.analyze_cell(directory, self.config)
+            self.assertIn("census_cpu", analyzed["flags"])
+            self.assertEqual(analyzed["census_cpu_flags"][0]["segment"], "idle.1")
+
+    def test_text_hash_cannot_substitute_for_token_ids(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bundle = make_bundle(Path(temp), "text-only")
+            (bundle / "outputs" / "tokens.jsonl").unlink()
+            (bundle / "outputs" / "response.txt").write_text("same decoded text")
+            evidence = analyze.bundle_evidence(bundle)
+            self.assertFalse(evidence["valid"])
+            self.assertIn("output_tokens", evidence["issues"])
+            self.assertIn("output_hash_missing", evidence["issues"])
+
+    def test_u_replication_variance_component(self):
+        spread = {"between_cell_paired_sd_log": {"E": .015, "R": .02},
+                  "within_run_sd_log": {"E": .015, "R": .02}}
+        scaled = analyze.u_replication_spread(spread, 1, 2)
+        self.assertAlmostEqual(scaled["E"], .015 * math.sqrt(2))
+        self.assertAlmostEqual(analyze.equivalence_power(scaled["E"], 6), .13745, delta=.01)
+        self.assertEqual({row["runs_per_cell_U"] for row in analyze.power_table(scaled["E"], scaled["R"])}, {1})
 
 
 if __name__ == "__main__":
