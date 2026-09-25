@@ -92,3 +92,9 @@ Packet hygiene: complete and neutral; both exhibits carried verbatim; the A2 que
 6. The 2-second redesign stays shelved as a fallback with named triggers.
 7. The old branch's code is reused only after re-keying it to this campaign; the four pinned estimator files stay untouched.
 8. Nothing needs you except replying NO to the arm notice if you object, and, when convenient, turning off automatic macOS updates.
+
+## R16-a (2026-09-25, PR-L final pass, ratified placement PRR-R3-01)
+
+Appended by the resident magistrate (activation 817355d2) as ruled by cold gate PRR-R3-01 Q1 (`docs/process_traces/2026-09-25-activation-152c9255/27-coldgate-packet-prr-r3/20-coldgate-fable-prr-r3-ruling.md` §2 Q1). Source: `docs/process_traces/2026-09-25-activation-152c9255/24-finalpass-packet-prl/20-fable-final-pass-prl.md` line 42, sha256 `98621b0621e3f24bd04f5b190fbfadda595ff74d3b8c846b39574df0e26382c3`. This text is not part of Revision 5.
+
+R16-a. The `measurement_root_outside_custody` refusal does not apply to a plan authored at or after epoch 1790340000 when all of the following hold: (a) its `receipt_class` is `TRANSACTION_PACK` and `pack_night` is present; (b) the bytes at `pack_night.authorization_record.path` hash to `pack_night.authorization_record.sha256`; (c) that record's `purpose` is exactly `T0_REHEARSAL`. If the record is missing, symlinked, mismatched, or not a JSON object, the exemption is forfeited and R16 applies. The exemption removes only R16. The T0 rehearsal rules continue to apply unchanged: rehearsal window-id prefix, `rehearsal_roots_not_disjoint` against every production custody root including `/Users/edr/night-custody/measurement`, rehearsal clone prefix, and `claim_eligible = false`; an exempted plan therefore cannot produce a claim-eligible measurement. No other purpose, no packless plan, and no quiet-admission plan receives the exemption.
