@@ -282,3 +282,7 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    Remaining before the final pass:
    - gate item (2): the full suite, running;
    - the 105/20 U3/§3.4(c) typed-code line: per INV-23/36/37/38/52, K states the entry-path witness at `requeue_overrun` and its asserted code (brief 107, a light read-only Sol scout).
+103. Typed-code line (brief 107, Sol; report 107b), required by 105/20 §3.4(c):
+   - INV-38 has entry-path witnesses: `inv_38`, and the `r5a` test accepts `inv_38` or `inv_39`, noted.
+   - INV-52 has an entry-path witness: `inv_52`, direct.
+   - **INV-23, INV-36 and INV-37 have NO entry-path witness.** They appear only as checker mutations. Under the ruling that is an **open gate-item (1) defect**. It is cured by adding three entry-path witness tests (K scope, tests only; brief 108), after which the harness and module runs repeat.
