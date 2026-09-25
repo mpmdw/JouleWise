@@ -1,0 +1,2 @@
+Ruling written (23,976 bytes, under 28 KB); validator PASS after the deliberate-typo REFUSE; N1 AFFIRM the harness-as-gate method with amended acceptance text, N3 REJECT the harness as-is (broken `drop_single` causes 100 % of the 2,779 refresh errors; no seal run on the legal corpus; triples must be exhaustive at 63 s), D1 dropped, D2/D3 converted to named seal witnesses, forger seat kept, exact R4-0…R4-5 texts at `docs/process_traces/2026-09-24-activation-278ebc9e/82-coldgate-packet-a291-r3method/20-coldgate-fable-r4-ruling.md`.
+rc=0

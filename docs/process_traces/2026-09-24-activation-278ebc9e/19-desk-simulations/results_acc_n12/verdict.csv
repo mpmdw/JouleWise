@@ -1,0 +1,9 @@
+model,n,trials,screen_trials,issuance_refusal,excursion_limited,zero_headroom,later_level_refusal,bracket_pass,floor_pass,interval_pass,false_admission,false_admission_rate,later_level_refusal_rate,iid_order_statistic_expected
+gaussian,12,200,10000,0,0,180,778,179,0,0,0,0.0,0.0778,0.07692307692307693
+gaussian,19,200,10000,0,0,195,568,194,0,0,0,0.0,0.0568,0.05
+heavy_excursions,12,200,10000,0,0,0,445,188,0,0,0,0.0,0.0445,0.07692307692307693
+heavy_excursions,19,200,10000,0,200,0,307,198,0,0,0,0.0,0.0307,0.05
+serial_ar1,12,200,10000,0,0,195,1807,171,0,0,0,0.0,0.1807,0.07692307692307693
+serial_ar1,19,200,10000,0,0,199,1165,175,0,0,0,0.0,0.1165,0.05
+block_drift,12,200,10000,0,0,200,9992,0,0,0,0,0.0,0.9992,0.07692307692307693
+block_drift,19,200,10000,0,0,0,1273,177,0,0,0,0.0,0.1273,0.05

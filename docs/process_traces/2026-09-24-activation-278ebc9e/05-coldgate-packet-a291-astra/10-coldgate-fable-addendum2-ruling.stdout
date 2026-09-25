@@ -1,0 +1,4 @@
+Ruling written (19,988 bytes, only untracked file in the tree; /tmp probe copies removed). Validator PASS on the correct sha after the typo REFUSE; F1 and F2 both CONFIRMED by executed probes at 20cd29de; B1 written differently (empty parent refuses `inv_10` in `_structure` and `_lever`, R4d as a P regression through `verify_executed_roster`; R2/R4b/census unchanged), B2 accepted with `ast.unparse` canonicalisation, threshold 0.30, control bound 0.28, two pinned positive controls; B3 one MATERIAL (fuzz (f) blind to F1) and four NITs; Final texts v3 restated in full.
+
+Ruling filed at `docs/process_traces/2026-09-24-activation-278ebc9e/05-coldgate-packet-a291-astra/10-coldgate-fable-addendum2-ruling.md`: validator PASS, F1 and F2 CONFIRMED, B1 rewritten (`inv_10` + R4d), B2 accepted (canonicalise, 0.30 / control 0.28), Final texts v3 complete.
+rc=0
