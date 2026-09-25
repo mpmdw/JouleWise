@@ -11,8 +11,8 @@ Rule MERGE or NO-MERGE on the exact merge candidate: PR #409, branch `fix/2026-0
 1. **The sha:** `ex-01-sha.txt`. It gives S, the parents, the merge-base, the file stat against main and the blob shas. `origin/main` has moved on since (docs-only interactive-4b commits); the magistrate checked that S merges with current main cleanly and that `gen_state --check` passes on the merged tree.
 2. **The diff:** `ex-02a` is post-review commit d2e751df (V1 a+b). `ex-02b` is 37f47475 (the kernel retirement that cures main's generated-region drift). `ex-02c` is 7c56aa33 plus its revert 72808d82. `ex-02d` is b1913497 (the CI patch-target fix). `ex-02-diff-note.txt` gives the lane-only stat from `3fb98469` to S.
 3. **Re-gate outputs:**
-   - `ex-03-regate-d2e751df.log`: 49 tests OK;
-   - the new test FAILS with the 3fb98469 packer (RecursionError) and PASSES at d2e751df (record 00 item 108);
+   - `ex-03-regate-d2e751df.log.txt`: 49 tests OK;
+   - the new test FAILS with the 3fb98469 packer (RecursionError) and PASSES at d2e751df — reproduce it yourself (the charge allows own execution for items 1–3);
    - `ex-115b` (fresh eyes) re-ran the patch-target test under both import styles.
 4. **Evidence transfer:** `ex-04-evidence-transfer.md` and `ex-04-packer-diff-6e2504b1-S.patch`.
 5. **F-C replay evidence:** `ex-104-fc-replay.jsonl` (all nine REFUSED by `_replay_roster`, inv_38/inv_39). F-B's is in `ex-106-fb-adjudication-and-replay.jsonl`. The adjudications are `ex-104-fc-adjudication.jsonl` and the F-B file.
@@ -20,7 +20,7 @@ Rule MERGE or NO-MERGE on the exact merge candidate: PR #409, branch `fix/2026-0
 7. **Lens reports, counter-review and dispositions:** `ex-110a`, `ex-110b`, `ex-111b` and `ex-07-dispositions.md`. The fresh-eyes reports are `ex-113b`, `ex-114b` and `ex-115b`.
 8. **The entry-witness code note:** in `ex-07-dispositions.md` and `ex-107b`/`ex-108b`. The INV-23/36/37 witnesses assert inv_38/inv_38/inv_11, not the listed inv_23/inv_36/inv_37.
 9. **The R4-2 final text, verbatim:** `ex-85-a291-final-texts-r4.md` (R4-2 (a)–(e)) as amended by `ex-95-a291-final-texts-r4b.md`. The contract is v4.1 (`ex-89`).
-10. **This charter pin with the validator receipt, and the PR ledger draft:** `ex-pr-ledger-draft.md`.
+10. **This charter pin with the validator receipt, and the PR ledger draft:** `ex-pr-ledger-draft.md`; `ex-10-validator-receipt.json` is the receipt of the validator run IN A JUDGE-STYLE WORKTREE on this packet as it stood before ex-10 was added (a packet cannot pin its own final digest). Your own validator run is the binding check. Re-convened after REFUSE run 1 (`20-refused-run1-ruling.md`, cure §2.2 applied: the gitignored `.log` exhibit is renamed `.log.txt` with identical bytes).
 
 Other context: `ex-105-forger2-ruling.md` (the forger-seat rulings) and `ex-100b` (mutation kills).
 
@@ -50,7 +50,7 @@ ca755344c9d01b91e9b17049ca72bc40bd524416deea87a91773b448a41fd23a  ex-01-sha.txt
 1c5d30b5d2ba9403d12550bad5cc73e62d75bd0c0dd58fbca852baef77b46d75  ex-02b-postreview-37f47475.patch
 1fcb0563392f95d07e9a36dc2625575b1b79b1c3ba0ee0213b34a2f6cf74274d  ex-02c-revert-72808d82.txt
 0ea9309196a83a3f26cd3c79de833a1436f53f052b0dc8e3fd85431d590ee3ae  ex-02d-postreview-b1913497.patch
-02d0224c89b9b3e6e962702ea1ba50e042fc31510d0de99df5f272ebf84bd559  ex-03-regate-d2e751df.log
+02d0224c89b9b3e6e962702ea1ba50e042fc31510d0de99df5f272ebf84bd559  ex-03-regate-d2e751df.log.txt
 163718b0b3d25ce7aaa9789033c0f417aab297c6ebc74ce78f04dbfd8d538e4b  ex-04-evidence-transfer.md
 226b0a052ce54c63914b5d2071fea5b0b9db1a318fc14c37d07f4957d3b92865  ex-04-packer-diff-6e2504b1-S.patch
 051002a0a4e4d0f760f8ed262c1bf07963f03af84b15c54cf31bc977d4e54686  ex-06-fullsuite-summary.txt
