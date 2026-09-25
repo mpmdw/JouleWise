@@ -3188,9 +3188,6 @@ os.execv(sys.executable,[sys.executable,*args])
             self.assertTrue(any(c[0].endswith("install_night_agent.sh") and "--uninstall" in c for c in calls))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class MeasurementRootLocationTests(unittest.TestCase):
     """Record 29: measurement clones live under the Spotlight-excluded custody tree."""
@@ -3206,6 +3203,18 @@ class MeasurementRootLocationTests(unittest.TestCase):
         self.assertNotIn(custody, root.parents)
         self.assertNotEqual(root, custody)
 
-    def test_measurement_subdir_never_matches_plan_prefix_or_plan_glob(self):
+    def test_measurement_subdir_never_matches_plan_prefix(self):
         prefix = entry.kind_row(entry.KIND).plan_id_prefix
         self.assertFalse(entry.MEASUREMENT_SUBDIR.startswith(prefix))
+
+    def test_one_level_plan_glob_never_reaches_a_clone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            custody = Path(tmp) / "night-custody"
+            clone = custody / entry.MEASUREMENT_SUBDIR / "JouleWise-measurement-x"
+            clone.mkdir(parents=True)
+            (clone / "night_plan.json").write_text("{}")
+            self.assertEqual(list(custody.glob("*/night_plan.json")), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

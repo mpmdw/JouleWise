@@ -653,7 +653,9 @@ the plan's `measurement_head`. The custody root is
 `/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-<H>`
 and the measurement clone
 `/Users/edr/JouleWise-measurement-20260923-0700-1790172000-<H>-qpe01-pilot-n1`
-(the naming in `joulewise/evidence_night.py` `locations`); the exact
+(the naming in `joulewise/evidence_night.py` `locations` as of 2026-09-23;
+from 2026-09-25 new clones live under `/Users/edr/night-custody/measurement/`,
+see `docs/contracts/evidence_night_entry.md`); the exact
 directories are the ones named in the published plan. The plan's
 repo-relative `registration_path` is
 `configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json`,

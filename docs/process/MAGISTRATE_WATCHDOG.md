@@ -230,7 +230,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
 
    If stop reports no daemon, the final enumeration still must pass. Never restart the daemon during the handoff. The installer and reaper independently refuse `handoff_daemon_not_retired` if any live `claude daemon run`, `bg-spare`/`--bg-spare`, or `bg-pty-host`/`--bg-pty-host` remains, regardless of PPID. The helper only enumerates; it never stops a process.
 
-2. Preserve the two retired-v1 custody trees below a directory the watchdog's one-level plan glob cannot reach:
+2. (Non-plan siblings of plan roots in `~/night-custody` include `magistrate/`, `successor-claims/`, `active-campaigns/`, `retired-v1/` and, since 2026-09-25, `measurement/`, which holds the evidence-night measurement clones; a clone may be deleted after harvest without touching any plan root.) Preserve the two retired-v1 custody trees below a directory the watchdog's one-level plan glob cannot reach:
 
    ```zsh
    mkdir -p "$HOME/night-custody/retired-v1"
