@@ -177,7 +177,7 @@ This procedure does not expand commit, push, merge, or deployment authority.
    Ruled 2026-09-24 by cold gate COUNCIL-407-01 §G5 as a D-184 addendum;
    Ed was informed with veto by Gmail `1a0d364481dec249` and endorsed the
    rule in GitHub issue #415 on 2026-09-25. Installed at the merge of the
-   installation PR #419 on 2026-09-25. The 30-day revert window and the
+   installation PR on 2026-09-25. The 30-day revert window and the
    day-30 review run from that merge: day-30 review 2026-10-25. Material
    defects and the suspension trigger are tracked in
    `docs/process/tier01_defect_log.md`.
