@@ -166,3 +166,4 @@
      - (1) a Sol harness seat, scoped to the tests and the oracle, adds the witnesses and corrects the oracle on Astra F1 (window-index binding), F2 (completeness passes) and F3 (numeric check), leaving the suite RED exactly where the reducer must change ([16/05](16-a292-impl/05-harness-fix1-brief.txt));
      - (2) the Opus implementation seat, scoped to the reducer, takes it to GREEN.
    - Aggregate `fsum` overflow is a ruling gap: joules cannot physically approach 1e308, and it currently fails closed by an untyped exception. It is registered as follow-up A292-AGGREGATE-OVERFLOW-01, with no test this round.
+60. PR-L fix round 1 completed after the scope approval (the resume's rc 0): commit `9500545f`. The requested set is 681 tests OK, with 9 sandbox skips for the process census. A fresh Opus delta re-audit (53) is running. The lead's bench run of the eight PR-L modules outside the sandbox (covering the 9 census tests) is running too.
