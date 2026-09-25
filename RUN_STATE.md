@@ -10,6 +10,15 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION ed17a643 — from 14:17 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the running log.
+- **Directive #421 (Ed, binding):** the battery-float gate is mandatory for every window, and anything germane to the truth of a number is mandatory.
+- **W1 is held on four things:** code PR **BFG-D**, amendment **A-R5b**, the 4b logger being dead, and two clean float reads.
+- The cold gate BATTERY-FLOAT-01 has ruled. Its paired Opus refuter found 2 BLOCKERs, and a cold Fable addendum is convened to rule them.
+- **Seal PR #418:** all three reviews say MERGE. The row-9 full-suite replay at `7ee773c0` is running (`/tmp/ed17a643/fullsuite-7ee773c0.log`).
+- **TIER-01 PR #419:** the delta fixes are in at `5cfc2f39`. Still owed: a final-head fresh read, the full suite, CI, and the Fable final pass.
+- **W1 arm scripts:** at `6a6feb69` on `docs/2026-09-25-817355d2-w1arm`, carrying the C9 procedural battery gate. Their harvest check is void and is replaced by the ruling.
+- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item.
+
 **▶▶ ACTIVATION 817355d2 — from 13:52 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-817355d2/00-activation-record.md) is the running log.
 - **Revision 5 seal:** branch `feat/2026-09-25-rev5-seal`, commit `23dd9909` (values bench-verified; placeholder count 0; 234 tests OK). It is under the full gate: a cold Fable final pass, Opus and Sol lenses, and a full-suite replay.
 - **R16-a** is appended to the acceptance-rulings record as PRR-R3-01 ruled. This bookkeeping branch carries it.
