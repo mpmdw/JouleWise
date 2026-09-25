@@ -291,3 +291,6 @@
 90. **WAVE-CONFIRM-01 C3 fallback satisfied** on wave tree `integ/2026-09-25-wave3` = main + H `dc210094` + PR-R `e77ec15d` + A292 `64dec562`. The ruled module set (ex-04's fifteen plus `test_epoch_continuation` and `test_epoch_equivalence_check`): **Ran 764 tests in 2,017 s, OK (skipped=1)** ([30/03](30-integration/03-c3-rerun-wave3.txt)).
    - C1-b(3): #412 is MERGEABLE.
    - C1-b(4): gate-ledger passes on H, with no failed check. Two test shards are still pending, and branch protection requires them green, so the merge waits for them.
+91. Peer 4b relays that Ed amended #416 in an issue **comment**: the audit moves to after W1/W2 and before any claim-bearing run, with a "CLAIM-RUN WORK COMPLETE" handoff.
+   - The relaunch contract binds only directive issue BODIES, and comments are never instructions. So the magistrate keeps the audit as a W1 arm precondition, the conservative reading, until #416's body is edited or a superseding directive is opened.
+   - The peer has been asked to arrange that, so headless successors read the same thing.
