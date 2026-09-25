@@ -144,3 +144,8 @@
    - **W3 REJECTS the FPC** (16–92 % false admission if the truth is a superpopulation) and adds a population-wording addendum.
    - W4 sets SESOI 0.30 with TOST null wording.
    - **HEADLINE-POWER-01 is decided.** Its texts feed HEADLINE-AP5M-AMENDMENT-01. The importer must list the census draw, which becomes a new obligation of that lane.
+55. **Bookkeeping candidate `docs/2026-09-25-152c9255-bk1` @ `91921075`: cold Fable final pass BK1-FINALPASS-01 = MERGE** ([23/20](23-finalpass-packet-bk1/20-fable-final-pass-bk1.md)): 0 BLOCKER, 0 MATERIAL, 3 NIT.
+   - The MATH sweep is clean, only allowed paths change, all six lens fixes are closed, `gen_state` rc 0, 44 tests OK, 14/14 spot-checks match.
+   - The ruling is cited from the working branch so the candidate head does not churn.
+   - The PR-0 re-scope ruling ([20/20](20-coldgate-packet-pr0scope/20-coldgate-fable-pr0scope-ruling.md)) is (A) amended: zero over the validator is rejected as a one-round gate; an exact target map; a deterministic corruption corpus on the two builder-built clean artifacts; a tracked residual ratchet (R-6v2). Round 3 was launched (seat 47), with an after-the-fact paired Opus refuter (48); a refuter BLOCKER stops the seat.
+   - **Process note:** gates 20 (PR-0 re-scope), 21 (power final pass) and 23 (bookkeeping final pass) ran without a paired refuter before ruling. Gate 20 gets one after the fact. Gates 21 and 23 are final passes over already-lensed material.
