@@ -1,0 +1,28 @@
+{
+  "reason": null,
+  "session": "C",
+  "status": "complete",
+  "steps": [
+    {
+      "end_wall_ns": 1790323515474230000,
+      "outcome": "complete",
+      "reason": null,
+      "start_wall_ns": 1790320678118595000,
+      "step": "C1"
+    },
+    {
+      "end_wall_ns": 1790324147627930000,
+      "outcome": "complete",
+      "reason": null,
+      "start_wall_ns": 1790323515474323000,
+      "step": "P"
+    },
+    {
+      "end_wall_ns": 1790324148521785000,
+      "outcome": "complete",
+      "reason": null,
+      "start_wall_ns": 1790324147628045000,
+      "step": "final_analyze"
+    }
+  ]
+}

@@ -2713,56 +2713,6 @@
       "status": "shelved",
       "stop_card": null
     },
-    "ED-BRANCH-PROTECTION-E1-01": {
-      "acceptance": {
-        "evidence": [
-          "`gh api repos/mpmdw/JouleWise/branches/main/protection` returns the protection object naming `test`, both exclusive jobs, and `gate-ledger` as required status checks"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ED-BRANCH-PROTECTION-E1-01/acceptance",
-          "label": "ED-BRANCH-PROTECTION-E1-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Ed enables branch protection on main so the gate-ledger job (and CI) can bind; until then the job is advisory and D-072 self-merge is conditioned on it green by doctrine only."
-      },
-      "authority": {
-        "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
-        "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "T26-RULING-INSTALL-01 closed 2026-09-03: D-170's three installing PRs #273, #274 and #275 are merged and the gate-ledger job is live and advisory",
-            "path": "docs/decision_log.md"
-          },
-          "kind": "task",
-          "required": "The advisory gate-ledger job exists and is green on its own PR before Ed is asked to make it required",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "T26-RULING-INSTALL-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
-            "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
-          },
-          "rule": "`enforce_admins` is Ed's choice; D-150a/D-155 NR-2 forbid pushes inside the freeze span, so a red required check is least recoverable exactly there - Ed decides with that in view"
-        }
-      ],
-      "flags": [],
-      "goal": "T26 cold gate item 2 routed item E1: enable branch protection on `main` with `test`, both exclusive jobs, and `gate-ledger` as required status checks (today `gh api .../branches/main/protection` returns 404 Branch not protected, so no red check blocks anything).",
-      "id": "ED-BRANCH-PROTECTION-E1-01",
-      "lane": "ed_external",
-      "priority": "p2_next_slice",
-      "rank": 8,
-      "status": "queued",
-      "status_note": "UNBLOCKED 2026-09-03 per the fresh-Fable docs-vs-truth audit A3: the installing row is closed and the advisory gate-ledger job is live, so the only thing left is Ed's hand on branch protection. Lane: ed (GitHub admin action on Ed's account). Registered 2026-09-02 with T26-RULING-INSTALL-01. Batch with the next Ed machine session; nothing else waits on it except the job becoming binding.",
-      "stop_card": null
-    },
     "ED-D118-NA-TIER-E2-01": {
       "acceptance": {
         "evidence": [

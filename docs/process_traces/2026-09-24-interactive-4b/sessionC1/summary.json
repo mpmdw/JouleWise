@@ -1,0 +1,1689 @@
+{
+  "background_cpu_ratio": null,
+  "cells": [
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-01",
+      "cell_id": 1,
+      "census_cpu_flags": [],
+      "context": "SH",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-01.1.SH.a1",
+      "flags": [],
+      "metrics": {
+        "E": 0.3899207486755405,
+        "R": 83.80137337499872,
+        "attribution_bound_j": 24.71890870768248,
+        "cpu_probe_seconds": [
+          7.62957699992694,
+          7.609196958015673,
+          7.628326291916892
+        ],
+        "cpu_seconds": 7.622366749953168,
+        "drift_ratio": 0.11968981411952402,
+        "edge_bound_j_per_token": 0.0014532569844514565,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.08003566331893808,
+          "E_drift_bound_j": 23.894805468324396,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 200.68249742888116,
+        "idle_power_w_mean": 0.16315584810914352,
+        "idle_power_w_stddev": 0.35143500969290353,
+        "max_run_drift_ratio": 0.11968981411952402,
+        "median_sample_interval_s": 0.1212425415,
+        "net_j": 199.63942332187673
+      },
+      "phase": null,
+      "pid": 1617,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-01.1.SH.a1/runs/osctx-c1-c1-01-1-sh-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.3899207486755405,
+            "R": 83.80137337499872,
+            "attribution_bound_j": 24.71890870768248,
+            "drift_ratio": 0.11968981411952402,
+            "edge_bound_j": 0.7440675760391458,
+            "edge_bound_j_per_token": 0.0014532569844514565,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.08003566331893808,
+              "E_drift_bound_j": 23.894805468324396,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 200.68249742888116,
+            "idle_power_w_mean": 0.16315584810914352,
+            "idle_power_w_stddev": 0.35143500969290353,
+            "median_sample_interval_s": 0.1212425415,
+            "net_j": 199.63942332187673
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 50.35845371434581,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.0032890234129733143,
+            "eligible": false,
+            "in_window_sample_count": 56,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.1269521713256836,
+            "observed_window_p95_sample_gap_s": 0.11675453186035156,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.393115043640137
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-01",
+      "cell_id": 2,
+      "census_cpu_flags": [],
+      "context": "I",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-01.2.I.a1",
+      "flags": [],
+      "metrics": {
+        "E": 0.38848425385749563,
+        "R": 84.3135248212769,
+        "attribution_bound_j": 11.166318747133841,
+        "cpu_probe_seconds": [
+          7.78685991698876,
+          7.695990959065966,
+          7.920590583002195
+        ],
+        "cpu_seconds": 7.801147153018974,
+        "drift_ratio": 0.0535141322643005,
+        "edge_bound_j_per_token": 0.0009137977674445169,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.05428264551585471,
+          "E_drift_bound_j": 10.644171644686393,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 199.52479612480593,
+        "idle_power_w_mean": 0.09730940599480874,
+        "idle_power_w_stddev": 0.2132761323990717,
+        "max_run_drift_ratio": 0.0535141322643005,
+        "median_sample_interval_s": 0.131997104,
+        "net_j": 198.90393797503776
+      },
+      "phase": null,
+      "pid": 1909,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-01.2.I.a1/runs/osctx-c1-c1-01-2-i-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.38848425385749563,
+            "R": 84.3135248212769,
+            "attribution_bound_j": 11.166318747133841,
+            "drift_ratio": 0.0535141322643005,
+            "edge_bound_j": 0.4678644569315927,
+            "edge_bound_j_per_token": 0.0009137977674445169,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.05428264551585471,
+              "E_drift_bound_j": 10.644171644686393,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 199.52479612480593,
+            "idle_power_w_mean": 0.09730940599480874,
+            "idle_power_w_stddev": 0.2132761323990717,
+            "median_sample_interval_s": 0.131997104,
+            "net_j": 198.90393797503776
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 48.179801740620846,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.003520070302948573,
+            "eligible": false,
+            "in_window_sample_count": 55,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.13242578506469727,
+            "observed_window_p95_sample_gap_s": 0.12059378623962402,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.380248069763184
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-02",
+      "cell_id": 1,
+      "census_cpu_flags": [],
+      "context": "SH",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-02.1.SH.a1",
+      "flags": [],
+      "metrics": {
+        "E": 0.38863495922960084,
+        "R": 83.86425559939411,
+        "attribution_bound_j": 11.488785147506471,
+        "cpu_probe_seconds": [
+          7.6559120420133695,
+          7.618631500052288,
+          7.621822000015527
+        ],
+        "cpu_seconds": 7.632121847360395,
+        "drift_ratio": 0.05576481261538283,
+        "edge_bound_j_per_token": 0.000713161857729587,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.027502569609396232,
+          "E_drift_bound_j": 11.096143706739527,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 199.90332321689178,
+        "idle_power_w_mean": 0.14459015252820187,
+        "idle_power_w_stddev": 0.24060562714095404,
+        "max_run_drift_ratio": 0.05576481261538283,
+        "median_sample_interval_s": 0.12111693700000001,
+        "net_j": 198.98109912555563
+      },
+      "phase": null,
+      "pid": 2165,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-02.1.SH.a1/runs/osctx-c1-c1-02-1-sh-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.38863495922960084,
+            "R": 83.86425559939411,
+            "attribution_bound_j": 11.488785147506471,
+            "drift_ratio": 0.05576481261538283,
+            "edge_bound_j": 0.36513887115754856,
+            "edge_bound_j_per_token": 0.000713161857729587,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.027502569609396232,
+              "E_drift_bound_j": 11.096143706739527,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 199.90332321689178,
+            "idle_power_w_mean": 0.14459015252820187,
+            "idle_power_w_stddev": 0.24060562714095404,
+            "median_sample_interval_s": 0.12111693700000001,
+            "net_j": 198.98109912555563
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 52.18371526883734,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.004190033390618686,
+            "eligible": false,
+            "in_window_sample_count": 56,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.12222576141357422,
+            "observed_window_p95_sample_gap_s": 0.11631488800048828,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.378194332122803
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-02",
+      "cell_id": 2,
+      "census_cpu_flags": [
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.050834547926115574,
+          "pid": 1,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/Users/edr/.local/bin/claude",
+          "core_fraction": 0.09384839617121506,
+          "pid": 31688,
+          "segment": "idle.1"
+        }
+      ],
+      "context": "I",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-02.2.I.a1",
+      "flags": [
+        "census_cpu"
+      ],
+      "metrics": {
+        "E": 0.3895475035732682,
+        "R": 84.30828135417876,
+        "attribution_bound_j": 12.053643166559285,
+        "cpu_probe_seconds": [
+          7.943779999972321,
+          7.7598740418907255,
+          7.559526124969125
+        ],
+        "cpu_seconds": 7.754393388944057,
+        "drift_ratio": 0.059968909970797665,
+        "edge_bound_j_per_token": 0.00016760206528831584,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.007132453510905634,
+          "E_drift_bound_j": 11.960698455620761,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 200.1335130167606,
+        "idle_power_w_mean": 0.10767987800937165,
+        "idle_power_w_stddev": 0.25506615031921226,
+        "max_run_drift_ratio": 0.059968909970797665,
+        "median_sample_interval_s": 0.1318150205,
+        "net_j": 199.4483218295133
+      },
+      "phase": null,
+      "pid": 2438,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-02.2.I.a1/runs/osctx-c1-c1-02-2-i-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.3895475035732682,
+            "R": 84.30828135417876,
+            "attribution_bound_j": 12.053643166559285,
+            "drift_ratio": 0.059968909970797665,
+            "edge_bound_j": 0.08581225742761771,
+            "edge_bound_j_per_token": 0.00016760206528831584,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.007132453510905634,
+              "E_drift_bound_j": 11.960698455620761,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 200.1335130167606,
+            "idle_power_w_mean": 0.10767987800937165,
+            "idle_power_w_stddev": 0.25506615031921226,
+            "median_sample_interval_s": 0.1318150205,
+            "net_j": 199.4483218295133
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 48.684704865133064,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.002679901750273077,
+            "eligible": false,
+            "in_window_sample_count": 55,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.13070273399353027,
+            "observed_window_p95_sample_gap_s": 0.11957025527954102,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.363224029541016
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-03",
+      "cell_id": 1,
+      "census_cpu_flags": [
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.06286776379057997,
+          "pid": 1,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.05093012000481577,
+          "pid": 1,
+          "segment": "idle.1"
+        }
+      ],
+      "context": "SH",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-03.1.SH.a1",
+      "flags": [
+        "census_cpu"
+      ],
+      "metrics": {
+        "E": 0.3905601397057903,
+        "R": 83.8188313806469,
+        "attribution_bound_j": 13.30674543611067,
+        "cpu_probe_seconds": [
+          7.66597816592548,
+          7.902426042011939,
+          7.592026917031035
+        ],
+        "cpu_seconds": 7.720143708322818,
+        "drift_ratio": 0.0625561365528655,
+        "edge_bound_j_per_token": 0.0014557706467930361,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.052240948003316134,
+          "E_drift_bound_j": 12.50914991694932,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 200.82231541610003,
+        "idle_power_w_mean": 0.13374216363940344,
+        "idle_power_w_stddev": 0.2475075349686399,
+        "max_run_drift_ratio": 0.0625561365528655,
+        "median_sample_interval_s": 0.121109229,
+        "net_j": 199.96679152936463
+      },
+      "phase": null,
+      "pid": 2713,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-03.1.SH.a1/runs/osctx-c1-c1-03-1-sh-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.3905601397057903,
+            "R": 83.8188313806469,
+            "attribution_bound_j": 13.30674543611067,
+            "drift_ratio": 0.0625561365528655,
+            "edge_bound_j": 0.7453545711580345,
+            "edge_bound_j_per_token": 0.0014557706467930361,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.052240948003316134,
+              "E_drift_bound_j": 12.50914991694932,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 200.82231541610003,
+            "idle_power_w_mean": 0.13374216363940344,
+            "idle_power_w_stddev": 0.2475075349686399,
+            "median_sample_interval_s": 0.121109229,
+            "net_j": 199.96679152936463
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 52.898425085074585,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.002100792974244434,
+            "eligible": false,
+            "in_window_sample_count": 56,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.1209263801574707,
+            "observed_window_p95_sample_gap_s": 0.11660408973693848,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.396815061569214
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-03",
+      "cell_id": 2,
+      "census_cpu_flags": [
+        {
+          "comm": "/usr/libexec/runningboardd",
+          "core_fraction": 0.13740019283675986,
+          "pid": 417,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/usr/libexec/PerfPowerServices",
+          "core_fraction": 0.1589916517111231,
+          "pid": 50333,
+          "segment": "idle.1"
+        }
+      ],
+      "context": "I",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-03.2.I.a1",
+      "flags": [
+        "census_cpu"
+      ],
+      "metrics": {
+        "E": 0.39144150179507864,
+        "R": 84.06848063499024,
+        "attribution_bound_j": 11.38584429199259,
+        "cpu_probe_seconds": [
+          7.346315333037637,
+          7.613236750010401,
+          7.618032332975417
+        ],
+        "cpu_seconds": 7.5258614720078185,
+        "drift_ratio": 0.05672304770153055,
+        "edge_bound_j_per_token": 3.274390398039595e-05,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.0007568640699560092,
+          "E_drift_bound_j": 11.368322549084672,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 201.05388884441805,
+        "idle_power_w_mean": 0.09938015977867297,
+        "idle_power_w_stddev": 0.2594351231302731,
+        "max_run_drift_ratio": 0.05672304770153055,
+        "median_sample_interval_s": 0.131934812,
+        "net_j": 200.41804891908026
+      },
+      "phase": null,
+      "pid": 2991,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-03.2.I.a1/runs/osctx-c1-c1-03-2-i-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.39144150179507864,
+            "R": 84.06848063499024,
+            "attribution_bound_j": 11.38584429199259,
+            "drift_ratio": 0.05672304770153055,
+            "edge_bound_j": 0.016764878837962727,
+            "edge_bound_j_per_token": 3.274390398039595e-05,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.0007568640699560092,
+              "E_drift_bound_j": 11.368322549084672,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 201.05388884441805,
+            "idle_power_w_mean": 0.09938015977867297,
+            "idle_power_w_stddev": 0.2594351231302731,
+            "median_sample_interval_s": 0.131934812,
+            "net_j": 200.41804891908026
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 48.724831776074254,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.001760896035093373,
+            "eligible": false,
+            "in_window_sample_count": 56,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.13130998611450195,
+            "observed_window_p95_sample_gap_s": 0.1199183464050293,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.398056983947754
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-04",
+      "cell_id": 1,
+      "census_cpu_flags": [
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.06833573647851034,
+          "pid": 1,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.05091976581149797,
+          "pid": 1,
+          "segment": "idle.1"
+        }
+      ],
+      "context": "I",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-04.1.I.a1",
+      "flags": [
+        "census_cpu"
+      ],
+      "metrics": {
+        "E": 0.38902613881592474,
+        "R": 84.3208753961179,
+        "attribution_bound_j": 10.920962597517866,
+        "cpu_probe_seconds": [
+          7.908388584037311,
+          7.60225429199636,
+          7.625704083009623
+        ],
+        "cpu_seconds": 7.712115653014432,
+        "drift_ratio": 0.0543478657689378,
+        "edge_bound_j_per_token": 0.00017911785901290455,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.0041711827395261025,
+          "E_drift_bound_j": 10.825083070963732,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 199.86226213682914,
+        "idle_power_w_mean": 0.10703967745727222,
+        "idle_power_w_stddev": 0.2646633456870049,
+        "max_run_drift_ratio": 0.0543478657689378,
+        "median_sample_interval_s": 0.131879791,
+        "net_j": 199.18138307375347
+      },
+      "phase": null,
+      "pid": 3242,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-04.1.I.a1/runs/osctx-c1-c1-04-1-i-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.38902613881592474,
+            "R": 84.3208753961179,
+            "attribution_bound_j": 10.920962597517866,
+            "drift_ratio": 0.0543478657689378,
+            "edge_bound_j": 0.09170834381460713,
+            "edge_bound_j_per_token": 0.00017911785901290455,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.0041711827395261025,
+              "E_drift_bound_j": 10.825083070963732,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 199.86226213682914,
+            "idle_power_w_mean": 0.10703967745727222,
+            "idle_power_w_stddev": 0.2646633456870049,
+            "median_sample_interval_s": 0.131879791,
+            "net_j": 199.18138307375347
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 48.01999096473909,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.0015201757187258903,
+            "eligible": false,
+            "in_window_sample_count": 55,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.13246560096740723,
+            "observed_window_p95_sample_gap_s": 0.11959314346313477,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.360996961593628
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-04",
+      "cell_id": 2,
+      "census_cpu_flags": [
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.05096445164216539,
+          "pid": 1,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd",
+          "core_fraction": 0.05684496529317419,
+          "pid": 711,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+          "core_fraction": 0.14700722827785068,
+          "pid": 411,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+          "core_fraction": 0.1019250116059729,
+          "pid": 664,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd",
+          "core_fraction": 0.29989474568681,
+          "pid": 711,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores",
+          "core_fraction": 0.10191935324528342,
+          "pid": 564,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+          "core_fraction": 0.0960224966010831,
+          "pid": 411,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+          "core_fraction": 0.06466821199666235,
+          "pid": 664,
+          "segment": "idle.1"
+        }
+      ],
+      "context": "SH",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-04.2.SH.a1",
+      "flags": [
+        "census_cpu"
+      ],
+      "metrics": {
+        "E": 0.388390469445617,
+        "R": 83.83596545204114,
+        "attribution_bound_j": 15.6377659108312,
+        "cpu_probe_seconds": [
+          7.344514708034694,
+          7.538774750079028,
+          7.543177124927752
+        ],
+        "cpu_seconds": 7.475488861013825,
+        "drift_ratio": 0.07669314070227125,
+        "edge_bound_j_per_token": 0.0007244249958172421,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.015975233618462426,
+          "E_drift_bound_j": 15.25088507935431,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 200.17732471481085,
+        "idle_power_w_mean": 0.20709294689251173,
+        "idle_power_w_stddev": 0.3438598036155077,
+        "max_run_drift_ratio": 0.07669314070227125,
+        "median_sample_interval_s": 0.1213411875,
+        "net_j": 198.8559203561559
+      },
+      "phase": null,
+      "pid": 3499,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-04.2.SH.a1/runs/osctx-c1-c1-04-2-sh-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.388390469445617,
+            "R": 83.83596545204114,
+            "attribution_bound_j": 15.6377659108312,
+            "drift_ratio": 0.07669314070227125,
+            "edge_bound_j": 0.37090559785842797,
+            "edge_bound_j_per_token": 0.0007244249958172421,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.015975233618462426,
+              "E_drift_bound_j": 15.25088507935431,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 200.17732471481085,
+            "idle_power_w_mean": 0.20709294689251173,
+            "idle_power_w_stddev": 0.3438598036155077,
+            "median_sample_interval_s": 0.1213411875,
+            "net_j": 198.8559203561559
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 52.10973277983738,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.002194887366622003,
+            "eligible": false,
+            "in_window_sample_count": 56,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.12244796752929688,
+            "observed_window_p95_sample_gap_s": 0.11642622947692871,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.380730867385864
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-05",
+      "cell_id": 1,
+      "census_cpu_flags": [
+        {
+          "comm": "/Users/edr/.local/bin/claude",
+          "core_fraction": 0.054682306681841694,
+          "pid": 31688,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/Users/edr/.local/bin/claude",
+          "core_fraction": 0.10729649318408553,
+          "pid": 31688,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/Users/edr/.local/bin/claude",
+          "core_fraction": 0.07616642885494904,
+          "pid": 31688,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/MediaAnalysis.framework/Versions/A/mediaanalysisd",
+          "core_fraction": 0.06640150207868491,
+          "pid": 41356,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.05467107813414215,
+          "pid": 1,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+          "core_fraction": 0.07838286600745091,
+          "pid": 411,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+          "core_fraction": 0.10385729745972543,
+          "pid": 664,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+          "core_fraction": 0.05879446716023346,
+          "pid": 411,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+          "core_fraction": 0.09177602589238582,
+          "pid": 411,
+          "segment": "run.1"
+        },
+        {
+          "comm": "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+          "core_fraction": 0.060533123460936276,
+          "pid": 664,
+          "segment": "run.1"
+        }
+      ],
+      "context": "I",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-05.1.I.a1",
+      "flags": [
+        "census_cpu"
+      ],
+      "metrics": {
+        "E": 0.3883415879917362,
+        "R": 84.14372115826431,
+        "attribution_bound_j": 11.896644803766458,
+        "cpu_probe_seconds": [
+          7.6094799999846146,
+          7.692128665978089,
+          7.566392875043675
+        ],
+        "cpu_seconds": 7.622667180335459,
+        "drift_ratio": 0.05637146968288369,
+        "edge_bound_j_per_token": 0.001250975369843268,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.04775575471822435,
+          "E_drift_bound_j": 11.20838965968848,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 199.7940833805375,
+        "idle_power_w_mean": 0.1504575310406475,
+        "idle_power_w_stddev": 0.3254841151290154,
+        "max_run_drift_ratio": 0.05637146968288369,
+        "median_sample_interval_s": 0.1317406865,
+        "net_j": 198.83089305176892
+      },
+      "phase": null,
+      "pid": 3760,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-05.1.I.a1/runs/osctx-c1-c1-05-1-i-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.3883415879917362,
+            "R": 84.14372115826431,
+            "attribution_bound_j": 11.896644803766458,
+            "drift_ratio": 0.05637146968288369,
+            "edge_bound_j": 0.6404993893597533,
+            "edge_bound_j_per_token": 0.001250975369843268,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.04775575471822435,
+              "E_drift_bound_j": 11.20838965968848,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 199.7940833805375,
+            "idle_power_w_mean": 0.1504575310406475,
+            "idle_power_w_stddev": 0.3254841151290154,
+            "median_sample_interval_s": 0.1317406865,
+            "net_j": 198.83089305176892
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 50.68838300699987,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.00251197777191109,
+            "eligible": false,
+            "in_window_sample_count": 55,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.1262960433959961,
+            "observed_window_p95_sample_gap_s": 0.11983370780944824,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.401742219924927
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-05",
+      "cell_id": 2,
+      "census_cpu_flags": [],
+      "context": "SH",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-05.2.SH.a1",
+      "flags": [],
+      "metrics": {
+        "E": 0.38876523834520416,
+        "R": 83.78163004845662,
+        "attribution_bound_j": 13.248368890869454,
+        "cpu_probe_seconds": [
+          7.591711167013273,
+          7.589151042047888,
+          7.893996166065335
+        ],
+        "cpu_seconds": 7.691619458375499,
+        "drift_ratio": 0.06286658476512565,
+        "edge_bound_j_per_token": 0.001333731801482461,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.05204268970695125,
+          "E_drift_bound_j": 12.513455518803482,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 200.06159741317964,
+        "idle_power_w_mean": 0.1584810009995424,
+        "idle_power_w_stddev": 0.28968029551072966,
+        "max_run_drift_ratio": 0.06286658476512565,
+        "median_sample_interval_s": 0.1228794995,
+        "net_j": 199.04780203274453
+      },
+      "phase": null,
+      "pid": 4014,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-05.2.SH.a1/runs/osctx-c1-c1-05-2-sh-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.38876523834520416,
+            "R": 83.78163004845662,
+            "attribution_bound_j": 13.248368890869454,
+            "drift_ratio": 0.06286658476512565,
+            "edge_bound_j": 0.68287068235902,
+            "edge_bound_j_per_token": 0.001333731801482461,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.05204268970695125,
+              "E_drift_bound_j": 12.513455518803482,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 200.06159741317964,
+            "idle_power_w_mean": 0.1584810009995424,
+            "idle_power_w_stddev": 0.28968029551072966,
+            "median_sample_interval_s": 0.1228794995,
+            "net_j": 199.04780203274453
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 53.127381308326086,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.0023443163587944273,
+            "eligible": false,
+            "in_window_sample_count": 56,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.1204078197479248,
+            "observed_window_p95_sample_gap_s": 0.11697077751159668,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.396952152252197
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-06",
+      "cell_id": 1,
+      "census_cpu_flags": [],
+      "context": "I",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-06.1.I.a1",
+      "flags": [],
+      "metrics": {
+        "E": 0.3886723605468149,
+        "R": 84.34712036956289,
+        "attribution_bound_j": 12.348674240160612,
+        "cpu_probe_seconds": [
+          7.9145717499777675,
+          7.723903749953024,
+          7.79402404197026
+        ],
+        "cpu_seconds": 7.810833180633684,
+        "drift_ratio": 0.060176889167341964,
+        "edge_bound_j_per_token": 0.0006790481222047565,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.02578569731792868,
+          "E_drift_bound_j": 11.975215904273847,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 199.6134360131707,
+        "idle_power_w_mean": 0.09624269196997569,
+        "idle_power_w_stddev": 0.2614097422108937,
+        "max_run_drift_ratio": 0.060176889167341964,
+        "median_sample_interval_s": 0.13167302,
+        "net_j": 199.00024859996924
+      },
+      "phase": null,
+      "pid": 4286,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-06.1.I.a1/runs/osctx-c1-c1-06-1-i-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.3886723605468149,
+            "R": 84.34712036956289,
+            "attribution_bound_j": 12.348674240160612,
+            "drift_ratio": 0.060176889167341964,
+            "edge_bound_j": 0.34767263856883535,
+            "edge_bound_j_per_token": 0.0006790481222047565,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.02578569731792868,
+              "E_drift_bound_j": 11.975215904273847,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 199.6134360131707,
+            "idle_power_w_mean": 0.09624269196997569,
+            "idle_power_w_stddev": 0.2614097422108937,
+            "median_sample_interval_s": 0.13167302,
+            "net_j": 199.00024859996924
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 47.702283453884654,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.002360879071305026,
+            "eligible": false,
+            "in_window_sample_count": 55,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.13356304168701172,
+            "observed_window_p95_sample_gap_s": 0.11961817741394043,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.371262073516846
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "C1-06",
+      "cell_id": 2,
+      "census_cpu_flags": [
+        {
+          "comm": "/sbin/launchd",
+          "core_fraction": 0.05284811061085671,
+          "pid": 1,
+          "segment": "idle.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+          "core_fraction": 0.06705069870215223,
+          "pid": 411,
+          "segment": "run.1"
+        },
+        {
+          "comm": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+          "core_fraction": 0.09232157714693849,
+          "pid": 411,
+          "segment": "run.1"
+        },
+        {
+          "comm": "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+          "core_fraction": 0.06285724401493495,
+          "pid": 664,
+          "segment": "run.1"
+        }
+      ],
+      "context": "SH",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-06.2.SH.a1",
+      "flags": [
+        "census_cpu"
+      ],
+      "metrics": {
+        "E": 0.3890183268073594,
+        "R": 83.7261450397335,
+        "attribution_bound_j": 18.163792421979934,
+        "cpu_probe_seconds": [
+          7.563827916048467,
+          7.555757209076546,
+          7.684662249987014
+        ],
+        "cpu_seconds": 7.601415791704009,
+        "drift_ratio": 0.08773575578203453,
+        "edge_bound_j_per_token": 0.0012372372668895597,
+        "energy_bound_terms_j": {
+          "E_clock_anchor_shift_bound_j": 0.05534868059331188,
+          "E_drift_bound_j": 17.474978260739167,
+          "E_interpolation_edge_bound_j": 0.0,
+          "E_interpolation_joint_edge_bound_j": 0.0
+        },
+        "gross_energy_j": 200.1747999648316,
+        "idle_power_w_mean": 0.1558970132378245,
+        "idle_power_w_stddev": 0.32263067088502734,
+        "max_run_drift_ratio": 0.08773575578203453,
+        "median_sample_interval_s": 0.1220451665,
+        "net_j": 199.17738332536803
+      },
+      "phase": null,
+      "pid": 4540,
+      "requests": [
+        {
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+        }
+      ],
+      "runs": [
+        {
+          "bundle": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-06.2.SH.a1/runs/osctx-c1-c1-06-2-sh-r1",
+          "diagnostic_issues": [],
+          "issues": [],
+          "metrics": {
+            "E": 0.3890183268073594,
+            "R": 83.7261450397335,
+            "attribution_bound_j": 18.163792421979934,
+            "drift_ratio": 0.08773575578203453,
+            "edge_bound_j": 0.6334654806474546,
+            "edge_bound_j_per_token": 0.0012372372668895597,
+            "energy_bound_terms_j": {
+              "E_clock_anchor_shift_bound_j": 0.05534868059331188,
+              "E_drift_bound_j": 17.474978260739167,
+              "E_interpolation_edge_bound_j": 0.0,
+              "E_interpolation_joint_edge_bound_j": 0.0
+            },
+            "gross_energy_j": 200.1747999648316,
+            "idle_power_w_mean": 0.1558970132378245,
+            "idle_power_w_stddev": 0.32263067088502734,
+            "median_sample_interval_s": 0.1220451665,
+            "net_j": 199.17738332536803
+          },
+          "output_hash": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306",
+          "output_tokens": 512,
+          "precheck": {
+            "cadence_ratio": 52.53869602927385,
+            "cadence_ratio_min": 4.0,
+            "clock_anchor_bound_s": 0.0028309893962679173,
+            "eligible": false,
+            "in_window_sample_count": 56,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "metric_name": "idle_subtracted_energy_j",
+            "observed_bracketing_max_sample_gap_s": 0.12177538871765137,
+            "observed_window_p95_sample_gap_s": 0.11650705337524414,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_class": "idle_subtracted_request",
+            "window_duration_s": 6.39792013168335
+          },
+          "status": "succeeded",
+          "valid": true
+        }
+      ],
+      "stage": "C1",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "P-01",
+      "cell_id": 1,
+      "census_cpu_flags": [],
+      "context": "D",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/P/P-01.1.D.a1",
+      "flags": [],
+      "metrics": {
+        "E": null,
+        "R": null,
+        "cpu_probe_seconds": [
+          7.558183750021271,
+          7.5107025830075145,
+          7.567520666052587
+        ],
+        "cpu_seconds": 7.558183750021271
+      },
+      "phase": null,
+      "pid": 4804,
+      "requests": [],
+      "runs": [],
+      "stage": "P",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "P-02",
+      "cell_id": 1,
+      "census_cpu_flags": [],
+      "context": "B",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/P/P-02.1.B.a1",
+      "flags": [],
+      "metrics": {
+        "E": null,
+        "R": null,
+        "cpu_probe_seconds": [
+          56.84409858298022,
+          57.31041870894842,
+          56.866230083978735
+        ],
+        "cpu_seconds": 56.866230083978735
+      },
+      "phase": null,
+      "pid": 4898,
+      "requests": [],
+      "runs": [],
+      "stage": "P",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "P-03",
+      "cell_id": 1,
+      "census_cpu_flags": [],
+      "context": "D",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/P/P-03.1.D.a1",
+      "flags": [],
+      "metrics": {
+        "E": null,
+        "R": null,
+        "cpu_probe_seconds": [
+          7.554078874993138,
+          7.5809878329746425,
+          7.4786771250655875
+        ],
+        "cpu_seconds": 7.554078874993138
+      },
+      "phase": null,
+      "pid": 5038,
+      "requests": [],
+      "runs": [],
+      "stage": "P",
+      "state": "U"
+    },
+    {
+      "allow_pids": [
+        1265,
+        1263,
+        46048,
+        789,
+        778,
+        642
+      ],
+      "attempt": 1,
+      "block": "P-04",
+      "cell_id": 1,
+      "census_cpu_flags": [],
+      "context": "B",
+      "dir": "/Users/edr/osctx-mvp-01/sessionC1/P/P-04.1.B.a1",
+      "flags": [],
+      "metrics": {
+        "E": null,
+        "R": null,
+        "cpu_probe_seconds": [
+          57.80042854102794,
+          58.026914292015135,
+          57.23667612497229
+        ],
+        "cpu_seconds": 57.80042854102794
+      },
+      "phase": null,
+      "pid": 5132,
+      "requests": [],
+      "runs": [],
+      "stage": "P",
+      "state": "U"
+    }
+  ],
+  "discarded": [
+    {
+      "cell": "/Users/edr/osctx-mvp-01/sessionC1/C1/C1-warmup.1.I.a1",
+      "reason": "preregistered discard"
+    }
+  ],
+  "errors": [],
+  "flags": [],
+  "interpretation": {
+    "C1_I_invalid_attempts": 0,
+    "all_I_runs_valid": true,
+    "contemporary_shell_equivalent": true,
+    "cure_supported_for_tested_shell": null,
+    "default_context_compromised": null,
+    "interactive_cadence_median_ms": 131.84740575,
+    "original_130_ms_criterion_met": false,
+    "production_300_sample_seconds": 39.554221725000005,
+    "production_bound_seconds": 55,
+    "purpose_based_cure_test_met": true
+  },
+  "intervals": {
+    "SH/I:E": {
+      "absolute_interval_j_per_token": [
+        -0.0017641431279740159,
+        0.0016896550042386582
+      ],
+      "absolute_j_per_token": -3.7244061867678736e-05,
+      "approx_80pct_mde_ratio": 1.0355105519563594,
+      "arm_sample_sd_log_E": {
+        "I": 0.0029657012007702683,
+        "SH": 0.002167896623796784
+      },
+      "idle_baseline_mean_w_max": 0.20709294689251173,
+      "lower_log": -0.004528708056326515,
+      "lower_ratio": 0.9954815310794861,
+      "max_cell_drift_ratio": 0.11968981411952402,
+      "mean_edge_bound_j_per_token_by_arm": {
+        "I": 0.000537214181295693,
+        "SH": 0.0011529305921938904
+      },
+      "mean_log": -9.397577248897003e-05,
+      "n": 6,
+      "ratio": 0.9999060286430956,
+      "sd_log": 0.0024002457556809307,
+      "upper_log": 0.004340756511348575,
+      "upper_ratio": 1.004350191241243,
+      "v2.3 C3 outcome": "INCONCLUSIVE-by-attribution",
+      "widened interval crosses \u03b4": "yes",
+      "widened_lower_log": -0.1491407205339263,
+      "widened_lower_ratio": 0.8614478829632067,
+      "widened_upper_log": 0.14895276898894835,
+      "widened_upper_ratio": 1.1606181707448808
+    },
+    "SH/I:R": {
+      "approx_80pct_mde_ratio": 1.0334932263622192,
+      "lower_log": -0.008116789862425514,
+      "lower_ratio": 0.9919160623315358,
+      "mean_log": -0.005302798307234104,
+      "n": 6,
+      "ratio": 0.9947112367084647,
+      "sd_log": 0.00152303923993027,
+      "upper_log": -0.0024888067520426934,
+      "upper_ratio": 0.9975142877597355
+    }
+  },
+  "invalid_cell_counts": {
+    "B": 0,
+    "D": 0,
+    "I": 0,
+    "SH": 0
+  },
+  "invalid_cell_counts_by_stage": {
+    "C1": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    },
+    "P": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    },
+    "S": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    },
+    "U1": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    },
+    "U2": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    },
+    "rehearsal": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    },
+    "stage0": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    },
+    "stage0U": {
+      "B": 0,
+      "D": 0,
+      "I": 0,
+      "SH": 0
+    }
+  },
+  "probe_summary": {
+    "B": {
+      "median_cpu_probe_seconds": 57.273547416960355,
+      "ratio_to_I": 7.443865633036549
+    },
+    "D": {
+      "median_cpu_probe_seconds": 7.556131312507205,
+      "ratio_to_I": 0.9820733782455986
+    },
+    "I": {
+      "median_cpu_probe_seconds": 7.694059812522028,
+      "ratio_to_I": 1.0
+    },
+    "SH": {
+      "median_cpu_probe_seconds": 7.6139142290339805,
+      "ratio_to_I": 0.989583446783503
+    }
+  },
+  "sandwich_intervals": {
+    "E": null,
+    "R": null
+  },
+  "stage": "C1",
+  "stage_references": {
+    "C1": "token_ids:23be1a6c54c86c4fb70533f9ef7eb8f3cfaf20650e7c6d89d873ba36cb1be306"
+  },
+  "verdicts": {
+    "SH/I:E": "EQUIVALENT",
+    "SH/I:R": "EQUIVALENT"
+  }
+}
