@@ -1,0 +1,7 @@
+# Magistrate proposal: PR-0 F1 (masked gated mutant) — Opus 5.5, activation 152c9255
+
+**Fact (seat report ex-01, flag F1).** Under PR-0 acceptance v3 (ex-02), the gated mutant `joulewise/paper_custody.py:620:if_false@4` survives the exact standing-test oracle. It disables the floor-anchor mismatch refusal in `_claim_issuance_gate`. The mutant is not semantically equivalent. But on every v1 artifact that passes `validate_claim_verdicts`, execution then reaches `:632` and raises the known KeyError (defect D-1, lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01). The generic catch at `:1345-1347` maps that to the same typed refusal the floor-anchor check would have produced. The two are therefore indistinguishable at the gate's observable boundary. Acceptance v3's `v1-wire-unreachable` exception covers only arcs at or after `:632`.
+
+**Proposal.** List the mutant as `masked-by-D-1` in the exception list, with the proof stated: every reachable v1 input that passes the validator reaches `:632` before any other effect, so the mutation changes no observable output while D-1 exists. Attach a recertification obligation: the lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01 fix PR must remove every `masked-by-D-1` entry and re-run the sweep, and its gate refuses if any such entry survives. Then complete `--certify` at the bench.
+
+**Alternative.** Wait for D-1's fix before certifying PR-0. That blocks PR-0 behind a production-defect lane that is not yet scheduled.

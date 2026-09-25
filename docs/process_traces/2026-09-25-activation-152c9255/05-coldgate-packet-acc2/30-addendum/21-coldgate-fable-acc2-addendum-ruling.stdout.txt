@@ -1,0 +1,2 @@
+Ruling written (26.6 KB, only new file, within budget): validator PASS on the correct sha; A1 affirms B1 and B2 as BLOCKERs and M1–M4/N1–N3 with exact texts; A2 reverses J3 to derive directly with W1 as window one, on the verified frame-length dependence of B; A3 issues rulings v2.1 R1–R17 plus the 8-line Ed summary.
+rc=0

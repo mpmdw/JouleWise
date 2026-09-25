@@ -1,0 +1,2 @@
+Ruling written (27.8 KB, under the 30 KB cap, only the ruling file untracked) at 06:28 PDT, 15 minutes into the 55-minute budget; validator PASS on the correct charter sha after the deliberate-typo REFUSE; H1 ruled per finding with P0-c settled outright (population = level-L eligible pool), H2 issued as v1.1 final texts with the paired-envelope Welch estimator, two-mint floor (20 windows), no byte-mismatch ceiling, and the power statement at n_acc = 128/200.
+rc=0
