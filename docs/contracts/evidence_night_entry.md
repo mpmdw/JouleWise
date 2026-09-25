@@ -29,15 +29,23 @@ age check without reauthoring.
 Plan IDs are `qpe01-pilot-n1-YYYYMMDD-HHMM` (local t0), giving same-day
 candidates distinct courier results branches and probe labels.
 A preparation stamp includes local date/time, epoch and full H. Measurement
-roots are `/Users/edr/JouleWise-measurement-<stamp>-qpe01-pilot-n1`, staging
-is `/Users/edr/night-plan-staging/<plan_id>-<stamp>/`, and custody is
-`/Users/edr/night-custody/<plan_id>-<stamp>/`. `--roots-under` replaces
+roots are `/Users/edr/night-custody/measurement/JouleWise-measurement-<stamp>-qpe01-pilot-n1`,
+staging is `/Users/edr/night-plan-staging/<plan_id>-<stamp>/`, and custody is
+`/Users/edr/night-custody/<plan_id>-<stamp>/`. Clones sit under
+`night-custody/measurement/` because `~/night-custody` is on the Spotlight
+privacy list; a clone at `~/JouleWise-measurement-*` (≈788 MB with its `.venv`)
+was indexed just before every window (record
+`docs/process_traces/2026-09-24-interactive-4b/29-spotlight-gap-measurement-clones.md`).
+`measurement/` matches no plan-id prefix and holds no `night_plan.json`, so
+every night-custody glob skips it. Clones prepared before this change were
+named `/Users/edr/JouleWise-measurement-<stamp>-qpe01-pilot-n1`; a candidate
+staged under the old naming refuses at check/publish/verify (fail closed). `--roots-under` replaces
 `/Users/edr` for both measurement and custody; `--staging-under` replaces the
 staging parent. These two overrides support isolated offline fixtures.
 Symlink components, overlapping roots and locations inside Git worktrees are
 refused, preserving canonical and other-checkout fences. Staging and custody
-parents must have equal `st_dev` for atomic publication; parents are created
-before comparing, before cloning.
+parents must have equal `st_dev` for atomic publication; the staging, custody
+and measurement parents are created before comparing, before cloning.
 
 Preparation checkpoints selection before cloning, then:
 
