@@ -135,16 +135,20 @@ class SystemBackend:
             return False
 
     def stop_shell(self, process):
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        # macOS returns EPERM from killpg when the group holds only exited
+        # (zombie) members, so a finished SH cell is reaped first and any
+        # survivor is proven by pgrep over the process group, not by killpg.
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
         process.wait(timeout=15)
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
+        survivors = subprocess.run(["/usr/bin/pgrep", "-g", str(process.pid)],
+                                   capture_output=True, text=True, check=False)
+        if survivors.returncode == 1 and not survivors.stdout.strip():
             return
-        raise RuntimeError(f"shell process-group survivor {process.pid}")
+        raise RuntimeError(f"shell process-group survivor {process.pid}: {survivors.stdout.strip()}")
 
 
 def runner_ancestry() -> list[int]:
