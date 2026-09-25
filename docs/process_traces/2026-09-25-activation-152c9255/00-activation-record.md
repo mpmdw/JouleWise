@@ -121,3 +121,11 @@
    - PR-L Astra lens ([17/02](17-prl-review/02-astra-exec-lens.md)): no BLOCKER; 484 tests. It could not get a single non-Interactive variant past the refusal, and R16 escapes are refused.
    - SHOULD-FIX F1: the receipt's plist digests are not bound to the rendered payloads. F2: timeout paths drop partial cadence evidence, and the refusal lacks elapsed_s. NIT F3: path case on a case-insensitive filesystem.
    - Physics note: the ruled max ≤ 200 ms criterion refuses 26 % of probes if 0.1 % of frames exceed 200 ms. Record it; the thresholds are ruled.
+51. PR-L Opus contract lens ([17/01](17-prl-review/01-opus-contract-lens.md)): FIX-FIRST.
+   - **B1:** `measurement_root_outside_custody` is not registered in `arm_retry.COLD_GATE_CODES`, so `tests.test_arm_retry` fails. Neither seat ran that module.
+   - **S1:** R16 conflicts with the ruled T0-rehearsal disjointness rule (`night_gate.py:1105-1154`), so every post-cutoff rehearsal plan would refuse.
+   - **S2:** the install does not bind the receipt's context. This is the same finding as Astra F1.
+   - **S3:** a SIGKILL sent to sudo can orphan the root-owned powermetrics.
+   - N1 and N2.
+   - **Magistrate provisional reading on S1:** R16 does not apply to `T0_REHEARSAL` pack plans. R16's purpose (M3) is Spotlight exclusion for measurement clones, and rehearsals produce no data. The reading is implemented provisionally and put explicitly to PR-L's cold Fable final pass, since the scope of a cold ruling is not the magistrate's to settle alone.
+   - Fix round 1 was dispatched with dictated closure shapes ([17/03](17-prl-review/03-fix1-brief.txt)).
