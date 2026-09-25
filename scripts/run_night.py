@@ -3662,8 +3662,10 @@ def probe_night(plan_path: Path, receipt_path: Path, timeout_s: float = 600) -> 
                 cadence = record.get("cadence") or {}
                 record.update(outcome="timeout", refusal_code="calibration_ledger_custody_timeout",
                               custody_elapsed_s=time.monotonic() - (deadline - timeout_s),
-                              detail="probe cadence median_ms={} p95_ms={} max_ms={}: supervisor timeout".format(
-                                  cadence.get("median_ms"), cadence.get("p95_ms"), cadence.get("max_ms")))
+                              detail="probe cadence median_ms={} p95_ms={} max_ms={}: supervisor timeout; "
+                                     "custody_elapsed_s={:g} timeout_s={:g}".format(
+                                         cadence.get("median_ms"), cadence.get("p95_ms"),
+                                         cadence.get("max_ms"), record["custody_elapsed_s"], timeout_s))
         elif not gone:
             record.update(outcome="refused", refusal_code="probe_process_survived")
         elif not output.is_file():
@@ -3776,9 +3778,6 @@ def _probe_cadence(directory: Path, *, executable="/usr/bin/powermetrics",
         result.pop("completed", None)
     if result["elapsed_s"] is None:
         result["elapsed_s"] = time.monotonic() - started
-    if not result["passed"]:
-        result["detail"] = ("{}; elapsed_s={:g} bound_s={:g}".format(
-            result.get("detail", "cadence failed"), result["elapsed_s"], bound))
     return result
 
 

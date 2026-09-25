@@ -3027,7 +3027,10 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         result = self.run_probe("hang", timeout=3.0)
         self.assertLess(time.monotonic() - started, 8)
         self.assertEqual(2, result.returncode, result.stderr)
-        self.assertEqual("timeout", json.loads(self.receipt.read_text())["outcome"])
+        timeout_receipt = json.loads(self.receipt.read_text())
+        self.assertEqual("timeout", timeout_receipt["outcome"])
+        self.assertIn("custody_elapsed_s=", timeout_receipt["detail"])
+        self.assertIn("timeout_s=3", timeout_receipt["detail"])
         stub_pids = Path(self.plan.measurement_root) / "stub-pids.json"
         deadline = time.monotonic() + 2
         while not stub_pids.exists() and time.monotonic() < deadline:
@@ -3197,6 +3200,25 @@ raise SystemExit(run_night.main(sys.argv[3:]))
         record["observations"] = 0
         path.write_text(json.dumps(record))
         self.assertEqual("ok", engine.validate_probe_receipt(prepared)["outcome"])
+
+
+class ProbeSupervisorDetailTests(unittest.TestCase):
+    def test_timeout_detail_includes_elapsed_custody_and_bound(self):
+        driver = _load_driver()
+        process = mock.Mock(pid=4242, stdout=io.BytesIO(), stderr=io.BytesIO())
+        process.communicate.side_effect = subprocess.TimeoutExpired("fixture probe", 0.25)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            receipt_path = root / "night_probe_receipt.json"
+            with mock.patch.object(driver.subprocess, "Popen", return_value=process), \
+                 mock.patch.object(driver, "_stop_probe_group", return_value=True):
+                code = driver.probe_night(root / "night_plan.json", receipt_path, timeout_s=0.25)
+            self.assertEqual(2, code)
+            receipt = json.loads(receipt_path.read_bytes())
+            self.assertEqual("calibration_ledger_custody_timeout", receipt["refusal_code"])
+            self.assertIn("supervisor timeout; custody_elapsed_s=", receipt["detail"])
+            self.assertIn("timeout_s=0.25", receipt["detail"])
+            self.assertGreaterEqual(receipt["custody_elapsed_s"], 0)
 
 
 class PackNightProducerTests(unittest.TestCase):
@@ -3735,6 +3757,40 @@ class PackNightProducerTests(unittest.TestCase):
                 with self.assertRaisesRegex(self.driver.PackNightRefusal, detail) as caught:
                     self.driver._pack_rehearsal_roots(plan, changed_arm, purpose)
                 self.assertEqual("launch_go_receipt_invalid", caught.exception.reason)
+
+    def test_post_cutoff_t0_inside_measurement_custody_refuses_disjointness_end_to_end(self):
+        case = PackNightProducerTests()
+        case._rehearsal_layout = True
+        case.setUp()
+        try:
+            cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+            custody_root = case.root / "measurement"
+            measurement = custody_root / "JouleWise-rehearsal-inside-custody"
+            measurement.mkdir(parents=True)
+            case._window_id = case.custody.name
+            case.authorization.update(purpose="T0_REHEARSAL", authority="T0-UNATTENDED-01")
+            ref = case.write(case.custody / "authorization.json", case.authorization)
+            case.plan = replace(case.plan, t0_epoch_s=cutoff + 60, authored_epoch_s=cutoff,
+                                measurement_root=str(measurement),
+                                pack_night={**case.plan.pack_night, "authorization_record": ref})
+            case.plan_path = write_night_plan(case.plan_path, case.plan)
+            case.raw = case.plan_path.read_bytes()
+            case.probe_source.now_epoch_s = cutoff + 61
+            inventory = [{"deployment_id": "production", "measurement_root": str(custody_root),
+                          "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody_root), \
+                 mock.patch.object(Path, "home", return_value=case.root / "home"), \
+                 mock.patch.object(case.readiness, "_authenticate_launcher_identity", return_value=measurement), \
+                 mock.patch.object(case.readiness, "_production_inventory", return_value=inventory):
+                code, calls = case.run_driver()
+            self.assertEqual(case.driver.EXIT_REFUSED, code)
+            self.assertEqual([], calls)
+            self.assertFalse((case.custody / "night/go_receipt.json").exists())
+            receipt = json.loads((case.custody / "night/receipt.json").read_bytes())
+            self.assertEqual("launch_go_receipt_invalid", receipt["refusal"]["reason"])
+            self.assertIn("rehearsal_roots_not_disjoint: measurement_root", receipt["refusal"]["detail"])
+        finally:
+            case.doCleanups()
 
     def test_pack_rehearsal_gate_refuses_another_measurement_checkout(self):
         other = self.root / (self.readiness.REHEARSAL_CLONE_PREFIX + "other")

@@ -919,6 +919,7 @@ class NightGateTests(unittest.TestCase):
                                      pack_night=binding)
                     receipt = self.evaluate(plan, source)
                     if exempt:
+                        self.assertNotEqual("GO", receipt.verdict)
                         self.assertNotEqual("measurement_root_outside_custody",
                                             receipt.refusal.reason if receipt.refusal else None)
                         self.assertTrue(source.measurement_calls)
@@ -935,8 +936,36 @@ class NightGateTests(unittest.TestCase):
                 receipt = self.evaluate(plan, source)
                 self.assertEqual("measurement_root_outside_custody", receipt.refusal.reason)
                 self.assertEqual([], source.measurement_calls)
-            # The separate T0 disjointness rule remains exercised by
-            # test_rehearsal_plan_and_arm_context_roots_follow_sibling_child_rule.
+
+    def test_pack_rehearsal_exemption_requires_real_authorization_digest(self) -> None:
+        cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            custody = root / "measurement"
+            custody.mkdir()
+            outside = root / "JouleWise-rehearsal-authenticated"
+            outside.mkdir()
+            authorization = outside / "authorization.json"
+            raw = json.dumps({"purpose": "T0_REHEARSAL"}).encode()
+            authorization.write_bytes(raw)
+            digest = hashlib.sha256(raw).hexdigest()
+            with mock.patch.object(night_gate, "MEASUREMENT_ROOT_CUSTODY_ROOT", custody):
+                for sha, expected_r16 in ((digest, False), ("0" * 64, True)):
+                    with self.subTest(sha=sha):
+                        source = FakeProbeSource(now_epoch_s=cutoff + 5)
+                        plan = make_plan(
+                            "TRANSACTION_PACK", t0_epoch_s=cutoff,
+                            authored_epoch_s=cutoff, measurement_root=str(outside),
+                            pack_night={"authorization_record": {
+                                "path": str(authorization), "sha256": sha,
+                            }},
+                        )
+                        receipt = self.evaluate(plan, source)
+                        self.assertEqual(
+                            "measurement_root_outside_custody" if expected_r16 else "night_probe_error",
+                            receipt.refusal.reason,
+                        )
+                        self.assertNotEqual("GO", receipt.verdict)
 
     def test_existing_case_alias_inside_custody_is_accepted(self) -> None:
         cutoff = night_gate.MEASUREMENT_ROOT_CUSTODY_CUTOFF_EPOCH_S

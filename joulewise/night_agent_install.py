@@ -1290,8 +1290,9 @@ def validate_install(args, repo):
 def _validate_install_launch_context(prepared, receipt):
     context = prepared.launch_context()
     recorded = receipt.get("launch_context")
-    if not isinstance(recorded, dict) or any(recorded.get(label) != context[label] for label in LABELS):
-        raise Refused(2, "probe receipt launch_context differs from install")
+    for label in LABELS:
+        if not isinstance(recorded, dict) or recorded.get(label) != context[label]:
+            raise Refused(2, "probe receipt launch_context differs from install: " + label)
 
 
 def main(argv=None):

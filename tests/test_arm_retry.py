@@ -47,6 +47,7 @@ INSTALLER = {
     "retained prior plist: <path>; re-run --uninstall",
     "unsupported plist destination: <path>",
     "--render-only directory must differ from launch_dir",
+    "probe receipt launch_context differs from install: <label>",
 }
 DOCS = ("docs/process/NIGHT_HANDBACK.md", "docs/phase_2/derivation_night_runbook.md")
 

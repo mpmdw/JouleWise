@@ -2307,14 +2307,14 @@ class RenderedProcessTypeTests(unittest.TestCase):
             receipt = {"launch_context": json.loads(json.dumps(context))}
             installer._validate_install_launch_context(prepared, receipt)
             with self.assertRaisesRegex(installer.Refused,
-                                        "probe receipt launch_context differs from install"):
+                                        "probe receipt launch_context differs from install: " + LABELS[0]):
                 installer._validate_install_launch_context(prepared, {})
             for label in LABELS:
                 with self.subTest(label=label):
                     changed = json.loads(json.dumps(receipt))
                     changed["launch_context"][label]["rendered_plist_sha256"] = "f" * 64
                     with self.assertRaisesRegex(installer.Refused,
-                                                "probe receipt launch_context differs from install"):
+                                                "probe receipt launch_context differs from install: " + label):
                         installer._validate_install_launch_context(prepared, changed)
             # Probe bytes depend on --probe-timeout-s and are intentionally
             # excluded from this install-time equality check.
@@ -2325,7 +2325,7 @@ class RenderedProcessTypeTests(unittest.TestCase):
             prepared.template = prepared.template.replace("</plist>",
                                                            "<!-- changed after receipt -->\n</plist>")
             with self.assertRaisesRegex(installer.Refused,
-                                        "probe receipt launch_context differs from install"):
+                                        "probe receipt launch_context differs from install: " + LABELS[0]):
                 installer._validate_install_launch_context(prepared, receipt)
 
     def test_each_label_requires_parsed_interactive_value(self):

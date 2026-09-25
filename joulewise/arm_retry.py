@@ -74,6 +74,7 @@ INSTALLER_REFUSALS = {
     "retained prior plist: <path>; re-run --uninstall": "A saved previous job file remains; follow the existing human-resolution/uninstall path.",
     "unsupported plist destination: <path>": "The job-file destination is not a regular file; resolve it under the existing path.",
     "--render-only directory must differ from launch_dir": "Use a separate directory for rendered job files.",
+    "probe receipt launch_context differs from install: <label>": "The installed night or dead-man job differs from the verified probe rendering; re-run the probe before installing.",
 }
 OTHER_REFUSALS = {
     "HOLD_CENSUS": "A supervisor census hold alone does not establish the narrowly evidenced idle arm cause.",
