@@ -50,3 +50,8 @@
    - With the negative control in item 26 (default launchd context: median 173 ms, max 262 ms, REFUSED), the probe discriminates the two regimes on the real sudo path. Evidence is in [11-prl-bench-smoke](11-prl-bench-smoke/).
    - The label was booted out and its plist moved to /tmp. Only `com.joulewise.magistrate` remains in ~/Library/LaunchAgents.
    - **Note for PR-L's lens:** the installed night agent must run a Python ≥ 3.11. Check that the rendered template's interpreter is not `/usr/bin/python3`.
+28. **Cold Fable addendum A292-REDUCER-DESIGN-01-ADD** ([09/30/21](09-coldgate-packet-a292/30-addendum/21-coldgate-fable-a292-addendum-ruling.md), rc 0).
+   - It keeps refuse-on-missing-live-window as an explicitly labelled amendment of 15/10 Q16 (S7 v1.1). The three A291 witnesses re-run through `reduce` now assert `missing_live_window`.
+   - It downgrades refuter B1/B2 to MATERIAL: the design stays executable once the texts are corrected.
+   - It adds two MATERIAL misses: the K24 superseded-row pairing and a per-window anchor bound.
+   - **A292 reducer rulings v1.1 (E2)** are the one source for the harness and implementation seats. The harness seat's WRITE_SCOPE is `tests/test_scored_reduce.py` plus `tests/scored_reduce_checker.py` (a stdlib-only oracle, AST-enforced).
