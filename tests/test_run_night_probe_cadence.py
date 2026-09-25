@@ -87,8 +87,10 @@ class ProbeCadenceTests(unittest.TestCase):
         self.assertEqual((220, 248, 248, 248), tuple(result[k] for k in
             ("count", "median_ms", "p95_ms", "max_ms")))
         self.assertIn("timed out", result["detail"])
-        self.assertIn("elapsed_s=", result["detail"])
-        self.assertIn("bound_s=55", result["detail"])
+        self.assertEqual(55, result["bound_s"])
+        self.assertIsInstance(result["elapsed_s"], float)
+        self.assertGreater(result["elapsed_s"], 0)
+        self.assertLessEqual(result["elapsed_s"], result["bound_s"])
         self.assertEqual("TERM relayed", term_marker.read_text())
 
     def test_nonzero_exit_retains_complete_frames(self):

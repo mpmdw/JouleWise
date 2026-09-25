@@ -127,6 +127,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `retained prior plist: <path>; re-run --uninstall` | A saved previous job file remains; follow the existing human-resolution/uninstall path. |
 | `unsupported plist destination: <path>` | The job-file destination is not a regular file; resolve it under the existing path. |
 | `--render-only directory must differ from launch_dir` | Use a separate directory for rendered job files. |
+| `probe receipt launch_context differs from install: <label>` | The installed night or dead-man job differs from the verified probe rendering; re-run the probe before installing. |
 
 **Other explicit refusals — cold-gate path.**
 
