@@ -304,3 +304,15 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    - Fix `RecursionError` alongside the merge.
    - The merge candidate must re-merge main, which moved to `25cde215`.
    R6-1 is important science (the headline design), so it goes to the council and cold gate with the AP-5M v5 and A291 contract v5 work. The pre-merge items go to a cold pre-merge question: which small fixes land before the final pass, given R4-2's "nothing else changes".
+108. Cold question A291-PREMERGE-01 (112/20, Fable, rc 0). The rulings:
+   - V1(a) and V1(b) land now, as exact texts: `-> dict`, and `RecursionError` added to BOTH conversion tuples. Sol's sha256-only cure was rejected: nesting in `items` escapes the same way.
+   - V1(c), the test timings, is REJECTED as worded ("exclusive" would drop a module from CI) and becomes lane CI-A291-TIMINGS-01.
+   - V1(d), the index cut, becomes a follow-up (A291-STRUCTURE-INDEX-01).
+   - V2 AFFIRMS that R6-1 gates the first REGISTERED night. An "R6-1 gate" rule is PROPOSED (not ratified by the magistrate; process rule for the cold gate or Ed): no registered-mode arm without a level-balanced `pack` test or a reducer envelope-index covariate.
+   - V3 lists the ten items the final-pass packet needs.
+   - M5 is a follow-up: `_digest` under `finalize=True` on an unsealed deep roster is reachable only by direct callers.
+   Done at the bench:
+   - the merge candidate re-merged main (`f911fe3e`);
+   - V1(a) and V1(b) applied exactly as the post-review commit **`d2e751df`**: 3 changed packer lines, `grep -c RecursionError` = 2. The new regression FAILS with the `3fb98469` packer (RecursionError) and PASSES at `d2e751df`, and the three AST tests pass;
+   - the re-gate modules are running;
+   - F-C replay evidence (M3) supplied: all nine F-C OUT_OF_ROUND candidates are REFUSED by `_replay_roster` (`inv_38`/`inv_39`), recorded in `104-forger-fable/replay-check.jsonl`.

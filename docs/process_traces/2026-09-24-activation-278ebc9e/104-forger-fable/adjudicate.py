@@ -42,3 +42,11 @@ for label, (reg, roster, status) in pairs:
 for o in out:
     print(json.dumps(o))
 print('LEN labels', len(labels), 'captured', len(captured))
+print("REPLAY CHECK")
+import joulewise.scored_packer as spk
+for label, (reg, roster, status) in pairs:
+    if status != 'ACCEPTED': continue
+    try:
+        spk._replay_roster(reg, copy.deepcopy(roster)); print(json.dumps([label, "REPLAY ACCEPTED"]))
+    except spk.PackingRefusal as e:
+        print(json.dumps([label, f"REPLAY REFUSED {str(e)[:80]}"]))
