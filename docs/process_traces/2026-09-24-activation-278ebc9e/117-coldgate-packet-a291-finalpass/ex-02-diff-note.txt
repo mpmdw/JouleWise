@@ -1,0 +1,5 @@
+Lane-only diff from round-3 head to S, main-side merged files excluded:
+ joulewise/scored_packer.py  |  6 +++---
+ tests/test_gen_state.py     |  9 ++++-----
+ tests/test_scored_packer.py | 32 ++++++++++++++++++++++++++++++++
+ 3 files changed, 39 insertions(+), 8 deletions(-)

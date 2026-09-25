@@ -1,0 +1,26 @@
+Full unittest discovery at PR #409 head c5cbfd9eeefe6aa3dc7f323f1da7f6593b069a59; command: python3 -B -m unittest discover -s tests (unpiped to a log file); start 1790324448 end 1790334090 (epoch s)
+Ran 7131 tests in 9638.590s
+FAILED (failures=1, skipped=109)
+rc=1
+
+The one failure:
+FAIL: test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (test_sample_quiet_predicate_evidence.LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child) (exit_delay=60)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/wt-278ebc9e-a291mc/tests/test_sample_quiet_predicate_evidence.py", line 846, in test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child
+    self.assertEqual(child["exitcode"], -harness.signal.SIGTERM)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: -9 != -15
+
+----------------------------------------------------------------------
+
+Isolated re-run of that test at the same head, idle machine: OK (Ran 1 test in 1.661s). The test asserts SIGTERM (-15) on a stuck child's exit ladder and got SIGKILL (-9) under full-suite load: a timing-sensitive ladder in tests/test_sample_quiet_predicate_evidence.py, outside the A291 lane (no lane file touches it); hosted CI shards on the same head passed it.
+
+A291 module tails from this run:
+FUZZ cases=4 submissions=1798 census={'inv_02': 808, 'inv_03': 99, 'inv_11': 447, 'inv_12': 41, 'inv_38': 372, 'inv_39': 8, 'inv_52': 23}
+GENERATOR seed=291013 cases=60 edges={'E1': 298, 'E10': 170, 'E11': 30, 'E2': 432, 'E3': 1041, 'E4': 212, 'E5': 54, 'E6': 84, 'E7': 95, 'E8': 24, 'E9': 7}
+GENERATOR seed=291014 cases=60 edges={'E1': 311, 'E10': 171, 'E11': 36, 'E2': 480, 'E3': 1122, 'E4': 206, 'E5': 61, 'E6': 89, 'E7': 75, 'E8': 24, 'E9': 8}
+GENERATOR signatures differ 60/60
+STRESS seed=291013 registrations=300 calls=4263 checker_calls=4863 violations=0 edges={'E1': 262, 'E10': 76, 'E11': 37, 'E2': 1027, 'E3': 186, 'E4': 224, 'E5': 38, 'E6': 260, 'E7': 74, 'E8': 223, 'E9': 37}
+STRESS seed=291014 registrations=300 calls=4253 checker_calls=4853 violations=0 edges={'E1': 262, 'E10': 76, 'E11': 37, 'E2': 1028, 'E3': 186, 'E4': 224, 'E5': 38, 'E6': 260, 'E7': 74, 'E8': 223, 'E9': 37}
+archived: ~/night-archive/278ebc9e-fullsuite-c5cbfd9e.log.gz sha256 ba8aea410f1036bfadafd26c53eefa080e4f9ae9ea6294b50a095f277bfb70b3

@@ -1,0 +1,93 @@
+commit d2e751dfb5db634bda3152c2cf348adb2ddb7adc
+Author: Ed R <edr@Eds-MacBook-Pro.local>
+Date:   Thu Sep 24 21:16:21 2026 -0700
+
+    A291 post-review commit per cold ruling A291-PREMERGE-01 V1(a)+(b): _ownership -> dict with AST assertion; RecursionError in the two inv_52 conversion tuples (_checked_derived, _seal) with the ruled deep-nesting regression (FAIL at 3fb98469 packer, PASS here)
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/joulewise/scored_packer.py b/joulewise/scored_packer.py
+index 56a43c86..b49e911a 100644
+--- a/joulewise/scored_packer.py
++++ b/joulewise/scored_packer.py
+@@ -67,7 +67,7 @@ def _predictions(registration, predicted):
+     _need(expected is None or digest == expected, "inv_08", "prediction digest")
+ 
+ 
+-def _ownership(registration, roster):
++def _ownership(registration, roster) -> dict:
+     """Rebuild the ownership view from the roster on every call."""
+     blocks = {}
+     for block in roster["blocks"]:
+@@ -167,7 +167,7 @@ def _checked_derived(registration, roster, captured_window_keys=None):
+         return _derived(registration, roster, captured_window_keys)
+     except PackingRefusal:
+         raise
+-    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError) as exc:
++    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError, RecursionError) as exc:
+         raise PackingRefusal("inv_52", "malformed roster") from exc
+     except ArithmeticError as exc:
+         raise PackingRefusal("inv_52", f"internal:{type(exc).__name__}") from exc
+@@ -290,7 +290,7 @@ def _seal(registration, roster, *, finalize=False):
+         short, lever = _checked_derived(registration, roster)
+     except PackingRefusal:
+         raise
+-    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError) as exc:
++    except (KeyError, TypeError, ValueError, IndexError, StopIteration, AttributeError, RecursionError) as exc:
+         raise PackingRefusal("inv_52", "malformed roster") from exc
+     except ArithmeticError as exc:
+         raise PackingRefusal("inv_52", f"internal:{type(exc).__name__}") from exc
+diff --git a/tests/test_scored_packer.py b/tests/test_scored_packer.py
+index d8a98274..2705fd80 100644
+--- a/tests/test_scored_packer.py
++++ b/tests/test_scored_packer.py
+@@ -10,6 +10,7 @@ from tests.scored_roster_checker import check_roster, check_transition, check_ex
+ from tests.test_scored_registration import fixture
+ from tests.test_scored_roster_checker import r2_four_envelope_roster
+ from tests.test_scored_packer_stress import run_case
++from tests.scored_case_generator import generate_case
+ import random
+ 
+ 
+@@ -610,6 +611,8 @@ class ScoredPackerTests(unittest.TestCase):
+     def test_a291_parent_facts_and_conserve_read_the_view_ast(self):
+         tree = ast.parse(inspect.getsource(sp))
+         functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
++        self.assertIsInstance(functions['_ownership'].returns, ast.Name)
++        self.assertEqual(functions['_ownership'].returns.id, 'dict')
+         first = functions['_parent_facts'].body[0]
+         self.assertIsInstance(first, ast.Assign)
+         self.assertEqual([type(t) for t in first.targets], [ast.Name])
+@@ -632,3 +635,32 @@ class ScoredPackerTests(unittest.TestCase):
+             if isinstance(node, ast.Import):
+                 for alias in node.names:
+                     self.assertNotEqual(alias.name.split('.')[0], 'tests')
++
++    def test_a291_deep_nesting_refuses_inv_52_not_recursion_error(self):
++        case = generate_case(291013, 0)
++        reg, first, last = case.reg, case.rosters[0], case.rosters[-1]
++        deep = []
++        cur = deep
++        for _ in range(1200):
++            nxt = []
++            cur.append(nxt)
++            cur = nxt
++        pending = next(e for e in first['envelopes'] if e['kind'] == 'loaded' and e['observations'] is None)
++        obs = [dict(block_id=b, status='not_started', elapsed_s=None) for b in pending['blocks']]
++        for where in ('sha256', 'items'):
++            m = copy.deepcopy(first)
++            if where == 'sha256':
++                m['sha256'] = deep
++            else:
++                m['blocks'][0]['items'][0] = deep
++            with self.assertRaises(sp.PackingRefusal) as caught:
++                sp._seal(reg, m)
++            self.assertEqual(caught.exception.code, 'inv_52')
++            with self.assertRaises(sp.PackingRefusal) as caught:
++                sp.requeue_overrun(reg, m, pending['index'], obs)
++            self.assertEqual(caught.exception.code, 'inv_52')
++        m = copy.deepcopy(last)
++        m['sha256'] = deep
++        with self.assertRaises(sp.PackingRefusal) as caught:
++            sp.executed_status(reg, m, {}, set())
++        self.assertEqual(caught.exception.code, 'inv_52')
