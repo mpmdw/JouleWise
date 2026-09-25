@@ -155,3 +155,9 @@
    - Bookkeeping **PR #411** is opened from `docs/2026-09-25-152c9255-bk1` @ `91921075`, with the gate ledger at 12/12 RUN (local checker) and CI running.
 57. PR-L fix round 1 (seat 44, Sol, rc 79 NEEDS_SCOPE; [17/04](17-prl-review/04-fix1-report.md)). It implemented B1, the S1 provisional T0-rehearsal exemption (flagged for the final pass), S2+F1 receipt binding, S3 SIGTERM-first, F2 partial-frame evidence, F3 samefile, N1 and N2. Two paths were out of scope: the mirrored reason table in `docs/phase_2/derivation_night_runbook.md`, and `tests/test_evidence_arm_sequence.py`, whose hand-built receipt lacks `launch_context` and is correctly refused by the new binding. **Scope approved via `codex-run-v3 resume --approve-scope-add`**, with the instruction to account for every failure in the combined run (failures=3, errors=5).
    - PR #411 CI: `calibration-exits-exclusive` failed on `test_forced_auto_maintenance_mutation_reproduces_cleanup_race`. That is the known git-maintenance race flake (lane CALEXITS-RACE-FLAKE-01), which a docs-only diff cannot touch. The failed job will be re-run once the run completes.
+58. **Cold addendum PR0-SCOPE-01-ADD** ([20/30/21](20-coldgate-packet-pr0scope/30-addendum/21-coldgate-fable-pr0scope-addendum-ruling.md)).
+   - B-1 is AFFIRMED as a BLOCKER, with a different cure: the sweeps become one-time, blob-pinned certification evidence, and the live guard is the byte-compared golden plus the transitions.
+   - The judge adds BLOCKER J-1: live-built corpus bases would break the live guard at WR-6, so the bases become tracked files.
+   - M-1, M-2, M-4, M-5 and M-6 are affirmed; M-3 is moot.
+   - J-2 requests a WR-6 write-scope rule for `APPLIED_TRANSITIONS`. That is a CG-4 PR scope item, recorded for the CG-4 brief.
+   - **PR-0 acceptance v3** is issued self-contained for one round. Round 4 (seat 51) was launched from `576f3989`; the stopped round-3 partial stays stashed.
