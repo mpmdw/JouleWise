@@ -17,6 +17,8 @@ REDUCTION_SCHEMA = "joulewise.scored_reduction.v1"
 ROW_KEYS = frozenset("schema registration_sha256 roster_sha256 scorer_id block_id attempt item_id prompt_tokens generated_tokens stop_reason extracted_answer scorer_match".split())
 WINDOW_KEYS = frozenset("schema registration_sha256 roster_sha256 block_id attempt envelope_index gross_j bundle_sha256 energy_bound_terms_j".split())
 ANCHOR_KEY = "E_clock_anchor_shift_bound_j"
+ENERGY_MAX_J = 10**12
+INT_MAX = 2**53
 REDUCTION_CODES = (
     "reduce_input",
     "window_keys", "window_domain", "window_unknown", "window_binding", "window_duplicate",
@@ -49,11 +51,11 @@ def _hex(v):
 
 
 def _int(v):
-    return type(v) is int and v >= 0
+    return type(v) is int and 0 <= v <= INT_MAX
 
 
 def _num(v):
-    return type(v) is int or (type(v) is float and math.isfinite(v))
+    return (type(v) is int or (type(v) is float and math.isfinite(v))) and v <= ENERGY_MAX_J
 
 
 def _canon(value):
