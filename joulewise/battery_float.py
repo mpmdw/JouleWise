@@ -15,6 +15,7 @@ import time
 from typing import Any, Callable, Mapping
 
 IOREG_BATTERY_ARGV = ("/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery")
+PROBE_TIMEOUT_S = 10
 SCHEMA = "joulewise.battery_float.v1"
 POLICY_ID = "bfg-01"
 LIMIT_MA = 200
@@ -116,7 +117,11 @@ def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
 def observe(*, phase: str, runner: Callable | None = None, wall_time_s: float | None = None,
             monotonic_ns: Callable[[], int] = time.monotonic_ns, raw_path: str | None = None,
             **identity: Any) -> tuple[dict[str, Any], bytes]:
-    """Run the bounded probe and return its record plus exact stdout bytes."""
+    """Run the bounded probe and return its record plus exact stdout bytes.
+
+    Every failure of the probe or the parse is recorded as ``probe_error`` and
+    never as a pass; the caller decides the refusal its site owes.
+    """
     before = monotonic_ns()
     wall = time.time() if wall_time_s is None else wall_time_s
     raw = b""
@@ -124,8 +129,10 @@ def observe(*, phase: str, runner: Callable | None = None, wall_time_s: float | 
     exit_code: int | None = None
     timed_out = False
     error: str | None = None
+    update_age_s: float | None = None
     try:
-        result = (subprocess.run(IOREG_BATTERY_ARGV, capture_output=True, timeout=10, check=False)
+        result = (subprocess.run(IOREG_BATTERY_ARGV, capture_output=True,
+                                 timeout=PROBE_TIMEOUT_S, check=False)
                   if runner is None else runner(IOREG_BATTERY_ARGV))
         raw_value = result.stdout
         raw = raw_value.encode("utf-8") if isinstance(raw_value, str) else raw_value
@@ -140,7 +147,7 @@ def observe(*, phase: str, runner: Callable | None = None, wall_time_s: float | 
     except subprocess.TimeoutExpired as exc:
         timed_out = True
         error = f"ioreg timeout: {exc}"
-    except (OSError, ValueError, TypeError, AttributeError) as exc:
+    except Exception as exc:  # any runner or parse failure is a probe error
         error = f"{type(exc).__name__}: {exc}"
         update_age_s = getattr(exc, "update_age_s", None)
     after = monotonic_ns()
@@ -164,7 +171,7 @@ def observe(*, phase: str, runner: Callable | None = None, wall_time_s: float | 
     }
     if error is None:
         record.update(parsed)
-    elif 'update_age_s' in locals():
+    else:
         record["update_age_s"] = update_age_s
     record["probe_error"] = error is not None
     return record, raw

@@ -1363,7 +1363,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
             def check_battery_float():
                 observed, _raw = battery_float.observe(
-                    phase="arm_check", runner=lambda argv: runner(argv, timeout=10),
+                    phase="arm_check", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                     plan_id=state.get("plan_id"),
                 )
                 try:
@@ -1786,7 +1786,7 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
                     or prior_successor.get("candidate_sha256") != successor["candidate_sha256"]):
                 raise Refused("successor facts changed after check.json")
             battery_observation, _battery_raw = battery_float.observe(
-                phase="publish_install", runner=lambda argv: runner(argv, timeout=10),
+                phase="publish_install", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
                 plan_id=state.get("plan_id"),
             )
             saved_json(attempt / "battery-float-at-publication.json", battery_observation)

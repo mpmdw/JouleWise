@@ -1163,16 +1163,16 @@ def launchd_probe(prepared, executable, shield, timeout_s=600, max_age_s=PROBE_R
         return receipt
 
 
+# The battery-float probe runner (final texts v1.1 §5.1: injectable, as
+# night_gate.Probes is). None runs the real bounded ioreg probe; only an
+# in-process caller (a test) can substitute it.
+BATTERY_PROBE_RUNNER = None
+
+
 def validate_install(args, repo):
     # Import only on the install path, after the shell's MIN_PYTHON probe.
     from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S, PlanError
     from joulewise import battery_float
-
-    battery_observation, _battery_raw = battery_float.observe(phase="validate_install")
-    try:
-        battery_float.require_pass(battery_observation)
-    except (battery_float.ProbeError, ValueError) as exc:
-        raise Refused(3, "battery not at float: {}".format(exc)) from exc
 
     template_path = repo / "configs/launchd/com.joulewise.night.plist.template"
     if not template_path.is_file():
@@ -1214,6 +1214,16 @@ def validate_install(args, repo):
         schedule = run_night.schedule(plan)
     except (ValueError, OverflowError, OSError) as exc:
         raise Refused(2, "{}: {}".format(getattr(exc, "reason", "plan_schedule_unrepresentable"), exc))
+    # Directive #421 (final texts v1.1 §5.3 item 4): the battery-float
+    # predicate holds before the template is first rendered
+    # (Prepared.launch_context) and before admission's mkdir; it follows plan
+    # validation so the reading is as fresh as the read-only phase allows.
+    battery_observation, _battery_raw = battery_float.observe(
+        phase="validate_install", runner=BATTERY_PROBE_RUNNER)
+    try:
+        battery_float.require_pass(battery_observation)
+    except (battery_float.ProbeError, ValueError) as exc:
+        raise Refused(3, "battery not at float: {}".format(exc)) from exc
     prepared = Prepared(plan, args.plan, repo, python, template, str(Path(courier).resolve()),
                         courier_path, schedule, run_night.install_spans_for_day,
                         getattr(args, "probe_timeout_s", 600))

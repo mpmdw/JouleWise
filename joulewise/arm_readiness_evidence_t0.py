@@ -33,6 +33,7 @@ from typing import (
 )
 
 from joulewise import arm_readiness as _readiness
+from joulewise import battery_float as _battery_float
 from joulewise import calibration_ledger as _ledger
 from joulewise import clock_reference as _clock_reference
 from joulewise import identity_pins as _identity
@@ -52,6 +53,8 @@ _MIN_IDLE_NS = 600 * 1_000_000_000
 _MAX_T0_SEQUENCE_AGE_NS = 60 * 60 * 1_000_000_000
 _MIN_BACKUP_FREE_BYTES = 20 * 1024**3
 _PROBE_TIMEOUT_SECONDS = 45
+# The battery-float probe carries its own ruled bound (final texts v1.1 §5.1).
+_PROBE_TIMEOUT_OVERRIDES = {_battery_float.IOREG_BATTERY_ARGV: _battery_float.PROBE_TIMEOUT_S}
 # Census browser executables in app bundles, rather than every command line
 # mentioning a browser name; OS extensions and services must not block the row.
 _BROWSER_CENSUS_PATTERN = r"/Contents/MacOS/(Safari|Google Chrome|Chromium|firefox)( |$)"
@@ -428,7 +431,7 @@ def _canonical_object(
     return value, identity, raw
 
 
-def _execute_probe(argv: _Sequence[str], *, cwd: _Path, timeout_s: int = _PROBE_TIMEOUT_SECONDS) -> _ProbeResult:
+def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
     """Execute one bounded probe without a shell or inherited environment."""
 
     environment = {
@@ -437,6 +440,7 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path, timeout_s: int = _PROBE_
         if name in _os.environ
     }
     environment.update({"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"})
+    timeout_s = _PROBE_TIMEOUT_OVERRIDES.get(tuple(argv), _PROBE_TIMEOUT_SECONDS)
     try:
         with _tempfile.TemporaryFile() as stdout, _tempfile.TemporaryFile() as stderr:
             process = _subprocess.Popen(
@@ -482,7 +486,6 @@ def _fresh_probe(
     kind: str,
     label: str,
     argv: _Sequence[str],
-    *, timeout_s: int = _PROBE_TIMEOUT_SECONDS,
 ) -> _ProbeResult:
     if kind in {"MAINTENANCE_CENSUS", "PROCESS_CENSUS"}:
         r1_finished = context.values.get("r1_batch_finished_monotonic_ns")
@@ -495,9 +498,7 @@ def _fresh_probe(
                 "fresh census cannot run before the R1 clock-reference batch completes",
             )
     try:
-        if timeout_s == _PROBE_TIMEOUT_SECONDS:
-            return _execute_probe(argv, cwd=context.repository)
-        return _execute_probe(argv, cwd=context.repository, timeout_s=timeout_s)
+        return _execute_probe(argv, cwd=context.repository)
     except Exception as exc:
         raise _underivable(kind, f"fresh {label} probe could not execute: {exc}") from exc
 
@@ -1840,17 +1841,9 @@ def _recursive_values(value: _Any, token: str) -> list[_Any]:
 
 
 def _derive_power(context: _Context) -> _DerivedRow:
-    from joulewise import battery_float
     kind = "POWER_PREFLIGHT"
     policy = _frozen_power_policy(context, kind=kind)
     batt = _fresh_probe(context, kind, "AC state", ("/usr/bin/pmset", "-g", "batt"))
-    battery_probe = _fresh_probe(context, kind, "battery float", battery_float.IOREG_BATTERY_ARGV, timeout_s=10)
-    battery_observation, _battery_raw = battery_float.observe(
-        phase="t0_power_row", runner=lambda _argv: battery_probe,
-        monotonic_ns=context.clock.monotonic_ns,
-    )
-    if not battery_observation["passed"]:
-        raise _underivable(kind, "battery not at float")
     custom = _fresh_probe(context, kind, "low-power mode", ("/usr/bin/pmset", "-g", "custom"))
     profiler = _fresh_probe(
         context,
@@ -1874,6 +1867,17 @@ def _derive_power(context: _Context) -> _DerivedRow:
     connected = [str(value).lower() for value in _recursive_values(power_value, "connected")]
     if profiler.exit_code != 0 or not watts or max(watts) <= 0 or not any(value in {"yes", "true", "1"} for value in connected):
         raise _underivable(kind, "fresh supply probe lacks a connected known-wattage adapter")
+    battery = _fresh_probe(context, kind, "battery float", _battery_float.IOREG_BATTERY_ARGV)
+    battery_observation, _battery_raw = _battery_float.observe(
+        phase="t0_power_row", runner=lambda _argv: battery,
+        monotonic_ns=context.clock.monotonic_ns,
+    )
+    if battery_observation["probe_error"]:
+        raise _underivable(
+            kind, "battery float probe error: " + "; ".join(battery_observation["reasons"])
+        )
+    if not battery_observation["passed"]:
+        raise _underivable(kind, "battery not at float")
     return _DerivedRow(
         "t0.power_path",
         kind,
@@ -1886,7 +1890,7 @@ def _derive_power(context: _Context) -> _DerivedRow:
             "low_power_mode": "off",
         },
         "PROBE",
-        probes=(batt, battery_probe, custom, profiler),
+        probes=(batt, custom, profiler, battery),
         derivation={"frozen_power_policy": policy, "battery_float": battery_observation},
     )
 
