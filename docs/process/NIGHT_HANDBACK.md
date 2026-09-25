@@ -90,6 +90,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `night_refused_registration` | The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source. |
 | `night_window_expired` | Measurement window expired. |
 | `night_plan_stale` | Plan age, pinned head, or a clean measurement clone failed; not a stale notice. |
+| `measurement_root_outside_custody` | A plan authored at/after 1790340000 whose resolved measurement_root is not strictly inside /Users/edr/night-custody/measurement (acceptance ruling v2.1 R16). Re-author the plan; never a retry cause. |
 | `night_plan_malformed` | Plan structure or fields failed their contract. |
 | `night_chain_digest_mismatch` | Executable chain bytes differ from their fixed fingerprint. |
 | `launch_go_receipt_missing` | Required measurement-pack launch authorization is absent. |
@@ -126,6 +127,7 @@ D-180 clause 2; A172 rulings R1–R3 and fix-round-1 R1–R4 (2026-09-15). Exact
 | `retained prior plist: <path>; re-run --uninstall` | A saved previous job file remains; follow the existing human-resolution/uninstall path. |
 | `unsupported plist destination: <path>` | The job-file destination is not a regular file; resolve it under the existing path. |
 | `--render-only directory must differ from launch_dir` | Use a separate directory for rendered job files. |
+| `probe receipt launch_context differs from install: <label>` | The installed night or dead-man job differs from the verified probe rendering; re-run the probe before installing. |
 
 **Other explicit refusals — cold-gate path.**
 
@@ -653,7 +655,9 @@ the plan's `measurement_head`. The custody root is
 `/Users/edr/night-custody/qpe01-pilot-n1-20260923-0700-20260923-0700-1790172000-<H>`
 and the measurement clone
 `/Users/edr/JouleWise-measurement-20260923-0700-1790172000-<H>-qpe01-pilot-n1`
-(the naming in `joulewise/evidence_night.py` `locations`); the exact
+(the naming in `joulewise/evidence_night.py` `locations` as of 2026-09-23;
+from 2026-09-25 new clones live under `/Users/edr/night-custody/measurement/`,
+see `docs/contracts/evidence_night_entry.md`); the exact
 directories are the ones named in the published plan. The plan's
 repo-relative `registration_path` is
 `configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json`,

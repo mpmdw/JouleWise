@@ -1,0 +1,14 @@
+# Ten spot checks for the council
+
+Each row is a fact to verify at its source, followed by the unresolved design question it creates. No row casts a vote.
+
+1. `claims.py` compares `abs(estimate)` to F, and the paired estimator's estimate is the mean of n block differences (`joulewise/analysis_engine/claims.py:343-344`; `joulewise/analysis_engine/estimators.py:450-469`). What mean-scale physical quantity should F represent?
+2. The comparative floor contains `sqrt(1+1/n)` and the maximum observed block delta (`joulewise/detection_floor.py:871-881,1132-1152`). Which part should guard a future block versus a mean claim?
+3. The effect-floor check uses the point estimate; the sign check uses both intervals and adjusted rejection (`joulewise/analysis_engine/claims.py:343-344,369-382`). Which claim wording corresponds to that conjunction?
+4. D-083's later addendum retains `|estimate|>F` and interval zero-exclusion as separate checks; it says F+B is not an additive gate (`docs/decision_log.md:11291-11303`). What exact registered minimum-effect statement, if any, should be added?
+5. The nominal 95% interval covers 0.556–0.565 in the floor/claim grid, while the expanded interval covers 0.948–0.951 (`docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/README.md:40-46`). Which dependence source needs explicit coverage validation?
+6. The desk TOST at margin 4σ admits equivalence in 0.052 of zero-effect components, with unadjusted 0.05 (`docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/README.md:9,42-48`). What physical margin and family adjustment would be registered?
+7. The current equivalence-night tool refuses below six retained captures, then compares maximum and range to old screens (`scripts/epoch_equivalence_check.py:127,480-536`). Should the inferential target be mean, spread, both, or another instrument property?
+8. At old n=17/m=12 under no change, current-rule false FAIL averages 0.580 over four models (`docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/README.md:50-59`). What false-alarm target and retained-m policy should be frozen?
+9. The proposed TOST-plus-variance screen passes 0.882–0.930 of fourfold variance increases (`docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/equivalence_replacement.md:19-30`). What variance change must the rule detect?
+10. AP-5M v5 proposes a five-level Holm family on a log ratio change between two budgets, while O-21 requires a J/correct difference above F; the scale mapping is open (`docs/process_traces/2026-09-24-activation-278ebc9e/52-ap5m-v5-draft/01-ap5m-draft-v5.md:63-69`; `docs/process_traces/2026-09-24-interactive-02a24110/01-ed-rulings-harvest-and-reply-miss.md:41-44`). What exact signed difference and floor conversion would be registered?

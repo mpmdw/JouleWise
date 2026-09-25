@@ -122,6 +122,20 @@ with patch.object(run_night, '_probe_group_absent', return_value=True):
         self.assertTrue(receipt['verify_only'])
         self.assertFalse(receipt['collect_started'])
         self.assertFalse(receipt['load_started'])
+        # This direct supervisor call bypasses launchd_probe, which normally
+        # adds the rendered context before publishing its installable receipt.
+        from scripts import run_night
+        with f.installer_environment():
+            courier = shutil.which('claude')
+            self.assertIsNotNone(courier)
+            context_prepared = installer.Prepared(
+                f.plan, f.plan_path, f.repo, python, (f.repo / template).read_text(),
+                str(Path(courier).resolve()),
+                str(Path(courier).parent) + ':/usr/bin:/bin:/usr/sbin:/sbin',
+                run_night.schedule(f.plan), run_night.install_spans_for_day, 30)
+            receipt['launch_context'] = context_prepared.launch_context()
+            receipt['ProcessType'] = receipt['launch_context'][installer.probe_label(f.plan.plan_id)]['ProcessType']
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + '\n')
         prepared = SimpleNamespace(plan=f.plan, plan_path=f.plan_path, python=python)
         self.assertEqual(installer.validate_probe_receipt(prepared), receipt)
         published_digests = render(f.plan_path)

@@ -1,0 +1,7 @@
+ROLE: PAIRED DELTA REFUTER (Astra 6) on "Claim-gate final texts v2 (CG-1..CG-4)" (/Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/91-claimgate-final-texts-v2.md; full addendum ruling /Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/66-coldgate-packet-claimgate/30-addendum/21-coldgate-fable-claimgate-addendum-ruling.md; the prior refuter report it answers /Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/88b-claimgate-refuter-sol.md). Read-only with executed CPU-only simulations. Do not call Claude or any other agent.
+
+WRITE_SCOPE: []
+
+Worktree: /Users/edr/code/wt-278ebc9e-cg-astra (bookkeeping-branch checkout; production code under joulewise/). Scratch /tmp/278ebc9e/cgv2ref/. Fences: never launchctl, sudo, powermetrics; never touch /Users/edr/night-custody, /Users/edr/JouleWise-measurement-*, ~/Library/LaunchAgents, /Users/edr/code/JouleWise.
+CHECK: D1. Are 88b F1–F7 cured (one line each)? Re-run the decisive F1 boundary simulation against the NEW CG-3 statistic (S1) with r7's constants: false PASS at the margin must be ≤ 5 %. D2. CG-1 false admission at δ=0 ≤ 5 % and power at 2σ/5σ under the four generating models of trace 19, k = 5 and 8. D3. Any contradiction with the code sites CG-4 names, or anything the implementer must choose.
+Severity BLOCKER / MATERIAL / NIT with exact replacement text. OUTPUT: findings table; simulation tables; probe tails.

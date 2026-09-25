@@ -1,0 +1,2 @@
+F-A run 1 status (codex-run-v3): FAILED rc=1, vendor message "This content was flagged for possible cybersecurity risk" (twice).
+F-A run 2 on brief 102a: log shows the same flag twice; null-final recovery produced the empty report ex-103b.

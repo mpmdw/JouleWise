@@ -1,0 +1,29 @@
+S=c5cbfd9eeefe6aa3dc7f323f1da7f6593b069a59
+parents: b191349781bba77e9679f7b9f8bab77292e03da6 a50d098b25995e16bd4fa0e93d8a4d648f61727a
+merge-base origin/main S: 25cde215606599e1367fab8356fc05af74926527
+origin/main: e0934a593e94a44801e248c5954c7a726b99dff0
+
+Lane + post-review file diff vs main (code/tests/scripts/.github/kernel/queue):
+ TASK_QUEUE.md                          |   2 -
+ docs/process/state_kernel.json         |  50 --
+ joulewise/scored_packer.py             | 503 +++++++++++++++++++
+ joulewise/scored_registration.py       | 162 ++++++
+ tests/scored_case_generator.py         | 119 +++++
+ tests/scored_ownership_generator.py    | 205 ++++++++
+ tests/scored_ownership_oracle.py       |  60 +++
+ tests/scored_roster_checker.py         | 865 ++++++++++++++++++++++++++++++++
+ tests/test_gen_state.py                |   3 +-
+ tests/test_scored_ownership_forgery.py | 343 +++++++++++++
+ tests/test_scored_packer.py            | 666 +++++++++++++++++++++++++
+ tests/test_scored_packer_fuzz.py       | 234 +++++++++
+ tests/test_scored_packer_stress.py     | 149 ++++++
+ tests/test_scored_registration.py      |  61 +++
+ tests/test_scored_roster_checker.py    | 888 +++++++++++++++++++++++++++++++++
+ 15 files changed, 4256 insertions(+), 54 deletions(-)
+
+blob joulewise/scored_packer.py at S: b49e911a6efabdda8cec2d446471f989349a462a
+blob tests/test_scored_packer.py at S: 2705fd807e9ffc8dd08106ddd7f9c11b97b6d298
+blob tests/test_scored_ownership_forgery.py at S: 57012e9f2e608052db69ae7736fddab5e879a3fc
+blob joulewise/scored_packer.py at 6e2504b1 and 3fb98469: 56a43c860ce3c3942a5c1ed592e5f0661a788226 / 56a43c860ce3c3942a5c1ed592e5f0661a788226
+
+Post-review commits after 3fb98469 (lane-affecting): d2e751df (V1 a+b), 7c56aa33 + 72808d82 (regenerate, reverted), 37f47475 (kernel retirement of ED-BRANCH-PROTECTION-E1-01), b1913497 (patch target); plus records-only merges a05ea0dc, c5cbfd9e and main merges e3769062, f911fe3e.

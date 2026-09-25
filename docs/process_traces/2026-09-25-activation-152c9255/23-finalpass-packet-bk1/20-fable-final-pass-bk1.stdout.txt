@@ -1,0 +1,2 @@
+BK1-FINALPASS-01 on `91921075`: anchors PASS (typo run REFUSED as designed); V1–V4 AFFIRM (MATH sweep clean, allowed paths only, all six lens fixes closed, gen_state rc 0 + 44 tests OK, 14/14 spot-checks match); V5 **MERGE**, 0 BLOCKER / 0 MATERIAL / 3 NIT, ruling written to `docs/process_traces/2026-09-25-activation-152c9255/23-finalpass-packet-bk1/20-fable-final-pass-bk1.md` (11.9 KB).
+rc=0

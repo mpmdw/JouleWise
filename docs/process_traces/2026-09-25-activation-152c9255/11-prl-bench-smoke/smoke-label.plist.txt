@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.joulewise.smoke-probe-152c9255</string>
+<key>ProgramArguments</key><array><string>/opt/homebrew/bin/python3</string><string>/tmp/152c9255/probe-smoke-I/run.py</string></array>
+<key>ProcessType</key><string>Interactive</string>
+<key>RunAtLoad</key><true/>
+<key>StandardOutPath</key><string>/tmp/152c9255/probe-smoke-I/out.log</string>
+<key>StandardErrorPath</key><string>/tmp/152c9255/probe-smoke-I/err.log</string>
+</dict></plist>

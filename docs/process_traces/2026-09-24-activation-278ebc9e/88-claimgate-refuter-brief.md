@@ -1,0 +1,10 @@
+ROLE: PAIRED REFUTER (Sol 6.0) on cold ruling CLAIMGATE-01's final texts CG-1..CG-4 (/Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/87-claimgate-final-texts.md; full ruling /Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/66-coldgate-packet-claimgate/20-coldgate-fable-claimgate-ruling.md; packet in the same directory). Read-only with executed probes (CPU-only simulations allowed). Do not call Claude or any other agent.
+
+WRITE_SCOPE: []
+
+Worktree: /Users/edr/code/wt-278ebc9e-cg-sol (checkout of the bookkeeping branch; production code under joulewise/). Scratch /tmp/278ebc9e/cgref/. Fences: never launchctl, sudo, powermetrics; never touch /Users/edr/night-custody, /Users/edr/JouleWise-measurement-*, ~/Library/LaunchAgents, /Users/edr/code/JouleWise.
+These texts will drive one full-tier implementation PR. Find what is CONTRADICTORY, UNIMPLEMENTABLE, or would admit false claims / refuse real ones:
+ Q1. CG-1: implement the rule in a scratch script calling the production estimators (`estimate_paired_blocks`, `small_sample_guard_factor`, `holm_adjust`, Student-t helpers) and simulate false admission at δ=0 and power at 2σ/5σ under the four generating models of docs/process_traces/2026-09-24-activation-278ebc9e/19-desk-simulations/ (Gaussian, heavy-tailed, within-night drift, shared-plus-local), k = 5 and 8 envelopes. Report numbers. False admission must be ≤ 5 % nominal under every model.
+ Q2. CG-2 and CG-3: same, for equivalence and for the night rule (no-change false FAIL ≤ 5 % on every generator; detection at +3σ, +5σ, ×4, ×16) with r7's 10-window layout if you can derive it from configs/calibration/calibration_acceptance_d079_v2_n17_r7.json.
+ Q3. CG-4: any code site the texts name that does not exist or conflicts (estimators.py, claims.py:361-363, epoch_equivalence_check.py:127,480-536, analysis_plans.md:29).
+Severity BLOCKER / MATERIAL / NIT with exact replacement text. OUTPUT: findings table; simulation tables; probe tails.
