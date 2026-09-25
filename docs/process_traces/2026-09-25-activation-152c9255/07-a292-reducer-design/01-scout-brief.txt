@@ -1,0 +1,15 @@
+SEAT: Sol 6.0 — read-only SCOUT for the JouleWise magistrate (activation 152c9255). Lane A292 HEADLINE-REDUCER-SEALED-01 was just unblocked (the A291 scored-roster packer merged as PR #409, main 75d04e9e).
+WRITE_SCOPE: []
+
+TASK: assemble the complete, verbatim set of RULED text that binds the scored reducer, plus the merged packer's actual interface, so the magistrate can write a harness-first brief (executable acceptance tests written and committed BEFORE implementation, then implementation to GREEN). Do not design beyond the rulings; where rulings are silent or conflict, list it as an OPEN item.
+
+Sources to search (your checkout is the bookkeeping branch at b2f6c563, which contains main 75d04e9e):
+- the kernel lane: docs/process/state_kernel.json tasks["HEADLINE-REDUCER-SEALED-01"] (acceptance, status_note);
+- cold ruling 45 (docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/) — every field/constant marked CARRIED to the reducer;
+- A291 contract and rulings: docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/ (ruling 15/10 Q1 and Q16: PROVISIONAL reduce-column witnesses, cap_bound_fraction), and docs/process_traces/2026-09-24-activation-278ebc9e/ records 82 (R4/R4b), 89 (contract v4.1), 112, 117 (final pass) — only the parts that constrain the reducer;
+- the merged packer and checker code: joulewise/scored_packer.py, the independent checker (find it), their tests; which roster fields/digests/events the reducer consumes;
+- the stopped draft reducer c0998fdb on origin/feat/2026-09-24-a281a-registration-packer-reducer (git show) — state what it did and why it was stopped (search the records), and whether any part is reusable;
+- AP-5M v5 draft (docs/process_traces/2026-09-24-activation-278ebc9e/52-ap5m-v5-draft/) retry sentences that must land with or before A291-dependent code.
+
+OUTPUT (markdown, under 20 KB): (1) the binding clauses, each quoted verbatim with path:line; (2) the packer/roster interface the reducer consumes (types, fields, digests), path:line; (3) a proposed acceptance-test list for the harness stage — one named test per clause, stating input, expected refusal code or output; (4) OPEN items (silent/conflicting rulings) — these go to the magistrate, not decided by you; (5) proposed WRITE_SCOPE for the harness seat and for the implementation seat.
+Rules: read-only; never run sudo/launchctl/powermetrics; never touch /Users/edr/code/JouleWise (canonical root) or /Users/edr/night-custody; focused unit tests of named modules allowed, never the discovery suite.

@@ -1,0 +1,2 @@
+Ruling written to `docs/process_traces/2026-09-25-activation-152c9255/09-coldgate-packet-a292/30-addendum/21-coldgate-fable-a292-addendum-ruling.md` (28.2 KB, validator PASS on the correct sha): refuse-on-missing-window stands as an explicitly labelled Q16 amendment, B1/B2 downgraded to MATERIAL, K24 pairing and the per-window anchor bound added as MATERIAL misses, v1.1 final texts issued, no BLOCKER.
+rc=0

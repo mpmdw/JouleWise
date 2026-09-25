@@ -1,0 +1,20 @@
+commit 72808d824ded7c96ac84adeba34fcd273297d812
+Author: Ed R <edr@Eds-MacBook-Pro.local>
+Date:   Thu Sep 24 21:32:34 2026 -0700
+
+    Revert "Regenerate TASK_QUEUE.md state-kernel view (main at 25cde215/d8e1736f carries generated-region drift; gen_state.py --check now clean)"
+    
+    This reverts commit 7c56aa3320421c393b1d2c1c1c7bb96e8420d57a.
+
+ TASK_QUEUE.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+commit 7c56aa3320421c393b1d2c1c1c7bb96e8420d57a
+Author: Ed R <edr@Eds-MacBook-Pro.local>
+Date:   Thu Sep 24 21:32:18 2026 -0700
+
+    Regenerate TASK_QUEUE.md state-kernel view (main at 25cde215/d8e1736f carries generated-region drift; gen_state.py --check now clean)
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+ TASK_QUEUE.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
