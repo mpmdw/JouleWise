@@ -569,6 +569,7 @@ class PrepareTests(unittest.TestCase):
                 entry.prepare(**self.kw)
         self.assertFalse(any("clone" in argv for argv in calls))
         self.assertFalse(list(Path(self.kw["roots_under"]).glob("JouleWise-measurement-*")))
+        self.assertFalse(list(Path(self.kw["roots_under"]).glob("night-custody/measurement/JouleWise-measurement-*")))
 
     def test_clone_authoring_max_age_binds_before_plan_write(self):
         original = entry.run
@@ -3189,3 +3190,22 @@ os.execv(sys.executable,[sys.executable,*args])
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MeasurementRootLocationTests(unittest.TestCase):
+    """Record 29: measurement clones live under the Spotlight-excluded custody tree."""
+
+    def test_measurement_root_is_under_night_custody_measurement(self):
+        roots = Path("/Users/example")
+        paths = entry.locations(roots, roots / "night-plan-staging", 1790172000, "a" * 40)
+        root = Path(paths["measurement_root"])
+        self.assertEqual(root.parent, roots / "night-custody" / entry.MEASUREMENT_SUBDIR)
+        self.assertTrue(root.name.startswith("JouleWise-measurement-"))
+        custody = Path(paths["custody_root"])
+        self.assertNotIn(root, custody.parents)
+        self.assertNotIn(custody, root.parents)
+        self.assertNotEqual(root, custody)
+
+    def test_measurement_subdir_never_matches_plan_prefix_or_plan_glob(self):
+        prefix = entry.kind_row(entry.KIND).plan_id_prefix
+        self.assertFalse(entry.MEASUREMENT_SUBDIR.startswith(prefix))

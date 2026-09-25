@@ -155,6 +155,9 @@ def checkout_ok(root, head):
         raise Refused("dirty clone")
 
 
+MEASUREMENT_SUBDIR = "measurement"
+
+
 def locations(roots, stages, epoch, head):
     local = datetime.fromtimestamp(epoch)
     row = kind_row(KIND)
@@ -163,7 +166,14 @@ def locations(roots, stages, epoch, head):
     plan_id = row.plan_id_prefix + local.strftime("%Y%m%d-%H%M")
     stamp = f"{local:%Y%m%d-%H%M}-{epoch}-{head}"
     return dict(plan_id=plan_id,
-                measurement_root=str(roots / f"JouleWise-measurement-{stamp}-{row.measurement_root_suffix}"),
+                # Clones live under ~/night-custody, which the Spotlight privacy
+                # list excludes (verified 2026-09-25, record
+                # docs/process_traces/2026-09-24-interactive-4b/29): a clone at
+                # ~/JouleWise-measurement-* (~788 MB incl. .venv) was indexed
+                # just before every window. The subdirectory never matches a
+                # plan_id_prefix glob and holds no night_plan.json.
+                measurement_root=str(roots / "night-custody" / MEASUREMENT_SUBDIR
+                                     / f"JouleWise-measurement-{stamp}-{row.measurement_root_suffix}"),
                 staging=str(stages / f"{plan_id}-{stamp}"),
                 custody_root=str(roots / "night-custody" / f"{plan_id}-{stamp}"))
 
@@ -414,7 +424,7 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
     from joulewise.night_gate import PLAN_MAX_AGE_S
     if epoch - now > PLAN_MAX_AGE_S:
         raise Refused("t0 is beyond the plan's maximum age at authoring")
-    for parent in (stages, custody.parent):
+    for parent in (stages, custody.parent, root.parent):
         parent.mkdir(parents=True, exist_ok=True)
     if stages.stat().st_dev != custody.parent.stat().st_dev:
         raise Refused("staging and custody are not on one filesystem (atomic publication)")
