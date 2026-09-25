@@ -40,6 +40,7 @@ COLD_GATE_CODES = {
     "night_refused_registration": "The registration digest is not in the ruled table, or its bound chain-source digest differs from the measured source.",
     "night_window_expired": "Measurement window expired.",
     "night_plan_stale": "Plan age, pinned head, or a clean measurement clone failed; not a stale notice.",
+    "measurement_root_outside_custody": "A plan authored at/after 1790340000 whose resolved measurement_root is not strictly inside /Users/edr/night-custody/measurement (acceptance ruling v2.1 R16). Re-author the plan; never a retry cause.",
     "night_plan_malformed": "Plan structure or fields failed their contract.",
     "night_chain_digest_mismatch": "Executable chain bytes differ from their fixed fingerprint.",
     "launch_go_receipt_missing": "Required measurement-pack launch authorization is absent.",
@@ -73,6 +74,7 @@ INSTALLER_REFUSALS = {
     "retained prior plist: <path>; re-run --uninstall": "A saved previous job file remains; follow the existing human-resolution/uninstall path.",
     "unsupported plist destination: <path>": "The job-file destination is not a regular file; resolve it under the existing path.",
     "--render-only directory must differ from launch_dir": "Use a separate directory for rendered job files.",
+    "probe receipt launch_context differs from install: <label>": "The installed night or dead-man job differs from the verified probe rendering; re-run the probe before installing.",
 }
 OTHER_REFUSALS = {
     "HOLD_CENSUS": "A supervisor census hold alone does not establish the narrowly evidenced idle arm cause.",

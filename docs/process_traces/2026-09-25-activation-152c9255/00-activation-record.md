@@ -137,3 +137,124 @@
    - N2: the negative-control capture is committed as `11-prl-bench-smoke/default-context-negative-control.json` (median 173.2, max 262.3, 300 frames).
    - N3: the hard-level ≈0 power qualifier.
    - `gen_state --check` rc 0; `tests.test_gen_state` OK.
+53. **A292, the lead's own verification (rule 1):** the full `tests.test_scored_reduce` plus `tests.test_scored_packer` run at `8d06633e` gives **Ran 95 tests in 2002 s, OK** ([16/03](16-a292-impl/03-lead-bench-run.txt)).
+54. **HEADLINE-POWER-01, Fable final pass** ([21/20](21-coldgate-packet-power/20-fable-final-pass-power.md)), no REFUSE:
+   - W1 AFFIRMS the census, with replacement text. The counts 355–1,009 cannot be derived at HEAD, because the importer draws only 64/128, and an AP:31 amendment label is required.
+   - W2 ADOPTS the min-df addendum, with ν_proj anchored at the mint and a k−1 fallback. Welch runs hot at census counts: 0.080/0.063 on 2 of 6 generators.
+   - **W3 REJECTS the FPC** (16–92 % false admission if the truth is a superpopulation) and adds a population-wording addendum.
+   - W4 sets SESOI 0.30 with TOST null wording.
+   - **HEADLINE-POWER-01 is decided.** Its texts feed HEADLINE-AP5M-AMENDMENT-01. The importer must list the census draw, which becomes a new obligation of that lane.
+55. **Bookkeeping candidate `docs/2026-09-25-152c9255-bk1` @ `91921075`: cold Fable final pass BK1-FINALPASS-01 = MERGE** ([23/20](23-finalpass-packet-bk1/20-fable-final-pass-bk1.md)): 0 BLOCKER, 0 MATERIAL, 3 NIT.
+   - The MATH sweep is clean, only allowed paths change, all six lens fixes are closed, `gen_state` rc 0, 44 tests OK, 14/14 spot-checks match.
+   - The ruling is cited from the working branch so the candidate head does not churn.
+   - The PR-0 re-scope ruling ([20/20](20-coldgate-packet-pr0scope/20-coldgate-fable-pr0scope-ruling.md)) is (A) amended: zero over the validator is rejected as a one-round gate; an exact target map; a deterministic corruption corpus on the two builder-built clean artifacts; a tracked residual ratchet (R-6v2). Round 3 was launched (seat 47), with an after-the-fact paired Opus refuter (48); a refuter BLOCKER stops the seat.
+   - **Process note:** gates 20 (PR-0 re-scope), 21 (power final pass) and 23 (bookkeeping final pass) ran without a paired refuter before ruling. Gate 20 gets one after the fact. Gates 21 and 23 are final passes over already-lensed material.
+56. After-the-fact refuter on the PR-0 re-scope ruling ([20/21](20-coldgate-packet-pr0scope/21-opus-refuter.md)): **1 BLOCKER** (B-1: the standing sensitivity tests break by design at CG-4, whose write scope cannot fix them), 6 MATERIAL and 3 NIT.
+   - As planned, **round-3 seat 47 was STOPPED**. The wrappers were killed, the worktree has been quiet since epoch 1790346235, and the partial work is stashed as `pr0-r3-partial-stopped` in `wt-152c9255-pr0`.
+   - Cold addendum packet [20/30](20-coldgate-packet-pr0scope/30-addendum/00-charge.md), sha `b21a5a7c649c959314ad416bd20b9b04be07c71c2eb6e457eb0698c3aad74e08`. It includes an explicit proportionality question (Y2).
+   - Bookkeeping **PR #411** is opened from `docs/2026-09-25-152c9255-bk1` @ `91921075`, with the gate ledger at 12/12 RUN (local checker) and CI running.
+57. PR-L fix round 1 (seat 44, Sol, rc 79 NEEDS_SCOPE; [17/04](17-prl-review/04-fix1-report.md)). It implemented B1, the S1 provisional T0-rehearsal exemption (flagged for the final pass), S2+F1 receipt binding, S3 SIGTERM-first, F2 partial-frame evidence, F3 samefile, N1 and N2. Two paths were out of scope: the mirrored reason table in `docs/phase_2/derivation_night_runbook.md`, and `tests/test_evidence_arm_sequence.py`, whose hand-built receipt lacks `launch_context` and is correctly refused by the new binding. **Scope approved via `codex-run-v3 resume --approve-scope-add`**, with the instruction to account for every failure in the combined run (failures=3, errors=5).
+   - PR #411 CI: `calibration-exits-exclusive` failed on `test_forced_auto_maintenance_mutation_reproduces_cleanup_race`. That is the known git-maintenance race flake (lane CALEXITS-RACE-FLAKE-01), which a docs-only diff cannot touch. The failed job will be re-run once the run completes.
+58. **Cold addendum PR0-SCOPE-01-ADD** ([20/30/21](20-coldgate-packet-pr0scope/30-addendum/21-coldgate-fable-pr0scope-addendum-ruling.md)).
+   - B-1 is AFFIRMED as a BLOCKER, with a different cure: the sweeps become one-time, blob-pinned certification evidence, and the live guard is the byte-compared golden plus the transitions.
+   - The judge adds BLOCKER J-1: live-built corpus bases would break the live guard at WR-6, so the bases become tracked files.
+   - M-1, M-2, M-4, M-5 and M-6 are affirmed; M-3 is moot.
+   - J-2 requests a WR-6 write-scope rule for `APPLIED_TRANSITIONS`. That is a CG-4 PR scope item, recorded for the CG-4 brief.
+   - **PR-0 acceptance v3** is issued self-contained for one round. Round 4 (seat 51) was launched from `576f3989`; the stopped round-3 partial stays stashed.
+59. A292 Sol mutation lens ([16/04](16-a292-impl/04-sol-mutation-lens.md)): 109 mutants, 84 killed by the fast suite. The 200-night differential kills one more, M077 is proven equivalent, and **23 non-equivalent survivors** remain. Those are harness witness gaps: F1–F3 are BLOCKER, and F4 and F5 are SHOULD-FIX, F5 being integer overflow and the same finding as Astra F3.
+   - The fix round is split to keep the oracle independent of the implementation:
+     - (1) a Sol harness seat, scoped to the tests and the oracle, adds the witnesses and corrects the oracle on Astra F1 (window-index binding), F2 (completeness passes) and F3 (numeric check), leaving the suite RED exactly where the reducer must change ([16/05](16-a292-impl/05-harness-fix1-brief.txt));
+     - (2) the Opus implementation seat, scoped to the reducer, takes it to GREEN.
+   - Aggregate `fsum` overflow is a ruling gap: joules cannot physically approach 1e308, and it currently fails closed by an untyped exception. It is registered as follow-up A292-AGGREGATE-OVERFLOW-01, with no test this round.
+60. PR-L fix round 1 completed after the scope approval (the resume's rc 0): commit `9500545f`. The requested set is 681 tests OK, with 9 sandbox skips for the process census. A fresh Opus delta re-audit (53) is running. The lead's bench run of the eight PR-L modules outside the sandbox (covering the 9 census tests) is running too.
+61. PR-L lead bench run at `9500545f`, outside the Codex sandbox: eight modules, **Ran 524 tests in 1,026 s, OK**, with no skips, so the 9 process-census tests the sandbox skipped now run and pass ([17/06](17-prl-review/06-lead-bench-run.txt)). PR #411: attempt 2 of the flaky `calibration-exits-exclusive` job was re-run; the other 12 checks pass.
+62. PR-L delta re-audit ([17/07](17-prl-review/07-delta-reaudit.md)): all nine items CLOSED, no new BLOCKER. The auditor independently confirmed, with real files and no mocks, that the T0 exemption cannot be abused by a measurement plan. SF1 is a test gap: the exempt branch does not prove the disjointness rule still bites after the cutoff. Plus 4 NITs. Fix round 2 was dispatched ([17/08](17-prl-review/08-fix2-brief.txt)). It is a different defect class from round 1, so no same-signature trigger.
+63. **PR #411 MERGED → main `95521871`** (docs/bookkeeping; `--match-head-commit 91921075`). All 15 checks green after re-running the flaky `calibration-exits-exclusive` job; cold Fable final pass MERGE; ledger 12/12.
+   - **Canonical fast-forwarded to `95521871`** after confirming no `com.joulewise.night*` label is loaded and no such plist is on disk.
+   - The move does NOT make the resident supervisor stale. `scripts/magistrate_watchdog.py` imports only the standard library, and `c034a56f..95521871` changes nothing under `scripts/` or `joulewise/`.
+64. **PR-0 PARKED** (WIP committed on `test/2026-09-25-claimgate-pr0-golden`; [19/02](19-pr0-round2/02-round4-seat-report.md)). Acceptance v3 round: golden and tracked corpus bases regenerated, coverage PASS.
+   - F1 NEEDS_RULING: gated mutant `paper_custody.py:620:if_false@4`, which removes the floor-anchor mismatch refusal, survives. It is masked by the D-1 KeyError at `:632`, but the ruled exception covers only arcs after `:632`.
+   - F2: the certification run was interrupted, so there is no certificate yet.
+   - PR-0 is off the critical path to the first calibration windows (PR-L → PR-R → W1/W2).
+   - **Next exact action:** a narrow cold ruling on F1. The magistrate's proposed reading is to list it as masked-by-D-1, with recertification obligated by lane V1-ISSUANCE-GATE-EVIDENCE-CLASS-01. Then complete `--certify` at the bench (background, tracked).
+65. A292 harness fix-1 (seat 52, Sol, rc 0): commit `73ac8ddf`. It adds the Sol-lens witnesses and corrects the oracle on Astra F1, F2 and F3. The 200-night differential passes (2,138 s), oracle liveness PASS, and exactly four focused methods are RED on the known reducer defects.
+   - **The seat correctly refused a magistrate brief error:** the brief said positive `10**1000` must refuse, but E2 admits finite nonnegative integers. The seat followed E2, which prevails. The error is recorded here.
+   - The implementation fix went to the Opus seat (56), scoped to the reducer. It must return NEEDS_RULING rather than invent a code if admitting huge integers reaches the unruled aggregate-overflow gap (A292-AGGREGATE-OVERFLOW-01).
+   - PR-R merged main (`8cd9e831`), so the acceptance ruling file its registration cites is now present on the branch.
+66. A292 reducer fix-1 (Opus seat 56): a two-line diff. The in-force binding now uses `w["envelope_index"]`, and `_num` admits integers of any size while negatives refuse `window_domain`. The seat reports GREEN, with a partitioned differential (8 parts) in place of one 35-minute run. The commit is on `feat/2026-09-25-a292-scored-reduce`. The lead's unpartitioned bench run (reducer + packer + fuzz) is running.
+67. PR-L fix-2 (seat 55): 7 of 7 scoped fixes done; the codex envelope rc 65 made the run non-resumable. Three out-of-scope files had been omitted from the magistrate's scope (two generated documentation tables and the cadence test). The WIP is committed, and completion seat 58 is scoped to exactly those three files.
+68. PR-L fix round 2 is complete at `1bdbca1d` (seat 58: generated refusal tables and the cadence test's timing fields; focused suites OK). A fresh Opus delta-2 re-audit (60) is running.
+   - A292 lead bench after fix-1: **Ran 109 tests in 1,159 s, OK** (reducer with the full 200-night differential, packer, fuzz). The Sol delta re-audit with the M8 mutation sweep re-run (59) is running.
+   - **Integration tree** `integ/2026-09-25-prl-prr` = main `95521871` + PR-L `1bdbca1d` + PR-R `8cd9e831`: clean merges, CHECK_OK. The gate-row-9 full-suite replay (unpiped discovery) started, logging to `/tmp/152c9255/61-integ-fullsuite.log`, tracked.
+69. A292 delta re-audit with the mutation re-sweep ([16/08](16-a292-impl/08-delta-mutation-sweep.md)): 16 of 19 domain-operand survivors are closed, and Sol F2–F4 and Astra F1–F3 are closed. The two-line reducer diff matches E2, and the oracle is still independent.
+   - **3 non-equivalent survivors remain (M033, M045, M050)**: the added witnesses fail the key-set check first. With the first sweep, that is **two rounds with the same signature**, so the escalation trigger fires.
+   - F2: E2's unbounded integers crash in `math.fsum` and in canonical-JSON hashing (untyped).
+   - Escalation cold gate [25](25-coldgate-packet-a292esc/00-charge.md), sha `b7075d351646cf3c850d998b68dfb43753fda27db2716fcaaa8c2b1b8443ccb4`. Proposal P1: generated one-fault witnesses with mechanical acceptance. P2: an instrument-sized domain bound of 0 ≤ E ≤ 1e12 J, refusing `window_domain`.
+70. PR-L delta-2 ([17/10](17-prl-review/10-delta2-reaudit.md)): SF1 and N-a–N-d are closed, with no new BLOCKER. Two mutation probes (the exemption skipping the digest; T0 skipping the root rules) are killed by the new tests.
+   - One SHOULD-FIX, S-1: no test asserts the worker's cadence-refusal timing text. It was mutation-proven dead: deleting the fields leaves every test green.
+   - A test-only seat (64) adds a worker-level test, scoped to a new file.
+   - A292 escalation refuter (after the fact, paired; [25/21](25-coldgate-packet-a292esc/21-opus-refuter.md)): P1 is affirmed, since 15 generated witnesses kill M033, M045 and M050. P2: the 1e12 J value is affirmed but the text as written is rejected, because it does not close the crashes. The judge's ruling is pending.
+71. **Cold ruling A292-ESC-01** ([25/20](25-coldgate-packet-a292esc/20-coldgate-fable-a292esc-ruling.md)), no BLOCKER:
+   - Z1 affirms the generated one-fault witness mechanism with ruled spec G1–G6.
+   - Z2 affirms 1e12 J (≈226 years at this machine's 140 W ceiling) with a completed clause, **amendment A292-ESC-01**: `ENERGY_MAX_J = 10**12`, `INT_MAX = 2**53` for integer fields, `gross_j > 0` kept. The judge found three more crash inputs (`prompt_tokens`/`attempt` = 10**5000; 1e308 floats overflowing `fsum`).
+   - Z3 issues the round-2 texts.
+   - The paired refuter's BLOCKER (the JSON crash on `prompt_tokens`) is covered by the INT_MAX clause, so no addendum is needed.
+   - Fix round 2: harness seat (Sol) first, then the Opus implementation seat.
+   - PR-L head is now `99495ba9` (worker-level cadence text test), and its cold Fable final pass PRL-FINALPASS-01 (packet 24, including the T0 question L2) is running.
+72. **PR-L cold Fable final pass PRL-FINALPASS-01 = MERGE** on `99495ba9` ([24/20](24-finalpass-packet-prl/20-fable-final-pass-prl.md)).
+   - L1 AFFIRM: R1, R2, R3, R6 and R16 implemented; D-138 pins unchanged.
+   - **L2 AFFIRMS the magistrate's T0 reading, with rule text R16-a.** It must be recorded in the acceptance rulings before the W1 arm notice is sealed.
+   - L3: 463 tests OK, plus a clean merge check. L4: no BLOCKER or MATERIAL, six NITs.
+   - NIT-1 (the `sudo -n -l` line in the PR body): the harness classifier blocks `sudo -n -l` (known since 09-24), so the PR body cites the execution proof (ex-11: rc 0, 300 frames), which the judge said satisfies R6 in substance.
+   - NIT-2–6 are post-merge follow-ups. NIT-3 (`mkdir -p /Users/edr/night-custody/measurement` before the W1 plan) belongs in the arm procedure.
+73. A292 fix round 2:
+   - The harness (Sol seat 66, `a7d88826`) adds the generated one-fault witnesses per G1–G6 and the bound witnesses, RED only on the bounds.
+   - The implementation (Opus seat 67, `241ea65c`) is a four-line diff: `ENERGY_MAX_J = 10**12` and `INT_MAX = 2**53` in `_int`/`_num`. GREEN on 63 fast tests plus all 200 differential nights.
+   - Delta re-audit with the M8 sweep (Sol seat 70) and the lead's bench run of reducer plus packer plus fuzz (71) are running.
+   - PR #412 (PR-L) is opened with ledger rows cited, and CI is running. It merges only after the integration full suite is green.
+   - The PR-R final pass PRR-FINALPASS-01 (packet 26, charge sha `e45e9df3`) is running.
+74. **PR-R final pass PRR-FINALPASS-01 = FIX-FIRST** ([26/20](26-finalpass-packet-prr/20-fable-final-pass-prr.md)).
+   - R1, R2 and R5 are affirmed on primary evidence: 234 tests OK, pinned files and r7 byte-identical, simulation reproduced.
+   - R3 REFUSED: Revision 5 lacks the R16-a text.
+   - R4 rejects the rendered-plist seal pin, because rendered bytes are per-window and R15 says template digests.
+   - The exact texts are F1–F3. MERGE follows once PR #412 is merged first and F1–F3 land verbatim in one commit, re-audited by one lens; no further cold gate is needed.
+   - Seat 72 (Sol) applies F1–F3 verbatim.
+75. **Cold gate PRR-R3-01** ([27/20](27-coldgate-packet-prr-r3/20-coldgate-fable-prr-r3-ruling.md)).
+   - Q1 AFFIRMS that R16-a is **not** in Revision 5: it goes in the acceptance-rulings record only, under the heading "R16-a (2026-09-25, PR-L final pass, ratified placement PRR-R3-01)".
+   - Q2 **RATIFIES amendment A-R5a-1** (the seal pins template digests at PR #412's merge commit), with three corrections and exact texts. It is recorded as a new `docs/decision_log.md` entry.
+76. **Magistrate erratum reading (mechanical, meaning-preserving; flagged for the next cold gate).**
+   - The ratified Revision 5 seal sentence contains the grep example `grep -c -E '<PR-L-MERGE-SHA>|<TEMPLATE-SHA256:'`. That example itself contains the literal placeholder tokens, so a correctly sealed file would still match the issuer's placeholder regex and refuse, and its grep count could never reach 0. PR-R seat 72 found this and raised it as a blocking flag.
+   - Reading: the example is written `'<PR-L-MERGE[-]SHA>|<TEMPLATE[-]SHA256:'`. The regex still matches the real tokens; the text no longer contains them. A test proves that a fully sealed copy passes and greps 0.
+   - Seat 72 (rc 79, NEEDS_SCOPE for `docs/decision_log.md`) is resumed with the scope approved and the ratified texts ([/tmp instructions, copied as 27/30](27-coldgate-packet-prr-r3/30-resume-instructions.txt)).
+77. **A292 mutation gate PASS**: the delta-2 sweep (Sol seat 70; [16/11](16-a292-impl/11-delta2-mutation-sweep.md)) kills or proves equivalent all 119 mutants. There are **zero non-equivalent survivors** after the 200-night differential, and the equivalents M081 and M083 come with proofs. The generator conforms to G1–G6 and is independent.
+   - The lead's bench run at `241ea65c`, reducer plus packer plus fuzz, is **OK** ([16/12](16-a292-impl/12-lead-bench-run-r2.txt)).
+   - G6(iv) requires the PR to carry a custody copy of the sweep and a gate-ledger entry. A records-only commit into the A292 branch comes before its cold Fable final pass, so the judge rules on a head that already carries its evidence.
+78. PR-R round (seat 72, resumed): commit `2bbcc779`. It applies the ratified A-R5a-1 texts, the decision_log entry at `:12207`, F2 and F3, and the erratum. At the bench, DeskEpochWatchTests pass and the unsealed file counts one placeholder line (expected before the seal). The one-lens conformance delta audit (75) is running.
+   - A292 cold Fable final pass A292-FINALPASS-01 (packet 28, sha `05488169`) is running on head `e144bf07`: the records-only commit plus the main merge; the code diff vs main is the reducer, tests, oracle and generator only.
+79. PR-R one-lens conformance audit ([15/06](15-prr-review/06-final-conformance-lens.md)): **CONFORMS**. F2, F3 and the ratified A-R5a-1 texts are applied exactly, and the erratum is the only, meaning-preserving deviation: a sealed copy passes and greps 0. PR-R now waits only on PR #412 merging first, a records-only head commit, and a cold confirm of the exact heads.
+80. **After-the-fact summary email to Ed** (Gmail `1a0d992604fa5446`, D-184), in plain language and asking nothing. It covers the calibration cure with the required R14 line, the CG-1 accuracy-term correction, the census sample size (E4), and the reducer status.
+81. **Cold gate PR0-F1-01** ([29/20](29-coldgate-packet-pr0f1/20-coldgate-fable-pr0f1-ruling.md)) **REJECTS the magistrate's masking claim**. The mutant is uncovered, not masked by D-1, and three more pre-632 survivors exist at `:626`. It also rejects waiting for D-1. It rules amendment A1: three prototyped real-wire golden rows that kill all four, with the eight sites at or after `:632` listed. Seat 78 (Sol) implements A1 and verifies only the four targeted mutants; the lead runs the full `--certify` after the integration suite, to avoid load-induced flakes. Scorecard: a Fable cold gate corrected a magistrate (Opus) proposal on primary evidence.
+82. **A292 cold Fable final pass A292-FINALPASS-01** ([28/20](28-finalpass-packet-a292/20-fable-final-pass-a292.md)).
+   - A1–A4 AFFIRM. A conservation probe over four nights found no path to a wrong count or a silently dropped item.
+   - A5 FIX-FIRST, records-only: F1, the G6(iv) custody copy of the sweep and differential scripts, was applied at the bench as `f6e6d162`. Both digests match the ruling (`554720d3…`, `4f22e9a0…`), and `git diff e144bf07 HEAD -- joulewise tests` is empty. **A292 is MERGE-authorized without reconvening**, provided no `joulewise/` or `tests/` change.
+   - **Merge-wave plan (row 9):**
+     1. The full suite at `d48bd18f` (PR-L `1bdbca1d` + PR-R `8cd9e831`) is running.
+     2. When it completes, integration tree 2 is built from the final heads (PR-L `99495ba9`, PR-R `2bbcc779`, A292 `f6e6d162`) plus main, and the focused modules for every post-`d48bd18f` delta are re-run there: PR-L's new worker-cadence test; PR-R's issuer, prereg and registration modules; A292's reducer, packer and fuzz; gen_state.
+     3. Records-only commits carry the evidence into each head.
+     4. A cold confirm of the exact PR-L and PR-R heads follows. A292 needs none, per its ruling.
+     5. Merge order: PR-L, then PR-R, then A292.
+83. PR-0 A1 (seat 78): commit on `test/2026-09-25-claimgate-pr0-golden`. The golden blob is `caa18e15`, byte-identical twice, and all four targeted mutants are KILLED by the real-wire rows. The certificate pin test errors only because the full `--certify` sweep has not run yet. **Next:** the lead runs `--certify` at the bench after the integration suite, then a delta lens, then the final pass.
+84. **PR #412 hosted CI: a real failure, found only on Linux.** `test_install_night_agent` has two installer tests that fail with "probe receipt launch_context differs from install: com.joulewise.night". Shards 2 and 4 were cancelled by fail-fast.
+   - Root cause (bench-reproduced with `TZ=UTC`): the test fixture writes the probe receipt in-process under the runner's TZ, while the installer subprocess runs with `TZ=America/Los_Angeles`. The rendered `StartCalendarInterval`, and with it the digest, is TZ-dependent. It is a test-only defect: production probe and install share one machine's TZ.
+   - Bench fix in the PR-L head: the fixture renders the receipt under the subprocess's TZ. `tests.test_install_night_agent` is OK under UTC, Los Angeles and Tokyo.
+   - The PR-L modules are running under TZ=UTC at the bench. This post-final-pass commit is covered by the planned cold confirm of the final heads (row 10).
+   - The gate-ledger failure on #412 was expected: evidence paths must exist in the PR head, which the records-only commit cures.
+   - PR-L modules under TZ=UTC at `2e522d1a`: **Ran 613 tests, OK** (seven modules).
+85. **Gate row 9, full-suite replay** on integration tree `integ/2026-09-25-prl-prr` @ `d48bd18f` (main `95521871` + PR-L `1bdbca1d` + PR-R `8cd9e831`), unpiped discovery, 09:05→11:50: **Ran 7,166 tests in 9,886 s: 1 failure, 1 error, 109 skipped** ([30/01](30-integration/01-fullsuite-d48bd18f-summary.txt); full log archived at `~/night-archive/152c9255-integ-fullsuite-d48bd18f.log.gz`).
+   - FAIL `test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child` (-9 vs -15): the same known load-timing flake as #409's full suite. It passes alone at the integration head.
+   - ERROR `test_g4_real_ruled_census_pgrep_dialect`: real `pgrep` against live processes, where the parse hit `'cat'`. This is the known multi-line-argv census defect (lane CENSUS-MULTILINE-ARGV-01), triggered by concurrent agent processes. It passes alone at the integration head and on main.
+   - Neither touches PR-L or PR-R code.
+   - Next: the focused re-run on integration tree 2 `integ/2026-09-25-wave2` @ `d9ed116f` (main + PR-L `2e522d1a` + PR-R `2bbcc779` + A292 `f6e6d162`; conflicts checked clean without `-X`), covering every module changed since `d48bd18f`.
+86. **Gate row 9, focused completion** on integration tree 2 `integ/2026-09-25-wave2` @ `d9ed116f` (main + final PR-L `2e522d1a` + PR-R `2bbcc779` + A292 `f6e6d162`). It covers every module changed since the full-suite head `d48bd18f`, plus A292's reducer, packer and fuzz: **Ran 674 tests in 1,968 s, OK (skipped=1)** ([30/02](30-integration/02-focused-integ2-d9ed116f.txt)).
+   - With item 85, row 9 is satisfied for the three-PR wave: a full suite at `d48bd18f`, whose only two red items are known and unrelated and pass alone, plus a focused re-run of every delta module on the final integration tree.
+   - Next: records-only commits into the three heads; a cold confirm of the PR-L and PR-R exact heads; open the PR-R and A292 PRs; merge PR-L, then PR-R, then A292.

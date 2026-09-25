@@ -4,6 +4,7 @@
 <dict>
   <key>Label</key>
   <string>com.joulewise.night</string>
+  <key>ProcessType</key><string>Interactive</string>
   <key>ProgramArguments</key>
   <array>
     <string>@@PYTHON@@</string>
