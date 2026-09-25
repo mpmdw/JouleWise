@@ -9,8 +9,6 @@ from tests.test_scored_roster_checker import refresh_derived
 
 
 CASES = ((291013, 3), (291013, 10), (291014, 3), (291014, 8))
-TRIPLE_SAMPLE = 128
-TRIPLE_SEED = 291013
 
 
 def _live(r):
@@ -125,22 +123,51 @@ def drop_single(r, rng):
     choices = [b for b in r['blocks'] if b['parent_block_id'] is not None]
     if not choices:
         return False
-    r['blocks'].remove(rng.choice(choices))
+    block = rng.choice(choices)
+    bid = block['block_id']
+    r['blocks'].remove(block)
+    r['placements'][:] = [p for p in r['placements'] if p['block_id'] != bid]
+    for e in r['envelopes']:
+        e['blocks'][:] = [x for x in e['blocks'] if x != bid]
+        e['voided_block_ids'][:] = [x for x in e['voided_block_ids'] if x != bid]
+    return True
+
+
+def drop_terminal_entry(r, rng):
+    if not r['terminal_refusals']:
+        return False
+    r['terminal_refusals'].remove(rng.choice(r['terminal_refusals']))
+    return True
+
+
+def duplicate_terminal_entry(r, rng):
+    if not r['terminal_refusals']:
+        return False
+    r['terminal_refusals'].append(deepcopy(rng.choice(r['terminal_refusals'])))
+    return True
+
+
+def copy_item_into_live_block(r, rng):
+    live_ids = {pl['block_id'] for _, pl in _live(r)}
+    blocks = [b for b in r['blocks'] if b['block_id'] in live_ids]
+    choices = [(a, b) for a in blocks for b in blocks
+               if a['block_id'] != b['block_id'] and a['model'] == b['model']]
+    if not choices:
+        return False
+    a, b = rng.choice(choices)
+    b['items'].append(rng.choice(a['items']))
     return True
 
 
 OPERATORS = (clone_block_new_id, list_live_new_envelope, void_block,
              terminalise_block, retarget_terminal, revive_voided,
-             flip_superseded, drop_single)
+             flip_superseded, drop_single, drop_terminal_entry,
+             duplicate_terminal_entry, copy_item_into_live_block)
 
 
 def _combinations(arity):
-    if arity == 2:
-        return list(product(OPERATORS, repeat=2))
-    if arity == 3:
-        rng = random.Random(TRIPLE_SEED)
-        all_combos = list(product(OPERATORS, repeat=3))
-        return rng.sample(all_combos, TRIPLE_SAMPLE)
+    if arity in (2, 3):
+        return list(product(OPERATORS, repeat=arity))
     raise ValueError(arity)
 
 

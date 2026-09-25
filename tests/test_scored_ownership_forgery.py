@@ -24,7 +24,7 @@ def _terminal(block, attempt, item):
 
 
 def _named_witnesses():
-    """Type-clean reconstructions of AUD-1, B1, B2 and probe-D."""
+    """Type-clean ownership and formation witnesses."""
     g, p, reg, base = _split_route()
     parent = next(b for b in base['blocks'] if b['superseded'])
     voided = next(e for e in base['envelopes']
@@ -36,6 +36,16 @@ def _named_witnesses():
     e['voided_block_ids'].remove(parent['block_id'])
     e['blocks'].append(parent['block_id'])
     out['B1'] = b1
+
+    m = deepcopy(b1)
+    singles = {b['block_id'] for b in m['blocks']
+               if b['parent_block_id'] == parent['block_id']}
+    for e in m['envelopes']:
+        for bid in list(e['blocks']):
+            if bid in singles:
+                e['blocks'].remove(bid)
+                e['voided_block_ids'].append(bid)
+    out['B1-singles-voided'] = m
 
     b2 = deepcopy(base)
     pl = [x for x in b2['placements'] if x['block_id'] == parent['block_id']][-1]
@@ -87,6 +97,15 @@ def _named_witnesses():
     e['voided_block_ids'].append(single['block_id'])
     contrast['terminal_refusals'].append(_terminal(single, pl['attempt'], single['items'][0]))
     out['legal-contrast'] = contrast
+
+    reordered = deepcopy(base)
+    parents = [(i, b) for i, b in enumerate(reordered['blocks'])
+               if b['parent_block_id'] is None]
+    left, right = next(((i, j) for i, a in parents for j, b in parents
+                        if a['model'] != b['model'] and a['level'] == b['level']))
+    reordered['blocks'][left], reordered['blocks'][right] = (
+        reordered['blocks'][right], reordered['blocks'][left])
+    out['cross-model-reorder'] = reordered
     return g, p, reg, out
 
 
@@ -118,13 +137,18 @@ class OwnershipForgeryTests(unittest.TestCase):
         print(f'LEGAL total_cases=48 rosters={count} violations=0', flush=True)
 
     def test_named_regressions(self):
-        g, _, _, witnesses = _named_witnesses()
-        for name in ('AUD-1', 'B1', 'B2', 'probe-D'):
+        g, p, _, witnesses = _named_witnesses()
+        for name in ('AUD-1', 'B1', 'B2', 'probe-D', 'B1-singles-voided'):
             bad = ownership_violations(g, witnesses[name])
             self.assertTrue(bad, name)
+            if name == 'B1-singles-voided':
+                self.assertIn('superseded_live', [v.reason for v in bad])
+            self.assertIn('INV-11', _checker_rows(g, witnesses[name], p), name)
             print(f'NAMED {name} oracle=REJECT first={bad[0]}', flush=True)
-        self.assertEqual([], ownership_violations(g, witnesses['legal-contrast']))
-        print('NAMED legal-contrast oracle=ACCEPT', flush=True)
+        for name in ('legal-contrast', 'cross-model-reorder'):
+            self.assertEqual([], ownership_violations(g, witnesses[name]), name)
+            self.assertNotIn('INV-11', _checker_rows(g, witnesses[name], p), name)
+            print(f'NAMED {name} oracle=ACCEPT', flush=True)
 
     def test_checker_exception_is_failure(self):
         g, p, _, witnesses = _named_witnesses()
@@ -148,9 +172,26 @@ class OwnershipForgeryTests(unittest.TestCase):
             else:
                 outcomes[name] = 'accepted'
         print('NAMED_SEAL ' + json.dumps(outcomes, sort_keys=True), flush=True)
-        for name in ('AUD-1', 'B1', 'B2', 'probe-D'):
-            self.assertTrue(outcomes[name].startswith('refused:'), (name, outcomes[name]))
+        for name in ('AUD-1', 'B1', 'B2', 'probe-D', 'B1-singles-voided'):
+            self.assertEqual('refused:inv_11', outcomes[name], name)
+        self.assertEqual('refused:inv_10', outcomes['cross-model-reorder'])
         self.assertEqual('accepted', outcomes['legal-contrast'])
+
+    def test_legal_corpus_seal(self):
+        count = 0
+        for seed in range(291013, 291017):
+            for i in range(12):
+                case = generate_case(seed, i)
+                for roster in case.rosters:
+                    m = deepcopy(roster)
+                    refresh_derived(case.g, m)
+                    m['sha256'] = None
+                    if m['events']:
+                        m['events'][-1]['sha256'] = ''
+                    _seal(case.reg, m, finalize=True)
+                    count += 1
+        self.assertEqual(1868, count)
+        print(f'LEGAL_SEAL rosters={count} accepted={count}', flush=True)
 
     def _seal_property(self, arity):
         started = time.monotonic()
@@ -159,6 +200,9 @@ class OwnershipForgeryTests(unittest.TestCase):
         escapes = []
         checker_crashes = []
         seal_crashes = []
+        checker_disagreements = []
+        refresh_seal_failures = []
+        refusal_codes = Counter()
         inconclusive = []
         log_path = os.environ.get('A291_ESCAPE_LOG')
         log = open(log_path, 'w', encoding='utf-8') if log_path else None
@@ -175,6 +219,17 @@ class OwnershipForgeryTests(unittest.TestCase):
                             inconclusive.append(record)
                         if inconclusive_log:
                             inconclusive_log.write(json.dumps(record, sort_keys=True) + '\n')
+                    if outcome.startswith('refresh_error:'):
+                        try:
+                            _seal(case.reg, m, finalize=True)
+                        except PackingRefusal:
+                            pass
+                        except Exception as exc:
+                            refresh_seal_failures.append((combo, case.seed, case.i, k,
+                                                          type(exc).__name__, str(exc)))
+                        else:
+                            refresh_seal_failures.append((combo, case.seed, case.i, k,
+                                                          'accepted'))
                     continue
                 pair_counts[combo, 'ready'] += 1
                 bad = ownership_violations(case.g, m)
@@ -182,13 +237,17 @@ class OwnershipForgeryTests(unittest.TestCase):
                     continue
                 pair_counts[combo, 'oracle_rejects'] += 1
                 try:
-                    _checker_rows(case.g, m, case.p)
+                    rows = _checker_rows(case.g, m, case.p)
                 except CheckerCrash as exc:
                     checker_crashes.append((combo, case.seed, case.i, k, str(exc)))
                     continue
+                if 'INV-52' not in rows and 'INV-11' not in rows:
+                    checker_disagreements.append((combo, case.seed, case.i, k,
+                                                  sorted(rows)))
                 try:
                     _seal(case.reg, m, finalize=True)
-                except PackingRefusal:
+                except PackingRefusal as exc:
+                    refusal_codes[exc.code] += 1
                     continue
                 except Exception as exc:
                     seal_crashes.append((combo, case.seed, case.i, k,
@@ -212,7 +271,10 @@ class OwnershipForgeryTests(unittest.TestCase):
               f'operator_errors={totals["operator_error"]} '
               f'refresh_errors={totals["refresh_error"]} '
               f'escapes={len(escapes)} checker_crashes={len(checker_crashes)} '
-              f'seal_crashes={len(seal_crashes)} runtime_s={time.monotonic()-started:.3f}',
+              f'seal_crashes={len(seal_crashes)} '
+              f'checker_disagreements={len(checker_disagreements)} '
+              f'refusal_codes={json.dumps(refusal_codes, sort_keys=True)} '
+              f'runtime_s={time.monotonic()-started:.3f}',
               flush=True)
         if inconclusive:
             print('INCONCLUSIVE first=' + json.dumps(inconclusive, sort_keys=True), flush=True)
@@ -222,11 +284,17 @@ class OwnershipForgeryTests(unittest.TestCase):
                   f'escapes={pair_counts[combo,"escapes"]}', flush=True)
         self.assertFalse(checker_crashes, f'checker crashes: {checker_crashes[:10]}')
         self.assertFalse(seal_crashes, f'seal crashes: {seal_crashes[:10]}')
+        self.assertEqual(0, totals['operator_error'], f'operator errors: {inconclusive[:10]}')
+        self.assertEqual(0, totals['refresh_error'], f'refresh errors: {inconclusive[:10]}')
+        self.assertFalse(refresh_seal_failures,
+                         f'refresh-error mutants accepted or crashed: {refresh_seal_failures[:10]}')
+        self.assertFalse(checker_disagreements,
+                         f'checker disagreements: {checker_disagreements[:10]}')
         self.assertFalse(escapes, f'{len(escapes)} seal escapes; first 20: '
                          + json.dumps(escapes[:20], sort_keys=True))
 
     def test_pairwise_seal_property(self):
         self._seal_property(2)
 
-    def test_sampled_triples_seal_property(self):
+    def test_triple_seal_property(self):
         self._seal_property(3)

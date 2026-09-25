@@ -471,6 +471,29 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(ids, set(c.ROWS) | set(c.NOT_CHECKABLE))
         self.assertFalse(set(c.ROWS) & set(c.NOT_CHECKABLE))
 
+    def test_closed_INV_11_counts_superseded_and_terminal_multiplicity(self):
+        bid = self.r['blocks'][0]['block_id']
+        item = self.r['blocks'][0]['items'][0]
+
+        superseded = deepcopy(self.r)
+        superseded['blocks'][0]['superseded'] = True
+        self.assertRow('INV-11', r=seal(superseded))
+
+        terminal = deepcopy(self.r)
+        terminal['envelopes'][0]['blocks'].remove(bid)
+        terminal['envelopes'][0]['voided_block_ids'].append(bid)
+        entry = dict(type='unattributed_overrun', block_id=bid, attempt=0,
+                     parent_block_id=None, item_id=item, model='big', level=1)
+        terminal['terminal_refusals'].append(entry)
+        self.assertNotIn('INV-11', {v.inv_id for v in c.check_roster(
+            self.g, seal(terminal), self.p)})
+        terminal['terminal_refusals'].append(deepcopy(entry))
+        self.assertRow('INV-11', r=seal(terminal))
+
+        duplicate_live = deepcopy(self.r)
+        duplicate_live['envelopes'][1]['blocks'].append(bid)
+        self.assertRow('INV-11', r=seal(duplicate_live))
+
     def test_witness_inventory(self):
         groups = {
             'test_registration_rows': {'INV-04', 'INV-05', 'INV-06', 'INV-09', 'INV-28', 'INV-51'},

@@ -574,19 +574,28 @@ def _static_checks(g, r, p, out):
     initial_envelopes = [r['placements'][i]['envelope_index'] for i in initial_indices]
     if initial_indices != list(range(len(initial_indices))) or initial_envelopes != sorted(initial_envelopes):
         _bad(out, 'INV-38', 'pack-time placements not first in envelope order')
-    terms = {(t['model'], t['item_id']) for t in r['terminal_refusals']}
-    # INV-11 (02d:467-469), read per ruled text 3: (a) exactly one holder that
-    # is not superseded, not terminal and listed in exactly one envelope;
-    # (b) exactly one terminal entry and no holder listed anywhere.
-    listing_count = {x: live_ids.count(x) for x in set(live_ids)}
+    # INV-11 (v4.1 closed form): count every live (block, envelope) listing,
+    # including superseded blocks, and retain terminal-entry multiplicity.
+    live = {}
+    for e in r['envelopes']:
+        for bid in e['blocks']:
+            block = bm[bid]
+            for item in set(block['items']):
+                live.setdefault((block['model'], item), []).append((block, e))
+    terms = {}
+    for entry in r['terminal_refusals']:
+        terms.setdefault((entry['model'], entry['item_id']), []).append(entry)
     for m in models:
         for item in ids:
-            holders = [b for b in r['blocks'] if b['model'] == m and item in b['items']]
-            live_once = [b for b in holders if not b['superseded'] and not all((m, x) in terms for x in b['items']) and listing_count.get(b['block_id']) == 1]
-            named = sum(t['model'] == m and t['item_id'] == item for t in r['terminal_refusals'])
-            owned = len(live_once) == 1
-            refused = named == 1 and not any(b['block_id'] in listing_count for b in holders)
-            if owned == refused:
+            holders = live.get((m, item), ())
+            named = terms.get((m, item), ())
+            owned = (len(holders), len(named)) == (1, 0)
+            if owned:
+                block = holders[0][0]
+                owned = (not block['superseded'] and
+                         not any(terms.get((m, held)) for held in block['items']))
+            refused = (len(holders), len(named)) == (0, 1)
+            if not (owned or refused):
                 _bad(out, 'INV-11', f'item ownership {m}:{item}')
     for i, e in enumerate(r['envelopes']):
         if e['index'] != i:
