@@ -1280,10 +1280,10 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             )
         if "# Revision 5 (" not in preregistration_text:
             raise PrepareRefusal("25G83/v3 identity requires registration Revision 5")
-        if re.search(r"<PR-L-MERGE-SHA>|<RENDERED-PLIST-SHA256:[^>]+>", preregistration_text):
+        if re.search(r"<PR-L-MERGE-SHA>|<TEMPLATE-SHA256:[^>]+>", preregistration_text):
             raise PrepareRefusal("registration Revision 5 launch-context pins are unsealed placeholders")
         if not re.search(r"template at commit [0-9a-f]{40}\b", preregistration_text) or not re.search(
-            r"rendered-plist digests [0-9a-f]{64}, [0-9a-f]{64}, and [0-9a-f]{64}\b",
+            r"template digests [0-9a-f]{64} and [0-9a-f]{64}\b",
             preregistration_text,
         ):
             raise PrepareRefusal("registration Revision 5 launch-context pins are malformed")

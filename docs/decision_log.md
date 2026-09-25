@@ -12203,3 +12203,9 @@ Under ACCEPTANCE-25G83-02 §5 R5(i) and R9, for epoch 25G83/v3 under registratio
 ## D-126 addendum (2026-09-25): Revision 5 corpus and equivalence for epoch 25G83/v3
 
 Under ACCEPTANCE-25G83-02 §5 R5(c), R5(g), R5(l), R5(m) and R9, for epoch 25G83/v3 under registration Revision 5, the retained corpus floor is 12, with every valid member retained. The old n ≥ 19 floor, calendar-day spacing, screen challenge as issuance veto, and strict S < C are superseded for this registration only. The comparison against the predecessor screen stays diagnostic. Revision 2's equivalence look is not taken. Revision 4 was drafted but never sealed; its fallback tag is `acc-v4-fallback` at `ea10e3c8`.
+
+## ACCEPTANCE-25G83-02 addendum A-R5a-1 (2026-09-25): Revision 5 operating-condition pin = template digests
+
+A-R5a-1 (2026-09-25, PR-R cold final pass PRR-FINALPASS-01 F1, ratified by cold gate PRR-R3-01): Under ACCEPTANCE-25G83-02 R5(a) as ruled in `docs/process_traces/2026-09-25-activation-152c9255/05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md`, Revision 5's pinned operating condition names the commit at which PR #412 (PR-L) landed on main and the sha256 of the two launchd templates `configs/launchd/com.joulewise.night.plist.template` (rendered for both the night and dead-man labels) and `configs/launchd/com.joulewise.night-probe.plist.template` at that commit. Rendered-plist digests embed per-window values (plan path, custody root, probe receipt path, launch calendar); the installer records them per window in that window's arm evidence and probe receipt as `rendered_plist_sha256`, and they are not part of the registration text. Where R5(a) says "rendered-plist digests", read "template digests".
+
+Ratification: docs/process_traces/2026-09-25-activation-152c9255/27-coldgate-packet-prr-r3/20-coldgate-fable-prr-r3-ruling.md §2 Q2.

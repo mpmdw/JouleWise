@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -23,18 +24,13 @@ R7 = ROOT / "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
 R6 = ROOT / "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
 REGISTRY = ROOT / "configs/calibration/observation_dispositions.json"
 DECISION_ID = "D-126-disposition-25G83-v3-2026-09-25"
-LAUNCH_CONDITION = re.compile(
-    r"template at commit \S+, rendered-plist digests \S+, \S+, and \S+\."
-)
+LAUNCH_CONDITION = re.compile(r"template at commit \S+, template digests \S+ and \S+\.")
 
 
-def registration_with_launch_pins(commit: str, night: str, deadman: str, probe: str) -> str:
+def registration_with_launch_pins(commit: str, night: str, probe: str) -> str:
     """Derive each seal fixture from the current registration's operating sentence."""
     text = PREREG.read_text()
-    condition = (
-        f"template at commit {commit}, rendered-plist digests "
-        f"{night}, {deadman}, and {probe}."
-    )
+    condition = f"template at commit {commit}, template digests {night} and {probe}."
     result, count = LAUNCH_CONDITION.subn(condition, text)
     if count != 1:
         raise AssertionError(f"expected one launch condition, found {count}")
@@ -42,7 +38,7 @@ def registration_with_launch_pins(commit: str, night: str, deadman: str, probe: 
 
 
 def sealed_registration() -> str:
-    return registration_with_launch_pins("a" * 40, "b" * 64, "c" * 64, "d" * 64)
+    return registration_with_launch_pins("a" * 40, "b" * 64, "c" * 64)
 IDS_AND_VALUES = [
     ("08cf2f19ca7d2b1881e9ed426bbf2c4039e1b425e1ba999a5527bcee4e743cb6", "0.041133514338919874"),
     ("697ad07383e83bca6e031dd40708595d1f59227fece3c3eb8e6d04c8c2318dca", "0.04200278099548145"),
@@ -88,7 +84,7 @@ class RevisionFiveTests(unittest.TestCase):
             with self.assertRaisesRegex(issuer.PrepareRefusal, "invalid or duplicate"):
                 issuer._registered_dispositions(path)
 
-    def test_sealed_copy_clears_placeholder_refusal_but_malformed_seal_refuses(self) -> None:
+    def test_full_seal_accepts_and_grep_count_zero_while_malformed_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             fixture = build_derivation_ledger(
@@ -96,10 +92,18 @@ class RevisionFiveTests(unittest.TestCase):
                 second_session=("derivation-night-2", [Slot("0.026") for _ in range(12)]),
             )
             sealed = root / "sealed.md"
-            sealed.write_text(sealed_registration())
+            sealed.write_text(sealed_registration().replace(
+                "# Revision 5 (2026-09-25; sealing pending PR-L pins)",
+                "# Revision 5 (2026-09-25; sealed 2026-09-25 at PR-L merge aaaaaaaa)",
+            ))
+            grep = subprocess.run(
+                ["grep", "-c", "-E", r"<PR-L-MERGE[-]SHA>|<TEMPLATE[-]SHA256:", str(sealed)],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual((grep.returncode, grep.stdout), (1, "0\n"), grep.stderr)
             malformed = root / "malformed.md"
             malformed.write_text(registration_with_launch_pins(
-                "not-a-commit", "b" * 64, "c" * 64, "d" * 64,
+                "not-a-commit", "b" * 64, "c" * 64,
             ))
 
             def args(prereg: Path):
@@ -144,14 +148,18 @@ class RevisionFiveTests(unittest.TestCase):
             sealed.write_text(sealed_registration())
             unsealed = root / "unsealed.md"
             unsealed.write_text(registration_with_launch_pins(
-                "<PR-L-MERGE-SHA>", "<RENDERED-PLIST-SHA256:night>",
-                "<RENDERED-PLIST-SHA256:deadman>", "<RENDERED-PLIST-SHA256:probe>",
+                "<PR-L-MERGE-SHA>", "<TEMPLATE-SHA256:night>", "<TEMPLATE-SHA256:probe>",
             ))
             pre_revision = root / "pre_revision_5.md"
             pre_revision.write_text(PREREG.read_text().split("# Revision 5 (", 1)[0])
             malformed = root / "malformed.md"
             malformed.write_text(registration_with_launch_pins(
-                "not-a-commit", "b" * 64, "c" * 64, "d" * 64,
+                "not-a-commit", "b" * 64, "c" * 64,
+            ))
+            superseded = root / "superseded.md"
+            superseded.write_text(sealed_registration().replace(
+                f"template digests {'b' * 64} and {'c' * 64}.",
+                f"rendered-plist digests {'b' * 64}, {'c' * 64}, and {'d' * 64}.",
             ))
             registry = root / "registry.json"
             out = root / "candidate.json"
@@ -175,6 +183,8 @@ class RevisionFiveTests(unittest.TestCase):
                     issuer._prepare_candidate(args(unsealed))
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "pins are malformed"):
                     issuer._prepare_candidate(args(malformed))
+                with self.assertRaisesRegex(issuer.PrepareRefusal, "pins are malformed"):
+                    issuer._prepare_candidate(args(superseded))
                 wrong_predecessor = args(sealed)
                 wrong_predecessor.predecessor_acceptance = R6
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "requires r7 predecessor"):
