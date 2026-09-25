@@ -137,3 +137,10 @@
    - N2: the negative-control capture is committed as `11-prl-bench-smoke/default-context-negative-control.json` (median 173.2, max 262.3, 300 frames).
    - N3: the hard-level ≈0 power qualifier.
    - `gen_state --check` rc 0; `tests.test_gen_state` OK.
+53. **A292, the lead's own verification (rule 1):** the full `tests.test_scored_reduce` plus `tests.test_scored_packer` run at `8d06633e` gives **Ran 95 tests in 2002 s, OK** ([16/03](16-a292-impl/03-lead-bench-run.txt)).
+54. **HEADLINE-POWER-01, Fable final pass** ([21/20](21-coldgate-packet-power/20-fable-final-pass-power.md)), no REFUSE:
+   - W1 AFFIRMS the census, with replacement text. The counts 355–1,009 cannot be derived at HEAD, because the importer draws only 64/128, and an AP:31 amendment label is required.
+   - W2 ADOPTS the min-df addendum, with ν_proj anchored at the mint and a k−1 fallback. Welch runs hot at census counts: 0.080/0.063 on 2 of 6 generators.
+   - **W3 REJECTS the FPC** (16–92 % false admission if the truth is a superpopulation) and adds a population-wording addendum.
+   - W4 sets SESOI 0.30 with TOST null wording.
+   - **HEADLINE-POWER-01 is decided.** Its texts feed HEADLINE-AP5M-AMENDMENT-01. The importer must list the census draw, which becomes a new obligation of that lane.
