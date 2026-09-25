@@ -5,3 +5,10 @@
 3. Peer: the interactive session `joulewise-4b` (started 17:47 09-24, busy) still owns OSCTX and PR #410. It has been messaged that the magistrate changed and that the acceptance council is reopening on its records.
 4. Bookkeeping branch `docs/2026-09-25-152c9255`, cut from `docs/2026-09-24-278ebc9e` at `a3adf8e1`, which already contains main `75d04e9e`. It carries the predecessor's records 115–122 to main.
 5. Reopened the acceptance council (D-184, four seats), packet [01/00](01-acceptance-reopen-packet/00-question.md): ACCEPTANCE-25G83-02, the ProcessType=Interactive cure versus v4 pulses. Seats: Sol 6.0 high, Astra 6 high, Opus 5.5, and a blind Fable 5.1. Next: synthesis, then a cold Fable gate paired with an Opus refuter.
+6. The four acceptance seats launched ≈04:58 (outputs `/tmp/152c9255/02-acc-{sol,astra,opus,fable}.md`; seat worktrees `wt-152c9255-acc-*` at `032e9661`). Peer `joulewise-4b` replied at ≈05:00:
+   - Use record 26 as corrected: nominal E equivalence, attribution unresolved, workload-scoped. The purpose-based cure test **replaced the ≤ 130 ms criterion after the data**. The synthesis must weigh this as a rules-before-data point.
+   - PR #410 (clone relocation) cleared its full gate and merges when CI is green.
+   - New follow-ups for the queue: an `mdfind` precondition at arm time proving the fresh clone is unindexed, and a post-harvest clone retention rule (≈788 MB per night).
+   - Design note: v3 1 s pulses may suffice under Interactive.
+   - No QUIET GO is planned. The OSCTX lane is complete, and the next measurement windows belong to the magistrate.
+7. Second stream: the claim-gate v2 wiring design consult, packet [03/00](03-claimgate-wiring-consult/00-question.md) (W1 F_est provenance, W2 manifest v2 schema, W3 mixed v1/v2, W4 custody receipts). Blind seats Sol 6.0 high, Opus 5.5 and Astra 6 high. Fable is held back for the cold gate because this is integration wiring of already-ruled science texts, not new science (D-184 scope). Recorded so a later reader can dispute it.
