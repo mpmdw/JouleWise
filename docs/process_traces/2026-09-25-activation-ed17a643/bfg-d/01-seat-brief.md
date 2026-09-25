@@ -1,0 +1,20 @@
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+WRITE_SCOPE: see the codex-run-v3 --write-scope list (exhaustive)
+
+ROLE: implementation seat for PR **BFG-D** (lane BATTERY-FLOAT-GATE-01, first of two PRs). Model Sol 6.0, effort xhigh. You implement; you do not review your own work as final.
+
+THE ONE SOURCE OF TRUTH: `docs/process_traces/2026-09-25-activation-ed17a643/bfg-d/00-final-texts-v1.1-source.md` §5 ("Battery-float rulings: final texts v1.1"), sub-sections 5.1–5.7. It is a cold-gate ruling; implement it EXACTLY. Where it gives a name (module, function, flag, refusal code, record field, file name, phase value), use that name verbatim. Implement only the **BFG-D** items (§5.3 items 1–7, §5.5 in full including the issuer contract, §5.6 tests 1–11). Do NOT implement BFG-S items. Do NOT edit the registration file (A-R5b §5.8 lands in a separate PR). Do NOT edit `joulewise/calibration_bracketing.py`, `joulewise/adapters/powermetrics.py`, `joulewise/powermetrics_fiducial.py`, `joulewise/uncertainty_evidence.py`, `joulewise/reduce.py`, `protocol_v3.json`, any file under `scripts/night_chains/`, or `configs/launchd/` — these are pinned; test 5 proves they did not move. Line numbers in §5 are at `c6814dd8` (= this branch's base).
+
+WHY IT MATTERS (context, not scope): Ed's binding directive #421 (`gh issue view 421 --repo mpmdw/JouleWise`) makes a battery-float check mandatory for every measurement window, because a charging battery heats the SoC and confounds energy measurements. The next derivation window (W1) cannot arm until this PR merges.
+
+RULES:
+- `joulewise/battery_float.py` is the ONE home of probe argv, parser, predicate, record schema and `validate_window`; every site calls it; nothing re-implements parsing.
+- Real-format fixture: capture ONE `ioreg -r -c AppleSmartBattery` output now into `tests/fixtures/battery_float/` (you may run ioreg; it is read-only) and derive the charging/stale/malformed fixtures from it by byte edits documented in a README in that directory. The machine is currently at float; the charging fixture is a documented edit of the real bytes (`IsCharging = Yes`, `InstantAmperage = 739`), labelled synthetic-from-real.
+- Existing tests whose fake `Probes` tables must now answer the new ioreg argv may gain that response and nothing else: never weaken, delete or loosen an existing assertion. If an existing assertion must change for a reason other than the new probe in the sequence, stop and return NEEDS_RULING.
+- If a file outside WRITE_SCOPE must change (for example a reason-code registry mirrored in docs/contracts or a generated state file), finish all else and return NEEDS_SCOPE naming the path and the exact change.
+- Verification you run and paste: every new test module; `tests.test_night_gate`, the evidence_night, arm_retry, night_agent_install, arm_readiness_evidence_t0, validate_powermetrics_fiducial, issue_calibration_acceptance_generation, calibration_cadence_report and issue_epoch_continuation test modules (whatever exists by those names; list them with `ls tests | grep -E ...`); a pin check showing `git diff --stat c6814dd8 -- <the pinned paths above>` is empty. Do NOT run full test discovery (the lead runs it).
+- No launchctl, powermetrics, sudo, installer runs, or model inference. Single foreground session; no subagents or background jobs.
+- Commit in logical commits on the current branch (`feat/2026-09-25-bfg-d`), messages starting "BFG-D:" and ending with `Co-Authored-By: Sol 6.0 <noreply@openai.com>`. Do not push. If git metadata is not writable, leave the work uncommitted and say so.
+- Report: for each §5.3 item, §5.5 clause and §5.6 test, the file:line that implements it and the test that proves it (a table). Flag anything in §5 you believe is wrong, with evidence, as a finding — but implement the text as ruled unless it is impossible.
