@@ -3780,60 +3780,6 @@
       "status_note": "2026-09-24 activation a65fb4fa: BLOCKED on Ed’s AP-5M adoption and installation; P1. The draft at d2f9a273 remains ungated. Consume merge_order, min_correct and holm_m as mandatory rows (cold ruling 15/10 Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A282 AP-5M carrying the table; P1. Draft d2f9a273 remains ungated.",
       "stop_card": null
     },
-    "HEADLINE-PACKER-RECUT-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/34-a281a-sol-delta.md class-iv evidence",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/37-a281a-stop-and-consult-brief.md stop",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/39-a281a-opus-delta.md perturbation and drift",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/40-a281a-sol-consult2.md independent consult",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/44-a281a-opus-consult2.md independent consult",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/10-coldgate-fable-ruling.md Q1–Q4",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/11-opus-contract-refuter.md paired refuter",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/21-coldgate-fable-addendum-ruling.md §7 final text",
-          "docs/process_traces/2026-09-23-activation-d8cc9c0a/00-activation-record.md items 12–14",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/02-a291-invariant-matrix-and-roster-contract.md initial contract",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/02b-a291-invariant-matrix-and-roster-contract-v2.md revised contract",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/09-a291-contract-sol-lens.md contract lens",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/13-a291-contract-synthesis-and-rulings.md magistrate synthesis",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/10-coldgate-fable-ruling.md cold ruling",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/11-opus-contract-refuter.md paired BLOCKER",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/15-coldgate-packet-a291-contract/20-addendum/21-coldgate-fable-addendum-ruling.md FT-1..FT-14 and I2 gate",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/02d-a291-contract-v4-self-contained.md ruled self-contained contract",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/25-a291-residual-details-rulings.md residual rulings",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/29-a291-v3-installation-rulings.md installation rulings",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/31-a291-v4-residual-rulings.md version-4 residual rulings",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/37-a291-checker-opus-lens.md checker BLOCKERs",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/44-a291-checker-delta.md checker fix delta",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/46-a291-i1-fix1-report.md 20cd29de stress and planned-lever fix",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md items 3, 8, 11, 13, 15, 18–19, 22, 26–31, 33 and 36",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/50-a291-fix1-delta.md B1 BLOCKER (seal and cache), S1 same-signature (D5 YES), S2 seed diversity",
-          "docs/process_traces/2026-09-24-activation-a65fb4fa/36-a291-implementer-i1-report.md I1 stress run"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/HEADLINE-PACKER-RECUT-01/acceptance",
-          "label": "HEADLINE-PACKER-RECUT-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Use a new brief carrying cold ruling 45/10 Q2–Q4 verbatim as superseded by addendum 45/21 §7 W/T/N/E/S/R/G/X/P verbatim. A different seat, outside the implementer write scope, commits an independent checker from the ruling text before implementation starts. The seal checks every ruled invariant, including item conservation, parent-block spread, capacity, prediction binding, drift, retry-stage edges, bounded innocent reschedules and fixed-envelope placement. A machine-readable registration-field and invariant binding matrix drives boundary perturbations on every closed path. Gate criterion is exactly addendum §7 G: consumed or closed-list carried fields and constants, executed witnesses per path, seeded independent stress checker with zero violations, and operand, boundary and guard-deletion sweeps killing every mutant. Delta re-audit returns to a cold gate before merge; the AP-5M retry sentences land with or before this code."
-      },
-      "authority": {
-        "label": "A281A-RECUT cold gate Q1–Q4 as amended by addendum §7 (verbatim brief text)",
-        "path": "docs/process_traces/2026-09-23-activation-d8cc9c0a/45-coldgate-packet-a281a-recut/10-coldgate-fable-ruling.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Rebuild the claim-bearing scored registration and packer, which assigns fixed MATH problem blocks to power-capture envelopes and reschedules overrun attempts. The stopped draft at c0998fdb repeatedly accepted fields that it carried without using. Derive values from the registration rather than copying them into a roster; use one _seal check of every ruled invariant on every public exit and at retry entry. A retry must preserve each item and its parent block, record observations and stage transitions, and never place work into a capture that has already run.",
-      "id": "HEADLINE-PACKER-RECUT-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 291,
-      "status": "active",
-      "status_note": "2026-09-24 activation a65fb4fa: IN PROGRESS [AGENT], P1. The contract was drafted in records 02 and 02b, checked by lens 09 and synthesis 13, then ruled by cold gate A291-CONTRACT-01 (15/10). Paired refuter 15/11 found a BLOCKER; cold addendum 15/20/21 cured it with final texts FT-1..FT-14. The self-contained ruled version 4 is record 02d, with rulings 25, 29 and 31. The independent checker was committed first (b8962fd0); Opus lens 37 found two BLOCKERs, fixed at b8fae7b3, and delta 44 was clean. Implementer stage I1 is ef1c5e48 (300-registration stress run, zero violations); the fixed checker then caught an I1 planned-lever misreading, fixed at 20cd29de (both stress seeds zero violations). Branch feat/2026-09-24-a291-packer-recut is at 20cd29de. Delta re-audit 50 of 20cd29de: F1-F4 arithmetic confirmed, but B1 BLOCKER (the seal accepts a forged roster with two live placements for one block, which the checker rejects, so the seal does not enforce the full invariant set; a trusted-output cache lets a re-finalized roster skip replay) and S1 same-signature YES (a derived lever uses two parent populations). STANDING ESCALATION TRIGGER FIRED: NEXT is a blind consult (Sol 6.0 high and Opus 5.5) on the structural cure, not fix round 2: one invariant table consumed by the seal and mirrored by the independently written checker; each derived quantity computed once from one population definition; no trusted-output cache. Then a cold Fable gate on the fix-round-2 plan before any code, then I2 (witness matrix and perturbation sweep with a seed-driven generator), I3 (mutation sweeps), cold delta gate and cold Fable final pass before merge. The independent checker stays read-only for the implementer. AP-5M retry sentences must land with or before this code (A282).",
-      "stop_card": null
-    },
     "HEADLINE-PURE-MODULES-GATE-01": {
       "acceptance": {
         "evidence": [
@@ -3891,11 +3837,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "A291 packer merged as PR #409 → 75d04e9e on 2026-09-25 (cold Fable final pass MERGE, ledger 12/12)",
+            "path": "docs/process_traces/2026-09-24-activation-278ebc9e/00-activation-record.md"
+          },
           "kind": "task",
           "required": "the sealed roster and retry transition contract must be gated before the reducer can consume it",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "HEADLINE-PACKER-RECUT-01"
         }
@@ -3908,8 +3857,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 292,
-      "status": "blocked",
-      "status_note": "2026-09-24 activation a65fb4fa: BLOCKED on A291 gated packer and sealed roster; P1. The stopped c0998fdb draft is not accepted. At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A291 packer gate; P1. The c0998fdb reducer is a stopped draft.",
+      "status": "queued",
+      "status_note": "2026-09-25 activation 152c9255: UNBLOCKED — A291 packer merged as PR #409 (75d04e9e). At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). The AP-5M retry sentences that A291 required to land with or before its code are carried by HEADLINE-AP5M-AMENDMENT-01. 2026-09-24 activation a65fb4fa: BLOCKED on A291 gated packer and sealed roster; P1. The stopped c0998fdb draft is not accepted. At the real reducer entry, re-run A291’s PROVISIONAL reduce-column witnesses and consume cap_bound_fraction as mandatory rows (cold ruling 15/10 Q16 and Q1). 2026-09-23 activation d8cc9c0a: BLOCKED on A291 packer gate; P1. The c0998fdb reducer is a stopped draft.",
       "stop_card": null
     },
     "HEADLINE-SCORED-NIGHT-KIND-01": {
