@@ -161,3 +161,8 @@
    - M-1, M-2, M-4, M-5 and M-6 are affirmed; M-3 is moot.
    - J-2 requests a WR-6 write-scope rule for `APPLIED_TRANSITIONS`. That is a CG-4 PR scope item, recorded for the CG-4 brief.
    - **PR-0 acceptance v3** is issued self-contained for one round. Round 4 (seat 51) was launched from `576f3989`; the stopped round-3 partial stays stashed.
+59. A292 Sol mutation lens ([16/04](16-a292-impl/04-sol-mutation-lens.md)): 109 mutants, 84 killed by the fast suite. The 200-night differential kills one more, M077 is proven equivalent, and **23 non-equivalent survivors** remain. Those are harness witness gaps: F1–F3 are BLOCKER, and F4 and F5 are SHOULD-FIX, F5 being integer overflow and the same finding as Astra F3.
+   - The fix round is split to keep the oracle independent of the implementation:
+     - (1) a Sol harness seat, scoped to the tests and the oracle, adds the witnesses and corrects the oracle on Astra F1 (window-index binding), F2 (completeness passes) and F3 (numeric check), leaving the suite RED exactly where the reducer must change ([16/05](16-a292-impl/05-harness-fix1-brief.txt));
+     - (2) the Opus implementation seat, scoped to the reducer, takes it to GREEN.
+   - Aggregate `fsum` overflow is a ruling gap: joules cannot physically approach 1e308, and it currently fails closed by an untyped exception. It is registered as follow-up A292-AGGREGATE-OVERFLOW-01, with no test this round.
