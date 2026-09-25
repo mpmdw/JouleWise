@@ -1,0 +1,4 @@
+Ruling written (16 KB, under the 24 KB cap) as the only new file; temp extracts removed; all probes executed within budget.
+
+PRR-R3-01: Q1 AFFIRM (R16-a stays out of Revision 5, acceptance-rulings record only); Q2 AFFIRM A-R5a-1 with corrected exact text recorded in docs/decision_log.md; no BLOCKER/MATERIAL; ruling at docs/process_traces/2026-09-25-activation-152c9255/27-coldgate-packet-prr-r3/20-coldgate-fable-prr-r3-ruling.md.
+rc=0

@@ -219,3 +219,10 @@
    - R4 rejects the rendered-plist seal pin, because rendered bytes are per-window and R15 says template digests.
    - The exact texts are F1–F3. MERGE follows once PR #412 is merged first and F1–F3 land verbatim in one commit, re-audited by one lens; no further cold gate is needed.
    - Seat 72 (Sol) applies F1–F3 verbatim.
+75. **Cold gate PRR-R3-01** ([27/20](27-coldgate-packet-prr-r3/20-coldgate-fable-prr-r3-ruling.md)).
+   - Q1 AFFIRMS that R16-a is **not** in Revision 5: it goes in the acceptance-rulings record only, under the heading "R16-a (2026-09-25, PR-L final pass, ratified placement PRR-R3-01)".
+   - Q2 **RATIFIES amendment A-R5a-1** (the seal pins template digests at PR #412's merge commit), with three corrections and exact texts. It is recorded as a new `docs/decision_log.md` entry.
+76. **Magistrate erratum reading (mechanical, meaning-preserving; flagged for the next cold gate).**
+   - The ratified Revision 5 seal sentence contains the grep example `grep -c -E '<PR-L-MERGE-SHA>|<TEMPLATE-SHA256:'`. That example itself contains the literal placeholder tokens, so a correctly sealed file would still match the issuer's placeholder regex and refuse, and its grep count could never reach 0. PR-R seat 72 found this and raised it as a blocking flag.
+   - Reading: the example is written `'<PR-L-MERGE[-]SHA>|<TEMPLATE[-]SHA256:'`. The regex still matches the real tokens; the text no longer contains them. A test proves that a fully sealed copy passes and greps 0.
+   - Seat 72 (rc 79, NEEDS_SCOPE for `docs/decision_log.md`) is resumed with the scope approved and the ratified texts ([/tmp instructions, copied as 27/30](27-coldgate-packet-prr-r3/30-resume-instructions.txt)).
