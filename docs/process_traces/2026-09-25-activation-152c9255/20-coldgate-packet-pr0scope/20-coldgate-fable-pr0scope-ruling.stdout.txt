@@ -1,0 +1,2 @@
+Ruling written (17.9 KB, 15 min of the 55-min budget, only the ruling file added): Q1 REJECT zero-over-validator as a one-round gate, Q2 rule (A) amended with an exact target map, deterministic corruption corpus on the two builder-built clean artifacts, and a tracked residual ratchet, Q3 R-6v2 acceptance text issued; sweep reproduced at 1,112/271/1/840.
+rc=0
