@@ -163,6 +163,28 @@ def census_cpu_flags(records, windows_by_key, *, workload_pid, sampler_pid, allo
 def analyze_cell(directory: Path, config: dict, reference_hash: str | None = None) -> dict:
     cell = json.loads((directory / "cell.json").read_text())
     done = json.loads((directory / "done.json").read_text())
+    if cell["stage"] == "P":
+        census = [json.loads(line) for line in (directory / "census.jsonl").read_text().splitlines()]
+        probe = cell.get("cpu", [])
+        valid_probe = (not cell.get("runs") and len(probe) == config["segments"]["cpu_repeats"] and
+                       all(isinstance(item, dict) and item.get("repeat") == i and
+                           isinstance(item.get("seconds"), (int, float)) and math.isfinite(item["seconds"]) and
+                           item["seconds"] >= config["segments"]["cpu_seconds"]
+                           for i, item in enumerate(probe, 1)) and bool(census) and
+                       all(isinstance(item, dict) for item in census))
+        flags = list(cell.get("flags", []))
+        if not valid_probe or not done.get("ok"):
+            flags.append("probe_invalid")
+        if done.get("interrupted") or cell.get("interrupted") or any(
+                isinstance(x, dict) and x.get("interrupted") for x in census):
+            flags.append("interrupted")
+        return {"stage": "P", "state": cell["state"], "context": cell["context"],
+                "block": directory.name.split(".")[0], "phase": None, "pid": cell["pid"],
+                "cell_id": cell["cell_id"], "dir": str(directory), "metrics": {
+                    "E": None, "R": None, "cpu_seconds": statistics.median(x["seconds"] for x in probe) if valid_probe else None,
+                    "cpu_probe_seconds": [x["seconds"] for x in probe] if valid_probe else []},
+                "runs": [], "requests": [], "flags": sorted(set(flags)), "census_cpu_flags": [],
+                "allow_pids": cell.get("allow_pids", [])}
     runs = [bundle_evidence(Path(item["bundle"]), reference_hash) for item in cell["runs"]]
     if len(runs) != config["runs_per_cell"][cell["stage"]]:
         raise ValueError("wrong number of production bundles")
@@ -220,7 +242,8 @@ def analyze_cell(directory: Path, config: dict, reference_hash: str | None = Non
                "energy_bound_terms_j": energy_bound_terms,
                "drift_ratio": None,
                "max_run_drift_ratio": max((run["metrics"]["drift_ratio"] for run in runs if run["metrics"]["drift_ratio"] is not None), default=None),
-               "cpu_seconds": statistics.mean(x["seconds"] for x in cell.get("cpu", [])) if cell.get("cpu") else None}
+               "cpu_seconds": statistics.mean(x["seconds"] for x in cell.get("cpu", [])) if cell.get("cpu") else None,
+               "cpu_probe_seconds": [x["seconds"] for x in cell.get("cpu", []) if isinstance(x.get("seconds"), (int, float))]}
     if metrics["net_j"] and energy_bound_terms.get("E_drift_bound_j") is not None:
         metrics["drift_ratio"] = energy_bound_terms["E_drift_bound_j"] / metrics["net_j"]
     block_name = directory.name.split(".")[0]
@@ -328,16 +351,25 @@ def paired_rows(rows, comparison, endpoint):
 
 def decision_table(rows, config):
     verdicts, intervals, flags = {}, {}, []
+    c1 = [row for row in rows if row["stage"] == "C1"]
     u1 = [row for row in rows if row["stage"] == "U1"]
     u2 = [row for row in rows if row["stage"] == "U2"]
-    eligible = [row for row in u1+u2 if row["context"] in ("D", "I", "SH")]
-    stage = "U2" if u2 else "U1" if u1 else None
-    if u1:
-        for comparison in ("D/I", "SH/I"):
+    if c1 and any(row["stage"] not in ("C1", "P") for row in rows):
+        raise ValueError("C1 cannot mix with earlier stages")
+    stage = "C1" if c1 else "U2" if u2 else "U1" if u1 else None
+    infer_rows = c1 if c1 else u1 + u2
+    stage_blocks = [block for block in blocks(config, "C1" if c1 else "U1")
+                    if not block["discard"] and "I" in block["arms"] and len(block["arms"]) > 1]
+    tested_arms = {arm for block in stage_blocks for arm in block["arms"]}
+    comparisons = tuple(f"{arm}/I" for arm in config["contexts"] if arm in tested_arms and arm != "I")
+    eligible = [row for row in infer_rows if row["context"] in {arm for b in stage_blocks for arm in b["arms"]}]
+    if c1 or u1:
+        for comparison in comparisons:
             for endpoint in ("E", "R"):
                 key = f"{comparison}:{endpoint}"
                 logs, absolute, flagged = paired_rows(eligible, comparison, endpoint)
-                expected_pairs = config["sizes"]["u_blocks"] * (2 if u2 else 1)
+                tested_arm = comparison.split("/")[0]
+                expected_pairs = sum(tested_arm in block["arms"] for block in stage_blocks) * (1 if c1 else 2 if u2 else 1)
                 interval = paired_interval(logs) if len(logs) == expected_pairs else None
                 if interval and endpoint == "E":
                     interval["absolute_j_per_token"] = statistics.mean(absolute)
@@ -387,8 +419,31 @@ def decision_table(rows, config):
                             arm: statistics.mean(row["metrics"].get("edge_bound_j_per_token") or 0.
                                                  for pair in pairs for row in pair if row["context"] == arm)
                             for arm in (arm_a, arm_b)}
-                        if result == "EQUIVALENT" and (interval["max_cell_drift_ratio"] is None or
-                                                       interval["max_cell_drift_ratio"] > .03):
+                        if c1:
+                            interval["widened interval crosses δ"] = ("yes" if
+                                interval.get("widened_lower_log") is None or
+                                interval["widened_lower_log"] < LOWER or interval["widened_upper_log"] > UPPER
+                                else "no")
+                            interval["v2.3 C3 outcome"] = (
+                                "INCONCLUSIVE-by-attribution" if result == "EQUIVALENT" and
+                                (interval["max_cell_drift_ratio"] is None or interval["max_cell_drift_ratio"] > .03)
+                                else result)
+                            if result == "EQUIVALENT":
+                                arm_sd = {}
+                                for arm in (arm_a, arm_b):
+                                    values = [math.log(row["metrics"]["E"]) for row in eligible
+                                              if row["context"] == arm and row["metrics"].get("E") is not None]
+                                    arm_sd[arm] = statistics.stdev(values) if len(values) >= 2 else None
+                                interval["arm_sample_sd_log_E"] = arm_sd
+                                idle_values = [row["metrics"].get("idle_power_w_mean") for row in eligible]
+                                idle_readable = all(isinstance(value, (int, float)) and math.isfinite(value)
+                                                    for value in idle_values)
+                                interval["idle_baseline_mean_w_max"] = max(idle_values) if idle_readable else None
+                                if (any(value is None or value > .01 for value in arm_sd.values()) or
+                                    not idle_readable or any(value > 1. for value in idle_values)):
+                                    result = "INCONCLUSIVE-by-stability"
+                        elif result == "EQUIVALENT" and (interval["max_cell_drift_ratio"] is None or
+                                                         interval["max_cell_drift_ratio"] > .03):
                             result = "INCONCLUSIVE-by-attribution"
                     if result == "DIFFERENT" and endpoint == "E" and comparison == "D/I":
                         edges = interval["mean_edge_bound_j_per_token_by_arm"]
@@ -423,16 +478,52 @@ def decision_table(rows, config):
                  if r["context"] == "I" and r["metrics"].get("median_sample_interval_s") is not None]
     i_cadence = [x for x in i_cadence if isinstance(x, (int, float))]
     median_i_cadence = statistics.median(i_cadence) if i_cadence else None
+    c_i = [row for row in c1 if row["context"] == "I"]
+    c_i_valid = len(c_i) == len(stage_blocks) and all(
+        row["metrics"].get("E") is not None and "bundle_invalid" not in row.get("flags", []) and
+        "interrupted" not in row.get("flags", []) for row in c_i)
+    probe_rows = [row for row in rows if not {"probe_invalid", "bundle_invalid", "interrupted"} & set(row.get("flags", []))
+                  and ((row["stage"] == "C1" and row["context"] in ("I", "SH")) or
+                       (row["stage"] == "P" and row["context"] in ("D", "B")))]
+    probe_seconds = {}
+    for arm in ("I", "SH", "D", "B"):
+        values = []
+        for row in probe_rows:
+            if row["context"] != arm:
+                continue
+            measurements = row["metrics"].get("cpu_probe_seconds")
+            if measurements is None:
+                seconds = row["metrics"].get("cpu_seconds")
+                measurements = [seconds] if seconds is not None else []
+            values.extend(measurements)
+        probe_seconds[arm] = statistics.median(values) if values else None
+    probe_summary = {arm: {"median_cpu_probe_seconds": value,
+                           "ratio_to_I": value / probe_seconds["I"] if value is not None and probe_seconds["I"] else None}
+                     for arm, value in probe_seconds.items()}
     interpretation = {
         "default_context_compromised": any(verdicts.get(f"D/I:{endpoint}") == "DIFFERENT" for endpoint in ("E", "R")),
         "cure_supported_for_tested_shell": bool(u1) and all(verdicts.get(f"SH/I:{endpoint}") == "EQUIVALENT" for endpoint in ("E", "R"))
             and median_i_cadence is not None and median_i_cadence <= config["thresholds"]["interactive_cadence_ms"],
         "interactive_cadence_median_ms": median_i_cadence,
     }
-    invalid_counts = {arm: sum("bundle_invalid" in row.get("flags", []) for row in rows if row.get("context") == arm)
+    if c1:
+        interpretation.update({
+            "default_context_compromised": None,
+            "cure_supported_for_tested_shell": None,
+            "contemporary_shell_equivalent": all(verdicts.get(f"SH/I:{endpoint}") == "EQUIVALENT"
+                                                for endpoint in ("E", "R")),
+            "original_130_ms_criterion_met": median_i_cadence is not None and median_i_cadence <= 130,
+            "purpose_based_cure_test_met": c_i_valid and median_i_cadence is not None and median_i_cadence <= 150,
+            "all_I_runs_valid": c_i_valid,
+            "production_300_sample_seconds": 300 * median_i_cadence / 1000 if median_i_cadence is not None else None,
+            "production_bound_seconds": 55,
+        })
+    invalid_counts = {arm: sum(bool({"bundle_invalid", "probe_invalid"} & set(row.get("flags", [])))
+                               for row in rows if row.get("context") == arm)
                       for arm in ("D", "I", "SH", "B")}
     return {"stage": stage, "verdicts": verdicts, "intervals": intervals, "invalid_cell_counts": invalid_counts,
             "sandwich_intervals": sandwich, "background_cpu_ratio": b_control,
+            "probe_summary": probe_summary if c1 or any(row["stage"] == "P" for row in rows) else {},
             "interpretation": interpretation, "flags": sorted(set(flags))}
 
 
@@ -520,26 +611,27 @@ def stage0_spread(rows):
                                                         for r in rows if r["metrics"].get("attribution_bound_j") is not None
                                                         and r["metrics"].get("net_j")), default=None),
             "D/I_proxy": "SH/I stage0 spread; stage0 contains no D arm",
-            "stage0_context": "attended, agents active; drift may be an upper bound, spread is not presumed conservative"}
+            "stage0_context": ("unattended, agents drained" if rows and all(r.get("state") == "U" for r in rows)
+                               else "attended, agents active")}
 
 
 def markdown(rows, decision, errors, discarded):
     lines = ["# OSCTX diagnostic summary", "", "Diagnostic only; not claim-bearing.", ""]
-    for stage in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S"):
+    for stage in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S", "C1", "P"):
         stage_rows = [r for r in rows if r["stage"] == stage]
         if not stage_rows: continue
         lines += [f"## {stage}", "", "| Block | Arm | E J/token | R token/s | Flags |", "|---|---|---:|---:|---|"]
         for row in stage_rows:
             m = row["metrics"]
-            energy = f"{m['E']:.6f}" if m.get("E") is not None else "invalid"
-            rate = f"{m['R']:.3f}" if m.get("R") is not None else "invalid"
+            energy = "n/a" if stage == "P" else f"{m['E']:.6f}" if m.get("E") is not None else "invalid"
+            rate = "n/a" if stage == "P" else f"{m['R']:.3f}" if m.get("R") is not None else "invalid"
             lines.append(f"| {row['block']} | {row['context']} | {energy} | {rate} | {', '.join(row['flags'])} |")
         lines.append("")
         lines += ["| Block | Arm | Bundle status | Idle-request precheck reasons | Gross J | Idle W mean / SD | Idle cadence s | Energy bound terms J |",
                   "|---|---|---|---|---:|---|---:|---|"]
         for row in stage_rows:
             m = row["metrics"]
-            statuses = ", ".join(str(run["status"]) for run in row.get("runs", []))
+            statuses = "probe-only" if stage == "P" else ", ".join(str(run["status"]) for run in row.get("runs", []))
             reasons = ", ".join(sorted({reason for run in row.get("runs", [])
                                          for reason in run["precheck"].get("reasons", [])}))
             terms = json.dumps(m.get("energy_bound_terms_j"), sort_keys=True)
@@ -557,11 +649,11 @@ def markdown(rows, decision, errors, discarded):
                 return statistics.mean(values) if values else None
             ratios = [r["metrics"].get("drift_ratio") for r in arm_rows]
             ratios = [v for v in ratios if isinstance(v, (int, float))]
-            lines.append(f"| {arm} | {sum('bundle_invalid' in r['flags'] for r in arm_rows)} | "
+            lines.append(f"| {arm} | {sum(bool({'bundle_invalid', 'probe_invalid'} & set(r['flags'])) for r in arm_rows)} | "
                          f"{aggregate('idle_power_w_mean')} | {aggregate('edge_bound_j_per_token')} | "
                          f"{max(ratios) if ratios else None} |")
         lines.append("")
-        if stage in ("U1", "U2"):
+        if stage in ("U1", "U2", "C1"):
             lines += ["| Contrast | Verdict | Ratio 99.375% interval | Widened E interval | Absolute J/token contrast 99.375% interval | Approx. 80% MDE ratio |",
                       "|---|---|---|---|---|---:|"]
             for key, interval in decision["intervals"].items():
@@ -574,15 +666,40 @@ def markdown(rows, decision, errors, discarded):
                 else:
                     lines.append(f"| {key} | INCONCLUSIVE | unavailable | unavailable | unavailable | unavailable |")
             lines.append("")
-            lines += [f"Interactive LM cadence: {decision['interpretation']['interactive_cadence_median_ms']} ms; "
-                      f"tested-shell cure supported: {decision['interpretation']['cure_supported_for_tested_shell']}; "
-                      f"default context compromised: {decision['interpretation']['default_context_compromised']}.", ""]
+            if stage == "C1":
+                lines += [f"Contemporary SH/I equivalence on E and R: "
+                          f"{decision['interpretation']['contemporary_shell_equivalent']}.", ""]
+            else:
+                lines += [f"Interactive LM cadence: {decision['interpretation']['interactive_cadence_median_ms']} ms; "
+                          f"tested-shell cure supported: {decision['interpretation']['cure_supported_for_tested_shell']}; "
+                          f"default context compromised: {decision['interpretation']['default_context_compromised']}.", ""]
+            if stage == "C1":
+                for key, interval in decision["intervals"].items():
+                    if key.endswith(":E"):
+                        lines += [f"{key}: widened interval crosses δ: {interval.get('widened interval crosses δ', 'unknown') if interval else 'unknown'}; "
+                                  f"v2.3 C3 outcome: {interval.get('v2.3 C3 outcome', 'INCONCLUSIVE') if interval else 'INCONCLUSIVE'}."]
+                cure = decision["interpretation"]
+                lines += [f"Original I median idle cadence ≤ 130 ms: {'met' if cure['original_130_ms_criterion_met'] else 'not met'} "
+                          f"({cure['interactive_cadence_median_ms']} ms).",
+                          f"Purpose-based cure test (all I runs valid; median ≤ 150 ms): {'met' if cure['purpose_based_cure_test_met'] else 'not met'}.",
+                          f"Production margin: 300 × median cadence = {cure['production_300_sample_seconds']} s "
+                          f"against {cure['production_bound_seconds']} s.", "",
+                          "| Cell | Arm | E drift bound / net energy |", "|---|---|---:|"]
+                for row in stage_rows:
+                    lines.append(f"| {row['block']} | {row['context']} | {row['metrics'].get('drift_ratio')} |")
+                lines.append("")
         if stage == "S":
             lines += ["Exploratory S versus geometric mean of bracketing U cells; no verdict.", "",
                       "| Endpoint | Ratio 99.375% interval |", "|---|---|"]
             for endpoint, interval in decision["sandwich_intervals"].items():
                 lines.append(f"| {endpoint} | {interval['ratio']:.5f} [{interval['lower_ratio']:.5f}, {interval['upper_ratio']:.5f}] |" if interval else f"| {endpoint} | unavailable |")
             lines.append("")
+    if decision.get("probe_summary"):
+        lines += ["## CPU probe (descriptive, outside inference)", "",
+                  "| Context | Median CPU-probe seconds | Ratio to I |", "|---|---:|---:|"]
+        for arm, record in decision["probe_summary"].items():
+            lines.append(f"| {arm} | {record['median_cpu_probe_seconds']} | {record['ratio_to_I']} |")
+        lines.append("")
     all_flags = sorted(set(decision["flags"] + [f"{r['dir']}: {flag}" for r in rows for flag in r["flags"]]))
     if all_flags:
         lines += ["## Flags", ""] + [f"- {flag}" for flag in all_flags]
@@ -599,6 +716,15 @@ def stage_schedules(source: Path) -> dict[Path, dict]:
     if direct.is_file():
         locations = [source]
         rehearsal_only = json.loads(direct.read_text()).get("stage") == "rehearsal"
+    elif (source / "C1" / "command_sequence.json").is_file():
+        if not (source / "P" / "command_sequence.json").is_file():
+            raise ValueError("C session requires C1 and P schedules")
+        if any((source / name / "command_sequence.json").is_file()
+               for name in ("stage0", "stage0U", "U1", "U2", "S", "rehearsal")):
+            raise ValueError("C1 cannot mix with earlier stages")
+        locations = [source / name for name in ("C1", "P")
+                     if (source / name / "command_sequence.json").is_file()]
+        rehearsal_only = False
     elif (source / "U1" / "command_sequence.json").is_file():
         locations = [source / name for name in ("stage0U", "U1", "U2", "S")
                      if (source / name / "command_sequence.json").is_file()]
@@ -612,7 +738,7 @@ def stage_schedules(source: Path) -> dict[Path, dict]:
     for location in locations:
         schedule = json.loads((location / "command_sequence.json").read_text())
         stage = schedule.get("stage")
-        if stage not in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S") or (location != source and stage != location.name):
+        if stage not in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S", "C1", "P") or (location != source and stage != location.name):
             raise ValueError(f"invalid stage schedule: {location}")
         actions = {}
         for action in schedule["actions"]:
@@ -776,7 +902,7 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
                         if run["run_id"] is not None and metadata.is_file() and json.loads(metadata.read_text()).get("run_id") != run_id:
                             raise ValueError(f"discarded bundle run_id mismatch: {directory}")
                     discarded.append({"cell": str(directory), "reason": detail.get("reason", event["reason"])})
-                    if detail.get("reason") == "bundle_invalid":
+                    if detail.get("reason") in ("bundle_invalid", "probe_invalid"):
                         invalid_cell_counts[(stage, arm)] += 1
                     continue
                 if (directory / "discarded.json").exists():
@@ -797,7 +923,7 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
             if kind == "block_accepted":
                 reference = event.get("reference_hash")
                 if not isinstance(reference, str) or not reference:
-                    if not matching["discard"]:
+                    if not matching["discard"] and stage != "P":
                         raise ValueError(f"missing accepted reference_hash: {block_id}")
                 elif stage in references and references[stage] != reference:
                     raise ValueError(f"reference_hash mismatch: {stage}/{block_id}")
@@ -822,12 +948,12 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None, output_
             raise ValueError(f"reference_hash mismatch: {row['dir']}")
     decision = decision_table(rows, config)
     for row in rows:
-        if "bundle_invalid" in row.get("flags", []):
+        if {"bundle_invalid", "probe_invalid"} & set(row.get("flags", [])):
             invalid_cell_counts[(row["stage"], row["context"])] += 1
     decision["invalid_cell_counts_by_stage"] = {
         stage: {arm: invalid_cell_counts[(stage, arm)]
                 for arm in ("D", "I", "SH", "B")}
-        for stage in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S")}
+        for stage in ("rehearsal", "stage0", "stage0U", "U1", "U2", "S", "C1", "P")}
     decision["invalid_cell_counts"] = {arm: sum(counts[arm] for counts in decision["invalid_cell_counts_by_stage"].values())
                                        for arm in ("D", "I", "SH", "B")}
     report = {"cells": rows, "errors": errors, "discarded": discarded,

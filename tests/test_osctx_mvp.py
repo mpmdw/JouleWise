@@ -63,10 +63,13 @@ def make_cell(parent: Path, config, stage, block, arm, energies, rates=None, *, 
         runs.append({"bundle": str(bundle), "run_id": run_id, "config": str(cfg),
                      "materialized_sha256": hashlib.sha256(cfg.read_bytes()).hexdigest(),
                      "child": {"pid": 700 + number}})
+    cpu = [{"repeat": i, "seconds": 5.1} for i in range(1, 4)] if stage == "P" else [{"seconds": 5.1}]
     record = {"stage": stage, "state": scheduled["state"], "context": arm,
-              "pid": 500, "cell_id": slot, "runs": runs, "cpu": [{"seconds": 5.1}], "allow_pids": [], "flags": [], "interrupted": False}
+              "pid": 500, "cell_id": slot, "runs": runs, "cpu": cpu, "allow_pids": [], "flags": [], "interrupted": False}
     (directory / "cell.json").write_text(json.dumps(record))
     (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": False}))
+    if stage == "P":
+        (directory / "census.jsonl").write_text(json.dumps({"display_state": "on", "hid_idle_seconds": 700}) + "\n")
     return directory
 
 
@@ -91,7 +94,7 @@ def seal_fixture(root, config, stage, config_path=common.DEFAULT_CONFIG):
                 raise AssertionError("fixture block is incomplete")
             cells = [ledger.cell_entry(d, slot=a["cell_id"], arm=a["context"], label=a["label"].replace(".a1", f".a{attempt}"))
                      for a, d in present]
-            if not discarded and reference is None and not block["discard"]:
+            if not discarded and reference is None and not block["discard"] and stage != "P":
                 reference = analyze.bundle_evidence(Path(cells[0]["runs"][0]["bundle"]))["output_hash"]
             record = {"event": "block_discarded" if discarded else "block_accepted", "stage": stage,
                       "block": block["id"], "attempt": attempt, "discard": block["discard"],
@@ -203,7 +206,8 @@ class OSCTXTests(unittest.TestCase):
             config.pop("runs_per_cell")
             path.write_text(json.dumps(config))
             self.assertEqual(common.load_config(path)["runs_per_cell"],
-                             {stage: (1 if stage == "rehearsal" else 2) for stage in common.STAGES})
+                             {stage: (0 if stage == "P" else 1 if stage in ("rehearsal", "C1") else 2)
+                              for stage in common.STAGES})
 
     def test_materialized_config_only_two_edits_and_hashes(self):
         source = cell.ROOT / self.config["source_config"]
@@ -805,6 +809,8 @@ class OSCTXTests(unittest.TestCase):
             self.assertEqual(report["verdicts"], {})
             self.assertEqual(analyze.stage0_spread(report["cells"])["paired_block_count_by_endpoint"],
                              {"E": 3, "R": 3})
+            self.assertEqual(analyze.stage0_spread(report["cells"])["stage0_context"],
+                             "unattended, agents drained")
 
     def test_session_chains_once_and_freezes_before_u1(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -845,6 +851,8 @@ class OSCTXTests(unittest.TestCase):
             self.assertEqual(fake.calls, [runner.NETWORK_TIME + ["off"], runner.NETWORK_TIME + ["on"]])
             session = json.loads((root / "live" / "session.json").read_text())
             self.assertEqual(session["status"], "complete")
+            self.assertEqual(json.loads((root / "live" / "power.json").read_text())["stage0_context"],
+                             "unattended, agents drained")
             self.assertEqual(ledger.owned(root / "live" / "owned.jsonl"), {})
             self.assertEqual([r["event"] for r in ledger.read(root / "live" / "owned.jsonl")],
                              ["acquire", "release"])
@@ -866,7 +874,7 @@ class OSCTXTests(unittest.TestCase):
         sizing = {"total_u_blocks": 6, "runs_per_cell": 1, "reason": "cheapest_powered_within_budget",
                   "candidates": [], "power_at_1p5_sd": {}}
         for verdict, expected in (("EQUIVALENT", ["stage0U", "U1", "S"]),
-                                  ("INCONCLUSIVE", ["stage0U", "U1", "U2", "S"])):
+                                  ("INCONCLUSIVE", ["stage0U", "U1", "S"])):
             with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as temp:
                 stages, fake = [], Fake()
                 def execute(out, config_path, config, stage, python, **kwargs): stages.append(stage)
@@ -883,8 +891,7 @@ class OSCTXTests(unittest.TestCase):
                 self.assertEqual(stages, expected)
                 self.assertEqual(fake.calls, ["off", "on"])
                 session = json.loads((Path(temp) / "session.json").read_text())
-                self.assertEqual(next(s for s in session["steps"] if s["step"] == "U2")["outcome"],
-                                 "skipped" if verdict == "EQUIVALENT" else "complete")
+                self.assertEqual(next(s for s in session["steps"] if s["step"] == "U2")["outcome"], "skipped")
 
     def test_session_failure_records_reason_and_restores_network_time(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -1240,6 +1247,194 @@ class OSCTXTests(unittest.TestCase):
         self.assertEqual(sent, [(98231, signal.SIGTERM), (98232, signal.SIGTERM),
                                 (98231, signal.SIGKILL), (98232, signal.SIGKILL)])
 
+
+
+class ContinuationTests(unittest.TestCase):
+    def setUp(self):
+        self.config = common.load_config()
+
+    def test_c_schedule_seed_orders_and_no_u2(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(runner.main(["--session", "C", "--render-only", str(root)]), 0)
+            plan = json.loads((root / "session_plan.json").read_text())
+            self.assertEqual(plan["stages"], ["C1", "P"])
+            self.assertNotIn("U2", json.dumps(plan))
+            schedule = json.loads((root / "C1" / "command_sequence.json").read_text())
+            self.assertEqual(schedule["seed"], 20260925)
+            self.assertEqual(schedule["sequence"][0]["arms"], ["I"])
+            self.assertTrue(schedule["sequence"][0]["discard"])
+            orders = [tuple(block["arms"]) for block in schedule["sequence"][1:]]
+            self.assertEqual(orders.count(("I", "SH")), 3)
+            self.assertEqual(orders.count(("SH", "I")), 3)
+            self.assertEqual(orders, [tuple(block["arms"]) for block in common.blocks(self.config, "C1")[1:]])
+            self.assertEqual([block["arms"] for block in json.loads((root / "P" / "command_sequence.json").read_text())["sequence"]],
+                             [["D"], ["B"], ["D"], ["B"]])
+            self.assertTrue(all(block["gate"] == "HIDIdleTime >= 600 s" for block in schedule["sequence"]))
+
+    def test_c_session_one_look_even_if_inconclusive(self):
+        class Fake:
+            def __init__(self): self.calls = []
+            def run(self, argv):
+                self.calls.append(argv[-1])
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+        with tempfile.TemporaryDirectory() as temp:
+            root, stages, analyses, fake = Path(temp), [], [], Fake()
+            def execute(out, config_path, config, stage, python, **kwargs):
+                stages.append(stage)
+                self.assertFalse(kwargs["manage_network"])
+                self.assertTrue((out.parent / "C1" / "command_sequence.json").is_file())
+                self.assertTrue((out.parent / "P" / "command_sequence.json").is_file())
+            def analyze_dir(out, config, **kwargs):
+                analyses.append(out)
+                return {"errors": [], "verdicts": {"SH/I:E": "INCONCLUSIVE"}}
+            with patch.object(runner, "execute", side_effect=execute), \
+                 patch.object(runner, "analyze_directory", side_effect=analyze_dir):
+                runner.run_session(root, common.DEFAULT_CONFIG, self.config, "/python", backend=fake, session_kind="C")
+            self.assertEqual(stages, ["C1", "P"])
+            self.assertEqual(analyses, [root])
+            self.assertEqual(fake.calls, ["off", "on"])
+            self.assertEqual([step["step"] for step in json.loads((root / "session.json").read_text())["steps"]],
+                             ["C1", "P", "final_analyze"])
+
+    def test_probe_only_wrapper_and_validity(self):
+        calls = []
+        class Fake:
+            def command(self, argv): return {"stdout": "", "returncode": 0}
+            def idle(self): return 700
+            def display(self): return "on"
+            def sleep(self, seconds): calls.append(("sleep", seconds))
+            def preread(self, model): raise AssertionError("probe-only must not preread")
+            def production(self, argv, log): raise AssertionError("probe-only must not run production")
+            def cpu_probe(self, iterations): calls.append(("cpu", iterations)); return 1
+        with tempfile.TemporaryDirectory() as temp:
+            cfg = copy.deepcopy(self.config)
+            cfg["segments"] = {**cfg["segments"], "cpu_seconds": 0, "cpu_iterations": 1}
+            root = Path(temp)
+            cell.run(root, cfg, "U", "D", 1, stage="P", backend=Fake(), python="/python")
+            self.assertEqual([kind for kind, _ in calls], ["cpu", "cpu", "cpu", "sleep"])
+            self.assertEqual(json.loads((root / "cell.json").read_text())["runs"], [])
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner.plan(root, common.DEFAULT_CONFIG, self.config, "P", "/python")
+            for block in common.blocks(self.config, "P"):
+                make_cell(root, self.config, "P", block["id"], block["arms"][0], [])
+            seal_fixture(root, self.config, "P")
+            report = analyze.analyze_directory(root, self.config)
+            self.assertEqual(len(report["cells"]), 4)
+            self.assertTrue(all(not row["flags"] for row in report["cells"]))
+            self.assertTrue(all(row["runs"] == [] for row in report["cells"]))
+            first = root / "P-01.1.D.a1"
+            record = json.loads((first / "cell.json").read_text())
+            record["cpu"].pop()
+            (first / "cell.json").write_text(json.dumps(record))
+            self.assertIn("probe_invalid", analyze.analyze_cell(first, self.config)["flags"])
+
+    def test_probe_only_runner_accepts_completed_probe_without_bundles(self):
+        class Fake:
+            def run(self, argv):
+                if argv[1] == "bootstrap":
+                    directory = Path(argv[-1]).parent
+                    action = next(a for a in self.actions if Path(a["cell_dir"]) == directory)
+                    (directory / "cell.json").write_text(json.dumps({
+                        "stage": "P", "state": "U", "context": action["context"],
+                        "cell_id": action["cell_id"], "pid": 500, "runs": [],
+                        "cpu": [{"repeat": n, "seconds": 5.1} for n in (1, 2, 3)],
+                        "allow_pids": [], "flags": [], "interrupted": False}))
+                    (directory / "census.jsonl").write_text(json.dumps({"display_state": "on"}) + "\n")
+                    (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": False}))
+                return SimpleNamespace(returncode=1 if argv[1] in ("print", "-f") else 0,
+                                       stdout="", stderr="")
+            def now(self): return 0.
+            def sleep(self, seconds): pass
+            def display(self): return "on"
+            def idle(self): return 700.
+        with tempfile.TemporaryDirectory() as temp:
+            root, fake = Path(temp), Fake()
+            fake.actions = runner.plan(root, common.DEFAULT_CONFIG, self.config, "P", "/python")
+            runner.execute(root, common.DEFAULT_CONFIG, self.config, "P", "/python",
+                           backend=fake, existing_actions=fake.actions, manage_network=False)
+            self.assertEqual(sum(record["event"] == "block_accepted"
+                                 for record in ledger.read(root / "ledger.jsonl", sealed=True)), 4)
+            self.assertTrue(all(not row["flags"] for row in analyze.analyze_directory(root, self.config)["cells"]))
+
+    def rows(self, *, sh_energies=None, i_energies=None, idle=0.5, drift=.01, bound=1., cadence=.132):
+        sh_energies = sh_energies or [1.] * 6
+        i_energies = i_energies or [1.] * 6
+        return [{"stage": "C1", "block": f"C1-{number:02}", "context": arm, "flags": [],
+                 "metrics": {"E": energy, "R": 50., "net_j": energy * 512,
+                             "drift_ratio": drift, "attribution_bound_j": bound,
+                             "edge_bound_j_per_token": .001, "idle_power_w_mean": idle,
+                             "median_sample_interval_s": cadence, "cpu_seconds": 5.1}}
+                for number in range(1, 7) for arm, energy in (("I", i_energies[number-1]),
+                                                               ("SH", sh_energies[number-1]))]
+
+    def test_c3_v25_stability_widened_and_original_outcome(self):
+        rows = self.rows(drift=.04, bound=10.)
+        report = analyze.decision_table(rows, self.config)
+        self.assertEqual(set(report["verdicts"]), {"SH/I:E", "SH/I:R"})
+        self.assertEqual(report["verdicts"]["SH/I:E"], "EQUIVALENT")
+        self.assertEqual(report["verdicts"]["SH/I:R"], "EQUIVALENT")
+        self.assertEqual(report["intervals"]["SH/I:E"]["widened interval crosses δ"], "yes")
+        self.assertEqual(report["intervals"]["SH/I:E"]["v2.3 C3 outcome"], "INCONCLUSIVE-by-attribution")
+        nominal = analyze.decision_table(self.rows(), self.config)["intervals"]["SH/I:E"]
+        self.assertEqual(nominal["widened interval crosses δ"], "no")
+        self.assertEqual(nominal["v2.3 C3 outcome"], "EQUIVALENT")
+        spread = [1., 1.012, .988, 1.012, .988, 1.]
+        self.assertEqual(analyze.decision_table(self.rows(sh_energies=spread), self.config)["verdicts"]["SH/I:E"],
+                         "INCONCLUSIVE-by-stability")
+        self.assertEqual(analyze.decision_table(self.rows(idle=1.01), self.config)["verdicts"]["SH/I:E"],
+                         "INCONCLUSIVE-by-stability")
+        self.assertEqual(analyze.decision_table(self.rows(sh_energies=[1.1] * 6), self.config)["verdicts"]["SH/I:E"],
+                         "DIFFERENT")
+        self.assertEqual(analyze.decision_table(self.rows(sh_energies=[1.03, .97] * 3), self.config)["verdicts"]["SH/I:E"],
+                         "INCONCLUSIVE")
+
+    def test_r5_cadence_and_probe_summary(self):
+        rows = self.rows()
+        rows += [{"stage": "P", "block": f"P-{i:02}", "context": arm,
+                  "metrics": {"cpu_seconds": seconds}, "flags": []}
+                 for i, arm, seconds in ((1, "D", 10.), (2, "B", 15.), (3, "D", 12.), (4, "B", 17.))]
+        report = analyze.decision_table(rows, self.config)
+        cure = report["interpretation"]
+        self.assertFalse(cure["original_130_ms_criterion_met"])
+        self.assertTrue(cure["purpose_based_cure_test_met"])
+        self.assertAlmostEqual(cure["production_300_sample_seconds"], 39.6)
+        self.assertEqual(cure["production_bound_seconds"], 55)
+        self.assertAlmostEqual(report["probe_summary"]["D"]["ratio_to_I"], 11 / 5.1)
+        self.assertAlmostEqual(report["probe_summary"]["B"]["median_cpu_probe_seconds"], 16.)
+        self.assertAlmostEqual(report["probe_summary"]["SH"]["ratio_to_I"], 1.)
+        rows[0]["flags"].append("bundle_invalid")
+        self.assertFalse(analyze.decision_table(rows, self.config)["interpretation"]["purpose_based_cure_test_met"])
+
+    def test_c_analysis_refuses_earlier_stage_schedule(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner.main(["--session", "C", "--render-only", str(root)])
+            runner.plan(root / "stage0U", common.DEFAULT_CONFIG, self.config, "stage0U", "/python")
+            with self.assertRaisesRegex(ValueError, "cannot mix"):
+                analyze.analyze_directory(root, self.config)
+
+    def test_c_full_stage_analysis_has_only_sh_i_and_probe_descriptions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runner.main(["--session", "C", "--render-only", str(root)])
+            c1 = root / "C1"
+            for block in common.blocks(self.config, "C1"):
+                for arm in block["arms"]:
+                    make_cell(c1, self.config, "C1", block["id"], arm, [.4])
+            seal_fixture(c1, self.config, "C1")
+            probe = root / "P"
+            for block in common.blocks(self.config, "P"):
+                make_cell(probe, self.config, "P", block["id"], block["arms"][0], [])
+            seal_fixture(probe, self.config, "P")
+            report = analyze.analyze_directory(root, self.config)
+            self.assertEqual(report["stage"], "C1")
+            self.assertEqual(set(report["verdicts"]), {"SH/I:E", "SH/I:R"})
+            self.assertEqual(len(report["cells"]), 16)
+            self.assertEqual(report["probe_summary"]["D"]["median_cpu_probe_seconds"], 5.1)
+            self.assertIn("v2.3 C3 outcome", (root / "summary.md").read_text())
+            self.assertIn("Production margin", (root / "summary.md").read_text())
 
 
 class DisplayStateTests(unittest.TestCase):

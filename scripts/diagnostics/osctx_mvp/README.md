@@ -10,13 +10,16 @@ REHEARSAL=/private/tmp/osctx-mvp-rehearsal
 ROOT=/private/tmp/osctx-mvp-session
 $PY scripts/diagnostics/osctx_mvp/runner.py --stage rehearsal --render-only "$REHEARSAL" --python "$PY"
 $PY scripts/diagnostics/osctx_mvp/runner.py --session U --render-only "$ROOT" --python "$PY"
+$PY scripts/diagnostics/osctx_mvp/runner.py --session C --render-only "$ROOT" --python "$PY"
 # Live execution is a separate, lead-owned operation:
 # $PY scripts/diagnostics/osctx_mvp/runner.py --stage rehearsal --out "$REHEARSAL" --python "$PY"
 # $PY scripts/diagnostics/osctx_mvp/analyze.py "$REHEARSAL"
 # $PY scripts/diagnostics/osctx_mvp/runner.py --session U --out "$ROOT" --python "$PY"
 ```
 
-The session performs `stage0U`, power analysis, the mechanical freeze, U1, conditional U2, S, and final root analysis. `freeze.json` is written before U1 and cannot be overwritten. The candidate grid is `(6 blocks, 1 run)`, `(6, 2)`, `(12, 1)`, `(12, 2)` ordered by estimated U-stage wall time. At 1.5 times the U-scale paired SD, the cheapest candidate with at least 0.80 EQUIVALENT power on all four primary tests and at most 180 minutes is selected. The D/I SD uses the SH/I proxy. If none qualifies, `(12, 1)` is frozen with `underpowered_by_prereg`. A 12-block freeze always runs U2; a 6-block freeze runs U2 only when U1 has an INCONCLUSIVE primary verdict. `session.json` records step outcomes and reasons.
+The U session performs `stage0U`, power analysis, the mechanical freeze, U1, conditional U2, S, and final root analysis. `freeze.json` is written before U1 and cannot be overwritten. The candidate grid is `(6 blocks, 1 run)`, `(6, 2)`, `(12, 1)`, `(12, 2)` ordered by estimated U-stage wall time. At 1.5 times the U-scale paired SD, the cheapest candidate with at least 0.80 EQUIVALENT power on all four primary tests and at most 180 minutes is selected. The D/I SD uses the SH/I proxy. If none qualifies, `(12, 1)` is frozen with `underpowered_by_prereg`. A 12-block freeze runs U2; a 6-block freeze has no extension even if U1 is INCONCLUSIVE. `session.json` records step outcomes and reasons.
+
+The v2.5 C session runs in state U with one look: a discarded I warm-up, six I/SH blocks with three of each order shuffled by seed 20260925, then four probe-only cells in D, B, D, B order. It pauses network time once across both stages. C1 has one production run per cell; P has no production run or model preread, only three CPU probes of at least five seconds plus the settle. P is descriptive and excluded from paired inference. C1's sole contrast is SH/I. The C3 v2.5 E equivalence gate requires the nominal interval inside the bounds, sample SD of log E at most 1% in each arm, and idle-baseline mean at most 1 W in every C1 cell. The widened interval and original v2.3 C3 outcome remain visible. The report also shows the original 130 ms cadence criterion, the 150 ms purpose-based cure test, and 300-sample timing margin against 55 seconds.
 
 Single stages remain available with `--stage NAME --render-only DIR` or `--stage NAME --out DIR`. A standalone live stage pauses and restores network time around the stage. `analyze.py power --stage0-summary DIR/summary.json` accepts a `stage0U` summary for a separate sizing inspection; the session itself writes `power.json` and `freeze.json`. Session sizing estimates cover U cells, the two B controls, and the I warm-up. `S` is the three-phase U–S–U display sandwich.
 

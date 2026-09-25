@@ -1,9 +1,10 @@
 {
   "seed": 20260924,
-  "stages": ["stage0", "stage0U", "U1", "U2", "S", "rehearsal"],
+  "continuation_seed": 20260925,
+  "stages": ["stage0", "stage0U", "U1", "U2", "S", "rehearsal", "C1", "P"],
   "rehearsal_state": "A",
   "sizes": {"stage0_blocks": 3, "u_warmup_cells": 1, "u_blocks": 6, "background_cells": 2, "sandwich_cells": 3},
-  "runs_per_cell": {"stage0": 2, "stage0U": 2, "U1": 1, "U2": 1, "S": 1, "rehearsal": 1},
+  "runs_per_cell": {"stage0": 2, "stage0U": 2, "U1": 1, "U2": 1, "S": 1, "rehearsal": 1, "C1": 1, "P": 0},
   "source_config": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b2.json",
   "contexts": {"D": null, "I": "Interactive", "SH": "shell", "B": "Background"},
   "segments": {"cpu_seconds": 5, "cpu_iterations": 400000000, "cpu_repeats": 3, "settle_seconds": 60},

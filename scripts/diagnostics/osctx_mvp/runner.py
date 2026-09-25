@@ -73,6 +73,7 @@ def make_action(out: Path, stage: str, block: dict, slot: int, attempt: int, con
     arm = block["arms"][slot]
     directory = (out / f"{block['id']}.{slot+1}.{arm}.a{attempt}").resolve()
     action = {"stage": stage, "block": block["id"], "state": block["state"], "phase": block.get("phase"),
+              "probe_only": block.get("probe_only", False),
               "context": arm, "cell_id": slot+1, "attempt": attempt, "discard": block["discard"],
               "cell_dir": str(directory), "label": label(block["id"], arm, attempt)}
     argv = cell_argv(action, config_path, python, allow_pids)
@@ -105,10 +106,11 @@ def plan(out: Path, config_path: Path, config: dict, stage: str, python: str) ->
         previous_state = target
         sequence.append({"block": block["id"], "state": block["state"], "phase": block.get("phase"),
                          "arms": block["arms"], "discard": block["discard"],
+                         "probe_only": block.get("probe_only", False),
                          "gate": "HIDIdleTime >= 600 s" if block["state"] == "U" else None,
                          "starts": [a["start"] for a in actions if a["block"] == block["id"]],
                          "interrupted": "discard entire block and retry in same order"})
-    write_json(out / "command_sequence.json", {"stage": stage, "seed": config["seed"], "actions": actions,
+    write_json(out / "command_sequence.json", {"stage": stage, "seed": config["continuation_seed"] if stage == "C1" else config["seed"], "actions": actions,
                                                     "sequence": sequence})
     return actions
 
@@ -465,7 +467,7 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
         log(event="cleanup_proved", label=action["label"])
     def ledger_cells(actions, *, accepted=False):
         return [ledger.cell_entry(Path(a["cell_dir"]), slot=a["cell_id"], arm=a["context"],
-                                  label=a["label"], require_bundle_files=accepted)
+                                  label=a["label"], require_bundle_files=accepted and not a["probe_only"])
                 for a in actions]
     def block_record(kind, block, attempt, actions, reference, **extra):
         ledger.append(out / "ledger.jsonl", {"event": kind, "stage": stage, "block": block["id"],
@@ -529,7 +531,19 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
                         cell_record = json.loads((directory / "cell.json").read_text())
                         bad = bool(done.get("interrupted") or cell_record.get("interrupted"))
                         reason = "interrupted" if bad else None
-                        if done.get("ok") and not bad:
+                        if done.get("ok") and not bad and action["probe_only"]:
+                            probe = cell_record.get("cpu", [])
+                            try:
+                                census = [json.loads(line) for line in (directory / "census.jsonl").read_text().splitlines()]
+                            except (OSError, ValueError, TypeError):
+                                census = []
+                            if (cell_record.get("runs") or len(probe) != config["segments"]["cpu_repeats"] or
+                                any(not isinstance(item, dict) or item.get("repeat") != i or not isinstance(item.get("seconds"), (int, float)) or
+                                    not math.isfinite(item["seconds"]) or item["seconds"] < config["segments"]["cpu_seconds"]
+                                    for i, item in enumerate(probe, 1)) or not census or
+                                not all(isinstance(item, dict) for item in census)):
+                                bad, reason = True, "probe_invalid"
+                        elif done.get("ok") and not bad:
                             try:
                                 run_records = [bundle_evidence(Path(run["bundle"]), pending_reference)
                                                for run in cell_record.get("runs", [])]
@@ -543,13 +557,13 @@ def _execute_cells(out: Path, config_path: Path, config: dict, stage: str, pytho
                             elif pending_reference is None and not block["discard"]:
                                 pending_reference = run_records[0]["output_hash"]
                         elif not done.get("ok") and not bad:
-                            bad, reason = True, "bundle_invalid"
-                        if bad and reason == "bundle_invalid":
+                            bad, reason = True, "probe_invalid" if action["probe_only"] else "bundle_invalid"
+                        if bad and reason in ("bundle_invalid", "probe_invalid"):
                             invalid_cells[action["context"]] += 1
                             if invalid_cells[action["context"]] >= 3:
                                 for discarded_action in actions:
                                     write_json(Path(discarded_action["cell_dir"]) / "discarded.json",
-                                               {"reason": "bundle_invalid" if discarded_action["label"] == action["label"] else "block_peer_discard",
+                                               {"reason": reason if discarded_action["label"] == action["label"] else "block_peer_discard",
                                                 "trigger": action["label"], "block": block["id"], "attempt": attempt})
                                 log(event="stage_stopped", reason="arm_invalid_cell_limit",
                                     arm=action["context"], invalid_cells=3, council_review_required=True)
@@ -655,7 +669,8 @@ def freeze_rule(spread: dict, config: dict) -> dict:
                 for contrast in ("D/I", "SH/I"):
                     power[f"{contrast}:{endpoint}"] = power_cache[key]
             cell_minutes = 3.8 if runs == 1 else 6.0
-            wall = (3 * block_count + config["sizes"]["background_cells"] +
+            arm_count = len(next(block for block in blocks(config, "U1") if not block["discard"] and len(block["arms"]) > 1)["arms"])
+            wall = (arm_count * block_count + config["sizes"]["background_cells"] +
                     config["sizes"]["u_warmup_cells"]) * cell_minutes
             candidates.append({"blocks": block_count, "runs_per_cell": runs,
                                "estimated_wall_minutes": wall, "power_at_1p5_sd": power,
@@ -674,7 +689,7 @@ def freeze_rule(spread: dict, config: dict) -> dict:
 
 
 def run_session(out: Path, config_path: Path, config: dict, python: str, *, backend=None,
-                extra_allow_pids=None):
+                extra_allow_pids=None, session_kind="U"):
     backend = backend or SystemBackend()
     out.mkdir(parents=True, exist_ok=True)
     if unreleased(out):
@@ -682,7 +697,7 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
     session_path = out / "session.json"
     if session_path.exists() or (out / "freeze.json").exists():
         raise FileExistsError("session or freeze already exists; session cannot overwrite a prior freeze")
-    session = {"session": "U", "status": "running", "steps": [], "reason": None}
+    session = {"session": session_kind, "status": "running", "steps": [], "reason": None}
     write_json(session_path, session)
     def log(**record):
         with (out / "events.jsonl").open("a") as stream:
@@ -705,17 +720,34 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
         finally:
             record["end_wall_ns"] = time.time_ns()
             write_json(session_path, session)
-    def stage(name, active_config, active_path):
+    def stage(name, active_config, active_path, *, analyze_stage=True, planned_actions=None):
         directory = out / name
-        actions = plan(directory, active_path, active_config, name, python)
+        actions = planned_actions if planned_actions is not None else plan(directory, active_path, active_config, name, python)
         execute(directory, active_path, active_config, name, python, backend=backend,
                 existing_actions=actions, extra_allow_pids=extra_allow_pids, manage_network=False,
                 ownership_path=out / "owned.jsonl")
+        if not analyze_stage:
+            return None
         report = analyze_directory(directory, active_config)
         if report["errors"]:
             raise RuntimeError(f"{name} analysis errors: {report['errors']}")
         return report
     def body():
+        if session_kind == "C":
+            planned = {name: plan(out / name, config_path, config, name, python) for name in ("C1", "P")}
+            step("C1", lambda: stage("C1", config, config_path, analyze_stage=False,
+                                     planned_actions=planned["C1"]))
+            step("P", lambda: stage("P", config, config_path, analyze_stage=False,
+                                    planned_actions=planned["P"]))
+            def final_c_analysis():
+                report = analyze_directory(out, config)
+                if report["errors"]:
+                    raise RuntimeError(f"final analysis errors: {report['errors']}")
+                return report
+            step("final_analyze", final_c_analysis)
+            session["status"] = "complete"
+            write_json(session_path, session)
+            return
         step("stage0U", lambda: stage("stage0U", config, config_path))
         def power_step():
             stage0 = analyze_directory(out / "stage0U", config, write_outputs=False)
@@ -730,7 +762,9 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
                 sd = u_replication_spread(spread, runs, config["runs_per_cell"]["stage0U"])
                 estimates = {contrast: sd for contrast in ("D/I", "SH/I")}
                 table.extend(power_table(estimates, None, (6, 12), runs_per_cell_u=runs))
+            state = next(block["state"] for block in blocks(config, "stage0U") if not block["discard"])
             write_json(out / "power.json", {"spread": spread, "table": table,
+                                            "stage0_context": "unattended, agents drained" if state == "U" else "attended, agents active",
                                             "candidates": sizing["candidates"]})
             return sizing
         sizing = step("analyze_power", power_step)
@@ -747,11 +781,11 @@ def run_session(out: Path, config_path: Path, config: dict, python: str, *, back
         frozen_path = out / "frozen_config.json"
         frozen = load_config(frozen_path)
         u1 = step("U1", lambda: stage("U1", frozen, frozen_path))
-        if sizing["total_u_blocks"] == 12 or any(value.startswith("INCONCLUSIVE") for value in u1["verdicts"].values()):
+        if sizing["total_u_blocks"] == 12:
             step("U2", lambda: stage("U2", frozen, frozen_path))
         else:
             record = {"step": "U2", "start_wall_ns": time.time_ns(), "end_wall_ns": time.time_ns(),
-                      "outcome": "skipped", "reason": "six_block_freeze_and_U1_conclusive"}
+                      "outcome": "skipped", "reason": "six_block_freeze_no_extension"}
             session["steps"].append(record)
             write_json(session_path, session)
         step("S", lambda: stage("S", frozen, frozen_path))
@@ -858,8 +892,8 @@ def main(argv=None) -> int:
     mode.add_argument("--out", type=Path)
     mode.add_argument("--recover", type=Path)
     scope = parser.add_mutually_exclusive_group()
-    scope.add_argument("--stage", choices=("stage0", "stage0U", "U1", "U2", "S", "rehearsal"))
-    scope.add_argument("--session", choices=("U",))
+    scope.add_argument("--stage", choices=("stage0", "stage0U", "U1", "U2", "S", "rehearsal", "C1", "P"))
+    scope.add_argument("--session", choices=("U", "C"))
     parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.json"))
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--u1-summary", type=Path)
@@ -876,6 +910,14 @@ def main(argv=None) -> int:
     out = (args.render_only or args.out).resolve()
     if args.session:
         if args.render_only:
+            if args.session == "C":
+                for name in ("C1", "P"):
+                    plan(out / name, args.config.resolve(), config, name, args.python)
+                write_json(out / "session_plan.json", {"session": "C", "stages": ["C1", "P"],
+                    "network_time": [NETWORK_TIME + ["off"], NETWORK_TIME + ["on"]],
+                    "sequence": ["network_time_off", "C1", "P", "final_analyze", "network_time_on"],
+                    "looks": 1, "extension": False})
+                return 0
             for name in ("stage0U", "U1", "U2", "S"):
                 plan(out / name, args.config.resolve(), config, name, args.python)
             write_json(out / "session_plan.json", {"session": "U", "stages": ["stage0U", "U1", "U2", "S"],
@@ -886,24 +928,25 @@ def main(argv=None) -> int:
                                                                "S", "final_analyze", "network_time_on"],
                                                   "U1_U2_templates": "provisional; live session re-renders after freeze"})
             return 0
-        run_session(out, args.config.resolve(), config, args.python, extra_allow_pids=args.allow_pid)
+        run_session(out, args.config.resolve(), config, args.python,
+                    extra_allow_pids=args.allow_pid, session_kind=args.session)
         return 0
     if args.stage == "U2" and args.out:
         if not args.u1_summary:
             parser.error("U2 execution requires --u1-summary")
         summary = json.loads(args.u1_summary.read_text())
-        verdicts = summary["verdicts"]
         if summary.get("stage") != "U1" or summary.get("errors"):
             parser.error("U2 requires a clean U1 analysis")
-        expected_blocks = {block["id"] for block in blocks(config, "U1") if len(block["arms"]) == 3}
+        expected_blocks = {block["id"]: set(block["arms"]) for block in blocks(config, "U1")
+                           if not block["discard"] and len(block["arms"]) > 1}
         observed = {block_id: {row["context"] for row in summary["cells"] if row["block"] == block_id}
                     for block_id in expected_blocks}
-        if any(arms != {"D", "I", "SH"} for arms in observed.values()):
+        if any(arms != expected_blocks[block_id] for block_id, arms in observed.items()):
             parser.error("U2 requires six complete U1 Williams blocks")
         freeze_path = out.parent / "freeze.json"
         frozen_twelve = freeze_path.is_file() and json.loads(freeze_path.read_text()).get("total_u_blocks") == 12
-        if not frozen_twelve and not any(value.startswith("INCONCLUSIVE") for value in verdicts.values()):
-            parser.error("U2 runs only after an INCONCLUSIVE U1 verdict")
+        if not frozen_twelve:
+            parser.error("U2 runs only after a twelve-block freeze")
     actions = plan(out, args.config.resolve(), config, args.stage, args.python)
     if args.out:
         execute(out, args.config.resolve(), config, args.stage, args.python,

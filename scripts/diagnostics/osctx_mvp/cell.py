@@ -217,7 +217,8 @@ def run(out: Path, config: dict, state: str, context: str, cell_id: int, *, stag
         metadata["pre"] = {"display_state": initial_display,
                            "environment": {k: os.environ.get(k) for k in ("PATH", "HOME", "HF_HUB_OFFLINE")}}
         census.start()
-        metadata["preread_files"] = backend.preread(config["model"])
+        if stage != "P":
+            metadata["preread_files"] = backend.preread(config["model"])
         match = re.fullmatch(r"(.+)\.(\d+)\.(D|I|SH|B)\.a\d+", out.name)
         cell_name = f"{match.group(1)}-{match.group(2)}".lower() if match else f"cell-{cell_id}"
         for number in range(1, config["runs_per_cell"][stage] + 1):
