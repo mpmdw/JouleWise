@@ -38,6 +38,16 @@ def _reducer():
     return importlib.import_module("joulewise.scored_reduce")
 
 
+class _EqualToSchema:
+    """A non-string schema value that compares equal to its literal."""
+
+    def __init__(self, literal):
+        self.literal = literal
+
+    def __eq__(self, other):
+        return other == self.literal
+
+
 def _night(n=5, width=1, mode="registered", policy=None, budget_j=None):
     cap = 6.0
     g, predictions = fixture(n=n, block_size=width, mode=mode, pred=.9, worst=1.0, cap=cap)
@@ -246,20 +256,39 @@ class ScoredReduceTests(unittest.TestCase):
         self._refuses("window_keys", windows=w)
         w = deepcopy(self.windows); w[0].pop("energy_bound_terms_j")
         self._refuses("window_keys", windows=w)
+        w = deepcopy(self.windows); w[0] = []
+        self._refuses("window_keys", windows=w)
 
     def test_window_domain_zero_negative_nonfinite_bool_anchor(self):
-        for field, values in (("gross_j", [0, -1, float("nan"), float("inf"), True]),
-                              ("attempt", [-1, True]), ("bundle_sha256", ["bad"])):
+        for field, values in (("schema", ["bad", _EqualToSchema("joulewise.scored_window.v1")]),
+                              ("registration_sha256", [123, "bad"]),
+                              ("roster_sha256", [123, "bad"]),
+                              ("bundle_sha256", [123, "bad"]),
+                              ("block_id", [123, ""]),
+                              ("attempt", [-1, True, 0.0]),
+                              ("envelope_index", [-1, True, 0.0]),
+                              ("gross_j", [0, -1, -10**1000, float("nan"), float("inf"), True, "1"])):
             for value in values:
-                with self.subTest(field=field, value=value):
+                label = "-10**1000" if type(value) is int and value == -10**1000 else value
+                with self.subTest(field=field, value=label):
                     w = deepcopy(self.windows); w[0][field] = value
                     self._refuses("window_domain", windows=w)
-        for anchor in [-1, float("nan"), float("inf"), True, "1"]:
+        for anchor in [-1, -10**1000, float("nan"), float("inf"), True, "1"]:
             w = deepcopy(self.windows)
             w[0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = anchor
             self._refuses("window_domain", windows=w)
         w = deepcopy(self.windows); w[0]["energy_bound_terms_j"]["extra"] = 1
         self._refuses("window_domain", windows=w)
+        w = deepcopy(self.windows); w[0]["energy_bound_terms_j"] = []
+        self._refuses("window_domain", windows=w)
+
+    def test_positive_zero_and_large_integer_anchor(self):
+        for anchor in (0, 10**1000):
+            with self.subTest(anchor="zero" if anchor == 0 else "10**1000"):
+                windows = deepcopy(self.windows)
+                windows[0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = anchor
+                candidate = self._accepted(windows=windows)
+                self.assertEqual(candidate["counted_windows"][0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"], anchor)
 
     def test_window_unknown_and_idle_slot(self):
         w = deepcopy(self.windows); w[0]["block_id"] = "foreign"
@@ -286,7 +315,28 @@ class ScoredReduceTests(unittest.TestCase):
 
     def test_window_envelope_mismatch(self):
         w = deepcopy(self.windows); w[0]["envelope_index"] += 1
+        w[0]["roster_sha256"] = _in_force(self.roster, w[0]["envelope_index"])
         self._refuses("window_envelope", windows=w)
+
+    def test_window_binding_uses_declared_index_before_envelope_mismatch(self):
+        case = generate_case(937, 2)
+        g, reg, roster, predictions = case.g, case.reg, case.rosters[-1], case.p
+        rows, windows = _inputs(g, reg, roster)
+        target = next((i, index) for i, window in enumerate(windows)
+                      for index in range(len(roster["envelopes"]))
+                      if index != window["envelope_index"]
+                      and _in_force(roster, index) != window["roster_sha256"])
+        position, other_index = target
+        changed_index = deepcopy(windows)
+        changed_index[position]["envelope_index"] = other_index
+        with self.subTest(stamp="original"):
+            self._refuses("window_binding", rows=rows, windows=changed_index,
+                          roster=roster, reg=reg, predictions=predictions)
+        changed_both = deepcopy(changed_index)
+        changed_both[position]["roster_sha256"] = _in_force(roster, other_index)
+        with self.subTest(stamp="declared-index"):
+            self._refuses("window_envelope", rows=rows, windows=changed_both,
+                          roster=roster, reg=reg, predictions=predictions)
 
     def test_window_unstarted_only_on_nonlive_keys(self):
         g, reg, roster, p = _terminal_night()
@@ -309,6 +359,32 @@ class ScoredReduceTests(unittest.TestCase):
         key = (removed["block_id"], removed["attempt"])
         self._refuses("missing_live_window", windows=self.windows[1:], detail_contains=repr(key))
 
+    def test_completeness_missing_window_precedes_earlier_null_anchor(self):
+        windows = deepcopy(self.windows)
+        windows[0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = None
+        missing = windows.pop()
+        self._refuses("missing_live_window", windows=windows,
+                      detail_contains=repr((missing["block_id"], missing["attempt"])))
+
+    def test_completeness_missing_window_precedes_earlier_missing_row(self):
+        missing = self.windows[-1]
+        self._refuses("missing_live_window", rows=self.rows[1:], windows=self.windows[:-1],
+                      detail_contains=repr((missing["block_id"], missing["attempt"])))
+
+    def test_completeness_null_anchor_precedes_earlier_missing_row(self):
+        windows = deepcopy(self.windows)
+        windows[-1]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = None
+        self._refuses("anchor_energy_envelope_unrecorded", rows=self.rows[1:], windows=windows)
+
+    def test_completeness_null_anchors_follow_window_input_order(self):
+        windows = deepcopy(self.windows)
+        windows[0]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = None
+        windows[-1]["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] = None
+        windows.reverse()
+        first = windows[0]
+        self._refuses("anchor_energy_envelope_unrecorded", windows=windows,
+                      detail_contains=repr((first["block_id"], first["attempt"])))
+
     def test_a291_partial_keys_refuse_at_reduce(self):
         for width in (1, 2):
             with self.subTest(width=width):
@@ -322,12 +398,26 @@ class ScoredReduceTests(unittest.TestCase):
     def test_row_keys(self):
         rows = deepcopy(self.rows); rows[0].pop("prompt_tokens")
         self._refuses("row_keys", rows=rows)
+        rows = deepcopy(self.rows); rows[0] = []
+        self._refuses("row_keys", rows=rows)
 
     def test_row_domain_and_coherence(self):
-        for field, value in (("prompt_tokens", True), ("generated_tokens", -1),
-                             ("scorer_match", 1), ("extracted_answer", ""), ("schema", "bad")):
-            rows = deepcopy(self.rows); rows[0][field] = value
-            self._refuses("row_domain", rows=rows)
+        for field, values in (("schema", ["bad", _EqualToSchema("joulewise.scored_row.v1")]),
+                              ("registration_sha256", [123, "bad"]),
+                              ("roster_sha256", [123, "bad"]),
+                              ("scorer_id", [123, ""]),
+                              ("block_id", [123, ""]),
+                              ("item_id", [123, ""]),
+                              ("stop_reason", [123, ""]),
+                              ("attempt", [-1, True, 0.0]),
+                              ("prompt_tokens", [-1, True, 0.0]),
+                              ("generated_tokens", [-1, True, 0.0]),
+                              ("scorer_match", [1]),
+                              ("extracted_answer", ["", 123])):
+            for value in values:
+                with self.subTest(field=field, value=value):
+                    rows = deepcopy(self.rows); rows[0][field] = value
+                    self._refuses("row_domain", rows=rows)
         rows = deepcopy(self.rows); rows[0]["extracted_answer"] = None
         self._refuses("row_domain", rows=rows)
 
@@ -349,6 +439,19 @@ class ScoredReduceTests(unittest.TestCase):
     def test_row_binding_final_digest(self):
         rows = deepcopy(self.rows); rows[0]["roster_sha256"] = self.roster["registered_sha256"]
         self._refuses("row_binding", rows=rows)
+        rows = deepcopy(self.rows); rows[0]["registration_sha256"] = "0" * 64
+        self.assertNotEqual(rows[0]["registration_sha256"], self.reg.digest)
+        self._refuses("row_binding", rows=rows)
+
+    def test_null_unmatched_answer_is_accepted_and_malformed(self):
+        rows = deepcopy(self.rows)
+        rows[0]["extracted_answer"] = None
+        rows[0]["scorer_match"] = False
+        candidate = self._accepted(rows=rows)
+        item = next(i for i in candidate["items"] if i["block_id"] == rows[0]["block_id"]
+                    and i["attempt"] == rows[0]["attempt"] and i["item_id"] == rows[0]["item_id"])
+        self.assertTrue(item["malformed"])
+        self.assertFalse(item["correct"])
 
     def test_row_duplicate(self):
         self._refuses("row_duplicate", rows=self.rows + [deepcopy(self.rows[0])])
@@ -615,6 +718,15 @@ class ScoredReduceTests(unittest.TestCase):
         degraded = self._accepted(rows, windows, roster, reg, p)
         self.assertEqual(degraded["cells"]["large:1"]["distinct_envelopes"], 4)
         self.assertTrue(degraded["cells"]["large:1"]["spread_exceeded"])
+
+    def test_spread_four_parents_with_five_envelopes(self):
+        case = generate_case(17, 6)
+        g, reg, roster, p = case.g, case.reg, case.rosters[-1], case.p
+        rows, windows = _inputs(g, reg, roster, optional=True, seed=17006)
+        candidate = self._accepted(rows, windows, roster, reg, p)
+        cell = candidate["cells"]["small:3"]
+        self.assertEqual((cell["fully_counted_parents"], cell["distinct_envelopes"]), (4, 5))
+        self.assertTrue(cell["spread_exceeded"])
 
     def test_partial_parent_position_and_null_lever(self):
         target = None

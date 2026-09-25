@@ -30,7 +30,7 @@ def _sha(value):
 
 
 def _number(value):
-    return type(value) in (int, float) and math.isfinite(value)
+    return type(value) is int or (type(value) is float and math.isfinite(value))
 
 
 def _integer(value):
@@ -62,7 +62,7 @@ def _in_force(roster, index):
 
 
 def _row_domain(row):
-    return (row["schema"] == "joulewise.scored_row.v1"
+    return (type(row["schema"]) is str and row["schema"] == "joulewise.scored_row.v1"
             and _hex(row["registration_sha256"]) and _hex(row["roster_sha256"])
             and all(_string(row[k]) for k in ("scorer_id", "block_id", "item_id", "stop_reason"))
             and all(_integer(row[k]) for k in ("attempt", "prompt_tokens", "generated_tokens"))
@@ -77,7 +77,7 @@ def _window_domain(window):
                  and (terms["E_clock_anchor_shift_bound_j"] is None
                       or (_number(terms["E_clock_anchor_shift_bound_j"])
                           and terms["E_clock_anchor_shift_bound_j"] >= 0)))
-    return (window["schema"] == "joulewise.scored_window.v1"
+    return (type(window["schema"]) is str and window["schema"] == "joulewise.scored_window.v1"
             and _hex(window["registration_sha256"]) and _hex(window["roster_sha256"])
             and _hex(window["bundle_sha256"]) and _string(window["block_id"])
             and _integer(window["attempt"]) and _integer(window["envelope_index"])
@@ -244,7 +244,7 @@ def _first_refusal(g, roster, predictions, rows, windows):
         key = _key(window)
         if key not in placements:
             return "window_unknown", repr(key)
-        if window["registration_sha256"] != _sha(g) or window["roster_sha256"] != _in_force(roster, placements[key]["envelope_index"]):
+        if window["registration_sha256"] != _sha(g) or window["roster_sha256"] != _in_force(roster, window["envelope_index"]):
             return "window_binding", repr(key)
         if key in seen:
             return "window_duplicate", repr(key)
@@ -283,18 +283,21 @@ def _first_refusal(g, roster, predictions, rows, windows):
             return "row_tokens_over_cap", repr(row_key)
         if STOP_REASONS[row["stop_reason"]] != (row["generated_tokens"] >= cap_tokens_arm):
             return "row_cap_disagreement", repr(row_key)
-    for key in roster["placements"]:
-        pair = _key(key)
-        if pair not in live:
-            continue
-        window = next((w for w in windows if _key(w) == pair), None)
-        if window is None:
+    window_by_key = {_key(window): window for window in windows}
+    for placement in roster["placements"]:
+        pair = _key(placement)
+        if pair in live and pair not in window_by_key:
             return "missing_live_window", repr(pair)
-        if window["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] is None:
-            return "anchor_energy_envelope_unrecorded", repr(pair)
-        for item in blocks[pair[0]]["items"]:
-            if (pair, item) not in seen_rows:
-                return "row_missing", repr((pair, item))
+    for window in windows:
+        if (_key(window) in live
+                and window["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"] is None):
+            return "anchor_energy_envelope_unrecorded", repr(_key(window))
+    for placement in roster["placements"]:
+        pair = _key(placement)
+        if pair in live:
+            for item in blocks[pair[0]]["items"]:
+                if (pair, item) not in seen_rows:
+                    return "row_missing", repr((pair, item))
     return None, None
 
 
