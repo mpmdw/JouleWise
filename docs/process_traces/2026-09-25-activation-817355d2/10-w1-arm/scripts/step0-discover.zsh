@@ -4,8 +4,8 @@ source "$(dirname "$0")/arm-env.zsh"
 repo_root="$(git -C "${0:A:h}" rev-parse --show-toplevel)"
 cd "$repo_root" || exit 3
 
-print -- "CHECK: H is a full reviewed SHA and t0 is a minute-aligned epoch"
-[[ "$H" =~ '^[0-9a-f]{40}$' && "$T0_EPOCH_S" =~ '^[0-9]+$' ]] || exit 3
+print -- "CHECK: H is a full reviewed SHA, A-R5b has a whole-file SHA-256 pin, and t0 is a minute-aligned epoch"
+[[ "$H" =~ '^[0-9a-f]{40}$' && "$PREREG_SHA256" =~ '^[0-9a-f]{64}$' && "$T0_EPOCH_S" =~ '^[0-9]+$' ]] || exit 3
 (( T0_EPOCH_S % 60 == 0 )) || exit 3
 print -- "CHECK: os_build is 25G83"
 test "$(sw_vers -buildVersion)" = 25G83
@@ -44,6 +44,6 @@ print -- "CHECK: the W1 staging directory is absent before the first battery obs
 test ! -e "$STAGE"; test ! -L "$STAGE"
 # C9 adds this evidence write to discovery. A failed observation stops the arm.
 mkdir -p "$STAGE"
-print -- "CHECK: connected, not charging and signed current within 200 mA; retain raw observation"
+print -- "CHECK: connected, not charging, signed current within 200 mA and gauge age <=180 s; retain raw values"
 battery_gate | tee -a "$STAGE/battery-gate.txt"
 echo "STEP0 OK"

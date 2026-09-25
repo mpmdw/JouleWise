@@ -5,13 +5,14 @@ cd "$MEASUREMENT_ROOT" || exit 3
 print -- "CHECK: clone HEAD still equals reviewed H and the tree is clean"
 test "$(git rev-parse HEAD)" = "$H"
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
-print -- "CHECK: sealed Revision 5 and both PR-L templates have their exact arm-time digests"
+print -- "CHECK: amended Revision 5, frozen calibration plan and both PR-L templates have their exact arm-time digests"
 "$PY" -B - <<'PY'
 import hashlib, os, re
 from pathlib import Path
 e = os.environ
 paths = {
-    "SEALED_REGISTRATION_SHA256": Path("configs/calibration/preregistration_d079_epoch_25g83_rev1.md"),
+    "PREREG_SHA256": Path("configs/calibration/preregistration_d079_epoch_25g83_rev1.md"),
+    "FROZEN_PLAN_SHA256": Path(os.environ["FROZEN_PLAN_REL"]),
     "NIGHT_TEMPLATE_SHA256": Path("configs/launchd/com.joulewise.night.plist.template"),
     "PROBE_TEMPLATE_SHA256": Path("configs/launchd/com.joulewise.night-probe.plist.template"),
 }
@@ -19,10 +20,14 @@ for key, path in paths.items():
     observed = hashlib.sha256(path.read_bytes()).hexdigest()
     print(f"CHECK: sha256({path}) == {key}: {observed}", flush=True)
     assert observed == e[key]
-registration = paths["SEALED_REGISTRATION_SHA256"].read_text()
+registration = paths["PREREG_SHA256"].read_text()
 count = len(re.findall(r"<PR-L-MERGE-SHA>|<TEMPLATE-SHA256:[^>]+>", registration))
 print(f"CHECK: sealed launch-context placeholder count == 0: {count}", flush=True)
 assert count == 0
+heading = "# Revision 5 — Amendment A-R5b (2026-09-25): battery float (directive #421)"
+heading_count = registration.splitlines().count(heading)
+print(f"CHECK: A-R5b heading occurs exactly once: {heading_count}", flush=True)
+assert heading_count == 1
 print("CHECK: Revision 5 names the PR-L merge commit and both template digests", flush=True)
 assert all(value in registration for value in (e["PR_L_COMMIT"], e["NIGHT_TEMPLATE_SHA256"], e["PROBE_TEMPLATE_SHA256"]))
 PY

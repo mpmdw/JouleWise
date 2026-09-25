@@ -34,8 +34,10 @@ def digest(path):
 registration=Path(e["MEASUREMENT_ROOT"])/D166_REGISTRATION_PATH
 print("CHECK: D-166 registration digest equals the gate pin", file=sys.stderr, flush=True)
 assert digest(registration)==D166_REGISTRATION_SHA256
-print("CHECK: sealed Revision 5 digest equals the arm pin", file=sys.stderr, flush=True)
-assert digest(Path(e["MEASUREMENT_ROOT"])/"configs/calibration/preregistration_d079_epoch_25g83_rev1.md")==e["SEALED_REGISTRATION_SHA256"]
+print("CHECK: A-R5b amended Revision 5 digest equals the arm pin", file=sys.stderr, flush=True)
+assert digest(Path(e["MEASUREMENT_ROOT"])/"configs/calibration/preregistration_d079_epoch_25g83_rev1.md")==e["PREREG_SHA256"]
+print("CHECK: frozen calibration plan digest equals the arm pin", file=sys.stderr, flush=True)
+assert digest(e["CALIBRATION_PLAN"])==e["FROZEN_PLAN_SHA256"]
 render=json.loads((Path(e["STAGE"])/"render-context.json").read_text())
 print("CHECK: render evidence contains night and dead-man", file=sys.stderr, flush=True)
 assert set(render)=={"com.joulewise.night","com.joulewise.night.deadman"}
@@ -49,7 +51,7 @@ print("Launch needs no action from you unless you reply NO. Your NO overrides.")
 print("Arm attempt 1; earlier abort for this new candidate: none.")
 print("The calibration campaign for macOS 25G83 is now two 12-slot windows at least 6 hours apart, at least 12 retained captures, a third window only on count. July's calibration is not continued: its ceiling was set with shorter sampling frames than the machine now delivers, so the equivalence check you proposed in issue 316 would not be able to tell the two apart. Reply NO to the arm notice to stop.")
 print("W1 derivation window one: 600 s settle, 12 slots at 600 s cadence, 480 s capture budgets; window 9000 s.")
-print("The arm required the battery to be connected, not charging and within 200 mA of zero current; a window in which any slot records charging is not used for derivation.")
+print("The arm required the battery to be connected, not charging, within 200 mA of zero current and with a battery-gauge reading no older than 180 s. Every slot records a battery reading before and after it, and a window with any failing or missing reading is not used and is replaced at most once (registration amendment A-R5b).")
 print("No model runs or measurement pack. No member values read before the session is terminal.")
 print("receipt_class:",p["receipt_class"],"attempt:",1)
 print("plan_id:",p["plan_id"])
@@ -69,7 +71,8 @@ for k,v in [("install close EXCLUDED",t-600),("REQUEST / exit BEFORE",t-480),
 for i,(a,b) in enumerate(s["install_spans_today"],1):
  stamp(f"install span {i} open",a); stamp(f"install span {i} close EXCLUDED",b)
 print("Notice-send open: actual acceptance of this message, retained in the arm record.")
-print("sealed Revision 5 preregistration sha256:",e["SEALED_REGISTRATION_SHA256"])
+print("A-R5b amended Revision 5 preregistration sha256:",e["PREREG_SHA256"])
+print("frozen calibration plan source:",e["FROZEN_PLAN_REL"],"sha256",e["FROZEN_PLAN_SHA256"])
 print("D-166 registration:",registration,"sha256",D166_REGISTRATION_SHA256)
 protocol=Path(e["MEASUREMENT_ROOT"])/"configs/calibration/powermetrics_fiducial/protocol_v3.json"
 print("protocol_v3:",protocol,"sha256",digest(protocol))
@@ -88,7 +91,6 @@ print("Interactive render-only evidence:")
 for label, item in sorted(render.items()):
  print(label,"ProcessType=Interactive",item["path"],"sha256",item["rendered_plist_sha256"])
 print("Probe template is Interactive and installer render-only validates all three launch contexts; the probe receipt records all three rendered digests at install.")
-print("Close the interactive Claude session joulewise-4b before t0.")
 print("Keep agent applications closed and the machine untouched from REQUEST through completion; longer if the night remains active.")
 print("Reply NO to stop.")
 print("NO may be on this thread or relayed through an owner-authored directive. No reply is required.")
