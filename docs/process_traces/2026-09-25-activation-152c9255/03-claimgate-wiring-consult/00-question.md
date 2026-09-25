@@ -1,6 +1,6 @@
 # 03/00 — Design consult CLAIMGATE-WIRING-01: end-to-end wiring of claim gate v2
 
-Assembled 2026-09-25 ≈05:05 PDT by the resident magistrate (Opus 5.5, activation 152c9255). Nothing is armed. This is integration design, not new science. The science texts are already ruled: CLAIMGATE-01 and its addendum, final texts v2 at `docs/process_traces/2026-09-24-activation-278ebc9e/91-claimgate-final-texts-v2.md` (CG-1..CG-4). Treat those texts as fixed inputs. If wiring them faithfully is impossible, say so as a BLOCKER. Do not redesign them.
+Assembled 2026-09-25 ≈04:33 PDT by the resident magistrate (Opus 5.5, activation 152c9255). Nothing is armed. This is integration design, not new science. The science texts are already ruled: CLAIMGATE-01 and its addendum, final texts v2 at `docs/process_traces/2026-09-24-activation-278ebc9e/91-claimgate-final-texts-v2.md` (CG-1..CG-4). Treat those texts as fixed inputs. If wiring them faithfully is impossible, say so as a BLOCKER. Do not redesign them.
 
 ## Terms, as used here
 

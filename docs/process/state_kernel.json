@@ -3,12 +3,105 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Activation a65fb4fa record: PR #403 landed; scored packer in progress; analysis-plan proposal awaits Ed",
-    "path": "docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md"
+    "label": "Activation 152c9255 record: acceptance council reopened on the launch-context cause; claim-gate wiring consult",
+    "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
   "tasks": {
+    "A291-DIGEST-FINALIZE-01": {
+      "acceptance": {
+        "evidence": [
+          "Wrap _digest body in try/except RecursionError as exc, raising PackingRefusal(\"inv_52\", \"malformed roster\") from exc",
+          "Direct _seal(finalize=True) deep events[-1].sha256 probe refuses with inv_52 rather than leaking RecursionError",
+          "Full tests.test_scored_ownership_forgery, tests.test_scored_packer_fuzz and tests.test_scored_packer GREEN; Sol V2 probe rerun with 131-event total"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/A291-DIGEST-FINALIZE-01/acceptance",
+          "label": "A291-DIGEST-FINALIZE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "_digest catches RecursionError and raises PackingRefusal(\"inv_52\", \"malformed roster\") from the exception; re-gate like ruling 112 V1(d)."
+      },
+      "authority": {
+        "label": "Ruling 112 M5 finalize-path follow-up",
+        "path": "docs/process_traces/2026-09-24-activation-278ebc9e/112-coldgate-packet-a291-premerge/20-coldgate-fable-premerge-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Harden direct _seal(finalize=True) handling of an unsealed roster whose events[-1].sha256 is deeply nested.",
+      "id": "A291-DIGEST-FINALIZE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 296,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25; ruling 117 R-6 affirms this post-merge lane.",
+      "stop_card": null
+    },
+    "A291-INV12-RECONCILE-01": {
+      "acceptance": {
+        "evidence": [
+          "Reconcile checker INV-12 at scored_roster_checker.py:558 with the contract predicate and packer inv_12 for a single whose predicted_item_s differs from its parent",
+          "Include F-C C1 and F-B C1b grandchild single-as-parent candidates in the reconciliation",
+          "Record the selected rule and its witness; do not treat checker INV-12 agreement as claim authority before the ruling"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/A291-INV12-RECONCILE-01/acceptance",
+          "label": "A291-INV12-RECONCILE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Magistrate rules whether to add the single predicted_item_s equality clause to contract INV-12 and packer inv_12 with its own witness or delete it from the checker; until ruled, no claim rests on checker INV-12 agreement."
+      },
+      "authority": {
+        "label": "R4b S4(a) INV-12 reconciliation request",
+        "path": "docs/process_traces/2026-09-24-activation-278ebc9e/82-coldgate-packet-a291-r3method/30-addendum/21-coldgate-fable-r4-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Resolve the checker-versus-contract INV-12 single-as-parent prediction gap, including F-C C1 and F-B C1b, by a separately ruled reconciliation.",
+      "id": "A291-INV12-RECONCILE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 297,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25; PR #409 terminal review lists C1/C1b as open.",
+      "stop_card": null
+    },
+    "A291-STRUCTURE-INDEX-01": {
+      "acceptance": {
+        "evidence": [
+          "Only joulewise/scored_packer.py changes in the implementation lane",
+          "tests.test_scored_ownership_forgery, tests.test_scored_packer_fuzz and tests.test_scored_packer GREEN in full",
+          "Sol V2 probe (ex-110b) rerun and 131-event total reported"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/A291-STRUCTURE-INDEX-01/acceptance",
+          "label": "A291-STRUCTURE-INDEX-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Insert pindex = {(p[\"block_id\"], p[\"envelope_index\"]): p for p in placements} before for event in roster[\"events\"]:, replace placement lookup with pindex[(bid, ix)], and re-gate the full forgery, fuzz and packer modules plus Sol V2 probe with 131-event total."
+      },
+      "authority": {
+        "label": "Ruling 112 V1(d) structure index follow-up",
+        "path": "docs/process_traces/2026-09-24-activation-278ebc9e/112-coldgate-packet-a291-premerge/20-coldgate-fable-premerge-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Index placements by (block_id, envelope_index) before the roster events loop in _structure and use that index for event placement lookup; WRITE_SCOPE joulewise/scored_packer.py only.",
+      "id": "A291-STRUCTURE-INDEX-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 295,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25; post-merge follow-up.",
+      "stop_card": null
+    },
     "ACCEPTANCE-EPOCH-25G83-01": {
       "acceptance": {
         "evidence": [
@@ -38,7 +131,7 @@
       "priority": "p1_phase_gate",
       "rank": 179,
       "status": "queued",
-      "status_note": "2026-09-10 23:35: Ed's ruling (issue 316) recorded on main (PR #319); night one = epoch-equivalence check; continuation mechanism (S10) in the gate on its branch; arm materials next",
+      "status_note": "2026-09-10 23:35: Ed's ruling (issue 316) recorded on main (PR #319); night one = epoch-equivalence check; continuation mechanism (S10) in the gate on its branch; arm materials next; 2026-09-25: D-184 council reopened as ACCEPTANCE-25G83-02 because cadence cause is launchd default ProcessType (docs/process_traces/2026-09-24-interactive-4b/01-powermetrics-cadence-launch-context.md, 21-session-results-and-stop.md, 26-continuation-results.md; packet docs/process_traces/2026-09-25-activation-152c9255/01-acceptance-reopen-packet/00-question.md). v4/rev4 branch origin/feat/2026-09-24-acc-25g83-v4-rev4 HELD pending that council.",
       "stop_card": null
     },
     "ARM-PACKET-01": {
@@ -1356,6 +1449,37 @@
       "status": "shelved",
       "stop_card": null
     },
+    "CI-A291-TIMINGS-01": {
+      "acceptance": {
+        "evidence": [
+          "First hosted main run including the lane supplies MODULE PASS seconds for tests.test_scored_ownership_forgery, tests.test_scored_packer, tests.test_scored_packer_fuzz, tests.test_scored_packer_stress, tests.test_scored_registration and tests.test_scored_roster_checker, taking each maximum over both interpreters",
+          "For each of the six rows at or above 300 s, the same PR adds a calibration-exits-exclusive-style ci.yml job with validate-declaration and python -m unittest -v <module>; K checks exclusive_modules keys are a subset of job-name modules",
+          "No test file changes; environment flags or campaign splitting require a separate lane and forgery re-gate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CI-A291-TIMINGS-01/acceptance",
+          "label": "CI-A291-TIMINGS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The six scored modules have maximum hosted MODULE PASS seconds across both interpreters recorded in seconds_by_module, with run IDs in _provenance; each row at or above 300 s has a dedicated ci.yml job and an exclusive_modules key covered by that job."
+      },
+      "authority": {
+        "label": "Ruling 112 V1(c) CI follow-up",
+        "path": "docs/process_traces/2026-09-24-activation-278ebc9e/112-coldgate-packet-a291-premerge/20-coldgate-fable-premerge-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "On the first hosted main run including this lane, register six scored-test module timings and make any module at or above 300 s exclusive with its own CI job.",
+      "id": "CI-A291-TIMINGS-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 294,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25; opens after merge on the first hosted main run including the lane.",
+      "stop_card": null
+    },
     "CI-DOCS-ONLY-SKIP-MASKS-RED-01": {
       "acceptance": {
         "evidence": [
@@ -1445,6 +1569,77 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "CLAIMGATE-V2-IMPL-01": {
+      "acceptance": {
+        "evidence": [
+          "CG-1 through CG-4 final texts implemented under one claim_rule_version without changing historical v1 replay",
+          "CLAIMGATE-WIRING-01 resolves W1 F_est provenance, W2 manifest schema, W3 mixed registries and W4 paper-custody receipts",
+          "Desk simulations for CG-1, CG-2 and CG-3 committed before any claim-bearing use"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CLAIMGATE-V2-IMPL-01/acceptance",
+          "label": "CLAIMGATE-V2-IMPL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Implement CG-4 in order with versioned v1/v2 behaviour, authenticated same-epoch F_est provenance, manifest fields, mixed-registry rule, paper-custody receipt reissue, and desk simulations before claim-bearing use."
+      },
+      "authority": {
+        "label": "Claim-gate final texts v2 CG-1 through CG-4",
+        "path": "docs/process_traces/2026-09-24-activation-278ebc9e/91-claimgate-final-texts-v2.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "design consult resolves W1-W4 before implementation resumes",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CLAIMGATE-WIRING-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Resume the one-PR full-tier claim-gate v2 implementation under ruled CG-1 through CG-4 after the CLAIMGATE-WIRING-01 design consult resolves end-to-end wiring.",
+      "id": "CLAIMGATE-V2-IMPL-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 298,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-25; stopped for design consult CLAIMGATE-WIRING-01 (docs/process_traces/2026-09-25-activation-152c9255/03-claimgate-wiring-consult/00-question.md); WIP origin/feat/2026-09-24-claimgate-v2 at 3cd00c73; resume report docs/process_traces/2026-09-24-activation-278ebc9e/97b-claimgate-impl-resume-report.md.",
+      "stop_card": null
+    },
+    "CLONE-ARM-MDFIND-01": {
+      "acceptance": {
+        "evidence": [
+          "Fresh clone under the excluded measurement parent has an arm-time mdfind check",
+          "The arm record proves the fresh clone is unindexed before the measurement window"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CLONE-ARM-MDFIND-01/acceptance",
+          "label": "CLONE-ARM-MDFIND-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The arm-time precondition executes mdfind against the fresh clone and records proof that Spotlight has not indexed it before the window starts."
+      },
+      "authority": {
+        "label": "Activation 152c9255 record item 6: clone follow-ups",
+        "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Add an arm-time mdfind precondition proving the fresh measurement clone is unindexed before a measurement window starts.",
+      "id": "CLONE-ARM-MDFIND-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 299,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25 after PR #410 final pass; clone relocation source docs/process_traces/2026-09-24-interactive-4b/29-spotlight-gap-measurement-clones.md.",
+      "stop_card": null
+    },
     "CLONE-READINESS-01": {
       "acceptance": {
         "evidence": [
@@ -1472,6 +1667,36 @@
       "rank": 166,
       "status": "queued",
       "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding). 2026-09-10: production clone provisionally cut at 078a13a4 (record 05: clean tree, lock diff empty, ledger authenticated with custody replay at sequence 76, tokenizer pins match); fresh cut at H on 09-11 per checklist 13 §6. 2026-09-10: provisional clone re-cut at d84da72e (clean, lock diff empty, ledger authenticated with custody replay); the final cut waits for the transaction head.",
+      "stop_card": null
+    },
+    "CLONE-RETENTION-01": {
+      "acceptance": {
+        "evidence": [
+          "The rule applies only after harvest to clones under ~/night-custody/measurement",
+          "The retention decision accounts for approximately 788 MB per night"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CLONE-RETENTION-01/acceptance",
+          "label": "CLONE-RETENTION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A post-harvest rule states when and how measurement clones under ~/night-custody/measurement are retained or removed, accounting for approximately 788 MB per night."
+      },
+      "authority": {
+        "label": "Activation 152c9255 record item 6: clone follow-ups",
+        "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Define a post-harvest retention rule for measurement clones under ~/night-custody/measurement, at approximately 788 MB per night.",
+      "id": "CLONE-RETENTION-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 300,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25 after PR #410 final pass.",
       "stop_card": null
     },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {
@@ -10290,5 +10515,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-24"
+  "updated": "2026-09-25"
 }

@@ -1,6 +1,6 @@
 # 01/00 — Reopened D-184 council ACCEPTANCE-25G83-02: the cadence cure is the launch context, not the pulse length
 
-Assembled 2026-09-25 ≈04:50 PDT by the resident magistrate (Opus 5.5, activation 152c9255). Nothing is armed, and no night agent is loaded or on disk.
+Assembled 2026-09-25 ≈04:30 PDT by the resident magistrate (Opus 5.5, activation 152c9255). Nothing is armed, and no night agent is loaded or on disk.
 
 ## 1. What changed since the last ruling
 

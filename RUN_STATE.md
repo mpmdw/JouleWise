@@ -5416,7 +5416,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-24). Latest report: [Activation a65fb4fa record: PR #403 landed; scored packer in progress; analysis-plan proposal awaits Ed](docs/process_traces/2026-09-24-activation-a65fb4fa/00-activation-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance council reopened on the launch-context cause; claim-gate wiring consult](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
 
 ### [ED-EXTERNAL]
 
