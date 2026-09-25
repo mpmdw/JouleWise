@@ -264,3 +264,13 @@ Headless magistrate, Opus 5.5 (`--model opus`), Claude Code 2.1.281, launched by
    These nine are queued for the INV-12 and oracle-gap reconciliation the rulings requested (82/30/21 S4; 101/20 F2). Whether the seal should own event-binding rows is a separate question for the final gate.
    F-A (Astra) escalated after two INCONCLUSIVE runs (vendor content filter). **Item (4) is therefore NOT yet COMPLETED_NO_ESCAPE in aggregate.**
 100. Peer `joulewise-4b` plan v2.4. Stage 0 moves inside the unattended session. The quiet window will need **3–4 h of no new CPU work** from the magistrate once the peer says QUIET GO, which comes with an ETA about 15 min ahead. The runner toggles network time via the installed sudoers rule. The magistrate replied: at QUIET GO it kills the suite, stops all its children and launches nothing until QUIET END. It also offered to EXIT outright if the peer's census needs zero agent processes (parking the watchdog is not the magistrate's to do). The cold question A291-FORGER-02 was convened on packet 105 (U1–U3).
+101. Cold question A291-FORGER-02 (105/20, Fable, rc 0). The rulings:
+   - U1: seat **F-B, a second fresh Fable 5.1**, replaces F-A (F-C alone was rejected; Sol is not licensed). Item (4) = F-B ∧ F-C, and F-C's result stands.
+   - U2 AFFIRMS all nine OUT_OF_ROUND, reproduced. The judge found all nine refused by replay at `6e2504b1`, so they need not be seal-owned before merge. ex-101 F2 is replaced by a replay-conditioned rule. A checker gap on INV-12 single-as-parent is queued.
+   - U3: the final-pass packet must exhibit gate items (1) and (2) with revision and time pins.
+   - Findings F1–F4 MATERIAL; no BLOCKER.
+   F-A cause of record (clause d):
+   - run 1 log `/tmp/278ebc9e/103-forger-astra.log`, sha256 `4e37754f23b855cb998ced9f01820ec097d674ede011a2b441c476af77ef5f1a`, refusal text at lines 70, 71, 87, 88;
+   - run 2 log `/tmp/278ebc9e/103b-forger-astra.log`, sha256 `78862c91d2e73908b5769911d73a6c5a5d55be09ba7f41cb27ce004e3f45a86c`, lines 161, 162;
+   - the refusal text: "This content was flagged for possible cybersecurity risk…".
+   The contract copy the forgers see is git blob `b4b1b176`. F-B was launched ≈20:14 in `/tmp/forger-278ebc9e-fable-b` on brief 102 verbatim.
