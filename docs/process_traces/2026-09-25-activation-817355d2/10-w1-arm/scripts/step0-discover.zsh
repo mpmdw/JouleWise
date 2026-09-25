@@ -35,9 +35,15 @@ print("CHECK: result['verdict'] == 'pass'", flush=True)
 assert result["verdict"] == "pass", "active or unknown sibling plan"
 PY
 
-# NIT-3 / R16: this is the sole mutation in discovery.
+# NIT-3 / R16 custody precondition.
 print -- "CHECK: /Users/edr/night-custody/measurement is or can be a real directory"
 test ! -L /Users/edr/night-custody/measurement
 mkdir -p /Users/edr/night-custody/measurement
 test -d /Users/edr/night-custody/measurement
+print -- "CHECK: the W1 staging directory is absent before the first battery observation"
+test ! -e "$STAGE"; test ! -L "$STAGE"
+# C9 adds this evidence write to discovery. A failed observation stops the arm.
+mkdir -p "$STAGE"
+print -- "CHECK: connected, not charging and signed current within 200 mA; retain raw observation"
+battery_gate | tee -a "$STAGE/battery-gate.txt"
 echo "STEP0 OK"

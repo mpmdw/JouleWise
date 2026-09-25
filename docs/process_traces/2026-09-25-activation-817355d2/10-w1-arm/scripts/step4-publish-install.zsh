@@ -69,6 +69,10 @@ for label, item in sorted(evidence.items()):
 PY
 echo "== final arm census"
 "$PY" -B -m joulewise.arm_census --plan "$STAGED_PLAN" | tee "$ATTEMPT_DIR/arm-census-final.json"
+print -- "CHECK: fresh battery gate immediately before publication; retain raw observation"
+battery_gate | tee -a "$STAGE/battery-gate.txt"
+print -- "CHECK: two passing battery observations are retained"
+test "$(grep -c '^BATTERY GATE PASS$' "$STAGE/battery-gate.txt")" -eq 2
 echo "== publication"
 "$PY" -B - <<'PY'
 import json,os,time

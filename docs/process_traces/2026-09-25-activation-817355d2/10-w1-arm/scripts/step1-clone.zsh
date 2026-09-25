@@ -9,8 +9,14 @@ test ! -L /Users/edr/night-custody/measurement
 remote_main="$(git ls-remote --exit-code "$REMOTE_URL" refs/heads/main)"
 print -r -- 'CHECK: test "${remote_main%%$'\''\t'\''*}" = "$H"'
 test "${remote_main%%$'\t'*}" = "$H"
-print -r -- 'CHECK: for p in "$MEASUREMENT_ROOT" "$NIGHT_ROOT" "$STAGE"; do test ! -e "$p"; test ! -L "$p"; done'
-for p in "$MEASUREMENT_ROOT" "$NIGHT_ROOT" "$STAGE"; do test ! -e "$p"; test ! -L "$p"; done
+print -r -- 'CHECK: measurement and night roots are absent; staging contains only step0 battery evidence'
+for p in "$MEASUREMENT_ROOT" "$NIGHT_ROOT"; do test ! -e "$p"; test ! -L "$p"; done
+test -d "$STAGE"; test ! -L "$STAGE"
+test -f "$STAGE/battery-gate.txt"; test ! -L "$STAGE/battery-gate.txt"
+stage_entries=("$STAGE"/*(DN))
+(( ${#stage_entries} == 1 )) || exit 3
+[[ "${stage_entries[1]:t}" == battery-gate.txt ]] || exit 3
+grep -q 'BATTERY GATE PASS' "$STAGE/battery-gate.txt" || exit 3
 git clone -q --no-hardlinks "$REMOTE_URL" "$MEASUREMENT_ROOT"
 git -C "$MEASUREMENT_ROOT" checkout -q --detach "$H"
 cd "$MEASUREMENT_ROOT" || exit 3

@@ -25,3 +25,35 @@ export PATH="$MEASUREMENT_ROOT/.venv/bin:$PATH"
 export REMOTE_URL=https://github.com/mpmdw/JouleWise
 export LEDGER_SOURCE=/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
 export ARM_ATTEMPT=1 ATTEMPT_DIR="$STAGE/arm-attempts/000001"
+
+# Read-only battery observation. The caller retains stdout with a timestamp.
+battery_gate() {
+  local raw
+  print -- 'CHECK: ioreg -r -c AppleSmartBattery supplies ExternalConnected, IsCharging and InstantAmperage'
+  raw="$(/usr/sbin/ioreg -r -c AppleSmartBattery)" || return 3
+  print -- "CHECK: battery gate observed at $(TZ=UTC date '+%Y-%m-%dT%H:%M:%SZ')"
+  print -r -- "$raw" | python3 -B -c '
+import re, sys
+text = sys.stdin.read()
+def field(name):
+    matches = re.findall(r"\"" + re.escape(name) + r"\"\s*=\s*(Yes|No|True|False|[+-]?\d+)", text)
+    print(f"CHECK: exactly one {name} field; raw={matches}", flush=True)
+    if len(matches) != 1:
+        raise SystemExit(3)
+    return matches[0]
+external = field("ExternalConnected")
+charging = field("IsCharging")
+amperage_raw = field("InstantAmperage")
+raw_number = int(amperage_raw)
+print(f"CHECK: raw ExternalConnected={external} IsCharging={charging} InstantAmperage={amperage_raw} mA", flush=True)
+print("CHECK: InstantAmperage is a signed integer or unsigned 64-bit two\047s complement", flush=True)
+if raw_number >= 2**64 or raw_number < -(2**63):
+    raise SystemExit(3)
+signed = raw_number - 2**64 if raw_number >= 2**63 else raw_number
+print(f"CHECK: signed InstantAmperage={signed} mA (unsigned64 conversion={raw_number >= 2**63})", flush=True)
+print("CHECK: ExternalConnected=Yes, IsCharging=No, abs(signed InstantAmperage)<=200 mA", flush=True)
+if external != "Yes" or charging != "No" or abs(signed) > 200:
+    raise SystemExit(3)
+print("BATTERY GATE PASS", flush=True)
+'
+}

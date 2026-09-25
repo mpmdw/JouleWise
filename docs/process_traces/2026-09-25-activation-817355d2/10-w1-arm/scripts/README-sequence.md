@@ -21,7 +21,11 @@ manual acts are complete.
    `com.joulewise.night*` labels and plists, and classifies every one-level
    custody plan through `joulewise.evidence_night.retained_roots` (which uses
    watchdog `plan_span_active`). Terminal roots may remain; ACTIVE or UNKNOWN
-   stops. Its only mutation is creating the R16 custody parent.
+   stops. It creates the R16 custody parent and opens W1 staging solely to
+   retain the first timestamped, raw battery observation in
+   `$STAGE/battery-gate.txt`. ExternalConnected must be Yes, IsCharging No,
+   and signed InstantAmperage within 200 mA of zero. A refusal postpones the
+   arm; do not change the charge setting as a repair in this attempt.
 3. Run `zsh step1-clone.zsh`. It requires the R16 clone prefix, remote main
    equals H, detached clean checkout, exact Python lock, byte-equal ledger
    copy, and authenticated ledger head equal to the committed pin.
@@ -49,7 +53,9 @@ manual acts are complete.
    a new notice and chronological `attempts.json` under runbook §1.4a.
 7. Refresh owner directives, stop files, census and desk checks; then run
    `zsh step4-publish-install.zsh` strictly before t0 minus 10 minutes. It
-   calls `retry_allowed` on the exact notice and plan snapshot, atomically
+   repeats the battery gate immediately before publication and appends its raw
+   timestamped observation to `$STAGE/battery-gate.txt`; it then calls
+   `retry_allowed` on the exact notice and plan snapshot, atomically
    publishes with `os.replace`, runs the real 300-frame launchd probe,
    asserts its v2 receipt, then performs ordinary install from the clone.
    Consent prompts and any probe repeat follow the runbook. The probe is a
@@ -75,6 +81,23 @@ manual acts are complete.
 | C6 publish/install | Fresh-plan `retry_allowed`, atomic publication, actual v2 cadence and `launch_context` fields, probe before ordinary install. No predecessor successor licence helper. | `arm_retry.retry_allowed`; `successor_arm_allowed` is for a terminal zero-capture predecessor; `night_agent_install.validate_probe_receipt`; runbook §1.4. |
 | C7 exit | n1 installed-calendar/argv/byte checks with t0-derived exit boundary. | n1 step 5; runbook §1.5. |
 | C8 sequence | Adds W1 run order, Gmail IDs, seat ping and exit boundary. | Scout Q4; runbook §1.4–1.5. |
+| C9 charge state | Read-only ioreg gate at discovery and immediately before publication; raw timestamped evidence in staging; notice and harvest disposition rule. | Issue #420; `joulewise/environment.py` battery parser; C9 addendum. |
+
+## HARVEST CHECK — charge state
+
+Every attempted slot's recorded `is_charging` must be false. If any slot
+records true, report W1 as confounded by charging and do not use it for
+derivation; the magistrate disposes the window without repair. At this head,
+the per-slot writer is `scripts/validate_powermetrics_fiducial.py`, called by
+`scripts/night_chains/calibration_derivation_only.zsh`; it writes under
+`$NIGHT_ROOT/runs/instrument_validation` but does **not** call
+`collect_environment_snapshot` or write `is_charging` to the slot artifacts.
+`joulewise/environment.py` supplies `power.is_charging` to ordinary run bundle
+`metadata.json` through `joulewise/controller.py`, but those bundles are not
+the derivation slots. The per-slot harvest check is therefore unavailable at
+this head and needs a lead ruling before W1 can claim charge-state coverage
+throughout the window. The two arm observations establish only their own
+timestamps.
 
 **Frozen plan ruling needed before execution.** Neither Revision 5, the
 acceptance rulings nor the generator identifies the precise W1 campaign-pack

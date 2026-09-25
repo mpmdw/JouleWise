@@ -39,9 +39,11 @@ print -r -- "$check_output" "$prereg_output"
 echo "check_rc=$check_rc prereg_rc=$prereg_rc"
 print -r -- 'CHECK: test "$check_rc" -eq 3; test "$prereg_rc" -eq 3'
 test "$check_rc" -eq 3; test "$prereg_rc" -eq 3
-print -- "CHECK: both reports have the explained os_build mismatch, no ledger error; preregistered sampler matches"
+print -- "CHECK: both reports have exactly the old os_build and sampler mismatches, no ledger error; preregistered sampler matches"
 print -r -- "$check_output" | grep -Eq '^os_build[[:space:]]+25F84[[:space:]]+25G83[[:space:]]+MISMATCH$'
 print -r -- "$prereg_output" | grep -Eq '^os_build[[:space:]]+25F84[[:space:]]+25G83[[:space:]]+MISMATCH$'
+print -r -- "$check_output" | grep -Fxq 'mismatched fields: os_build, powermetrics_sha256'
+print -r -- "$prereg_output" | grep -Fxq 'mismatched fields: os_build, powermetrics_sha256'
 ! print -r -- "$check_output" "$prereg_output" | grep -q '^ledger:'
 print -r -- "$prereg_output" | grep -Eq '^pre-registered powermetrics sha256 [0-9a-f]{64}: match$'
 shasum -a 256 scripts/night_chains/calibration_derivation_only.zsh configs/calibration/preregistration_d079_epoch_25g83_rev1.md
