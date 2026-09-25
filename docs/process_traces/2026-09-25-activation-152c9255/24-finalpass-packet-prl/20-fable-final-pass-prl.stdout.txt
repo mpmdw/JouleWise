@@ -1,0 +1,2 @@
+PRL-FINALPASS-01: validator PASS (typo run REFUSED as designed); L1 AFFIRM, L2 AFFIRM with rule text R16-a, L3 463 tests OK plus clean merge check, L4 no BLOCKER/MATERIAL (six NITs), L5 MERGE — ruling written to `docs/process_traces/2026-09-25-activation-152c9255/24-finalpass-packet-prl/20-fable-final-pass-prl.md` (16.1 KB).
+rc=0
