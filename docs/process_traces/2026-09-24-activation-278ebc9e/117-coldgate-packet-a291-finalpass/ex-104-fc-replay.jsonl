@@ -1,0 +1,10 @@
+REPLAY CHECK
+["C1 grandchild single", "REPLAY REFUSED inv_38: event replay"]
+["C2 root with pre-split parent", "REPLAY REFUSED inv_39: root re-pack"]
+["C2b root with terminal refusal", "REPLAY REFUSED inv_39: root re-pack"]
+["C3 retargeted terminal refusal", "REPLAY REFUSED inv_38: event replay"]
+["C4 phantom terminal refusals (dup, unregistered)", "REPLAY REFUSED inv_39: root re-pack"]
+["C5 superseded flag on terminal single", "REPLAY REFUSED inv_38: event replay"]
+["C6 forged placement stage/attempt", "REPLAY REFUSED inv_39: root re-pack"]
+["C7 live placement into reported envelope 0", "REPLAY REFUSED inv_38: event replay"]
+["C8 event-less reschedule", "REPLAY REFUSED inv_38: event replay"]

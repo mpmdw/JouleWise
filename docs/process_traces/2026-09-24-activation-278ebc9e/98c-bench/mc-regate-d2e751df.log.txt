@@ -1,0 +1,15 @@
+...............................................FUZZ cases=4 submissions=1798 census={'inv_02': 808, 'inv_03': 99, 'inv_11': 447, 'inv_12': 41, 'inv_38': 372, 'inv_39': 8, 'inv_52': 23}
+NAMED_SEAL {"AUD-1": "refused:inv_11", "B1": "refused:inv_11", "B1-singles-voided": "refused:inv_11", "B2": "refused:inv_11", "cross-model-reorder": "refused:inv_10", "legal-contrast": "accepted", "probe-D": "refused:inv_11"}
+.NAMED AUD-1 oracle=REJECT first=OwnershipViolation(model='large', item='L1I2', live=2, terminal=1, reason='counts')
+NAMED B1 oracle=REJECT first=OwnershipViolation(model='large', item='L1I0', live=2, terminal=0, reason='counts')
+NAMED B2 oracle=REJECT first=OwnershipViolation(model='large', item='L1I0', live=2, terminal=0, reason='counts')
+NAMED probe-D oracle=REJECT first=OwnershipViolation(model='large', item='L2I0', live=1, terminal=1, reason='counts')
+NAMED B1-singles-voided oracle=REJECT first=OwnershipViolation(model='large', item='L1I0', live=1, terminal=0, reason='superseded_live')
+NAMED legal-contrast oracle=ACCEPT
+NAMED cross-model-reorder oracle=ACCEPT
+.
+----------------------------------------------------------------------
+Ran 49 tests in 61.586s
+
+OK
+rc=0
