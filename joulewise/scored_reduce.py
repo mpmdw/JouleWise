@@ -53,7 +53,7 @@ def _int(v):
 
 
 def _num(v):
-    return type(v) in (int, float) and math.isfinite(v)
+    return type(v) is int or (type(v) is float and math.isfinite(v))
 
 
 def _canon(value):
@@ -100,7 +100,7 @@ def _check_window(w, registration, roster, keys, seen):
     _need(key in keys, "window_unknown", repr(key))
     placement, _, status = keys[key]
     _need(w["registration_sha256"] == registration.digest
-          and w["roster_sha256"] == _in_force(roster, placement["envelope_index"]), "window_binding", repr(key))
+          and w["roster_sha256"] == _in_force(roster, w["envelope_index"]), "window_binding", repr(key))
     _need(key not in seen, "window_duplicate", repr(key))
     seen.add(key)
     _need(w["envelope_index"] == placement["envelope_index"], "window_envelope", repr(key))
