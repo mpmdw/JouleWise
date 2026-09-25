@@ -2,18 +2,16 @@
   "seed": 20260924,
   "stages": ["stage0", "U1", "U2", "S"],
   "sizes": {"stage0_blocks": 3, "u_warmup_cells": 1, "u_blocks": 6, "background_cells": 2, "sandwich_cells": 3},
+  "runs_per_cell": {"stage0": 2, "U1": 1, "U2": 1, "S": 1},
+  "source_config": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b2.json",
   "contexts": {"D": null, "I": "Interactive", "SH": "shell", "B": "Background"},
-  "segments": {"guard_seconds": 2, "idle_seconds": 30, "cpu_seconds": 5, "cpu_iterations": 400000000, "cpu_repeats": 3, "lm_warmups": 1, "lm_repeats": 3, "lm_tokens": 256},
+  "segments": {"cpu_seconds": 5, "cpu_iterations": 400000000, "cpu_repeats": 3, "settle_seconds": 60},
   "model": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
-  "model_file": "model.safetensors",
-  "prompt": "Explain why a lighthouse keeper records the weather each evening in two paragraphs.",
-  "runtime": {"mlx": "0.31.2", "mlx_lm": "0.31.3"},
-  "sampler_interval_ms": 100,
-  "timeout_seconds": 900,
+  "timeout_seconds": 1200,
   "hid_idle_seconds": 600,
   "hid_poll_seconds": 15,
   "census_interval_seconds": 5,
   "assertions_interval_seconds": 30,
   "display_settle_seconds": 120,
-  "thresholds": {"materiality_lower": 0.97, "materiality_upper": 1.03, "confidence": 0.99375, "boundary_fraction": 0.005, "integral_j": 0.1, "census_core_fraction": 0.05, "background_cpu_ratio": 1.5, "interactive_cadence_ms": 130}
+  "thresholds": {"materiality_lower": 0.97, "materiality_upper": 1.03, "confidence": 0.99375, "census_core_fraction": 0.05, "background_cpu_ratio": 1.5, "interactive_cadence_ms": 130}
 }

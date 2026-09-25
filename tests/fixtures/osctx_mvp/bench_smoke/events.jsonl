@@ -1,0 +1,3 @@
+{"timestamp_s": 1790302189.120907, "event_type": "sampling_started", "phase": "measured_run", "message": "telemetry sampling confirmed active", "metadata": {}}
+{"timestamp_s": 1790302195.440408, "event_type": "phase_end", "phase": "decode", "message": "mlx decode completed", "metadata": {"phase_boundary_method": "first_token", "emitted_tokens": 512, "requested_output_tokens": 512}}
+{"timestamp_s": 1790302195.441449, "event_type": "sampling_stopped", "phase": "measured_run", "message": "measured window stopped; telemetry tail retained outside window", "metadata": {}}

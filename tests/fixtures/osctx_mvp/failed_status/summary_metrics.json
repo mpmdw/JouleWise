@@ -1,0 +1,343 @@
+{
+  "decode_latency_s": 6.036736011505127,
+  "energy_anchor_shift_envelopes": {
+    "/energy_output_token_j": {
+      "anchor_bound_s": 0.0034999990372842644,
+      "independent_edge_shift_bound_j": 0.008509277419534556,
+      "lower_j": 0.40543816569938906,
+      "max_abs_delta_j": 6.220194369294108e-05,
+      "method": "common_trace_shift_plus_independent_edge_corners_v3",
+      "point_j": 0.405500367643082,
+      "upper_j": 0.40556256958677495,
+      "wall_minus_monotonic_independent_edge_span_s": 0.0004036426544189453
+    },
+    "/energy_request_j": {
+      "anchor_bound_s": 0.0034999990372842644,
+      "independent_edge_shift_bound_j": 0.008509277419534556,
+      "lower_j": 207.5843408380872,
+      "max_abs_delta_j": 0.03184739517078583,
+      "method": "common_trace_shift_plus_independent_edge_corners_v3",
+      "point_j": 207.616188233258,
+      "upper_j": 207.64803562842877,
+      "wall_minus_monotonic_independent_edge_span_s": 0.0004036426544189453
+    },
+    "/energy_token_j": {
+      "anchor_bound_s": 0.0034999990372842644,
+      "independent_edge_shift_bound_j": 0.008509277419534556,
+      "lower_j": 0.3243505325595113,
+      "max_abs_delta_j": 4.976155495434176e-05,
+      "method": "common_trace_shift_plus_independent_edge_corners_v3",
+      "point_j": 0.32440029411446564,
+      "upper_j": 0.32445005566942,
+      "wall_minus_monotonic_independent_edge_span_s": 0.0004036426544189453
+    },
+    "/gross_energy_j": {
+      "anchor_bound_s": 0.0034999990372842644,
+      "independent_edge_shift_bound_j": 0.008509277419534556,
+      "lower_j": 244.72572197738035,
+      "max_abs_delta_j": 0.02710415276149547,
+      "method": "common_trace_shift_plus_independent_edge_corners_v3",
+      "point_j": 244.75282613014184,
+      "upper_j": 244.77993028290334,
+      "wall_minus_monotonic_independent_edge_span_s": 0.0004036426544189453
+    },
+    "/idle_subtracted_energy_j": {
+      "anchor_bound_s": 0.0034999990372842644,
+      "independent_edge_shift_bound_j": 0.008509277419534556,
+      "lower_j": 207.5843408380872,
+      "max_abs_delta_j": 0.03184739517078583,
+      "method": "common_trace_shift_plus_independent_edge_corners_v3",
+      "point_j": 207.616188233258,
+      "upper_j": 207.64803562842877,
+      "wall_minus_monotonic_independent_edge_span_s": 0.0004036426544189453
+    },
+    "/phase_energy_j/decode": {
+      "anchor_bound_s": 0.0034999990372842644,
+      "independent_edge_shift_bound_j": 0.02531369022369745,
+      "lower_j": 235.4678173526385,
+      "max_abs_delta_j": 0.13562603089786762,
+      "method": "common_trace_shift_plus_independent_edge_corners_v3",
+      "point_j": 235.60344338353633,
+      "upper_j": 235.7390694144342,
+      "wall_minus_monotonic_independent_edge_span_s": 0.0004036426544189453
+    },
+    "/phase_energy_j/prefill": {
+      "anchor_bound_s": 0.0034999990372842644,
+      "independent_edge_shift_bound_j": 0.022889652447176445,
+      "lower_j": 8.978560172644103,
+      "max_abs_delta_j": 0.15179686846331286,
+      "method": "common_trace_shift_plus_independent_edge_corners_v3",
+      "point_j": 9.130357041107416,
+      "upper_j": 9.282153909570729,
+      "wall_minus_monotonic_independent_edge_span_s": 0.0004036426544189453
+    }
+  },
+  "energy_bound_terms_j": {
+    "E_clock_anchor_shift_bound_j": 0.02710415276149547,
+    "E_drift_bound_j": 25.81792407196404,
+    "E_interpolation_edge_bound_j": 0.0,
+    "E_interpolation_joint_edge_bound_j": 0.0
+  },
+  "energy_output_token_j": 0.405500367643082,
+  "energy_request_j": 207.616188233258,
+  "energy_token_j": 0.3244002941144656,
+  "energy_uncertainty_status": "bounded",
+  "energy_variance_terms_j2": {
+    "E_gross_repetition_j2": null,
+    "E_idle_mean_j2": 0.04827938686669735
+  },
+  "failure_message": null,
+  "failure_reason": null,
+  "gross_energy_j": 244.75282613014184,
+  "idle_baseline": {
+    "duration_s": 35.470231951,
+    "gpu_freq_hz_mean": 356.22081000000003,
+    "gpu_freq_mhz_mean": 356.22081000000003,
+    "gpu_idle_ratio_mean": 0.9525278566666666,
+    "gpu_idle_ratio_min": 0.847476,
+    "idle_window_suspect": false,
+    "power_w_mean": 5.875546547630988,
+    "power_w_stddev": 0.37764507815414844,
+    "sample_count": 300,
+    "telemetry_backend": "powermetrics"
+  },
+  "idle_mean_uncertainty": {
+    "bandwidth_s": 10.0,
+    "cadence_p95_p05_ratio": 1.038588406675033,
+    "correlation_scope": "independent_run",
+    "effective_sample_size": 118.00883839716262,
+    "governed_variance_of_mean_w2": 0.0012085179973899472,
+    "hac_variance_of_mean_w2": 0.0012085179973899472,
+    "iid_variance_of_mean_w2": 0.0004754452046296826,
+    "lag_count": 84,
+    "median_sample_interval_s": 0.1184257285,
+    "method": "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+    "raw_sample_count": 300,
+    "reason_codes": [],
+    "sample_variance_w2": 0.14261580505405289,
+    "source_artifact": "raw/powermetrics_idle.plist",
+    "source_sha256": "3a21434e7d4a6b9042e5cda2dc30947e8a5ba36bf2023c911055a9a770da3006",
+    "status": "estimated"
+  },
+  "idle_subtracted_energy_j": 207.616188233258,
+  "inter_token_throughput_tokens_s": 84.64839261251602,
+  "measurement_quality": {
+    "cooldown_cap_hit": null,
+    "dropped_samples": 0,
+    "idle_power_w_stddev": 0.37764507815414844,
+    "idle_window_suspect": false,
+    "observed_sampling_hz": 8.450533509558042,
+    "phase_identifiability": {
+      "decode": "identifiable",
+      "generation_setup": "not_resolvable_sample_count",
+      "prefill": "identifiable",
+      "tokenize": "not_resolvable_sample_count"
+    },
+    "remote_cleanup_failed": null,
+    "requested_sampling_hz": 10.0,
+    "runtime_cleanup_ok": true,
+    "telemetry_source": "powermetrics",
+    "thermal_drift_c": null,
+    "token_count_source": "runtime_observed",
+    "token_counts_source": "runtime_observed"
+  },
+  "phase_energy_j": {
+    "decode": 235.60344338353633,
+    "generation_setup": 0.0003935816544055939,
+    "prefill": 9.130357041107416,
+    "tokenize": 0.0036860090099811553
+  },
+  "status": "failed",
+  "suite_metrics": null,
+  "summary_provenance": {
+    "config_schema_version": "0.1",
+    "reducer_id": "joulewise.reduce_bundle",
+    "reducer_version": "0.5.2",
+    "summary_schema_version": "0.1"
+  },
+  "throughput_tokens_s": 84.81404504424306,
+  "ttft_s": 0.27223801612854004,
+  "uncertainty": null,
+  "window_evidence_precheck": {
+    "gross_request": {
+      "cadence_ratio": 53.23316124601659,
+      "cadence_ratio_min": 4.0,
+      "clock_anchor_bound_s": 0.0034999990372842644,
+      "eligible": false,
+      "in_window_sample_count": 57,
+      "interpolation_edge_bound_j": 0.0,
+      "interpolation_joint_edge_bound_j": 0.0,
+      "metric_name": "gross_energy_j",
+      "observed_bracketing_max_sample_gap_s": 0.11873316764831543,
+      "observed_window_p95_sample_gap_s": 0.11465215682983398,
+      "reasons": [
+        "environment_admission_failed",
+        "environment_admission_missing",
+        "instrument_calibration_missing"
+      ],
+      "window_class": "gross_request",
+      "window_duration_s": 6.320541858673096
+    },
+    "idle_subtracted_request": {
+      "cadence_ratio": 53.23316124601659,
+      "cadence_ratio_min": 4.0,
+      "clock_anchor_bound_s": 0.0034999990372842644,
+      "eligible": false,
+      "in_window_sample_count": 57,
+      "interpolation_edge_bound_j": 0.0,
+      "interpolation_joint_edge_bound_j": 0.0,
+      "metric_name": "idle_subtracted_energy_j",
+      "observed_bracketing_max_sample_gap_s": 0.11873316764831543,
+      "observed_window_p95_sample_gap_s": 0.11465215682983398,
+      "reasons": [
+        "environment_admission_failed",
+        "environment_admission_missing",
+        "instrument_calibration_missing"
+      ],
+      "window_class": "idle_subtracted_request",
+      "window_duration_s": 6.320541858673096
+    },
+    "phase": {
+      "decode": {
+        "eligible": false,
+        "reasons": [
+          "environment_admission_failed",
+          "environment_admission_missing",
+          "instrument_calibration_missing"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": 52.60115803532174,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 0.0034999990372842644,
+            "eligible": false,
+            "in_window_sample_count": 55,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11496448516845703,
+            "observed_window_p95_sample_gap_s": 0.11465215682983398,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_duration_s": 6.04726505279541
+          }
+        ]
+      },
+      "generation_setup": {
+        "eligible": false,
+        "reasons": [
+          "anchor_energy_envelope_unrecorded",
+          "cadence_ratio_unrecorded",
+          "clock_bound_exceeds_quarter_window",
+          "environment_admission_failed",
+          "environment_admission_missing",
+          "instrument_calibration_missing",
+          "insufficient_in_window_samples"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": null,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 0.0034999990372842644,
+            "eligible": false,
+            "in_window_sample_count": 1,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11873316764831543,
+            "observed_window_p95_sample_gap_s": null,
+            "reasons": [
+              "anchor_energy_envelope_unrecorded",
+              "cadence_ratio_unrecorded",
+              "clock_bound_exceeds_quarter_window",
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing",
+              "insufficient_in_window_samples"
+            ],
+            "window_duration_s": 5.221366882324219e-05
+          }
+        ]
+      },
+      "prefill": {
+        "eligible": false,
+        "reasons": [
+          "environment_admission_failed",
+          "environment_admission_missing",
+          "instrument_calibration_missing"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": 2.287608709184483,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 0.0034999990372842644,
+            "eligible": false,
+            "in_window_sample_count": 3,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11873316764831543,
+            "observed_window_p95_sample_gap_s": 0.11165738105773926,
+            "reasons": [
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing"
+            ],
+            "window_duration_s": 0.27161502838134766
+          }
+        ]
+      },
+      "tokenize": {
+        "eligible": false,
+        "reasons": [
+          "anchor_energy_envelope_unrecorded",
+          "cadence_ratio_unrecorded",
+          "clock_bound_exceeds_quarter_window",
+          "environment_admission_failed",
+          "environment_admission_missing",
+          "instrument_calibration_missing",
+          "insufficient_in_window_samples"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": null,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 0.0034999990372842644,
+            "eligible": false,
+            "in_window_sample_count": 1,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11873316764831543,
+            "observed_window_p95_sample_gap_s": null,
+            "reasons": [
+              "anchor_energy_envelope_unrecorded",
+              "cadence_ratio_unrecorded",
+              "clock_bound_exceeds_quarter_window",
+              "environment_admission_failed",
+              "environment_admission_missing",
+              "instrument_calibration_missing",
+              "insufficient_in_window_samples"
+            ],
+            "window_duration_s": 0.0004889965057373047
+          }
+        ]
+      }
+    },
+    "throughput": {
+      "eligible": false,
+      "metric_names": [
+        "throughput_tokens_s",
+        "inter_token_throughput_tokens_s",
+        "decode_phase_output_throughput_tokens_s"
+      ],
+      "reasons": [
+        "environment_admission_missing"
+      ],
+      "universal_claim_barrier": true
+    }
+  }
+}

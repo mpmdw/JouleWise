@@ -16,9 +16,11 @@ import time
 try:
     from .common import blocks, load_config, write_json
     from .cell import display_state, hid_idle_seconds
+    from .analyze import bundle_evidence
 except ImportError:
     from common import blocks, load_config, write_json
     from cell import display_state, hid_idle_seconds
+    from analyze import bundle_evidence
 
 ROOT = Path(__file__).resolve().parents[3]
 PREFIX = "com.joulewise.dummy.osctx."
@@ -32,7 +34,7 @@ def cell_argv(action: dict, config_path: Path, python: str, allow_pids: list[int
     result = [python, str(Path(__file__).with_name("cell.py")), "--out", action["cell_dir"],
               "--state", action["state"], "--context", action["context"],
               "--cell-id", str(action["cell_id"]), "--stage", action["stage"],
-              "--config", str(config_path)]
+              "--config", str(config_path), "--python", python]
     for pid in allow_pids:
         result += ["--allow-pid", str(pid)]
     return result
@@ -203,6 +205,8 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
     allow_pids = list(dict.fromkeys((runner_ancestry() if isinstance(backend, SystemBackend) else []) +
                                     (extra_allow_pids or [])))
     old_handlers = {}
+    stage_reference = None
+    invalid_cells = {arm: set() for arm in config["contexts"]}
     if isinstance(backend, SystemBackend):
         def interrupted_signal(signum, frame):
             raise KeyboardInterrupt(f"signal {signum}")
@@ -240,6 +244,7 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
             previous = target
             attempt = 1
             while True:
+                pending_reference = stage_reference
                 if stage == "S" and state == "S" and backend.display() != "asleep":
                     wait_gate(backend, config, log)
                     transition(backend, "asleep", config, log)
@@ -277,19 +282,47 @@ def execute(out: Path, config_path: Path, config: dict, stage: str, python: str,
                         done = json.loads((directory / "done.json").read_text())
                         cell_record = json.loads((directory / "cell.json").read_text())
                         bad = bool(done.get("interrupted") or cell_record.get("interrupted"))
-                        log(event="cell_end", label=action["label"], interrupted=bad, ok=done.get("ok"))
-                        if not done.get("ok") and not bad:
-                            raise RuntimeError(f"cell failed: {action['label']}")
+                        reason = "interrupted" if bad else None
+                        if done.get("ok") and not bad:
+                            try:
+                                run_records = [bundle_evidence(Path(run["bundle"]), pending_reference)
+                                               for run in cell_record.get("runs", [])]
+                            except (OSError, ValueError, KeyError, TypeError) as exc:
+                                log(event="bundle_read_error", label=action["label"], error=str(exc))
+                                run_records = []
+                            if len(run_records) != config["runs_per_cell"][stage] or any(not run["valid"] for run in run_records):
+                                bad, reason = True, "bundle_invalid"
+                            elif len({run["output_hash"] for run in run_records}) != 1:
+                                bad, reason = True, "bundle_invalid"
+                            elif pending_reference is None and not block["discard"]:
+                                pending_reference = run_records[0]["output_hash"]
+                        elif not done.get("ok") and not bad:
+                            bad, reason = True, "bundle_invalid"
+                        if bad and reason == "bundle_invalid":
+                            invalid_cells[action["context"]].add((block["id"], action["cell_id"]))
+                            if len(invalid_cells[action["context"]]) >= 3:
+                                log(event="stage_stopped", reason="arm_invalid_cell_limit",
+                                    arm=action["context"], invalid_cells=3, council_review_required=True)
+                                raise RuntimeError(f"stage stopped: 3 invalid cells in {action['context']}; council review required")
+                        log(event="cell_end", label=action["label"], interrupted=bad,
+                            reason=reason, ok=done.get("ok"),
+                            invalid_cells={arm: len(cells) for arm, cells in invalid_cells.items()})
                     finally:
                         cleanup(action)
                     if bad:
                         break
                 if not bad:
+                    stage_reference = pending_reference
                     break
-                for action in actions:
-                    write_json(Path(action["cell_dir"]) / "discarded.json",
-                               {"reason": "interrupted_block", "block": block["id"], "attempt": attempt})
-                log(event="block_discarded", block=block["id"], attempt=attempt, reason="interrupted")
+                failed_label = action["label"]
+                for discarded_action in actions:
+                    write_json(Path(discarded_action["cell_dir"]) / "discarded.json",
+                               {"reason": reason if discarded_action["label"] == failed_label else "block_peer_discard",
+                                "trigger": failed_label, "block": block["id"], "attempt": attempt})
+                log(event="block_discarded", block=block["id"], attempt=attempt, reason=reason)
+                if attempt >= 3:
+                    log(event="stage_stopped", reason="block_attempt_limit", block=block["id"], attempts=attempt)
+                    raise RuntimeError(f"stage stopped: block {block['id']} failed three times")
                 attempt = retry_block(block, attempt)["attempt"]
         log(event="stage_done", stage=stage)
     finally:
@@ -336,7 +369,7 @@ def main(argv=None) -> int:
                     for block_id in expected_blocks}
         if any(arms != {"D", "I", "SH"} for arms in observed.values()):
             parser.error("U2 requires six complete U1 Williams blocks")
-        if "INCONCLUSIVE" not in verdicts.values():
+        if not any(value.startswith("INCONCLUSIVE") for value in verdicts.values()):
             parser.error("U2 runs only after an INCONCLUSIVE U1 verdict")
     out = (args.render_only or args.out).resolve()
     actions = plan(out, args.config.resolve(), config, args.stage, args.python)

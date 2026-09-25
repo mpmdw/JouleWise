@@ -1,15 +1,15 @@
-"""Offline OSCTX schedule, workload, telemetry, and statistical checks."""
+"""Offline OSCTX production-wrapper, bundle, schedule, and statistic checks."""
 from __future__ import annotations
 
 import copy
 from contextlib import redirect_stderr
-from datetime import datetime, timezone
 import io
 import json
 import math
 from pathlib import Path
 import plistlib
 import shlex
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -17,31 +17,40 @@ from types import SimpleNamespace
 
 from scripts.diagnostics.osctx_mvp import analyze, cell, common, runner
 
+FIXTURES = Path(__file__).parent / "fixtures" / "osctx_mvp"
 
-class FakeWorkload:
-    def __init__(self):
-        self.calls = 0
-    def command(self, argv):
-        return {"argv": argv, "pid": 99999, "stdout": "", "returncode": 0}
-    def idle(self):
-        return 700
-    def display(self):
-        return "on"
-    def sleep(self, seconds):
-        pass
-    def model_sha256(self, path):
-        return "a" * 64
-    def preread(self, config):
-        pass
-    def prepare_model(self, config):
-        return {"versions": config["runtime"], "prompt": "templated prompt"}
-    def generate(self, prepared, max_tokens, first_token):
-        self.calls += 1
-        first_token()
-        return {"token_ids": list(range(max_tokens)), "output_tokens": max_tokens,
-                "prompt_tps": 100., "generation_tps": 50., "finish_reason": "length"}
-    def cpu_probe(self, seconds):
-        return 123
+
+def make_bundle(parent: Path, name: str, fixture="bench_smoke", *, energy=None, rate=None, token_offset=0):
+    bundle = parent / name
+    bundle.mkdir(parents=True)
+    source = FIXTURES / fixture
+    summary = json.loads((source / "summary_metrics.json").read_text())
+    if energy is not None:
+        summary["energy_output_token_j"] = energy
+        summary["idle_subtracted_energy_j"] = energy * 512
+    if rate is not None:
+        summary["inter_token_throughput_tokens_s"] = rate
+    (bundle / "summary_metrics.json").write_text(json.dumps(summary))
+    shutil.copy(FIXTURES / "bench_smoke" / "power_trace.csv", bundle / "power_trace.csv")
+    shutil.copy(FIXTURES / "bench_smoke" / "events.jsonl", bundle / "events.jsonl")
+    (bundle / "outputs").mkdir()
+    (bundle / "outputs" / "tokens.jsonl").write_text("".join(json.dumps({"index": n, "token_id": n + token_offset}) + "\n" for n in range(512)))
+    return bundle
+
+
+def make_cell(parent: Path, config, stage, block, arm, energies, rates=None, *, fixture="bench_smoke", token_offset=0):
+    directory = parent / f"{block}.1.{arm}.a1"
+    directory.mkdir()
+    runs = []
+    for number, energy in enumerate(energies, 1):
+        bundle = make_bundle(directory, f"bundle-{number}", fixture, energy=energy,
+                             rate=(rates or [84.] * len(energies))[number-1], token_offset=token_offset)
+        runs.append({"bundle": str(bundle), "child": {"pid": 700 + number}})
+    record = {"stage": stage, "state": "A" if stage == "stage0" else "U", "context": arm,
+              "pid": 500, "cell_id": 1, "runs": runs, "cpu": [{"seconds": 5.1}], "allow_pids": [], "flags": [], "interrupted": False}
+    (directory / "cell.json").write_text(json.dumps(record))
+    (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": False}))
+    return directory
 
 
 class OSCTXTests(unittest.TestCase):
@@ -55,33 +64,70 @@ class OSCTXTests(unittest.TestCase):
         self.assertNotEqual(orders, common.williams_orders(self.config["seed"]+1, "U1"))
         self.assertEqual([b["arms"] for b in common.blocks(self.config, "stage0")],
                          [["I", "SH"], ["SH", "I"], ["I", "SH"]])
-        self.assertEqual(sum(map(lambda b: len(b["arms"]), common.blocks(self.config, "U1"))), 21)
-        self.assertEqual(sum(map(lambda b: len(b["arms"]), common.blocks(self.config, "U2"))), 18)
+        self.assertEqual(sum(len(b["arms"]) for b in common.blocks(self.config, "U1")), 21)
+        self.assertEqual(sum(len(b["arms"]) for b in common.blocks(self.config, "U2")), 18)
         self.assertEqual([b["state"] for b in common.blocks(self.config, "S")], ["U"]*3+["S"]*3+["U"]*3)
 
     def test_rendered_zsh_exec_and_shell_detachment(self):
         with tempfile.TemporaryDirectory() as temp:
             actions = runner.plan(Path(temp), common.DEFAULT_CONFIG, self.config, "U1", "/python")
             d = next(a for a in actions if a["context"] == "D")
-            i = next(a for a in actions if a["context"] == "I")
-            b = next(a for a in actions if a["context"] == "B")
             sh = next(a for a in actions if a["context"] == "SH")
             self.assertEqual(sh["start"][:3], ["nohup", "caffeinate", "-is"])
             self.assertEqual(sh["start"][3:5], ["/bin/zsh", "-c"])
-            self.assertTrue(sh["start"][5].startswith("exec /python "))
-            self.assertTrue(sh["detached"])
-            for action, process_type in ((d, None), (i, "Interactive"), (b, "Background")):
-                with Path(action["cell_dir"], "job.plist").open("rb") as stream:
-                    pl = plistlib.load(stream)
-                self.assertEqual(pl["ProgramArguments"][:2], ["/bin/zsh", "-c"])
-                self.assertTrue(pl["ProgramArguments"][2].startswith("exec /python "))
-                self.assertEqual(pl.get("ProcessType"), process_type)
-                self.assertEqual(pl["WorkingDirectory"], str(runner.ROOT))
-                self.assertIn("PATH", pl["EnvironmentVariables"])
-            backend = runner.SystemBackend()
+            self.assertIn("--python /python", sh["start"][5])
+            with Path(d["cell_dir"], "job.plist").open("rb") as stream:
+                pl = plistlib.load(stream)
+            self.assertEqual(pl["ProgramArguments"][:2], ["/bin/zsh", "-c"])
+            self.assertEqual(pl.get("ProcessType"), None)
+            self.assertEqual(pl["WorkingDirectory"], str(runner.ROOT))
             with patch("subprocess.Popen") as popen:
-                backend.spawn_shell(sh["start"], Path(sh["cell_dir"]))
+                runner.SystemBackend().spawn_shell(sh["start"], Path(sh["cell_dir"]))
                 self.assertTrue(popen.call_args.kwargs["start_new_session"])
+
+    def test_runs_per_cell_defaults_to_two(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "config.json"
+            config = copy.deepcopy(self.config)
+            config.pop("runs_per_cell")
+            path.write_text(json.dumps(config))
+            self.assertEqual(common.load_config(path)["runs_per_cell"], {stage: 2 for stage in common.STAGES})
+
+    def test_materialized_config_only_two_edits_and_hashes(self):
+        source = cell.ROOT / self.config["source_config"]
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "run.json"
+            hashes = cell.materialize_config(source, target, "osctx-stage0-01-i-r1")
+            original, modified = json.loads(source.read_text()), json.loads(target.read_text())
+            self.assertEqual(modified.pop("run_id"), "osctx-stage0-01-i-r1")
+            self.assertEqual(modified["run_metadata"].pop("tags"), cell.TAGS)
+            original.pop("run_id")
+            original["run_metadata"].pop("tags")
+            self.assertEqual(modified, original)
+            self.assertEqual(hashes["source_sha256"], cell.sha256(source))
+            self.assertEqual(hashes["materialized_sha256"], cell.sha256(target))
+
+    def test_wrapper_command_and_settle(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp)
+            cmd = cell.production_command("/python", out / "run-r1.json", out)
+            self.assertEqual(cmd, ["/python", "-m", "joulewise", "run", str(out / "run-r1.json"),
+                                   "--runs-dir", str(out / "runs"), "--post-window-sampling-dwell-s", "60"])
+            cfg = copy.deepcopy(self.config)
+            cfg["segments"].update({"cpu_seconds": 0, "cpu_iterations": 1, "cpu_repeats": 3, "settle_seconds": 60})
+            calls = []
+            class Fake:
+                def command(self, argv): return {"stdout": "", "returncode": 0}
+                def idle(self): return 700
+                def display(self): return "on"
+                def sleep(self, seconds): calls.append(("sleep", seconds))
+                def preread(self, model): calls.append(("preread", model)); return []
+                def production(self, argv, log): calls.append(("production", argv)); return {"pid": 123, "returncode": 0}
+                def cpu_probe(self, iterations): calls.append(("cpu", iterations)); return 1
+            cell.run(out, cfg, "A", "I", 1, stage="stage0", backend=Fake(), python="/python")
+            self.assertEqual([x[0] for x in calls], ["preread", "production", "production", "cpu", "cpu", "cpu", "sleep"])
+            self.assertEqual(calls[-1], ("sleep", 60))
+            self.assertTrue((out / "done.json").exists())
 
     def test_paired_t_and_verdict_boundaries(self):
         values = [.01, .02, .03, .04, .05, .06]
@@ -91,68 +137,134 @@ class OSCTXTests(unittest.TestCase):
         self.assertAlmostEqual(analyze.student_t_cdf(2.5705818366, 5), .975, places=8)
         self.assertAlmostEqual(interval["upper_log"]-interval["mean_log"],
                                analyze.student_t_ppf(.996875, 5)*math.sqrt(.00175/5)/math.sqrt(6))
-        def i(low, high):
-            return {"lower_log": low, "upper_log": high}
+        def i(low, high): return {"lower_log": low, "upper_log": high}
         self.assertEqual(analyze.verdict(i(analyze.LOWER, analyze.UPPER)), "EQUIVALENT")
         self.assertEqual(analyze.verdict(i(analyze.UPPER, analyze.UPPER+.001)), "INCONCLUSIVE")
         self.assertEqual(analyze.verdict(i(analyze.UPPER+.0001, analyze.UPPER+.001)), "DIFFERENT")
-        self.assertEqual(analyze.verdict(i(analyze.LOWER-.001, analyze.LOWER)), "INCONCLUSIVE")
 
-    def test_power_known_cases(self):
+    def test_power_grid_and_stage0_spread(self):
         self.assertEqual(analyze.equivalence_power(0., 6), 1.)
         self.assertLess(analyze.equivalence_power(.2, 12), .01)
         table = analyze.power_table(0., 0.)
-        self.assertEqual(len(table), 8)
-        self.assertTrue(all(x["power"] == 1. for x in table))
-        self.assertTrue(all("20000" in x["method"] for x in table))
+        self.assertEqual(len(table), 24)
+        self.assertEqual({r["contrast"] for r in table}, {"D/I", "SH/I"})
+        self.assertEqual({r["sd_multiplier"] for r in table}, {1., 1.5, 2.})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for i, (a, b) in enumerate(((.40, .41), (.43, .42), (.39, .40)), 1):
+                make_cell(root, self.config, "stage0", f"stage0-{i:02}", "I", [a, a*1.01])
+                make_cell(root, self.config, "stage0", f"stage0-{i:02}", "SH", [b, b*1.02])
+            rows = analyze.analyze_directory(root, self.config)["cells"]
+            spread = analyze.stage0_spread(rows)
+            self.assertGreater(spread["within_run_sd_log"]["E"], 0)
+            self.assertGreater(spread["between_cell_paired_sd_log"]["E"], 0)
+
+    def test_drift_equivalence_and_edge_difference_gates(self):
+        rows = []
+        for number in range(1, 7):
+            for arm in ("D", "I", "SH"):
+                energy = 1.04 if arm == "D" else 1.0
+                rows.append({"stage": "U1", "block": f"U1-{number:02}", "context": arm,
+                             "metrics": {"E": energy, "R": 50., "net_j": energy * 512,
+                                         "drift_ratio": .01, "attribution_bound_j": 1.,
+                                         "edge_bound_j_per_token": .10 if arm == "D" else .001,
+                                         "median_sample_interval_s": .1, "cpu_seconds": 5.}})
+        decision = analyze.decision_table(rows, self.config)
+        self.assertEqual(decision["verdicts"]["D/I:E"], "INCONCLUSIVE")
+        self.assertIn("edge_bound_downgrade:D/I:E", decision["flags"])
+        self.assertEqual(decision["verdicts"]["SH/I:E"], "EQUIVALENT")
+        self.assertLess(decision["intervals"]["SH/I:E"]["widened_lower_ratio"],
+                        decision["intervals"]["SH/I:E"]["lower_ratio"])
+        for row in rows:
+            row["metrics"]["drift_ratio"] = .04
+        decision = analyze.decision_table(rows, self.config)
+        self.assertEqual(decision["verdicts"]["SH/I:E"], "INCONCLUSIVE-by-attribution")
+        self.assertEqual(decision["verdicts"]["SH/I:R"], "EQUIVALENT")
 
     def test_interruption_and_same_order_retry(self):
         self.assertTrue(runner.interrupted({"hid_idle_seconds": 599, "display_state": "on"}, "U", 600, "on"))
         self.assertTrue(runner.interrupted({"hid_idle_seconds": 700, "display_state": "asleep"}, "U", 600, "on"))
         self.assertFalse(runner.interrupted({"hid_idle_seconds": 700, "display_state": "unknown"}, "U", 600, "on"))
         block = common.blocks(self.config, "U1")[2]
-        retry = runner.retry_block(block, 1)
-        self.assertEqual(retry["arms"], block["arms"])
-        self.assertEqual(retry["attempt"], 2)
-        self.assertEqual(cell.census_sample(FakeWorkload(), "U", "on", 600)["interrupted"], False)
+        self.assertEqual(runner.retry_block(block, 1)["arms"], block["arms"])
+        self.assertFalse(cell.census_sample(SimpleNamespace(command=lambda argv: {"stdout":""}, idle=lambda:700,
+                                                         display=lambda:"on"), "U", "on", 600)["interrupted"])
 
-    def test_runner_replays_whole_interrupted_block(self):
+    def test_runner_replays_invalid_bundle_block_in_same_order(self):
+        config = copy.deepcopy(self.config)
         class FakeRunner:
             def __init__(self):
                 self.started = []
-                self.first = True
+            def write_cell(self, script):
+                parts = shlex.split(script)
+                directory = Path(parts[parts.index("--out") + 1])
+                self.started.append(directory.name)
+                block, slot, arm, attempt = directory.name.split(".")
+                fixture = "failed_status" if directory.name == "stage0-01.1.I.a1" else "bench_smoke"
+                runs = []
+                for number in (1, 2):
+                    bundle = make_bundle(directory, f"bundle-{number}", fixture)
+                    runs.append({"bundle": str(bundle), "child": {"pid": 800 + number}})
+                (directory / "cell.json").write_text(json.dumps({
+                    "stage": "stage0", "state": "A", "context": arm, "cell_id": int(slot),
+                    "pid": 500, "runs": runs, "flags": [], "interrupted": False}))
+                (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": False}))
             def run(self, argv):
                 if argv[1] == "bootstrap":
                     script = plistlib.loads(Path(argv[-1]).read_bytes())["ProgramArguments"][2]
                     self.write_cell(script)
-                code = 1 if argv[1] in ("print", "-f") else 0
-                return SimpleNamespace(returncode=code, stdout="", stderr="")
-            def write_cell(self, script):
-                parts = shlex.split(script)
-                directory = Path(parts[parts.index("--out")+1])
-                self.started.append(directory.name)
-                interrupted = self.first
-                self.first = False
-                (directory / "cell.json").write_text(json.dumps({"interrupted": interrupted}))
-                (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": interrupted}))
+                return SimpleNamespace(returncode=1 if argv[1] in ("print", "-f") else 0,
+                                       stdout="", stderr="")
             def spawn_shell(self, argv, directory):
-                self.write_cell(argv[5])
-                return object()
+                self.write_cell(argv[5]); return object()
             def stop_shell(self, process): pass
             def now(self): return 0.
             def sleep(self, seconds): pass
             def display(self): return "on"
             def idle(self): return 700.
-        fake = FakeRunner()
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp)
-            actions = runner.plan(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python")
-            runner.execute(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python",
+            actions = runner.plan(out, common.DEFAULT_CONFIG, config, "stage0", "/python")
+            fake = FakeRunner()
+            runner.execute(out, common.DEFAULT_CONFIG, config, "stage0", "/python",
                            backend=fake, existing_actions=actions)
-            self.assertEqual(len(fake.started), 7)  # first failed cell plus all six cells replayed
-            self.assertTrue((out / "stage0-01.1.I.a1" / "discarded.json").exists())
+            self.assertEqual(len(fake.started), 7)
+            discarded = json.loads((out / "stage0-01.1.I.a1" / "discarded.json").read_text())
+            self.assertEqual(discarded["reason"], "bundle_invalid")
             self.assertTrue((out / "stage0-01.1.I.a2" / "done.json").exists())
             self.assertTrue((out / "stage0-01.2.SH.a2" / "done.json").exists())
+
+    def test_three_distinct_invalid_cells_stop_stage(self):
+        class FakeRunner:
+            def write_cell(self, script):
+                parts = shlex.split(script)
+                directory = Path(parts[parts.index("--out") + 1])
+                block, slot, arm, attempt = directory.name.split(".")
+                (directory / "cell.json").write_text(json.dumps({
+                    "stage": "stage0", "state": "A", "context": arm, "cell_id": int(slot),
+                    "pid": 500, "runs": [{"bundle": str(directory / f"r{n}")} for n in (1, 2)],
+                    "interrupted": False}))
+                (directory / "done.json").write_text(json.dumps({"ok": True, "interrupted": False}))
+            def run(self, argv):
+                if argv[1] == "bootstrap":
+                    self.write_cell(plistlib.loads(Path(argv[-1]).read_bytes())["ProgramArguments"][2])
+                return SimpleNamespace(returncode=1 if argv[1] in ("print", "-f") else 0, stdout="", stderr="")
+            def spawn_shell(self, argv, directory): self.write_cell(argv[5]); return object()
+            def stop_shell(self, process): pass
+            def now(self): return 0.
+            def sleep(self, seconds): pass
+            def display(self): return "on"
+            def idle(self): return 700.
+        def evidence(bundle, reference):
+            name = bundle.parent.name
+            invalid = ".SH.a1" in name
+            return {"valid": not invalid, "output_hash": "same"}
+        with tempfile.TemporaryDirectory() as temp, patch.object(runner, "bundle_evidence", side_effect=evidence):
+            out = Path(temp)
+            actions = runner.plan(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python")
+            with self.assertRaisesRegex(RuntimeError, "3 invalid cells in SH"):
+                runner.execute(out, common.DEFAULT_CONFIG, self.config, "stage0", "/python",
+                               backend=FakeRunner(), existing_actions=actions)
 
     def test_u2_rejects_non_u1_or_incomplete_summary(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -171,96 +283,52 @@ class OSCTXTests(unittest.TestCase):
         def record(t, cpu):
             return {"wall_ns": int(t*1e9), "ps": {"pid": 999,
                     "stdout": f"PID PPID TIME COMM\n42 1 00:{cpu:05.2f} daemon\n43 1 00:{cpu:05.2f} allowed\n"}}
-        records = [record(1000., 0.), record(1005., .3)]
-        flags = analyze.census_cpu_flags(records, {("lm", 1): (1000., 1005.)}, workload_pid=1,
+        flags = analyze.census_cpu_flags([record(1000., 0.), record(1005., .3)],
+                                         {("run", 1): (1000., 1005.)}, workload_pid=500,
                                          sampler_pid=2, allow_pids=[43])
         self.assertEqual([x["pid"] for x in flags], [42])
         self.assertAlmostEqual(flags[0]["core_fraction"], .06)
 
-    def test_token_and_hash_integrity_and_fake_cell(self):
-        good = {"output_tokens": 256, "token_ids": list(range(256)), "finish_reason": "length"}
-        self.assertEqual(cell.token_flags(good), [])
-        self.assertEqual(cell.token_flags({**good, "output_tokens": 255}), ["token_count_mismatch"])
-        self.assertIn("early_finish", cell.token_flags({**good, "finish_reason": "stop"}))
-        self.assertNotEqual(cell.output_hash(good["token_ids"]), cell.output_hash(list(reversed(good["token_ids"]))))
-        config = copy.deepcopy(self.config)
-        config["segments"].update({"guard_seconds": 0, "idle_seconds": 0, "cpu_seconds": 0})
-        fake = FakeWorkload()
-        with tempfile.TemporaryDirectory() as temp:
-            out = Path(temp)
-            cell.run(out, config, "A", "I", 1, stage="stage0", backend=fake, no_powermetrics=True)
-            saved = json.loads((out / "cell.json").read_text())
-            self.assertEqual(fake.calls, 4)
-            self.assertEqual(len(saved["repeats"]["lm"]), 3)
-            self.assertEqual(len([b for b in saved["boundaries"] if b["edge"] == "first_token"]), 4)
-            self.assertEqual(saved["model_sha256"], "a"*64)
-            self.assertTrue(json.loads((out / "done.json").read_text())["ok"])
-
-    def test_two_integral_and_boundary_flags_on_plist(self):
-        epoch = 1000.
-        def make_raw(bad_counter=False):
-            return b"\0".join(plistlib.dumps({"timestamp": datetime.fromtimestamp(epoch+i*.1, tz=timezone.utc),
-                      "elapsed_ns": 100_000_000, "processor": {
-                          "cpu_power": 12000 if 5 <= i <= 9 else 6000,
-                          "gpu_power": 6000 if 5 <= i <= 9 else 3000,
-                          "ane_power": 2000 if 5 <= i <= 9 else 1000,
-                          "cpu_energy": (1400 if bad_counter else 1200) if 5 <= i <= 9 else 600,
-                          "gpu_energy": 600 if 5 <= i <= 9 else 300,
-                          "ane_energy": 200 if 5 <= i <= 9 else 100}})
-                          for i in range(12)) + b"\0"
-        raw = make_raw()
-        bounds = [{"name": name, "repeat": repeat, "edge": edge, "wall_ns": int(t*1e9)}
-                  for name, repeat, start, end in (("idle", 1, 1000.05, 1000.35), ("lm", 1, 1000.45, 1000.85))
-                  for edge, t in (("start", start), ("end", end))]
-        trace = analyze.reduce_trace(raw, bounds, epoch)
-        self.assertGreater(trace["lm.1"]["energy_j"], 7.)
-        self.assertAlmostEqual(trace["lm.1"]["energy_j"], trace["lm.1"]["counter_energy_j"], places=5)
-        self.assertGreater(trace["lm.1"]["boundary_uncertainty_j"], 0.)
-        repeats = [{"repeat": 1, "output_tokens": 256, "output_hash": "h", "generation_tps": 50., "prompt_tps": 100., "flags": []}]
-        values, flags = analyze.request_metrics(trace, repeats, self.config)
-        self.assertGreater(values[0]["net_j"], 0.)
-        self.assertIn("boundary_uncertainty:lm.1", flags)
-        broken = analyze.reduce_trace(make_raw(bad_counter=True), bounds, epoch)
-        self.assertGreater(broken["lm.1"]["integral_disagreement_j"], .1)
-        _, flags = analyze.request_metrics(broken, repeats, self.config)
-        self.assertIn("two_integral_disagreement:lm.1", flags)
-
-    def test_analyzer_end_to_end_fake_backend(self):
+    def test_bundle_validity_and_edge_from_real_shape(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            data = {}
+            good = make_bundle(root, "good")
+            record = analyze.bundle_evidence(good)
+            self.assertTrue(record["valid"], record["issues"])
+            self.assertAlmostEqual(record["metrics"]["E"], .405500367643082)
+            self.assertGreater(record["metrics"]["edge_bound_j"], 0.)
+            self.assertGreater(record["metrics"]["drift_ratio"], .03)
+            failed = make_bundle(root, "failed", "failed_status")
+            self.assertIn("status", analyze.bundle_evidence(failed)["issues"])
+            precheck = make_bundle(root, "precheck", "failed_precheck")
+            self.assertTrue(any(x.startswith("precheck:") for x in analyze.bundle_evidence(precheck)["issues"]))
+            mismatch = analyze.bundle_evidence(good, "token_ids:bad")
+            self.assertIn("output_hash_mismatch", mismatch["issues"])
+            short = good / "outputs" / "tokens.jsonl"
+            short.write_text("".join(short.read_text().splitlines(keepends=True)[:511]))
+            self.assertIn("output_tokens", analyze.bundle_evidence(good)["issues"])
+
+    def test_analyzer_synthetic_bundle_cells_and_verdict_gates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
             for block in common.blocks(self.config, "U1"):
                 if block["discard"] or block["arms"] == ["B"]: continue
                 for arm in block["arms"]:
-                    directory = root / f"{block['id']}.{arm}"
-                    directory.mkdir()
-                    (directory / "cell.json").write_text("{}")
-                    value = 1.04 if arm == "D" else 1.
-                    data[str(directory)] = {"stage": "U1", "state": "U", "context": arm,
-                        "block": block["id"], "dir": str(directory),
-                        "metrics": {"E": value, "R": 50.*value},
-                        "requests": [{"output_hash": "same"}], "flags": []}
-            extra = root / "U1-B-extra.B"
-            extra.mkdir()
-            (extra / "cell.json").write_text("{}")
-            data[str(extra)] = {"stage": "U1", "state": "U", "context": "B", "block": "U1-B-extra",
-                                "dir": str(extra), "metrics": {"E": 1., "R": 50.},
-                                "requests": [{"output_hash": "different"}], "flags": []}
-            report = analyze.analyze_directory(root, self.config, analyzer_backend=lambda path, config: data[str(path)])
+                    value = .42 if arm == "D" else .4
+                    make_cell(root, self.config, "U1", block["id"], arm, [value])
+            invalid = make_cell(root, self.config, "U1", "U1-B-extra", "B", [.4], fixture="failed_status")
+            report = analyze.analyze_directory(root, self.config)
             self.assertEqual(len(report["cells"]), 19)
             self.assertEqual(report["verdicts"]["D/I:E"], "DIFFERENT")
             self.assertEqual(report["verdicts"]["SH/I:R"], "EQUIVALENT")
-            self.assertTrue(any("output_hash_mismatch" in r["flags"] for r in report["cells"]))
-            self.assertIsNone(next(r for r in report["cells"] if r["context"] == "B")["metrics"]["E"])
+            self.assertEqual(report["invalid_cell_counts"]["B"], 1)
+            self.assertIn("bundle_invalid", next(r for r in report["cells"] if r["dir"] == str(invalid))["flags"])
+            interval = report["intervals"]["D/I:E"]
+            self.assertGreater(interval["widened_upper_ratio"] - interval["widened_lower_ratio"], 0)
             self.assertIn("Absolute J/token", (root / "summary.md").read_text())
-            u2 = []
-            for block in common.blocks(self.config, "U2"):
-                for arm in block["arms"]:
-                    value = 1.04 if arm == "D" else 1.
-                    u2.append({"stage": "U2", "context": arm, "block": block["id"],
-                               "metrics": {"E": value, "R": 50.*value}})
-            combined = analyze.decision_table(report["cells"] + u2, self.config)
-            self.assertEqual(combined["intervals"]["D/I:E"]["n"], 12)
+            make_cell(root, self.config, "U1", "U1-B-other", "B", [.4], token_offset=1)
+            rerun = analyze.analyze_directory(root, self.config)
+            self.assertIn("output_hash_mismatch", next(r for r in rerun["cells"] if "other" in r["block"])["flags"])
 
 
 if __name__ == "__main__":

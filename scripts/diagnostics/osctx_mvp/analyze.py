@@ -1,7 +1,9 @@
-"""OSCTX reduction through production clock anchoring and interval integration."""
+"""Analyze production JouleWise bundles by launch context."""
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 from collections import defaultdict
 import json
 import math
@@ -18,152 +20,95 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
-from joulewise.adapters.powermetrics import (  # noqa: E402
-    anchor_records_from_powermetrics, decode_rich_telemetry,
-    parse_powermetrics_records, samples_from_raw_powermetrics,
-)
-from joulewise.bundle_read import TracePoint  # noqa: E402
-from joulewise.clock import ClockStamp  # noqa: E402
-from joulewise.reduce import _integrate  # noqa: E402
-from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD, resolve_clock_evidence_deriver  # noqa: E402
 
 LOWER, UPPER = math.log(.97), math.log(1.03)
 CONFIDENCE = .99375
 
 
-def percentile(values, fraction):
-    if not values:
-        return None
-    ordered = sorted(values)
-    return ordered[max(0, math.ceil(fraction * len(ordered)) - 1)]
+DECLARED_REASONS = {"environment_admission_failed", "environment_admission_missing", "instrument_calibration_missing"}
 
 
-def windows(boundaries):
-    grouped = defaultdict(dict)
-    for item in boundaries:
-        if item["edge"] in ("start", "end"):
-            grouped[item["name"], item["repeat"]][item["edge"]] = item["wall_ns"] / 1e9
-    result = {}
-    for key, edges in grouped.items():
-        if set(edges) != {"start", "end"} or edges["end"] <= edges["start"]:
-            raise ValueError(f"invalid boundary pair: {key}")
-        result[key] = edges["start"], edges["end"]
+def bundle_hash(bundle: Path) -> tuple[str | None, int | None]:
+    tokens = bundle / "outputs" / "tokens.jsonl"
+    if tokens.exists():
+        ids = [json.loads(line)["token_id"] for line in tokens.read_text().splitlines() if line.strip()]
+        return "token_ids:" + hashlib.sha256(json.dumps(ids, separators=(",", ":")).encode()).hexdigest(), len(ids)
+    response = bundle / "outputs" / "response.txt"
+    if response.exists():
+        return "text:" + hashlib.sha256(response.read_bytes()).hexdigest(), None
+    return None, None
+
+
+def edge_bound(bundle: Path, idle_w: float) -> float:
+    events = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
+    def marker(kind):
+        found = [x["timestamp_s"] for x in events if x.get("event_type") == kind and x.get("phase") == "measured_run"]
+        if len(found) != 1:
+            raise ValueError(f"missing or duplicate {kind} marker")
+        return found[0]
+    boundaries = marker("sampling_started"), marker("sampling_stopped")
+    with (bundle / "power_trace.csv").open(newline="") as stream:
+        samples = list(csv.DictReader(stream))
+    intervals = {}
+    for row in samples:
+        key = (float(row["interval_start_s"]), float(row["interval_end_s"]))
+        intervals[key] = intervals.get(key, 0.) + float(row["power_w"])
+    result = 0.
+    for boundary in boundaries:
+        crossing = [(key, power) for key, power in intervals.items() if key[0] <= boundary <= key[1]]
+        if not crossing:
+            raise ValueError("power trace does not bracket request edge")
+        (left, right), power = min(crossing, key=lambda item: item[0][1] - item[0][0])
+        result += .25 * abs(power - idle_w) * (right - left)
+    if not math.isfinite(result):
+        raise ValueError("nonfinite edge bound")
     return result
 
 
-def cadence(records, start, end):
-    gaps = [r.elapsed_ns / 1e6 for r in records[1:] if start <= r.timestamp_s <= end]
-    return {"n": len(gaps), "median_ms": statistics.median(gaps) if gaps else None,
-            "p95_ms": percentile(gaps, .95)}
-
-
-def cluster_metrics(rich, start, end):
-    totals = defaultdict(lambda: {"active": 0., "duration": 0., "freq_active": 0., "freq_weight": 0.})
-    for record in rich:
-        right = record["timestamp_s"]
-        left = right - record["elapsed_ns"] / 1e9
-        overlap = max(0., min(end, right) - max(start, left))
-        if not overlap:
-            continue
-        for cluster in record["clusters"]:
-            name = cluster.get("name") or ""
-            kind = "E" if name.startswith("E") else "P" if name.startswith("P") else None
-            if kind is None:
-                continue
-            cpus = cluster.get("cpus") or []
-            active = [max(0., 1. - float(cpu["idle_ratio"]) - float(cpu.get("down_ratio") or 0))
-                      for cpu in cpus if cpu.get("idle_ratio") is not None]
-            if not active:
-                continue
-            mean = statistics.mean(active)
-            totals[kind]["active"] += mean * overlap * len(active)
-            totals[kind]["duration"] += overlap * len(active)
-            freq = cluster.get("freq_hz")
-            if isinstance(freq, (int, float)) and freq > 0:
-                totals[kind]["freq_active"] += freq * mean * overlap * len(active)
-                totals[kind]["freq_weight"] += mean * overlap * len(active)
-    return {kind: {"active_residency": val["active"] / val["duration"] if val["duration"] else None,
-                   "active_frequency_hz": val["freq_active"] / val["freq_weight"] if val["freq_weight"] else None}
-            for kind, val in totals.items()}
-
-
-def interval_checks(records, start, end):
-    counter, boundary = 0., 0.
-    for record in records:
-        right = record.timestamp_s
-        left = right - record.elapsed_ns / 1e9
-        duration = right - left
-        if duration <= 0:
-            continue
-        overlap = max(0., min(end, right) - max(start, left))
-        if overlap:
-            counter += sum(record.rail_energy_mj.values()) / 1000 * overlap / duration
-        if left < start < right:
-            boundary += record.combined_power_w * (start - left)
-        if left < end < right:
-            boundary += record.combined_power_w * (right - end)
-    return counter, boundary
-
-
-def reduce_trace(raw: bytes, boundary_records: list[dict], endpoint: float) -> dict:
-    records = parse_powermetrics_records(raw, first_record_endpoint_s=endpoint)
-    samples = samples_from_raw_powermetrics(raw, first_record_endpoint_s=endpoint)
-    rich = decode_rich_telemetry(raw, first_record_endpoint_s=endpoint)
-    curves = defaultdict(list)
-    for sample in samples:
-        curves[sample.rail].append(TracePoint(sample.timestamp_s, sample.power_w,
-                                             sample.interval_start_s, sample.interval_end_s))
-    result = {}
-    for (name, repeat), (start, end) in windows(boundary_records).items():
-        rails = {rail: _integrate(curve, start, end) for rail, curve in curves.items()}
-        gross = math.fsum(rails.values())
-        counter, boundary = interval_checks(records, start, end)
-        result[f"{name}.{repeat}"] = {"duration_s": end - start, "energy_j": gross,
-                                       "rail_energy_j": rails, "counter_energy_j": counter,
-                                       "integral_disagreement_j": abs(gross-counter),
-                                       "boundary_uncertainty_j": boundary,
-                                       "cadence": cadence(records, start, end),
-                                       "thermal_pressure": [r.thermal_pressure for r in records
-                                                            if start <= r.timestamp_s <= end],
-                                       "clusters": cluster_metrics(rich, start, end)}
-    return result
-
-
-def derive_endpoint(raw, cell):
-    stamps = {key: ClockStamp(**value) for key, value in cell["clock_stamps"].items()}
-    native = parse_powermetrics_records(raw)
-    evidence, endpoint = resolve_clock_evidence_deriver(ACTIVE_CAPTURE_ANCHOR_METHOD)(
-        stamps=stamps, records=anchor_records_from_powermetrics(native))
-    if endpoint is None:
-        raise ValueError(f"production clock anchor unresolved: {evidence['clock_anchor']}")
-    return endpoint, evidence
-
-
-def request_metrics(segments, repeats, config):
-    idle = segments["idle.1"]
-    idle_w = idle["energy_j"] / idle["duration_s"]
-    values, flags = [], []
-    for repeat in repeats:
-        number = repeat["repeat"]
-        segment = segments[f"lm.{number}"]
-        gross = segment["energy_j"]
-        net = gross - idle_w * segment["duration_s"]
-        item = {"repeat": number, "gross_j": gross, "net_j": net,
-                "j_per_token": net / repeat["output_tokens"] if net > 0 and repeat["output_tokens"] else None,
-                "generation_tps": repeat["generation_tps"], "prompt_tps": repeat["prompt_tps"],
-                "output_hash": repeat["output_hash"], "output_tokens": repeat["output_tokens"],
-                "boundary_uncertainty_j": segment["boundary_uncertainty_j"],
-                "integral_disagreement_j": segment["integral_disagreement_j"]}
-        if net <= 0:
-            flags.append(f"nonpositive_net_energy:lm.{number}")
-        if segment["boundary_uncertainty_j"] > config["thresholds"]["boundary_fraction"] * net:
-            flags.append(f"boundary_uncertainty:lm.{number}")
-        if segment["integral_disagreement_j"] > config["thresholds"]["integral_j"]:
-            flags.append(f"two_integral_disagreement:lm.{number}")
-        if repeat["output_tokens"] != config["segments"]["lm_tokens"] or repeat.get("flags"):
-            flags.append(f"token_integrity:lm.{number}")
-        values.append(item)
-    return values, flags
+def bundle_evidence(bundle: Path, reference_hash: str | None = None) -> dict:
+    summary = json.loads((bundle / "summary_metrics.json").read_text())
+    precheck = summary.get("window_evidence_precheck", {}).get("idle_subtracted_request") or {}
+    reasons = set(precheck.get("reasons", []))
+    output_hash, count = bundle_hash(bundle)
+    if count is None:
+        observed = json.loads((bundle / "metadata.json").read_text()).get("workload_observed", {}) if (bundle / "metadata.json").exists() else {}
+        count = observed.get("output_token_count")
+    issues = []
+    if summary.get("status") != "succeeded": issues.append("status")
+    anchor = precheck.get("clock_anchor_bound_s")
+    if not isinstance(anchor, (int, float)) or not math.isfinite(anchor) or anchor > .05 or anchor < 0:
+        issues.append("clock_anchor")
+    if not precheck: issues.append("precheck_missing")
+    if reasons - DECLARED_REASONS: issues.append("precheck:" + ",".join(sorted(reasons - DECLARED_REASONS)))
+    if precheck.get("eligible") is False and not reasons:
+        issues.append("precheck_unexplained")
+    if count != 512: issues.append("output_tokens")
+    if output_hash is None: issues.append("output_hash_missing")
+    if reference_hash is not None and output_hash != reference_hash: issues.append("output_hash_mismatch")
+    idle = summary.get("idle_baseline") or {}
+    bound_terms = summary.get("energy_bound_terms_j") or {}
+    net = summary.get("idle_subtracted_energy_j")
+    drift = bound_terms.get("E_drift_bound_j")
+    ratio = drift / net if all(isinstance(x, (int, float)) and math.isfinite(x) for x in (drift, net)) and net > 0 else None
+    diagnostic_issues = []
+    if ratio is None: diagnostic_issues.append("drift_ratio_missing")
+    anchor_j = bound_terms.get("E_clock_anchor_shift_bound_j")
+    if not isinstance(anchor_j, (int, float)) or not math.isfinite(anchor_j): diagnostic_issues.append("anchor_energy_bound_missing")
+    try:
+        edge_j = edge_bound(bundle, idle["power_w_mean"])
+    except (KeyError, OSError, ValueError, TypeError):
+        edge_j = None
+        diagnostic_issues.append("edge_bound_missing")
+    return {"bundle": str(bundle), "status": summary.get("status"), "precheck": precheck,
+            "metrics": {"E": summary.get("energy_output_token_j"), "R": summary.get("inter_token_throughput_tokens_s"),
+                        "gross_energy_j": summary.get("gross_energy_j"), "idle_power_w_mean": idle.get("power_w_mean"),
+                        "idle_power_w_stddev": idle.get("power_w_stddev"),
+                        "median_sample_interval_s": (summary.get("idle_mean_uncertainty") or {}).get("median_sample_interval_s"),
+                        "energy_bound_terms_j": bound_terms, "net_j": net, "drift_ratio": ratio,
+                        "edge_bound_j": edge_j, "edge_bound_j_per_token": edge_j / 512 if edge_j is not None else None,
+                        "attribution_bound_j": (anchor_j + drift + edge_j) if all(isinstance(x, (int, float)) for x in (anchor_j, drift, edge_j)) else None},
+            "output_hash": output_hash, "output_tokens": count, "issues": issues,
+            "diagnostic_issues": diagnostic_issues, "valid": not issues}
 
 
 def parse_cpu_time(value):
@@ -199,8 +144,16 @@ def census_cpu_flags(records, windows_by_key, *, workload_pid, sampler_pid, allo
         for key, (start, end) in windows_by_key.items():
             if min(end, right_t) <= max(start, left_t):
                 continue
+            owned = set(allow_pids) | {workload_pid, sampler_pid, census_pid}
+            changed = True
+            while changed:
+                changed = False
+                for pid, info in right.items():
+                    if info["ppid"] in owned and pid not in owned:
+                        owned.add(pid)
+                        changed = True
             for pid in left.keys() & right.keys():
-                if pid in set(allow_pids) | {workload_pid, sampler_pid, census_pid}:
+                if pid in owned:
                     continue
                 delta_cpu = right[pid]["cpu_s"] - left[pid]["cpu_s"]
                 if delta_cpu / delta_t >= fraction:
@@ -209,45 +162,71 @@ def census_cpu_flags(records, windows_by_key, *, workload_pid, sampler_pid, allo
     return flags
 
 
-def analyze_cell(directory: Path, config: dict) -> dict:
+def analyze_cell(directory: Path, config: dict, reference_hash: str | None = None) -> dict:
     cell = json.loads((directory / "cell.json").read_text())
     done = json.loads((directory / "done.json").read_text())
-    if not done["ok"] or done.get("interrupted") or cell.get("interrupted"):
-        raise ValueError("cell failed or interrupted")
-    raw = (directory / "powermetrics.plist").read_bytes()
-    endpoint, evidence = derive_endpoint(raw, cell)
-    segments = reduce_trace(raw, cell["boundaries"], endpoint)
-    requests, flags = request_metrics(segments, cell["repeats"]["lm"], config)
-    flags += [f"two_integral_disagreement:{key}" for key, segment in segments.items()
-              if segment["integral_disagreement_j"] > config["thresholds"]["integral_j"]]
-    flags += cell.get("flags", [])
+    runs = [bundle_evidence(Path(item["bundle"]), reference_hash) for item in cell["runs"]]
+    if len(runs) != config["runs_per_cell"][cell["stage"]]:
+        raise ValueError("wrong number of production bundles")
+    flags = list(cell.get("flags", []))
+    if not done.get("ok") or done.get("interrupted") or cell.get("interrupted"):
+        flags.append("interrupted")
+    if any(not run["valid"] for run in runs):
+        flags.append("bundle_invalid")
+    hashes = {run["output_hash"] for run in runs}
+    if len(hashes) > 1:
+        flags.extend(("output_hash_mismatch", "bundle_invalid"))
     census_path = directory / "census.jsonl"
     census = [json.loads(line) for line in census_path.read_text().splitlines()] if census_path.exists() else []
-    cpu_flags = census_cpu_flags(census, windows(cell["boundaries"]),
-                                 workload_pid=cell["pid"], sampler_pid=cell.get("powermetrics_pid"),
-                                 allow_pids=cell.get("allow_pids", []),
-                                 fraction=config["thresholds"]["census_core_fraction"])
-    flags += [f"census_cpu:{item['segment']}:{item['pid']}" for item in cpu_flags]
-    if any(r.get("interrupted") for r in census):
+    if any(record.get("interrupted") for record in census):
         flags.append("interrupted")
-    valid_e = all(x["j_per_token"] is not None for x in requests)
-    valid_tokens = not any(flag.startswith("token_integrity") or flag in ("token_count_mismatch", "early_finish")
-                           for flag in flags)
-    metrics = {"E": statistics.median(x["j_per_token"] for x in requests) if valid_e else None,
-               "R": statistics.median(x["generation_tps"] for x in requests) if valid_tokens else None,
-               "gross_j": statistics.median(x["gross_j"] for x in requests),
-               "cpu_seconds": statistics.median(x["seconds"] for x in cell["repeats"]["cpu"]),
-               "lm_cadence_median_ms": statistics.median(v["cadence"]["median_ms"] for k, v in segments.items()
-                                                       if k.startswith("lm.") and v["cadence"]["median_ms"] is not None)}
-    if not valid_tokens:
-        metrics["E"] = None
+    windows_by_key = {}
+    for number, run in enumerate(runs, 1):
+        try:
+            events = [json.loads(line) for line in (Path(run["bundle"]) / "events.jsonl").read_text().splitlines()]
+        except (OSError, ValueError):
+            events = []
+        starts = [x["timestamp_s"] for x in events if x.get("event_type") == "sampling_started" and x.get("phase") == "measured_run"]
+        ends = [x["timestamp_s"] for x in events if x.get("event_type") == "sampling_stopped" and x.get("phase") == "measured_run"]
+        if len(starts) == len(ends) == 1:
+            windows_by_key[("run", number)] = (starts[0], ends[0])
+        else:
+            flags.append(f"census_window_missing:r{number}")
+    child_pids = [item["child"]["pid"] for item in cell["runs"] if item.get("child", {}).get("pid")]
+    cpu_flags = census_cpu_flags(census, windows_by_key, workload_pid=cell["pid"], sampler_pid=None,
+                                 allow_pids=cell.get("allow_pids", []) + child_pids,
+                                 fraction=config["thresholds"]["census_core_fraction"])
+    if cpu_flags: flags.append("census_cpu")
+    valid = not any(flag in ("interrupted", "bundle_invalid", "output_hash_mismatch") for flag in flags)
+    def mean_metric(key):
+        values = [run["metrics"].get(key) for run in runs]
+        return statistics.mean(values) if valid and all(isinstance(x, (int, float)) and math.isfinite(x) for x in values) else None
+    term_keys = set().union(*(run["metrics"]["energy_bound_terms_j"] for run in runs))
+    energy_bound_terms = {}
+    for key in term_keys:
+        values = [run["metrics"]["energy_bound_terms_j"].get(key) for run in runs]
+        energy_bound_terms[key] = (statistics.mean(values) if valid and
+                                   all(isinstance(x, (int, float)) and math.isfinite(x) for x in values) else None)
+    metrics = {"E": mean_metric("E"), "R": mean_metric("R"), "gross_energy_j": mean_metric("gross_energy_j"),
+               "idle_power_w_mean": mean_metric("idle_power_w_mean"),
+               "idle_power_w_stddev": mean_metric("idle_power_w_stddev"),
+               "median_sample_interval_s": mean_metric("median_sample_interval_s"),
+               "net_j": mean_metric("net_j"), "edge_bound_j_per_token": mean_metric("edge_bound_j_per_token"),
+               "attribution_bound_j": mean_metric("attribution_bound_j"),
+               "energy_bound_terms_j": energy_bound_terms,
+               "drift_ratio": None,
+               "max_run_drift_ratio": max((run["metrics"]["drift_ratio"] for run in runs if run["metrics"]["drift_ratio"] is not None), default=None),
+               "cpu_seconds": statistics.mean(x["seconds"] for x in cell.get("cpu", [])) if cell.get("cpu") else None}
+    if metrics["net_j"] and energy_bound_terms.get("E_drift_bound_j") is not None:
+        metrics["drift_ratio"] = energy_bound_terms["E_drift_bound_j"] / metrics["net_j"]
     block_name = directory.name.split(".")[0]
-    phase = int(re.search(r"S-p(\d)-", block_name).group(1)) if re.search(r"S-p(\d)-", block_name) else None
+    match = re.search(r"S-p(\d)-", block_name)
     return {"stage": cell["stage"], "state": cell["state"], "context": cell["context"],
-            "block": block_name, "phase": phase,
-            "pid": cell["pid"], "dir": str(directory), "metrics": metrics,
-            "requests": requests, "segments": segments, "clock_anchor": evidence["clock_anchor"],
-            "flags": sorted(set(flags)), "census_cpu_flags": cpu_flags, "allow_pids": cell.get("allow_pids", [])}
+            "block": block_name, "phase": int(match.group(1)) if match else None,
+            "pid": cell["pid"], "cell_id": cell["cell_id"], "dir": str(directory), "metrics": metrics, "runs": runs,
+            "requests": [{"output_hash": run["output_hash"]} for run in runs],
+            "flags": sorted(set(flags)), "census_cpu_flags": cpu_flags,
+            "allow_pids": cell.get("allow_pids", [])}
 
 
 # Regularized incomplete beta and Student-t CDF; no optional statistics package.
@@ -351,7 +330,8 @@ def decision_table(rows, config):
             for endpoint in ("E", "R"):
                 key = f"{comparison}:{endpoint}"
                 logs, absolute, flagged = paired_rows(eligible, comparison, endpoint)
-                interval = paired_interval(logs) if len(logs) in (6, 12) else None
+                expected_pairs = config["sizes"]["u_blocks"] * (2 if u2 else 1)
+                interval = paired_interval(logs) if len(logs) == expected_pairs else None
                 if interval and endpoint == "E":
                     interval["absolute_j_per_token"] = statistics.mean(absolute)
                     # Paired absolute interval is descriptive and retains the same confidence rule.
@@ -364,7 +344,51 @@ def decision_table(rows, config):
                            student_t_ppf(.8, len(logs)-1)) * interval["sd_log"] / math.sqrt(len(logs))
                     interval["approx_80pct_mde_ratio"] = math.exp(UPPER + mde)
                 intervals[key] = interval
-                verdicts[key] = verdict(interval)
+                result = verdict(interval)
+                if interval:
+                    arm_a, arm_b = comparison.split("/")
+                    groups = defaultdict(dict)
+                    for row in eligible:
+                        groups[row["block"]][row["context"]] = row
+                    pairs = [(arms[arm_a], arms[arm_b]) for arms in groups.values()
+                             if arm_a in arms and arm_b in arms and
+                             all(arms[arm]["metrics"].get(endpoint) is not None for arm in (arm_a, arm_b))]
+                    def log_bound(row):
+                        m = row["metrics"]
+                        bound, net = m.get("attribution_bound_j"), m.get("net_j")
+                        if (not isinstance(bound, (int, float)) or not isinstance(net, (int, float)) or
+                            not math.isfinite(bound) or not math.isfinite(net) or net <= bound):
+                            return float("inf")
+                        return -math.log1p(-bound/net)
+                    if endpoint == "E":
+                        widened_by = statistics.mean(log_bound(a) + log_bound(b) for a, b in pairs)
+                        if math.isfinite(widened_by):
+                            interval["widened_lower_log"] = interval["lower_log"] - widened_by
+                            interval["widened_upper_log"] = interval["upper_log"] + widened_by
+                            interval["widened_lower_ratio"] = math.exp(interval["widened_lower_log"])
+                            interval["widened_upper_ratio"] = math.exp(interval["widened_upper_log"])
+                        else:
+                            interval["widened_lower_log"] = interval["widened_upper_log"] = None
+                            interval["widened_lower_ratio"] = interval["widened_upper_ratio"] = None
+                            interval["widened_status"] = "unbounded"
+                        drift_ratios = [row["metrics"].get("drift_ratio") for pair in pairs for row in pair]
+                        interval["max_cell_drift_ratio"] = max(drift_ratios) if all(x is not None for x in drift_ratios) else None
+                        interval["mean_edge_bound_j_per_token_by_arm"] = {
+                            arm: statistics.mean(row["metrics"].get("edge_bound_j_per_token") or 0.
+                                                 for pair in pairs for row in pair if row["context"] == arm)
+                            for arm in (arm_a, arm_b)}
+                        if result == "EQUIVALENT" and (interval["max_cell_drift_ratio"] is None or
+                                                       interval["max_cell_drift_ratio"] > .03):
+                            result = "INCONCLUSIVE-by-attribution"
+                    if result == "DIFFERENT" and endpoint == "E" and comparison == "D/I":
+                        edges = interval["mean_edge_bound_j_per_token_by_arm"]
+                        if any(row["metrics"].get("edge_bound_j_per_token") is None for pair in pairs for row in pair):
+                            result = "INCONCLUSIVE"
+                            flags.append(f"edge_bound_missing:{key}")
+                        elif abs(interval["absolute_j_per_token"]) < abs(edges[arm_a] - edges[arm_b]):
+                            result = "INCONCLUSIVE"
+                            flags.append(f"edge_bound_downgrade:{key}")
+                verdicts[key] = result
                 flags += [f"invalid_log_block:{block}" for block in flagged]
     sandwich = {}
     s_rows = [r for r in rows if r["stage"] == "S"]
@@ -385,7 +409,8 @@ def decision_table(rows, config):
                  all(isinstance(x, (int, float)) and x > 0 for x in b_cpu+i_cpu) else None)
     if b_control is not None and b_control < config["thresholds"]["background_cpu_ratio"]:
         flags.append("background_control_investigate")
-    i_cadence = [r["metrics"].get("lm_cadence_median_ms") for r in eligible if r["context"] == "I"]
+    i_cadence = [1000 * r["metrics"].get("median_sample_interval_s") for r in eligible
+                 if r["context"] == "I" and r["metrics"].get("median_sample_interval_s") is not None]
     i_cadence = [x for x in i_cadence if isinstance(x, (int, float))]
     median_i_cadence = statistics.median(i_cadence) if i_cadence else None
     interpretation = {
@@ -394,7 +419,9 @@ def decision_table(rows, config):
             and median_i_cadence is not None and median_i_cadence <= config["thresholds"]["interactive_cadence_ms"],
         "interactive_cadence_median_ms": median_i_cadence,
     }
-    return {"stage": stage, "verdicts": verdicts, "intervals": intervals,
+    invalid_counts = {arm: sum("bundle_invalid" in row.get("flags", []) for row in rows if row.get("context") == arm)
+                      for arm in ("D", "I", "SH", "B")}
+    return {"stage": stage, "verdicts": verdicts, "intervals": intervals, "invalid_cell_counts": invalid_counts,
             "sandwich_intervals": sandwich, "background_cpu_ratio": b_control,
             "interpretation": interpretation, "flags": sorted(set(flags))}
 
@@ -415,10 +442,54 @@ def equivalence_power(sd, n, draws=20000, seed=20260924):
     return wins/draws
 
 
-def power_table(sd_e, sd_r):
-    return [{"endpoint": endpoint, "n": n, "sd_multiplier": multiplier, "sd_log": sd*multiplier,
-             "power": equivalence_power(sd*multiplier, n), "method": "20000-draw seeded Gaussian paired simulation"}
-            for endpoint, sd in (("E", sd_e), ("R", sd_r)) for n in (6, 12) for multiplier in (1., 1.5)]
+def power_table(sd_e, sd_r, n_values=(6, 12)):
+    if isinstance(sd_e, (int, float)):
+        estimates = {contrast: {"E": sd_e, "R": sd_r} for contrast in ("D/I", "SH/I")}
+    else:
+        estimates = sd_e
+    table = []
+    for contrast, endpoints in estimates.items():
+        for endpoint, sd in endpoints.items():
+            for n in n_values:
+                for multiplier in (1., 1.5, 2.):
+                    scaled = sd * multiplier
+                    power = equivalence_power(scaled, n)
+                    mde = math.exp(UPPER + (student_t_ppf((1+CONFIDENCE)/2, n-1) +
+                                            student_t_ppf(.8, n-1)) * scaled / math.sqrt(n))
+                    table.append({"contrast": contrast, "endpoint": endpoint, "n": n,
+                                  "sd_multiplier": multiplier, "sd_log": scaled,
+                                  "equivalence_power": power,
+                                  "equivalence_power_mc_se": math.sqrt(power*(1-power)/20000),
+                                  "approx_80pct_material_difference_mde_ratio": mde,
+                                  "method": "20000-draw seeded Gaussian paired simulation"})
+    return table
+
+
+def stage0_spread(rows):
+    rows = [r for r in rows if r["stage"] == "stage0" and all(r["metrics"].get(k) is not None for k in ("E", "R"))]
+    within, between, bootstrap = {}, {}, {}
+    for endpoint in ("E", "R"):
+        diffs = [math.log(r["runs"][0]["metrics"][endpoint] / r["runs"][1]["metrics"][endpoint])
+                 for r in rows if len(r.get("runs", [])) == 2]
+        within[endpoint] = math.sqrt(statistics.mean(d*d / 2 for d in diffs)) if diffs else None
+        logs = paired_rows(rows, "SH/I", endpoint)[0]
+        between[endpoint] = statistics.stdev(logs) if len(logs) >= 2 else None
+        if len(logs) >= 2:
+            rng = random.Random(f"20260924:{endpoint}")
+            draws = [statistics.stdev(rng.choices(logs, k=len(logs))) for _ in range(5000)]
+            draws.sort()
+            bootstrap[endpoint] = [draws[124], draws[4874]]
+        else:
+            bootstrap[endpoint] = None
+    return {"within_run_sd_log": within, "between_cell_paired_sd_log": between,
+            "paired_sd_bootstrap_95pct": bootstrap,
+            "paired_block_count": len(paired_rows(rows, "SH/I", "E")[0]),
+            "max_stage0_drift_ratio": max((r["metrics"].get("drift_ratio") or 0. for r in rows), default=None),
+            "max_stage0_attribution_bound_ratio": max((r["metrics"]["attribution_bound_j"] / r["metrics"]["net_j"]
+                                                        for r in rows if r["metrics"].get("attribution_bound_j") is not None
+                                                        and r["metrics"].get("net_j")), default=None),
+            "D/I_proxy": "SH/I stage0 spread; stage0 contains no D arm",
+            "stage0_context": "attended, agents active; drift may be an upper bound, spread is not presumed conservative"}
 
 
 def markdown(rows, decision, errors, discarded):
@@ -433,15 +504,44 @@ def markdown(rows, decision, errors, discarded):
             rate = f"{m['R']:.3f}" if m.get("R") is not None else "invalid"
             lines.append(f"| {row['block']} | {row['context']} | {energy} | {rate} | {', '.join(row['flags'])} |")
         lines.append("")
+        lines += ["| Block | Arm | Bundle status | Idle-request precheck reasons | Gross J | Idle W mean / SD | Idle cadence s | Energy bound terms J |",
+                  "|---|---|---|---|---:|---|---:|---|"]
+        for row in stage_rows:
+            m = row["metrics"]
+            statuses = ", ".join(str(run["status"]) for run in row.get("runs", []))
+            reasons = ", ".join(sorted({reason for run in row.get("runs", [])
+                                         for reason in run["precheck"].get("reasons", [])}))
+            terms = json.dumps(m.get("energy_bound_terms_j"), sort_keys=True)
+            lines.append(f"| {row['block']} | {row['context']} | {statuses} | {reasons} | "
+                         f"{m.get('gross_energy_j')} | {m.get('idle_power_w_mean')} / {m.get('idle_power_w_stddev')} | "
+                         f"{m.get('median_sample_interval_s')} | {terms} |")
+        lines.append("")
+        lines += ["| Arm | Invalid cells | Mean idle W | Mean edge J/token | Max drift ratio |",
+                  "|---|---:|---:|---:|---:|"]
+        for arm in sorted({r["context"] for r in stage_rows}):
+            arm_rows = [r for r in stage_rows if r["context"] == arm]
+            def aggregate(key):
+                values = [r["metrics"].get(key) for r in arm_rows]
+                values = [v for v in values if isinstance(v, (int, float))]
+                return statistics.mean(values) if values else None
+            ratios = [r["metrics"].get("drift_ratio") for r in arm_rows]
+            ratios = [v for v in ratios if isinstance(v, (int, float))]
+            lines.append(f"| {arm} | {sum('bundle_invalid' in r['flags'] for r in arm_rows)} | "
+                         f"{aggregate('idle_power_w_mean')} | {aggregate('edge_bound_j_per_token')} | "
+                         f"{max(ratios) if ratios else None} |")
+        lines.append("")
         if stage in ("U1", "U2"):
-            lines += ["| Contrast | Verdict | Ratio 99.375% interval | Absolute J/token contrast 99.375% interval | Approx. 80% MDE ratio |",
-                      "|---|---|---|---|---:|"]
+            lines += ["| Contrast | Verdict | Ratio 99.375% interval | Widened E interval | Absolute J/token contrast 99.375% interval | Approx. 80% MDE ratio |",
+                      "|---|---|---|---|---|---:|"]
             for key, interval in decision["intervals"].items():
                 if interval:
                     absolute = interval.get("absolute_interval_j_per_token", "")
-                    lines.append(f"| {key} | {decision['verdicts'][key]} | {interval['ratio']:.5f} [{interval['lower_ratio']:.5f}, {interval['upper_ratio']:.5f}] | {interval.get('absolute_j_per_token', '')} {absolute} | {interval['approx_80pct_mde_ratio']:.5f} |")
+                    widened = (f"[{interval['widened_lower_ratio']:.5f}, {interval['widened_upper_ratio']:.5f}]"
+                               if interval.get("widened_lower_ratio") is not None else
+                               "unbounded" if key.endswith(":E") else "n/a")
+                    lines.append(f"| {key} | {decision['verdicts'][key]} | {interval['ratio']:.5f} [{interval['lower_ratio']:.5f}, {interval['upper_ratio']:.5f}] | {widened} | {interval.get('absolute_j_per_token', '')} {absolute} | {interval['approx_80pct_mde_ratio']:.5f} |")
                 else:
-                    lines.append(f"| {key} | INCONCLUSIVE | unavailable | unavailable | unavailable |")
+                    lines.append(f"| {key} | INCONCLUSIVE | unavailable | unavailable | unavailable | unavailable |")
             lines.append("")
             lines += [f"Interactive LM cadence: {decision['interpretation']['interactive_cadence_median_ms']} ms; "
                       f"tested-shell cure supported: {decision['interpretation']['cure_supported_for_tested_shell']}; "
@@ -458,16 +558,21 @@ def markdown(rows, decision, errors, discarded):
     if errors:
         lines += ["", "## Cell errors and discarded attempts", ""] + [f"- {e['cell']}: {e['error']}" for e in errors]
     if discarded:
-        lines += ["", "## Discarded interrupted attempts", ""] + [f"- {path}" for path in discarded]
+        lines += ["", "## Discarded attempts", ""] + [f"- {path}" for path in discarded]
     return "\n".join(lines) + "\n"
 
 
 def analyze_directory(out: Path, config: dict, *, analyzer_backend=None):
     rows, errors, discarded = [], [], []
+    invalid_cell_keys = set()
     for path in sorted(out.rglob("cell.json")):
         try:
             if (path.parent / "discarded.json").exists():
                 discarded.append(str(path.parent))
+                discard = json.loads((path.parent / "discarded.json").read_text())
+                if discard.get("reason") == "bundle_invalid":
+                    record = json.loads(path.read_text())
+                    invalid_cell_keys.add((record["stage"], discard["block"], record["cell_id"], record["context"]))
                 continue
             row = analyzer_backend(path.parent, config) if analyzer_backend else analyze_cell(path.parent, config)
             if row.get("stage") == "U1" and "warmup" in row.get("block", ""):
@@ -477,14 +582,27 @@ def analyze_directory(out: Path, config: dict, *, analyzer_backend=None):
             errors.append({"cell": str(path.parent), "error": str(exc)})
     references = {}
     for row in rows:
-        stage = row["stage"]
-        for request in row.get("requests", []):
-            reference = references.setdefault(stage, request["output_hash"])
-            if request["output_hash"] != reference:
-                row["flags"].append("output_hash_mismatch")
-                row["metrics"]["E"] = None
-                row["metrics"]["R"] = None
+        if "bundle_invalid" not in row.get("flags", []):
+            for request in row.get("requests", []):
+                if request.get("output_hash"):
+                    references.setdefault(row["stage"], request["output_hash"])
+                    break
+    for row in rows:
+        reference = references.get(row["stage"])
+        if reference and any(request.get("output_hash") != reference for request in row.get("requests", [])):
+            row["flags"].extend(("output_hash_mismatch", "bundle_invalid"))
+            row["metrics"]["E"] = None
+            row["metrics"]["R"] = None
     decision = decision_table(rows, config)
+    for row in rows:
+        if "bundle_invalid" in row.get("flags", []):
+            invalid_cell_keys.add((row["stage"], row["block"], row.get("cell_id", 1), row["context"]))
+    decision["invalid_cell_counts_by_stage"] = {
+        stage: {arm: sum(key[0] == stage and key[3] == arm for key in invalid_cell_keys)
+                for arm in ("D", "I", "SH", "B")}
+        for stage in ("stage0", "U1", "U2", "S")}
+    decision["invalid_cell_counts"] = {arm: sum(counts[arm] for counts in decision["invalid_cell_counts_by_stage"].values())
+                                       for arm in ("D", "I", "SH", "B")}
     report = {"cells": rows, "errors": errors, "discarded": discarded,
               **decision, "stage_references": references}
     write_json(out / "summary.json", report)
@@ -499,16 +617,21 @@ def main(argv=None):
         power.add_argument("--stage0-summary", type=Path)
         power.add_argument("--sd-e", type=float)
         power.add_argument("--sd-r", type=float)
+        power.add_argument("--config", type=Path, default=Path(__file__).with_name("config.json"))
         args = power.parse_args(argv[1:])
         if args.stage0_summary:
             rows = json.loads(args.stage0_summary.read_text())["cells"]
-            sd_e = statistics.stdev(paired_rows(rows, "SH/I", "E")[0])
-            sd_r = statistics.stdev(paired_rows(rows, "SH/I", "R")[0])
+            spread = stage0_spread(rows)
+            estimates = {contrast: spread["between_cell_paired_sd_log"] for contrast in ("D/I", "SH/I")}
+            if any(value is None for pair in estimates.values() for value in pair.values()):
+                power.error("stage0 needs at least two valid paired blocks")
         elif args.sd_e is not None and args.sd_r is not None:
-            sd_e, sd_r = args.sd_e, args.sd_r
+            estimates = {contrast: {"E": args.sd_e, "R": args.sd_r} for contrast in ("D/I", "SH/I")}
+            spread = None
         else:
             power.error("provide --stage0-summary or both paired SDs")
-        print(json.dumps(power_table(sd_e, sd_r), indent=2))
+        size = load_config(args.config)["sizes"]["u_blocks"]
+        print(json.dumps({"spread": spread, "table": power_table(estimates, None, (size, size * 2))}, indent=2))
         return 0
     parser = argparse.ArgumentParser()
     parser.add_argument("out", type=Path)
