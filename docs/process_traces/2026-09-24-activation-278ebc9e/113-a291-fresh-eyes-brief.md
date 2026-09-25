@@ -1,0 +1,7 @@
+ROLE: FRESH-EYES REVIEWER (Sol 6.0) of one post-review commit on the JouleWise A291 merge candidate (gate-ledger row 10). Read-only; light CPU. Do not call Claude or any other agent.
+
+WRITE_SCOPE: []
+
+OBJECT: commit `d2e751df` on `fix/2026-09-24-a291-merge-candidate` (its parent `f911fe3e` is the lane merged with current main). `git show d2e751df`. It implements cold ruling A291-PREMERGE-01 V1(a)+(b) (/Users/edr/code/wt-278ebc9e-bk/docs/process_traces/2026-09-24-activation-278ebc9e/112-coldgate-packet-a291-premerge/20-coldgate-fable-premerge-ruling.md §1): `-> dict` on `_ownership` plus an AST assertion; `RecursionError` added to the two inv_52 conversion tuples; one regression test with the ruled exact text. Worktree: /Users/edr/code/wt-278ebc9e-a291mc (read-only for you). Scratch /tmp/278ebc9e/fresh/. Fences: never launchctl, sudo, powermetrics; never touch /Users/edr/night-custody, /Users/edr/JouleWise-measurement-*, ~/Library/LaunchAgents, /Users/edr/code/JouleWise.
+CHECK: (1) the diff equals the ruled texts exactly (lines 70, 170, 293; the test body verbatim; the import); (2) nothing else changed in `git diff 3fb98469 d2e751df -- joulewise tests scripts .github` besides these and the merged-in main files (list any other change); (3) could adding RecursionError to the tuple mask a real bug (e.g. legitimate deep recursion in legal rosters)? Construct the deepest legal roster the generator makes and confirm it seals; (4) run the new test and the AST tests once.
+OUTPUT: verdict CLEAN / FINDINGS with a findings table and tails.
