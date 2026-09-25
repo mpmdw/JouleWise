@@ -288,3 +288,6 @@
        5. W1 arms only after every verified BLOCKER is fixed or ruled not load-bearing by a cold gate, and the audit record is linked from the arm notice.
      - The magistrate runs the audit itself if seat 4b is not alive. **Added to W1's arm preconditions and to the next exact action.**
    - **Peer request (4b):** message it at least 45 minutes before any window t0, since its session must close for the census. Add the line "close interactive Claude session joulewise-4b before t0" to the arm notice.
+90. **WAVE-CONFIRM-01 C3 fallback satisfied** on wave tree `integ/2026-09-25-wave3` = main + H `dc210094` + PR-R `e77ec15d` + A292 `64dec562`. The ruled module set (ex-04's fifteen plus `test_epoch_continuation` and `test_epoch_equivalence_check`): **Ran 764 tests in 2,017 s, OK (skipped=1)** ([30/03](30-integration/03-c3-rerun-wave3.txt)).
+   - C1-b(3): #412 is MERGEABLE.
+   - C1-b(4): gate-ledger passes on H, with no failed check. Two test shards are still pending, and branch protection requires them green, so the merge waits for them.

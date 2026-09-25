@@ -1,0 +1,4 @@
+integ3 1a6c1661dd242166c1ad65e87812c560a55e1c03 start 12:40:11
+Ran 764 tests in 2017.476s
+OK (skipped=1)
+rc=0 end 13:13:49
