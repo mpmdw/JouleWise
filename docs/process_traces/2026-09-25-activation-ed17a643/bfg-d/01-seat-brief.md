@@ -1,7 +1,7 @@
 SESSION_MODE: delegated
 BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
-WRITE_SCOPE: see the codex-run-v3 --write-scope list (exhaustive)
+WRITE_SCOPE: ["joulewise/battery_float.py","joulewise/night_gate.py","joulewise/arm_retry.py","joulewise/evidence_night.py","joulewise/night_agent_install.py","joulewise/arm_readiness_evidence_t0.py","scripts/validate_powermetrics_fiducial.py","scripts/issue_calibration_acceptance_generation.py","scripts/calibration_cadence_report.py","scripts/issue_epoch_continuation.py","tests/**"]
 
 ROLE: implementation seat for PR **BFG-D** (lane BATTERY-FLOAT-GATE-01, first of two PRs). Model Sol 6.0, effort xhigh. You implement; you do not review your own work as final.
 
