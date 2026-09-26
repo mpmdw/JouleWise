@@ -23,8 +23,9 @@ from tests.test_night_gate import FakeProbeSource, REGISTRATION_TEXT, make_plan,
 FIXTURES = Path(__file__).parent / "fixtures/battery_float"
 UPDATE = 1790373525
 
-# Source bytes at the requested S0 base (64e39bb9). A309 changes only its
-# own row after rebase; the lead regenerates this one table then.
+# Source bytes at the S0 base, main 5d5a0b75 (BFG-D 64e39bb9 plus A309).
+# Regenerate from the BASE file, never from this branch's head: a table
+# computed from the head certifies whatever the head contains.
 FROZEN_FUNCTION_SOURCE_SHA256 = {
     "parse": "ccd50dd168b5ce128127a4f6f9e454b7715a4dcb01229bbe34cd03ecef23e865",
     "_structure": "988e36bb5acb54737e10183e26ff46e5dd1a1a7130156931fa7111f03dab9a60",
@@ -34,13 +35,13 @@ FROZEN_FUNCTION_SOURCE_SHA256 = {
     "validate_window": "cda762184be73c6853c98679bac375e96fc44c8dd7a200b5f53a4c89079fcb4d",
     "predates_battery_float": "a387371550b0ac3f18b709ff5fa0288bf6e743660c52d402fb54ae413bb2fcee",
     "authenticate_committed_verdict": "1a4d783b9937e6d5dee26e1b02295898abd2170ef5b354573e2a88b7cad73522",
-    "load_committed_verdict": "d1e9bc2257d908734a8433368fb8097ad769cea8bc1210b228025e0818a5809c",
+    "load_committed_verdict": "43900752071c16b8d4fe7b603c0d30ec573e185aa48e40515b24ed9b587ca1ea",
     "compare_verdict": "d375ca6c5d514a2d2c62fd3ce999a3679936677463771b13cdb210ec677fa143",
     "AuthenticatedSlot": "61200f491c133abd27cd3bc0c1e413314b2b86fed3c16d076f4d91cb7783bc53",
     "AuthenticatedVerdict": "e7c3684e4efede62ac4754b1a0fb95d32829c52a44c554f5b1a3868f2d8423bf",
     "BatteryVerdictRefusal": "29acdbfbd45625ec97608150fb64502f8c0efa590cfcd50c3a486c6586ad63f6",
     "CommittedVerdict": "4d9d9c1bf381907734c0654a7e8234a1a79d05c8ad388156963c6cb8a2e0fcd1",
-    "CustodyFailure": "6e0e7ea1f511180ea5be612c4124199384ed7730e24276d0fe10b4b30ea14f5c",
+    "CustodyFailure": "af27587c69dc2b4e69cfad2eff52affd3e2dd293997470b4ccc8725fafb51dbf",
     "IOREG_BATTERY_ARGV": "938ae450fde51fff154cd5c2af01836eec2426b1380175fb1919c6e0cca3fd92",
     "LEDGER_HEAD_PIN": "ef9889df272af5fdece3b6f2ad681f2e35e3c10036cd3ebd58c8c3ecba5ccf1f",
     "LIMIT_MA": "0298b4e2433d25f8a7a17c02cd4eadb9005690374efd3f2a89a87553519a2e60",
@@ -645,6 +646,13 @@ class S0FreezeTests(unittest.TestCase):
                            else ast.get_source_segment(source, definitions[name]))
                 actual = hashlib.sha256(segment.encode()).hexdigest()
                 self.assertEqual(actual, pinned)
+
+    def test_custody_unreadable_refuses_as_custody_failure(self):
+        exc = battery_float.CustodyUnreadable("round journal unreadable: x")
+        self.assertIsInstance(exc, battery_float.CustodyFailure)
+        self.assertNotIsInstance(exc, (ValueError, OSError))
+        self.assertEqual((exc.failures, exc.detail, str(exc)),
+                         ([], "round journal unreadable: x", "round journal unreadable: x"))
 
     def test_mutating_signed_dependency_turns_pin_red(self):
         source = Path(battery_float.__file__).read_text()

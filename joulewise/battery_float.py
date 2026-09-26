@@ -60,12 +60,7 @@ class CustodyFailure(RuntimeError):
     consumer refuses, and restoring the bytes is the only cure (A-R5b-1).
     """
 
-    def __init__(self, failures: list[dict[str, Any]] | str) -> None:
-        if isinstance(failures, str):
-            self.failures = []
-            self.detail = failures
-            super().__init__(failures)
-            return
+    def __init__(self, failures: list[dict[str, Any]]) -> None:
         self.failures = failures
         self.detail = "; ".join(
             f"{item['slot']}/{item['artifact']} expected {item['expected_sha256']} "
@@ -73,6 +68,20 @@ class CustodyFailure(RuntimeError):
             for item in failures
         )
         super().__init__(f"custody failure: {self.detail}")
+
+
+class CustodyUnreadable(CustodyFailure):
+    """Custody bytes that cannot be read as recorded: an unreadable journal, a
+    symlinked raw path or a duplicate JSON key.
+
+    A subclass, so every consumer that refuses on ``CustodyFailure`` refuses
+    here too, while ``CustodyFailure`` itself keeps its frozen base bytes.
+    """
+
+    def __init__(self, detail: str) -> None:
+        self.failures = []
+        self.detail = detail
+        RuntimeError.__init__(self, detail)
 
 
 class NoRecord(ValueError):
@@ -788,7 +797,7 @@ def _json_pairs(filename: str):
         result = {}
         for key, value in pairs:
             if key in result:
-                raise CustodyFailure(f"duplicate JSON key {key} in {filename}")
+                raise CustodyUnreadable(f"duplicate JSON key {key} in {filename}")
             result[key] = value
         return result
     return unique
@@ -799,13 +808,13 @@ def _raw_bytes(root: Path, relative: str) -> bytes | None:
     path = root
     try:
         if stat.S_ISLNK(path.lstat().st_mode):
-            raise CustodyFailure(f"raw path traverses a symlink: {path}")
+            raise CustodyUnreadable(f"raw path traverses a symlink: {path}")
         for part in Path(relative).parts:
             path = path / part
             if stat.S_ISLNK(path.lstat().st_mode):
-                raise CustodyFailure(f"raw path traverses a symlink: {path}")
+                raise CustodyUnreadable(f"raw path traverses a symlink: {path}")
         if not path.resolve().is_relative_to(root.resolve()):
-            raise CustodyFailure(f"raw path traverses a symlink: {path}")
+            raise CustodyUnreadable(f"raw path traverses a symlink: {path}")
         with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
             return stream.read()
     except CustodyFailure:
@@ -935,7 +944,7 @@ def authenticate_quiet_session(envelope_dir: Path | str) -> PairVerdict:
         except CustodyFailure:
             raise
         except (OSError, ValueError) as exc:
-            raise CustodyFailure(f"round journal unreadable: {exc}") from exc
+            raise CustodyUnreadable(f"round journal unreadable: {exc}") from exc
     start, end = session.get("start_stamp"), session.get("end_stamp")
     try:
         first = monotonic_ns_from_s(start["monotonic_before_s"])
