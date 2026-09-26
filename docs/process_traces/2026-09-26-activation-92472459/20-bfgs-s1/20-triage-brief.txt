@@ -1,0 +1,22 @@
+LANE: BATTERY-FLOAT-GATE-01, S1 triage (read-only root-cause scout). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, root_cause genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96, branch feat/2026-09-26-bfgs-s1-bundles @ 24b79db3 (S1 rounds 1/1b, committed WIP over main 1417c0c4).
+WRITE_SCOPE: []
+You edit NO repository file. Scratch files and temporary archives go under /tmp only.
+
+CONTEXT. The S1 implementation seat's report is /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/20-bfgs-s1/11-seat-report-round1b.md. Its brief (the ruled texts it implements, with paths) is 10-seat-brief-round1b.txt in the same directory. The seat returned blocked with two flags:
+- F1: V2 fails in tests/test_battery_float_consumers.py (`test_no_consumer_references_a_verdict_primitive`, `test_replace_call_allowlist_is_exact_and_only_covers_older_types`) because controller.py now imports battery_float and has four pre-existing `dataclasses.replace` calls (lines 1983, 2566, 2569, 2966 at 24b79db3).
+- F2: V3 (29 modules importing bundle_read or controller) gave 51 failures and 37 errors. Failure index: 20-bfgs-s1/bfgs-s1-v3-failure-index.txt in the same directory (full log /private/tmp/bfgs-s1-v3.log if still present).
+The ruled S1 WRITE_SCOPE (Final texts v1.1 §E) does not include tests/test_battery_float_consumers.py or any of the V3 modules except those in the seat's scope. The lead must decide whether to seek a scope ruling, and needs the facts first.
+
+QUESTIONS (answer each with executed evidence: commands run and their exact output tails):
+Q1 (F1). For each of the four replace sites, what object type is replaced, and can it ever be, or contain, a PairVerdict? Quote what the S0 guard keys on (the exact predicate in tests/test_battery_float_consumers.py and which ruled text or amendment it implements; S0 was ruled under addendum 2 amendment 25 and the addendum-3 S-2 guard). List every compliant option (e.g. extend the typed allowlist by these four sites; restructure the controller's import so the guarded module set is honestly unchanged; anything else) with its effect on the guard's power to catch a forged PairVerdict, and recommend one. Name any option that would evade the guard rather than satisfy it.
+Q2 (F2). Classify EVERY V3 failure and error by root cause, re-running at 24b79db3 and at base 1417c0c4 (use `git archive 1417c0c4 | tar -x -C /tmp/...`) as needed:
+  (A) the fixture builds a new (prospective) bundle without a battery_float pair, and text 8 now refuses it exactly as ruled;
+  (B) other fixture shapes the ruled texts now reject (e.g. `config.json digest does not match metadata.config_sha256`); say which ruled text rejects it;
+  (C) a defect in S1's production edits (behaviour the ruled texts do not require);
+  (D) failing at base too, or unrelated.
+  Give per class: count, modules, representative test ids, and the minimal fix shape (e.g. one shared test helper that writes a passing pair or a MOCK config; which files it must touch). Say whether any class (A)/(B) shows a PRODUCTION path (not a test) that the ruled behaviour now makes unusable, e.g. a CLI or script that reads a freshly produced bundle; quote the call site.
+Q3. Which V3 modules are already inside round 2's ruled scope (text 12's eight consumers and their tests, text 9 and text 10; see the brief's SPLIT paragraph) and which are in neither round's scope? Give the exact file list that a scope ruling would have to add, split into (i) round-2-owned already, (ii) new.
+Q4. Rerun V2 alone at 24b79db3 on an otherwise idle suite and paste its tail (the seat's V1/V2 timings suggest heavy machine load).
+
+Do not end your turn until all four answers are in the report. REPORT in the claude-codex-report/v1 envelope, with one table per question.
