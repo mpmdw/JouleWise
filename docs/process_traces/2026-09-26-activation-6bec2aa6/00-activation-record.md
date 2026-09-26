@@ -19,3 +19,13 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
    - The liveness seat, from the unchanged brief `10-liveness/00-seat-brief.txt`: Sol 6.0 high, report `10-liveness/21-seat-report-relaunch-6bec2aa6.md`.
    - #425 row 9: `scripts/shard_tests.py --workers 6` at `f15be524`, logged to `/tmp/6bec2aa6/fullsuite-f15be524.log`.
    - The BFG-S scout, from the unchanged brief `20-bfgs/00-scout-brief.txt`: Sol 6.0 xhigh, report `20-bfgs/11-scout-report-relaunch-6bec2aa6.md`.
+5. **BFG-S scout relaunch, first attempt: exit 75.** A stale scope lock held by the predecessor's dead runner (pid 12613) caused it. After confirming the pid was dead, I removed the lock dir `codex-run-v3-scope-locks/cabf73e2….lock` and relaunched.
+6. **#425 row 12 (magistrate terminal review of `f15be524`), in progress.**
+   - Non-trace changes: RUN_STATE, TASK_QUEUE, `state_kernel.json` (three lanes), and `tests/test_gen_state.py` (count pin 260). All are records or bookkeeping, which agrees with row 1.
+   - Pending: the row-9 tail and hosted CI.
+   - The 8e43cfa7 item-5 NITs (a)–(d) are fixed after the merge on this branch.
+7. **A310 TEST-LOAD-JOIN-LADDER-FLAKE-01 started.**
+   - Setup: worktree `JouleWise-wt-flake-6bec2aa6`, branch `test/2026-09-26-load-join-ladder-flake` from `64e39bb9`.
+   - Seat: Sol 6.0 high, WRITE_SCOPE is the test module only. Brief `30-flake/00-seat-brief.txt`.
+   - Tier: light (test-only).
+   - Caveat for row 9: the seat's artificial load, capped at 60 s per burst, may perturb timing tests in the concurrent row-9 replay. Any row-9 failure outside `test_gen_state` gets an isolated rerun before it is adjudicated.
