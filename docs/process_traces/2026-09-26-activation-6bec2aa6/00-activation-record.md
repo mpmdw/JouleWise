@@ -76,3 +76,14 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - The partial work is committed as WIP `8b4e1bd4`: helper, fence, pins, `FROZEN_FUNCTION_SOURCE_SHA256` table, and RED proofs for T1, T2-custody and T4.
     - The magistrate filled the gap with [60-bfgs-s0/20](../2026-09-26-activation-6bec2aa6/60-bfgs-s0/20-ruling-bundle-span.md): monotonic bounds are recorded in `events.jsonl` by S1, with no wall-to-monotonic conversion. This is flagged to the S0 and S1 Fable final passes.
     - S0 round 2 is launched (Sol xhigh, brief `21`).
+19. **A309 Opus contract lens (70/11): PASS**, with no BLOCKER and no SHOULD-FIX. Its P01 is the same case as Sol F1, and it judges that case harmless.
+    - Both NITs were fixed at the bench in `67231358`.
+    - I merged main into the branch, giving the integration head `58bfd3b0`.
+    - **Cold Fable final pass (70/21): MERGE `58bfd3b0`.** Eleven adversarial histories were run against both the old and the new loader, and no history authenticates bytes that differ from the honest adding commit. It accepts the F1 disposition.
+    - **Q3 ruled:** merging A309 before S0 is consistent with text 3 "exactly, not by exception". S0 carries three obligations (§4):
+      1. rebase onto the A309 merge before computing the pins;
+      2. the pin test names `ex-01-dictated-closure-M1.md` as the baseline for `load_committed_verdict`;
+      3. the S0 PR body states that no harvest verdict was committed between the two merges.
+    - **PR #426 opened** (full tier). Rows 1–8 and 10 are RUN (`8af29bb5`). Row 9 (full suite at `58bfd3b0`) is running; rows 11 and 12 follow.
+20. **S0 round 2 returned complete**, committed as `26ab7234`. `authenticate_bundle` implements the span gap-fill, with span-rung tests. The only failure is the sandbox sysctl live probe, which is bench-verified elsewhere.
+    - Three S0 lenses launched at `26ab7234` under charge `60-bfgs-s0/30-lens-charge.md`: Sol execution (xhigh, 31), Astra execution (cross-family, high, 32) and Opus contract (33).
