@@ -85,7 +85,21 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
     _refuse(bool(snapshot.refusal_reasons), "ledger: " + ", ".join(snapshot.refusal_reasons))
     if any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
            for row in session.finalized_slots.values()):
-        battery_result = battery_float.validate_window(session)
+        # Obligations v1.1 §4.5: the committed harvest verdict governs; the
+        # recomputation from raw bytes is only its custody check.
+        try:
+            recomputed = battery_float.validate_window(session)
+        except battery_float.CustodyFailure as failure:
+            raise ContinuationRefusal(f"battery_float_custody_failure: {failure.detail}") from failure
+        try:
+            battery_result = battery_float.load_committed_verdict(
+                Path(args.repo_root), args.session_id, session=session,
+                preregistration_sha256=None,
+            )
+        except battery_float.NoRecord as missing:
+            raise ContinuationRefusal(f"battery_float_verdict_missing: {missing.reason}") from missing
+        difference = battery_float.compare_verdict(battery_result, recomputed)
+        _refuse(difference is not None, f"battery_float_verdict_mismatch: {difference}")
         battery_status = battery_result["status"]
         details = "; ".join(
             reason for slot in battery_result["slots"] for reason in slot["reasons"]

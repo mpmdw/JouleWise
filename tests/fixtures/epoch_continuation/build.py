@@ -22,7 +22,8 @@ def build_issued_continuation(
     A copied writer may re-key its acceptance to its private estimator bytes;
     the temporary pin below authenticates only that private test artifact.
     """
-    fixture = build_derivation_ledger(root / "night", [Slot("0.025")] * 12)
+    # The night carries its committed harvest verdict (obligations v1.1 §4.5).
+    fixture = build_derivation_ledger(root / "night", [Slot("0.025")] * 12, verdict_records=True)
     raw_acceptance = acceptance_path.read_bytes()
     acceptance = json.loads(raw_acceptance)
     acceptance_id = acceptance["acceptance_id"]

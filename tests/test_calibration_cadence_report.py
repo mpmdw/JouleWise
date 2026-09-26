@@ -31,9 +31,11 @@ class CadenceReportTests(unittest.TestCase):
         cls._ledger_tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls._ledger_tmp.cleanup)
         root = Path(cls._ledger_tmp.name)
-        cls.clean = build_derivation_ledger(root / "clean", [Slot("0.02")])
+        # Each window carries its committed harvest verdict (obligations v1.1
+        # §4.5): the report refuses to run before the record exists.
+        cls.clean = build_derivation_ledger(root / "clean", [Slot("0.02")], verdict_records=True)
         cls.charging = build_derivation_ledger(
-            root / "charging", [Slot("0.02", battery_mode="charging")],
+            root / "charging", [Slot("0.02", battery_mode="charging")], verdict_records=True,
         )
 
     def session_args(self, fixture: dict[str, Path] | None = None) -> dict:

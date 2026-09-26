@@ -49,6 +49,9 @@ class EpochContinuationTests(unittest.TestCase):
         self.fixture = None
 
     def build(self, slots=None, **kwargs):
+        # Every 25G83/v3 window carries its committed harvest verdict
+        # (obligations v1.1 §4.5): the continuation refuses without one.
+        kwargs.setdefault("verdict_records", True)
         self.fixture = build_derivation_ledger(
             self.root / "fixture", slots or [Slot("0.025")] * 12, **kwargs,
         )
@@ -260,12 +263,28 @@ class EpochContinuationTests(unittest.TestCase):
                 self.fixture = build_derivation_ledger(
                     self.root / f"battery-{mode}",
                     [Slot("0.025", battery_mode=mode)] + [Slot("0.025")] * 11,
+                    verdict_records=True,
                 )
                 rc, out, error = self.prepare()
                 self.assertEqual(rc, 3)
                 self.assertEqual(out, "")
                 self.assertIn(status, error)
                 self.assertFalse(self.out.exists())
+
+    def test_revision_five_session_refuses_without_a_record_or_on_custody_failure(self):
+        # Obligations v1.1 §4.5: the committed harvest verdict governs.
+        self.fixture = build_derivation_ledger(self.root / "unrecorded", [Slot("0.025")] * 12)
+        rc, out, error = self.prepare()
+        self.assertEqual((rc, out), (3, ""))
+        self.assertIn("battery_float_verdict_missing: absent or uncommitted", error)
+        self.assertFalse(self.out.exists())
+        self.build()
+        (self.fixture["runs"] / "instrument_validation" / f"{SESSION_ID}-d04" / "raw"
+         / "battery_float.post.ioreg").unlink()
+        rc, out, error = self.prepare()
+        self.assertEqual((rc, out), (3, ""))
+        self.assertIn("battery_float_custody_failure: d04/post expected ", error)
+        self.assertFalse(self.out.exists())
 
     def test_candidate_recipe_marker_pin_and_check(self):
         payload = self.candidate()
@@ -855,15 +874,26 @@ class EpochContinuationTests(unittest.TestCase):
         self.assertFalse(self.out.exists())
 
     def test_retained_epochs_must_be_unanimous_and_content_ids_recomputed(self):
-        self.build()
-        snapshot = self.snapshot()
-        session = snapshot.bracket_sessions[0]
-        name, row = next(iter(session.finalized_slots.items()))
-        for field, value, reason in (
-            ("identity_epoch", {**TARGET_EPOCH, "hardware_model": "other-machine"}, "identity_epoch_not_unanimous"),
-            ("content_id", "f" * 64, "content_id"),
+        # The unanimity refusal is exercised on a non-Revision-5 epoch: on a
+        # 25G83/v3 session a mixed-epoch row set can hold no authentic
+        # harvest verdict (obligations v1.1 §4.3 check 3), so the battery
+        # gate refuses first -- asserted by the third case.
+        other_epoch = {**TARGET_EPOCH, "os_build": "25G99"}
+        for field, value, reason, epoch in (
+            ("identity_epoch", {**other_epoch, "hardware_model": "other-machine"},
+             "identity_epoch_not_unanimous", other_epoch),
+            ("content_id", "f" * 64, "content_id", TARGET_EPOCH),
+            ("identity_epoch", {**TARGET_EPOCH, "hardware_model": "other-machine"},
+             "battery_float_verdict_missing: identity mismatch: identity_epoch", TARGET_EPOCH),
         ):
-            with self.subTest(field=field):
+            self.fixture = build_derivation_ledger(
+                self.root / f"unanimity-{field}-{epoch['os_build']}-{len(reason)}", [Slot("0.025")] * 12,
+                session_epoch=epoch, t1_bindings={**T1_BINDINGS, **epoch}, verdict_records=True,
+            )
+            snapshot = self.snapshot()
+            session = snapshot.bracket_sessions[0]
+            name, row = next(iter(session.finalized_slots.items()))
+            with self.subTest(field=field, epoch=epoch["os_build"]):
                 altered = replace(row, **{field: value})
                 slots = dict(session.finalized_slots)
                 slots[name] = altered

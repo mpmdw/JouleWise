@@ -59,7 +59,24 @@ def report_window(label: str, window: Path, *, ledger: Path, session_id: str,
         raise ValueError(f"session {session_id} is not in the ledger")
     if session.state not in {"finalized", "aborted"}:
         raise ValueError(f"session {session_id} is not terminal")
-    battery_verdict = battery_float.validate_window(session)["status"]
+    # Obligations v1.1 §4.5: the committed harvest verdict governs; the
+    # recomputation from raw bytes is only its custody check.
+    try:
+        recomputed = battery_float.validate_window(session)
+    except battery_float.CustodyFailure as failure:
+        raise ValueError(f"battery-float custody failure: {failure.detail}") from failure
+    try:
+        record = battery_float.load_committed_verdict(
+            root, session_id, session=session, preregistration_sha256=None,
+        )
+    except battery_float.NoRecord as missing:
+        raise ValueError(
+            f"battery-float harvest verdict missing or uncommitted: {missing.reason}"
+        ) from missing
+    difference = battery_float.compare_verdict(record, recomputed)
+    if difference is not None:
+        raise ValueError(f"battery-float harvest verdict cannot be re-established: {difference}")
+    battery_verdict = record["status"]
     captures = []
     all_lengths: list[float] = []
     for path in capture_paths(window):
