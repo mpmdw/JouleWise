@@ -772,6 +772,30 @@ class MandatoryContainerAndJournalTests(unittest.TestCase):
                 with self.assertRaises(battery_float.CustodyFailure):
                     battery_float.authenticate_quiet_session(tmp)
 
+    def test_t30_f_pre_only_first_write_is_not_custody(self):
+        # P-B as the collector writes it: first-write session (no end_stamp,
+        # no journal_rows), pre record only, provisional journal. Rung (a)
+        # names the missing post; the provisional journal is not opened;
+        # raw loss still raises from rung (b).
+        for journal in (None, "", '{"raw":{"paths":[],"sha256":{}}}\n', "{"):
+            with self.subTest(journal=journal), tempfile.TemporaryDirectory() as tmp:
+                session, pair = self.quiet(tmp)
+                del session["end_stamp"], session["journal_rows"]
+                session["round_workers"] = []
+                session["battery_float"] = {"pre": pair["pre"]}
+                (Path(tmp) / "session.json").write_text(json.dumps(session))
+                path = Path(tmp) / "rounds.jsonl"
+                path.unlink()
+                if journal is not None:
+                    path.write_text(journal)
+                verdict = battery_float.authenticate_quiet_session(tmp)
+                self.assertEqual((verdict.status, verdict.reasons),
+                                 ("battery_float_evidence_missing",
+                                  ("post evidence missing: phase not recorded",)))
+                (Path(tmp) / "raw/battery_float.pre.ioreg").unlink()
+                with self.assertRaises(battery_float.CustodyFailure):
+                    battery_float.authenticate_quiet_session(tmp)
+
     def test_t30_g_historical_missing_key_keeps_status(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.quiet(tmp)
