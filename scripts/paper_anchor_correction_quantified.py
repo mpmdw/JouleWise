@@ -706,24 +706,6 @@ def build_payload(repository_root: Path, corpus_root: Path) -> dict[str, Any]:
     if not directories:
         raise PopulationUnavailable(f"{population_root} holds no capture directories")
 
-    # Check the entire operator-named population before analysing any capture.
-    # Revision-5 derivation evidence must not enter this historical B reader.
-    from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH  # noqa: PLC0415
-
-    for directory in directories:
-        evidence_path = directory / "instrument_evidence.json"
-        if not evidence_path.is_file():
-            continue
-        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-        if not isinstance(evidence, dict):
-            continue
-        if "battery_float" in evidence or any(
-            isinstance(epoch, dict)
-            and all(epoch.get(field) == value for field, value in REVISION_FIVE_EPOCH.items())
-            for epoch in (evidence.get("identity_epoch"), evidence.get("bindings"))
-        ):
-            raise PopulationUnavailable(f"revision_five evidence in {directory}")
-
     rows = [
         analyse_capture(directory, corpus_root, CLOCK_METHOD_V2, CLOCK_METHOD_V3)
         for directory in directories

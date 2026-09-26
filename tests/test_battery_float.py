@@ -17,6 +17,7 @@ from unittest import mock
 
 from joulewise import battery_float, night_gate
 from tests import battery_float_corpus as corpus
+from tests.git_fixture import init_git_fixture
 from tests.test_night_gate import FakeProbeSource, REGISTRATION_TEXT, make_plan, result
 
 FIXTURES = Path(__file__).parent / "fixtures/battery_float"
@@ -413,7 +414,7 @@ class CommittedVerdictTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name) / "repo"
         self.repo.mkdir()
-        self.git("init", "-q")
+        init_git_fixture(self.repo, "-q")
         self.session = custody_session(Path(self.tmp.name) / "custody", {"d01": clean_phases()})
         self.record = battery_float.verdict_record(
             self.session, snapshot=SimpleNamespace(head_sequence=24, head_digest="e" * 64),

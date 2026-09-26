@@ -12,7 +12,6 @@ from unittest.mock import patch
 from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH
 from joulewise.controller import _load_instrument_calibration_attachment
 from scripts import calibration_ledger_backfill as backfill
-from scripts import paper_anchor_correction_quantified as paper
 from tests.fixtures.epoch_bootstrap.build import TARGET_EPOCH
 
 
@@ -61,22 +60,6 @@ class RevisionFiveBReaderTests(unittest.TestCase):
                 ]):
                     with self.assertRaisesRegex(ValueError, "revision_five"):
                         backfill._candidate(directory)
-
-    def test_paper_scans_every_capture_before_any_analysis(self) -> None:
-        for forbidden in ("identity_epoch", "battery_float"):
-            with self.subTest(forbidden=forbidden):
-                population = self.root / forbidden / paper.POPULATION_SUBDIRECTORY
-                for name, evidence in (
-                    ("a-prior", {"bindings": {"os_build": "25F84"}}),
-                    ("z-forbidden", self.evidence(forbidden)),
-                ):
-                    directory = population / name
-                    directory.mkdir(parents=True)
-                    (directory / "instrument_evidence.json").write_text(json.dumps(evidence))
-                with patch.object(paper, "analyse_capture", side_effect=AssertionError("B read")) as analyse:
-                    with self.assertRaisesRegex(paper.PopulationUnavailable, "revision_five"):
-                        paper.build_payload(self.root, self.root / forbidden)
-                analyse.assert_not_called()
 
     def test_controller_attachment_refuses_before_physics_or_bound(self) -> None:
         for forbidden in ("identity_epoch", "battery_float"):

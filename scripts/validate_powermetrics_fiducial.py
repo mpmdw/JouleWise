@@ -2155,21 +2155,24 @@ def main(argv: list[str] | None = None) -> int:
     def observe_battery(phase: str):
         raw_path = f"raw/battery_float.{phase}.ioreg"
         probe_options = {}
-        if args.battery_probe_fixture_for_test is not None:
+        if logical_test_clock is not None:
+            probe_options = {
+                "wall_time_s": clock.now(),
+                "monotonic_ns": lambda: int(clock.stamp().monotonic_before_s * 1_000_000_000),
+            }
+            fixture_path = (args.battery_probe_fixture_for_test
+                            or REPO_ROOT / "tests/fixtures/battery_float/float.ioreg")
             def fixture_runner(argv):
                 # The fixture's own UpdateTime line is re-stamped to the
                 # logical clock so the observation is fresh by construction.
                 raw = re.sub(
                     rb'(?m)^(\s+"UpdateTime" = )[0-9]+$',
                     lambda match: match.group(1) + str(int(clock.now())).encode(),
-                    args.battery_probe_fixture_for_test.read_bytes(), count=1,
+                    fixture_path.read_bytes(), count=1,
                 )
                 logical_test_clock.advance(args.battery_probe_duration_for_test)
                 return subprocess.CompletedProcess(argv, 0, raw, b"")
-            probe_options = {
-                "runner": fixture_runner, "wall_time_s": clock.now(),
-                "monotonic_ns": lambda: int(clock.now() * 1_000_000_000),
-            }
+            probe_options["runner"] = fixture_runner
         return battery_float.observe(
             phase=f"slot_{phase}", raw_path=raw_path,
             session_id=args.session_id, slot=args.slot, attempt_id=args.attempt_id,

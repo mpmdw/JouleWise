@@ -593,6 +593,8 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             "--sampler-direct-for-test",
             "--time-scale-for-test",
             "0.001",
+            "--battery-probe-fixture-for-test",
+            str(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg"),
             "--sampler-ready-timeout-s",
             str(_SAMPLER_ACK_TIMEOUT_S),
             "--rollover-timeout-s",
@@ -604,8 +606,6 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             command.append("--derivation-only")
         if battery_probe_duration_for_test is not None:
             command.extend([
-                "--battery-probe-fixture-for-test",
-                str(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg"),
                 "--battery-probe-duration-for-test", str(battery_probe_duration_for_test),
             ])
         return self.runner.run(

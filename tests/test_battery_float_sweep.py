@@ -54,9 +54,10 @@ READERS = {
         "refuses Revision 5", "raises '<dir>: revision_five evidence is not a backfill candidate'; "
         "test_revision_five_b_readers.test_backfill_refuses_revision_five_before_bound"),
     "scripts/paper_anchor_correction_quantified.py": (
-        "refuses Revision 5", "raises PopulationUnavailable('revision_five evidence in <dir>') over every "
-        "capture before any analysis; test_revision_five_b_readers."
-        "test_paper_scans_every_capture_before_any_analysis"),
+        "historical", "pinned by sha in docs/paper/results-fill-registry.md; reads only "
+        "retained historical corpora in docs/paper/round7/anchor-correction-quantified.md; "
+        "Revision-5 roots are outside its inputs "
+        "(docs/process_traces/2026-09-25-activation-ed17a643/bfg-d/26-fix-contract-r7b.md H-4)"),
     "scripts/paper_excursion_decomposition.py": ("historical", "pinned member 20260722T145535-e941c821"),
     "scripts/check_paper_replay_fence.py": ("historical", "pinned member 20260722T145535-e941c821"),
     "scripts/check_paper_round7_artifacts.py": ("historical", "committed paper artifacts only"),

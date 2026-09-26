@@ -642,6 +642,8 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             "--sampler-direct-for-test",
             "--time-scale-for-test",
             "0.001",
+            "--battery-probe-fixture-for-test",
+            str(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg"),
             "--sampler-ready-timeout-s",
             str(_SAMPLER_ACK_TIMEOUT_S),
             "--rollover-timeout-s",
