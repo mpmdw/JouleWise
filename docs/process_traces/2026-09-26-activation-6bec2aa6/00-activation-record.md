@@ -49,3 +49,15 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - Fable judge: [ruling 50/10](../2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/10-coldgate-fable-ruling.md). It accepts most items and amends D2, D3a, D5, D8, D9 and D11. It adds obligations 9–11. Obligations 5 and 8 become separate lanes, and 8 must block the paper renderer in code.
     - Paired Opus contract refuter: [50/11](../2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/11-opus-contract-refuter.md). **M1 and M2 are BLOCKERs (text):** the QPE early return books a non-battery refusal as battery `evidence_missing`, and D8's loader outcome is unspecified. It also raised MATERIAL findings M3–M11.
     - A cold Fable addendum was convened at `d710aa5a` (worktree `JouleWise-wt-bfgs-cgadd-6bec2aa6`). It produces Final texts v1.1 for the S0–S3 briefs.
+12. **Cold Fable addendum ruled.** [50/30/21](../2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md) §4 is **Final texts v1.1**, which supersedes v1.
+    - Refuter M1 and M2 (the text BLOCKERs) were fixed by text. Most of M3–M11 were amended in. M7, M8 and N2 were already covered. Nothing was rejected outright.
+    - PR order: S0 (helper plus arm fence, no pin moves) → S1 ∥ S2 → S3 (`_v5` packs) → S4 (after the Rev-5 epoch).
+    - New lanes: SCORED-CEILING-BATTERY-01, and HISTORICAL-BATTERY-STATE-01. The second blocks the paper renderer mechanically through a `battery_state` column.
+13. **Sequencing conflict found and resolved by ordering, not reinterpretation.**
+    - The conflict: Final texts v1.1 text 3 freezes `load_committed_verdict` (among others) "before S4", with "no exception granted". But ruled lane A309 (the M-1 closure from the BFG-D final pass) edits that function and must land before the first Rev-5 issuance. The judge struck the M-1 exception only because the M-1 ruling was absent from its packet (ruling 50/10 E20).
+    - The resolution: A309 merges before S0. S0's pin test then pins the post-A309 bytes, and the whole epoch (W1 has not yet run) sees a single version. Both rulings hold as written.
+    - A309's Fable final pass is asked to confirm this ordering explicitly. If that pass or S0's final pass reads text 3 otherwise, the question goes to a cold gate. It is not resolved by the magistrate.
+14. **S0 seat launched.**
+    - Setup: worktree `JouleWise-wt-bfgs-s0-6bec2aa6`, branch `feat/2026-09-26-bfgs-s0-helper-fence` from `64e39bb9`.
+    - Seat: Sol 6.0 xhigh. Brief `60-bfgs-s0/00-seat-brief.txt` quotes texts 1–4, 15, 17 and T1–T4 verbatim.
+    - The pin table is regenerated after the rebase onto A309.

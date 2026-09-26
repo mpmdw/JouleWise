@@ -1,0 +1,53 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S0 "BFG-S helper + arm fence" (JouleWise). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre. Tier: FULL gate (arm-gate code and custody helper).
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s0-6bec2aa6 (branch feat/2026-09-26-bfgs-s0-helper-fence, at origin/main 64e39bb9).
+WRITE_SCOPE: ["joulewise/battery_float.py","joulewise/night_kinds.py","joulewise/evidence_night.py","tests/test_battery_float.py","tests/test_battery_float_consumers.py","tests/test_battery_float_sweep.py","tests/test_evidence_night.py","tests/test_night_kinds.py"]
+(WRITE_SCOPE is exhaustive. If anything else seems necessary, finish the independent work and return NEEDS_SCOPE with the exact path and reason. If the ruled text below does not determine a choice, return NEEDS_RULING; never guess.)
+
+1. GOAL. Implement exactly the S0 rows of cold gate BFGS-DESIGN-01 addendum "Final texts v1.1" (the ONE authority; full file: /Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md §4). S0 = texts 1–4 (phases constant, PairVerdict + authenticate_pair + three wrappers, frozen-function pins, guard amendment), text 15 (NightKind.battery_brackets field + evidence_night.check fence; QPE=False, calibration=True), text 17 (staleness pin), and test obligations T1–T4. S0 moves NO frozen-source pin and edits NO frozen function. S1/S2/S3/S4 are NOT in this PR: do not touch controller, bundle_read, collectors, packs, or the registration.
+
+2. SEQUENCING NOTE (lead). A separately ruled lane (A309, BFGD-VERDICT-MERGE-LIVENESS-01) is editing load_committed_verdict on another branch and will merge BEFORE S0. Compute text 3's source-digest pins from the source at your base; put the pinned digests in ONE clearly named constant/table in the test so the lead can regenerate them after rebasing onto A309. Do not edit load_committed_verdict or any other text-3 function yourself.
+
+3. RULED TEXT (verbatim excerpts; the full §4 governs where these are silent):
+### A. Mechanism
+
+1. **Phases.** `battery_float.PHASES` is the module constant `("arm_check", "publish_install", "t0", "validate_install", "t0_power_row", "slot_pre", "slot_post", "quiet_pre", "quiet_post", "bundle_pre", "bundle_post")`. This amends the enumeration in ex-01 §5.4; the schema id stays `joulewise.battery_float.v1` and the field set is unchanged. `observe()` is **not edited**; the enumeration is enforced by `authenticate_pair` (each reader requires its exact phase pair) and by a sweep test asserting that every production `observe(phase=…)` literal under `joulewise/` and `scripts/` is in `PHASES`. Identity: `quiet_*` binds `session_id` = the collector uuid, `slot`/`attempt_id` null, `plan_id` = the night plan id when the executor passes one; `bundle_*` binds `session_id` = `metadata.json.run_id`, `slot`/`attempt_id` null. `raw_path` = `raw/battery_float.<pre|post>.ioreg` relative to the container.
+
+2. **Helper.** In `joulewise/battery_float.py`, after `authenticate_committed_verdict`: a frozen dataclass `PairVerdict(kind, status, reasons, pre_raw_sha256, post_raw_sha256, pre_update_age_s, post_update_age_s, delta_q_mah)` with `status ∈ {"pass", "battery_float_confounded", "battery_float_evidence_missing", "not_applicable", "unobserved_historical"}`; the core `authenticate_pair(record, custody_root, *, phases, identity, span=None) -> PairVerdict`; wrappers `authenticate_quiet_session(envelope_dir)`, `authenticate_bundle(bundle_path)`, `authenticate_capture(capture_dir)`. Per phase, in order: (a) phase absent, not a dict, `phase` ≠ expected, `session_id` ≠ `identity`, `raw_path` ≠ the fixed relative path, `raw_stdout_sha256` not 64-hex, `wall_time_s` not numeric → `evidence_missing`; (b) raw file unreadable or its digest ≠ `raw_stdout_sha256` → **raise `CustodyFailure`** (never a status; refuses the consumer's whole computation; never an exclusion); (c) `exit_code ≠ 0` or `timed_out` → `evidence_missing`; (d) `parse(raw, wall_time_s)` raises → `evidence_missing`; (e) predicate false → `confounded`; (f) when `span` is given, `pre.monotonic_after_ns` ≤ span start and `post.monotonic_before_ns` ≥ span end, else `evidence_missing: <phase> outside measured span`. Custody raises before any status; confounded > evidence_missing > pass. `delta_q_mah` is reported and never gates. A stored `passed` is never read. No committed verdict file exists for these kinds.
+
+3. **Frozen functions.** `parse`, `_structure`, `_recorded_values`, `observe`, `require_pass`, `validate_window`, `predates_battery_float`, `authenticate_committed_verdict`, `load_committed_verdict`, `compare_verdict` do not change before S4; a test pins `sha256(inspect.getsource(fn))` of each. No exception is granted by this ruling. A golden test calls `observe` with each of the seven pre-existing phases through an injected runner and clock and asserts byte-identical records against a pre-S0 fixture.
+
+4. **Guard.** This amends ex-04 §3.10: exactly one new allowlist row, `joulewise/battery_float.py::authenticate_pair → parse`; the six-row assertion becomes seven; a guard self-test asserts that a `parse` reference from any other new function in `battery_float.py` is flagged; the three wrappers call `authenticate_pair` only; a `PairVerdict(...)` **call** outside `battery_float.py` is a violation (`isinstance` references remain allowed).
+
+
+15. **PR order and fence.** S0 (helper + fence, no pin moves) → S1 ∥ S2 from S0's merge head → S3 from the S1+S2 merged head → S4 after the Revision 5 epoch issues or stops. `NightKind` gains `battery_brackets: bool` (`calibration=True`, `quiet_predicate_evidence=False` until S2 flips it in the same PR as the collector brackets). In `evidence_night.check`, after `inspect("battery_float", …)` and after `row = NIGHT_KINDS.get(payload_kind)`, the new check `inspect("battery_brackets", …)` fails unless `row is not None and row.battery_brackets is True`; it has no `skipped` state and is **not** added to the `("machine_quiet", "corecaptured")` exemption at `:1415`. Tests: a QPE candidate is not armable before S2; the derivation kind is unchanged; an unknown payload kind is not armable. ex-03 §8 F-1's sentence "Re-freeze `arm_readiness.sources` in the same PR, since `controller.py` is a frozen source" is superseded by: "No transaction-pack window arms between the S1 merge and the completion and verification of S3's freeze for the pack it would use; S1's PR body states this verbatim." No non-derivation window of any kind arms before its kind's PR (S2 for QPE; S1+S3 for transaction packs) has merged. S1's PR body also lists `docs/paper/results-fill-registry.md:366-367, 774` (line citations moved by S1) for refresh.
+
+17. **Staleness pin.** A raw with `UpdateTime` 1000 s in the future parses as `pass` today at every site (one-sided `age > 180`, `battery_float.py:249-250`); S0 pins that behaviour so S4 is visibly RED.
+
+S0 WRITE_SCOPE and test obligations as ruled:
+**S0**
+```text
+joulewise/battery_float.py
+joulewise/night_kinds.py
+joulewise/evidence_night.py
+tests/test_battery_float.py
+tests/test_battery_float_consumers.py
+tests/test_battery_float_sweep.py
+tests/test_evidence_night.py
+tests/test_night_kinds.py
+```
+
+- T1 (S0): frozen-function source-digest pins (text 3); `observe` golden for seven phases; `PHASES` sweep of production callers; guard row count 7 with self-test; `PairVerdict` call-site violation.
+- T2 (S0): `authenticate_pair` order of precedence (structure → custody raise → probe failure → parse failure → predicate → span), one test per rung; custody raises before any status.
+- T3 (S0): staleness pin (text 17).
+- T4 (S0): fence tests (text 15): QPE not armable, calibration unchanged, unknown kind not armable, no `skipped` exemption.
+
+4. VERIFY. Paste the exact last 5 lines of each of these runs:
+   - python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_battery_float_sweep
+   - python3 -m unittest tests.test_evidence_night tests.test_night_kinds
+   - every OTHER test module that imports joulewise.battery_float, joulewise.night_kinds or joulewise.evidence_night. Find them with grep -l over tests/*.py and run each one; the lesson from BFG-D is that focused sweeps missed importer modules.
+   Each new test must be shown RED on the unmodified base for its stated reason, where it tests new behaviour. Paste the RED proof for the fence tests (T4) and for T2's custody-raises-first rung.
+   Keep tests hermetic: tests must pass on a host with no battery (inject the runner or fixture; see tests/battery_float_fixture.py).
+
+5. DO NOT: commit, push, run the full suite, or edit any path outside WRITE_SCOPE. The lead commits.
+
+6. REPORT in the claude-codex-report/v1 envelope: a diff summary mapped to texts 1–4, 15 and 17 and T1–T4; the RED proofs; all test tails; the pin table's location; and every point where the ruled text could not be applied literally, with the reason.
