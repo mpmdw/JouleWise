@@ -846,6 +846,67 @@
       "status": "queued",
       "stop_card": null
     },
+    "BATTERY-FLOAT-GATE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-ed17a643/10-coldgate-packet-bfg/30-addendum/21-coldgate-fable-bfg-addendum-ruling.md §5.3",
+          "docs/process_traces/2026-09-25-activation-ed17a643/41-coldgate-packet-harvest-final/30-addendum/21-coldgate-fable-harvest-final-addendum-ruling.md §4.11",
+          "docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/40-fable-final-pass.md §8 F-1"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BATTERY-FLOAT-GATE-01/acceptance",
+          "label": "BATTERY-FLOAT-GATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "BFG-S implements BATTERY-FLOAT-01 final texts v1.1 §5.3 (BFG-S row) under the same seam and guard as BFG-D (CONSUMER-DRIFT final texts v1.1). It includes the cold Fable BFG-D final pass F-1 closure: controller attachment keys on REVISION_FIVE_EPOCH, not on the battery_float key. It also carries the abs(update_age_s) <= 180 predicate change and the custody clause into A-R5b's text only after the Revision-5 epoch issues or stops (HARVEST-VERDICT-FINAL-01-ADD §4.11). No non-derivation window arms before BFG-S merges."
+      },
+      "authority": {
+        "label": "Ed directive #421 (binding) and cold gate BATTERY-FLOAT-01 P1 split",
+        "path": "docs/process_traces/2026-09-25-activation-ed17a643/10-coldgate-packet-bfg/20-coldgate-fable-bfg-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Install Ed's binding battery-float gate (directive #421) for every measurement window kind. PR BFG-D (#424) covers derivation windows; PR BFG-S covers the rest: quiet-predicate envelopes, controller/scored bundles, the scored reducer's authenticated window evidence, the two calibration_bracketing consumers, and the arm_readiness.sources re-freeze of every transaction-pack campaign.",
+      "id": "BATTERY-FLOAT-GATE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 308,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424; BFG-S not started. Required before any non-derivation window arms.",
+      "stop_card": null
+    },
+    "BFGD-VERDICT-MERGE-LIVENESS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/41-opus-counter-review.md §4 M-1 and §6 closure",
+          "docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/40-fable-final-pass.md §8 F-2/F-3 (fail-closed reading)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BFGD-VERDICT-MERGE-LIVENESS-01/acceptance",
+          "label": "BFGD-VERDICT-MERGE-LIVENESS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Apply the dictated closure: history calls gain --no-merges and --no-renames, plus an adding-blob check against HEAD bytes. Add tests (a) an honest harvest merged --no-ff into a moved main loads, RED at b2c31e5b; (b) an evil merge that rewrites the record is NoRecord; (c) the existing refusals stand. Must land before any harvest verdict reaches main through a merge and before the first Revision-5 issuance. Full gate (verdict authentication code)."
+      },
+      "authority": {
+        "label": "BFG-D Opus row-6 counter-review M-1 (dissent recorded; Fable final pass MERGE prevails)",
+        "path": "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the Opus row-6 dissent M-1 on BFG-D. load_committed_verdict's --full-history without --no-merges makes an honest harvest verdict commit that reaches main through a --no-ff merge fail to authenticate. That fails closed, but it is a liveness trap for issuance from main.",
+      "id": "BFGD-VERDICT-MERGE-LIVENESS-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 309,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). Not W1-blocking: W1 arm and harvest run in the measurement clone on plain history.",
+      "stop_card": null
+    },
     "BIND-REQUEST-PAYLOAD-CAP-01": {
       "acceptance": {
         "evidence": [
@@ -8833,6 +8894,36 @@
       "rank": 261,
       "status": "queued",
       "status_note": "2026-09-20 activation 21752427 — queued [AGENT], p3_tooling. CI-LEGACY-FIXTURE-LINUX-01 retired by removal after PR #370 (merge d8e6761f, 2026-09-20 05:00 PDT); post-merge matrix run 35509175943 SUCCESS, including test (3.11, 3). Closure evidence: records 02/06/07/08 in docs/process_traces/2026-09-20-activation-21752427/. These remaining host-path fixtures are follow-ups, latent/inert today as executed in records 06/07.",
+      "stop_card": null
+    },
+    "TEST-LOAD-JOIN-LADDER-FLAKE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-ed17a643/30-seal-418/row9-fullsuite-7ee773c0-tail.txt",
+          "docs/process_traces/2026-09-25-activation-ed17a643/31-integ-137cc9ee/tail.txt"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-LOAD-JOIN-LADDER-FLAKE-01/acceptance",
+          "label": "TEST-LOAD-JOIN-LADDER-FLAKE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The root cause is identified. Either the timing margins derive from a measured budget or the test runs in an exclusive CI job, and the fix is verified in a loaded full-suite replay. Assertion semantics are unchanged."
+      },
+      "authority": {
+        "label": "Lead observation, activation ed17a643 (three occurrences under load)",
+        "path": "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make tests.test_sample_quiet_predicate_evidence LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (exit_delay=60) robust under concurrent machine load. It failed SIGKILL-for-SIGTERM in three full-suite replays on 2026-09-25/26 while implementation seats were running, and passed each isolated rerun.",
+      "id": "TEST-LOAD-JOIN-LADDER-FLAKE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 310,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation ed17a643).",
       "stop_card": null
     },
     "TEST-PGREP-DIALECT-MULTILINE-01": {
