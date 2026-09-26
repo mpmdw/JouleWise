@@ -1032,27 +1032,27 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             1,
         )
 
-    def test_issuance_refuses_t0_when_r1_batch_is_stale_by_600s_plus_1ns(
+    def test_issuance_refuses_t0_when_r1_batch_is_stale_by_610s_plus_1ns(
         self,
     ) -> None:
         with self.assertRaises(T0EvidenceAuthoringError) as caught:
-            self._author_with_r1_age(600_000_000_001)
+            self._author_with_r1_age(610_000_000_001)
         self.assertEqual(
             caught.exception.reason_code,
             "evidence_author_t0_predicate_refused",
         )
 
-    def test_issuance_passes_t0_when_r1_batch_is_600s_minus_1ns_old(
+    def test_issuance_passes_t0_when_r1_batch_is_610s_minus_1ns_old(
         self,
     ) -> None:
         self.assertEqual(
-            self._author_with_r1_age(599_999_999_999)["status"],
+            self._author_with_r1_age(609_999_999_999)["status"],
             "PASS",
         )
 
-    def test_issuance_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+    def test_issuance_t0_liveness_bound_passes_at_exactly_610s(self) -> None:
         self.assertEqual(
-            self._author_with_r1_age(600_000_000_000)["status"],
+            self._author_with_r1_age(610_000_000_000)["status"],
             "PASS",
         )
 
@@ -1143,11 +1143,16 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
         post_r1_sites = len(direct_call_names) - 1
         self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
-        self.assertEqual(post_r1_sites, 11, sites_by_function)
+        self.assertEqual(post_r1_sites, 12, sites_by_function)
         self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
         self.assertEqual(
             readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
-            (post_r1_sites * t0._PROBE_TIMEOUT_SECONDS + 105) * 1_000_000_000,
+            (
+                (post_r1_sites - 1) * t0._PROBE_TIMEOUT_SECONDS
+                + t0._PROBE_TIMEOUT_OVERRIDES[t0._battery_float.IOREG_BATTERY_ARGV]
+                + 105
+            )
+            * 1_000_000_000,
         )
 
     def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:

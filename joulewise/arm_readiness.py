@@ -6721,7 +6721,9 @@ def _content_matches(value: object, required: object) -> bool:
 
 
 _PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE = object()
-_T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS = 600_000_000_000
+# Eleven 45 s post-R1 probe sites plus the 10 s battery-float ioreg site
+# (BFG-D, final texts v1.1 §5.1/§5.3 item 5), plus 105 s: 610 s.
+_T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS = 610_000_000_000
 _CLOCK_PROBE_VALUE_KEYS = frozenset(
     {
         "independent_clock_attestation",
