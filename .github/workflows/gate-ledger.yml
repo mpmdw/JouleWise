@@ -1,16 +1,21 @@
 name: gate-ledger
 
 # ==================================================================
-# ADVISORY GATE-LEDGER CHECK (T26 cold gate item 2, D-170). NOT A
-# REQUIRED STATUS CHECK.
-# Every fresh PR is red by construction because the template seeds twelve
-# NOT-RUN rows; that deliberate nudge keeps an incomplete ledger visible.
+# REQUIRED GATE-LEDGER CHECK on main since 2026-09-24, made required in
+# Ed's interactive session (T26 cold gate item 2, D-170; interactive
+# record 02a24110 §7).
+# Every fresh PR is red by construction because the template seeds an
+# unresolved Tier choice and twelve NOT-RUN rows; that deliberate nudge
+# keeps an incomplete ledger visible.
 #
 # Read this before touching anything below. This job validates the
 # twelve-row "Gate ledger (D-118 / D-121)" table that
 # .github/pull_request_template.md seeds into every PR body: each key
-# 1-12 present exactly once, no row empty or NOT-RUN, every `RUN <path>`
-# resolving at the PR head under scripts/gen_state.py's pointer rules,
+# 1-12 present exactly once. Full tier (also the missing-Tier fallback)
+# requires RUN evidence in every row; declared light tier requires RUN
+# evidence in rows 1, 9, 11 and 12 and exact N/A (light tier) in the others.
+# No required row may be empty or NOT-RUN. Every `RUN <path>` must resolve
+# at the PR head under scripts/gen_state.py's pointer rules,
 # every `RUN <sha>` a commit the checkout knows, and item 12 naming the
 # PR's final head sha. It targets the MISTAKE class (a forgotten item);
 # a deliberately pasted block is out of the threat model (D-161).
@@ -21,12 +26,9 @@ name: gate-ledger
 # rounds) and widening ci.yml's untyped `pull_request` trigger would
 # re-run the whole ~17-minute matrix on every body edit.
 #
-# ADVISORY until Ed makes it a required status check (kernel row
-# ED-BRANCH-PROTECTION-E1-01). Do not promote this job to a required
-# check here; that is a lead-gated branch-protection change and must be
-# proposed, not applied. The D-072 self-merge condition already binds
-# independently: the magistrate self-merges only when this job is green
-# on the final head.
+# Made a required status check on main on 2026-09-24 in Ed's interactive
+# session (record 02a24110 §7); the
+# D-072 self-merge condition also requires it green on the final head.
 # ==================================================================
 
 on:
