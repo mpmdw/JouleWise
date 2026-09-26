@@ -874,7 +874,37 @@
       "priority": "p1_phase_gate",
       "rank": 308,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); addendum 2 (amendments 20-28, docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md); S0 at 980138c7 on feat/2026-09-26-bfgs-s0-helper-fence awaiting rebase, delta re-audit, Fable final pass and full suite (activation 6bec2aa6 record item 29). Required before any non-derivation window arms.",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); addendum 2 (amendments 20-28, docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md); S0 at 980138c7 on feat/2026-09-26-bfgs-s0-helper-fence awaiting rebase, delta re-audit, Fable final pass and full suite (activation 6bec2aa6 record item 29). Required before any non-derivation window arms. 2026-09-26 activation f8d6cab1: S0 delta re-audit split -> cold gate addendum 3 (amendments 29-32) + erratum (30 re-issued, 26/31/32 restated, 33/34 new for S2); round 4 c9081c6e; bench 783a09be (frozen CustodyFailure restored), b7df341b (strict UTF-8), 747596a3 (Fable-dictated T30-f row); cold Fable final pass MERGE; PR #429. S1/S2 briefs must quote amendments 26 and 31-34 verbatim from the erratum §3 and decide QPE-SHAPE3-NIGHT-BLANK-01 first.",
+      "stop_card": null
+    },
+    "BFGS-S0-FOLLOWUPS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/52-opus-contract-lens.md NITs 1-4",
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/60-s0-gate/21-fable-final-pass.md §5 (deferral accepted; RecursionError mapping named as the tidy fix)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BFGS-S0-FOLLOWUPS-01/acceptance",
+          "label": "BFGS-S0-FOLLOWUPS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Each NIT closed with a defect-shaped test (RED before, GREEN after) inside battery_float.py and its tests; the frozen closure and pins unchanged (regenerated only from base if any pin moves); full tier because battery_float.py is measurement-gating code."
+      },
+      "authority": {
+        "label": "S0 cold Fable final pass (deferrals accepted) and the addendum-3 erratum flag",
+        "path": "docs/process_traces/2026-09-26-activation-f8d6cab1/60-s0-gate/21-fable-final-pass.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the four S0 NITs the cold Fable final pass deferred (none changes a number): whitespace-only journal lines are skipped although C1 says any non-empty line must be a JSON object; a deeply nested container escapes as RecursionError instead of CustodyUnreadable; the S-1 single-binding count misses match/case capture rebinding; symlinked or directory journals are labelled 'unreadable' where amendment 30 says 'missing'.",
+      "id": "BFGS-S0-FOLLOWUPS-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 313,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1) from the S0 final pass; not started; not blocking S1/S2.",
       "stop_card": null
     },
     "BIND-REQUEST-PAYLOAD-CAP-01": {
@@ -7050,6 +7080,35 @@
       "status_note": "The default composed-member-envelope mean rule may be implemented now. The t95 plus window variant remains proposed and cannot govern _v5 collection until this cold gate rules it.",
       "stop_card": null
     },
+    "QPE-SHAPE3-NIGHT-BLANK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md §6 'Flag, not ruled'"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QPE-SHAPE3-NIGHT-BLANK-01/acceptance",
+          "label": "QPE-SHAPE3-NIGHT-BLANK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cold-gate ruling on text 6 (keep blanking, or exclude a shape-iii envelope as collect_error with its reason recorded), installed in S2's brief before S2 lands; the magistrate does not amend text 6 alone."
+      },
+      "authority": {
+        "label": "Addendum-3 erratum §6 flag",
+        "path": "docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Decide whether one timed-out collector envelope (shape iii: killed mid-envelope, evidence_missing) should blank the whole quiet-predicate night under text 6's 'blank on non-pass', while a collector that crashed before writing anything is excluded as collect_error and the night proceeds. No number escapes either way; the question is campaign cost and the asymmetry.",
+      "id": "QPE-SHAPE3-NIGHT-BLANK-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 314,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1); flagged by the erratum judge, not ruled; must be decided before S2 is briefed.",
+      "stop_card": null
+    },
     "QPE01-ABORT-SUCCESSOR-01": {
       "acceptance": {
         "evidence": [
@@ -8925,36 +8984,33 @@
       "status_note": "2026-09-20 activation 21752427 — queued [AGENT], p3_tooling. CI-LEGACY-FIXTURE-LINUX-01 retired by removal after PR #370 (merge d8e6761f, 2026-09-20 05:00 PDT); post-merge matrix run 35509175943 SUCCESS, including test (3.11, 3). Closure evidence: records 02/06/07/08 in docs/process_traces/2026-09-20-activation-21752427/. These remaining host-path fixtures are follow-ups, latent/inert today as executed in records 06/07.",
       "stop_card": null
     },
-    "TEST-LOAD-JOIN-LADDER-FLAKE-01": {
+    "TEST-LOAD-LADDER-KILL-COVERAGE-01": {
       "acceptance": {
         "evidence": [
-          "docs/process_traces/2026-09-25-activation-ed17a643/30-seal-418/row9-fullsuite-7ee773c0-tail.txt",
-          "docs/process_traces/2026-09-25-activation-ed17a643/31-integ-137cc9ee/tail.txt",
-          "docs/process_traces/2026-09-25-activation-ed17a643/51-bfgd-fullsuite-3ad48d1e/tail.txt",
-          "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md item 39 (integration replay at 80fe9969: 7,239 tests, 1 failure, the same ladder; isolated rerun passed; its log stayed in /tmp and is not tracked)"
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/00-activation-record.md item 8 (#428 row-1 review, KILL-mutation passes at 5d5a0b75 and d8aed7cd)"
         ],
         "pointer": {
-          "json_pointer": "/tasks/TEST-LOAD-JOIN-LADDER-FLAKE-01/acceptance",
-          "label": "TEST-LOAD-JOIN-LADDER-FLAKE-01 acceptance",
+          "json_pointer": "/tasks/TEST-LOAD-LADDER-KILL-COVERAGE-01/acceptance",
+          "label": "TEST-LOAD-LADDER-KILL-COVERAGE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The root cause is identified. Either the timing margins derive from a measured budget or the test runs in an exclusive CI job, and the fix is verified in a loaded full-suite replay. Assertion semantics are unchanged."
+        "summary": "A fixture child that ignores SIGTERM, and a test showing load() escalates to SIGKILL and reports the escalation; a mutation removing the KILL branch turns it RED. Test-only, light tier."
       },
       "authority": {
-        "label": "Lead observation, activation ed17a643 (three occurrences under load)",
-        "path": "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md"
+        "label": "#428 row-1 review follow-up",
+        "path": "docs/process_traces/2026-09-26-activation-f8d6cab1/00-activation-record.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Make tests.test_sample_quiet_predicate_evidence LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (exit_delay=60) robust under concurrent machine load. It failed SIGKILL-for-SIGTERM in four full-suite replays on 2026-09-25/26 while implementation seats were running, and passed each isolated rerun.",
-      "id": "TEST-LOAD-JOIN-LADDER-FLAKE-01",
+      "goal": "No test covers the KILL step of the quiet-predicate load ladder: no fixture child survives SIGTERM, so removing the kill() branch from load() leaves every test green (found by the #428 row-1 reviewer, pre-existing on main).",
+      "id": "TEST-LOAD-LADDER-KILL-COVERAGE-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 310,
+      "rank": 315,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). Fix candidate 37f9b935 on test/2026-09-26-load-join-ladder-flake (activation 6bec2aa6; post-TERM join 1 s -> 3 s in the test only; not reproduced locally 0/32). 2026-09-26 activation f8d6cab1: PR #428 opened, light tier, integration head d8aed7cd (merges main 5d5a0b75). The pgrep-census multi-line-argv hermeticity defect (#425 row 9) belongs to the existing lane TEST-PGREP-DIALECT-MULTILINE-01, not this one.",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1); not started.",
       "stop_card": null
     },
     "TEST-PGREP-DIALECT-MULTILINE-01": {
