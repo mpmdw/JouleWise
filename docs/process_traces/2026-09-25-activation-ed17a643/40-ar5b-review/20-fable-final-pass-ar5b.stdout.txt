@@ -1,0 +1,21 @@
+Ruling written to `/tmp/ed17a643/ar5b/20-fable-final-pass-ar5b.md` (sha256 `f2eb2446…48d7d4`). The worktree is untouched.
+
+**Verdict: MERGE `ad7565a7` as is. No blocker.**
+
+Contamination disclosure: the harness auto-loaded the global and project CLAUDE.md files and the memory index MEMORY.md. I opened no memory file, RUN_STATE, TASK_QUEUE, or council log. Everything else I read is listed in the ruling.
+
+Executed evidence, by charged check:
+
+- **Prefix and append.** The first 47 804 bytes of the HEAD file compare identical to the file at e9ed7a98. The appended tail equals one blank separator line plus the §5.8 blockquote with its markers stripped, byte for byte. Whole-file sha256 is `81b65f08…`, matching the digest the magistrate posted on issue #422 for the W1 notice pin.
+- **Sealed text.** Zero deletions in the diff, seal header intact, placeholder count 0, A-R5b heading occurs once.
+- **Coherence.** The amendment does not contradict Revision 5's stops, blindness, or no-outcome-driven-top-up rule, nor Revision 1's membership and A-7 refusal path. The verdict is computed from raw ioreg bytes before any B value is read, and the issuer-computed exclusion set reconciles the A-7 path explicitly.
+- **Decision-log record.** Accurate clause by clause against §5.8, §5.3, §5.7, and issues #421 and #422. It claims no council ratification and none is asserted.
+- **Tests.** The three named modules ran 48 tests, OK.
+- **Ed's approval.** Issue #422's binding text is followed to its letter: after #418 merged, only that file, only that append, plus the log entry.
+
+Findings to carry, none blocking:
+
+- **M1 (MATERIAL, ordering).** Once merged, any derivation window armed before BFG-D lands is `battery_float_evidence_missing` by construction and would consume the epoch's single replacement. The arm notice must wait for BFG-D on main.
+- **M2 (MATERIAL).** The decision-log record cites three ruling paths that exist only on the docs branch, not on main. Merge that branch before the W1 notice cites the record, or add the branch name to the log entry.
+- **N1 (NIT).** The record says the Opus refuter "amended" the ruling. The refuter raised findings; the cold Fable addendum amended. Wording only.
+rc=0

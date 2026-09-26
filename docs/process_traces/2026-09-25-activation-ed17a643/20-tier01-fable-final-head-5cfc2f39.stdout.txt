@@ -1,0 +1,12 @@
+**Verdict: MERGE** on 5cfc2f39, the verified live head of PR #419. Ruling written to `docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/60-fable-final-head-5cfc2f39.md` (the only file touched; working tree otherwise clean).
+
+**Contamination.** Only the harness-injected CLAUDE.md files and the memory index were in context before I acted. I opened no memory file, RUN_STATE.md, council log, or activation record, and read TASK_QUEUE.md only through the diff.
+
+**What I found, by charge item:**
+
+- **Dictated texts.** All installed. The rule header (F1) and the D-170 addendum (F5) are byte-exact. The install-date paragraphs (F2) differ only by the `#419` fill, which is exactly what my dictated "(set the PR number here at merge)" instruction asked for, and the PR number is now stable. The six numbered rule items are byte-identical to 7c9dadc4. The F3 predicate fix mirrors the checker's own tier parse and carries a regression Sol mutation-checked.
+- **Kernel lanes.** Both accurate to their cited sources. Every path the path-guard lane names exists. The D-118 quotation is verbatim. Ranks 306/307 are the next free slots. One NIT: the path-guard lane's authority label says "Opus 41 §T3 design" but the installed summary is Sol 42 F2's allow-list, which is the strictest of the three designs, so the text is safe and only the label is off. gen_state check and the two test modules pass (83 OK).
+- **Merge carry.** Nothing objectionable. Main advanced one commit (battery-float observation) since the candidate's base. It overlaps none of the seventeen changed files, and a merge-tree simulation is clean, so the 257 pin survives.
+
+**Conditions for the lead.** Row 12 must name 5cfc2f39. If the merge slips past 2026-09-25 PDT, move the two install dates and the two day-30 dates in merge bookkeeping. Fix the path-guard authority label at that lane's next touch, not in this PR.
+rc=0

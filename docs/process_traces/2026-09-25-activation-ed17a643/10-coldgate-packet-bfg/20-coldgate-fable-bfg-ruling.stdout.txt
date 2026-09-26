@@ -1,0 +1,20 @@
+The ruling is complete and written to `docs/process_traces/2026-09-25-activation-ed17a643/10-coldgate-packet-bfg/20-coldgate-fable-bfg-ruling.md` (sha256 `11e6d30c…`, untracked, not committed). Nothing else in the tree was touched.
+
+**Verification before the merits.** Charter digest matched the charge's pin. All six exhibit digests matched. Code in this worktree is byte-identical to origin/main at c6814dd8.
+
+**Verdicts.**
+- B1: A1, A3, A6, A8 affirmed. A2, A4, A5, A7 affirmed as amended.
+- B2: P1 affirmed. BFG-D must merge before W1. BFG-S must merge before any non-derivation window and is a registered obligation, not a follow-up.
+- B3: addendum required. P2 replaced by an exact A-R5b text. One bounded replacement affirmed over halt. A-R5b lands after PR #418 as its own labelled amendment.
+- B4: P3 affirmed for powermetrics windows. For wall-meter windows a current screen is rejected as the bound. An energy bound with the arithmetic is required first.
+- B5: P4 affirmed. Plan digest pinned in the ruling.
+
+**Material findings the seats and synthesis missed.**
+- The seats' A4 hashing plan puts new entries in two inventories that the ledger's historical-candidate authenticator checks as exact sets, and the ledger row only ever hashes the five governed names. The cure is a `battery_float` key inside the already-hashed evidence file.
+- Revision 5 runs the cadence report before the dry run, so the battery verdict must precede the cadence report too.
+- The arm check runs its machine predicates only for flagged night kinds. The battery check must sit outside those branches or W1 skips it.
+- The gauge's mAh counter is in every ioreg read. Reading it before and after each slot gives an integral charge screen the two point samples cannot.
+- A 30 s battery logger is running in /tmp and must be proven dead before W1 arms. Derivation kinds do not run the non-observer census that would catch it.
+
+**Not observed.** The pack was still in finishing charge at 100 % through 14:38 PDT, so float on this machine has never been seen. The ruling makes two clean readings a W1 prerequisite.
+rc=0
