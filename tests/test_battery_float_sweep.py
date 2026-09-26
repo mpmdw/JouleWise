@@ -23,10 +23,12 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 B_LEXEME = re.compile(r"b_fiducial_s|exact_bound_lexeme_s")
 
-# file -> (classification, gate).  "UNGATED" rows are reported NEEDS_SCOPE.
+# file -> (classification, gate, and for a refusal the test that proves it).
 READERS = {
     "scripts/issue_calibration_acceptance_generation.py": (
-        "gated", "check dry run and _dry_run_epoch_bound; prepare-candidate battery block"),
+        "gated", "check dry run and prepare-candidate, both through authenticate_battery_epoch "
+        "(authenticate_committed_verdict); proved by test_battery_float_consumers and the "
+        "BatteryFloatRevisionFiveTests parity matrix"),
     "scripts/epoch_equivalence_check.py": ("refuses Revision 5", "evaluate_session (R2-2)"),
     "scripts/issue_epoch_continuation.py": ("refuses Revision 5", "derive_record (R2-10)"),
     "joulewise/calibration_epoch_continuation.py": (
@@ -44,12 +46,17 @@ READERS = {
     "joulewise/detection_floor.py": ("bracket rows", "outside the derivation scope"),
     "scripts/mint_floor_artifact_generalized.py": ("bracket rows", "outside the derivation scope"),
     "joulewise/controller.py": (
-        "UNGATED", "operator-named instrument calibration attachment; NEEDS_SCOPE"),
+        "refuses Revision 5", "instrument calibration attachment raises 'revision_five evidence cannot be "
+        "attached as instrument calibration'; test_revision_five_b_readers."
+        "test_controller_attachment_refuses_before_physics_or_bound"),
     "scripts/run_campaign.py": ("run metadata", "reads the run's own controller attachment"),
     "scripts/calibration_ledger_backfill.py": (
-        "UNGATED", "writes evidence b_fiducial_s into candidate rows for any root; NEEDS_SCOPE"),
+        "refuses Revision 5", "raises '<dir>: revision_five evidence is not a backfill candidate'; "
+        "test_revision_five_b_readers.test_backfill_refuses_revision_five_before_bound"),
     "scripts/paper_anchor_correction_quantified.py": (
-        "UNGATED", "population = every capture under <corpus-root>/runs/instrument_validation; NEEDS_SCOPE"),
+        "refuses Revision 5", "raises PopulationUnavailable('revision_five evidence in <dir>') over every "
+        "capture before any analysis; test_revision_five_b_readers."
+        "test_paper_scans_every_capture_before_any_analysis"),
     "scripts/paper_excursion_decomposition.py": ("historical", "pinned member 20260722T145535-e941c821"),
     "scripts/check_paper_replay_fence.py": ("historical", "pinned member 20260722T145535-e941c821"),
     "scripts/check_paper_round7_artifacts.py": ("historical", "committed paper artifacts only"),
@@ -87,6 +94,18 @@ class SweepGuardTests(unittest.TestCase):
             if count and name != "joulewise/battery_float.py":
                 calls[name] = count
         self.assertEqual(calls, {name: len(runners) for name, runners in OBSERVE_CALLERS.items()})
+
+
+    def test_no_reader_is_ungated_and_each_refusal_names_its_proof(self):
+        for name, (classification, gate) in READERS.items():
+            with self.subTest(reader=name):
+                self.assertNotIn("UNGATED", classification)
+                self.assertNotIn("NEEDS_SCOPE", gate)
+                if classification == "refuses Revision 5" and name not in (
+                        "scripts/epoch_equivalence_check.py", "scripts/issue_epoch_continuation.py"):
+                    test_name = gate.rsplit(".", 1)[1]
+                    source = (ROOT / "tests/test_revision_five_b_readers.py").read_text(encoding="utf-8")
+                    self.assertIn(f"def {test_name}(", source)
 
 
 if __name__ == "__main__":
