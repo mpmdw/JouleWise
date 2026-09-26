@@ -1,0 +1,10 @@
+The ruling is written to `/tmp/817355d2/40-fable-final-pass-tier01.md`.
+
+**Verdict: FIX-FIRST (text only), then MERGE.** No blocker.
+
+- **T1 Conformance.** The diff implements §G5 exactly: six files, rule text verbatim, template tier line plus six-line impact statement, defect log with the suspension rule. Nothing missing, nothing overbuilt.
+- **T2 Checker.** Unit tests pass (38 OK). Nineteen adversarial bodies ran: `Tier: Light`, no-space, trailing text, leading spaces, table cell, BOM, and the raw template all refuse or fall back to full. CRLF and trailing whitespace are accepted correctly. N/A is rejected in rows 1, 9, 11, 12 and outside light tier. The row-12 head-sha rule is unchanged. One nit: an indented `Tier: light` with twelve RUN rows validates as full but prints the light-tier success message.
+- **T3 Path validation.** Follow-up, not a merge condition. Defensibility rests on the full-tier fallback, the reviewer confirming the tier, and the 30-day revert trigger. The report gives the exact design: a `--changed-files` list from `git diff --name-only` in the workflow, a fixed full-tier prefix list, fail-closed if the list is missing under light tier.
+- **T4 Doc accuracy.** Branch protection verified live: gate-ledger is a required check on main, so the workflow header is accurate. Two MATERIAL text fixes with exact replacement wording: the rule still says "proposed, Ed may veto" after Ed endorsed it in #415, and it claims installation on 09-24 when the PR does not exist yet, which shifts the day-30 review to 2026-10-25.
+
+The contamination disclosure is the report's first line: auto-loaded CLAUDE.md files and the memory index, §G5 of the ruling, four lines of record 02a24110 §7, and an over-broad grep that surfaced unrelated lines from RUN_STATE.md and TASK_QUEUE.md.

@@ -1,6 +1,16 @@
+Tier: full|light
+
+Impact statement (answer each line for this PR):
+(i) Raw-bundle byte or recorded timestamp: TODO
+(ii) Reduced energy, time, token count or correctness score: TODO
+(iii) Admit, refuse, select or exclude decision over bundles, nights, blocks, envelopes or items: TODO
+(iv) Unit or uncertainty: TODO
+(v) Registration, prospective manifest, analysis plan or estimator constant: TODO
+(vi) Published number or sentence in the paper, README claims or claim renderers: TODO
+
 ## Gate ledger (D-118 / D-121)
 
-Fill every row as `RUN <repo-relative-path>` or `RUN <commit-sha>` (a committed repo-relative artifact at the PR head or a commit sha: no `:N`, no `#anchor`, no URL); Evidence is plain text, no backticks; or `NOT-RUN`, which the advisory `gate-ledger` check reports as a defect until the row is filled. Item 12 must name the final head sha.
+Replace `Tier: full|light` with `Tier: full` or `Tier: light`. The independent reviewer confirms the tier; any disagreement resolves to full. Fill required rows as `RUN <repo-relative-path>` or `RUN <commit-sha>` (a committed repo-relative artifact at the PR head or a commit sha: no `:N`, no `#anchor`, no URL); Evidence is plain text, no backticks. Full tier requires all twelve rows. Light tier requires rows 1, 9, 11 and 12 with evidence; rows 2–8 and 10 must read `N/A (light tier)`. `NOT-RUN` remains a defect in required rows until filled. The `gate-ledger` check is required on `main`. Item 12 must name the final head sha.
 
 Row labels are keys; the authoritative gate text is D-118 / D-121 in docs/decision_log.md (and D-170 for this ledger).
 
