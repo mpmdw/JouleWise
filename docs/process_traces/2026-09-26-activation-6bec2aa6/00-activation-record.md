@@ -61,3 +61,9 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - Setup: worktree `JouleWise-wt-bfgs-s0-6bec2aa6`, branch `feat/2026-09-26-bfgs-s0-helper-fence` from `64e39bb9`.
     - Seat: Sol 6.0 xhigh. Brief `60-bfgs-s0/00-seat-brief.txt` quotes texts 1–4, 15, 17 and T1–T4 verbatim.
     - The pin table is regenerated after the rebase onto A309.
+15. **The A309 liveness seat returned. I committed its work unchanged as the branch head of `fix/2026-09-26-bfgd-verdict-merge-liveness` (pushed).**
+    - The diff matches the dictated M-1 closure verbatim.
+    - RED before the fix: `test_honest_harvest_merged_no_ff_into_moved_main_loads` failed with NoRecord "2 commits, 1 adding".
+    - Importer modules: 20 of 21 pass. `test_issue_calibration_acceptance_generation` failed one live probe only because the sandbox denies `sysctl kern.osversion`; a bench rerun is in progress.
+    - Full-gate lenses launched: Sol execution lens `70-a309-gate/10` (adversarial git histories) and Opus contract lens `70-a309-gate/11`.
+    - Still to come: the Fable final pass, which also confirms item 13's ordering, then the integration full-suite replay.
