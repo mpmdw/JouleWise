@@ -122,3 +122,11 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
       - Opus NITs 1–4 are deferred to a follow-up lane.
       - No cold gate is needed for R1: it is not a recurrence of the ruled class, and it is the first round on this defect.
 19. **The S0 cold Fable final pass is convened** on `b7df341b` (charge [60-s0-gate/20](60-s0-gate/20-fable-final-pass-charge.md), worktree `JouleWise-wt-s0fp-f8d6cab1`). It is also the row-10 fresh-eyes review of the bench commit. It must rule on the R2 reading and the deferrals.
+20. **S0 cold Fable final pass** ([60-s0-gate/21](60-s0-gate/21-fable-final-pass.md), on `b7df341b`) returned **FIX-FIRST (test-only), then MERGE without a further lens round**.
+    - It recomputed all 39 pins from base and found the frozen closure byte-identical.
+    - `b7df341b` is correct and complete, and nothing else in S0 auto-detects an encoding: 25 of 25 encoding cells refuse.
+    - The R2 reading is made the ruled reading: `evidence_missing`, and when a phase is absent, rung (a)'s reason stands.
+    - It accepts the NIT deferrals and the Opus residual (D-161).
+    - The one FIX is the dictated T30-f pre-only first-write row. It was applied verbatim as `747596a3` (`tests.test_battery_float` OK).
+    - Design notes D-1 to D-5; none stops S0. D-1: S1/S2 must pass real directories, never a symlink.
+21. **PR #429 opened** (S0, full tier). Rows 1–8 and 10 are RUN, with evidence in [60-s0-gate/30](60-s0-gate/30-ledger-evidence.md) (`d76d136d`). Row 9 (full suite at `747596a3`) is running, and rows 11 and 12 are pending.
