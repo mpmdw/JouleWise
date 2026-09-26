@@ -561,7 +561,7 @@ class CommittedVerdictTests(unittest.TestCase):
         self.git("checkout", "--theirs", "--", self.rel)
         self.git("add", self.rel)
         self.git("commit", "-q", "-m", "resolve record with theirs")
-        self.assert_no_record("path history is not a single adding commit")
+        self.assert_no_record("path history is not a single adding commit (2 commits, 2 adding)")
 
     def test_uncommitted_edit_is_no_record(self):
         self.write()
