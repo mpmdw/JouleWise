@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from contextlib import redirect_stdout
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
@@ -16,7 +18,8 @@ from scripts import issue_calibration_acceptance_generation as issuer
 from scripts import sim_acc_25g83_rev5 as simulation
 from joulewise import calibration_bracketing as bracketing
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
-from tests.fixtures.epoch_bootstrap.build import Slot, build_derivation_ledger
+from tests.fixtures.epoch_bootstrap import build as build_module
+from tests.fixtures.epoch_bootstrap.build import Slot, add_session, build_derivation_ledger, write_verdict_record
 
 ROOT = Path(__file__).resolve().parents[1]
 PREREG = ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
@@ -39,6 +42,12 @@ def registration_with_launch_pins(commit: str, night: str, probe: str) -> str:
 
 def sealed_registration() -> str:
     return registration_with_launch_pins("a" * 40, "b" * 64, "c" * 64)
+
+
+def recorded_under(text: str) -> dict:
+    """Fixture options: commit each window's harvest verdict under this registration."""
+    return {"verdict_records": True,
+            "preregistration_sha256": hashlib.sha256(text.encode()).hexdigest()}
 IDS_AND_VALUES = [
     ("08cf2f19ca7d2b1881e9ed426bbf2c4039e1b425e1ba999a5527bcee4e743cb6", "0.041133514338919874"),
     ("697ad07383e83bca6e031dd40708595d1f59227fece3c3eb8e6d04c8c2318dca", "0.04200278099548145"),
@@ -77,25 +86,33 @@ class RevisionFiveTests(unittest.TestCase):
             path = Path(tmp) / "registry.json"
             row = json.loads(REGISTRY.read_text())[0]
             path.write_text(json.dumps([row, row]))
-            with self.assertRaisesRegex(issuer.PrepareRefusal, "invalid or duplicate"):
-                issuer._registered_dispositions(path)
+            # The row grammar still runs behind the digest pin (§4.6): pin the
+            # copy's own digest so this test reaches it.
+            with patch.object(issuer, "DISPOSITION_REGISTRY_SHA256",
+                              hashlib.sha256(path.read_bytes()).hexdigest()):
+                with self.assertRaisesRegex(issuer.PrepareRefusal, "invalid or duplicate"):
+                    issuer._registered_dispositions(path)
             row["disposing_decision_id"] = "unruled"
             path.write_text(json.dumps([row]))
-            with self.assertRaisesRegex(issuer.PrepareRefusal, "invalid or duplicate"):
-                issuer._registered_dispositions(path)
+            with patch.object(issuer, "DISPOSITION_REGISTRY_SHA256",
+                              hashlib.sha256(path.read_bytes()).hexdigest()):
+                with self.assertRaisesRegex(issuer.PrepareRefusal, "invalid or duplicate"):
+                    issuer._registered_dispositions(path)
 
     def test_full_seal_accepts_and_grep_count_zero_while_malformed_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            sealed_text = sealed_registration().replace(
+                "# Revision 5 (2026-09-25; sealing pending PR-L pins)",
+                "# Revision 5 (2026-09-25; sealed 2026-09-25 at PR-L merge aaaaaaaa)",
+            )
             fixture = build_derivation_ledger(
                 root / "fixture", [Slot("0.025") for _ in range(12)],
                 second_session=("derivation-night-2", [Slot("0.026") for _ in range(12)]),
+                **recorded_under(sealed_text),
             )
             sealed = root / "sealed.md"
-            sealed.write_text(sealed_registration().replace(
-                "# Revision 5 (2026-09-25; sealing pending PR-L pins)",
-                "# Revision 5 (2026-09-25; sealed 2026-09-25 at PR-L merge aaaaaaaa)",
-            ))
+            sealed.write_text(sealed_text)
             grep = subprocess.run(
                 ["grep", "-c", "-E", r"<PR-L-MERGE[-]SHA>|<TEMPLATE[-]SHA256:", str(sealed)],
                 capture_output=True, text=True, check=False,
@@ -133,6 +150,7 @@ class RevisionFiveTests(unittest.TestCase):
             fixture = build_derivation_ledger(
                 root / "fixture", [Slot("0.025") for _ in range(12)],
                 second_session=("derivation-night-2", [Slot("0.026") for _ in range(12)]),
+                **recorded_under(sealed_registration()),
             )
             snapshot = load_calibration_ledger_snapshot(
                 fixture["ledger"], fixture["pin"], require_committed_pin=True,
@@ -190,8 +208,14 @@ class RevisionFiveTests(unittest.TestCase):
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "requires r7 predecessor"):
                     issuer._prepare_candidate(wrong_predecessor)
                 registry.write_text("[]\n")
-                with self.assertRaisesRegex(issuer.PrepareRefusal, "valid same-epoch observations outside"):
+                # An empty registry now refuses on its digest (§4.6); pinned to
+                # its own digest it still shows the archived rows trip A-7.
+                with self.assertRaisesRegex(issuer.PrepareRefusal, "registry digest mismatch"):
                     issuer._prepare_candidate(args(sealed))
+                with patch.object(issuer, "DISPOSITION_REGISTRY_SHA256",
+                                  hashlib.sha256(b"[]\n").hexdigest()):
+                    with self.assertRaisesRegex(issuer.PrepareRefusal, "valid same-epoch observations outside"):
+                        issuer._prepare_candidate(args(sealed))
                 registry.write_bytes(REGISTRY.read_bytes())
                 candidate = issuer._prepare_candidate(args(sealed))
             prior = candidate["prior_observation_set"]
@@ -254,6 +278,7 @@ class RevisionFiveTests(unittest.TestCase):
                     fixture = build_derivation_ledger(
                         root / label, first,
                         second_session=("derivation-night-2", [Slot("0.026") for _ in range(12)]),
+                        **recorded_under(sealed_registration()),
                     )
                     args = issuer.build_parser().parse_args([
                         "prepare-candidate", "--ledger", str(fixture["ledger"]),
@@ -275,7 +300,14 @@ class RevisionFiveTests(unittest.TestCase):
             fixture = build_derivation_ledger(
                 root / "fixture", [Slot("0.025") for _ in range(12)],
                 second_session=("derivation-night-2", [Slot("0.026") for _ in range(12)]),
+                **recorded_under(sealed_registration()),
             )
+            # The synthetic third window replays night 2's rows, so its
+            # harvest verdict is night 2's under its own session id.
+            night_two = fixture["root"] / "configs/calibration/battery_float_verdicts/derivation-night-2.json"
+            write_verdict_record(fixture, "derivation-night-3", record={
+                **json.loads(night_two.read_text()), "session_id": "derivation-night-3"})
+            build_module._commit(fixture["root"], "harvest derivation-night-3")
             snapshot = load_calibration_ledger_snapshot(
                 fixture["ledger"], fixture["pin"], require_committed_pin=True,
                 verify_custody=False, mode="read_replay", repo_root=fixture["root"],
@@ -305,6 +337,78 @@ class RevisionFiveTests(unittest.TestCase):
             with patch.object(issuer, "load_calibration_ledger_snapshot", return_value=augmented):
                 with self.assertRaisesRegex(issuer.PrepareRefusal, "W3 was opened despite at least 12 valid"):
                     issuer._prepare_candidate(args)
+
+    # ---- obligations v1.1 §4.6 / §4.10 item 5: the registry digest pin ----
+
+    def test_tracked_registry_digest_is_the_pinned_constant(self) -> None:
+        self.assertEqual(hashlib.sha256(REGISTRY.read_bytes()).hexdigest(),
+                         issuer.DISPOSITION_REGISTRY_SHA256)
+        self.assertEqual(len(issuer._registered_dispositions()), 11)
+
+    def test_an_appended_row_under_the_fixed_id_refuses_on_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "registry.json"
+            rows = json.loads(REGISTRY.read_text())
+            rows.append({**rows[0], "content_id": "0" * 64})
+            path.write_text(json.dumps(rows, indent=2) + "\n")
+            with self.assertRaisesRegex(issuer.PrepareRefusal,
+                                        r"observation disposition registry digest mismatch: [0-9a-f]{64} "
+                                        r"!= pinned ba1ba3fc[0-9a-f]{56}; not issued"):
+                issuer._registered_dispositions(path)
+
+    def test_a4_route_refuses_on_digest_and_the_tracked_registry_refuses_on_a7(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sealed = root / "sealed.md"
+            sealed.write_text(sealed_registration())
+            values = [Slot(f"0.0{300 + index}", native_frames=True) for index in range(12)]
+            fixture = build_derivation_ledger(
+                root / "fixture", values, session_id="W1", second_session=("W2", values),
+                **recorded_under(sealed_registration()),
+            )
+            add_session(fixture, "W2-prime", values, **recorded_under(sealed_registration()))
+            snapshot = load_calibration_ledger_snapshot(
+                fixture["ledger"], fixture["pin"], require_committed_pin=True,
+                verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+            )
+            rows = json.loads(REGISTRY.read_text())
+            rows += [{**rows[0], "content_id": row.content_id}
+                     for row in snapshot.bracket_session_by_id["W2"].finalized_slots.values()]
+            appended = root / "registry.json"
+            appended.write_text(json.dumps(rows, indent=2) + "\n")
+
+            def run(registry: Path) -> tuple[int, str]:
+                stream = io.StringIO()
+                with redirect_stdout(stream), patch.object(issuer, "DISPOSITION_REGISTRY", registry):
+                    code = issuer.main([
+                        "prepare-candidate", "--ledger", str(fixture["ledger"]),
+                        "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+                        "--preregistration", str(sealed),
+                        "--preregistration-sha256", hashlib.sha256(sealed.read_bytes()).hexdigest(),
+                        "--predecessor-acceptance", str(R7),
+                        "--registration-session-id", "W1", "--registration-session-id", "W2-prime",
+                        "--d125-ruling", "D-125 25G83/v3 Revision 5",
+                        "--out", str(root / "candidate.json"),
+                    ])
+                return code, stream.getvalue()
+
+            code, printed = run(appended)
+            self.assertEqual(code, 3)
+            self.assertIn("observation disposition registry digest mismatch", printed)
+            code, printed = run(REGISTRY)
+            self.assertEqual(code, 3)
+            self.assertIn("valid same-epoch observations outside this registration: W2-d01", printed)
+            self.assertFalse((root / "candidate.json").exists())
+            # Counterfactual: without the pin, rows naming W2's ids under the
+            # fixed decision id exempt W2 and a clean window is silently
+            # dropped (the ruling's A4 route: W2's twelve ids, exit 0, n = 24).
+            only_w2 = root / "registry-w2.json"
+            only_w2.write_text(json.dumps(rows[11:], indent=2) + "\n")
+            with patch.object(issuer, "DISPOSITION_REGISTRY_SHA256",
+                              hashlib.sha256(only_w2.read_bytes()).hexdigest()):
+                code, printed = run(only_w2)
+            self.assertEqual(code, 0, printed)
+            self.assertIn("corpus n: 24", printed)
 
     def test_simulation_runs_all_four_models_without_false_admission(self) -> None:
         rows = simulation.run(20, 20)

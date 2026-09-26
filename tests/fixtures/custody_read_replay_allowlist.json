@@ -84,6 +84,20 @@
     "reason": "Read-only desk epoch watch and blind registration dry run replay the existing ledger snapshot once to compare identity fields, print a table and, with --session-ids, report session kinds/states/slot counts; never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest."
   },
   {
+    "file": "scripts/issue_calibration_acceptance_generation.py",
+    "function": "_battery_verdict",
+    "ordinal": 1,
+    "line": 1359,
+    "reason": "battery-verdict replays the committed ledger snapshot at harvest to read one terminal session's rows and write its battery-float verdict file exclusively under configs/calibration/battery_float_verdicts/; it never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest."
+  },
+  {
+    "file": "scripts/calibration_cadence_report.py",
+    "function": "report_window",
+    "ordinal": 1,
+    "line": 51,
+    "reason": "The cadence report replays the committed ledger snapshot to find one terminal session and its committed battery-float verdict, then prints native-frame statistics to stdout; it never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest."
+  },
+  {
     "file": "scripts/issue_epoch_continuation.py",
     "function": "_load_snapshot",
     "ordinal": 1,
