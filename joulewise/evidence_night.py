@@ -1383,8 +1383,16 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             except (Refused, OSError, ValueError) as exc:
                 checks["machine_quiet"] = dict(
                     verdict="fail", reason=f"payload kind unreadable: {type(exc).__name__}: {exc}")
+                def unreadable_battery_brackets():
+                    raise Refused("battery_brackets: payload kind unreadable")
+                inspect("battery_brackets", unreadable_battery_brackets)
             else:
                 row = NIGHT_KINDS.get(payload_kind)
+                def check_battery_brackets():
+                    if row is None or row.battery_brackets is not True:
+                        raise Refused(f"battery_brackets: {payload_kind!r} has no pair collector")
+                    return {"payload_kind": payload_kind}
+                inspect("battery_brackets", check_battery_brackets)
                 if row is not None and row.corecaptured_at_arm_and_t0:
                     actuator = corecaptured_actuator or production_corecaptured_actuator()
                     # A rehearsal decides "nothing loaded" with a fixture

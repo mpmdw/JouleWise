@@ -6,7 +6,7 @@ bytes, loads the committed record and requires the two to agree.  Every
 earlier drift between the desk dry run and the issuer came from a consumer
 calling the pieces itself and skipping one.  This test walks every tracked
 `*.py` under `joulewise/` and `scripts/` (plus the one test fixture that
-writes records) and fails on any reference to a piece outside the six
+writes records) and fails on any reference to a piece outside the seven
 allowlisted functions below, including the producer (`verdict_record`) and
 the parser (`parse`).
 """
@@ -24,13 +24,14 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE = "joulewise.battery_float"
 GUARDED = frozenset({"load_committed_verdict", "validate_window", "compare_verdict",
                      "verdict_record", "parse"})
-# file::function -> the guarded names it may reference; exactly six rows.
+# file::function -> the guarded names it may reference; exactly seven rows.
 ALLOWLIST = {
     ("joulewise/battery_float.py", "authenticate_committed_verdict"):
         frozenset({"validate_window", "load_committed_verdict", "compare_verdict"}),
     ("joulewise/battery_float.py", "verdict_record"): frozenset({"validate_window"}),
     ("joulewise/battery_float.py", "observe"): frozenset({"parse"}),
     ("joulewise/battery_float.py", "validate_window"): frozenset({"parse"}),
+    ("joulewise/battery_float.py", "authenticate_pair"): frozenset({"parse"}),
     ("scripts/issue_calibration_acceptance_generation.py", "_battery_verdict"):
         frozenset({"verdict_record"}),
     ("tests/fixtures/epoch_bootstrap/build.py", "write_verdict_record"): frozenset({"verdict_record"}),
@@ -85,6 +86,7 @@ class _Checker(ast.NodeVisitor):
         self.module_aliases: set[str] = set()      # names bound to joulewise.battery_float
         self.package_aliases: set[str] = set()     # `import joulewise.battery_float` binds `joulewise`
         self.bound: dict[str, str] = {}            # local name -> guarded name it was imported as
+        self.pair_constructors: set[str] = set()
         self.functions: list[str] = []
         self.found: list[tuple[str, int, str]] = []
         for node in ast.walk(tree):
@@ -105,6 +107,8 @@ class _Checker(ast.NodeVisitor):
                     for alias in node.names:
                         if alias.name in GUARDED:
                             self.bound[alias.asname or alias.name] = alias.name
+                        if alias.name == "PairVerdict":
+                            self.pair_constructors.add(alias.asname or alias.name)
 
     def _flag(self, node: ast.AST, name: str) -> None:
         function = self.functions[-1] if self.functions else None
@@ -134,6 +138,16 @@ class _Checker(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         if node.attr in GUARDED and self._resolves_to_module(node.value):
             self._flag(node, node.attr)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        callee = node.func
+        if not self.in_module and (
+            isinstance(callee, ast.Name) and callee.id in self.pair_constructors
+            or isinstance(callee, ast.Attribute) and callee.attr == "PairVerdict"
+            and self._resolves_to_module(callee.value)
+        ):
+            self.found.append((self.relative, node.lineno, "PairVerdict"))
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
@@ -182,8 +196,33 @@ class ConsumerGuardTests(unittest.TestCase):
                   if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
         self.assertLessEqual({"validate_window", "load_committed_verdict", "compare_verdict"}, called)
 
-    def test_the_allowlist_has_exactly_six_rows(self) -> None:
-        self.assertEqual(len(ALLOWLIST), 6)
+    def test_the_allowlist_has_exactly_seven_rows(self) -> None:
+        self.assertEqual(len(ALLOWLIST), 7)
+
+    def test_new_parse_reference_outside_pair_seam_is_flagged(self) -> None:
+        source = "def new_reader(raw):\n    return parse(raw, 1)\n"
+        self.assertEqual(violations("joulewise/battery_float.py", source),
+                         [("joulewise/battery_float.py", 2, "parse")])
+
+    def test_pair_verdict_calls_outside_module_are_flagged_but_isinstance_is_allowed(self) -> None:
+        source = ("from joulewise.battery_float import PairVerdict as PV\n"
+                  "from joulewise import battery_float as bf\n"
+                  "def f(value):\n"
+                  "    isinstance(value, PV)\n"
+                  "    isinstance(value, bf.PairVerdict)\n"
+                  "    PV('quiet', 'pass', (), None, None, None, None, None)\n"
+                  "    bf.PairVerdict('quiet', 'pass', (), None, None, None, None, None)\n")
+        self.assertEqual(violations("scripts/x.py", source), [
+            ("scripts/x.py", 6, "PairVerdict"), ("scripts/x.py", 7, "PairVerdict")])
+
+    def test_only_core_references_parser_and_wrappers_only_call_core(self) -> None:
+        tree = ast.parse((ROOT / "joulewise/battery_float.py").read_text())
+        functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+        for name in ("authenticate_quiet_session", "authenticate_bundle", "authenticate_capture"):
+            calls = {node.func.id for node in ast.walk(functions[name])
+                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                     and node.func.id in {"authenticate_pair", "parse", "validate_window"}}
+            self.assertEqual(calls, {"authenticate_pair"})
 
     # ---- self-test (§3.10) ----
 

@@ -1,6 +1,7 @@
 """Offline prepare composition and refusal boundaries; no live arm evidence."""
 import contextlib
 import fcntl
+from dataclasses import replace
 from datetime import datetime, timezone
 import io
 import inspect
@@ -40,6 +41,13 @@ from joulewise import night_gate
 from tests import battery_float_corpus, battery_float_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _post_s2_kind_table_for_downstream_gate_tests():
+    """Let older check tests exercise later predicates while the S0 fence stays closed."""
+    from joulewise.night_kinds import NIGHT_KINDS
+    return {**NIGHT_KINDS, "quiet_predicate_evidence": replace(
+        NIGHT_KINDS["quiet_predicate_evidence"], battery_brackets=True)}
 
 
 class NoticeProtocolTextTests(unittest.TestCase):
@@ -339,6 +347,12 @@ class PrepareTests(unittest.TestCase):
         self.kw = dict(kind=entry.KIND, t0=str(self.t0), head=self.head, remote=str(self.remote),
                        roots_under=self.base_dir / "roots", staging_under=self.base_dir / "staging",
                        builder=self.fake_builder, lock_verifier=lambda root: None)
+        if self._testMethodName in {
+                "test_b4_prepare_check_prepare",
+                "test_the_arm_check_refuses_a_busy_non_observer_with_the_gates_own_text"}:
+            fence = patch.object(entry, "NIGHT_KINDS", _post_s2_kind_table_for_downstream_gate_tests())
+            fence.start()
+            self.addCleanup(fence.stop)
 
     @staticmethod
     def fake_builder(root):
@@ -945,6 +959,10 @@ class LifecycleTests(unittest.TestCase):
                        runner=self.runner, caller_pid=90, census_observer=lambda **kw: self.fixture,
                        lock_verifier=lambda root: None, launchctl_bin="/fixture/launchctl",
                        quiet_observer=quiet_machine)
+        if self._testMethodName.startswith("test_corecaptured_"):
+            fence = patch.object(entry, "NIGHT_KINDS", _post_s2_kind_table_for_downstream_gate_tests())
+            fence.start()
+            self.addCleanup(fence.stop)
         self.schedule = dict(install_close_epoch_s=self.t0 - 1800,
                              boundaries={"REQUEST / exit BEFORE": self.t0 - 900})
         for p in (patch.object(entry, "CENSUS_FIX", self.head),
@@ -1620,15 +1638,19 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(record["checks"]["machine_quiet"],
                          dict(verdict="skipped", reason="not an evidence night", payload_kind="calibration"))
+        self.assertEqual(record["checks"]["battery_brackets"]["verdict"], "pass")
         self.assertTrue(record["rehearsal_ready"])
         written = json.loads((self.stage / "lifecycle/check.json").read_text())
         self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "skipped")
         # The same candidate with an evidence chain: the observer is spent once.
         self.evidence_chain()
-        record = entry.check(**dict(self.kw, quiet_observer=spy))
+        with self.assertRaisesRegex(entry.Refused, "battery_brackets"):
+            entry.check(**dict(self.kw, quiet_observer=spy))
+        record = json.loads(self.journal("check.json").read_text())
         self.assertEqual(calls, ["observed"])
         self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "pass")
-        self.assertTrue(record["rehearsal_ready"])
+        self.assertEqual(record["checks"]["battery_brackets"]["verdict"], "fail")
+        self.assertFalse(record["rehearsal_ready"])
         # The module guard: with no injected observer, the check reaches the
         # production sampler, which raises here instead of sampling.
         with self.assertRaises(ProductionSamplerInvoked):
@@ -1664,6 +1686,26 @@ class LifecycleTests(unittest.TestCase):
         record = self.checked("payload kind unreadable")
         self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "fail")
         self.assertFalse(record["armable"])
+
+    def test_unknown_payload_kind_has_a_failed_battery_brackets_check(self):
+        with patch.object(entry, "candidate_payload_kind", return_value="unknown"):
+            with self.assertRaisesRegex(entry.Refused, "battery_brackets"):
+                entry.check(**self.kw)
+        written = json.loads(self.journal("check.json").read_text())
+        self.assertEqual(written["checks"]["battery_brackets"]["verdict"], "fail")
+        self.assertFalse(written["armable"])
+        self.assertFalse(written["rehearsal_ready"])
+
+    def test_qpe_candidate_is_not_armable_before_s2(self):
+        self.evidence_chain()
+        with self.assertRaisesRegex(entry.Refused, "battery_brackets"):
+            entry.check(**self.kw)
+        written = json.loads(self.journal("check.json").read_text())
+        self.assertEqual(written["checks"]["battery_brackets"]["verdict"], "fail")
+        self.assertEqual(written["checks"]["corecaptured"]["verdict"], "pass")
+        self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "pass")
+        self.assertFalse(written["armable"])
+        self.assertFalse(written["rehearsal_ready"])
 
     def test_discovery_span_fence_reuses_the_watchdog_rule(self):
         from scripts.magistrate_watchdog import COURIER_DEADLINE_S
@@ -3177,10 +3219,11 @@ os.execv(sys.executable,[sys.executable,*args])
                 head=self.head, remote=str(self.remote), roots_under=base / "roots", staging_under=base / "staging",
                 builder=builder, lock_verifier=lambda root: None)
             stage, custody = Path(state["staging"]), Path(state["custody_root"])
-            checked = entry.check(candidate=stage, canonical=canonical, supervisor_state=resident,
-                launchctl_bin=str(fake.executable), runner=probes, caller_pid=90, census_observer=lambda **kw: observation(
-                    row(20, 1, "/bin/claude"), row(90, 20, "/bin/python3"), hits=(20,)),
-                quiet_observer=quiet_machine, lock_verifier=lambda root: None)
+            with patch.object(entry, "NIGHT_KINDS", _post_s2_kind_table_for_downstream_gate_tests()):
+                checked = entry.check(candidate=stage, canonical=canonical, supervisor_state=resident,
+                    launchctl_bin=str(fake.executable), runner=probes, caller_pid=90, census_observer=lambda **kw: observation(
+                        row(20, 1, "/bin/claude"), row(90, 20, "/bin/python3"), hits=(20,)),
+                    quiet_observer=quiet_machine, lock_verifier=lambda root: None)
             self.assertFalse(checked["armable"])
             self.assertTrue(checked["rehearsal_ready"])
             self.assertTrue(all(c.startswith(("list", "print")) for c in fake.calls()))

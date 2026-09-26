@@ -29,6 +29,8 @@ IOREG_BATTERY_ARGV = ("/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery")
 PROBE_TIMEOUT_S = 10
 SCHEMA = "joulewise.battery_float.v1"
 POLICY_ID = "bfg-01"
+PHASES = ("arm_check", "publish_install", "t0", "validate_install", "t0_power_row",
+          "slot_pre", "slot_post", "quiet_pre", "quiet_post", "bundle_pre", "bundle_post")
 LIMIT_MA = 200
 MAX_UPDATE_AGE_S = 180
 _REQUIRED = ("ExternalConnected", "IsCharging", "InstantAmperage", "UpdateTime")
@@ -735,3 +737,153 @@ def authenticate_committed_verdict(
         file_sha256=record.file_sha256,
         commit=record.commit,
     )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class PairVerdict:
+    kind: str
+    status: str
+    reasons: tuple[str, ...]
+    pre_raw_sha256: str | None
+    post_raw_sha256: str | None
+    pre_update_age_s: float | None
+    post_update_age_s: float | None
+    delta_q_mah: int | None
+
+    def __post_init__(self) -> None:
+        if self.status not in ("pass", "battery_float_confounded", "battery_float_evidence_missing",
+                               "not_applicable", "unobserved_historical"):
+            raise ValueError(f"unregistered battery pair status: {self.status}")
+
+
+def authenticate_pair(record: Any, custody_root: Path | str, *, phases: tuple[str, str],
+                      identity: str | None, span: tuple[int, int] | None = None) -> PairVerdict:
+    """Recompute a pair from recorded raw bytes; custody defects always raise.
+
+    A malformed phase does not hide a custody failure in its other phase.
+    The stored predicate and stored charge delta have no authority here.
+    """
+    if phases not in (("quiet_pre", "quiet_post"), ("bundle_pre", "bundle_post"),
+                      ("slot_pre", "slot_post")):
+        raise ValueError("unregistered battery pair phases")
+    kind = {"quiet_pre": "quiet", "bundle_pre": "bundle", "slot_pre": "capture"}[phases[0]]
+    reasons: list[str] = []
+    digests: dict[str, str | None] = {"pre": None, "post": None}
+    ages: dict[str, float | None] = {"pre": None, "post": None}
+    capacities: dict[str, int | None] = {"pre": None, "post": None}
+    confounded = False
+    root = Path(custody_root)
+    for phase, expected in zip(("pre", "post"), phases):
+        stored = record.get(phase) if isinstance(record, dict) else None
+        path = f"raw/battery_float.{phase}.ioreg"
+        try:
+            wall_valid = isinstance(stored, dict) and _is_wall_time(stored.get("wall_time_s"))
+        except (OverflowError, ValueError):
+            wall_valid = False
+        fault = (
+            "phase not recorded" if not isinstance(stored, dict) else
+            "phase mismatch" if stored.get("phase") != expected else
+            "session identity missing" if kind in ("quiet", "bundle") and (
+                not isinstance(identity, str) or not identity) else
+            "session identity mismatch" if stored.get("session_id") != identity else
+            "slot identity mismatch" if kind in ("quiet", "bundle") and (
+                stored.get("slot") is not None or stored.get("attempt_id") is not None) else
+            "raw path mismatch" if stored.get("raw_path") != path else
+            "raw digest not recorded" if not _is_sha256(stored.get("raw_stdout_sha256")) else
+            "wall time not recorded" if not wall_valid else
+            None
+        )
+        if fault is not None:
+            reasons.append(f"{phase} evidence missing: {fault}")
+            continue
+        expected_digest = stored["raw_stdout_sha256"]
+        try:
+            body = (root / path).read_bytes()
+        except OSError:
+            body = None
+        observed_digest = None if body is None else hashlib.sha256(body).hexdigest()
+        if observed_digest != expected_digest:
+            raise CustodyFailure([{"slot": identity, "attempt_id": None, "artifact": phase,
+                                   "expected_sha256": expected_digest,
+                                   "observed_sha256": observed_digest}])
+        digests[phase] = observed_digest
+        if stored.get("exit_code") != 0 or stored.get("timed_out"):
+            reasons.append(f"{phase} evidence missing: probe failed")
+            continue
+        try:
+            parsed = parse(body, float(stored["wall_time_s"]))
+        except (ProbeError, ValueError, TypeError) as exc:
+            reasons.append(f"{phase} evidence missing: {exc}")
+            continue
+        ages[phase] = parsed["update_age_s"]
+        capacities[phase] = parsed["apple_raw_current_capacity_mah"]
+        if not parsed["passed"]:
+            confounded = True
+            reasons.extend(f"{phase} {reason}" for reason in parsed["reasons"])
+        if span is not None:
+            stamp = stored.get("monotonic_after_ns" if phase == "pre" else "monotonic_before_ns")
+            bound = span[0] if phase == "pre" else span[1]
+            if (not isinstance(stamp, int) or isinstance(stamp, bool)
+                    or not isinstance(bound, int) or isinstance(bound, bool)
+                    or (stamp > bound if phase == "pre" else stamp < bound)):
+                reasons.append(f"{phase} evidence missing: {expected} outside measured span")
+    status = ("battery_float_confounded" if confounded else
+              "battery_float_evidence_missing" if reasons else "pass")
+    pre_q, post_q = capacities["pre"], capacities["post"]
+    return PairVerdict(kind, status, tuple(reasons), digests["pre"], digests["post"],
+                       ages["pre"], ages["post"],
+                       None if pre_q is None or post_q is None else post_q - pre_q)
+
+
+def authenticate_quiet_session(envelope_dir: Path | str) -> PairVerdict:
+    """Authenticate a collector envelope from its mutable session journal and raw bytes."""
+    root = Path(envelope_dir)
+    try:
+        session = json.loads((root / "session.json").read_bytes())
+    except (OSError, ValueError):
+        session = None
+    if not isinstance(session, dict):
+        session = {}
+    start, end = session.get("start_stamp"), session.get("end_stamp")
+    try:
+        span = (math.floor(start["monotonic_before_s"] * 1_000_000_000),
+                math.ceil(end["monotonic_after_s"] * 1_000_000_000))
+    except (KeyError, TypeError, ValueError, OverflowError):
+        span = (None, None)
+    verdict = authenticate_pair(session.get("battery_float"), root,
+                                phases=("quiet_pre", "quiet_post"),
+                                identity=session.get("session"), span=span)
+    rows_path = root / "rounds.jsonl"
+    if rows_path.exists():
+        try:
+            rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
+        except (OSError, ValueError):
+            rows = []
+        battery = session.get("battery_float")
+        for index, row in enumerate(rows):
+            for phase in ("pre", "post"):
+                stored = battery.get(phase) if isinstance(battery, dict) else None
+                expected = stored.get("raw_stdout_sha256") if isinstance(stored, dict) else None
+                if not _is_sha256(expected):
+                    continue
+                relative = f"raw/battery_float.{phase}.ioreg"
+                raw_map = row.get("raw", {}).get("sha256", {}) if isinstance(row, dict) else {}
+                observed = raw_map.get(relative) if isinstance(raw_map, dict) else None
+                if observed != expected:
+                    raise CustodyFailure([{"slot": session.get("session"), "attempt_id": index,
+                                           "artifact": relative, "expected_sha256": expected,
+                                           "observed_sha256": observed}])
+    return verdict
+
+
+def authenticate_capture(capture_dir: Path | str) -> PairVerdict:
+    """Authenticate the pair alongside instrument_evidence.json."""
+    root = Path(capture_dir)
+    try:
+        evidence = json.loads((root / "instrument_evidence.json").read_bytes())
+    except (OSError, ValueError):
+        evidence = None
+    battery = evidence.get("battery_float") if isinstance(evidence, dict) else None
+    pre = battery.get("pre") if isinstance(battery, dict) else None
+    identity = pre.get("session_id") if isinstance(pre, dict) else None
+    return authenticate_pair(battery, root, phases=("slot_pre", "slot_post"), identity=identity)

@@ -367,7 +367,7 @@ class NightKindTests(unittest.TestCase):
         try:
             third = replace(kind_row("quiet_predicate_evidence"), kind="scored_campaign",
                             corecaptured_at_arm_and_t0=False,
-                            non_observer_at_arm_and_t0=True)
+                            non_observer_at_arm_and_t0=True, battery_brackets=True)
             table = MappingProxyType(dict(NIGHT_KINDS, scored_campaign=third))
             case.evidence_chain("export NIGHT_PAYLOAD_KIND=scored_campaign\n")
             seen = []
@@ -384,6 +384,10 @@ class NightKindTests(unittest.TestCase):
             self.assertTrue(third.non_observer_at_arm_and_t0)
         finally:
             case.doCleanups()
+
+    def test_battery_bracket_flags_are_a_pre_s2_arm_fence(self):
+        self.assertTrue(kind_row("calibration").battery_brackets)
+        self.assertFalse(kind_row("quiet_predicate_evidence").battery_brackets)
 
     @unittest.skipUnless(Path("/bin/zsh").is_file(), "candidate sealing requires zsh")
     def test_prepare_authors_row_paths_and_seals_candidate_at_head(self):

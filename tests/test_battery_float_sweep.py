@@ -17,8 +17,11 @@ bytes (obligation R2-11).
 from __future__ import annotations
 
 from pathlib import Path
+import ast
 import re
 import unittest
+
+from joulewise import battery_float
 
 ROOT = Path(__file__).resolve().parents[1]
 B_LEXEME = re.compile(r"b_fiducial_s|exact_bound_lexeme_s")
@@ -84,6 +87,30 @@ def _production_sources():
 
 
 class SweepGuardTests(unittest.TestCase):
+    def test_every_production_observe_phase_is_registered(self):
+        seen = set()
+        for name, source in _production_sources():
+            tree = ast.parse(source, filename=name)
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                    continue
+                if node.func.attr != "observe" or not isinstance(node.func.value, ast.Name):
+                    continue
+                if node.func.value.id not in ("battery_float", "_battery_float"):
+                    continue
+                [phase] = [kw.value for kw in node.keywords if kw.arg == "phase"]
+                if isinstance(phase, ast.Constant) and isinstance(phase.value, str):
+                    self.assertIn(phase.value, battery_float.PHASES, (name, node.lineno))
+                    seen.add(phase.value)
+                else:
+                    # The existing slot writer formats only its pre/post loop.
+                    self.assertEqual(name, "scripts/validate_powermetrics_fiducial.py")
+                    self.assertIsInstance(phase, ast.JoinedStr)
+                    self.assertEqual(ast.unparse(phase), "f'slot_{phase}'")
+                    self.assertTrue({"slot_pre", "slot_post"} <= set(battery_float.PHASES))
+                    seen.update(("slot_pre", "slot_post"))
+        self.assertEqual(seen, set(battery_float.PHASES[:7]))
+
     def test_every_b_lexeme_reader_is_classified(self):
         readers = {name for name, text in _production_sources() if B_LEXEME.search(text)}
         self.assertEqual(readers, set(READERS))

@@ -23,6 +23,25 @@ from tests.test_night_gate import FakeProbeSource, REGISTRATION_TEXT, make_plan,
 FIXTURES = Path(__file__).parent / "fixtures/battery_float"
 UPDATE = 1790373525
 
+# Source bytes at the requested S0 base (64e39bb9). A309 changes only its
+# own row after rebase; the lead regenerates this one table then.
+FROZEN_FUNCTION_SOURCE_SHA256 = {
+    "parse": "ccd50dd168b5ce128127a4f6f9e454b7715a4dcb01229bbe34cd03ecef23e865",
+    "_structure": "988e36bb5acb54737e10183e26ff46e5dd1a1a7130156931fa7111f03dab9a60",
+    "_recorded_values": "82256b7fa221253727d55b39feb793ef5e71e87d87ee707802e09d5f882f7468",
+    "observe": "188a5709f352361b5364a703853a2bd02fc4a5e57fa1c74b274dea4b1f1b5d2e",
+    "require_pass": "28c04bf25d88d342ceca917a801dfa5a12d191f4db5ea56c89a222b9d83045fe",
+    "validate_window": "cda762184be73c6853c98679bac375e96fc44c8dd7a200b5f53a4c89079fcb4d",
+    "predates_battery_float": "a387371550b0ac3f18b709ff5fa0288bf6e743660c52d402fb54ae413bb2fcee",
+    "authenticate_committed_verdict": "1a4d783b9937e6d5dee26e1b02295898abd2170ef5b354573e2a88b7cad73522",
+    "load_committed_verdict": "d1e9bc2257d908734a8433368fb8097ad769cea8bc1210b228025e0818a5809c",
+    "compare_verdict": "d375ca6c5d514a2d2c62fd3ce999a3679936677463771b13cdb210ec677fa143",
+}
+
+# Exact canonical record from observe() at 64e39bb9 with a fixed clock and
+# the committed float.ioreg fixture. Only the phase lexeme changes per call.
+OBSERVE_GOLDEN = r'''{"amperage_ma":0,"apple_raw_current_capacity_mah":7591,"apple_raw_max_capacity_mah":7591,"argv":["/usr/sbin/ioreg","-r","-c","AppleSmartBattery"],"attempt_id":null,"current_capacity_pct":100,"exit_code":0,"external_connected":true,"external_connected_raw":"Yes","fully_charged":true,"instant_amperage_ma":0,"instant_amperage_raw":"0","is_charging":false,"is_charging_raw":"No","limit_ma":200,"max_update_age_s":180,"monotonic_after_ns":20,"monotonic_before_ns":10,"object_count":1,"passed":true,"phase":"arm_check","plan_id":"plan-1","policy_id":"bfg-01","probe_error":false,"property_lines":["      \"ExternalConnected\" = Yes","      \"IsCharging\" = No","      \"InstantAmperage\" = 0","      \"UpdateTime\" = 1790373525","      \"Amperage\" = 0","      \"Voltage\" = 12909","      \"Temperature\" = 3031","      \"FullyCharged\" = Yes","      \"CurrentCapacity\" = 100","      \"AppleRawCurrentCapacity\" = 7591","      \"AppleRawMaxCapacity\" = 7591"],"raw_path":"raw/battery_float.pre.ioreg","raw_stdout_sha256":"b42eb919dad653bc42dffac24df0512a4f9b315edbc928f79a1d31bd5b0766b4","reasons":[],"schema":"joulewise.battery_float.v1","session_id":"session-1","slot":null,"stderr":"","temperature_raw":3031,"timed_out":false,"update_age_s":1,"update_time_raw":"1790373525","update_time_s":1790373525,"voltage_mv":12909,"wall_time_s":1790373526}'''
+
 
 def raw(name="float.ioreg"):
     return (FIXTURES / name).read_bytes()
@@ -31,6 +50,139 @@ def raw(name="float.ioreg"):
 def edit(source: bytes, old: bytes, new: bytes) -> bytes:
     assert source.count(old) == 1
     return source.replace(old, new)
+
+
+class PairAuthenticationTests(unittest.TestCase):
+    def pair(self, root, pre=None, post=None):
+        directory = Path(root)
+        (directory / "raw").mkdir(exist_ok=True)
+        record = {}
+        for phase, body in (("pre", raw() if pre is None else pre),
+                            ("post", raw() if post is None else post)):
+            path = f"raw/battery_float.{phase}.ioreg"
+            (directory / path).write_bytes(body)
+            clock = iter((10, 20) if phase == "pre" else (80, 90))
+            observed, _ = battery_float.observe(
+                phase=f"quiet_{phase}", raw_path=path, session_id="session-1",
+                wall_time_s=UPDATE + 1, monotonic_ns=lambda: next(clock),
+                runner=lambda argv, body=body: subprocess.CompletedProcess(argv, 0, body, b""))
+            record[phase] = observed
+        return record
+
+    def authenticate(self, record, root, *, span=None):
+        return battery_float.authenticate_pair(
+            record, root, phases=("quiet_pre", "quiet_post"), identity="session-1", span=span)
+
+    def test_custody_raises_before_confounded_or_missing_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp, pre=raw("charging-synthetic-from-real.ioreg"))
+            record["post"]["exit_code"] = 2
+            (Path(tmp) / "raw/battery_float.post.ioreg").unlink()
+            with self.assertRaises(battery_float.CustodyFailure) as caught:
+                self.authenticate(record, tmp)
+            self.assertEqual(caught.exception.failures[0]["artifact"], "post")
+
+    def test_structure_is_checked_before_raw_custody(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp)
+            record["pre"]["phase"] = "wrong"
+            (Path(tmp) / "raw/battery_float.pre.ioreg").unlink()
+            result = self.authenticate(record, tmp)
+            self.assertEqual(result.status, "battery_float_evidence_missing")
+            self.assertIn("phase mismatch", result.reasons[0])
+
+    def test_probe_failure_precedes_parse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp, pre=b"invalid ioreg\n")
+            record["pre"]["exit_code"] = 2
+            result = self.authenticate(record, tmp)
+            self.assertEqual(result.status, "battery_float_evidence_missing")
+            self.assertIn("probe failed", result.reasons[0])
+            self.assertNotIn("header", str(result.reasons))
+
+    def test_parse_failure_precedes_predicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp, pre=b"invalid ioreg\n")
+            record["pre"]["passed"] = True
+            result = self.authenticate(record, tmp)
+            self.assertEqual(result.status, "battery_float_evidence_missing")
+            self.assertIn("header", result.reasons[0])
+
+    def test_predicate_precedes_span_and_stored_pass_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp, pre=raw("charging-synthetic-from-real.ioreg"))
+            record["pre"]["passed"] = True
+            record["post"]["passed"] = False
+            result = self.authenticate(record, tmp, span=(15, 100))
+            self.assertEqual(result.status, "battery_float_confounded")
+            self.assertTrue(any("IsCharging" in reason for reason in result.reasons))
+            self.assertTrue(any("outside measured span" in reason for reason in result.reasons))
+
+    def test_span_is_checked_after_passing_predicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp)
+            self.assertEqual(self.authenticate(record, tmp, span=(20, 80)).status, "pass")
+            result = self.authenticate(record, tmp, span=(15, 85))
+            self.assertEqual(result.status, "battery_float_evidence_missing")
+            self.assertEqual(sum("outside measured span" in r for r in result.reasons), 2)
+
+    def test_future_update_time_passes_pair_today(self):
+        future = edit(raw(), b'"UpdateTime" = 1790373525',
+                      b'"UpdateTime" = 1790374525')
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp, pre=future, post=future)
+            self.assertTrue(record["pre"]["passed"])
+            result = self.authenticate(record, tmp)
+            self.assertEqual(result.status, "pass")
+            self.assertEqual((result.pre_update_age_s, result.post_update_age_s), (-999, -999))
+
+    def test_quiet_wrapper_binds_session_span_and_round_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp)
+            root = Path(tmp)
+            (root / "session.json").write_text(json.dumps({
+                "session": "session-1", "battery_float": record,
+                "start_stamp": {"monotonic_before_s": 30e-9},
+                "end_stamp": {"monotonic_after_s": 70e-9},
+            }))
+            hashes = {record[phase]["raw_path"]: record[phase]["raw_stdout_sha256"]
+                      for phase in ("pre", "post")}
+            (root / "rounds.jsonl").write_text(json.dumps({"raw": {"sha256": hashes}}) + "\n")
+            self.assertEqual(battery_float.authenticate_quiet_session(root).status, "pass")
+            hashes["raw/battery_float.post.ioreg"] = "0" * 64
+            (root / "rounds.jsonl").write_text(json.dumps({"raw": {"sha256": hashes}}) + "\n")
+            with self.assertRaises(battery_float.CustodyFailure):
+                battery_float.authenticate_quiet_session(root)
+
+    def test_capture_wrapper_uses_instrument_evidence_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = self.pair(tmp)
+            for phase in ("pre", "post"):
+                record[phase]["phase"] = f"slot_{phase}"
+            (Path(tmp) / "instrument_evidence.json").write_text(json.dumps({"battery_float": record}))
+            self.assertEqual(battery_float.authenticate_capture(tmp).status, "pass")
+
+
+class S0FreezeTests(unittest.TestCase):
+    def test_frozen_function_sources_match_base(self):
+        for name, pinned in FROZEN_FUNCTION_SOURCE_SHA256.items():
+            with self.subTest(name=name):
+                actual = hashlib.sha256(inspect.getsource(getattr(battery_float, name)).encode()).hexdigest()
+                self.assertEqual(actual, pinned)
+
+    def test_observe_seven_old_phases_match_pre_s0_bytes(self):
+        for phase in ("arm_check", "publish_install", "t0", "validate_install",
+                      "t0_power_row", "slot_pre", "slot_post"):
+            with self.subTest(phase=phase):
+                clock = iter((10, 20))
+                record, stdout = battery_float.observe(
+                    phase=phase, runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw(), b""),
+                    wall_time_s=UPDATE + 1, monotonic_ns=lambda: next(clock),
+                    raw_path="raw/battery_float.pre.ioreg", session_id="session-1", plan_id="plan-1")
+                encoded = json.dumps(record, sort_keys=True, separators=(",", ":"))
+                self.assertEqual(encoded.encode(), OBSERVE_GOLDEN.replace(
+                    '"phase":"arm_check"', f'"phase":"{phase}"').encode())
+                self.assertEqual(stdout, raw())
 
 
 class ParserTests(unittest.TestCase):
@@ -58,6 +210,12 @@ class ParserTests(unittest.TestCase):
     def test_real_and_charging_fixtures(self):
         self.assertTrue(battery_float.parse(raw(), UPDATE + 179)["passed"])
         self.assertFalse(battery_float.parse(raw("charging-synthetic-from-real.ioreg"), UPDATE + 1)["passed"])
+
+    def test_future_update_time_is_currently_a_pass(self):
+        future = edit(raw(), b'"UpdateTime" = 1790373525',
+                      b'"UpdateTime" = 1790374525')
+        self.assertEqual(battery_float.parse(future, UPDATE)["update_age_s"], -1000)
+        self.assertTrue(battery_float.parse(future, UPDATE)["passed"])
 
     def test_signed_lexemes_and_exact_boundaries(self):
         original = raw()
@@ -217,6 +375,13 @@ class GateTests(unittest.TestCase):
 
 
 class WindowTests(unittest.TestCase):
+    def test_future_update_time_passes_derivation_window_today(self):
+        future = edit(raw(), b'"UpdateTime" = 1790373525',
+                      b'"UpdateTime" = 1790374525')
+        with tempfile.TemporaryDirectory() as tmp:
+            session, _ = self.make_session(tmp, future, future, wall=UPDATE)
+            self.assertEqual(battery_float.validate_window(session)["status"], "pass")
+
     def test_wrong_object_structure_is_evidence_missing_in_window(self):
         original = raw()
         cases = (
