@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import dataclasses
 import hashlib
 import importlib.util
 import inspect
@@ -552,6 +553,126 @@ class CommittedVerdictTests(unittest.TestCase):
         self.assertIsNone(battery_float.compare_verdict(changed, recomputed))
 
 
+class AuthenticatedVerdictSeamTests(unittest.TestCase):
+    """Consumer-drift final texts v1.1 §3.1-§3.2 and §3.12 (v), (vii): the one consumer entry."""
+
+    PREREG = CommittedVerdictTests.PREREG
+    setUp = CommittedVerdictTests.setUp
+    git = CommittedVerdictTests.git
+    write = CommittedVerdictTests.write
+    commit = CommittedVerdictTests.commit
+
+    def authenticate(self, prereg=PREREG):
+        return battery_float.authenticate_committed_verdict(
+            self.repo, session=self.session, preregistration_sha256=prereg)
+
+    def refusal(self, prereg=PREREG):
+        with self.assertRaises(battery_float.BatteryVerdictRefusal) as caught:
+            self.authenticate(prereg)
+        self.assertEqual(caught.exception.session_id, "W1")
+        self.assertNotIsInstance(caught.exception, (ValueError, OSError))
+        return caught.exception
+
+    def test_v_a_missing_or_malformed_digest_refuses_before_any_io(self):
+        self.write()
+        self.commit("harvest")
+        for prereg in (None, "", "d" * 63):
+            with self.subTest(prereg=prereg), \
+                    mock.patch.object(battery_float, "_git", side_effect=AssertionError("git read")) as git, \
+                    mock.patch.object(battery_float, "validate_window",
+                                      side_effect=AssertionError("custody read")) as replay:
+                refusal = self.refusal(prereg)
+                self.assertEqual(refusal.code, "registration_digest_required")
+                self.assertEqual(str(refusal), "battery-float registration digest missing or invalid for W1")
+                git.assert_not_called()
+                replay.assert_not_called()
+
+    def test_v_the_loader_never_returns_a_record_without_a_digest(self):
+        self.write()
+        self.commit("harvest")
+        with self.assertRaisesRegex(battery_float.NoRecord, "identity mismatch: preregistration_sha256"):
+            battery_float.load_committed_verdict(self.repo, "W1", session=self.session,
+                                                 preregistration_sha256=None)
+
+    def test_vii_custody_failure_code_text_and_cause(self):
+        self.write()
+        self.commit("harvest")
+        raw_path = Path(self.session.finalized_slots["d01"].custody_locator) / "raw/battery_float.post.ioreg"
+        expected = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+        raw_path.unlink()
+        refusal = self.refusal()
+        self.assertEqual(refusal.code, "custody_failure")
+        self.assertEqual(refusal.detail, f"d01/post expected {expected} observed absent")
+        self.assertEqual(str(refusal), f"battery-float custody failure for W1: d01/post expected {expected} "
+                                       "observed absent; restore the custody bytes byte-exact from the "
+                                       "harvest archive")
+        self.assertIsInstance(refusal.__cause__, battery_float.CustodyFailure)
+
+    def test_vii_record_unauthenticated_code_text_and_cause(self):
+        (self.repo / "README").write_text("x")
+        self.commit("genesis")
+        refusal = self.refusal()
+        self.assertEqual((refusal.code, refusal.detail), ("record_unauthenticated", "absent or uncommitted"))
+        self.assertEqual(str(refusal), "battery-float harvest verdict missing or uncommitted for W1: "
+                                       "absent or uncommitted")
+        self.assertIsInstance(refusal.__cause__, battery_float.NoRecord)
+        from joulewise import authentication_io
+        self.write()
+        self.commit("harvest")
+        failure = authentication_io.V2AuthenticationInputError("grammar", "duplicate JSON key")
+        with mock.patch.object(authentication_io, "ingest_git_authentication_input", side_effect=failure):
+            refusal = self.refusal()
+        self.assertEqual((refusal.code, refusal.detail), ("record_unauthenticated", "grammar: duplicate JSON key"))
+        self.assertIs(refusal.__cause__, failure)
+
+    def test_vii_verdict_mismatch_code_and_text(self):
+        self.write({**self.record, "status": "battery_float_confounded"})
+        self.commit("harvest")
+        refusal = self.refusal()
+        self.assertEqual((refusal.code, refusal.detail),
+                         ("verdict_mismatch", "status recorded battery_float_confounded recomputed pass"))
+        self.assertEqual(str(refusal), "battery-float harvest verdict for W1 cannot be re-established from raw "
+                                       "bytes (status recorded battery_float_confounded recomputed pass); "
+                                       "custody failure")
+
+    def test_vii_the_refusal_class_has_exactly_four_codes(self):
+        self.assertEqual(set(battery_float.REFUSAL_TEXT), {
+            "registration_digest_required", "custody_failure", "record_unauthenticated", "verdict_mismatch"})
+
+    def test_vii_the_result_is_frozen_and_built_from_the_record(self):
+        record = json.loads(json.dumps(self.record))
+        # Fields `compare_verdict` does not compare: the result must carry the record's.
+        record["slots"][0]["reasons"] = ["from the record"]
+        record["slots"][0]["pre_update_age_s"] = 12.5
+        self.write(record)
+        self.commit("harvest")
+        verdict = self.authenticate()
+        self.assertIsInstance(verdict, battery_float.AuthenticatedVerdict)
+        self.assertEqual((verdict.session_id, verdict.preregistration_sha256, verdict.status),
+                         ("W1", self.PREREG, "pass"))
+        [slot] = verdict.slots
+        self.assertIsInstance(slot, battery_float.AuthenticatedSlot)
+        self.assertEqual((slot.slot, slot.reasons, slot.pre_update_age_s), ("d01", ("from the record",), 12.5))
+        self.assertEqual(verdict.file_sha256, hashlib.sha256(self.path.read_bytes()).hexdigest())
+        self.assertRegex(verdict.commit, r"^[0-9a-f]{40}$")
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            verdict.status = "battery_float_confounded"
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            slot.verdict = "battery_float_confounded"
+        self.assertNotIsInstance(verdict, dict)
+
+    def test_vii_status_is_the_record_s_not_the_recomputation(self):
+        record = json.loads(json.dumps(self.record))
+        record["status"] = "battery_float_confounded"
+        record["slots"][0]["verdict"] = "battery_float_confounded"
+        self.write(record)
+        self.commit("harvest")
+        with mock.patch.object(battery_float, "compare_verdict", return_value=None):
+            verdict = self.authenticate()
+        self.assertEqual(verdict.status, "battery_float_confounded")
+        self.assertEqual(verdict.slots[0].verdict, "battery_float_confounded")
+
+
 # ex-03's own UpdateTime; the gate fixture's clock is 1005 s, so the gate site
 # re-stamps the corpus to 1000.
 REAL_UPDATE = 1790394405
@@ -693,7 +814,13 @@ def _relaxed_module(index: int, relaxation: str) -> ModuleType:
     tree = ast.fix_missing_locations(_Relax(site, relaxation).visit(tree))
     module = ModuleType(f"battery_float_relaxed_{index}_{relaxation}")
     module.__file__ = battery_float.__file__
-    exec(compile(tree, battery_float.__file__, "exec"), module.__dict__)
+    # Registered while it executes: the module's dataclasses resolve their
+    # postponed annotations through ``sys.modules``.
+    sys.modules[module.__name__] = module
+    try:
+        exec(compile(tree, battery_float.__file__, "exec"), module.__dict__)
+    finally:
+        del sys.modules[module.__name__]
     return module
 
 
@@ -762,7 +889,13 @@ class GrammarFreezeTests(unittest.TestCase):
                 path.write_text(source.replace(old, new))
                 spec = importlib.util.spec_from_file_location("battery_float_mutant", path)
                 mutant = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mutant)
+                # Registered while it executes: the module's dataclasses resolve
+                # their postponed annotations through ``sys.modules``.
+                sys.modules[spec.name] = mutant
+                try:
+                    spec.loader.exec_module(mutant)
+                finally:
+                    del sys.modules[spec.name]
                 self.assertNotEqual(structural_stage_sha256(mutant), STRUCTURAL_STAGE_SHA256)
 
 

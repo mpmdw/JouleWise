@@ -15,6 +15,7 @@ that needs an owner ruling.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import math
@@ -541,11 +542,12 @@ def _git(repo_root: Path, *argv: str) -> bytes | None:
 
 
 def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: Any,
-                           preregistration_sha256: str | None) -> CommittedVerdict:
+                           preregistration_sha256: str) -> CommittedVerdict:
     """Return the authentic committed harvest verdict, or raise ``NoRecord``.
 
     Obligations v1.1 §4.3. ``preregistration_sha256`` is the caller's pinned
-    registration digest. Revision-5 consumers supply it.
+    registration digest, always required: a record never authenticates
+    against no registration.  Consumers call ``authenticate_committed_verdict``.
     """
     # Imported here, not at module scope: night_gate imports this module on
     # every arm and t0 path, and those minimal import surfaces carry no
@@ -588,7 +590,7 @@ def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: A
     rows = list(session.finalized_slots.values())
     if not rows or any(record.get("identity_epoch") != dict(row.identity_epoch) for row in rows):
         raise NoRecord("identity mismatch: identity_epoch")
-    if preregistration_sha256 is not None and record.get("preregistration_sha256") != preregistration_sha256:
+    if record.get("preregistration_sha256") != preregistration_sha256:
         raise NoRecord("identity mismatch: preregistration_sha256")
     # 4. Slot binding to the ledger rows.
     slots = record.get("slots")
@@ -638,3 +640,93 @@ def compare_verdict(record: Mapping[str, Any], recomputed: Mapping[str, Any]) ->
             if left != right:
                 return f"{name}.{field} recorded {left} recomputed {right}"
     return None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AuthenticatedSlot:
+    slot: str
+    attempt_id: str
+    verdict: str                      # "pass" | "battery_float_confounded" | "battery_float_evidence_missing"
+    reasons: tuple[str, ...]
+    pre_raw_sha256: str | None
+    post_raw_sha256: str | None
+    pre_update_age_s: float | None
+    post_update_age_s: float | None
+    delta_q_mah: int | None
+    instrument_evidence_sha256: str | None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AuthenticatedVerdict:
+    session_id: str
+    preregistration_sha256: str
+    status: str                       # the RECORDED status; it governs every consumer decision
+    slots: tuple[AuthenticatedSlot, ...]
+    file_sha256: str                  # sha256 of the committed record bytes
+    commit: str                       # the single adding commit
+
+
+REFUSAL_TEXT = {
+    "registration_digest_required": "battery-float registration digest missing or invalid for {id}",
+    "custody_failure": ("battery-float custody failure for {id}: {detail}; restore the custody bytes "
+                        "byte-exact from the harvest archive"),
+    "record_unauthenticated": "battery-float harvest verdict missing or uncommitted for {id}: {detail}",
+    "verdict_mismatch": ("battery-float harvest verdict for {id} cannot be re-established from raw "
+                         "bytes ({detail}); custody failure"),
+}
+
+
+class BatteryVerdictRefusal(RuntimeError):
+    """Authentication of a committed harvest verdict failed. Never a verdict; every consumer refuses."""
+    def __init__(self, code: str, session_id: str, detail: str) -> None:
+        self.code, self.session_id, self.detail = code, session_id, detail
+        super().__init__(REFUSAL_TEXT[code].format(id=session_id, detail=detail))
+
+
+def authenticate_committed_verdict(
+    repo_root: Path | str, *, session: Any, preregistration_sha256: str,
+) -> AuthenticatedVerdict:
+    """The one consumer entry to a window's battery verdict (consumer-drift final texts v1.1 §3.1).
+
+    Replays the custody bytes (``validate_window``), loads the committed
+    record (``load_committed_verdict``) and requires the two to agree
+    (``compare_verdict``), in obligations v1.1 §4.4 step 3 order.  Any failure
+    is a ``BatteryVerdictRefusal``, never a verdict.  The result is built from
+    the RECORD, which governs; the recomputation is only its custody check.
+    Eligibility (kind, terminality, membership of the epoch) is the caller's.
+    """
+    session_id = session.session_id
+    if not _is_sha256(preregistration_sha256):
+        raise BatteryVerdictRefusal("registration_digest_required", session_id, "")
+    from joulewise.authentication_io import V2AuthenticationInputError
+
+    try:
+        recomputed = validate_window(session)
+    except CustodyFailure as failure:
+        raise BatteryVerdictRefusal("custody_failure", session_id, failure.detail) from failure
+    try:
+        record = load_committed_verdict(repo_root, session_id, session=session,
+                                        preregistration_sha256=preregistration_sha256)
+    except NoRecord as missing:
+        raise BatteryVerdictRefusal("record_unauthenticated", session_id, missing.reason) from missing
+    except V2AuthenticationInputError as error:
+        raise BatteryVerdictRefusal("record_unauthenticated", session_id, str(error)) from error
+    difference = compare_verdict(record, recomputed)
+    if difference is not None:
+        raise BatteryVerdictRefusal("verdict_mismatch", session_id, difference)
+    return AuthenticatedVerdict(
+        session_id=session_id,
+        preregistration_sha256=preregistration_sha256,
+        status=record["status"],
+        slots=tuple(AuthenticatedSlot(
+            slot=entry["slot"], attempt_id=entry.get("attempt_id"), verdict=entry.get("verdict"),
+            reasons=tuple(entry.get("reasons") or ()),
+            pre_raw_sha256=entry.get("pre_raw_sha256"), post_raw_sha256=entry.get("post_raw_sha256"),
+            pre_update_age_s=entry.get("pre_update_age_s"),
+            post_update_age_s=entry.get("post_update_age_s"),
+            delta_q_mah=entry.get("delta_q_mah"),
+            instrument_evidence_sha256=entry.get("instrument_evidence_sha256"),
+        ) for entry in record["slots"]),
+        file_sha256=record.file_sha256,
+        commit=record.commit,
+    )
