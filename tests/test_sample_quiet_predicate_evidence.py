@@ -141,6 +141,19 @@ def delayed_exit_load_worker(connection, config):
     harness.time.sleep(config["seed"])
 
 
+class TermGraceLoadProcess(harness.multiprocessing.get_context("spawn").Process):
+    """Give a loaded child time to run after the real ladder sends TERM."""
+
+    def terminate(self):
+        self._term_sent = True
+        return super().terminate()
+
+    def join(self, timeout=None):
+        if getattr(self, "_term_sent", False) and timeout == 1:
+            timeout = 3
+        return super().join(timeout)
+
+
 def assert_null_reasons(test, value):
     if isinstance(value, dict):
         for key, item in value.items():
@@ -827,7 +840,7 @@ class LoadTests(unittest.TestCase):
         # post-result exit and expose escalation with a short test-only grace.
         context = harness.multiprocessing.get_context("spawn")
         def process(*, target, args):
-            return context.Process(target=delayed_exit_load_worker, args=args)
+            return TermGraceLoadProcess(target=delayed_exit_load_worker, args=args)
         guarded = SimpleNamespace(Pipe=context.Pipe, Process=process)
         real_load = harness.load
         for delay, expected_exit in ((1, 0), (60, 1)):
