@@ -874,7 +874,7 @@
       "priority": "p1_phase_gate",
       "rank": 308,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424; BFG-S not started. Required before any non-derivation window arms.",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); S0 in progress (activation 6bec2aa6). Required before any non-derivation window arms.",
       "stop_card": null
     },
     "BFGD-VERDICT-MERGE-LIVENESS-01": {
@@ -904,7 +904,7 @@
       "priority": "p1_phase_gate",
       "rank": 309,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). Not W1-blocking: W1 arm and harvest run in the measurement clone on plain history.",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). Not W1-blocking: W1 arm and harvest run in the measurement clone on plain history. Implementation 87aad39c on fix/2026-09-26-bfgd-verdict-merge-liveness (activation 6bec2aa6), full gate in progress; merges before BFG-S S0 (record 6bec2aa6 item 13).",
       "stop_card": null
     },
     "BIND-REQUEST-PAYLOAD-CAP-01": {
@@ -8900,7 +8900,8 @@
       "acceptance": {
         "evidence": [
           "docs/process_traces/2026-09-25-activation-ed17a643/30-seal-418/row9-fullsuite-7ee773c0-tail.txt",
-          "docs/process_traces/2026-09-25-activation-ed17a643/31-integ-137cc9ee/tail.txt"
+          "docs/process_traces/2026-09-25-activation-ed17a643/31-integ-137cc9ee/tail.txt",
+          "docs/process_traces/2026-09-25-activation-ed17a643/51-bfgd-fullsuite-3ad48d1e/tail.txt"
         ],
         "pointer": {
           "json_pointer": "/tasks/TEST-LOAD-JOIN-LADDER-FLAKE-01/acceptance",
@@ -8917,13 +8918,13 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Make tests.test_sample_quiet_predicate_evidence LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (exit_delay=60) robust under concurrent machine load. It failed SIGKILL-for-SIGTERM in three full-suite replays on 2026-09-25/26 while implementation seats were running, and passed each isolated rerun.",
+      "goal": "Make tests.test_sample_quiet_predicate_evidence LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (exit_delay=60) robust under concurrent machine load. It failed SIGKILL-for-SIGTERM in four full-suite replays on 2026-09-25/26 while implementation seats were running, and passed each isolated rerun.",
       "id": "TEST-LOAD-JOIN-LADDER-FLAKE-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
       "rank": 310,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643).",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). Fix candidate 37f9b935 on test/2026-09-26-load-join-ladder-flake (activation 6bec2aa6; post-TERM join 1 s -> 3 s in the test only; not reproduced locally 0/32). Related hermeticity defect: test_arm_readiness_evidence_t0 test_g4_real_ruled_census_pgrep_dialect breaks on a concurrent seat's multi-line argv (#425 row 9).",
       "stop_card": null
     },
     "TEST-PGREP-DIALECT-MULTILINE-01": {

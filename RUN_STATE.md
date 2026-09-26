@@ -10,13 +10,22 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION ed17a643 — 14:17 PDT 09-25 → ≈06:45 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the full account; items 1–53 are its log.
+**▶▶ ACTIVATION 6bec2aa6 — from 08:43 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-26-activation-6bec2aa6/00-activation-record.md) is the running log. The short-lived predecessor 8e43cfa7 (08:28–08:34, [record](docs/process_traces/2026-09-26-activation-8e43cfa7/00-activation-record.md)) exited on usage; its seats died without reports and were relaunched.
+- **#425 bookkeeping MERGED → `6a463e87`**; canonical fast-forwarded (no code changed, supervisor current).
+- **W1 is BLOCKED by a live interactive Claude session** (PID 46048 on ttys000, running since 09-24 17:47). The W1 README says: email Ed and do not arm. Ed was asked at 08:3x on thread `1a0de5570fb67de4`; no reply yet. The arm scripts are unchanged (`docs/2026-09-25-817355d2-w1arm` @ `c79816c9`), and the first battery-float observation (08:30:16) passed.
+- **A309 liveness fix** is at `87aad39c` on `fix/2026-09-26-bfgd-verdict-merge-liveness` and is under full gate. The Sol execution lens found one SHOULD-FIX with no truth impact; the Opus contract lens and the Fable final pass are pending. It must merge BEFORE BFG-S S0 (record item 13).
+- **BFG-S (BATTERY-FLOAT-GATE-01):** a four-model consult, then cold gate BFGS-DESIGN-01, then a paired refuter (2 text BLOCKERs), then a cold addendum produced **Final texts v1.1** ([ruling](docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md)). The PR order is S0 → S1 ∥ S2 → S3 → S4. S0 is in progress on `feat/2026-09-26-bfgs-s0-helper-fence`, round 2, after a magistrate gap-fill on the bundle span.
+- **New science lane proposed by the ruling:** HISTORICAL-BATTERY-STATE-01. Every published number was measured with battery state unobserved, so it gets a `battery_state` column that the paper renderer refuses to render without. The ruling also proposes SCORED-CEILING-BATTERY-01.
+- **A310 flake fix** is `37f9b935` on `test/2026-09-26-load-join-ladder-flake`; its PR is not yet opened.
+- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item.
+
+**▶▶ ACTIVATION ed17a643 — 14:17 PDT 09-25 → ≈08:25 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the full account; items 1–57 are its log.
 
 **MERGED:**
 - #418, the Revision 5 seal → `e9ed7a98`.
 - #423, the A-R5b battery-float amendment (directive #421, approved in #422) → `935cef2d`. The registration digest is now `81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1`.
 - #419, the TIER-01 light tier → `cab01506`; #415 is closed.
-- **#424 BFG-D**, the battery gate for derivation windows → `64e39bb9` (merged ≈08:25 PDT 09-26). This activation exited for a fresh supervisor.
+- **#424 BFG-D**, the battery gate for derivation windows → `64e39bb9` (merged 08:18:59 PDT 09-26). This activation exited for a fresh supervisor.
 
 Four cold gates govern BFG-D: BATTERY-FLOAT-01, HARVEST-VERDICT-FINAL-01, BFG-D-PARSER-ESC-01 and CONSUMER-DRIFT-ESC-01. Each ran with a paired refuter plus an addendum. The final passes: Fable ruled MERGE; Opus dissented with M-1, which is carried as lane BFGD-VERDICT-MERGE-LIVENESS-01.
 
