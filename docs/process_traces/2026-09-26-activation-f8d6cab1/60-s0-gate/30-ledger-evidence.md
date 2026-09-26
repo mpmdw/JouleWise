@@ -24,3 +24,17 @@ Paths below are relative to `docs/process_traces/`.
 **Deferred to follow-up lanes (Fable-accepted):** Opus NITs 1–4 (whitespace-only journal lines; `RecursionError` mapped to `CustodyUnreadable`; `match`/`case` rebinding in S-1; "missing" versus "unreadable" wording). S1/S2 brief notes: D-1, pass the real envelope and bundle directories and never a symlink. Also the erratum's flagged text-6 asymmetry: one timed-out collector blanks a night.
 
 **A309 Fable obligation 3.** No harvest battery-float verdict has been committed to any branch between the A309 merge (`5d5a0b75`) and this PR: `git log 5d5a0b75..747596a3` touches no verdict directory, and main has not moved since `5d5a0b75`.
+
+## Rows 9, 11 and 12 (addendum)
+
+**Row 9: the lead's full-suite replay on the integration tree.** `1eeebc40` is the local merge of the candidate `747596a3` with main `560914be`. It differs from the candidate only by #428's test file, and it is the tree that GitHub's merge commit will carry. `scripts/shard_tests.py --workers 6` in `JouleWise-wt-s0integ-f8d6cab1` gave **7,454 tests, 0 failures, 0 errors, 109 skipped: PASS**. The tail is in [row9-fullsuite-1eeebc40-tail.txt](row9-fullsuite-1eeebc40-tail.txt) and the full log is `row9-fullsuite-1eeebc40.log.gz`. An earlier branch-only run at `747596a3` was stopped by the lead when main moved (exit 144); that was not a test failure.
+
+**Row 11: CI on `747596a3`.** Every job passes: `build`, `changes`, `fences`, `installed-wheel`, `quick`, `test (3.13, 1..6)`, `calibration-exits-exclusive (3.13)`, and `calibration-writer-crash-matrix-exclusive (3.13, 1..2)`. The post-merge cross-unit look follows the merge.
+
+**Row 12: the magistrate's terminal review.** Opus 5.5, activation f8d6cab1, with full session context, of `747596a30ef857faa15eb4dc2e514b00f0564734`.
+- Every production hunk traces to a ruled text (Final texts v1.1 texts 1–4, 15 and 17; amendments 20–25, 27, 28's scope clause, 29, 30 as re-issued, and 31's S0 part).
+- The frozen closure is byte-identical to `5d5a0b75`, verified independently three times: the bench, the Opus lens and the Fable final pass.
+- Both split verdicts were adjudicated: rounds 3/3b by cold gate, and round 4 by synthesis with a bench fix.
+- The Fable final pass ruled MERGE after its one dictated row, which is `747596a3`.
+- No consumer is wired yet, so S0 cannot change any published number. It adds fail-closed classification and an arm fence.
+- Verdict: **MERGE**.
