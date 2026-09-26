@@ -67,3 +67,12 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - Importer modules: 20 of 21 pass. `test_issue_calibration_acceptance_generation` failed one live probe only because the sandbox denies `sysctl kern.osversion`; a bench rerun is in progress.
     - Full-gate lenses launched: Sol execution lens `70-a309-gate/10` (adversarial git histories) and Opus contract lens `70-a309-gate/11`.
     - Still to come: the Fable final pass, which also confirms item 13's ordering, then the integration full-suite replay.
+16. **#425 MERGED as `6a463e87`** (light tier, TIER-01).
+    - Ledger rows 1, 9, 11 and 12 are RUN, with evidence at `80-pr425-ledger/` (`8d41f79d`); the local `check_gate_ledger.py` passes.
+    - Row 9: 7,381 tests, 0 failures, 1 environmental error. `test_g4_real_ruled_census_pgrep_dialect` parses `pgrep -lf` output and hit a concurrent Sol seat's multi-line argv (`'WORKTREE:'`). The isolated rerun is OK. **New hermeticity defect:** this live census test is not robust to multi-line argv from concurrent agent seats; it is added to the A310 flake family.
+    - Canonical was fast-forwarded to `6a463e87` after confirming that no `com.joulewise.night*` label or plist exists. No `joulewise/` or `scripts/` file changed, so the supervisor stays current.
+17. **A309 execution lens (Sol, 70/10).** One SHOULD-FIX, F1: a rewrite-then-restore across two merges loads. The final bytes equal the honest adding commit, so no altered verdict loads; the seat's G2 says the same. Proposed disposition: no truth impact and the dictated text is kept. The comment's claim ("a merge that rewrites the record is caught") holds for any rewrite that survives to HEAD. The Fable final pass adjudicates. The Opus contract lens is pending.
+18. **S0 round 1 returned NEEDS_RULING F1** (the bundle span domain).
+    - The partial work is committed as WIP `8b4e1bd4`: helper, fence, pins, `FROZEN_FUNCTION_SOURCE_SHA256` table, and RED proofs for T1, T2-custody and T4.
+    - The magistrate filled the gap with [60-bfgs-s0/20](../2026-09-26-activation-6bec2aa6/60-bfgs-s0/20-ruling-bundle-span.md): monotonic bounds are recorded in `events.jsonl` by S1, with no wall-to-monotonic conversion. This is flagged to the S0 and S1 Fable final passes.
+    - S0 round 2 is launched (Sol xhigh, brief `21`).
