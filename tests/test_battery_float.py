@@ -200,7 +200,10 @@ class WindowTests(unittest.TestCase):
             session, custody = self.make_session(tmp, raw(), None)
             self.assertEqual(battery_float.validate_window(session)["status"], "battery_float_evidence_missing")
             (custody / "raw/battery_float.pre.ioreg").write_bytes(b"tampered")
-            self.assertEqual(battery_float.validate_window(session)["status"], "battery_float_evidence_missing")
+            # Obligations v1.1 §4.1 / A10: recorded bytes that no longer match
+            # their digest are a custody failure, never a verdict.
+            with self.assertRaisesRegex(battery_float.CustodyFailure, r"s01/pre expected [0-9a-f]{64} observed"):
+                battery_float.validate_window(session)
 
     def test_confounded_takes_precedence_over_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -211,3 +214,239 @@ class WindowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             session, _ = self.make_session(tmp, raw(), raw(), wall=UPDATE + 181)
             self.assertEqual(battery_float.validate_window(session)["status"], "battery_float_evidence_missing")
+
+
+def custody_session(root, slots, *, wall=UPDATE + 1):
+    """A finalized session whose rows authenticate their evidence files.
+
+    ``slots`` maps slot -> {phase: (stdout, returncode)}; an absent phase is
+    unrecorded.  Each recorded phase's raw bytes are written exactly as the
+    capture writer writes them (unconditionally, possibly empty).
+    """
+    finalized = {}
+    for slot, phases in slots.items():
+        custody = Path(root) / slot
+        (custody / "raw").mkdir(parents=True)
+        battery = {}
+        for phase, (body, code) in phases.items():
+            path = f"raw/battery_float.{phase}.ioreg"
+            (custody / path).write_bytes(body)
+            record, _ = battery_float.observe(
+                phase=f"slot_{phase}", raw_path=path, wall_time_s=wall,
+                runner=lambda argv, body=body, code=code: subprocess.CompletedProcess(argv, code, body, b""))
+            battery[phase] = record
+        evidence = json.dumps({"battery_float": battery}).encode()
+        (custody / "instrument_evidence.json").write_bytes(evidence)
+        finalized[slot] = SimpleNamespace(
+            custody_locator=str(custody), attempt_id=f"W-{slot}",
+            identity_epoch={"os_build": "25G83"},
+            artifact_sha256={"instrument_evidence.json": hashlib.sha256(evidence).hexdigest()})
+    return SimpleNamespace(session_id="W1", session_kind="derivation", state="finalized",
+                           finalized_slots=finalized, declared_slots=tuple(slots))
+
+
+def clean_phases():
+    return {"pre": (raw(), 0), "post": (raw(), 0)}
+
+
+class CustodyRuleTests(unittest.TestCase):
+    """Obligations v1.1 §4.1 / §4.10 item 1 (a)-(g), at `validate_window`."""
+
+    build = staticmethod(custody_session)
+
+    def clean(self):
+        return clean_phases()
+
+    def test_a_deleted_recorded_raw_file_is_a_custody_failure_naming_slot_and_phase(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {"d03": self.clean()})
+            (Path(tmp) / "d03/raw/battery_float.post.ioreg").unlink()
+            with self.assertRaises(battery_float.CustodyFailure) as caught:
+                battery_float.validate_window(session)
+            self.assertIn("d03/post expected ", str(caught.exception))
+            self.assertIn(" observed absent", str(caught.exception))
+            [failure] = caught.exception.failures
+            self.assertEqual((failure["slot"], failure["attempt_id"], failure["artifact"],
+                              failure["observed_sha256"]), ("d03", "W-d03", "post", None))
+            self.assertNotIsInstance(caught.exception, (OSError, KeyError, TypeError, ValueError))
+
+    def test_b_one_appended_byte_is_a_custody_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {"d01": self.clean()})
+            path = Path(tmp) / "d01/raw/battery_float.pre.ioreg"
+            path.write_bytes(path.read_bytes() + b"\n")
+            with self.assertRaisesRegex(battery_float.CustodyFailure, r"d01/pre expected "):
+                battery_float.validate_window(session)
+
+    def test_c_altered_evidence_file_is_a_custody_failure_naming_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {"d01": self.clean()})
+            path = Path(tmp) / "d01/instrument_evidence.json"
+            path.write_bytes(path.read_bytes().replace(b"{", b'{"x": 1, ', 1))
+            with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                        r"d01/instrument_evidence\.json expected [0-9a-f]{64} observed [0-9a-f]{64}"):
+                battery_float.validate_window(session)
+            path.unlink()
+            with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                        r"d01/instrument_evidence\.json expected [0-9a-f]{64} observed absent"):
+                battery_float.validate_window(session)
+
+    def test_d_a_phase_absent_from_the_evidence_is_evidence_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {"d01": {"pre": (raw(), 0)}})
+            result = battery_float.validate_window(session)
+            self.assertEqual(result["status"], "battery_float_evidence_missing")
+            self.assertIsNone(result["slots"][0]["post_raw_sha256"])
+
+    def test_e_failed_probe_is_evidence_missing_until_its_recorded_empty_file_is_deleted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {"d01": {"pre": (raw(), 0), "post": (b"", 1)}})
+            empty = Path(tmp) / "d01/raw/battery_float.post.ioreg"
+            self.assertEqual(empty.read_bytes(), b"")
+            self.assertEqual(battery_float.validate_window(session)["status"],
+                             "battery_float_evidence_missing")
+            empty.unlink()
+            with self.assertRaisesRegex(battery_float.CustodyFailure, r"d01/post expected "):
+                battery_float.validate_window(session)
+
+    def test_f_stale_bytes_matching_their_digest_are_evidence_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {"d01": self.clean()}, wall=UPDATE + 181)
+            result = battery_float.validate_window(session)
+            self.assertEqual(result["status"], "battery_float_evidence_missing")
+            self.assertIsNone(result["slots"][0]["pre_update_age_s"])
+
+    def test_g_custody_precedes_every_verdict_across_slots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {
+                "d01": {"pre": (raw("charging-synthetic-from-real.ioreg"), 0), "post": (raw(), 0)},
+                "d02": self.clean(),
+            })
+            self.assertEqual(battery_float.validate_window(session)["status"], "battery_float_confounded")
+            (Path(tmp) / "d02/raw/battery_float.pre.ioreg").unlink()
+            with self.assertRaisesRegex(battery_float.CustodyFailure, r"^custody failure: d02/pre expected "):
+                battery_float.validate_window(session)
+
+    def test_slot_carries_evidence_digest_and_update_ages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session = self.build(tmp, {"d01": self.clean()}, wall=UPDATE + 38)
+            [slot] = battery_float.validate_window(session)["slots"]
+            self.assertEqual(slot["instrument_evidence_sha256"],
+                             session.finalized_slots["d01"].artifact_sha256["instrument_evidence.json"])
+            self.assertEqual((slot["pre_update_age_s"], slot["post_update_age_s"]), (38, 38))
+
+
+class CommittedVerdictTests(unittest.TestCase):
+    """§4.10 item 1 (h): `load_committed_verdict` in a scratch Git repository."""
+
+    PREREG = "d" * 64
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
+        self.git("init", "-q")
+        self.session = custody_session(Path(self.tmp.name) / "custody", {"d01": clean_phases()})
+        self.record = battery_float.verdict_record(
+            self.session, snapshot=SimpleNamespace(head_sequence=24, head_digest="e" * 64),
+            preregistration_sha256=self.PREREG, tool_commit="f" * 40, module_sha256="a" * 64,
+            wall_time_s=UPDATE + 60.0)
+        self.rel = battery_float.verdict_relative_path("W1")
+        self.path = self.repo / self.rel
+
+    def git(self, *argv):
+        subprocess.run(("git", "-C", str(self.repo), "-c", "user.email=t@example.invalid",
+                        "-c", "user.name=t", *argv), check=True, capture_output=True)
+
+    def write(self, record=None):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_bytes(battery_float.render_verdict(record or self.record))
+
+    def commit(self, message="c"):
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def load(self, prereg=PREREG):
+        return battery_float.load_committed_verdict(
+            self.repo, "W1", session=self.session, preregistration_sha256=prereg)
+
+    def assert_no_record(self, reason):
+        with self.assertRaises(battery_float.NoRecord) as caught:
+            self.load()
+        self.assertIn(reason, caught.exception.reason)
+        self.assertIsInstance(caught.exception, ValueError)
+
+    def test_record_fields_are_the_ruled_schema(self):
+        self.assertEqual(set(self.record), {
+            "schema", "policy_id", "session_id", "session_kind", "session_state",
+            "identity_epoch", "preregistration_sha256", "ledger_head", "computed_wall_time_s",
+            "tool_commit", "battery_float_module_sha256", "status", "slots"})
+        self.assertEqual(self.record["schema"], "joulewise.battery_float_verdict.v1")
+        self.assertEqual(self.record["ledger_head"], {"sequence": 24, "head_digest": "e" * 64})
+        self.assertEqual(set(self.record["slots"][0]), {
+            "slot", "attempt_id", "verdict", "reasons", "pre_raw_sha256", "post_raw_sha256",
+            "pre_update_age_s", "post_update_age_s", "delta_q_mah", "instrument_evidence_sha256"})
+
+    def test_honest_add_authenticates(self):
+        self.write()
+        self.commit("harvest")
+        record = self.load()
+        self.assertEqual(dict(record), json.loads(self.path.read_text()))
+        self.assertEqual(record.file_sha256, hashlib.sha256(self.path.read_bytes()).hexdigest())
+        self.assertRegex(record.commit, r"^[0-9a-f]{40}$")
+        self.assertIsNone(battery_float.compare_verdict(record, battery_float.validate_window(self.session)))
+
+    def test_delete_and_re_add_is_no_record(self):
+        self.write()
+        self.commit("harvest")
+        self.git("rm", "-q", self.rel)
+        self.commit("remove")
+        self.write({**self.record, "status": "battery_float_evidence_missing"})
+        self.commit("re-add")
+        self.assert_no_record("path history is not a single adding commit (3 commits, 2 adding)")
+
+    def test_modify_in_place_is_no_record(self):
+        self.write()
+        self.commit("harvest")
+        self.write({**self.record, "status": "battery_float_evidence_missing"})
+        self.commit("modify")
+        self.assert_no_record("path history is not a single adding commit (2 commits, 1 adding)")
+
+    def test_uncommitted_edit_is_no_record(self):
+        self.write()
+        self.commit("harvest")
+        self.write({**self.record, "status": "battery_float_evidence_missing"})
+        self.assert_no_record("working tree differs from HEAD")
+
+    def test_absent_and_uncommitted_are_no_record(self):
+        (self.repo / "README").write_text("x")
+        self.commit("genesis")
+        self.assert_no_record("absent or uncommitted")
+        self.write()
+        self.assert_no_record("absent or uncommitted")
+
+    def test_wrong_registration_digest_is_identity_mismatch(self):
+        self.write()
+        self.commit("harvest")
+        with self.assertRaisesRegex(battery_float.NoRecord, "identity mismatch: preregistration_sha256"):
+            self.load(prereg="0" * 64)
+
+    def test_altered_evidence_digest_is_slot_binding_mismatch(self):
+        altered = json.loads(json.dumps(self.record))
+        altered["slots"][0]["instrument_evidence_sha256"] = "0" * 64
+        self.write(altered)
+        self.commit("harvest")
+        self.assert_no_record("slot binding mismatch: d01")
+
+    def test_compare_verdict_names_the_first_difference(self):
+        recomputed = battery_float.validate_window(self.session)
+        self.assertIsNone(battery_float.compare_verdict(self.record, recomputed))
+        changed = json.loads(json.dumps(self.record))
+        changed["slots"][0]["post_raw_sha256"] = None
+        self.assertIn("d01.post_raw_sha256", battery_float.compare_verdict(changed, recomputed))
+        changed = {**self.record, "status": "battery_float_confounded"}
+        self.assertIn("status", battery_float.compare_verdict(changed, recomputed))
+        changed = json.loads(json.dumps(self.record))
+        changed["slots"][0]["reasons"] = ["ignored"]
+        self.assertIsNone(battery_float.compare_verdict(changed, recomputed))
