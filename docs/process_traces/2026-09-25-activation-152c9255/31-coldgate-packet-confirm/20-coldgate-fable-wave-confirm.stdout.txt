@@ -1,0 +1,4 @@
+Ruling written (15.6 KB, 14 minutes of the 35-minute budget used); the worktree shows only the new ruling file, and the /tmp clone is removed. Nothing further is needed.
+
+Ruling written to `docs/process_traces/2026-09-25-activation-152c9255/31-coldgate-packet-confirm/20-coldgate-fable-wave-confirm.md`: C1 fix AFFIRMED but 58d9ddc3 NOT CONFIRMED (unmergeable add/add conflict with main, no hosted check; successor H confirmed under C1-a/C1-b), C2 e77ec15d CONFIRMED after H, C3 row 9 adequate with this ruling's added runs; one BLOCKER, two MATERIAL, three NIT.
+rc=0

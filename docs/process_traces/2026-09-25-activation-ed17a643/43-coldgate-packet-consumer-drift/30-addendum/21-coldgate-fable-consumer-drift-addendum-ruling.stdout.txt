@@ -1,0 +1,20 @@
+The ruling is written and the scratch space is removed. The only change in the worktree is the new ruling file, left uncommitted for the magistrate to land.
+
+**Where the ruling is**
+`docs/process_traces/2026-09-25-activation-ed17a643/43-coldgate-packet-consumer-drift/30-addendum/21-coldgate-fable-consumer-drift-addendum-ruling.md`
+
+**Verification before the merits**
+All three input digests and the charter digest matched. The branch head is one docs-only commit past the charged `3e984ecc`, and I ruled on the charged commit from a `git archive` export, so no worktree metadata was written.
+
+**Z1 outcome.** All four MATERIAL findings are affirmed with executed evidence from a probe built on the branch's own fixtures:
+
+- **P5 affirmed.** With a re-serialised ledger pin, the dry run exits 0 and says "admissible" while the issuer refuses on the same snapshot. The cure is one shared ledger-refusal helper called by the issuer, the harvest writer, the collector and the dry run.
+- **P4 affirmed.** On the sanctioned replacement route the issuer issues with the confounded declaration, but no dry-run input can say yes, and `check` rejects the flag at argparse. The cure adds the same flag to `check` and makes the policy acknowledge the declared set.
+- **R16 affirmed.** The producer is a replay-only backdoor. It joins the guarded names, with the harvest writer and the fixture builder as the only allowlisted callers. The `parse` nit is adopted too.
+- **P3 and R18 affirmed.** The restored-bytes arm of the ruling's regression test is itself a false yes on A-7. That test now asserts parity.
+- **R19 ruled as bounded option (a).** A-7 is mirrored through the collector, which already computes the foreign-owner set. The "admissible" line's text is unchanged, but its promise is enumerated: a list of mirrored refusals and a list of issuer-only ones, in the docstring, the runbook return-code row and §4.1 in the same PR. The refuter's full shared admission prefix is rejected for this round because it would either reorder the issuer's refusal precedence or need two modes, and no unmirrored refusal can cost a night.
+
+**Z2 outcome.** Final texts v1.1 are issued complete in the ruling's §3: the seam, the four codes, the order, the collector with a `target_epoch` helper both consumers call, one policy object with two renderers so the issuer's refusal strings stay byte-identical, the `check` flag, a six-entry guard allowlist, the parity promise, and a thirteen-item test list with a parity matrix that is red at the pinned commit. A five-line plain summary for Ed is in §4.
+
+**Disclosure.** The harness injected the memory index and both CLAUDE.md files before I read the charge. I opened no memory file and nothing in the ruling cites them.
+rc=0

@@ -1,0 +1,6 @@
+ERROR: test_g4_real_ruled_census_pgrep_dialect (test_arm_readiness_evidence_t0.ArmReadinessEvidenceT0Tests.test_g4_real_ruled_census_pgrep_dialect) (pattern='powermetrics|window-chain|run_campaign|tail -f|(^|/)watch( |$)')
+FAIL: test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (test_sample_quiet_predicate_evidence.LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child) (exit_delay=60)
+Ran 7379 tests in 11114.039s
+FAILED (failures=1, errors=1, skipped=109)
+python3 -m unittest discover -s tests  7796.12s user 2836.31s system 95% cpu 3:05:16.50 total
+rc=1
