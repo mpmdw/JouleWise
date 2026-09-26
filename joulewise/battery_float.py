@@ -1,7 +1,16 @@
 """Battery float observations and authenticated derivation-window replay.
 
-The ioreg parser deliberately reads only standalone, top-level property lines.
-All consumers use this module for the probe and predicate (directive #421).
+The ioreg parser accepts only the exact whole-document grammar of cold ruling
+BFG-D-PARSER-ESC-01 §4: byte framing, one line type per physical line, and a
+recursive-descent value grammar that must consume each value to its last byte.
+Anything outside that allow-list is a ``ProbeError``, never a pass.  All
+consumers use this module for the probe and predicate (directive #421).
+
+Grammar freeze (refuter M-2, obligation R2-9): any change to the structural
+stage (``_structure`` and ``_recorded_values``) while the Revision-5 epoch is
+unissued must, in the same PR, replay every committed Revision-5 verdict with
+zero ``compare_verdict`` differences; otherwise it is a registration amendment
+that needs an owner ruling.
 """
 
 from __future__ import annotations
@@ -21,12 +30,10 @@ SCHEMA = "joulewise.battery_float.v1"
 POLICY_ID = "bfg-01"
 LIMIT_MA = 200
 MAX_UPDATE_AGE_S = 180
-_HEADER = re.compile(rb'^\+-o AppleSmartBattery  <[^>\r\n]+>$')
-_PROPERTY = re.compile(rb'^( +)("[^"\r\n]+" = .+)$')
 _REQUIRED = ("ExternalConnected", "IsCharging", "InstantAmperage", "UpdateTime")
 _OPTIONAL = ("Amperage", "Voltage", "Temperature", "FullyCharged", "CurrentCapacity",
              "AppleRawCurrentCapacity", "AppleRawMaxCapacity")
-_UINT = re.compile(r"[0-9]+\Z")
+_UINT = re.compile(r"[0-9]{1,20}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 _SESSION_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
@@ -86,68 +93,156 @@ def _signed(value: str) -> int:
     return number - 2**64 if number >= 2**63 else number
 
 
-def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
-    """Parse one complete ioreg object; raise ProbeError on required-data faults."""
-    if not isinstance(raw, bytes):
-        raise ProbeError("stdout is not bytes")
-    lines = raw.splitlines()
-    nonblank = [index for index, line in enumerate(lines) if line.strip()]
-    if len(nonblank) < 4 or nonblank[0] != 0 or not _HEADER.fullmatch(lines[0]):
-        raise ProbeError("expected one AppleSmartBattery object header")
-    opening = nonblank[1]
-    if lines[opening].strip() != b"{" or not lines[opening].startswith(b" "):
-        raise ProbeError("AppleSmartBattery property block does not open")
-    block_indent = len(lines[opening]) - len(lines[opening].lstrip(b" "))
-    closing = nonblank[-1]
-    if lines[closing] != b" " * block_indent + b"}":
-        raise ProbeError("AppleSmartBattery property block does not close")
-    if any(line == lines[closing] for line in lines[opening + 1:closing]):
-        raise ProbeError("content follows the AppleSmartBattery closing brace")
-    if any(line.startswith(b"+-o") for line in lines[1:closing]):
-        raise ProbeError("more than one object header")
-    property_indent = None
-    nested_depth = 0
-    properties: dict[str, list[tuple[str, str]]] = {}
-    for line in lines[opening + 1:closing]:
-        stripped = line.strip()
-        if stripped == b"{":
-            nested_depth += 1
+def _structure(raw: Any) -> dict[str, tuple[bytes, bytes]]:
+    """Accept one whole ioreg document (ruling §4) or raise ``ProbeError``.
+
+    Returns every top-level key with its verbatim line and VALUE bytes.  No
+    state crosses a physical line except the expected line type (BODY or
+    TAIL) and the set of top-level keys; nesting exists only inside one
+    value, checked by recursive descent that must consume it to its last
+    byte.  Frozen for the Revision-5 epoch (module docstring).
+    """
+    header = re.compile(
+        rb"\+-o AppleSmartBattery  <class AppleSmartBattery, id 0x[0-9a-f]+, registered, "
+        rb"matched, active, busy [0-9]+ \([0-9]+ ms\), retain [0-9]+>")
+    opening, closing = b"    {", b"    }"
+    prop = re.compile(rb' {6}"([A-Za-z0-9_][A-Za-z0-9_.-]*)" = (.+)')
+    tail = re.compile(rb" *")
+    key = re.compile(rb'"[A-Za-z0-9_][A-Za-z0-9_.-]*"')
+    atom = re.compile(rb"Yes|No|[0-9]+")
+    data = re.compile(rb"<(?:[0-9a-f]{2})*>")
+    max_bytes, max_line, max_depth = 1_048_576, 262_144, 64
+
+    def value(text: bytes, at: int, depth: int, where: str) -> int:
+        """Consume one VALUE starting at ``at``; return the cursor after it."""
+        head = text[at:at + 1]
+        if head == b'"':
+            return string(text, at, where)
+        if head == b"(" or head == b"{":
+            if depth >= max_depth:
+                raise ProbeError(f"{where}: depth")
+            return container(text, at, depth + 1, where)
+        token = (data if head == b"<" else atom).match(text, at)
+        if token is None:
+            raise ProbeError(f"{where}: token")
+        return token.end()
+
+    def string(text: bytes, at: int, where: str) -> int:
+        cursor = at + 1
+        while cursor < len(text) and text[cursor:cursor + 1] != b'"':
+            if text[cursor:cursor + 1] == b"\\":
+                if text[cursor + 1:cursor + 2] not in (b'"', b"\\"):
+                    raise ProbeError(f"{where}: escape")
+                cursor += 1
+            cursor += 1
+        if cursor >= len(text):
+            raise ProbeError(f"{where}: unclosed string")
+        return cursor + 1
+
+    def container(text: bytes, at: int, depth: int, where: str) -> int:
+        is_dict = text[at:at + 1] == b"{"
+        end, name = (b"}", "dict") if is_dict else (b")", "array")
+        cursor = at + 1
+        members: set[bytes] = set()
+        if text[cursor:cursor + 1] == end:
+            return cursor + 1
+        while True:
+            if is_dict:
+                member = key.match(text, cursor)
+                if member is None:
+                    raise ProbeError(f"{where}: nested key")
+                if member.group() in members:
+                    raise ProbeError(f"{where}: duplicate nested key {member.group().decode()}")
+                members.add(member.group())
+                cursor = member.end()
+                if text[cursor:cursor + 1] != b"=":
+                    raise ProbeError(f"{where}: token")
+                cursor += 1
+                # "K"=, and "K"=} are ioreg's unserialisable members.
+                if text[cursor:cursor + 1] not in (b",", b"}"):
+                    cursor = value(text, cursor, depth, where)
+            else:
+                cursor = value(text, cursor, depth, where)
+            follow = text[cursor:cursor + 1]
+            if follow == end:
+                return cursor + 1
+            if follow != b",":
+                if cursor >= len(text):
+                    raise ProbeError(f"{where}: unclosed {name}")
+                raise ProbeError(f"{where}: token")
+            cursor += 1
+
+    if not isinstance(raw, bytes) or not raw or len(raw) > max_bytes:
+        raise ProbeError("framing: type/size")
+    if re.search(rb"[^\n\x20-\x7e]", raw):
+        raise ProbeError("framing: byte")
+    if not raw.endswith(b"\n"):
+        raise ProbeError("framing: final LF")
+    lines = raw.split(b"\n")[:-1]
+    if not header.fullmatch(lines[0]):
+        raise ProbeError("header")
+    if lines[1:2] != [opening]:
+        raise ProbeError("open")
+    properties: dict[str, tuple[bytes, bytes]] = {}
+    in_body = True
+    for number, line in enumerate(lines[2:], start=3):
+        where = f"line {number}"
+        if not in_body:
+            if not tail.fullmatch(line):
+                raise ProbeError(f"{where}: tail")
             continue
-        if stripped == b"}":
-            if not nested_depth:
-                raise ProbeError("unexpected nested closing brace")
-            nested_depth -= 1
+        if line == closing and properties:
+            in_body = False
             continue
-        match = _PROPERTY.fullmatch(line)
+        if len(line) > max_line:
+            raise ProbeError(f"{where}: length")
+        match = prop.fullmatch(line)
         if match is None:
-            if stripped and not nested_depth:
-                raise ProbeError("malformed property block line")
-            continue
-        if nested_depth:
-            continue
-        indent = len(match.group(1))
-        if property_indent is None:
-            if indent <= block_indent:
-                raise ProbeError("property is not inside the object block")
-            property_indent = indent
-        if indent != property_indent:
-            raise ProbeError("property has inconsistent top-level indentation")
-        if line.endswith(b" = {"):
-            nested_depth += 1
-        try:
-            whole = match.group(2).decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise ProbeError("property line is not UTF-8") from exc
-        key, value = whole.split('" = ', 1)
-        properties.setdefault(key[1:], []).append((line.decode("utf-8"), value))
-    if nested_depth:
-        raise ProbeError("nested property block does not close")
-    for key in _REQUIRED:
-        if len(properties.get(key, ())) != 1:
-            raise ProbeError(f"{key} must occur exactly once")
-    values = {key: entries[0][1] for key, entries in properties.items() if len(entries) == 1}
-    if values["ExternalConnected"] not in ("Yes", "No") or values["IsCharging"] not in ("Yes", "No"):
-        raise ProbeError("malformed battery boolean")
+            raise ProbeError(f"{where}: property")
+        name, text = match.group(1).decode("ascii"), match.group(2)
+        if name in properties:
+            raise ProbeError(f"{where}: duplicate key {name}")
+        if value(text, 0, 0, where) != len(text):
+            raise ProbeError(f"{where}: value suffix")
+        properties[name] = (line, text)
+    if in_body:
+        raise ProbeError("close")
+    return properties
+
+
+def _recorded_values(properties: Mapping[str, tuple[bytes, bytes]]) -> dict[str, str]:
+    """Type-check every registered property (ruling §4 and obligation R2-8).
+
+    A required key is present exactly once; ``ExternalConnected``,
+    ``IsCharging`` and ``FullyCharged`` are exactly ``Yes``/``No``; every
+    registered integer fullmatches ``[0-9]{1,20}`` below 2^64.  A missing
+    recorded key stays ``None``; a malformed one is not a pass.  Frozen for
+    the Revision-5 epoch (module docstring).
+    """
+    values = {name: properties[name][1].decode("ascii")
+              for name in (*_REQUIRED, *_OPTIONAL) if name in properties}
+    for name in _REQUIRED:
+        if name not in values:
+            raise ProbeError(f"required {name}")
+    for name in ("ExternalConnected", "IsCharging", "FullyCharged"):
+        if name in values and values[name] not in ("Yes", "No"):
+            raise ProbeError(f"boolean {name}")
+    for name in ("InstantAmperage", "UpdateTime", "Amperage", "Voltage", "Temperature",
+                 "CurrentCapacity", "AppleRawCurrentCapacity", "AppleRawMaxCapacity"):
+        if name in values and (not _UINT.fullmatch(values[name]) or int(values[name]) >= 2**64):
+            raise ProbeError(f"uint64 {name}")
+    return values
+
+
+def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
+    """Accept one whole ioreg document, then evaluate the float predicate.
+
+    Structural acceptance (``_structure``) and typing (``_recorded_values``)
+    run over the whole document before any predicate; any fault raises
+    ``ProbeError``.
+    """
+    properties = _structure(raw)
+    values = _recorded_values(properties)
     current = _signed(values["InstantAmperage"])
     update = _unsigned(values["UpdateTime"])
     age = wall_time_s - update
@@ -160,13 +255,8 @@ def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
                        ("Temperature", "temperature_raw"), ("CurrentCapacity", "current_capacity_pct"),
                        ("AppleRawCurrentCapacity", "apple_raw_current_capacity_mah"),
                        ("AppleRawMaxCapacity", "apple_raw_max_capacity_mah")):
-        try:
-            optional[field] = None if key not in values else _signed(values[key])
-        except ProbeError:
-            optional[field] = None
+        optional[field] = None if key not in values else _signed(values[key])
     optional["fully_charged"] = None if "FullyCharged" not in values else values["FullyCharged"] == "Yes"
-    if "FullyCharged" in values and values["FullyCharged"] not in ("Yes", "No"):
-        optional["fully_charged"] = None
     reasons = []
     if values["ExternalConnected"] != "Yes":
         reasons.append("ExternalConnected is not Yes")
@@ -176,7 +266,8 @@ def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
         reasons.append("InstantAmperage exceeds 200 mA")
     return {
         "object_count": 1,
-        "property_lines": [entry[0] for key in (*_REQUIRED, *_OPTIONAL) for entry in properties.get(key, ())],
+        "property_lines": [properties[key][0].decode("ascii") for key in (*_REQUIRED, *_OPTIONAL)
+                           if key in properties],
         "external_connected_raw": values["ExternalConnected"],
         "is_charging_raw": values["IsCharging"],
         "instant_amperage_raw": values["InstantAmperage"],
@@ -213,7 +304,12 @@ def observe(*, phase: str, runner: Callable | None = None, wall_time_s: float | 
                                  timeout=PROBE_TIMEOUT_S, check=False)
                   if runner is None else runner(IOREG_BATTERY_ARGV))
         raw_value = result.stdout
-        raw = raw_value.encode("utf-8") if isinstance(raw_value, str) else raw_value
+        # Obligation R2-11: only the probe's exact stdout bytes reach the
+        # grammar.  Text was decoded by the runner (universal newlines turn
+        # CR into LF), so it is refused, never re-encoded.
+        if not isinstance(raw_value, bytes):
+            raise ProbeError("probe stdout is not bytes")
+        raw = raw_value
         stderr_value = result.stderr
         stderr = stderr_value.decode("utf-8", errors="replace") if isinstance(stderr_value, bytes) else stderr_value
         exit_code = getattr(result, "returncode", getattr(result, "exit_code", None))

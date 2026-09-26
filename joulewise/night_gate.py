@@ -20,7 +20,7 @@ import os
 import re
 import subprocess
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
@@ -331,6 +331,10 @@ class ProbeResult:
     stdout: str
     stderr: str
     monotonic_ns: int
+    # The probe's exact stdout bytes, for the battery-float grammar only
+    # (obligation R2-11).  A runner that captured text supplies None, and
+    # the battery observation is then a probe error.  Never serialised.
+    stdout_bytes: bytes | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -1511,7 +1515,9 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
         def battery_runner(argv):
             nonlocal battery_result
             battery_result = _run(probes, argv)
-            return battery_result
+            # R2-11: the grammar sees the runner's exact stdout bytes, never
+            # the decoded text (``observe`` refuses anything but bytes).
+            return replace(battery_result, stdout=battery_result.stdout_bytes)
         battery_record, battery_raw = battery_float.observe(
             phase="t0", runner=battery_runner, wall_time_s=probes.now_epoch_s(),
             plan_id=plan.plan_id,

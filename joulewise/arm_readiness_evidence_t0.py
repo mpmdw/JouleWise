@@ -22,7 +22,7 @@ import signal as _signal
 import subprocess as _subprocess
 import tempfile as _tempfile
 import time as _time
-from dataclasses import dataclass as _dataclass, field as _field
+from dataclasses import dataclass as _dataclass, field as _field, replace as _replace
 from datetime import datetime as _datetime
 from decimal import Decimal as _Decimal
 from pathlib import Path as _Path, PurePosixPath as _PurePosixPath
@@ -284,6 +284,9 @@ class _ProbeResult:
     exit_code: int
     stdout: str
     stderr: str
+    # The exact stdout bytes, for the battery-float grammar only (obligation
+    # R2-11); never part of the evidence projection.
+    stdout_bytes: bytes | None = _field(default=None, compare=False, repr=False)
 
     def evidence(self) -> dict[str, _Any]:
         return {
@@ -479,6 +482,7 @@ def _execute_probe(argv: _Sequence[str], *, cwd: _Path) -> _ProbeResult:
         int(process.returncode),
         stdout_raw.decode("utf-8", errors="replace"),
         stderr_raw.decode("utf-8", errors="replace"),
+        stdout_raw,
     )
 
 
@@ -1874,8 +1878,10 @@ def _derive_power(context: _Context) -> _DerivedRow:
     wall_time_s = _datetime.fromisoformat(
         context.clock.utc_now().replace("Z", "+00:00")
     ).timestamp()
+    # R2-11: the grammar judges the probe's exact stdout bytes.
     battery_observation, _battery_raw = _battery_float.observe(
-        phase="t0_power_row", runner=lambda _argv: battery, wall_time_s=wall_time_s,
+        phase="t0_power_row", runner=lambda _argv: _replace(battery, stdout=battery.stdout_bytes),
+        wall_time_s=wall_time_s,
         monotonic_ns=context.clock.monotonic_ns,
     )
     if battery_observation["probe_error"]:

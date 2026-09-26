@@ -32,10 +32,15 @@ def result(
     argv: tuple[str, ...],
     *,
     exit_code: int = 0,
-    stdout: str = "",
+    stdout: str | bytes = "",
     stderr: str = "",
     monotonic_ns: int = 10,
 ) -> night_gate.ProbeResult:
+    # A bytes stdout is what a bytes-capturing runner returns (the battery
+    # probe, obligation R2-11); its text is the lossless decode.
+    if isinstance(stdout, bytes):
+        return night_gate.ProbeResult(argv, exit_code, stdout.decode("utf-8", errors="replace"),
+                                      stderr, monotonic_ns, stdout_bytes=stdout)
     return night_gate.ProbeResult(argv, exit_code, stdout, stderr, monotonic_ns)
 
 
@@ -54,7 +59,7 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
         ),
         night_gate.IOREG_BATTERY_ARGV: result(
             night_gate.IOREG_BATTERY_ARGV,
-            stdout=(Path(__file__).parent / "fixtures/battery_float/float.ioreg").read_text(),
+            stdout=(Path(__file__).parent / "fixtures/battery_float/float.ioreg").read_bytes(),
         ),
         night_gate.PMSET_GENERAL_ARGV: result(
             night_gate.PMSET_GENERAL_ARGV,
@@ -1305,7 +1310,7 @@ class NightGateTests(unittest.TestCase):
             if index == 7:
                 source.results[night_gate.IOREG_BATTERY_ARGV] = result(
                     night_gate.IOREG_BATTERY_ARGV,
-                    stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text(),
+                    stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_bytes(),
                 )
             if index > 8:
                 source.results[night_gate.BOOT_SESSION_ARGV] = result(
@@ -1633,7 +1638,7 @@ class NightGateTests(unittest.TestCase):
         source = FakeProbeSource()
         source.results[night_gate.IOREG_BATTERY_ARGV] = result(
             night_gate.IOREG_BATTERY_ARGV,
-            stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text(),
+            stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_bytes(),
         )
         receipt = self.evaluate(make_plan(), source)
         self.assertEqual(receipt.refusal.reason, "night_refused_battery_float")
@@ -1803,8 +1808,11 @@ class QuietGatePhaseTests(unittest.TestCase):
                         source = FakeProbeSource(now_epoch_s=now)
                         if argv:
                             source.results[argv] = result(argv, stdout=stdout)
-                        source.results = {key: engine.ProbeResult(**dataclasses.asdict(value))
-                                          for key, value in source.results.items()}
+                        # The pre-v4 engine has no stdout_bytes field (R2-11).
+                        names = {field.name for field in dataclasses.fields(engine.ProbeResult)}
+                        source.results = {key: engine.ProbeResult(**{
+                            name: item for name, item in dataclasses.asdict(value).items()
+                            if name in names}) for key, value in source.results.items()}
                         with mock.patch.object(engine, 'D166_REGISTRATION_SHA256',
                                                hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
                             receipt = engine.evaluate_night(make_plan(receipt_class), source.probes())
@@ -1826,8 +1834,10 @@ class QuietGatePhaseTests(unittest.TestCase):
                 source = FakeProbeSource()
                 source.results[night_gate.BOOT_SESSION_ARGV] = result(
                     night_gate.BOOT_SESSION_ARGV, exit_code=code, stdout=stdout)
-                source.results = {key: engine.ProbeResult(**dataclasses.asdict(value))
-                                  for key, value in source.results.items()}
+                names = {field.name for field in dataclasses.fields(engine.ProbeResult)}
+                source.results = {key: engine.ProbeResult(**{
+                    name: item for name, item in dataclasses.asdict(value).items()
+                    if name in names}) for key, value in source.results.items()}
                 receipt = engine.evaluate_night(make_plan(), source.probes())
                 self.assertEqual(receipt.refusal.reason, 'night_refused_boot_clock')
                 receipts.append(receipt.to_json_bytes())

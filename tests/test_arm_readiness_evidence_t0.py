@@ -734,18 +734,23 @@ def make_t0_fixture(
 
 
 def _probe_result(argv, cwd, exit_code=0, stdout="", stderr=""):
+    # A bytes stdout is what `_execute_probe` captures (the battery probe's
+    # grammar reads those exact bytes, obligation R2-11).
+    if isinstance(stdout, bytes):
+        return t0._ProbeResult(tuple(argv), str(Path(cwd).resolve()), exit_code,
+                               stdout.decode("utf-8", errors="replace"), stderr, stdout)
     return t0._ProbeResult(tuple(argv), str(Path(cwd).resolve()), exit_code, stdout, stderr)
 
 
-def _float_ioreg(name="float.ioreg", *, age_s=0) -> str:
+def _float_ioreg(name="float.ioreg", *, age_s=0) -> bytes:
     """A real capture (tests/fixtures/battery_float) whose `UpdateTime` is
     `age_s` before the authoring clock's now: fixed under the synthetic clock
     (so re-authoring stays byte-idempotent), fresh under the real one."""
     from datetime import datetime
     now = datetime.fromisoformat(t0._production_clock().utc_now().replace("Z", "+00:00"))
-    text = (Path(__file__).parent / "fixtures/battery_float" / name).read_text()
-    return text.replace(
-        '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(now.timestamp()) - age_s}', 1
+    raw = (Path(__file__).parent / "fixtures/battery_float" / name).read_bytes()
+    return raw.replace(
+        b'"UpdateTime" = 1790373525', f'"UpdateTime" = {int(now.timestamp()) - age_s}'.encode(), 1
     )
 
 
@@ -2858,6 +2863,39 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
                 finally:
                     temporary.cleanup()
+
+    def test_power_row_battery_probe_passes_exact_bytes_and_refuses_cr_smuggle(self) -> None:
+        # Obligation R2-11 (refuter M-4): `_execute_probe` keeps the child's
+        # exact stdout bytes and the power row hands those bytes, not the
+        # decoded text, to the grammar.  A real child writes the refuter's
+        # CR-smuggled output.
+        import dataclasses
+        from datetime import datetime
+        import sys
+        from tests import battery_float_corpus
+        execute = t0._execute_probe
+        now = int(datetime.fromisoformat(t0._production_clock().utc_now().replace("Z", "+00:00")).timestamp())
+        smuggle = battery_float_corpus.negatives(now)["cr_smuggled_required"]
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        children = []
+        def probe(argv, *, cwd):
+            if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
+                child = execute((sys.executable, "-c",
+                                 "import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))",
+                                 smuggle.hex()), cwd=cwd)
+                children.append(child)
+                return dataclasses.replace(child, argv=tuple(argv))
+            return passing_probe(argv, cwd=cwd)
+        with author_environment(repository, probe=probe), self.assertRaises(
+            T0EvidenceAuthoringError
+        ) as caught:
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
+        self.assertRegex(str(caught.exception), "battery float probe error: .*framing: byte")
+        [child] = children
+        self.assertEqual(child.stdout_bytes, smuggle)
+        self.assertIn("\r", child.stdout)
 
     def test_power_row_refuses_charging_and_stale_battery_and_records_float(self) -> None:
         # Final texts v1.1 §5.3 item 5: the t0 power row's own ioreg probe.

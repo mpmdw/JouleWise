@@ -672,7 +672,11 @@ print(json.dumps(s))
 
 
 def probe_command(argv, *, cwd=None, timeout=None, env=None):
-    return subprocess.run(list(map(str, argv)), cwd=cwd, capture_output=True, text=True,
+    command = list(map(str, argv))
+    # Obligation R2-11: the battery-float probe is captured as bytes (no text
+    # mode, no universal newlines) so the grammar judges its exact stdout.
+    text = tuple(command) != battery_float.IOREG_BATTERY_ARGV
+    return subprocess.run(command, cwd=cwd, capture_output=True, text=text,
                           check=False, timeout=timeout,
                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", **(env or {})))
 

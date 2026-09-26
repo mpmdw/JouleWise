@@ -31,15 +31,17 @@ def fresh_ioreg(name: str = "float.ioreg", *, now_s: float | None = None) -> byt
 
 
 def answer(argv, name: str = "float.ioreg"):
-    """A text-mode completed ioreg run for the ruled argv, else None.
+    """A completed ioreg run for the ruled argv, else None.
 
     For runners shaped like `evidence_night.probe_command` that answer
     several commands: `return battery_float_fixture.answer(argv) or ...`.
+    Its stdout is bytes, as `probe_command` captures the battery argv
+    (obligation R2-11).
     """
 
     if tuple(map(str, argv)) != battery_float.IOREG_BATTERY_ARGV:
         return None
-    return subprocess.CompletedProcess(list(argv), 0, fresh_ioreg(name).decode("utf-8"), "")
+    return subprocess.CompletedProcess(list(argv), 0, fresh_ioreg(name), "")
 
 
 def runner(name: str = "float.ioreg"):
@@ -97,3 +99,28 @@ def install_user_site_runner(home: Path, python: str | None = None) -> bool:
     Path(site_dir).mkdir(parents=True, exist_ok=True)
     (Path(site_dir) / "usercustomize.py").write_text(_USERCUSTOMIZE, encoding="utf-8")
     return True
+
+
+def smuggling_run(original, stdout: bytes):
+    """A `subprocess.run` whose ioreg child writes exactly `stdout`.
+
+    The ruled ioreg argv is replaced by a real child process that writes the
+    bytes, and the caller's own keyword arguments (text mode, universal
+    newlines, timeout) are applied by the real `subprocess.run`; every other
+    command runs unchanged.  Refuter M-4's CR-smuggle case uses it to drive
+    the production runners (obligation R2-11).
+    """
+
+    import sys
+
+    def run(argv, *args, **kwargs):
+        if tuple(map(str, argv)) != battery_float.IOREG_BATTERY_ARGV:
+            return original(argv, *args, **kwargs)
+        completed = original(
+            [sys.executable, "-c",
+             "import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))", stdout.hex()],
+            *args, **kwargs)
+        completed.args = list(argv) if isinstance(argv, list) else argv
+        return completed
+
+    return run

@@ -1,16 +1,21 @@
 """Battery float parser and production-gate regressions from one real ioreg read."""
 from __future__ import annotations
 
+import ast
 import hashlib
+import importlib.util
+import inspect
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 import unittest
 from unittest import mock
 
 from joulewise import battery_float, night_gate
+from tests import battery_float_corpus as corpus
 from tests.test_night_gate import FakeProbeSource, REGISTRATION_TEXT, make_plan, result
 
 FIXTURES = Path(__file__).parent / "fixtures/battery_float"
@@ -165,7 +170,7 @@ class GateTests(unittest.TestCase):
                 with self.subTest(case=cases.index(changed), dynamic=dynamic):
                     source = FakeProbeSource()
                     source.results[night_gate.IOREG_BATTERY_ARGV] = result(
-                        night_gate.IOREG_BATTERY_ARGV, stdout=changed.decode())
+                        night_gate.IOREG_BATTERY_ARGV, stdout=changed)
                     receipt = self.evaluate(source, dynamic=dynamic)
                     self.assertIsNotNone(receipt.refusal)
                     self.assertEqual(receipt.refusal.reason, "night_probe_error")
@@ -186,7 +191,7 @@ class GateTests(unittest.TestCase):
 
     def test_charging_refuses_both_gate_paths_with_c3_raw_text(self):
         charging = edit(raw("charging-synthetic-from-real.ioreg"),
-                        b'"UpdateTime" = 1790373525', b'"UpdateTime" = 1000').decode()
+                        b'"UpdateTime" = 1790373525', b'"UpdateTime" = 1000')
         for dynamic in (False, True):
             source = FakeProbeSource()
             source.results[night_gate.IOREG_BATTERY_ARGV] = result(
@@ -195,7 +200,7 @@ class GateTests(unittest.TestCase):
             self.assertEqual(receipt.verdict, "REFUSED")
             self.assertEqual(receipt.refusal.reason, "night_refused_battery_float")
             battery = receipt.conditions[2].measured["battery_float"]
-            self.assertEqual(battery["raw_stdout"], charging)
+            self.assertEqual(battery["raw_stdout"], charging.decode())
             self.assertFalse(battery["passed"])
 
     def test_stale_is_probe_error_and_fresh_passes(self):
@@ -204,7 +209,7 @@ class GateTests(unittest.TestCase):
             fresh = edit(raw(), b'"UpdateTime" = 1790373525',
                          f'"UpdateTime" = {1005 - age}'.encode())
             source.results[night_gate.IOREG_BATTERY_ARGV] = result(
-                night_gate.IOREG_BATTERY_ARGV, stdout=fresh.decode())
+                night_gate.IOREG_BATTERY_ARGV, stdout=fresh)
             receipt = self.evaluate(source)
             self.assertEqual(receipt.refusal.reason if receipt.refusal else None, expected)
 
@@ -545,3 +550,247 @@ class CommittedVerdictTests(unittest.TestCase):
         changed = json.loads(json.dumps(self.record))
         changed["slots"][0]["reasons"] = ["ignored"]
         self.assertIsNone(battery_float.compare_verdict(changed, recomputed))
+
+
+# ex-03's own UpdateTime; the gate fixture's clock is 1005 s, so the gate site
+# re-stamps the corpus to 1000.
+REAL_UPDATE = 1790394405
+GATE_UPDATE = 1000
+
+
+class GrammarCorpusTests(unittest.TestCase):
+    """Ruling BFG-D-PARSER-ESC-01 §4 corpus at the four sites (R2-1, R2-8)."""
+
+    evaluate = GateTests.evaluate
+    make_session = WindowTests.make_session
+
+    def test_real_capture_fixture_is_ex03(self):
+        raw = (FIXTURES / corpus.REAL).read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), corpus.REAL_SHA256)
+        self.assertEqual((len(raw), raw.count(b"\n"), raw.count(b"\r")), (17337, 64, 0))
+        self.assertEqual(len(battery_float._structure(raw)), 59)
+
+    def test_positives_are_accepted_by_the_grammar(self):
+        for name, raw in corpus.positives(REAL_UPDATE).items():
+            with self.subTest(name=name):
+                battery_float._recorded_values(battery_float._structure(raw))
+                if name == "stale_fixture":
+                    with self.assertRaisesRegex(battery_float.ProbeError, "UpdateTime stale"):
+                        battery_float.parse(raw, REAL_UPDATE + 1)
+                    continue
+                parsed = battery_float.parse(raw, REAL_UPDATE + 1)
+                self.assertEqual(parsed["passed"], name != "charging_fixture")
+        minus = battery_float.parse(corpus.positives(REAL_UPDATE)["signed_minus_158"], REAL_UPDATE + 1)
+        self.assertEqual(minus["instant_amperage_ma"], -158)
+        shadow = battery_float.parse(corpus.positives(REAL_UPDATE)["nested_shadow_names"], REAL_UPDATE + 1)
+        self.assertEqual((shadow["external_connected_raw"], shadow["is_charging_raw"],
+                          shadow["instant_amperage_raw"]), ("Yes", "No", "0"))
+
+    def test_real_capture_records_every_registered_property(self):
+        parsed = battery_float.parse(corpus.positives(REAL_UPDATE)["real_capture_ex03"], REAL_UPDATE + 38)
+        self.assertEqual(len(parsed["property_lines"]), 11)
+        self.assertEqual((parsed["amperage_ma"], parsed["voltage_mv"], parsed["temperature_raw"],
+                          parsed["fully_charged"], parsed["current_capacity_pct"],
+                          parsed["apple_raw_current_capacity_mah"], parsed["apple_raw_max_capacity_mah"],
+                          parsed["update_age_s"]), (0, 12899, 3034, True, 100, 7585, 7585, 38))
+
+    def test_red_set_is_a_subset_of_the_corpus(self):
+        # Executed at faf0ea01 (seat report 19): these returned passed=True there.
+        self.assertLessEqual(corpus.RED, set(corpus.negatives(REAL_UPDATE)))
+        self.assertEqual(len(corpus.RED), 68)
+
+    def test_negatives_refused_by_parse_and_observe(self):
+        for name, raw in corpus.negatives(REAL_UPDATE).items():
+            with self.subTest(name=name):
+                with self.assertRaises(battery_float.ProbeError):
+                    battery_float.parse(raw, REAL_UPDATE + 1)
+                observed, stdout = battery_float.observe(
+                    phase="t0", wall_time_s=REAL_UPDATE + 1,
+                    runner=lambda argv, raw=raw: subprocess.CompletedProcess(argv, 0, raw, b""))
+                self.assertEqual((observed["probe_error"], observed["passed"]), (True, False))
+                self.assertEqual(stdout, raw)
+                self.assertEqual(observed["raw_stdout_sha256"], hashlib.sha256(raw).hexdigest())
+
+    def test_negatives_are_night_probe_error_at_both_gate_entries(self):
+        control = corpus.positives(GATE_UPDATE)["real_capture_ex03"]
+        for dynamic in (False, True):
+            source = FakeProbeSource()
+            source.results[night_gate.IOREG_BATTERY_ARGV] = result(night_gate.IOREG_BATTERY_ARGV, stdout=control)
+            receipt = self.evaluate(source, dynamic=dynamic)
+            self.assertIsNone(receipt.refusal)
+        for name, raw in corpus.negatives(GATE_UPDATE).items():
+            for dynamic in (False, True):
+                with self.subTest(name=name, dynamic=dynamic):
+                    source = FakeProbeSource()
+                    source.results[night_gate.IOREG_BATTERY_ARGV] = result(
+                        night_gate.IOREG_BATTERY_ARGV, stdout=raw)
+                    receipt = self.evaluate(source, dynamic=dynamic)
+                    self.assertIsNotNone(receipt.refusal)
+                    self.assertEqual(receipt.refusal.reason, "night_probe_error")
+
+    def test_negatives_are_evidence_missing_in_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            control = corpus.positives(REAL_UPDATE)["real_capture_ex03"]
+            session, _ = self.make_session(tmp, control, control, wall=REAL_UPDATE + 1)
+            self.assertEqual(battery_float.validate_window(session)["status"], "pass")
+        for name, raw in corpus.negatives(REAL_UPDATE).items():
+            for bad in ("pre", "post"):
+                with self.subTest(name=name, phase=bad), tempfile.TemporaryDirectory() as tmp:
+                    pre, post = (raw, control) if bad == "pre" else (control, raw)
+                    session, _ = self.make_session(tmp, pre, post, wall=REAL_UPDATE + 1)
+                    self.assertEqual(battery_float.validate_window(session)["status"],
+                                     "battery_float_evidence_missing")
+
+
+def _structural_raise_sites(tree: ast.Module) -> list[ast.Raise]:
+    [stage] = [node for node in tree.body
+               if isinstance(node, ast.FunctionDef) and node.name == "_structure"]
+    return [node for node in ast.walk(stage) if isinstance(node, ast.Raise)
+            and isinstance(node.exc, ast.Call) and getattr(node.exc.func, "id", None) == "ProbeError"]
+
+
+class _Relax(ast.NodeTransformer):
+    """Replace one refusal with one relaxation of it.
+
+    ``pass`` deletes the refusal.  In the line loop, ``continue`` skips the
+    offending line (the faf0ea01 failure shape).  In a cursor helper
+    (``value``/``string``/``container``), ``return len(text)`` consumes the
+    rest of the value.
+    """
+
+    def __init__(self, target: ast.Raise, relaxation: str) -> None:
+        self.target = target
+        self.relaxation = relaxation
+
+    def visit_Raise(self, node):
+        if node is not self.target:
+            return node
+        replacement = {
+            "pass": ast.Pass(),
+            "continue": ast.Continue(),
+            "consume": ast.Return(ast.Call(ast.Name("len", ast.Load()), [ast.Name("text", ast.Load())], [])),
+        }[self.relaxation]
+        return ast.copy_location(replacement, node)
+
+
+def _relaxations(tree: ast.Module) -> list[tuple[ast.Raise, tuple[str, ...]]]:
+    """Each structural refusal with the relaxations that fit where it sits."""
+    [stage] = [node for node in tree.body
+               if isinstance(node, ast.FunctionDef) and node.name == "_structure"]
+    helpers = {id(raise_) for helper in stage.body if isinstance(helper, ast.FunctionDef)
+               for raise_ in ast.walk(helper)}
+    in_loop = {id(raise_) for loop in stage.body if isinstance(loop, ast.For)
+               for raise_ in ast.walk(loop)}
+    return [(site, ("pass", "consume") if id(site) in helpers else
+             ("pass", "continue") if id(site) in in_loop else ("pass",))
+            for site in _structural_raise_sites(tree)]
+
+
+def _relaxed_module(index: int, relaxation: str) -> ModuleType:
+    source = Path(battery_float.__file__).read_text()
+    tree = ast.parse(source)
+    site, _ = _relaxations(tree)[index]
+    tree = ast.fix_missing_locations(_Relax(site, relaxation).visit(tree))
+    module = ModuleType(f"battery_float_relaxed_{index}_{relaxation}")
+    module.__file__ = battery_float.__file__
+    exec(compile(tree, battery_float.__file__, "exec"), module.__dict__)
+    return module
+
+
+def _accepted(module: ModuleType, raw: bytes) -> bool:
+    try:
+        module.parse(raw, REAL_UPDATE + 1)
+    except Exception:
+        return False
+    return True
+
+
+class GrammarMutationTests(unittest.TestCase):
+    """Ruling §4 test list (refuter N-1): every structural refusal is load-bearing.
+
+    For each ``raise ProbeError`` in ``_structure``, enumerated by AST, some
+    relaxation of that one refusal must let at least one corpus negative be
+    accepted, so a future "helpful" relaxation cannot pass unnoticed.
+    """
+
+    def test_every_structural_refusal_site_is_caught_by_the_corpus(self):
+        sites = _relaxations(ast.parse(Path(battery_float.__file__).read_text()))
+        # Enumerated by AST, not by a hand count: the ruling's classes as coded.
+        self.assertEqual(len(sites), 20)
+        negatives = corpus.negatives(REAL_UPDATE)
+        for index, (site, relaxations) in enumerate(sites):
+            with self.subTest(line=site.lineno, refusal=ast.unparse(site.exc)):
+                caught = [(relaxation, name) for relaxation in relaxations
+                          for name, raw in negatives.items()
+                          if _accepted(_relaxed_module(index, relaxation), raw)]
+                self.assertTrue(caught)
+
+
+# Obligation R2-9 (refuter M-2).  The battery grammar is frozen for the
+# Revision-5 epoch: every harvest consumer re-parses the committed raw bytes
+# with the current module and demands zero `compare_verdict` differences, and
+# a verdict path is added exactly once, so a grammar change after a verdict is
+# committed can strand that window or flip a gate outcome after the fact.  A
+# change to `_structure` or `_recorded_values` must, in the same PR, replay
+# every committed Revision-5 verdict with zero differences and update this
+# pin; otherwise it is a registration amendment needing an owner ruling.
+STRUCTURAL_STAGE_SHA256 = "1a9c32970aec07423f1c05930c689cfa248b428214bde066167f13b52c395d4f"
+
+
+def structural_stage_sha256(module: ModuleType) -> str:
+    text = "".join(inspect.getsource(getattr(module, name)) for name in ("_structure", "_recorded_values"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+class GrammarFreezeTests(unittest.TestCase):
+    def test_structural_stage_is_pinned(self):
+        self.assertEqual(structural_stage_sha256(battery_float), STRUCTURAL_STAGE_SHA256)
+
+    def test_mutating_the_structural_stage_fails_the_pin(self):
+        source = Path(battery_float.__file__).read_text()
+        mutations = (
+            ("max_bytes, max_line, max_depth = 1_048_576, 262_144, 64",
+             "max_bytes, max_line, max_depth = 1_048_576, 262_144, 65"),
+            ('atom = re.compile(rb"Yes|No|[0-9]+")', 'atom = re.compile(rb"Yes|No|-?[0-9]+")'),
+            ('        if name in values and values[name] not in ("Yes", "No"):',
+             '        if name in values and values[name] not in ("Yes", "No", "yes"):'),
+        )
+        for old, new in mutations:
+            with self.subTest(mutation=new), tempfile.TemporaryDirectory() as tmp:
+                self.assertEqual(source.count(old), 1)
+                path = Path(tmp) / "battery_float_mutant.py"
+                path.write_text(source.replace(old, new))
+                spec = importlib.util.spec_from_file_location("battery_float_mutant", path)
+                mutant = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mutant)
+                self.assertNotEqual(structural_stage_sha256(mutant), STRUCTURAL_STAGE_SHA256)
+
+
+class BytesFeederTests(unittest.TestCase):
+    """Obligation R2-11 (refuter M-4) at the shared entry point."""
+
+    def test_observe_refuses_text_stdout_and_never_re_encodes(self):
+        text = corpus.positives(REAL_UPDATE)["real_capture_ex03"].decode("ascii")
+        observed, stdout = battery_float.observe(
+            phase="arm_check", wall_time_s=REAL_UPDATE + 1,
+            runner=lambda argv: subprocess.CompletedProcess(argv, 0, text, ""))
+        self.assertEqual((observed["probe_error"], observed["passed"]), (True, False))
+        self.assertEqual(observed["reasons"], ["ProbeError: probe stdout is not bytes"])
+        self.assertEqual(stdout, b"")
+        with self.assertRaises(battery_float.ProbeError):
+            battery_float.parse(text, REAL_UPDATE + 1)
+
+    def test_default_runner_captures_bytes_without_text_mode(self):
+        smuggle = corpus.negatives(REAL_UPDATE)["cr_smuggled_required"]
+        from tests import battery_float_fixture
+        seen = []
+        original = subprocess.run
+        def run(argv, *args, **kwargs):
+            seen.append(kwargs)
+            return battery_float_fixture.smuggling_run(original, smuggle)(argv, *args, **kwargs)
+        with mock.patch.object(battery_float.subprocess, "run", side_effect=run):
+            observed, stdout = battery_float.observe(phase="slot_pre", wall_time_s=REAL_UPDATE + 1)
+        self.assertNotIn("text", seen[0])
+        self.assertEqual(stdout, smuggle)
+        self.assertEqual(observed["raw_stdout_sha256"], hashlib.sha256(smuggle).hexdigest())
+        self.assertTrue(observed["probe_error"])

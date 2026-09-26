@@ -339,9 +339,27 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
 
     started = time.monotonic_ns()
     command = tuple(str(part) for part in argv)
-    timeout_s = (battery_float.PROBE_TIMEOUT_S
-                 if command == battery_float.IOREG_BATTERY_ARGV else PROBE_TIMEOUT_S)
+    battery = command == battery_float.IOREG_BATTERY_ARGV
+    timeout_s = battery_float.PROBE_TIMEOUT_S if battery else PROBE_TIMEOUT_S
     try:
+        if battery:
+            # Obligation R2-11: the battery grammar judges the exact stdout
+            # bytes, so this probe is captured without text mode (universal
+            # newlines would turn a CR into an LF before the grammar sees it).
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=timeout_s,
+                check=False,
+            )
+            return ProbeResult(
+                argv=command,
+                exit_code=completed.returncode,
+                stdout=completed.stdout.decode("utf-8", errors="replace"),
+                stderr=completed.stderr.decode("utf-8", errors="replace"),
+                monotonic_ns=time.monotonic_ns(),
+                stdout_bytes=completed.stdout,
+            )
         completed = subprocess.run(
             command,
             capture_output=True,

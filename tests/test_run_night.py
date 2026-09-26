@@ -44,10 +44,15 @@ def _probe(
     argv: tuple[str, ...],
     *,
     exit_code: int = 0,
-    stdout: str = "",
+    stdout: str | bytes = "",
     stderr: str = "",
     monotonic_ns: int = 10,
 ) -> night_gate.ProbeResult:
+    # A bytes stdout is what a bytes-capturing runner returns (the battery
+    # probe, obligation R2-11); its text is the lossless decode.
+    if isinstance(stdout, bytes):
+        return night_gate.ProbeResult(argv, exit_code, stdout.decode("utf-8", errors="replace"),
+                                      stderr, monotonic_ns, stdout_bytes=stdout)
     return night_gate.ProbeResult(argv, exit_code, stdout, stderr, monotonic_ns)
 
 
@@ -55,7 +60,7 @@ def _green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
     return {
         night_gate.IOREG_BATTERY_ARGV: _probe(
             night_gate.IOREG_BATTERY_ARGV,
-            stdout=(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_text(),
+            stdout=(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes(),
         ),
         night_gate.HID_IDLE_ARGV: _probe(night_gate.HID_IDLE_ARGV, stdout="0\n"),
         night_gate.PMSET_BATT_ARGV: _probe(
@@ -332,7 +337,9 @@ class NightDriverTests(unittest.TestCase):
 
         def fake_run(argv, **kwargs):
             observed.append((tuple(argv), kwargs["timeout"]))
-            return subprocess.CompletedProcess(argv, 0, "", "")
+            # Models subprocess.run: text mode returns str, otherwise bytes.
+            empty = "" if kwargs.get("text") else b""
+            return subprocess.CompletedProcess(argv, 0, empty, empty)
 
         with mock.patch.object(driver.subprocess, "run", side_effect=fake_run):
             driver._probe_runner(battery_float.IOREG_BATTERY_ARGV)
@@ -341,6 +348,34 @@ class NightDriverTests(unittest.TestCase):
             (battery_float.IOREG_BATTERY_ARGV, battery_float.PROBE_TIMEOUT_S),
             (("/usr/bin/true",), driver.PROBE_TIMEOUT_S),
         ])
+
+    def test_t0_battery_runner_passes_exact_bytes_and_refuses_cr_smuggle(self):
+        # Obligation R2-11 (refuter M-4): the production t0 runner captures
+        # the ioreg stdout as bytes, so a CR-smuggled output (the refuter's
+        # executed case) reaches the grammar with its CR and is refused, and
+        # the recorded digest is that of the child's exact bytes.
+        driver = _load_driver()
+        from joulewise import battery_float
+        from tests import battery_float_corpus, battery_float_fixture
+        from tests.test_night_gate import FakeProbeSource, REGISTRATION_TEXT, make_plan
+        cases = (("real_capture", battery_float_corpus.positives(1000)["real_capture_ex03"], None),
+                 ("cr_smuggled", battery_float_corpus.negatives(1000)["cr_smuggled_required"],
+                  "night_probe_error"))
+        for label, stdout, refusal in cases:
+            with self.subTest(case=label):
+                with mock.patch.object(driver.subprocess, "run", side_effect=battery_float_fixture.smuggling_run(
+                        subprocess.run, stdout)):
+                    probe = driver._probe_runner(battery_float.IOREG_BATTERY_ARGV)
+                self.assertEqual(probe.stdout_bytes, stdout)
+                source = FakeProbeSource()
+                source.results[night_gate.IOREG_BATTERY_ARGV] = probe
+                with mock.patch.object(night_gate, "D166_REGISTRATION_SHA256",
+                                       hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
+                    receipt = night_gate.evaluate_night(make_plan(), source.probes())
+                self.assertEqual(receipt.refusal.reason if receipt.refusal else None, refusal)
+                battery = receipt.conditions[2].measured["battery_float"]
+                self.assertEqual(battery["raw_stdout_sha256"], hashlib.sha256(stdout).hexdigest())
+                self.assertEqual(battery["probe_error"], refusal is not None)
 
     def setUp(self) -> None:
         self.driver = _load_driver()
