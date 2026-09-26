@@ -35,3 +35,15 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
    - Both are running.
 6. **A310 PR #428 opened** (light tier, test-only). The integration head is `d8aed7cd` (seat `37f9b935` plus main `5d5a0b75`, merged in the existing worktree `JouleWise-wt-flake-6bec2aa6`). The row-1 fresh Opus reviewer is running.
    - A near-miss, recorded: a `cd` into a worktree that did not exist failed, and the `&&` guard skipped the following merge and push. Only a `git log` ran in canonical, and canonical was verified clean at `5d5a0b75` afterwards.
+7. **Lane bookkeeping** (`5802743f`):
+   - A309 BFGD-VERDICT-MERGE-LIVENESS-01 is retired after #426 merged.
+   - Registered A311 HISTORICAL-BATTERY-STATE-01 (P1; it blocks the paper's claim renderers mechanically; weekly `pmset -g log` re-archive duty) and A312 SCORED-CEILING-BATTERY-01 (P2; it blocks the scored campaign's arm), both under Final texts v1.1 text 19.
+   - The A310 note now points the pgrep defect at TEST-PGREP-DIALECT-MULTILINE-01 and adds the `80fe9969` replay as evidence (#427 NITs N1–N3).
+   - Count: 260 − 1 + 2 = 261. `gen_state --check` exits 0; `tests.test_gen_state` OK.
+8. **PR #428, row 1:** a fresh Opus reviewer at `d8aed7cd` returned **MERGE with no blockers**.
+   - The only production cleanup (`scripts/sample_quiet_predicate_evidence.py:1399-1406`) is unchanged.
+   - Mutation checks: removing TERM turns the test RED (−9 ≠ −15). Removing KILL still passes, but that gap already exists on main (no fixture child survives TERM), and this PR neither creates nor widens it.
+   - Three runs of the module: 79/79 OK each.
+   - NITs:
+     - say in a comment that the post-KILL `join(1)` is widened too, which is harmless because TERM has already failed by then;
+     - a follow-up is needed for a SIGTERM-ignoring fixture child, so that a test covers KILL. That follow-up is noted here for the next bookkeeping pass. It is not a merge condition.
