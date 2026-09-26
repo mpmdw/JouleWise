@@ -2404,6 +2404,7 @@ the stored bytes so they can be recovered without the working copy.
 | 3. Rule and instructions | The commit id containing the D-102 evening addendum (the written rule the PASS route applies), and the commit id containing the runbook revision followed, with its revision number. |
 | 4. Capture inputs | The wrapper chain's SHA-256 (the generated `chain.zsh` file the plan launches); the identity-epoch digest (the `identity-epoch.json` description of the instrument configuration); the T1-bindings digest (the `t1-bindings.json` fixed capture-input bindings); and `EVIDENCE_ROOT_ID` (the registered evidence-root identifier). These are the inputs already required in §0.2, §0.8 and §1.1b. |
 | 5. FAIL-route nights 2/3 | Re-record item 2's digest with the words **equal to night 1**, or record **STOP** and do not arm (§3). |
+| 6. Battery-float verdict lines (Revision 5 epochs, every window after W1) | Every earlier harvested window's `<session_id>: battery=<status> verdict_sha256=<64 hex> verdict_commit=<40 hex>` line, copied from its harvest notice (§2.2a; A-R5b-1). |
 
 With `$H` set to the 40-hex measurement head, recover item 2's blob id with:
 
