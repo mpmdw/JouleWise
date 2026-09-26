@@ -326,7 +326,13 @@ class PrepareTests(unittest.TestCase):
         self.tempdir = _census_clean_tempdir(prefix="case-", dir=self.base)
         self.addCleanup(self.tempdir.cleanup)
         self.base_dir = Path(self.tempdir.name)
-        self.env = patch.dict(os.environ, {"PATH": str(self.bin) + os.pathsep + os.environ.get("PATH", "")})
+        home = self.base_dir / "home"
+        self.assertTrue(battery_float_fixture.install_user_site_runner(home),
+                        "test interpreter must load the battery fixture in child Pythons")
+        self.env = patch.dict(os.environ, {
+            "HOME": str(home),
+            "PATH": str(self.bin) + os.pathsep + os.environ.get("PATH", ""),
+        })
         self.env.start()
         self.addCleanup(self.env.stop)
         self.t0 = (int(time.time()) // 60 + 90) * 60

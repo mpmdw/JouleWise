@@ -32,6 +32,7 @@ from joulewise.measurement_liveness import Identity
 from joulewise import calibration_ledger, night_gate
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
+from tests import battery_float_fixture
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2363,6 +2364,8 @@ runpy.run_path(script, run_name='__main__')
         courier.chmod(0o755)
         environment = os.environ.copy()
         environment["HOME"] = str(root / "home")
+        self.assertTrue(battery_float_fixture.install_user_site_runner(Path(environment["HOME"])),
+                        "test interpreter must load the battery fixture in child Pythons")
         environment["PATH"] = f"{binary_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
         return environment, courier
 
@@ -2380,6 +2383,8 @@ runpy.run_path(script, run_name='__main__')
         courier.symlink_to(version)
         environment = os.environ.copy()
         environment["HOME"] = str(root / "home")
+        self.assertTrue(battery_float_fixture.install_user_site_runner(Path(environment["HOME"])),
+                        "test interpreter must load the battery fixture in child Pythons")
         environment["PATH"] = f"{binary_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
         return environment, courier, version.resolve()
 
@@ -2467,6 +2472,9 @@ runpy.run_path(script, run_name='__main__')
         # PATH for its stdlib-only JSON read; this test is about the ABSENT
         # courier, so provide python3 and nothing else.
         (empty_path / "python3").symlink_to(sys.executable)
+        home = root / "home"
+        self.assertTrue(battery_float_fixture.install_user_site_runner(home),
+                        "test interpreter must load the battery fixture in child Pythons")
         completed = subprocess.run(
             [
                 "/bin/zsh",
@@ -2476,7 +2484,7 @@ runpy.run_path(script, run_name='__main__')
                 "--render-only",
                 str(root / "rendered"),
             ],
-            env={"HOME": str(root / "home"), "PATH": str(empty_path)},
+            env={"HOME": str(home), "PATH": str(empty_path)},
             capture_output=True,
             text=True,
             check=False,
