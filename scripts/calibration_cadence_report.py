@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise import battery_float
-from joulewise.calibration_ledger import load_calibration_ledger_snapshot
+from joulewise.calibration_ledger import SESSION_KIND_DERIVATION, load_calibration_ledger_snapshot
 
 STOP_THRESHOLD_MS = 150.0
 
@@ -75,25 +75,16 @@ def report_window(label: str, window: Path, *, ledger: Path, session_id: str,
         raise ValueError(f"session {session_id} is not in the ledger")
     if session.state not in {"finalized", "aborted"}:
         raise ValueError(f"session {session_id} is not terminal")
+    if session.session_kind != SESSION_KIND_DERIVATION:
+        raise ValueError(f"session {session_id} is kind {session.session_kind}, not derivation")
     # Obligations v1.1 §4.5: the committed harvest verdict governs; the
     # recomputation from raw bytes is only its custody check.
     try:
-        recomputed = battery_float.validate_window(session)
-    except battery_float.CustodyFailure as failure:
-        raise ValueError(f"battery-float custody failure: {failure.detail}") from failure
-    try:
-        record = battery_float.load_committed_verdict(
-            root, session_id, session=session,
-            preregistration_sha256=preregistration_sha256,
-        )
-    except battery_float.NoRecord as missing:
-        raise ValueError(
-            f"battery-float harvest verdict missing or uncommitted: {missing.reason}"
-        ) from missing
-    difference = battery_float.compare_verdict(record, recomputed)
-    if difference is not None:
-        raise ValueError(f"battery-float harvest verdict cannot be re-established: {difference}")
-    battery_verdict = record["status"]
+        verdict = battery_float.authenticate_committed_verdict(
+            root, session=session, preregistration_sha256=preregistration_sha256)
+    except battery_float.BatteryVerdictRefusal as refusal:
+        raise ValueError(str(refusal)) from refusal
+    battery_verdict = verdict.status
     derived: dict[Path, str] = {}
     for observation in session.finalized_slots.values():
         path = (Path(observation.custody_locator) / "raw/powermetrics.plist").resolve()

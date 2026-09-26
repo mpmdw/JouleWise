@@ -2524,8 +2524,13 @@ admissible for `prepare-candidate` — and it is neither the equivalence check
 nor an anticipation of it. On the FAIL route, where this night is registration
 night one and two more follow, the expected code after nights one and two is
 **5**, with the blocker naming the sessions that are not yet terminal; that is
-the correct mid-campaign answer there. On the PASS route nothing is ever
-prepared, and this code decides nothing.
+the correct mid-campaign answer there. After night two the same query names
+only night two, so night one's valid rows are rows of the same epoch owned by
+a session the query did not name, and the dry run also prints the addendum A-7
+blocker `valid same-epoch observations outside this registration: <n> rows
+owned by <session ids> (ruling 46 addendum A-7)`, exactly as `prepare-candidate`
+would refuse on them; that too is the correct mid-campaign answer. On the PASS
+route nothing is ever prepared, and this code decides nothing.
 
 ### 2.2a Record the battery-float verdict before reading any result (Revision 5 windows)
 
@@ -2539,9 +2544,10 @@ afterwards. So the verdict is computed once, at harvest, from the raw battery
 bytes alone, written to one file, and committed in the same commit as the
 ledger head pin (the committed file naming the ledger's row count and last row
 digest, §2.0). That committed file is the window verdict (decision log
-A-R5b-1). Every later tool (`check`, the cadence report, `prepare-candidate`,
-the continuation tool) recomputes the verdict from the same raw bytes only to
-confirm the file, and refuses on any disagreement.
+A-R5b-1). Every later tool (`check`, the cadence report and `prepare-candidate`,
+through the one function `authenticate_committed_verdict`) recomputes the
+verdict from the same raw bytes only to confirm the file, and refuses on any
+disagreement. The continuation tool refuses a Revision 5 session outright.
 
 **Custody failure.** When a capture finishes, the writer records a SHA-256
 fingerprint of each battery reading's raw bytes inside
@@ -2972,12 +2978,37 @@ echo "rc=$?"
 ```
 
 Expect **rc 0** and `registration admissible for prepare-candidate: yes`. An
-rc 5 prints its blockers: a non-terminal session; pending/unresolved rows in
-the prior-set prefix; a session's battery-float verdict missing or uncommitted
-(named or not: every computed window of the epoch must carry an authentic
-committed verdict); or a battery-float verdict that cannot be re-established
-from the raw battery bytes. Clear the named blocker at the desk — do not
-capture more to make it go away.
+rc 5 prints its blockers: a ledger refusal (for example an uncommitted head
+pin); a non-terminal session; pending/unresolved rows in the prior-set prefix;
+a session's battery-float verdict missing or uncommitted (named or not: every
+computed window of the epoch must carry an authentic committed verdict); a
+battery-float verdict that cannot be re-established from the raw battery
+bytes; an excluded window that is not declared, a declared window that is not
+excluded, or more than one excluded window; or valid rows of the same epoch
+owned by a session the command did not name (addendum A-7). Clear the named
+blocker at the desk — do not capture more to make it go away.
+
+**The replacement route.** Under amendment A-R5b a window whose committed
+battery-float verdict is not `pass` (`battery_float_confounded`: the Mac drew
+charge current; `battery_float_evidence_missing`: the readings cannot be
+judged) is EXCLUDED from the corpus, and one later window replaces it. On that
+route `<S1>` and `<S2>` are the windows the corpus is built from, and `<WX>` is
+the excluded window's `SESSION_ID`, which the command must DECLARE with
+`--battery-confounded-session-id` rather than name as a registration session:
+
+```zsh
+cd "$MEASUREMENT_ROOT"
+"$PY" scripts/issue_calibration_acceptance_generation.py check \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256" \
+  --session-ids "<S1>" --session-ids "<S2>" \
+  --battery-confounded-session-id "<WX>"
+echo "rc=$?"
+```
+
+The dry run then says "yes" exactly when `prepare-candidate` with the same
+declaration issues; add the same `--battery-confounded-session-id "<WX>"` to
+§4.2's command.
 
 Carry `--preregistration` here too, and read its appended line (§0.3): it must
 still say `match` on the sampler digest. `$PREREGISTRATION_SHA256` is the
@@ -3214,7 +3245,7 @@ Issuer return codes (`scripts/issue_calibration_acceptance_generation.py`):
 |---|---|---|---|
 | `check` (no `--session-ids`) | 3 | Identity mismatch and/or an acceptance/ledger error. | **Expected throughout this lane** (§0.3). Read the table; confirm the mismatched fields are `os_build` and `powermetrics_sha256` and no others. |
 | `check` (no `--session-ids`) | 0 | No mismatch, no error. | **Unexpected — stop.** The machine now matches the old epoch; the lane's premise is gone. Escalate before capturing. |
-| `check --session-ids …` | 0 | Registration would be admissible. | Proceed to §4.2 — on the FAIL route, and expected only after night 3 is terminal. |
+| `check --session-ids …` | 0 | The registration passes every desk-mirrored issuer check (ledger, terminality, battery gate, confounded declaration and bound, A-7, prior-set rows). `prepare-candidate` may still refuse on the registration-shape and value rules it alone checks (§4.2 table). | Proceed to §4.2 — on the FAIL route, and expected only after night 3 is terminal. |
 | `check --session-ids …` | 5 | Inadmissible; each blocker is printed. | Expected after nights 1 and 2. Clear the named blocker at the desk; never capture more to clear it. |
 | `prepare-candidate` | 3 | `REFUSED: <reason>` and nothing written — a non-terminal session, absent `--d125-ruling`, corpus below the minimum, a pending/unresolved prior-set row, a valid same-epoch observation outside the registration, a member whose stored bytes disagree with its ledger row, a failed quantile proof, `S >= C`, or two or more retained members over the level screen. | Read the reason literally. Several of these are science stops requiring Ed's written ruling (§4.2), not defects to fix. |
 | `prepare-candidate` | 3 | The arm-gate fences of §4.2, same `REFUSED:` shape: `pre-registration sha256 … does not match the pinned …; not issued`; `registration names <n> sessions, not the pre-registered 3`; `session <id> declared <n> slots, not the pre-registered 12`; `registration os_build … is not the pre-registered …; the registration is void`; `registration powermetrics sha256 … is not the pre-registered …; the registration is void`; `predecessor maximum plus range … does not equal the ruled diagnostic …`. | None of these is fixed by re-running with different flags. The first three are answered by naming the correct file and sessions, or by a written-ruling escape that already exists (§4.2) — never by inventing one. The two `void` refusals mean the campaign was captured on a machine the registration does not describe: stop, and take it to Ed in writing. |
