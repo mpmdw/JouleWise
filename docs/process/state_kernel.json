@@ -9061,6 +9061,68 @@
       "status_note": "2026-09-23 activation 4158e658: registered from the three-seat synthesis and issue #386. Item 5 is a process rule Fable adopted under Ed’s delegation in that record; this registration does not ratify or amend any process rule. Item 1(a), the third-version rule, is done at PR #387 merge 3a411784. 2026-09-23 activation 1d3796d5, record 00 items 32 and 36: item 2 MATH benchmark importer landed (PR #398, merge 946bce0e); the scored-campaign night kind, full gate on the draft pure modules, and AP-5M analysis-plan amendment remain under A280–A282.",
       "stop_card": null
     },
+    "TIER01-D118-RECONCILE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/41-opus-contract-lens-tier01.md M1 (MATERIAL; dissent recorded)",
+          "docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/40-fable-final-pass-tier01.md F5 (rated NIT; dated D-170 addendum installed instead)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TIER01-D118-RECONCILE-01/acceptance",
+          "label": "TIER01-D118-RECONCILE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cold gate rules whether D-118 needs an 'AMENDED by TIER-01' line and whether TIER-01 gets its own decision-log index entry; the ruled text is installed verbatim or the finding is dispositioned as not needed. The magistrate does not author decision-log entries alone (rule 11)."
+      },
+      "authority": {
+        "label": "TIER01-GATE-01 triage (Opus M1 dissent carried to the next cold gate)",
+        "path": "docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/50-triage.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Take Opus's TIER01-GATE-01 finding M1 to the next cold gate: D-118 still says every NOT-RUN item blocks merge and that a PR without a complete ledger is not merge-eligible, while rule TIER-01 lets a light-tier PR mark eight rows N/A.",
+      "id": "TIER01-D118-RECONCILE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 307,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25 (activation ed17a643); Opus dissent on D-118 wording, carried to the next cold gate.",
+      "stop_card": null
+    },
+    "TIER01-PATH-GUARD-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/41-opus-contract-lens-tier01.md §T3 (design)",
+          "docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/42-sol-exec-lens-tier01.md SF-2 / F2 (path list and eligible set)",
+          "docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/40-fable-final-pass-tier01.md (ruled a follow-up, not a merge condition)",
+          "Defect-shaped tests: a light body with a joulewise/** path refuses; a light body with only docs/** passes; missing path input refuses light"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TIER01-PATH-GUARD-01/acceptance",
+          "label": "TIER01-PATH-GUARD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The workflow computes a NUL-delimited merge-base-to-head path list and passes it to the checker; `Tier: light` is accepted only when every path is light-eligible (tests/**, docs/** except docs/paper/**, docs/report_src/** and docs/site/**, and the root bookkeeping files RUN_STATE.md, TASK_QUEUE.md, PROJECT_STATUS.md, AGENT_PLAN.md); every other path forces full, and missing or unreadable path input refuses light. The semantic six-question review stays mandatory; the path guard is a backstop, not the rule. Full-tier gate; lands before the TIER-01 day-30 review."
+      },
+      "authority": {
+        "label": "TIER01-GATE-01 triage (Fable final pass rules the #415 path check a follow-up; Opus 41 §T3 design)",
+        "path": "docs/process_traces/2026-09-25-activation-817355d2/02-tier01-review/50-triage.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Back the TIER-01 light tier with a changed-path guard, as Ed's issue #415 asks: the gate-ledger workflow passes the PR's merge-base-to-head changed-path list to scripts/check_gate_ledger.py, and a `Tier: light` body is refused when any changed path lies outside the light-eligible set.",
+      "id": "TIER01-PATH-GUARD-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 306,
+      "status": "queued",
+      "status_note": "Registered 2026-09-25 (activation ed17a643) from TIER01-GATE-01 triage; must land before the TIER-01 day-30 review.",
+      "stop_card": null
+    },
     "TOOL-01": {
       "acceptance": {
         "evidence": [
