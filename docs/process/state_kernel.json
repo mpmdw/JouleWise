@@ -877,36 +877,6 @@
       "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); addendum 2 (amendments 20-28, docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md); S0 at 980138c7 on feat/2026-09-26-bfgs-s0-helper-fence awaiting rebase, delta re-audit, Fable final pass and full suite (activation 6bec2aa6 record item 29). Required before any non-derivation window arms.",
       "stop_card": null
     },
-    "BFGD-VERDICT-MERGE-LIVENESS-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/41-opus-counter-review.md §4 M-1 and §6 closure",
-          "docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/40-fable-final-pass.md §8 F-2/F-3 (fail-closed reading)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/BFGD-VERDICT-MERGE-LIVENESS-01/acceptance",
-          "label": "BFGD-VERDICT-MERGE-LIVENESS-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Apply the dictated closure: history calls gain --no-merges and --no-renames, plus an adding-blob check against HEAD bytes. Add tests (a) an honest harvest merged --no-ff into a moved main loads, RED at b2c31e5b; (b) an evil merge that rewrites the record is NoRecord; (c) the existing refusals stand. Must land before any harvest verdict reaches main through a merge and before the first Revision-5 issuance. Full gate (verdict authentication code)."
-      },
-      "authority": {
-        "label": "BFG-D Opus row-6 counter-review M-1 (dissent recorded; Fable final pass MERGE prevails)",
-        "path": "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Close the Opus row-6 dissent M-1 on BFG-D. load_committed_verdict's --full-history without --no-merges makes an honest harvest verdict commit that reaches main through a --no-ff merge fail to authenticate. That fails closed, but it is a liveness trap for issuance from main.",
-      "id": "BFGD-VERDICT-MERGE-LIVENESS-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 309,
-      "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). MERGED as PR #426 -> 5d5a0b75 (activation 6bec2aa6; full gate, Fable final pass MERGE, full suite 7,384/0/0).",
-      "stop_card": null
-    },
     "BIND-REQUEST-PAYLOAD-CAP-01": {
       "acceptance": {
         "evidence": [
@@ -4098,6 +4068,36 @@
       "rank": 285,
       "status": "queued",
       "status_note": "2026-09-23 activation 1d3796d5: READY [AGENT], P2; independent blind seats are required before the scorer’s claim use. Packet A R5 recommends one blind model seat plus an Ed check on 20 rows; this registered follow-up asks for two independent blind model-family seats and per-level rates, so the protocol must state that extension explicitly.",
+      "stop_card": null
+    },
+    "HISTORICAL-BATTERY-STATE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md text 19 and N4 (the two pilot nights are this lane's population)",
+          "docs/process_traces/2026-09-26-activation-6bec2aa6/00-activation-record.md item 24 (pmset -g log reaches back only to 2026-09-19 11:28 and rolls over; 22 charge summaries incl. 2x on battery; archived read-only at ~/night-archive/pmset-log/ with a .sha256 sidecar)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/HISTORICAL-BATTERY-STATE-01/acceptance",
+          "label": "HISTORICAL-BATTERY-STATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Per Final texts v1.1 text 19: add a battery_state column with the values 'unobserved (pre-directive)', 'evidence of charging' or 'evidence of float' to every claim-bearing row of docs/paper/results-fill-registry.md and to the renderer's input; scripts/render_results_fills.py refuses to render a claim row whose column is empty; numbers with evidence of charging are re-measured or withdrawn; the 80 % charge-cap context is a presumption and is stated as one. The lane blocks the paper's claim renderers mechanically and does not block S0-S3 or the first QPE arm under S2."
+      },
+      "authority": {
+        "label": "Cold gate BFGS-DESIGN-01 addendum, Final texts v1.1 §4 text 19 (lanes)",
+        "path": "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Establish, for every number the paper claims, whether the laptop was on a charging battery, on a floating battery, or unobserved when it was measured. Directive #421 made battery float mandatory from 2026-09-25, but every published number and the two QPE pilot nights were measured with battery state unobserved, and charging adds SoC heat and leakage that bias energy readings.",
+      "id": "HISTORICAL-BATTERY-STATE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 311,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1) under Final texts v1.1 text 19; not started. Evidence-retention duty until it lands: re-archive `/usr/bin/pmset -g log` to ~/night-archive/pmset-log/ with a .sha256 sidecar at least weekly (the OS log keeps about 7 days). No OS-log battery evidence exists for any capture before 2026-09-19.",
       "stop_card": null
     },
     "ICLOUD-CUSTODY-LOCATOR-01": {
@@ -8067,6 +8067,35 @@
       "status_note": "T38c 2026-09-08: D-176 implementation landed via PR #307 at edb4f0ed (99gl terminal review). Live obligations and existing close dependencies remain open; earlier unimplemented/design-next language below is historical. D-176 2026-09-08: closes through UNATTENDED-LAUNCH-01, not a separate implementation; required launch refusal remains unimplemented. UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 06 of the ruled-not-installed sweep). A window can currently reach execve without proving or custodying the five-condition D-149 T-0 GO.",
       "stop_card": null
     },
+    "SCORED-CEILING-BATTERY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md M6 and text 19"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SCORED-CEILING-BATTERY-01/acceptance",
+          "label": "SCORED-CEILING-BATTERY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Per Final texts v1.1 text 19 (and M6, v1 §6 obligation 5): a ruled design for the scored campaign's response to a confounded window at a ceiling decision (for example re-measure the window versus refuse the reduction), landed before the scored campaign arms. The lane blocks the scored campaign's arm and nothing in S0-S3."
+      },
+      "authority": {
+        "label": "Cold gate BFGS-DESIGN-01 addendum, Final texts v1.1 §4 text 19 (lanes)",
+        "path": "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Decide how the scored campaign handles a battery-confounded window at a ceiling decision. Under Final texts v1.1 text 9 a ceiling decision on a confounded window already refuses the whole reduction, so correctness is protected; the open question is the campaign cost of losing a whole reduction to one confounded window.",
+      "id": "SCORED-CEILING-BATTERY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 312,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1) under Final texts v1.1 text 19; not started; a campaign-cost question, not a correctness gate.",
+      "stop_card": null
+    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
@@ -8901,7 +8930,8 @@
         "evidence": [
           "docs/process_traces/2026-09-25-activation-ed17a643/30-seal-418/row9-fullsuite-7ee773c0-tail.txt",
           "docs/process_traces/2026-09-25-activation-ed17a643/31-integ-137cc9ee/tail.txt",
-          "docs/process_traces/2026-09-25-activation-ed17a643/51-bfgd-fullsuite-3ad48d1e/tail.txt"
+          "docs/process_traces/2026-09-25-activation-ed17a643/51-bfgd-fullsuite-3ad48d1e/tail.txt",
+          "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md item 39 (integration replay at 80fe9969: 7,239 tests, 1 failure, the same ladder; isolated rerun passed; its log stayed in /tmp and is not tracked)"
         ],
         "pointer": {
           "json_pointer": "/tasks/TEST-LOAD-JOIN-LADDER-FLAKE-01/acceptance",
@@ -8924,7 +8954,7 @@
       "priority": "p3_hardening_candidates",
       "rank": 310,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). Fix candidate 37f9b935 on test/2026-09-26-load-join-ladder-flake (activation 6bec2aa6; post-TERM join 1 s -> 3 s in the test only; not reproduced locally 0/32). Related hermeticity defect: test_arm_readiness_evidence_t0 test_g4_real_ruled_census_pgrep_dialect breaks on a concurrent seat's multi-line argv (#425 row 9).",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). Fix candidate 37f9b935 on test/2026-09-26-load-join-ladder-flake (activation 6bec2aa6; post-TERM join 1 s -> 3 s in the test only; not reproduced locally 0/32). 2026-09-26 activation f8d6cab1: PR #428 opened, light tier, integration head d8aed7cd (merges main 5d5a0b75). The pgrep-census multi-line-argv hermeticity defect (#425 row 9) belongs to the existing lane TEST-PGREP-DIALECT-MULTILINE-01, not this one.",
       "stop_card": null
     },
     "TEST-PGREP-DIALECT-MULTILINE-01": {
