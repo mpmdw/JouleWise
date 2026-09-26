@@ -112,3 +112,8 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - **Consequence:** no OS-log battery evidence exists for any capture before 09-19. Those numbers can only be disclosed as "battery state unobserved (pre-directive)" or re-measured, and the lane text in Final texts v1.1 text 19 already allows for that.
     - The 09-19 → 09-26 window is lost within days unless archived. It is archived read-only at `~/night-archive/pmset-log/pmset-g-log-*.txt` with a `.sha256` sidecar.
     - The lane should re-archive each week until it lands.
+25. **S0 round 3 returned partial (WIP committed as `aa90f349`)**, with two early-return questions about the lead's own contract.
+    - F1: my C8(ii) flagged nine pre-existing `dataclasses.replace` calls outside scope.
+    - F2: the C10 guards cannot be RED on the base.
+    - Lead rulings are in [44](../2026-09-26-activation-6bec2aa6/60-bfgs-s0/44-lead-rulings-round3.md). F1: a content-keyed allowlist that can only shrink, with type evidence for each entry. F2: baseline-green guards, each backed by a mutation proof.
+    - Round 3b is launched (brief `45`).
