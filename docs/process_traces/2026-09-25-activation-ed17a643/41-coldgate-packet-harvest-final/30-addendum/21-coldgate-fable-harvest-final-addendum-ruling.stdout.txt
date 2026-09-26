@@ -1,0 +1,16 @@
+The addendum ruling is written and sealed as the only change in the worktree; all scratch material is removed.
+
+**File written:** `docs/process_traces/2026-09-25-activation-ed17a643/41-coldgate-packet-harvest-final/30-addendum/21-coldgate-fable-harvest-final-addendum-ruling.md` (sha256 `f9c31f34…dfaa1`). Manifest, charter and branch-tip digests all verified before the merits.
+
+**Y1 verdicts, each with executed evidence at `ab431280`:**
+- **P2-E1 BLOCKER: AFFIRM.** Reproduced in a scratch git repo. A `git rm` plus re-commit passes the ruling's HEAD-blob check while `git log` shows 3 commits touching the path and 2 adding it. An honest add shows 1 and 1.
+- **(a) Custody clause: AFFIRM, admissible as a reading without a text change.** The amendment says three times that the exclusion is "decided from instrument state alone", and a refusal is not one of its enumerated outcomes. I amended the form: custody failure keys on one fact, that a digest was recorded for the bytes before finalization, rather than on "a completed probe". Bytes with a recorded digest that are absent or differ now raise `CustodyFailure` in every consumer.
+- **(b) Last-window anchor: AFFIRM.** The anchor moves to the harvest notice.
+- **(c) Two sentences: AFFIRM in substance**, reworded into a complete final A-R5b-1 text.
+- **(d) Unpinned registry and R4: AFFIRM.** Reproduced through the production entry point: appending W2's content ids drops a clean W2 at exit 0, and the real parser accepts the appended rows. Cure is a sha256 pin constant in the issuer.
+- **R5 module drift: AMEND.** The record carries the module digest, but issuance refuses only on verdict disagreement. The BFG-S predicate change is sequenced after the Revision 5 epoch issues or stops.
+
+**Y2:** obligations v1.1 are issued as a self-contained section covering the custody rule as a per-slot table, the record schema and `battery-verdict` subcommand, four exact authentication checks, the issuer's step order with refusal texts, the other three consumers, the registry pin, anchor timing, the final decision-log text, the runbook block, eleven numbered implementation obligations with defect-shaped tests, timing, and a five-line summary for Ed. One correction to the original ruling: the git-authentication helper lives in `joulewise/authentication_io.py`, not `calibration_ledger.py`.
+
+**Not done, by charge:** nothing is committed. The magistrate commits the ruling and carries A-R5b-1 to the decision log and the obligations into BFG-D.
+rc=0
