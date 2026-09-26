@@ -148,3 +148,9 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
     - This branch becomes the bookkeeping PR, which supersedes #427; #427 is closed with a pointer.
     - Lanes this activation: retired A309 and A310; registered A311–A312 and BFGS-S0-FOLLOWUPS-01, QPE-SHAPE3-NIGHT-BLANK-01 and TEST-LOAD-LADDER-KILL-COVERAGE-01.
     - No Codex child or background process is left running at exit.
+26. **Exit done.**
+    - #430 opened, superseding #427; #427 is closed with a pointer.
+    - The checks found no `com.joulewise.night*` label loaded and no such plist. Canonical was clean and was fast-forwarded `5d5a0b75 → 1417c0c4` (`pull --ff-only`).
+    - Exit email accepted as Gmail `1a0dfdefe67d05d6`.
+    - No Codex seat, suite or judge is running. The only remaining process is the harness's own Codex MCP server, which ends with the session.
+    - **Successor's next exact action:** the RUN_STATE top block on this branch, step 1: merge #430 under the light tier, running rows 1, 9, 11 and 12.
