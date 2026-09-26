@@ -92,3 +92,11 @@ Headless magistrate (Opus 5.5), launched by the watchdog at 14:17:42 PDT 2026-09
     The round-2 delta (R2-6) runs on Astra 6 xhigh (science and bypass, a different family from the round-2 implementer) and a fresh Sol 6.0 xhigh session (execution). The charge is `bfg-d/22-delta-charge-r2.md` (`80753b97`), and it requires each reviewer's own ten mutations plus the importer-sweep test run.
     
     **Integration tree** `integ/2026-09-25-ed17a643-w1b`: main `cab01506` + BFG-D `80753b97` → `137cc9ee`. One conflict was resolved in the decision log: the A-R5b entry comes first, then A-R5b-1, per F-8. `gen_state --check` passes. The full suite started at ≈23:25 and runs concurrently with the delta seats.
+44. **Round-2 delta.**
+    - **Parser: no BLOCKER from either family.** Astra xhigh ran the 108-negative corpus at four sites. Sol xhigh added 12 fresh structural mutations of its own; all were refused at every site, and the live capture parses. The stop rule was not triggered. The grammar escalation is closed.
+    - The remaining findings:
+      - **F1 (MATERIAL, confirmed by Sol and executed).** The dry-run bound loads a computed session's record but never replays or compares it. With W1's raw bytes altered and only W2 named, `check` exits 0 and reports "admissible", while `prepare-candidate` refuses. **This is the third consecutive round with the same signature on the dry-run consumer**: FX-6, then R2-3, now F1. The **standing escalation trigger** fired again, together with the rule-11 mandatory cold gate.
+      - F2 (R2-7 consumer-list text in the ruling copy): dispositioned. Ruling copies are immutable, and the sweep table stays the list of record.
+      - F3 NIT: the sweep inventory labels are stale.
+    - The Astra sweep also caught a **lead bench miss**: `tests.test_arm_readiness` still pinned 600 s after N-1. It was fixed at the bench at `3e984ecc` and passes 71/71. Second lesson of the night: a bench change's verification must also sweep every importer.
+    - The consult on the consumer-drift cure is running: blind Sol 6.0 high and Astra 6 high, with the brief at `/tmp/ed17a643/esc2/consult-brief.txt`. The idea under test is one authenticated-verdict function for every consumer, plus an AST test that bans direct use of the primitives. A cold gate follows.
