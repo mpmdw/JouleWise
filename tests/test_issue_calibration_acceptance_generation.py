@@ -2217,6 +2217,37 @@ class PrepareCandidateTest(unittest.TestCase):
         self.assert_refused(code, "registration names 1 sessions, not the pre-registered 3")
 
 
+RUNBOOK = Path(__file__).resolve().parents[1] / "docs/phase_2/derivation_night_runbook.md"
+
+
+def runbook_dry_run_invocations() -> list[list[str]]:
+    """Every fenced `issue_calibration_acceptance_generation.py check` command
+    in the runbook that names sessions, as argv tokens (continuations joined)."""
+    import shlex
+    commands = []
+    for block in re.findall(r"```zsh\n(.*?)```", RUNBOOK.read_text(encoding="utf-8"), re.S):
+        for line in re.sub(r"\\\n\s*", " ", block).splitlines():
+            if "issue_calibration_acceptance_generation.py check" in line and "--session-ids" in line:
+                commands.append(shlex.split(line))
+    return commands
+
+
+class RunbookDryRunFlagsTests(unittest.TestCase):
+    """Cold ruling BFG-D-PARSER-ESC-01 §5.3 (obligation R2-4), light tier."""
+
+    def test_every_documented_dry_run_carries_both_registration_flags(self) -> None:
+        commands = runbook_dry_run_invocations()
+        self.assertEqual(len(commands), 3)  # §2.2, §2.2a step vii, §4.1
+        for argv in commands:
+            with self.subTest(argv=" ".join(argv)):
+                self.assertIn("--preregistration", argv)
+                self.assertIn("--preregistration-sha256", argv)
+                self.assertEqual(argv[argv.index("--preregistration") + 1],
+                                 "configs/calibration/preregistration_d079_epoch_25g83_rev1.md")
+                self.assertEqual(argv[argv.index("--preregistration-sha256") + 1],
+                                 "$PREREGISTRATION_SHA256")
+
+
 class BatteryFloatRevisionFiveTests(unittest.TestCase):
     def test_terminal_uncommitted_pin_verdict_commit_and_three_cli_consumers(self) -> None:
         fixture = self.fresh("cli-order",
@@ -2642,7 +2673,10 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
         self.assertIn("  blocker: session W1: battery harvest verdict missing or uncommitted "
                       "(absent or uncommitted)", lines)
         self.assertEqual(self.verdict(fixture, "W1")[0], 0)
-        build_module._commit(fixture["root"], "harvest W1")
+        # R2-3: W2 is computed for the epoch too, so the dry run is
+        # admissible only once W2 also carries its committed verdict.
+        self.assertEqual(self.verdict(fixture, "W2")[0], 0)
+        build_module._commit(fixture["root"], "harvest W1 and W2")
         code, lines = self.dry_run(fixture, "W1")
         self.assertEqual(code, 0, lines)
         self.assertIn("W1: battery=pass recorded=pass", lines)
@@ -2669,6 +2703,66 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
         self.assertTrue(any("harvest verdict missing" in line for line in lines))
         reader.assert_not_called()
         exemption.assert_not_called()
+
+    def test_dry_run_blocks_an_unnamed_computed_session_without_an_authentic_verdict(self) -> None:
+        # Cold ruling BFG-D-PARSER-ESC-01 §5.2 (obligation R2-3, Astra M1):
+        # W1 is computed but not named, and its committed verdict no longer
+        # authenticates.  The dry run must agree with prepare-candidate.
+        from joulewise import battery_float
+        fixture = self.fresh("unnamed-deleted", ("W1", self.values), ("W1-prime", self.values),
+                             ("W2", self.values))
+        (fixture["root"] / battery_float.verdict_relative_path("W1")).unlink()
+        code, lines = self.dry_run(fixture, "W1-prime", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT, lines)
+        self.assertIn("registration admissible for prepare-candidate: no", lines)
+        self.assertIn("  blocker: computed session W1: battery harvest verdict missing or "
+                      "uncommitted (working tree differs from HEAD)", lines)
+        code, printed, out = self.prepare(fixture)
+        self.assertEqual(code, 3)
+        self.assertIn("working tree differs from HEAD", printed)
+        self.assertFalse(out.exists())
+
+    def test_dry_run_blocks_an_unnamed_computed_session_recorded_under_another_registration(self) -> None:
+        # R2-3, second case: W1's verdict is committed but under a different
+        # registration digest (`NoRecord("identity mismatch: preregistration_sha256")`).
+        fixture = self.fresh("unnamed-wrong-registration", ("W1", self.values),
+                             ("W1-prime", self.values), ("W2", self.values), recorded=False)
+        build_module.write_verdict_record(fixture, "W1", preregistration_sha256="0" * 64)
+        build_module.write_verdict_record(fixture, "W1-prime", preregistration_sha256=self.registration_sha)
+        build_module.write_verdict_record(fixture, "W2", preregistration_sha256=self.registration_sha)
+        fixture["pin"].write_text(json.dumps(json.loads(fixture["pin"].read_text()),
+                                              sort_keys=True) + "\n")
+        build_module._commit(fixture["root"], "harvest with the pin")
+        code, lines = self.dry_run(fixture, "W1-prime", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT, lines)
+        self.assertIn("  blocker: computed session W1: battery harvest verdict missing or "
+                      "uncommitted (identity mismatch: preregistration_sha256)", lines)
+        self.assertIn("registration admissible for prepare-candidate: no", lines)
+
+    def test_every_documented_dry_run_shape_is_admissible_on_a_clean_revision_five_epoch(self) -> None:
+        # R2-4: each runbook invocation, executed on a Revision-5 fixture whose
+        # every window carries its committed verdict, exits 0 as documented.
+        fixture = self.clean_fixture
+        _, registered_powermetrics = issuer.preregistration_epoch_pins(
+            self.registration.read_text(encoding="utf-8"))
+        substitutions = {
+            "$SESSION_ID": "W1", "<S1>": "W1", "<S2>": "W1-prime", "<S3>": "W2",
+            "$PREREGISTRATION_SHA256": self.registration_sha,
+            "configs/calibration/preregistration_d079_epoch_25g83_rev1.md": str(self.registration),
+        }
+        for command in runbook_dry_run_invocations():
+            with self.subTest(argv=" ".join(command)):
+                argv = [substitutions.get(token, token) for token in command[2:]] + [
+                    "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
+                    "--repo-root", str(fixture["root"])]
+                stream = io.StringIO()
+                with redirect_stdout(stream), mock.patch.object(
+                        issuer, "observe_machine",
+                        return_value={"powermetrics_sha256": registered_powermetrics}), \
+                        mock.patch.object(issuer, "_registered_dispositions", return_value={}):
+                    code = issuer.main(argv)
+                self.assertEqual(code, 0, stream.getvalue())
+                self.assertIn("registration admissible for prepare-candidate: yes", stream.getvalue())
 
     def test_dry_run_blocks_one_computed_non_pass_session_omitted(self) -> None:
         code, lines = self.dry_run(self.fixture, "W1-prime", "W2")
@@ -2732,7 +2826,10 @@ class BatteryFloatRevisionFiveTests(unittest.TestCase):
                 "--d102-addendum-date", "2026-09-10",
                 "--out", str(self.root / "separate-continuation.json")])
         self.assertEqual(code, 3)
-        self.assertIn("verdict not committed with its ledger head pin", stream.getvalue())
+        # R2-10: the continuation refuses a Revision-5 session outright,
+        # before it would look for a verdict at all.
+        self.assertIn("revision_five_session", stream.getvalue())
+        self.assertFalse((self.root / "separate-continuation.json").exists())
 
     def test_dry_run_blocks_more_than_one_recorded_non_pass_window(self) -> None:
         code, lines = self.dry_run(self.two_non_pass_fixture, "W2")

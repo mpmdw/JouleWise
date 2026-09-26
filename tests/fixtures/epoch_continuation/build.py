@@ -10,8 +10,14 @@ from unittest.mock import patch
 from joulewise import calibration_bracketing as bracket
 from scripts import issue_epoch_continuation as issuer
 from tests.fixtures.epoch_bootstrap.build import (
-    PREREGISTRATION_SHA256, SESSION_ID, Slot, build_derivation_ledger,
+    PREREGISTRATION_SHA256, SESSION_ID, T1_BINDINGS, TARGET_EPOCH, Slot, build_derivation_ledger,
 )
+
+# The continued epoch of every fixture continuation.  `issue_epoch_continuation`
+# refuses registration-Revision-5 sessions (epoch 25G83/v3, `TARGET_EPOCH`)
+# outright (obligation R2-10), so the fixture night runs on a hypothetical
+# successor build that differs only in `os_build`.
+CONTINUED_EPOCH = {**TARGET_EPOCH, "os_build": "25G99"}
 
 
 def build_issued_continuation(
@@ -23,7 +29,10 @@ def build_issued_continuation(
     the temporary pin below authenticates only that private test artifact.
     """
     # The night carries its committed harvest verdict (obligations v1.1 §4.5).
-    fixture = build_derivation_ledger(root / "night", [Slot("0.025")] * 12, verdict_records=True)
+    fixture = build_derivation_ledger(
+        root / "night", [Slot("0.025")] * 12, verdict_records=True,
+        session_epoch=CONTINUED_EPOCH, t1_bindings={**T1_BINDINGS, **CONTINUED_EPOCH},
+    )
     raw_acceptance = acceptance_path.read_bytes()
     acceptance = json.loads(raw_acceptance)
     acceptance_id = acceptance["acceptance_id"]

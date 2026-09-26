@@ -334,8 +334,10 @@ def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path,
     """The A-R5b one-replacement bound over the recorded verdicts of the epoch.
 
     Counts the recorded non-pass sessions among the issuer's own computed set
-    (`_battery_computed_set`); a session without an authentic record is not
-    counted here, because its own line already carries a blocker.
+    (`_battery_computed_set`).  A computed session without an authentic
+    committed record is a blocker of its own, named or not (cold ruling
+    BFG-D-PARSER-ESC-01 §5.2, obligation R2-3), so the dry run never says
+    "admissible" where `prepare-candidate` refuses.
     """
 
     try:
@@ -343,6 +345,7 @@ def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path,
     except PrepareRefusal as refusal:
         return [refusal.reason]
     non_pass = []
+    blockers: list[str] = []
     computed = _battery_computed_set(snapshot, set(session_ids), REVISION_FIVE_EPOCH, dispositions)
     if preregistration_sha256 is None:
         return ["--preregistration and --preregistration-sha256 are required for Revision 5"]
@@ -356,12 +359,14 @@ def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path,
                 root, candidate_id, session=session,
                 preregistration_sha256=preregistration_sha256,
             )
-        except battery_float.NoRecord:
+        except battery_float.NoRecord as missing:
+            blockers.append(f"computed session {candidate_id}: battery harvest verdict missing "
+                            f"or uncommitted ({missing.reason})")
             continue
         if record["status"] != "pass":
             non_pass.append(candidate_id)
     omitted = sorted(set(non_pass) - set(session_ids))
-    blockers = [f"computed non-pass session omitted: {session_id}" for session_id in omitted]
+    blockers.extend(f"computed non-pass session omitted: {session_id}" for session_id in omitted)
     if len(non_pass) > 1:
         blockers.append("more than one battery-float non-pass window in this epoch: "
                         + ", ".join(sorted(set(non_pass))))

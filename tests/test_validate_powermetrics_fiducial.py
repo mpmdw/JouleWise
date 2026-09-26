@@ -17,8 +17,8 @@ from joulewise.calibration_exits import RefusalCode
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from scripts import generate_g2a_probe_inputs as probe
 from scripts import validate_powermetrics_fiducial as writer
-from tests.fixtures.epoch_bootstrap.build import TARGET_EPOCH, SESSION_ID
-from tests.fixtures.epoch_continuation.build import registered_continuation
+from tests.fixtures.epoch_bootstrap.build import SESSION_ID
+from tests.fixtures.epoch_continuation.build import CONTINUED_EPOCH, registered_continuation
 
 
 def documented_keys(name):
@@ -55,7 +55,7 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
     def test_contract_documented_key_lists_equal_emitted_preflight_and_screen_basis(self):
         with registered_continuation(self.root):
             record = {}
-            writer._derive_preflight_systematic_screen_s(TARGET_EPOCH, preflight_record=record)
+            writer._derive_preflight_systematic_screen_s(CONTINUED_EPOCH, preflight_record=record)
             _, basis = writer._derivation_only_screen_basis()
         self.assertEqual(documented_keys("acceptance_preflight"), set(record))
         self.assertEqual(documented_keys("screen_basis"), set(basis))
@@ -65,11 +65,11 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
             snapshot = self._continuation_snapshot()
             record = {}
             screen = writer._derive_preflight_systematic_screen_s(
-                TARGET_EPOCH, ledger_snapshot=snapshot, preflight_record=record,
+                CONTINUED_EPOCH, ledger_snapshot=snapshot, preflight_record=record,
             )
         self.assertEqual(screen, Decimal(self.artifact["decimal_derivation"][
             "ratified_operatives"]["preflight_level_screen_s"]))
-        self.assertEqual(record["judged_epochs"], [self.artifact["identity_epoch"], TARGET_EPOCH])
+        self.assertEqual(record["judged_epochs"], [self.artifact["identity_epoch"], CONTINUED_EPOCH])
         self.assertEqual(record["judged_epochs_basis"], "ledger_snapshot")
         self.assertEqual(record["continuation_refusals"], [])
 
@@ -84,7 +84,7 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
                 with self.subTest(detail=detail):
                     with self.assertRaises(writer._AcceptancePreflightError) as raised:
                         writer._derive_preflight_systematic_screen_s(
-                            TARGET_EPOCH, ledger_snapshot=replace(snapshot, bracket_sessions=sessions),
+                            CONTINUED_EPOCH, ledger_snapshot=replace(snapshot, bracket_sessions=sessions),
                         )
                     self.assertEqual(raised.exception.reason, "acceptance_artifact_epoch_mismatch")
                     self.assertEqual(raised.exception.context["judged_epochs_basis"], "ledger_snapshot")
@@ -113,7 +113,7 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
             ):
                 try:
                     rc = writer.main([
-                        "--allow-live", "--power-policy", TARGET_EPOCH["power_policy"],
+                        "--allow-live", "--power-policy", CONTINUED_EPOCH["power_policy"],
                         "--output-root", str(self.root / "captures"),
                     ])
                 except Exception as exc:
@@ -128,12 +128,12 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
         with registered_continuation(self.root):
             record = {}
             screen = writer._derive_preflight_systematic_screen_s(
-                TARGET_EPOCH, preflight_record=record,
+                CONTINUED_EPOCH, preflight_record=record,
             )
             self.assertEqual(screen, Decimal(self.artifact["decimal_derivation"][
                 "ratified_operatives"]["preflight_level_screen_s"]))
             self.assertIn("judged_epochs", record)
-            self.assertEqual(record["judged_epochs"], [self.artifact["identity_epoch"], TARGET_EPOCH])
+            self.assertEqual(record["judged_epochs"], [self.artifact["identity_epoch"], CONTINUED_EPOCH])
             self.assertEqual(record["judged_epochs_basis"], "registry_pins_only")
             self.assertEqual(record["continuation_refusals"], [])
 
@@ -146,7 +146,7 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
                     registry = {} if cut == "registry" else dict(bracket.EPOCH_CONTINUATION_REGISTRY)
                     with patch.dict(bracket.EPOCH_CONTINUATION_REGISTRY, registry, clear=True):
                         with self.assertRaises(writer._AcceptancePreflightError) as raised:
-                            writer._derive_preflight_systematic_screen_s(TARGET_EPOCH)
+                            writer._derive_preflight_systematic_screen_s(CONTINUED_EPOCH)
                     self.assertEqual(raised.exception.reason, "acceptance_artifact_epoch_mismatch")
                     self.assertEqual(raised.exception.context["stale_fields"], ["os_build"])
                     if cut == "bytes":
@@ -155,8 +155,8 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
 
     def test_continued_epoch_must_match_every_identity_field(self):
         with registered_continuation(self.root):
-            for field in TARGET_EPOCH:
-                epoch = dict(TARGET_EPOCH)
+            for field in CONTINUED_EPOCH:
+                epoch = dict(CONTINUED_EPOCH)
                 epoch[field] = 101 if field == "sampling_interval_ms" else "different"
                 with self.subTest(field=field), self.assertRaises(writer._AcceptancePreflightError):
                     writer._derive_preflight_systematic_screen_s(epoch)
@@ -165,18 +165,18 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
         with registered_continuation(self.root):
             _, basis = writer._derivation_only_screen_basis()
             self.assertEqual(basis["epoch"], self.artifact["identity_epoch"])
-            self.assertEqual(basis["judged_epochs"], [self.artifact["identity_epoch"], TARGET_EPOCH])
+            self.assertEqual(basis["judged_epochs"], [self.artifact["identity_epoch"], CONTINUED_EPOCH])
             self.assertEqual(basis["judged_epochs_basis"], "registry_pins_only")
 
     def test_derivation_only_refuses_continued_epoch_before_capture(self):
         identity = self.root / "identity.json"
-        identity.write_text(json.dumps(TARGET_EPOCH))
+        identity.write_text(json.dumps(CONTINUED_EPOCH))
         with registered_continuation(self.root), redirect_stderr(io.StringIO()) as error:
             snapshot = self._continuation_snapshot()
             # CLI owns the snapshot; this test only replaces disk custody I/O.
             with patch.object(writer, "load_calibration_ledger_snapshot", return_value=snapshot):
                 rc = writer.main([
-                    "--allow-live", "--derivation-only", "--power-policy", TARGET_EPOCH["power_policy"],
+                    "--allow-live", "--derivation-only", "--power-policy", CONTINUED_EPOCH["power_policy"],
                     "--identity-epoch-json-for-test", str(identity),
                     "--output-root", str(self.root / "captures"),
                 ])
@@ -187,12 +187,12 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
 
     def test_derivation_only_cli_uses_snapshot_before_epoch_guard(self):
         identity = self.root / "identity.json"
-        identity.write_text(json.dumps(TARGET_EPOCH))
+        identity.write_text(json.dumps(CONTINUED_EPOCH))
         with registered_continuation(self.root), redirect_stderr(io.StringIO()) as error:
             snapshot = replace(self._continuation_snapshot(), bracket_sessions=())
             with patch.object(writer, "load_calibration_ledger_snapshot", return_value=snapshot) as loader:
                 rc = writer.main([
-                    "--allow-live", "--derivation-only", "--power-policy", TARGET_EPOCH["power_policy"],
+                    "--allow-live", "--derivation-only", "--power-policy", CONTINUED_EPOCH["power_policy"],
                     "--identity-epoch-json-for-test", str(identity),
                     "--output-root", str(self.root / "captures"),
                 ])
@@ -207,20 +207,20 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
     def test_g2a_live_vectors_use_real_continuation_preflight(self):
         # Stub machine observations and MLX only; keep the generator, writer
         # preflight, acceptance loader and continuation authentication real.
-        identities = {"kern.osversion": TARGET_EPOCH["os_build"], "hw.model": TARGET_EPOCH["hardware_model"]}
+        identities = {"kern.osversion": CONTINUED_EPOCH["os_build"], "hw.model": CONTINUED_EPOCH["hardware_model"]}
         with (
             registered_continuation(self.root),
             patch.object(writer, "_sysctl_identity", side_effect=identities.__getitem__),
             patch.object(writer, "sha256_path", return_value="a" * 64),
             patch.dict("sys.modules", {"mlx.core": types.SimpleNamespace(__version__="test-mlx")}),
         ):
-            epoch, t1, acceptance = probe._derive_live_vectors(TARGET_EPOCH["power_policy"])
-            self.assertEqual(epoch, TARGET_EPOCH)
-            self.assertEqual({field: t1[field] for field in TARGET_EPOCH}, TARGET_EPOCH)
+            epoch, t1, acceptance = probe._derive_live_vectors(CONTINUED_EPOCH["power_policy"])
+            self.assertEqual(epoch, CONTINUED_EPOCH)
+            self.assertEqual({field: t1[field] for field in CONTINUED_EPOCH}, CONTINUED_EPOCH)
             self.assertEqual(acceptance, self.artifact)
             with patch.dict(bracket.EPOCH_CONTINUATION_REGISTRY, {}, clear=True):
                 with self.assertRaisesRegex(probe.G2AProbeError, "acceptance_artifact_epoch_mismatch"):
-                    probe._derive_live_vectors(TARGET_EPOCH["power_policy"])
+                    probe._derive_live_vectors(CONTINUED_EPOCH["power_policy"])
 
 
 if __name__ == "__main__":

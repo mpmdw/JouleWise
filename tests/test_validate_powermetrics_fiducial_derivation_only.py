@@ -45,7 +45,7 @@ from tests.owned_process_runner import (
 )
 import scripts.validate_powermetrics_fiducial as validation_script
 from tests.test_calibration_exits import _install_fake_writer_dependencies
-from tests.fixtures.epoch_continuation.build import build_issued_continuation
+from tests.fixtures.epoch_continuation.build import CONTINUED_EPOCH, build_issued_continuation
 from tests.test_validate_powermetrics_fiducial import documented_keys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -227,6 +227,35 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
             payload["code"],
             RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT.value,
         )
+
+
+class RevisionFiveRederiveTests(unittest.TestCase):
+    """Obligation R2-5 sweep row: `--rederive-from` cannot read a v3 capture's B.
+
+    Re-derivation accepts only the compatible 40-pulse v1/v2 evidence, and
+    every registration-Revision-5 capture is protocol v3, so the replay
+    refuses on the protocol check before it recomputes or reads any bound
+    and before it writes anything.
+    """
+
+    def test_revision_five_capture_is_refused_before_any_bound_is_read(self) -> None:
+        from unittest import mock
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "W1-d01"
+            (source / "raw").mkdir(parents=True)
+            (source / "manifest.json").write_text(json.dumps({"artifacts": {}}) + "\n")
+            (source / "instrument_evidence.json").write_text(json.dumps({
+                "protocol_id": PROTOCOL_ID, "pulse_count": 40, "b_fiducial_s": 0.03,
+                "battery_float": {"pre": {}, "post": {}},
+            }) + "\n")
+            output = Path(tmp) / "rederived"
+            with mock.patch.object(validation_script, "rederive_detection_from_artifacts",
+                                   side_effect=AssertionError("bound recomputed")) as rederive:
+                with self.assertRaisesRegex(ValueError, "requires compatible 40-pulse v1/v2 evidence"):
+                    validation_script.rederive_artifact(source, output)
+            rederive.assert_not_called()
+            self.assertFalse(output.exists())
 
 
 class BatteryFloatPinRegressionTests(unittest.TestCase):
@@ -671,7 +700,9 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
     def test_ordinary_continued_epoch_capture_requires_registered_continuation(self):
         """The real writer CLI reaches a fixture capture only with a valid pin."""
         acceptance = self._rekey_acceptance()
-        epoch, t1 = self._epoch("25G83")
+        # The fixture continuation continues into a successor build: no
+        # continuation can exist for registration Revision 5 (R2-10).
+        epoch, t1 = self._epoch(CONTINUED_EPOCH["os_build"])
         continuation_root = Path(self.tmp.name) / "continuation"
         _, registry = build_issued_continuation(
             continuation_root, acceptance_path=self.repo / _ACCEPTANCE_RELATIVE,

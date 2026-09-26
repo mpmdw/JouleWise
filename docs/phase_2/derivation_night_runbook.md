@@ -2493,9 +2493,19 @@ removal, and keep a separate `lstat` inventory of the original with sizes and
 ```zsh
 cd "$MEASUREMENT_ROOT"
 "$PY" scripts/issue_calibration_acceptance_generation.py check \
-  --session-ids "$SESSION_ID"
+  --session-ids "$SESSION_ID" \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256"
 echo "rc=$?"
 ```
+
+`$PREREGISTRATION_SHA256` is the registration digest the arm notice pinned
+(§0.5). Both registration flags are required for any Revision 5 session (a
+session with a finalized row in epoch 25G83/v3): the dry run authenticates each such
+session's committed battery-float verdict against that exact registration
+digest (§2.2a). Without them it prints the blocker `--preregistration and
+--preregistration-sha256 are required` and returns 5; that rc 5 is the flag
+blocker, not a fault in the window.
 
 With at least one non-empty `--session-ids`, `check` prints the epoch-watch
 table byte-identically to §0.3 and then APPENDS a **registration dry run**
@@ -2849,7 +2859,12 @@ refuses if its lexeme differs from the ledger row's), reads the operatives
 from the validator registry and refuses if the artifact disagrees, and prints
 the constants table, one line per declared slot, m, the two comparisons with
 their operands, and the verdict line. It judges only against the r6 generation
-named above; pointing it at any other acceptance refuses. It writes one JSON
+named above; pointing it at any other acceptance refuses. It also refuses, with
+exit 3 and nothing written, any session with a finalized row in epoch 25G83/v3:
+registration Revision 5 says the equivalence look is not taken for that epoch,
+so there is no legitimate run on such a session, and refusing before any
+capture is read keeps a B value from being printed before its battery-float
+verdict exists (cold ruling BFG-D-PARSER-ESC-01 §5.1). It writes one JSON
 record to `--out` (never under `configs/calibration/`) and nothing else:
 
 ```zsh
@@ -2868,8 +2883,8 @@ then refuses any generation other than r6 by id, so a second checkout at
 the same head running its own copy judges against the same bytes.
 
 Exit code 0 is PASS, 4 is FAIL, 5 is INCONCLUSIVE; 3 means the tool refused
-to judge (the session is not terminal, is not derivation-kind, or the envelope
-did not authenticate) and wrote nothing. Run it twice — once from the clone,
+to judge (the session is not terminal, is not derivation-kind, is a Revision 5
+session, or the envelope did not authenticate) and wrote nothing. Run it twice — once from the clone,
 once from a second checkout at the same head, with a DIFFERENT `--out` for the
 second run (for example `"$NIGHT_ROOT/epoch-equivalence-record-2.json"`; the
 tool refuses to overwrite the first record without `--force`, and `--force`
@@ -2949,17 +2964,22 @@ cross-checked against its arm record.
 cd "$MEASUREMENT_ROOT"
 "$PY" scripts/issue_calibration_acceptance_generation.py check \
   --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256" \
   --session-ids "<S1>" --session-ids "<S2>" --session-ids "<S3>"
 echo "rc=$?"
 ```
 
 Expect **rc 0** and `registration admissible for prepare-candidate: yes`. An
-rc 5 prints its blockers: a non-terminal session, or pending/unresolved rows in
-the prior-set prefix. Clear the named blocker at the desk — do not capture more
-to make it go away.
+rc 5 prints its blockers: a non-terminal session; pending/unresolved rows in
+the prior-set prefix; a session's battery-float verdict missing or uncommitted
+(named or not: every computed window of the epoch must carry an authentic
+committed verdict); or a battery-float verdict that cannot be re-established
+from the raw battery bytes. Clear the named blocker at the desk — do not
+capture more to make it go away.
 
 Carry `--preregistration` here too, and read its appended line (§0.3): it must
-still say `match` on the sampler digest. The dry run's return code is what the
+still say `match` on the sampler digest. `$PREREGISTRATION_SHA256` is the
+digest pinned at night 1's arm (§0.5), the same value §4.2 passes. The dry run's return code is what the
 command returns when sessions are named, so the sampler comparison is again
 reported only in the printed line, never in the code.
 
