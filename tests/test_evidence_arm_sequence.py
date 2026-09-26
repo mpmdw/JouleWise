@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts import gen_evidence_night
+from tests import battery_float_fixture
 from tests.test_gen_evidence_night import EvidenceFixture, ROOT
 
 
@@ -44,6 +45,9 @@ class EvidenceArmSequenceTests(unittest.TestCase):
         installer = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, {name: installer}):
             spec.loader.exec_module(installer)
+        # This private installer instance answers its battery-float probe from
+        # the real float capture, never the host battery.
+        installer.BATTERY_PROBE_RUNNER = battery_float_fixture.runner()
 
         staged = f.root / 'staged.json'
         os.replace(f.plan_path, staged)

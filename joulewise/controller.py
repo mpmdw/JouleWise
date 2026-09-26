@@ -434,6 +434,17 @@ def _load_instrument_calibration_attachment(
         evidence = json.loads(evidence_raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("instrument calibration evidence is invalid JSON") from exc
+    from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH  # noqa: PLC0415
+
+    if isinstance(evidence, dict) and (
+        "battery_float" in evidence
+        or any(
+            isinstance(epoch, dict)
+            and all(epoch.get(field) == value for field, value in REVISION_FIVE_EPOCH.items())
+            for epoch in (evidence.get("identity_epoch"), evidence.get("bindings"))
+        )
+    ):
+        raise ValueError("revision_five evidence cannot be attached as instrument calibration")
     bindings = evidence.get("bindings") if isinstance(evidence, dict) else None
     bound = evidence.get("b_fiducial_s") if isinstance(evidence, dict) else None
     if (

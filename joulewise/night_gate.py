@@ -20,12 +20,12 @@ import os
 import re
 import subprocess
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
-from joulewise import corecaptured_loop
+from joulewise import battery_float, corecaptured_loop
 from joulewise.night_kinds import NIGHT_KINDS, kind_row
 
 
@@ -167,6 +167,7 @@ def probe_payload_kind(text):
 AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "[c]odex|[c]laude|[t]3")
 
 PMSET_BATT_ARGV = ("/usr/bin/pmset", "-g", "batt")
+IOREG_BATTERY_ARGV = battery_float.IOREG_BATTERY_ARGV
 PMSET_GENERAL_ARGV = ("/usr/bin/pmset", "-g")
 HID_IDLE_ARGV = (
     "/usr/bin/defaults",
@@ -204,6 +205,7 @@ NIGHT_GATE_REASON_CODES = frozenset(
     {
         "night_refused_agent_present",
         "night_refused_not_quiet",
+        "night_refused_battery_float",
         "night_refused_bind_expired",
         "night_refused_hid_idle",
         "night_refused_boot_clock",
@@ -255,6 +257,7 @@ ORDER = (
     "night_refused_class_unbuilt",
     "night_refused_hid_idle",
     "night_refused_not_quiet",
+    "night_refused_battery_float",
     "night_refused_boot_clock",
     "night_refused_registration",
 )
@@ -328,6 +331,10 @@ class ProbeResult:
     stdout: str
     stderr: str
     monotonic_ns: int
+    # The probe's exact stdout bytes, for the battery-float grammar only
+    # (obligation R2-11).  A runner that captured text supplies None, and
+    # the battery observation is then a probe error.  Never serialised.
+    stdout_bytes: bytes | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -1503,6 +1510,28 @@ def _check_machine(plan, probes, rows, evidence, *, legacy_load=True):
                     tuple(evidence),
                 ),
             )
+
+        battery_result = None
+        def battery_runner(argv):
+            nonlocal battery_result
+            battery_result = _run(probes, argv)
+            # R2-11: the grammar sees the runner's exact stdout bytes, never
+            # the decoded text (``observe`` refuses anything but bytes).
+            return replace(battery_result, stdout=battery_result.stdout_bytes)
+        battery_record, battery_raw = battery_float.observe(
+            phase="t0", runner=battery_runner, wall_time_s=probes.now_epoch_s(),
+            plan_id=plan.plan_id,
+        )
+        if battery_result is not None:
+            evidence.append(battery_result)
+            rows["C3"].evidence.append(_probe_citation(battery_result))
+        battery_record["raw_stdout"] = battery_raw.decode("utf-8", errors="replace")
+        rows["C3"].measured["battery_float"] = battery_record
+        if battery_record["probe_error"]:
+            raise ProbeError("; ".join(battery_record["reasons"]))
+        if not battery_record["passed"]:
+            return _finish(plan, probes, rows, Refusal(
+                "night_refused_battery_float", "; ".join(battery_record["reasons"]), tuple(evidence)))
 
         settings = _run(probes, PMSET_GENERAL_ARGV)
         evidence.append(settings)

@@ -21,6 +21,7 @@ from scripts import run_night
 from joulewise.night_agent_install import interpreter_identity
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
+from tests import battery_float_fixture
 from tests.git_fixture import init_git_fixture
 from tests.test_night_agent_install import FakeLaunchctl, LABELS, run_fixture_process
 from tests.test_run_night import make_probe_fixture, write_matching_probe_receipt
@@ -84,6 +85,15 @@ class InstallNightAgentTests(unittest.TestCase):
         self.environment["LAUNCH_LOG"] = str(self.launch_log)
         self.repo_head = _git_head(REPO_ROOT)
         self.plan_counter = 0
+        # The installer's battery-float probe answers from the real float
+        # capture (tests/fixtures/battery_float), never the host battery: in
+        # this process by injection, in the wrapper-launched installer through
+        # the fake HOME's user site.
+        battery_float_fixture.install_user_site_runner(self.root / "home")
+        from joulewise import night_agent_install as installer
+        battery_patch = mock.patch.object(installer, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner())
+        battery_patch.start()
+        self.addCleanup(battery_patch.stop)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()

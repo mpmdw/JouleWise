@@ -108,6 +108,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
 from scripts.issue_calibration_acceptance_generation import (  # noqa: E402
     DECIMAL_WORK_PRECISION,
     PrepareRefusal,
+    REVISION_FIVE_EPOCH,
     TERMINAL_SESSION_STATES,
     _read_member_evidence,
     anchor_v3_replay_outcome,
@@ -462,6 +463,16 @@ def evaluate_session(
 ) -> dict[str, Any]:
     """Apply the rule to one resolved, terminal derivation night."""
 
+    # Cold ruling BFG-D-PARSER-ESC-01 §5.1 (obligation R2-2): registration
+    # Revision 5 does not take the equivalence look for epoch 25G83/v3, so a
+    # session with any finalized row in that epoch is refused here, before
+    # any member evidence (and so any B value) is read, and nothing is written.
+    if any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+           for row in session.finalized_slots.values()):
+        raise EquivalenceRefusal(
+            "revision_five_session: the equivalence look is not taken for epoch "
+            "25G83/v3 (registration Revision 5); this tool does not judge it"
+        )
     outcomes, retained = _slot_outcomes(session)
     record: dict[str, Any] = {
         "schema_version": "joulewise.epoch_equivalence_check.v1",

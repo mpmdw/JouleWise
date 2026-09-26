@@ -37,6 +37,7 @@ def _census_clean_tempdir(**kwargs):
 from joulewise import evidence_night as entry
 from joulewise import corecaptured_loop
 from joulewise import night_gate
+from tests import battery_float_corpus, battery_float_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -404,7 +405,7 @@ class PrepareTests(unittest.TestCase):
         def probes(argv, **kwargs):
             if Path(str(argv[0])).name == "pgrep":
                 return subprocess.CompletedProcess(argv, 1, "", "")
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
 
         daemon = ("/System/Library/Frameworks/CoreServices.framework/Versions/A/"
                   "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd", 341, 0.998)
@@ -468,7 +469,7 @@ class PrepareTests(unittest.TestCase):
         def probes(argv, **kwargs):
             if Path(str(argv[0])).name == "pgrep":
                 return subprocess.CompletedProcess(argv, 1, "", "")
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
 
         def sampler_died():
             raise RuntimeError("top died")
@@ -510,7 +511,7 @@ class PrepareTests(unittest.TestCase):
         def probes(argv, **kwargs):
             if Path(str(argv[0])).name == "pgrep":
                 return subprocess.CompletedProcess(argv, 1, "", "")
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
         absent = dict(jobs=[], plists=[], listing=dict(exit_code=0))
         with patch.object(entry, "night_agents", return_value=absent, create=True):
             entry.check(candidate=state["staging"], canonical=state["measurement_root"],
@@ -875,7 +876,7 @@ class LifecycleTests(unittest.TestCase):
         (self.canonical / "env/mac-measurement-lock.txt").write_text("fixture==1\n")
         (self.canonical / "joulewise").mkdir()
         (self.canonical / "joulewise/__init__.py").write_text("")
-        for name in ("night_gate.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
+        for name in ("night_gate.py", "battery_float.py", "night_kinds.py", "corecaptured_loop.py", "arm_census.py", "arm_retry.py", "quiet_guard_process.py", "night_agent_install.py"):
             shutil.copy2(ROOT / "joulewise" / name, self.canonical / "joulewise" / name)
         clone_route = {"test_retry_uses_clone_retry_route": "retry",
                        "test_retry_uses_clone_cold_gate_route": "cold_gate"}.get(self._testMethodName)
@@ -958,6 +959,10 @@ class LifecycleTests(unittest.TestCase):
 
     def runner(self, argv, **kwargs):
         self.calls.append(list(map(str, argv)))
+        if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+            return subprocess.CompletedProcess(argv, 0,
+                (ROOT / "tests/fixtures/battery_float/float.ioreg").read_text().replace(
+                    '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}').encode(), "")
         if str(argv[0]) == "ps":
             return self.ps
         if Path(str(argv[0])).name == "pgrep":
@@ -1008,6 +1013,52 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(record["checks"]["census"]["argv"][-1], "[c]odex|[c]laude|[t]3")
         self.assertIn(20, record["checks"]["census"]["owned_helpers"])
         self.assertFalse(any("launchctl" in str(c) for c in self.calls))
+
+    def test_charging_fails_arm_check_for_unknown_and_calibration_payloads(self):
+        charging = (ROOT / "tests/fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text()
+        for kind in ("unknown", "calibration"):
+            with self.subTest(kind=kind):
+                def runner(argv, **kwargs):
+                    if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                        return subprocess.CompletedProcess(argv, 0, charging.replace(
+                            '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}', 1).encode(), "")
+                    return self.runner(argv, **kwargs)
+                with patch.object(entry, "candidate_payload_kind", return_value=kind):
+                    with self.assertRaisesRegex(entry.Refused, "battery_float"):
+                        entry.check(**dict(self.kw, runner=runner))
+                record = json.loads(self.journal("check.json").read_text())
+                self.assertFalse(record["armable"])
+                self.assertFalse(record["rehearsal_ready"])
+                self.assertEqual(record["checks"]["battery_float"]["verdict"], "fail")
+
+    def test_arm_check_battery_runner_passes_exact_bytes_and_refuses_cr_smuggle(self):
+        # Obligation R2-11 (refuter M-4): the arm check's production runner
+        # (`probe_command`) captures the ioreg stdout as bytes.  The refuter's
+        # CR-smuggled output reaches the grammar with its CR and is refused;
+        # the recorded digest is that of the child's exact bytes.
+        import hashlib
+        now = int(time.time())
+        cases = (("real_capture", battery_float_corpus.positives(now)["real_capture_ex03"], "pass"),
+                 ("cr_smuggled", battery_float_corpus.negatives(now)["cr_smuggled_required"], "fail"))
+        for label, stdout, verdict in cases:
+            with self.subTest(case=label):
+                def runner(argv, **kwargs):
+                    if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                        return entry.probe_command(argv, **kwargs)
+                    return self.runner(argv, **kwargs)
+                with patch.object(entry.subprocess, "run", side_effect=battery_float_fixture.smuggling_run(
+                        subprocess.run, stdout)):
+                    if verdict == "fail":
+                        with patch.object(entry, "candidate_payload_kind", return_value="unknown"), \
+                                self.assertRaisesRegex(entry.Refused, "battery_float"):
+                            entry.check(**dict(self.kw, runner=runner))
+                    else:
+                        entry.check(**dict(self.kw, runner=runner))
+                battery = json.loads(self.journal("check.json").read_text())["checks"]["battery_float"]
+                self.assertEqual(battery["verdict"], verdict)
+                self.assertEqual(battery["observation"]["probe_error"], verdict == "fail")
+                self.assertEqual(battery["observation"]["raw_stdout_sha256"],
+                                 hashlib.sha256(stdout).hexdigest())
 
     def test_corecaptured_arm_toggles_once_and_counts_only_post_toggle_spawns(self):
         raw = (ROOT / "tests/fixtures/corecaptured/loop-20260922-1022.log").read_text()
@@ -1796,6 +1847,10 @@ class LifecycleTests(unittest.TestCase):
         def runner(argv, **kw):
             if argv == list(entry.DIRECTIVES_ARGV):
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                return subprocess.CompletedProcess(argv, 0,
+                    (ROOT / "tests/fixtures/battery_float/float.ioreg").read_text().replace(
+                        '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}').encode(), "")
             return installer(argv, **kw)
         return entry.publish_install(notice_accepted="message verbatim ", runner=runner,
                                      **dict(self.publication_kwargs(), **kwargs))
@@ -2111,6 +2166,64 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaisesRegex(entry.Refused, "installer --launchd-probe failed"):
                 self.publish(runner=lambda argv, **kw: subprocess.CompletedProcess(argv, 2, "", "refused"))
         self.assertEqual(len(seen), 1)
+
+    def test_charging_at_publication_preserves_plan_and_successor_claim(self):
+        self.released_predecessor()
+        self.checked()
+        self.vetoed()
+        self.notice_fixture()
+        charging = (ROOT / "tests/fixtures/battery_float/charging-synthetic-from-real.ioreg").read_text()
+        def runner(argv, **kwargs):
+            if argv == list(entry.DIRECTIVES_ARGV):
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                return subprocess.CompletedProcess(argv, 0, charging.replace(
+                    '"UpdateTime" = 1790373525', f'"UpdateTime" = {int(time.time())}', 1).encode(), "")
+            self.fail(f"unexpected publication command: {argv}")
+        original = os.replace
+        moved_plan = []
+        def replace(source, target):
+            if source == self.plan:
+                moved_plan.append(target)
+            return original(source, target)
+        with patch.object(entry.os, "replace", side_effect=replace):
+            with self.assertRaisesRegex(entry.Refused, "battery float at publication"):
+                entry.publish_install(**self.publication_kwargs(),
+                                      notice_accepted="charging-publication", runner=runner)
+        self.assertEqual(moved_plan, [])
+        self.assertTrue(self.plan.exists())
+        self.assertFalse((self.custody.parent / "successor-claims/predecessor.json").exists())
+        attempt = next((self.stage / "lifecycle/arm-attempts").iterdir())
+        observation = json.loads((attempt / "battery-float-at-publication.json").read_text())
+        self.assertFalse(observation["passed"])
+
+    def test_publication_battery_runner_passes_exact_bytes_and_refuses_cr_smuggle(self):
+        # Obligation R2-11 (refuter M-4) at publication: the production
+        # runner captures bytes; the CR-smuggled output is refused before the
+        # plan moves, and the retained observation carries the exact digest.
+        import hashlib
+        self.released_predecessor()
+        self.checked()
+        self.vetoed()
+        self.notice_fixture()
+        smuggle = battery_float_corpus.negatives(int(time.time()))["cr_smuggled_required"]
+        def runner(argv, **kwargs):
+            if argv == list(entry.DIRECTIVES_ARGV):
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if tuple(argv) == entry.battery_float.IOREG_BATTERY_ARGV:
+                return entry.probe_command(argv, **kwargs)
+            self.fail(f"unexpected publication command: {argv}")
+        with patch.object(entry.subprocess, "run", side_effect=battery_float_fixture.smuggling_run(
+                subprocess.run, smuggle)):
+            with self.assertRaisesRegex(entry.Refused, "battery float at publication"):
+                entry.publish_install(**self.publication_kwargs(),
+                                      notice_accepted="cr-smuggle-publication", runner=runner)
+        self.assertTrue(self.plan.exists())
+        attempt = next((self.stage / "lifecycle/arm-attempts").iterdir())
+        observation = json.loads((attempt / "battery-float-at-publication.json").read_text())
+        self.assertTrue(observation["probe_error"])
+        self.assertIn("framing: byte", observation["reasons"][0])
+        self.assertEqual(observation["raw_stdout_sha256"], hashlib.sha256(smuggle).hexdigest())
 
     def test_b6_clone_old_census_literal_is_reported(self):
         with patch.object(entry, "CENSUS_FIX", self.tip):
@@ -2512,6 +2625,8 @@ class LifecycleTests(unittest.TestCase):
                 self.assertNotIn("publishing", phases)
                 self.assertTrue(self.plan.is_file())
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if battery_float_fixture.answer(argv):
+                return battery_float_fixture.answer(argv)
             return subprocess.CompletedProcess(argv, 2, "", "fixture probe refusal")
         self.vetoed()
         self.notice_fixture()
@@ -2594,6 +2709,8 @@ class LifecycleTests(unittest.TestCase):
         def runner(argv, **kwargs):
             if argv == list(entry.DIRECTIVES_ARGV):
                 return subprocess.CompletedProcess(argv, 0, "[]", "")
+            if battery_float_fixture.answer(argv):
+                return battery_float_fixture.answer(argv)
             self.assertNotIn("--uninstall", argv, "earlier baseline must not enter recovery")
             if "--launchd-probe" in argv:
                 (self.custody / "night_probe_receipt.json").write_text("fixture receipt")
@@ -3026,7 +3143,7 @@ class LifecycleCompositionTests(unittest.TestCase):
             if tuple(argv) == night_gate.AGENT_CENSUS_ARGV:
                 return subprocess.CompletedProcess(argv, 1, "", "")
             self.assertNotIn(entry.CANONICAL, list(map(str, argv)))
-            return entry.probe_command(argv, **kwargs)
+            return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
         def builder(root):
             # Installer's real shell still dispatches its actual module. Only
             # its host process census is injected, as in the arm-sequence
@@ -3040,8 +3157,10 @@ args=sys.argv[1:]
 if args[:3]==['-B','-m','joulewise.night_agent_install']:
     sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
     from joulewise import night_agent_install
+    from tests import battery_float_fixture
     from unittest.mock import patch
-    with patch.object(night_agent_install,'probe_process_census'):
+    with patch.object(night_agent_install,'probe_process_census'), \\
+            patch.object(night_agent_install,'BATTERY_PROBE_RUNNER',battery_float_fixture.runner()):
         raise SystemExit(night_agent_install.main(args[3:]))
 os.execv(sys.executable,[sys.executable,*args])
 """)
@@ -3091,7 +3210,7 @@ os.execv(sys.executable,[sys.executable,*args])
                     # tests. No chain, sampler, courier or real launchd runs.
                     fake.directive(label, "bootstrap", probe_receipt=receipt,
                                    receipt_path=str(custody / "night_probe_receipt.pending.json"))
-                return entry.probe_command(argv, **kwargs)
+                return battery_float_fixture.answer(argv) or entry.probe_command(argv, **kwargs)
             installed = entry.publish_install(candidate=stage, notice_accepted="gmail-fixture-id",
                 launchctl_bin=str(fake.executable), runner=real_installer, magistrate=base / "magistrate",
                 lock_verifier=lambda root: None)

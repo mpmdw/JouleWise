@@ -20,7 +20,7 @@ RETRY = {
 }
 # Independent literals, not derived from the implementation or renderer.
 COLD = {
-    "night_refused_agent_present", "night_refused_not_quiet", "night_refused_bind_expired",
+    "night_refused_agent_present", "night_refused_not_quiet", "night_refused_battery_float", "night_refused_bind_expired",
     "night_refused_hid_idle", "night_refused_boot_clock",
     "night_refused_registration", "night_window_expired", "night_plan_stale",
     "measurement_root_outside_custody",
@@ -489,6 +489,16 @@ class ZeroCaptureSuccessorTests(unittest.TestCase):
                       predecessor_sha256="b" * 64, predecessor_is_successor=False,
                       existing_claim=None)
         return result, receipt, facts, delivery, claims
+
+    def test_battery_float_zero_capture_only_and_probe_error_never_successor(self):
+        result, receipt, _facts, _delivery, _claims = self.evidence()
+        result["aborted_reason"] = receipt["refusal"]["reason"] = "night_refused_battery_float"
+        self.assertTrue(arm_retry.terminal_zero_capture_refusal(result, receipt).allowed)
+        receipt["conditions"][0]["measured"]["captured_envelopes"] = 1
+        self.assertFalse(arm_retry.terminal_zero_capture_refusal(result, receipt).allowed)
+        receipt["conditions"][0]["measured"].clear()
+        result["aborted_reason"] = receipt["refusal"]["reason"] = "night_probe_error"
+        self.assertFalse(arm_retry.terminal_zero_capture_refusal(result, receipt).allowed)
 
     def test_bare_c5_needs_composed_disk_facts_and_delivery(self):
         result, receipt, facts, delivery, claims = self.evidence()

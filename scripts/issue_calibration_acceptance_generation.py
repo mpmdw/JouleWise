@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Desk tools for the D-079 calibration epoch: watch it, and prepare a candidate.
+"""Desk tools for the D-079 calibration epoch: watch it, record a window's
+battery-float verdict at harvest, and prepare a candidate.
 
-Neither subcommand authorizes a capture, issues anything, or writes into
-`configs/calibration/`.
+No subcommand authorizes a capture or issues anything.  Only
+`battery-verdict` writes under `configs/calibration/`: one new file,
+`battery_float_verdicts/<session_id>.json`, created exclusively (never
+overwritten) for the operator to commit with the ledger head pin.  It prints
+one status line and no count, value or slot.
 
 `check` is READ-ONLY. It authenticates the ACTIVE issued acceptance artifact and
 the ledger, then prints how the machine's identity today compares with the epoch
@@ -78,12 +82,14 @@ import re
 import statistics as std_statistics
 import subprocess
 import sys
+import time
 from typing import Any, Iterable, Mapping, Sequence
 
 sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise import battery_float  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     ACTIVE_ACCEPTANCE_ID,
     ENVELOPE_MINIMUM_CORPUS_N,
@@ -173,7 +179,8 @@ DRY_RUN_INADMISSIBLE_EXIT = 5
 
 
 def registration_dry_run(
-    snapshot: Any, session_ids: Sequence[str]
+    snapshot: Any, session_ids: Sequence[str], *, repo_root: Path | None = None,
+    preregistration_sha256: str | None = None,
 ) -> tuple[int, list[str]]:
     """Report whether a registration WOULD be admissible, naming no value.
 
@@ -185,11 +192,24 @@ def registration_dry_run(
     record's own `declared_slots` and `finalized_slots` -- the LENGTH of each,
     never the slot objects -- so an open session reports its progress without
     anything reading a captured value.
+
+    A Revision 5 session's battery line names the committed harvest verdict
+    (obligations v1.1 §4.5), read from the checkout that holds the ledger
+    (``repo_root``, by default the ledger's ``runs/`` parent).
     """
 
     lines = ["", DRY_RUN_HEADER]
     blockers: list[str] = []
     by_id = snapshot.bracket_session_by_id
+    root = Path(snapshot.ledger_path).resolve().parent.parent if repo_root is None else Path(repo_root)
+    revision_five_named = any(
+        session.session_kind == SESSION_KIND_DERIVATION
+        and session.state in TERMINAL_SESSION_STATES
+        and any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+                for row in session.finalized_slots.values())
+        for session in snapshot.bracket_sessions
+    )
+    battery_gate_blocked = False
     for session_id in session_ids:
         session = by_id.get(session_id)
         if session is None:
@@ -211,6 +231,53 @@ def registration_dry_run(
         # non-empty for an open session too, so removing this `if` really does
         # open bundles mid-campaign.
         if terminal:
+            if any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+                   for row in session.finalized_slots.values()):
+                revision_five_named = True
+                if preregistration_sha256 is None:
+                    blockers.append(f"session {session_id}: --preregistration and "
+                                    "--preregistration-sha256 are required")
+                    battery_gate_blocked = True
+                    continue
+                try:
+                    recomputed = battery_float.validate_window(session)
+                except battery_float.CustodyFailure as failure:
+                    blockers.append(f"session {session_id}: battery custody failure: {failure.detail}")
+                    battery_gate_blocked = True
+                    continue
+                label = recomputed["status"].removeprefix("battery_float_")
+                try:
+                    record = battery_float.load_committed_verdict(
+                        root, session_id, session=session,
+                        preregistration_sha256=preregistration_sha256,
+                    )
+                except battery_float.NoRecord as missing:
+                    lines.append(f"{session_id}: battery={label} recorded=absent")
+                    blockers.append(
+                        f"session {session_id}: battery harvest verdict missing or "
+                        f"uncommitted ({missing.reason})"
+                    )
+                    battery_gate_blocked = True
+                    continue
+                else:
+                    difference = battery_float.compare_verdict(record, recomputed)
+                    recorded = record["status"].removeprefix("battery_float_")
+                    lines.append(f"{session_id}: battery={label} recorded={recorded}")
+                    if difference is not None:
+                        blockers.append(
+                            f"session {session_id}: battery harvest verdict cannot be "
+                            f"re-established ({difference})"
+                        )
+                        battery_gate_blocked = True
+                        continue
+                if recomputed["status"] != "pass":
+                    lines.append(
+                        f"{session_id}: kind={session.session_kind} state={session.state} "
+                        f"terminal=yes declared={len(session.declared_slots)} "
+                        f"filled={len(session.finalized_slots)} valid=0 excluded=battery_{label}"
+                    )
+                    blockers.append(f"session {session_id}: battery={label}")
+                    continue
             for observation in session.finalized_slots.values():
                 if observation.classification_disposition != "valid":
                     continue
@@ -245,6 +312,9 @@ def registration_dry_run(
         if observation.content_id is None
         or observation.classification_disposition not in PRIOR_SET_DISPOSITIONS
     )
+    if revision_five_named and not battery_gate_blocked:
+        blockers.extend(_dry_run_epoch_bound(
+            snapshot, session_ids, root, preregistration_sha256))
     # A COUNT, not the attempt ids: naming rows invites reading them, and the
     # count is all a desk decision needs.
     lines.append(f"prefix pending or unresolved rows: {unresolved}")
@@ -257,6 +327,50 @@ def registration_dry_run(
     for blocker in blockers:
         lines.append(f"  blocker: {blocker}")
     return (0 if not blockers else DRY_RUN_INADMISSIBLE_EXIT), lines
+
+
+def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path,
+                         preregistration_sha256: str | None) -> list[str]:
+    """The A-R5b one-replacement bound over the recorded verdicts of the epoch.
+
+    Counts the recorded non-pass sessions among the issuer's own computed set
+    (`_battery_computed_set`).  A computed session without an authentic
+    committed record is a blocker of its own, named or not (cold ruling
+    BFG-D-PARSER-ESC-01 §5.2, obligation R2-3), so the dry run never says
+    "admissible" where `prepare-candidate` refuses.
+    """
+
+    try:
+        dispositions = _registered_dispositions()
+    except PrepareRefusal as refusal:
+        return [refusal.reason]
+    non_pass = []
+    blockers: list[str] = []
+    computed = _battery_computed_set(snapshot, set(session_ids), REVISION_FIVE_EPOCH, dispositions)
+    if preregistration_sha256 is None:
+        return ["--preregistration and --preregistration-sha256 are required for Revision 5"]
+    for candidate_id in sorted(computed, key=str):
+        session = snapshot.bracket_session_by_id.get(candidate_id)
+        if (session is None or session.session_kind != SESSION_KIND_DERIVATION
+                or session.state not in TERMINAL_SESSION_STATES):
+            continue
+        try:
+            record = battery_float.load_committed_verdict(
+                root, candidate_id, session=session,
+                preregistration_sha256=preregistration_sha256,
+            )
+        except battery_float.NoRecord as missing:
+            blockers.append(f"computed session {candidate_id}: battery harvest verdict missing "
+                            f"or uncommitted ({missing.reason})")
+            continue
+        if record["status"] != "pass":
+            non_pass.append(candidate_id)
+    omitted = sorted(set(non_pass) - set(session_ids))
+    blockers.extend(f"computed non-pass session omitted: {session_id}" for session_id in omitted)
+    if len(non_pass) > 1:
+        blockers.append("more than one battery-float non-pass window in this epoch: "
+                        + ", ".join(sorted(set(non_pass))))
+    return blockers
 
 
 def _excluded_summary(excluded: Mapping[str, int]) -> str:
@@ -289,7 +403,7 @@ def check(args: argparse.Namespace) -> int:
     # loads the same way and authenticates each member's bytes itself.
     snapshot = load_calibration_ledger_snapshot(
         args.ledger, args.head_pin, require_committed_pin=True,
-        verify_custody=False, mode="read_replay", repo_root=REPO_ROOT,
+        verify_custody=False, mode="read_replay", repo_root=args.repo_root,
     )
     if snapshot.refusal_reasons:
         errors.append("ledger: " + ", ".join(snapshot.refusal_reasons))
@@ -314,9 +428,10 @@ def check(args: argparse.Namespace) -> int:
     preregistration_failed = False
     if args.preregistration is not None:
         try:
-            text = Path(args.preregistration).read_text(encoding="utf-8")
+            preregistration_bytes = Path(args.preregistration).read_bytes()
+            text = preregistration_bytes.decode("utf-8")
             _, registered_powermetrics = preregistration_epoch_pins(text)
-        except (OSError, PrepareRefusal) as error:
+        except (OSError, UnicodeDecodeError, PrepareRefusal) as error:
             preregistration_lines.append(f"pre-registration: unusable ({error})")
             preregistration_failed = True
         else:
@@ -326,6 +441,11 @@ def check(args: argparse.Namespace) -> int:
                 + ("match" if agrees else "MISMATCH — the registration is void")
             )
             if not agrees:
+                preregistration_failed = True
+            if (args.preregistration_sha256 is not None
+                    and hashlib.sha256(preregistration_bytes).hexdigest()
+                    != args.preregistration_sha256):
+                preregistration_lines.append("pre-registration sha256: MISMATCH")
                 preregistration_failed = True
     print("Desk epoch watch (identity comparison only; no capture authorization)")
     print(f"ACTIVE acceptance: {ACTIVE_ACCEPTANCE_ID}")
@@ -350,9 +470,17 @@ def check(args: argparse.Namespace) -> int:
     named = [session_id for session_id in args.session_ids if session_id]
     if not named:
         return 3 if errors or mismatches or preregistration_failed else 0
-    dry_run_code, lines = registration_dry_run(snapshot, named)
+    digest = (args.preregistration_sha256 if args.preregistration is not None
+              and not any(line.startswith("pre-registration: unusable")
+                          or "sha256: MISMATCH" in line for line in preregistration_lines)
+              else None)
+    dry_run_code, lines = registration_dry_run(
+        snapshot, named, repo_root=args.repo_root, preregistration_sha256=digest)
     for line in lines:
         print(line)
+    if preregistration_failed and digest is None and dry_run_code == 0:
+        print("  blocker: pre-registration sha256 mismatch")
+        return DRY_RUN_INADMISSIBLE_EXIT
     # When a registration is named, the ANSWER is the registration's: the epoch
     # watch above still prints in full, but an epoch that has drifted is the
     # whole reason a new corpus is being captured, so it must not mask the
@@ -381,6 +509,10 @@ SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
 REVISION_FIVE_MINIMUM_CORPUS_SIZE = 12
 DISPOSITION_REGISTRY = REPO_ROOT / "configs/calibration/observation_dispositions.json"
 DISPOSITION_DECISION_ID = "D-126-disposition-25G83-v3-2026-09-25"
+# Obligations v1.1 §4.6: the registry is pinned by digest, so a row appended
+# under the fixed decision id and mechanism cannot exempt a session.  Any
+# registry change updates this constant in the same reviewed PR.
+DISPOSITION_REGISTRY_SHA256 = "ba1ba3fc596c9ef7f4014131e5cbc2012559f72bab41cafb89e004056790a63c"
 DISPOSITION_MECHANISM = (
     "captured under the default-ProcessType launch context (utility QoS, "
     "timer coalescing, median ≈ 248 ms); disposed as diagnostic, never a "
@@ -1119,8 +1251,18 @@ def _registered_dispositions(path: Path | None = None) -> dict[str, str]:
     """Read the dated, content-addressed A-7 exemptions fail closed."""
     path = DISPOSITION_REGISTRY if path is None else path
     try:
-        rows = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise PrepareRefusal(f"observation disposition registry unreadable: {error}") from error
+    observed = hashlib.sha256(raw).hexdigest()
+    if observed != DISPOSITION_REGISTRY_SHA256:
+        raise PrepareRefusal(
+            f"observation disposition registry digest mismatch: {observed} != pinned "
+            f"{DISPOSITION_REGISTRY_SHA256}; not issued"
+        )
+    try:
+        rows = json.loads(raw.decode("utf-8"))
+    except ValueError as error:
         raise PrepareRefusal(f"observation disposition registry unreadable: {error}") from error
     if not isinstance(rows, list):
         raise PrepareRefusal("observation disposition registry must be a list")
@@ -1138,6 +1280,41 @@ def _registered_dispositions(path: Path | None = None) -> dict[str, str]:
             raise PrepareRefusal("observation disposition registry has an invalid or duplicate row")
         result[row["content_id"]] = row["disposing_decision_id"]
     return result
+
+
+def _battery_computed_set(
+    snapshot: Any, registration_ids: set[str], target_epoch: Mapping[str, Any],
+    dispositions: Mapping[str, str],
+) -> set[str]:
+    """Every session whose battery verdict the epoch must account for (§4.4 step 2).
+
+    The registration's sessions, the owners of an undisposed foreign valid
+    row (A-7), and S: every terminal derivation session owning a finalized
+    target-epoch row, except (i) a session owning a row the pinned registry
+    disposes and (ii) a session captured before A-R5b (no ``battery_float``
+    key in any authenticating evidence).  Exemption (ii) never applies to a
+    registration session.
+    """
+
+    foreign_owners = {
+        observation.bracket_session_id
+        for observation in snapshot.observations
+        if observation.classification_disposition == "valid"
+        and observation.bracket_session_id not in registration_ids
+        and dict(observation.identity_epoch) == target_epoch
+        and observation.content_id not in dispositions
+    }
+    epoch_sessions = {
+        session.session_id
+        for session in snapshot.bracket_sessions
+        if session.session_kind == SESSION_KIND_DERIVATION
+        and session.state in TERMINAL_SESSION_STATES
+        and any(dict(row.identity_epoch) == target_epoch for row in session.finalized_slots.values())
+        and not any(row.content_id in dispositions for row in session.finalized_slots.values())
+        and (session.session_id in registration_ids
+             or not battery_float.predates_battery_float(session))
+    }
+    return set(registration_ids) | foreign_owners | epoch_sessions
 
 
 def _derivation_frame_cadence(
@@ -1195,6 +1372,102 @@ def _corpus_statistics(members: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         }
 
 
+def battery_verdict(args: argparse.Namespace) -> int:
+    """Write one window's battery-float harvest verdict (obligations v1.1 §4.2).
+
+    Runs at harvest, after the session is terminal and before any B value or
+    disposition is read; the operator commits the file with the head pin.
+    Prints one status line and never a count, a value or a slot.
+    """
+
+    try:
+        path = _battery_verdict(args)
+    except PrepareRefusal as refusal:
+        print(f"REFUSED: {refusal.reason}")
+        return 3
+    status = json.loads(path.read_text(encoding="utf-8"))["status"]
+    print(f"{args.session_id}: battery={status.removeprefix('battery_float_')}")
+    return 0
+
+
+def _battery_verdict(args: argparse.Namespace) -> Path:
+    repo_root = Path(args.repo_root)
+    try:
+        preregistration_bytes = Path(args.preregistration).read_bytes()
+    except OSError as error:
+        raise PrepareRefusal(f"pre-registration unreadable: {error}") from error
+    preregistration_sha256 = hashlib.sha256(preregistration_bytes).hexdigest()
+    if preregistration_sha256 != args.preregistration_sha256:
+        raise PrepareRefusal(
+            f"pre-registration sha256 {preregistration_sha256} does not match the "
+            f"pinned {args.preregistration_sha256}"
+        )
+    snapshot = load_calibration_ledger_snapshot(
+        args.ledger, args.head_pin, require_committed_pin=False,
+        verify_custody=False, mode="read_replay", repo_root=repo_root,
+    )
+    if Path(args.head_pin).resolve() != (repo_root / battery_float.LEDGER_HEAD_PIN).resolve():
+        raise PrepareRefusal("head pin must be configs/calibration/calibration_ledger_head.json")
+    if snapshot.refusal_reasons:
+        raise PrepareRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
+    session = snapshot.bracket_session_by_id.get(args.session_id)
+    if session is None:
+        raise PrepareRefusal(f"session {args.session_id} is not in the ledger")
+    if session.session_kind != SESSION_KIND_DERIVATION:
+        raise PrepareRefusal(f"session {args.session_id} is kind {session.session_kind!r}, not derivation")
+    if session.state not in TERMINAL_SESSION_STATES:
+        raise PrepareRefusal(f"session {args.session_id} is {session.state!r}, not terminal")
+    if not session.finalized_slots:
+        raise PrepareRefusal("no finalized slot; nothing to record")
+    if not any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+               for row in session.finalized_slots.values()):
+        raise PrepareRefusal(f"session {args.session_id} holds no Revision 5 epoch row")
+    if battery_float.predates_battery_float(session):
+        raise PrepareRefusal("pre-A-R5b session")
+    try:
+        relative = battery_float.verdict_relative_path(args.session_id)
+    except ValueError as error:
+        raise PrepareRefusal(str(error)) from error
+    path = repo_root / relative
+    if path.exists():
+        raise PrepareRefusal("record exists")
+    try:
+        module_sha256 = hashlib.sha256(
+            (repo_root / "joulewise" / "battery_float.py").read_bytes()).hexdigest()
+    except OSError as error:
+        raise PrepareRefusal(f"joulewise/battery_float.py unreadable under --repo-root: {error}") from error
+    # Read-only: the tool never commits; the operator does (§4.9 step iv).
+    try:
+        tool_commit = subprocess.run(
+            ("git", "-C", str(repo_root), "rev-parse", "HEAD"),
+            check=False, capture_output=True, text=True,
+        ).stdout.strip()
+    except OSError:
+        tool_commit = ""
+    if not re.fullmatch(r"[0-9a-f]{40}", tool_commit):
+        raise PrepareRefusal("--repo-root has no readable Git HEAD")
+    try:
+        record = battery_float.verdict_record(
+            session, snapshot=snapshot, preregistration_sha256=preregistration_sha256,
+            tool_commit=tool_commit, module_sha256=module_sha256,
+            wall_time_s=time.time(),
+        )
+    except battery_float.CustodyFailure as failure:
+        raise PrepareRefusal(
+            f"custody failure: {failure.detail}; restore the custody bytes byte-exact "
+            "from the harvest archive"
+        ) from failure
+    except ValueError as error:
+        raise PrepareRefusal(str(error)) from error
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(path, "xb") as handle:
+            handle.write(battery_float.render_verdict(record))
+    except FileExistsError as error:
+        raise PrepareRefusal("record exists") from error
+    return path
+
+
 def prepare_candidate(args: argparse.Namespace) -> int:
     try:
         payload = _prepare_candidate(args)
@@ -1240,8 +1513,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         repo_root=Path(args.repo_root),
     )
     session_ids = tuple(args.registration_session_id)
+    named_confounded = tuple(getattr(args, "battery_confounded_session_id", ()))
     refuse_repeated_sessions(session_ids)
+    refuse_repeated_sessions(named_confounded)
+    if set(session_ids) & set(named_confounded):
+        raise PrepareRefusal("session named both as registration and battery-confounded")
     refuse_open_registration(snapshot, session_ids)
+    refuse_open_registration(snapshot, named_confounded)
     if snapshot.refusal_reasons:
         raise PrepareRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
     predecessor = _authenticated_predecessor(Path(args.predecessor_acceptance))
@@ -1287,6 +1565,82 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             preregistration_text,
         ):
             raise PrepareRefusal("registration Revision 5 launch-context pins are malformed")
+    # A-R5b battery float (final texts v1.1 §5.5; obligations v1.1 §4.4),
+    # before the positional checks and before any B value is read.  Only the
+    # Revision 5 registration carries the obligation; every other generation
+    # keeps its behaviour byte for byte.  The committed harvest verdict is the
+    # window verdict (A-R5b-1); the recomputation here is its custody check.
+    battery_results: dict[str, battery_float.CommittedVerdict] = {}
+    computed_confounded: set[str] = set()
+    if revision_five:
+        dispositions_for_battery = _registered_dispositions()
+        computed_set = _battery_computed_set(
+            snapshot, set(session_ids), target_epoch, dispositions_for_battery,
+        )
+        for candidate_id in sorted(computed_set, key=str):
+            session = snapshot.bracket_session_by_id.get(candidate_id)
+            if (session is None or session.session_kind != SESSION_KIND_DERIVATION
+                    or session.state not in TERMINAL_SESSION_STATES):
+                continue
+            try:
+                recomputed = battery_float.validate_window(session)
+            except battery_float.CustodyFailure as failure:
+                raise PrepareRefusal(
+                    f"battery-float custody failure for {candidate_id}: {failure.detail}; "
+                    "restore the custody bytes byte-exact from the harvest archive; not issued"
+                ) from failure
+            try:
+                record = battery_float.load_committed_verdict(
+                    Path(args.repo_root), candidate_id, session=session,
+                    preregistration_sha256=args.preregistration_sha256,
+                )
+            except battery_float.NoRecord as missing:
+                raise PrepareRefusal(
+                    f"battery-float harvest verdict missing or uncommitted for {candidate_id}: "
+                    f"{missing.reason}; not issued"
+                ) from missing
+            difference = battery_float.compare_verdict(record, recomputed)
+            if difference is not None:
+                raise PrepareRefusal(
+                    f"battery-float harvest verdict for {candidate_id} cannot be re-established "
+                    f"from raw bytes ({difference}); custody failure; not issued"
+                )
+            battery_results[candidate_id] = record
+        computed_confounded = {
+            candidate_id for candidate_id, result in battery_results.items()
+            if result["status"] != "pass"
+        }
+    if set(named_confounded) != computed_confounded:
+        clean_named = sorted(
+            candidate_id for candidate_id in named_confounded
+            if candidate_id in battery_results and candidate_id not in computed_confounded
+        )
+        not_computed = sorted(
+            candidate_id for candidate_id in named_confounded if candidate_id not in battery_results
+        )
+        omitted = sorted(computed_confounded - set(named_confounded))
+        raise PrepareRefusal(
+            "battery-confounded set mismatch: "
+            + "; ".join(
+                part for part in (
+                    "clean session declared confounded: " + ", ".join(clean_named) if clean_named else "",
+                    "declared session is not a terminal derivation session of this registration "
+                    "or an A-7 foreign-row owner: " + ", ".join(not_computed) if not_computed else "",
+                    "computed non-pass session omitted: " + ", ".join(omitted) if omitted else "",
+                ) if part
+            )
+        )
+    # A-R5b "Replacement": at most one replacement window per epoch; any
+    # further window with either verdict stops the epoch.
+    if len(computed_confounded) > 1:
+        raise PrepareRefusal(
+            "more than one battery-float non-pass window in this epoch: "
+            + ", ".join(sorted(computed_confounded)) + "; the epoch stops and returns to council"
+        )
+    session_ids = tuple(session_id for session_id in session_ids if session_id not in computed_confounded)
+    observations = _registration_observations(snapshot, session_ids)
+    if not observations:
+        raise PrepareRefusal("registration: its sessions hold no observations")
     required_minimum = REVISION_FIVE_MINIMUM_CORPUS_SIZE if revision_five else SUCCESSOR_MINIMUM_CORPUS_SIZE
     minimum = required_minimum if args.minimum_corpus_size is None else args.minimum_corpus_size
     if minimum != required_minimum:
@@ -1372,6 +1726,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         for observation in snapshot.observations
         if observation.classification_disposition == "valid"
         and observation.bracket_session_id not in registration
+        and observation.bracket_session_id not in computed_confounded
         and dict(observation.identity_epoch) == target_epoch
         and observation.content_id not in dispositions
     ]
@@ -1621,6 +1976,19 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         },
     }
     derivation_notes = {
+        **({"battery_confounded_sessions": [
+            {"session_id": candidate_id, "status": battery_results[candidate_id]["status"],
+             "verdict_file_sha256": battery_results[candidate_id].file_sha256,
+             "verdict_commit": battery_results[candidate_id].commit,
+             "slots": [{key: slot[key] for key in (
+                 "slot", "attempt_id", "reasons", "pre_raw_sha256", "post_raw_sha256"
+             )} for slot in battery_results[candidate_id]["slots"] if slot["verdict"] != "pass"]}
+            for candidate_id in sorted(computed_confounded)
+        ], "battery_verdict_records": [
+            {"session_id": candidate_id, "status": record["status"],
+             "verdict_file_sha256": record.file_sha256, "verdict_commit": record.commit}
+            for candidate_id, record in sorted(battery_results.items())
+        ]} if revision_five else {}),
         "generation": (
             "D-079 epoch bootstrap: the first generation derived from live "
             "derivation-only captures under a new identity epoch."
@@ -1839,6 +2207,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="the ACTIVE issued acceptance artifact whose epoch is compared",
     )
     watch.add_argument(
+        "--repo-root", type=Path, default=REPO_ROOT,
+        help="checkout authenticating the committed ledger head pin and harvest verdicts",
+    )
+    watch.add_argument(
         "--preregistration", type=Path, default=None,
         help=(
             "compare the machine's observed powermetrics sha256 against the one "
@@ -1847,12 +2219,36 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     watch.add_argument(
+        "--preregistration-sha256", default=None,
+        help="arm-notice digest of the pre-registration; required with --preregistration for Revision 5",
+    )
+    watch.add_argument(
         "--session-ids", action="append", default=[],
         help=(
             "a derivation-kind ledger session to dry-run (repeatable); reports "
             "kinds, states and counts only, never a measured value"
         ),
     )
+    verdict = commands.add_parser(
+        "battery-verdict",
+        help=(
+            "write one terminal Revision 5 window's battery-float harvest verdict "
+            "under configs/calibration/battery_float_verdicts/ for the operator to "
+            "commit with the ledger head pin"
+        ),
+    )
+    verdict.add_argument("--ledger", type=Path, required=True,
+                         help="the append-only calibration observation ledger")
+    verdict.add_argument("--head-pin", type=Path, required=True,
+                         help="the committed ledger head pin")
+    verdict.add_argument("--repo-root", type=Path, required=True,
+                         help="the measurement checkout the verdict file is written under")
+    verdict.add_argument("--session-id", required=True,
+                         help="the terminal derivation session to record")
+    verdict.add_argument("--preregistration", type=Path, required=True,
+                         help="the pre-registration the window was armed under")
+    verdict.add_argument("--preregistration-sha256", required=True,
+                         help="the registration digest the arm notice pinned")
     prepare = commands.add_parser(
         "prepare-candidate",
         help="derive a NOT-ISSUED successor acceptance candidate from the ledger",
@@ -1886,6 +2282,10 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument(
         "--registration-session-id", action="append", default=[],
         help="a derivation-kind ledger session of this registration (repeatable)",
+    )
+    prepare.add_argument(
+        "--battery-confounded-session-id", action="append", default=[],
+        help="excluded battery-confounded derivation session (repeatable; issuer verifies the exact set)",
     )
     # Deliberately NOT `required=True`: an absent D-125 reference must produce
     # the ruled REFUSAL with its reason, not an argparse usage error.
@@ -1964,6 +2364,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "prepare-candidate":
         return prepare_candidate(args)
+    if args.command == "battery-verdict":
+        return battery_verdict(args)
     return check(args)
 
 

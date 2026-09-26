@@ -20,7 +20,7 @@ import time
 import traceback
 from typing import Callable
 
-from joulewise import corecaptured_loop
+from joulewise import battery_float, corecaptured_loop
 from joulewise.night_kinds import NIGHT_KINDS, kind_row
 from joulewise.arm_retry import successor_license
 from joulewise.zero_capture_facts import zero_capture_facts
@@ -672,7 +672,11 @@ print(json.dumps(s))
 
 
 def probe_command(argv, *, cwd=None, timeout=None, env=None):
-    return subprocess.run(list(map(str, argv)), cwd=cwd, capture_output=True, text=True,
+    command = list(map(str, argv))
+    # Obligation R2-11: the battery-float probe is captured as bytes (no text
+    # mode, no universal newlines) so the grammar judges its exact stdout.
+    text = tuple(command) != battery_float.IOREG_BATTERY_ARGV
+    return subprocess.run(command, cwd=cwd, capture_output=True, text=text,
                           check=False, timeout=timeout,
                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", **(env or {})))
 
@@ -1361,6 +1365,17 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             inspect("census", lambda: census_check(state, runner, census_observer,
                                                    os.getpid() if caller_pid is None else caller_pid))
             inspect("retry", lambda: retry_inventory(state, Path(candidate)))
+            def check_battery_float():
+                observed, _raw = battery_float.observe(
+                    phase="arm_check", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
+                    plan_id=state.get("plan_id"),
+                )
+                try:
+                    battery_float.require_pass(observed)
+                except (battery_float.ProbeError, ValueError) as exc:
+                    raise Refused(f"battery float: {exc}", evidence={"observation": observed}) from exc
+                return {"observation": observed}
+            inspect("battery_float", check_battery_float)
             # Each arm predicate follows its own row flag, as at t0. An
             # unflagged kind records `skipped`; an unreadable kind fails closed.
             try:
@@ -1774,6 +1789,15 @@ def publish_install(*, candidate, notice_accepted=None, launchctl_bin="launchctl
                     or prior_successor.get("predecessor_plan_id") != successor["predecessor_plan_id"]
                     or prior_successor.get("candidate_sha256") != successor["candidate_sha256"]):
                 raise Refused("successor facts changed after check.json")
+            battery_observation, _battery_raw = battery_float.observe(
+                phase="publish_install", runner=lambda argv: runner(argv, timeout=battery_float.PROBE_TIMEOUT_S),
+                plan_id=state.get("plan_id"),
+            )
+            saved_json(attempt / "battery-float-at-publication.json", battery_observation)
+            try:
+                battery_float.require_pass(battery_observation)
+            except (battery_float.ProbeError, ValueError) as exc:
+                raise Refused(f"battery float at publication: {exc}") from exc
             record["phase"] = "publishing"
             save()  # Durable intent precedes the rename, including lost acknowledgement.
             if not fake:
