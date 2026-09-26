@@ -78,3 +78,21 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
     - This changes ruled text, so **erratum convened**: cold Fable, charge [30-erratum/00](10-s0-delta/20-coldgate/30-erratum/00-charge.md), packet commit `eefd5523`, worktree `JouleWise-wt-s0err-fable-f8d6cab1`.
     - The paired refuter caught blocker-grade gaps in a cold ruling again, as on 2026-09-15. The pairing earns its cost.
 12. **#427 row 9** is still running: shard 6 is in `test_scored_reduce.test_differential_oracle_200_nights` (CPU-bound, 200 generated nights) under concurrent seat load. Shards 1–5 have finished.
+13. **Erratum ruled** ([30-erratum/21](10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md), cold Fable, about 9 minutes). All five refuter points were upheld, and each was reproduced on the real `collect`.
+    - **Amendment 30 is re-issued:**
+      - shape (i) (refusal) must have zero rows;
+      - shape (ii) (completed) must match an S2-recorded `session["journal_rows"]` (new amendment 33) instead of `round_workers`;
+      - in shape (iii) the provisional journal is not an input at all.
+    - **Amendment 32 is restated:** a `collect_error` carve-out for a collector with non-zero exit and no recorded output, and `summarize`'s enumeration becomes the union of the parents of `session.json` and `rounds.jsonl`.
+    - **Amendment 26 gains a sentence:** a `BundleReadError` at the window gate is re-raised as `CustodyUnreadable`.
+    - **Amendment 31's S1 clause** now covers a missing `events.jsonl` on a `battery_float` bundle.
+    - **New amendment 34 (S2):** atomic collector writes.
+    - Amendment 29 is unchanged.
+    - **Flagged, not ruled:** under text 6, one timed-out collector (shape iii) blanks a whole night's numbers, while a collector that crashed before writing anything is excluded. Changing that is a text-6 cold-gate question. It is noted as a candidate lane for S2 planning.
+14. **S0 fix round 4 launched:**
+    - Sol 6.0 xhigh, implementation genre.
+    - Brief [40](10-s0-delta/40-seat-brief-round4.txt): amendments 29, 30 (erratum) and 31 (S0 part), S-1 and S-2, and the T16/T30 tests with RED proofs.
+    - WRITE_SCOPE: `battery_float.py` and the three battery test modules.
+    - Report: `41-seat-report-round4.md`.
+    - Deferred Opus NITs N-3, N-4 and N-5 (the ruling says they need no ruling) are kept out of this round to hold its scope.
+    - This round is ordered by the cold gate, so rule 11's trigger is satisfied. A recurrence of the same signature after it returns to a cold gate, not to round 5.
