@@ -62,3 +62,19 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
      - cold Fable judge: `claude -p --model fable --effort high` in `JouleWise-wt-s0cg-fable-f8d6cab1`, output `/tmp/f8d6-coldgate-fable.out`;
      - Opus paired contract refuter: independent answers first, then refutation, in `JouleWise-wt-s0cg-opus-f8d6cab1`.
    - Sol's reproducer is preserved as `10-s0-delta/10-sol-repro.py`.
+10. **Addendum 3 ruled** ([20-coldgate/10](10-s0-delta/20-coldgate/10-coldgate-fable-ruling.md), cold Fable, rc 0, about 11 minutes).
+    - F1 and F2 are upheld as BLOCKERs, and two new members of the class were found: E2, an emptied journal on a completed envelope, and E5, non-object `events.jsonl` lines.
+    - Amendment 29: a mandatory container that is unreadable, missing or not an object is `CustodyUnreadable`.
+    - Amendment 30: the journal row count must equal `len(round_workers)` in the refusal and completed shapes.
+    - Amendment 31: `events.jsonl` is a mandatory container.
+    - Amendment 32 (S2): the quiet summary authenticates before its `incomplete_interior_support` exclusion.
+    - S-1 and S-2 are confirmed.
+    - **The Opus lens's "same signature: no" is rejected.** Fable prevails, and the Opus dissent is recorded here.
+11. **Paired Opus refuter** ([20-coldgate/11](10-s0-delta/20-coldgate/11-opus-contract-refuter.md); its independent answers were written at 12:17:56, before the ruling at 12:23:12).
+    - Q2, Q3 and Q4 are agreed.
+    - **BLOCKER R-1:** an honest `sampler.json` fault between the two collector appends leaves the journal rows fewer than `round_workers`. It was run through the real `collect`. Amendment 30 would make that a false custody failure, and amendment 32 would then lose the night. The proposed fix is an S2-recorded `journal_rows`.
+    - **BLOCKER R-2:** an executor-killed envelope (shape iii) has provisional rows with empty digest maps, which gives `CustodyFailure`, not the `evidence_missing` the ruling's own table states.
+    - SHOULD-FIX R-3 (non-atomic `write_json`; a collector that dies before its first write), R-4 (`summarize` discovers envelopes by `rounds.jsonl`) and R-5 (two sentences for the S1 brief).
+    - This changes ruled text, so **erratum convened**: cold Fable, charge [30-erratum/00](10-s0-delta/20-coldgate/30-erratum/00-charge.md), packet commit `eefd5523`, worktree `JouleWise-wt-s0err-fable-f8d6cab1`.
+    - The paired refuter caught blocker-grade gaps in a cold ruling again, as on 2026-09-15. The pairing earns its cost.
+12. **#427 row 9** is still running: shard 6 is in `test_scored_reduce.test_differential_oracle_200_nights` (CPU-bound, 200 generated nights) under concurrent seat load. Shards 1–5 have finished.
