@@ -1,0 +1,14 @@
+The ruling is written and is the only file created. Nothing else remains to gather.
+
+**Ruling file:** `docs/process_traces/2026-09-25-activation-ed17a643/10-coldgate-packet-bfg/30-addendum/21-coldgate-fable-bfg-addendum-ruling.md`, sha256 `1047af22a32ba70544eabac0f85ee470957312a27204f79a538a39d9063b3add`, untracked and uncommitted as the charge required. All four manifest digests and the charter digest matched before I read the merits.
+
+**Verdicts on the refuter's findings, each verified in code at c6814dd8:**
+
+- **F-5 coulomb counter: AFFIRMED as BLOCKER, cure option (a).** The deciding new fact is that the live counter reads 7591 mAh, which equals `AppleRawMaxCapacity`. The jump was the gauge resyncing to full-charge capacity, so the counter is not an integral. It is recorded as a diagnostic only, and the disclosure is rewritten to be physically true.
+- **F-9 bracket sites: AFFIRMED as BLOCKER.** The ruling's "before :2297" and "after :2452" wording admits placements inside the anchor stamps at 2296 and 2453, which feed the estimator. The v1.1 text pins the pre-observation to right after line 2229 and the post-observation to right after line 2454.
+- **Issuer contract, replacement bound, staleness: AFFIRMED as MATERIAL.** The positional checks and the A-7 sweep mean nothing issues after a confounded window today. The issuer now computes the excluded set itself and refuses if the caller's set differs. One replacement per epoch. A reading older than 180 s is a probe error.
+- **`finalize_abandoned` NIT: AFFIRMED and dropped**, since it runs while the sampler is alive and abandoned rows carry no hashed evidence.
+- **X2: the bracketing consumers go to BFG-S.** They never see derivation windows. The refuter's pin reasoning is amended: the writer itself is pinned in 18 frozen source files, so BFG-D moves transaction-pack pins regardless. That does not touch W1, and the re-freeze is a BFG-S prerequisite.
+
+**Live observations worth acting on:** the battery was at float on both my reads, which with the refuter's earlier read gives the two-reads-five-minutes-apart requirement in substance, though the arm record must carry its own pair. The 30-second logger under `/tmp/4b-osaudit` was still running at 14:51 and remains a W1 prerequisite to kill. PR #418 is still open.
+rc=0

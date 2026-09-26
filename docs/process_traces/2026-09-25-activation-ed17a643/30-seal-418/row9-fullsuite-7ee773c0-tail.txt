@@ -1,0 +1,19 @@
+FAIL: test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (test_sample_quiet_predicate_evidence.LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child) (exit_delay=60)
+Ran 7231 tests in 10594.465s
+FAILED (failures=1, skipped=109)
+python3 -m unittest discover -s tests  7430.23s user 2643.06s system 95% cpu 2:56:37.21 total
+rc=1
+======================================================================
+FAIL: test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (test_sample_quiet_predicate_evidence.LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child) (exit_delay=60)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-817355d2-fullsuite/tests/test_sample_quiet_predicate_evidence.py", line 846, in test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child
+    self.assertEqual(child["exitcode"], -harness.signal.SIGTERM)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: -9 != -15
+
+----------------------------------------------------------------------
+Ran 7231 tests in 10594.465s
+
+FAILED (failures=1, skipped=109)
+--- isolated rerun of tests.test_sample_quiet_predicate_evidence at 7ee773c0: Ran 79 tests in 29.864s OK

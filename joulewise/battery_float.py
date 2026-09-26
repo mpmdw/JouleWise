@@ -586,13 +586,15 @@ def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: A
         working = None
     if working != committed:
         raise NoRecord("working tree differs from HEAD")
-    # 2. Exactly one commit in HEAD's history touches the path, and it added it.
-    touching = (_git(root, "log", "--full-history", "--format=%H", "--", rel) or b"").decode().split()
-    adding = (_git(root, "log", "--full-history", "--diff-filter=A", "--format=%H", "--", rel)
-              or b"").decode().split()
+    # 2. Exactly one non-merge commit in HEAD's history touches the path, it added it, and HEAD holds its bytes.
+    touching = (_git(root, "log", "--full-history", "--no-merges", "--no-renames", "--format=%H", "--", rel) or b"").decode().split()
+    adding = (_git(root, "log", "--full-history", "--no-merges", "--no-renames", "--diff-filter=A", "--format=%H", "--", rel) or b"").decode().split()
     if len(touching) != 1 or adding != touching or not _COMMIT.fullmatch(touching[0]):
         raise NoRecord(f"path history is not a single adding commit "
                        f"({len(touching)} commits, {len(adding)} adding)")
+    # --no-merges: an honest harvest commit reaching main through a --no-ff merge is one adding commit; a merge that rewrites the record is caught by the adding-blob check below (BFG-D row-6 M-1).
+    if _git(root, "show", f"{touching[0]}:{rel}") != committed:
+        raise NoRecord("path history is not a single adding commit (the adding commit's bytes differ from HEAD)")
     # 3. Identity.
     try:
         record = json.loads(committed)

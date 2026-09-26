@@ -1,0 +1,14 @@
+SESSION_MODE: delegated
+WRITE_SCOPE: []
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+ROLE: blind design consultant (read-only; /tmp allowed). Licence to disagree.
+
+PROBLEM: `joulewise/battery_float.py` on branch origin/feat/2026-09-25-bfg-d (commit faf0ea01; this worktree) parses the text output of `/usr/sbin/ioreg -r -c AppleSmartBattery` for a registered battery-float predicate (ExternalConnected=Yes, IsCharging=No, |InstantAmperage|<=200 mA two's complement, UpdateTime<=180 s old). Two consecutive review rounds found the parser accepts structurally wrong output: round 1 (review of the implementation) — missing closing brace, other object class, required keys only inside a nested dictionary all reached GO; round 2 (after fix round 1) — the header regex accepts arbitrary text inside <...> so `<class OtherBattery, ...>` passes, and nested-depth tracking returns to top level early so an unclosed outer dictionary with required keys inside passes. Same defect class twice: this is an escalation, so the next step is a design consult, not another patch.
+
+A real capture from this machine is at /tmp/ed17a643/esc/real-ioreg-capture.txt (64 lines: a `+-o AppleSmartBattery  <class AppleSmartBattery, id ..., registered, matched, active, busy 0 (2 ms), retain N>` header, a `    {` line, top-level property lines at exactly 6 spaces of indentation each of the form `"Key" = value` with any nested dictionaries/arrays printed INLINE on that one line, a `    }` line, and a trailing blank line).
+
+CONSTRAINT: the registered probe command is exactly `/usr/sbin/ioreg -r -c AppleSmartBattery` (text output; its raw stdout is retained and hashed). Changing it to `-a` (plist XML) would change a registered text and needs the owner's approval; say whether you would recommend asking for that, but design a cure that works WITHOUT it.
+
+DELIVER: (1) a structural parser design that is fail-closed by construction (e.g. a whitelist line grammar for the whole stdout: exactly one header line whose class field is exactly `class AppleSmartBattery`; then exactly `{` at the object indentation; then only top-level property lines at one fixed indentation matching a strict `"Key" = <value>` grammar with balanced inline brackets/quotes per line; then `}`; then only blank lines) — specify the exact grammar as regexes/pseudocode; (2) every adversarial counterexample class it must refuse (list them concretely, including the four already found, duplicated keys, CRLF, tabs, trailing garbage, keys with escaped quotes, a second object, empty stdout, header-only); (3) a test list; (4) whether any of the real capture's lines would be refused by your grammar (run it on the file and show). Final message: the design with executed evidence.

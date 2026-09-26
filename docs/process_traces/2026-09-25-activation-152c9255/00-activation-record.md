@@ -258,3 +258,60 @@
 86. **Gate row 9, focused completion** on integration tree 2 `integ/2026-09-25-wave2` @ `d9ed116f` (main + final PR-L `2e522d1a` + PR-R `2bbcc779` + A292 `f6e6d162`). It covers every module changed since the full-suite head `d48bd18f`, plus A292's reducer, packer and fuzz: **Ran 674 tests in 1,968 s, OK (skipped=1)** ([30/02](30-integration/02-focused-integ2-d9ed116f.txt)).
    - With item 85, row 9 is satisfied for the three-PR wave: a full suite at `d48bd18f`, whose only two red items are known and unrelated and pass alone, plus a focused re-run of every delta module on the final integration tree.
    - Next: records-only commits into the three heads; a cold confirm of the PR-L and PR-R exact heads; open the PR-R and A292 PRs; merge PR-L, then PR-R, then A292.
+87. Records-only commits:
+   - PR-L `2e522d1a` → **`58d9ddc3`**
+   - PR-R `2bbcc779` → **`e77ec15d`**
+   - A292 `f6e6d162` → **`64dec562`**
+   Each is verified to touch only this activation's trace directory. The gate-ledger checker resolves evidence only in the PR head tree, hence the commits.
+   - PR #412's body is updated (12/12 locally, row 12 = `58d9ddc3`). **PR #413 (PR-R)** and **PR #414 (A292)** are opened, each 12/12 locally.
+   - Cold confirm WAVE-CONFIRM-01 (packet 31, sha `c4bdec1d`) is running on the exact PR-L and PR-R heads. A292 needs no reconvene per its ruling, since its code tree is unchanged from `e144bf07`.
+88. **Cold confirm WAVE-CONFIRM-01** ([31/20](31-coldgate-packet-confirm/20-coldgate-fable-wave-confirm.md)).
+   - C1: the fixture fix is AFFIRMED, but `58d9ddc3` is NOT CONFIRMED. **BLOCKER-1:** it is unmergeable (an add/add conflict with main on this record file, because PR-L predates #411) and has no hosted check run. The packet omitted the mergeability state, a hygiene defect. The cure is a successor H under C1-a and C1-b.
+   - C2: `e77ec15d` is CONFIRMED, to merge after H.
+   - C3: row 9 is adequate with the judge's added runs. MATERIAL-1: `test_epoch_continuation` and `test_epoch_equivalence_check` were missing from ex-04; the judge ran them, 90 OK.
+   - **C1-a executed:** merging 95521871 into 58d9ddc3 while keeping PR-L's record gives **H = `dc210094`**. The record blob is identical, and C1-b(1) holds.
+   - **C1-b(2) fails as literally written.** Merging main necessarily brings main's own #411 changes (kernel, RUN_STATE, TASK_QUEUE, `tests/test_gen_state.py`) into H relative to `58d9ddc3`. H's non-records diff vs main equals PR-L's code. `gen_state --check` OK.
+   - Per C3's own fallback, the named module set (ex-04's fifteen plus `test_epoch_continuation` and `test_epoch_equivalence_check`) re-runs. Several of those modules exist only with PR-R or A292 present, so they run on wave tree `integ/2026-09-25-wave3` = main + H + PR-R `e77ec15d` + A292 `64dec562`, which merges clean.
+   - C1-b(3)/(4), mergeable and hosted checks green on H, are checked before the merge.
+89. **New directives from Ed** (issue bodies authored by `mpmdw`, read at 12:55 PDT, relayed by the interactive seat 4b with Ed present).
+   - **#415** (TIER-01 endorsed). Ed, verbatim: "gates are only meant to keep science defendable, not to overly red-tape dumb stuff like docs changes."
+     - Docs-only, bookkeeping-only and test-only changes (no production code under `joulewise/` or `scripts/` executed by nights, windows, analysis or claims) take a light gate: one fresh non-author review plus green CI.
+     - Measurement, calibration, night, analysis and claim code keeps the full gate. When unsure, use the full gate.
+     - Apply: land TIER-01, plus a light-tier path in the gate-ledger CI checker (a declared `Risk tier: light` validated against the diff's paths).
+     - **Queued behind the current three-PR wave, as a new lane**: its checker change is CI tooling and takes the full gate until TIER-01 itself lands (when unsure, full).
+   - **#416** (pre-arm audit gate). Ed, verbatim: "i want a full multi agent fresh audit of the whole measurement system/codebase by astra 6 xhigh, fable 5.1 xhigh, and opus 5.5 xhigh", clarified as "meant for when all the work before launching the load bearing windows" is done.
+     - The sequence:
+       1. Merge every pre-W1 change (PR-L, PR-R, the sealed Revision 5, anything else on the W1 path).
+       2. Freeze the head.
+       3. Signal "PRE-WINDOW WORK COMPLETE" with the frozen sha and scope to seat 4b.
+       4. A three-family blind audit follows (Astra 6 xhigh, Fable 5.1, Opus 5.5 xhigh), cross-verified, with BLOCKERs refuted by a different family.
+       5. W1 arms only after every verified BLOCKER is fixed or ruled not load-bearing by a cold gate, and the audit record is linked from the arm notice.
+     - The magistrate runs the audit itself if seat 4b is not alive. **Added to W1's arm preconditions and to the next exact action.**
+   - **Peer request (4b):** message it at least 45 minutes before any window t0, since its session must close for the census. Add the line "close interactive Claude session joulewise-4b before t0" to the arm notice.
+90. **WAVE-CONFIRM-01 C3 fallback satisfied** on wave tree `integ/2026-09-25-wave3` = main + H `dc210094` + PR-R `e77ec15d` + A292 `64dec562`. The ruled module set (ex-04's fifteen plus `test_epoch_continuation` and `test_epoch_equivalence_check`): **Ran 764 tests in 2,017 s, OK (skipped=1)** ([30/03](30-integration/03-c3-rerun-wave3.txt)).
+   - C1-b(3): #412 is MERGEABLE.
+   - C1-b(4): gate-ledger passes on H, with no failed check. Two test shards are still pending, and branch protection requires them green, so the merge waits for them.
+91. Peer 4b relays that Ed amended #416 in an issue **comment**: the audit moves to after W1/W2 and before any claim-bearing run, with a "CLAIM-RUN WORK COMPLETE" handoff.
+   - The relaunch contract binds only directive issue BODIES, and comments are never instructions. So the magistrate keeps the audit as a W1 arm precondition, the conservative reading, until #416's body is edited or a superseding directive is opened.
+   - The peer has been asked to arrange that, so headless successors read the same thing.
+92. **#416 body amended** (author `mpmdw`; verified at 13:35 PDT). Binding text: "the audit runs AFTER W1/W2 pass and BEFORE any claim-bearing run. It is NOT a W1 arm precondition." The audit is **removed from W1's arm preconditions**. The handoff is now "CLAIM-RUN WORK COMPLETE" to seat 4b, with the sha, the scope and the W1/W2 bundle paths, after W1/W2 pass and the headline pipeline is frozen. The audit includes an independent re-derivation of the calibration from the raw bundles. The kit is on main at `docs/process_traces/2026-09-24-interactive-4b/30-prearm-audit-kit-416.md`.
+93. **THE MERGE WAVE LANDED** (13:44–13:48 PDT):
+   - **PR #412 (PR-L) → `9b750bf3cb0abc4c0a4474a2b5bb1e1e4ec52c87`**, head H `dc210094` per WAVE-CONFIRM-01, C1-b met (C3 fallback 764 OK; MERGEABLE; 15/15 checks).
+   - **PR #413 (PR-R) → `6c3a63c9`**, head `e77ec15d`, CONFIRMED by C2; 15/15 checks.
+   - **PR #414 (A292) → `c6814dd8`**, head `64dec562`; MERGE-authorized by A292-FINALPASS-01 with code identical to `e144bf07`; 15/15 checks.
+   - Canonical was fast-forwarded to `c6814dd8`, with no `com.joulewise.night*` label or plist present. **This makes the resident supervisor stale:** `scripts/magistrate_watchdog.py` imports `joulewise.night_gate`, `joulewise.arm_retry` and `scripts.run_night`, which PR-L changed. Per the relaunch contract, the magistrate commits, pushes and exits so a fresh successor becomes the resident.
+   - **Seal values for Revision 5** (A-R5a-1), computed at the merge commit:
+     - commit `9b750bf3cb0abc4c0a4474a2b5bb1e1e4ec52c87` (`gh pr view 412 --json mergeCommit`);
+     - `configs/launchd/com.joulewise.night.plist.template` sha256 `e62a461b9f739be6aa57588219674cbb27f574dc40930ee1ee706f230442e5c8`;
+     - `configs/launchd/com.joulewise.night-probe.plist.template` sha256 `1570b74587075445ee64fff9b14b718a4b753ec3432db9363455636a2d2fc1fd`.
+     - The prereg on main still has 1 placeholder line: the seal is owed.
+94. **Successor's next exact actions, in order:**
+   - (1) **Seal PR.** Replace the three literals in `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` with the values in item 93. Replace the header parenthetical "sealing pending PR-L pins" with "sealed 2026-09-2x at PR-L merge 9b750bf3". The placeholder grep must equal 0, and the issuer must accept the sealed text (`tests.test_acc_25g83_rev5`). This is registration text, so take the full gate; TIER-01 is not landed yet.
+   - (2) Land R16-a in the acceptance-rulings record under the heading ruled by PRR-R3-01 Q1, via a bookkeeping PR from this branch, which also carries items 53–94 and RUN_STATE.
+   - (3) `mkdir -p /Users/edr/night-custody/measurement` (PRL NIT-3).
+   - (4) **W1 arm** via NIGHT_HANDBACK.
+     - Preconditions: the calibration-derivation plan authored at or after the cutoff with `measurement_root` under `/Users/edr/night-custody/measurement/`; the R6 probe cadence phase PASS at install; Wispr Flow quit; display state recorded.
+     - **Message seat `joulewise-4b` at least 45 minutes before t0.** The arm notice carries "close interactive Claude session joulewise-4b before t0" and the seal digests.
+     - #416 is NOT a W1 precondition any more: the audit runs after W1/W2 pass, via the "CLAIM-RUN WORK COMPLETE" handoff.
+   - (5) Lanes queued: #415 TIER-01 plus the light-tier path in `scripts/check_gate_ledger.py`; PR-0 (run `--certify` at the bench, then lens and final pass); PRL NITs 2–6 (raw cadence plist retention, rehearsal custody mkdir, R3 regex, installer string, constants); A292-AGGREGATE-OVERFLOW-01 (closed by A292-ESC-01, to be recorded); CLAIMGATE-GOLDEN-SWEEP-OPERATORS-01; V1-ISSUANCE-GATE-EVIDENCE-CLASS-01; JCORRECT-NULL-CALIBRATION-WINDOWS-01; the CG-4 PR; A283 (seeded sampler); A282 (AP-5M v5 amendment carrying census n, A-JC-1, the window class).
+   - Exit email to Ed: Gmail (sent at exit). Final unread-from-Ed search: none. No children running. Canonical `c6814dd8` = origin/main, clean.

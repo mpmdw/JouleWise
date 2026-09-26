@@ -10,19 +10,56 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION 152c9255 — from 04:27 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md) is the running log. Every ruling below came from a four- or three-model council, then a cold Fable judge paired with an Opus contract refuter, then a cold Fable addendum. **In two of the four first cold rulings (acceptance, wiring), the paired Opus refuter caught a BLOCKER that the judge missed; in the other two (A292, J/correct) its findings were affirmed as MATERIAL.**
-- **Acceptance, 25G83:** ruled. [Rulings v2.1 R1–R17](docs/process_traces/2026-09-25-activation-152c9255/05-coldgate-packet-acc2/30-addendum/21-coldgate-fable-acc2-addendum-ruling.md).
-  - The cure is `ProcessType=Interactive` on the night templates with the original v3 1 s pulses; there is no r8.
-  - The installer refuses a non-Interactive plist, and each arm runs a 300-frame probe (median ≤ 150 ms, max ≤ 200 ms). The probe was bench-proven both ways: default context 173 ms → refuse; Interactive 125.6 ms → pass. Both controls are committed under `11-prl-bench-smoke/`.
-  - The 09-19 n1/n2 rows are disposed under D-126.
-  - The equivalence path is NOT taken, because B grows with frame length. W1 is derivation window one; W2 follows at least 6 h later; n ≥ 12.
-  - **PR-L** (`feat/2026-09-25-acc-launch-context`) and **PR-R** (`feat/2026-09-25-acc-registration-rev5`) are in review. PR-R's delta re-audit is clean. PR-R merges after PR-L and after this bookkeeping branch lands the ruling file on main. The PR-L Opus lens returned FIX-FIRST (B1: arm_retry code registration; S1: the T0-rehearsal reading goes to the final pass), and fix round 1 is dispatched.
-- **Claim gate v2 wiring:** ruled. [WR-0..WR-10](docs/process_traces/2026-09-25-activation-152c9255/06-coldgate-packet-cgw/30-addendum/21-coldgate-fable-cgw-addendum-ruling.md). **PR-0** golden (`test/2026-09-25-claimgate-pr0-golden`) escalated after two same-signature rounds. The ruled round under [escalation ruling R-1..R-7](docs/process_traces/2026-09-25-activation-152c9255/14-coldgate-packet-pr0esc/20-coldgate-fable-pr0esc-ruling.md) passed coverage but failed R-6 (840/1,112 unlisted survivors, 770 in `validate_claim_verdicts`), so a [re-scope cold gate](docs/process_traces/2026-09-25-activation-152c9255/20-coldgate-packet-pr0scope/00-charge.md) is pending.
-- **A292 reducer:** ruled. [Rulings v1.1](docs/process_traces/2026-09-25-activation-152c9255/09-coldgate-packet-a292/30-addendum/21-coldgate-fable-a292-addendum-ruling.md). The harness is RED `4bcddb49`; the Opus implementation is GREEN `8d06633e`. The lenses found 3 SHOULD-FIX, and the mutation sweep is running.
-- **J/correct floor plus a CG-1 science BLOCKER:** the ruled CG-1 omitted the accuracy sampling error, giving 25–89 % false admission per level. It is cured by the labelled amendment [A-JC-1 v1.1](docs/process_traces/2026-09-25-activation-152c9255/13-coldgate-packet-jc/30-addendum/21-coldgate-fable-jc-addendum-ruling.md): a paired-envelope Welch SE² = s_d²/k + V_acc. The floor is a log-unit null over 20 windows.
-- **New:** the headline is **underpowered** as drafted: power 0.20–0.37 at Δ_L = 0.3 with n_acc = 128, and ≈0 at a hard level with a cell near p = 0.05. HEADLINE-POWER-01: the [magistrate decision](docs/process_traces/2026-09-25-activation-152c9255/18-headline-power/10-magistrate-decision.md) is a census with a floor of 128, Holm m = 5, SESOI Δ_L = 0.3; the Fable final pass (packet 21) is pending.
-- **Prerequisites discovered:** A283's seeded sampler (the runtime at HEAD is greedy); a MATH window class longer than 600 s; a production defect V1-ISSUANCE-GATE-EVIDENCE-CLASS-01.
-- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from the last item, then continue the open gates in this order: PR-L fix round and final pass → bookkeeping PR → PR-R → A292 fix round → PR-0 re-scope ruling and round → HEADLINE-POWER-01 final pass. Every seat and branch is named in the record. No night can be armed before PR-L and PR-R merge and Revision 5 is sealed.
+**▶▶ ACTIVATION ed17a643 — 14:17 PDT 09-25 → ≈06:45 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the full account; items 1–53 are its log.
+
+**MERGED:**
+- #418, the Revision 5 seal → `e9ed7a98`.
+- #423, the A-R5b battery-float amendment (directive #421, approved in #422) → `935cef2d`. The registration digest is now `81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1`.
+- #419, the TIER-01 light tier → `cab01506`; #415 is closed.
+- **#424 BFG-D**, the battery gate for derivation windows → `64e39bb9` (merged ≈08:25 PDT 09-26). This activation exited for a fresh supervisor.
+
+Four cold gates govern BFG-D: BATTERY-FLOAT-01, HARVEST-VERDICT-FINAL-01, BFG-D-PARSER-ESC-01 and CONSUMER-DRIFT-ESC-01. Each ran with a paired refuter plus an addendum. The final passes: Fable ruled MERGE; Opus dissented with M-1, which is carried as lane BFGD-VERDICT-MERGE-LIVENESS-01.
+
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item, then:
+1. Merge the open bookkeeping PR for `docs/2026-09-25-152c9255` under the light tier (TIER-01). Then arm **W1** under NIGHT_HANDBACK, using the scripts on `docs/2026-09-25-817355d2-w1arm` @ `c79816c9` with its README prerequisites checklist:
+   - Fill `__H__` = main after #424 and the bookkeeping merge, `__T0__`, and `__PREREG__` = `81b65f08…ddf1`.
+   - The frozen plan is `9ab4776f…a072`.
+   - The battery gate runs at step0 and again before publication.
+   - Include the #422 digest pin, then remove the two `.claude/settings.local.json` entries #422 names.
+   - Seat 4b is gone; check with `ps` for other interactive sessions and email Ed if any are found.
+
+Lanes now open:
+- BATTERY-FLOAT-GATE-01 (BFG-S) must land before any non-derivation window.
+- BFGD-VERDICT-MERGE-LIVENESS-01 must land before the first issuance.
+- TEST-LOAD-JOIN-LADDER-FLAKE-01.
+
+Codex had an auth outage from 15:40 to 18:41 and recovered on its own.
+
+**▶▶ ACTIVATION 817355d2 — from 13:52 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-817355d2/00-activation-record.md) is the running log.
+- **Revision 5 seal:** branch `feat/2026-09-25-rev5-seal`, commit `23dd9909` (values bench-verified; placeholder count 0; 234 tests OK). It is under the full gate: a cold Fable final pass, Opus and Sol lenses, and a full-suite replay.
+- **R16-a** is appended to the acceptance-rulings record as PRR-R3-01 ruled. This bookkeeping branch carries it.
+- **W1 arm procedure:** the derivation runbook still describes the older equivalence-night route. A Sol xhigh scout is mapping W1 under Revision 5.
+- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item.
+
+**▶▶ ACTIVATION 152c9255 — 04:27 → ≈13:55 PDT 09-25 (Opus 5.5; NOTHING ARMED; exited for a fresh supervisor after the merge wave):** [Record 00](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md) items 1–94.
+- **Merged today:**
+  - #411 (records): `95521871`.
+  - **#412 PR-L** (launch-context cure: `ProcessType=Interactive`, installer refusal, 300-frame probe cadence phase, R16 custody root): `9b750bf3`.
+  - **#413 PR-R** (Revision 5, the n1/n2 D-126 disposition, the re-keyed issuer, the cadence report): `6c3a63c9`.
+  - **#414 A292** (the sealed scored reducer, harness- and mutation-gated): `c6814dd8`.
+- **Ruled today:**
+  - acceptance v2.1 plus R16-a plus A-R5a-1: Interactive + v3; the equivalence path is NOT taken; W1/W2 at least 6 h apart; n ≥ 12;
+  - claim-gate wiring WR-0..10;
+  - A292 v1.1 plus ESC-01;
+  - the CG-1 accuracy-term amendment A-JC-1 v1.1;
+  - census n_acc (HEADLINE-POWER-01).
+- **Directives:** #415 (the TIER-01 light gate; queued). #416, amended: the three-family audit runs AFTER W1/W2 and before any claim-bearing run.
+- **SUCCESSOR'S NEXT EXACT ACTION** (record 00 item 94):
+  1. The **Revision 5 seal PR**, using the values in item 93: commit `9b750bf3…`, night template `e62a461b…`, probe template `1570b745…`.
+  2. A bookkeeping PR (R16-a record; items 53–94).
+  3. `mkdir -p ~/night-custody/measurement`.
+  4. **Arm W1** via NIGHT_HANDBACK. Ping seat `joulewise-4b` at least 45 minutes before t0.
+  5. The queued lanes.
 
 **▶▶ ACTIVATION 278ebc9e — 04:46 PDT 09-24 → ≈04:25 PDT 09-25 (Opus 5.5; NOTHING ARMED; PR #409 A291 MERGED `75d04e9e`; exited for a fresh supervisor):** [Record 00](docs/process_traces/2026-09-24-activation-278ebc9e/00-activation-record.md) items 1–122.
 **Landed:**
