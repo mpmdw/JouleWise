@@ -115,3 +115,17 @@ Headless magistrate (Opus 5.5), launched by the watchdog at 14:17:42 PDT 2026-09
     - **`test_paper_round7_artifacts` ×3**: registry pin, producers byte-identical, appendix derive. The suspected cause is C-2's edit to the pinned paper tool `scripts/paper_anchor_correction_quantified.py`.
     
     These become a round-7b contract after the round-7 seat returns. **The delta reviewers' importer sweeps did not catch these, because they ran in sandboxes. The full integration replay is the net that catches them.**
+49. **BFG-D round 7** (fresh Opus seat; `4d92618c`, `d9ec3e41`, `346e373f`; report `bfg-d/25-seat-report-r7.md`) implements the consumer-drift final texts v1.1 §3:
+    - the seam `authenticate_committed_verdict`;
+    - one shared collector, policy and target epoch;
+    - `check` gains the confounded declaration;
+    - A-7 and the ledger refusal are mirrored;
+    - an AST consumer guard with a six-row allowlist;
+    - the sweep labels are fixed.
+    Six RED tests at `3e984ecc` are now GREEN, and the 19-module importer sweep is all OK. NEEDS_SCOPE: none.
+    
+    **Round 7b** (contract `bfg-d/26-fix-contract-r7b.md`, `9d10cdde`; Sol 6.0 xhigh) covers the integration-replay regressions:
+    - H-1: the t0_rehearsal 610 s boundary, plus a grep for other sites;
+    - H-2: writer battery-observation determinism under the logical clock;
+    - H-3: the git-fixture helper;
+    - H-4: **revert C-2(b)**. The paper tool's sha is pinned in `docs/paper/results-fill-registry.md`. Its disposition is "pinned historical corpora", and it is added to the pin proof.
