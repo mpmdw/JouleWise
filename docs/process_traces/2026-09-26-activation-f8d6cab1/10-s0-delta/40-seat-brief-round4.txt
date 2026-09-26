@@ -1,0 +1,29 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S0, fix round 4 (ordered by cold gate BFGS-DESIGN-01 addendum 3 plus its erratum). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s0-6bec2aa6 (branch feat/2026-09-26-bfgs-s0-helper-fence at 783a09be: rounds 1–3b, main 5d5a0b75 merged in, and the lead bench commit that restored the frozen CustodyFailure and added CustodyUnreadable).
+WRITE_SCOPE: ["joulewise/battery_float.py","tests/test_battery_float.py","tests/test_battery_float_consumers.py","tests/test_battery_float_sweep.py"]
+
+AUTHORITY: the ruled texts only, quoted by path. Implement them exactly; do not reinterpret them.
+- A. Amendment 29 (mandatory containers), verbatim from §3 of /Users/edr/code/JouleWise-wt-bk-f8d6cab1/docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/10-coldgate-fable-ruling.md. Its tests are T16-a, T16-b and T16-c from the same file.
+- B. Amendment 30 (ERRATUM text; it REPLACES the ruling's amendment 30), and amendment 31 (S0 clauses and S0 tests only; the S1 clause is not yours), verbatim from §3 of /Users/edr/code/JouleWise-wt-bk-f8d6cab1/docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md. Tests T30-a to T30-j are in §5 of the same file. T30-h changes the fixture `RoundThreeAuthenticationTests.quiet`: add `journal_rows`, and write the journal by default for the completed and refusal shapes.
+- C. S-1 and S-2 from the Opus delta lens /Users/edr/code/JouleWise-wt-bk-f8d6cab1/docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/11-opus-contract-lens.md, as confirmed in ruling §5:
+  - S-1: the C7 pin test hashes each closure member from its first decorator line (for a decorated node use the segment from the first decorator's line to the node's end; roots keep `inspect.getsource`), and asserts that each closure name has exactly one module-level binding.
+    - REGENERATE THE TABLE FROM THE BASE FILE ONLY: `git show 5d5a0b75:joulewise/battery_float.py`. Never regenerate it from your working tree; the comment above the table says why.
+    - Only `AuthenticatedSlot` and `AuthenticatedVerdict` should move. They move because the segment now includes the decorator, not because any bytes changed. If any other pin moves, stop and report it.
+    - Add mutation self-tests: making `AuthenticatedVerdict` `frozen=False` turns the pin RED, and appending a nested rebinding of `_is_sha256` turns the single-binding check RED.
+  - S-2: the C8(ii) guard also flags `copy.replace` (however imported, including `from copy import replace`) and any `<expr>.__replace__(...)` call. No allowlist row is added. Self-tests show each new form flagged.
+
+HARD CONSTRAINTS:
+- The FROZEN closure stays byte-identical to main 5d5a0b75. You edit only the wrappers (`authenticate_quiet_session`, `authenticate_bundle`, `authenticate_capture`), their private helpers, and S0's new code. Before you report, run the pin test (V1) and confirm it passes with base-derived pins.
+- `CustodyUnreadable(detail)` is the ONE exception for every amendment 29/30/31 raise. Do not widen `CustodyFailure`.
+- Amendment 29's rule is that no reader in `battery_float.py` converts a read or decode failure into an empty value. Remove the `session = {}` / `metadata = {}` / `evidence = None` fallbacks. The erratum's shape (iii) does not open the journal at all; that is not a reader converting a failure.
+- The order is unchanged: custody raises before any status, and `authenticate_pair`'s rungs (a)–(f) are untouched.
+- Every closure test must be RED before your change where the ruling marks it "RED today". Show the RED run for T30-a, T30-b, T30-d, T30-f (the provisional-row sub-row), T30-i, T30-j, one T16-a cell per kind, and the E5 non-object-lines bundle, then the GREEN run.
+
+The checklist your report must answer: probes P-A, P-B and P-D (erratum §1) and E1–E5 (ruling §1), each as a fixture test or an executed /tmp probe against your final tree. Also state "same signature: yes/no" against the class table in ruling §4, meaning whether any input S0 reads still converts a read or decode failure into an empty value or a custody failure into a status.
+
+VERIFY (paste the exact last 5 lines of each):
+- V1: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_evidence_night tests.test_night_kinds
+- V3: every other test module that imports joulewise.battery_float (list them with grep, then run them).
+
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. If a ruled text is ambiguous or conflicts with the code, finish the independent authorized work, then early-return with NEEDS_RULING (question, options, recommendation, blocked work). Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope.
