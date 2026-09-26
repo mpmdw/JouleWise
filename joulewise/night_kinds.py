@@ -38,6 +38,7 @@ class NightKind:
     requires_chain_bound_registration: bool
     corecaptured_at_arm_and_t0: bool
     non_observer_at_arm_and_t0: bool
+    battery_brackets: bool
     payload_kind: bool
     notice_intro: str
     notice_envelope_noun: str
@@ -62,6 +63,7 @@ NIGHT_KINDS = MappingProxyType({
         requires_chain_bound_registration=True,
         corecaptured_at_arm_and_t0=True,
         non_observer_at_arm_and_t0=True,
+        battery_brackets=False,
         payload_kind=True,
         notice_intro="This idle-variance evidence night sizes a later experiment; it activates no new quietness cutoff.",
         notice_envelope_noun="idle envelopes",
@@ -84,6 +86,7 @@ NIGHT_KINDS = MappingProxyType({
         requires_chain_bound_registration=False,
         corecaptured_at_arm_and_t0=False,
         non_observer_at_arm_and_t0=False,
+        battery_brackets=True,
         payload_kind=False,
         notice_intro="",
         notice_envelope_noun="",

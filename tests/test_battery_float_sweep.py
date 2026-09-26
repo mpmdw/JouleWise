@@ -17,8 +17,11 @@ bytes (obligation R2-11).
 from __future__ import annotations
 
 from pathlib import Path
+import ast
 import re
 import unittest
+
+from joulewise import battery_float
 
 ROOT = Path(__file__).resolve().parents[1]
 B_LEXEME = re.compile(r"b_fiducial_s|exact_bound_lexeme_s")
@@ -77,6 +80,35 @@ OBSERVE_CALLERS = {
 }
 
 
+def _observe_phases(name, source):
+    tree = ast.parse(source, filename=name)
+    module_aliases = set()
+    package_aliases = set()
+    observe_aliases = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "joulewise.battery_float":
+                    (module_aliases if alias.asname else package_aliases).add(alias.asname or "joulewise")
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "joulewise" and any(alias.name == "battery_float" for alias in node.names):
+                module_aliases.update(alias.asname or alias.name for alias in node.names if alias.name == "battery_float")
+            if node.module == "joulewise.battery_float":
+                observe_aliases.update(alias.asname or alias.name for alias in node.names if alias.name == "observe")
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        direct = isinstance(func, ast.Name) and func.id in observe_aliases
+        module = (isinstance(func, ast.Attribute) and func.attr == "observe" and (
+            isinstance(func.value, ast.Name) and func.value.id in module_aliases or
+            isinstance(func.value, ast.Attribute) and func.value.attr == "battery_float"
+            and isinstance(func.value.value, ast.Name) and func.value.value.id in package_aliases))
+        if direct or module:
+            phase = next((kw.value for kw in node.keywords if kw.arg == "phase"), None)
+            yield node.lineno, phase
+
+
 def _production_sources():
     for directory in ("joulewise", "scripts"):
         for path in sorted((ROOT / directory).rglob("*.py")):
@@ -84,6 +116,34 @@ def _production_sources():
 
 
 class SweepGuardTests(unittest.TestCase):
+    def test_every_production_observe_phase_is_registered(self):
+        seen = set()
+        for name, source in _production_sources():
+            for lineno, phase in _observe_phases(name, source):
+                if isinstance(phase, ast.Constant) and isinstance(phase.value, str):
+                    self.assertIn(phase.value, battery_float.PHASES, (name, lineno))
+                    seen.add(phase.value)
+                else:
+                    # The existing slot writer formats only its pre/post loop.
+                    self.assertEqual(name, "scripts/validate_powermetrics_fiducial.py")
+                    self.assertIsInstance(phase, ast.JoinedStr)
+                    self.assertEqual(ast.unparse(phase), "f'slot_{phase}'")
+                    self.assertTrue({"slot_pre", "slot_post"} <= set(battery_float.PHASES))
+                    seen.update(("slot_pre", "slot_post"))
+        self.assertEqual(seen, set(battery_float.PHASES[:7]))
+
+    def test_aliased_out_of_set_phase_is_visible(self):
+        forms = (
+            "from joulewise import battery_float as bf\nbf.observe(phase='unknown')\n",
+            "import joulewise.battery_float as x\nx.observe(phase='unknown')\n",
+            "from joulewise.battery_float import observe as o\no(phase='unknown')\n",
+        )
+        for source in forms:
+            with self.subTest(source=source):
+                [(line, phase)] = list(_observe_phases("joulewise/x.py", source))
+                self.assertEqual(line, 2)
+                self.assertNotIn(phase.value, battery_float.PHASES)
+
     def test_every_b_lexeme_reader_is_classified(self):
         readers = {name for name, text in _production_sources() if B_LEXEME.search(text)}
         self.assertEqual(readers, set(READERS))
