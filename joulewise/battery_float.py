@@ -21,7 +21,8 @@ SCHEMA = "joulewise.battery_float.v1"
 POLICY_ID = "bfg-01"
 LIMIT_MA = 200
 MAX_UPDATE_AGE_S = 180
-_PROPERTY = re.compile(rb'^\s+("[A-Za-z][A-Za-z0-9]*" = .+)$')
+_HEADER = re.compile(rb'^\+-o AppleSmartBattery  <[^>\r\n]+>$')
+_PROPERTY = re.compile(rb'^( +)("[^"\r\n]+" = .+)$')
 _REQUIRED = ("ExternalConnected", "IsCharging", "InstantAmperage", "UpdateTime")
 _OPTIONAL = ("Amperage", "Voltage", "Temperature", "FullyCharged", "CurrentCapacity",
              "AppleRawCurrentCapacity", "AppleRawMaxCapacity")
@@ -31,6 +32,7 @@ _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 _SESSION_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
 VERDICT_SCHEMA = "joulewise.battery_float_verdict.v1"
 VERDICT_DIRECTORY = "configs/calibration/battery_float_verdicts"
+LEDGER_HEAD_PIN = "configs/calibration/calibration_ledger_head.json"
 
 
 class ProbeError(ValueError):
@@ -89,20 +91,57 @@ def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
     if not isinstance(raw, bytes):
         raise ProbeError("stdout is not bytes")
     lines = raw.splitlines()
-    count = sum(line.startswith(b"+-o") for line in lines)
-    if count != 1:
-        raise ProbeError(f"AppleSmartBattery object count {count}, expected 1")
+    nonblank = [index for index, line in enumerate(lines) if line.strip()]
+    if len(nonblank) < 4 or nonblank[0] != 0 or not _HEADER.fullmatch(lines[0]):
+        raise ProbeError("expected one AppleSmartBattery object header")
+    opening = nonblank[1]
+    if lines[opening].strip() != b"{" or not lines[opening].startswith(b" "):
+        raise ProbeError("AppleSmartBattery property block does not open")
+    block_indent = len(lines[opening]) - len(lines[opening].lstrip(b" "))
+    closing = nonblank[-1]
+    if lines[closing] != b" " * block_indent + b"}":
+        raise ProbeError("AppleSmartBattery property block does not close")
+    if any(line == lines[closing] for line in lines[opening + 1:closing]):
+        raise ProbeError("content follows the AppleSmartBattery closing brace")
+    if any(line.startswith(b"+-o") for line in lines[1:closing]):
+        raise ProbeError("more than one object header")
+    property_indent = None
+    nested_depth = 0
     properties: dict[str, list[tuple[str, str]]] = {}
-    for line in lines:
+    for line in lines[opening + 1:closing]:
+        stripped = line.strip()
+        if stripped == b"{":
+            nested_depth += 1
+            continue
+        if stripped == b"}":
+            if not nested_depth:
+                raise ProbeError("unexpected nested closing brace")
+            nested_depth -= 1
+            continue
         match = _PROPERTY.fullmatch(line)
         if match is None:
+            if stripped and not nested_depth:
+                raise ProbeError("malformed property block line")
             continue
+        if nested_depth:
+            continue
+        indent = len(match.group(1))
+        if property_indent is None:
+            if indent <= block_indent:
+                raise ProbeError("property is not inside the object block")
+            property_indent = indent
+        if indent != property_indent:
+            raise ProbeError("property has inconsistent top-level indentation")
+        if line.endswith(b" = {"):
+            nested_depth += 1
         try:
-            whole = match.group(1).decode("utf-8")
+            whole = match.group(2).decode("utf-8")
         except UnicodeDecodeError as exc:
             raise ProbeError("property line is not UTF-8") from exc
         key, value = whole.split('" = ', 1)
         properties.setdefault(key[1:], []).append((line.decode("utf-8"), value))
+    if nested_depth:
+        raise ProbeError("nested property block does not close")
     for key in _REQUIRED:
         if len(properties.get(key, ())) != 1:
             raise ProbeError(f"{key} must occur exactly once")
@@ -136,7 +175,7 @@ def parse(raw: bytes, wall_time_s: float) -> dict[str, Any]:
     if abs(current) > LIMIT_MA:
         reasons.append("InstantAmperage exceeds 200 mA")
     return {
-        "object_count": count,
+        "object_count": 1,
         "property_lines": [entry[0] for key in (*_REQUIRED, *_OPTIONAL) for entry in properties.get(key, ())],
         "external_connected_raw": values["ExternalConnected"],
         "is_charging_raw": values["IsCharging"],
@@ -409,9 +448,8 @@ def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: A
                            preregistration_sha256: str | None) -> CommittedVerdict:
     """Return the authentic committed harvest verdict, or raise ``NoRecord``.
 
-    Obligations v1.1 §4.3.  ``preregistration_sha256`` is the caller's pinned
-    registration digest; ``None`` is passed only by the count-only and
-    diagnostic consumers that hold no pinned digest (report finding).
+    Obligations v1.1 §4.3. ``preregistration_sha256`` is the caller's pinned
+    registration digest. Revision-5 consumers supply it.
     """
     # Imported here, not at module scope: night_gate imports this module on
     # every arm and t0 path, and those minimal import surfaces carry no
@@ -436,8 +474,8 @@ def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: A
     if working != committed:
         raise NoRecord("working tree differs from HEAD")
     # 2. Exactly one commit in HEAD's history touches the path, and it added it.
-    touching = (_git(root, "log", "--no-renames", "--format=%H", "--", rel) or b"").decode().split()
-    adding = (_git(root, "log", "--no-renames", "--diff-filter=A", "--format=%H", "--", rel)
+    touching = (_git(root, "log", "--full-history", "--format=%H", "--", rel) or b"").decode().split()
+    adding = (_git(root, "log", "--full-history", "--diff-filter=A", "--format=%H", "--", rel)
               or b"").decode().split()
     if len(touching) != 1 or adding != touching or not _COMMIT.fullmatch(touching[0]):
         raise NoRecord(f"path history is not a single adding commit "
@@ -469,6 +507,20 @@ def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: A
         if recorded[name].get("instrument_evidence_sha256") != observation.artifact_sha256.get(
                 "instrument_evidence.json"):
             raise NoRecord(f"slot binding mismatch: {name}")
+    # 5. The adding commit is also the pin update that authenticates this
+    # exact ledger head. A later pin update cannot retroactively license it.
+    from joulewise.calibration_ledger import _head_pin
+    pin_commit = _git(root, "show", f"{touching[0]}:{LEDGER_HEAD_PIN}")
+    pin_change = _git(root, "diff-tree", "--root", "-r", "--name-only",
+                      touching[0], "--", LEDGER_HEAD_PIN)
+    try:
+        pin = _head_pin(json.loads(pin_commit)) if pin_commit is not None else None
+    except (ValueError, TypeError):
+        pin = None
+    ledger_head = record.get("ledger_head")
+    if (not pin_change or not isinstance(ledger_head, dict)
+            or pin != (ledger_head.get("sequence"), ledger_head.get("head_digest"))):
+        raise NoRecord("verdict not committed with its ledger head pin")
     result = CommittedVerdict(record)
     result.file_sha256 = hashlib.sha256(committed).hexdigest()
     result.commit = touching[0]

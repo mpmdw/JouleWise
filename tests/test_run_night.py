@@ -53,6 +53,10 @@ def _probe(
 
 def _green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
     return {
+        night_gate.IOREG_BATTERY_ARGV: _probe(
+            night_gate.IOREG_BATTERY_ARGV,
+            stdout=(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_text(),
+        ),
         night_gate.HID_IDLE_ARGV: _probe(night_gate.HID_IDLE_ARGV, stdout="0\n"),
         night_gate.PMSET_BATT_ARGV: _probe(
             night_gate.PMSET_BATT_ARGV, stdout="Now drawing from 'AC Power'\n"
@@ -321,6 +325,23 @@ class UnkillableProcess(FakeProcess):
 
 
 class NightDriverTests(unittest.TestCase):
+    def test_production_battery_probe_uses_ten_second_timeout_only_for_ioreg(self):
+        driver = _load_driver()
+        from joulewise import battery_float
+        observed = []
+
+        def fake_run(argv, **kwargs):
+            observed.append((tuple(argv), kwargs["timeout"]))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with mock.patch.object(driver.subprocess, "run", side_effect=fake_run):
+            driver._probe_runner(battery_float.IOREG_BATTERY_ARGV)
+            driver._probe_runner(("/usr/bin/true",))
+        self.assertEqual(observed, [
+            (battery_float.IOREG_BATTERY_ARGV, battery_float.PROBE_TIMEOUT_S),
+            (("/usr/bin/true",), driver.PROBE_TIMEOUT_S),
+        ])
+
     def setUp(self) -> None:
         self.driver = _load_driver()
         self.temporary = tempfile.TemporaryDirectory()

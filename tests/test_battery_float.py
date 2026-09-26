@@ -27,6 +27,27 @@ def edit(source: bytes, old: bytes, new: bytes) -> bytes:
 
 
 class ParserTests(unittest.TestCase):
+    def test_object_structure_rejects_missing_brace_wrong_class_and_nested_properties(self):
+        original = raw()
+        cases = (
+            original.rsplit(b"}", 1)[0],
+            original.replace(b"+-o AppleSmartBattery  <", b"+-o OtherBattery  <", 1),
+            b'+-o AppleSmartBattery  <class AppleSmartBattery, id 0x1>\n'
+            b'    {\n      "Nested" = {\n'
+            b'        "ExternalConnected" = Yes\n        "IsCharging" = No\n'
+            b'        "InstantAmperage" = 0\n        "UpdateTime" = 1790373525\n'
+            b'      }\n    }\n',
+            original + b"unexpected trailer\n",
+        )
+        for changed in cases:
+            with self.subTest(case=cases.index(changed)):
+                with self.assertRaises(battery_float.ProbeError):
+                    battery_float.parse(changed, UPDATE + 1)
+                observed, _ = battery_float.observe(
+                    phase="t0", runner=lambda argv: subprocess.CompletedProcess(argv, 0, changed, b""),
+                    wall_time_s=UPDATE + 1)
+                self.assertTrue(observed["probe_error"])
+
     def test_real_and_charging_fixtures(self):
         self.assertTrue(battery_float.parse(raw(), UPDATE + 179)["passed"])
         self.assertFalse(battery_float.parse(raw("charging-synthetic-from-real.ioreg"), UPDATE + 1)["passed"])
@@ -127,6 +148,28 @@ class ParserTests(unittest.TestCase):
 
 
 class GateTests(unittest.TestCase):
+    def test_wrong_object_structure_is_night_probe_error_at_both_gate_entries(self):
+        original = raw()
+        cases = (
+            original.rsplit(b"}", 1)[0],
+            original.replace(b"+-o AppleSmartBattery  <", b"+-o OtherBattery  <", 1),
+            b'+-o AppleSmartBattery  <class AppleSmartBattery, id 0x1>\n'
+            b'    {\n      "Nested" = {\n'
+            b'        "ExternalConnected" = Yes\n        "IsCharging" = No\n'
+            b'        "InstantAmperage" = 0\n        "UpdateTime" = 1000\n'
+            b'      }\n    }\n',
+            original + b"unexpected trailer\n",
+        )
+        for changed in cases:
+            for dynamic in (False, True):
+                with self.subTest(case=cases.index(changed), dynamic=dynamic):
+                    source = FakeProbeSource()
+                    source.results[night_gate.IOREG_BATTERY_ARGV] = result(
+                        night_gate.IOREG_BATTERY_ARGV, stdout=changed.decode())
+                    receipt = self.evaluate(source, dynamic=dynamic)
+                    self.assertIsNotNone(receipt.refusal)
+                    self.assertEqual(receipt.refusal.reason, "night_probe_error")
+
     def evaluate(self, source, *, dynamic=False):
         plan = make_plan()
         if dynamic:
@@ -167,6 +210,24 @@ class GateTests(unittest.TestCase):
 
 
 class WindowTests(unittest.TestCase):
+    def test_wrong_object_structure_is_evidence_missing_in_window(self):
+        original = raw()
+        cases = (
+            original.rsplit(b"}", 1)[0],
+            original.replace(b"+-o AppleSmartBattery  <", b"+-o OtherBattery  <", 1),
+            b'+-o AppleSmartBattery  <class AppleSmartBattery, id 0x1>\n'
+            b'    {\n      "Nested" = {\n'
+            b'        "ExternalConnected" = Yes\n        "IsCharging" = No\n'
+            b'        "InstantAmperage" = 0\n        "UpdateTime" = 1790373525\n'
+            b'      }\n    }\n',
+            original + b"unexpected trailer\n",
+        )
+        for changed in cases:
+            with self.subTest(case=cases.index(changed)), tempfile.TemporaryDirectory() as tmp:
+                session, _ = self.make_session(tmp, changed, changed)
+                self.assertEqual(battery_float.validate_window(session)["status"],
+                                 "battery_float_evidence_missing")
+
     def make_session(self, root, pre, post, *, wall=UPDATE + 1):
         custody = Path(root) / "attempt"
         (custody / "raw").mkdir(parents=True)
@@ -362,6 +423,10 @@ class CommittedVerdictTests(unittest.TestCase):
     def write(self, record=None):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_bytes(battery_float.render_verdict(record or self.record))
+        pin = self.repo / "configs/calibration/calibration_ledger_head.json"
+        pin.parent.mkdir(parents=True, exist_ok=True)
+        pin.write_text(json.dumps({"sequence": 24, "head_digest": "e" * 64,
+                                   "ledger_schema": "joulewise.calibration_observation_ledger.v1"}) + "\n")
 
     def commit(self, message="c"):
         self.git("add", "-A")
@@ -397,6 +462,22 @@ class CommittedVerdictTests(unittest.TestCase):
         self.assertRegex(record.commit, r"^[0-9a-f]{40}$")
         self.assertIsNone(battery_float.compare_verdict(record, battery_float.validate_window(self.session)))
 
+    def test_verdict_added_separately_from_pin_is_no_record(self):
+        self.write()
+        self.git("add", "configs/calibration/calibration_ledger_head.json")
+        self.git("commit", "-q", "-m", "pin first")
+        self.git("add", self.rel)
+        self.git("commit", "-q", "-m", "verdict later")
+        self.assert_no_record("verdict not committed with its ledger head pin")
+
+    def test_verdict_commit_with_wrong_pin_head_is_no_record(self):
+        self.write()
+        pin = self.repo / "configs/calibration/calibration_ledger_head.json"
+        pin.write_text(json.dumps({"sequence": 23, "head_digest": "e" * 64,
+                                   "ledger_schema": "joulewise.calibration_observation_ledger.v1"}) + "\n")
+        self.commit("wrong pin")
+        self.assert_no_record("verdict not committed with its ledger head pin")
+
     def test_delete_and_re_add_is_no_record(self):
         self.write()
         self.commit("harvest")
@@ -412,6 +493,20 @@ class CommittedVerdictTests(unittest.TestCase):
         self.write({**self.record, "status": "battery_float_evidence_missing"})
         self.commit("modify")
         self.assert_no_record("path history is not a single adding commit (2 commits, 1 adding)")
+
+    def test_merge_branch_modify_then_restore_is_no_record(self):
+        self.write()
+        self.commit("harvest")
+        original_branch = subprocess.check_output(
+            ("git", "-C", str(self.repo), "symbolic-ref", "--short", "HEAD"), text=True).strip()
+        self.git("checkout", "-q", "-b", "tamper")
+        self.write({**self.record, "status": "battery_float_evidence_missing"})
+        self.commit("modify")
+        self.write()
+        self.commit("restore")
+        self.git("checkout", "-q", original_branch)
+        self.git("merge", "--no-ff", "-q", "tamper")
+        self.assert_no_record("path history is not a single adding commit")
 
     def test_uncommitted_edit_is_no_record(self):
         self.write()

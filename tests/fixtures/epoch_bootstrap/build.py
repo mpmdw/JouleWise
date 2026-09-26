@@ -85,6 +85,7 @@ class Slot:
     anchor_method: str = CLOCK_METHOD_V3
     battery_mode: str = "pass"
     native_frames: bool = False
+    native_frame_lengths_ms: tuple[int, ...] | None = None
 
 
 def _write_bundle(custody: Path, attempt_id: str, slot: Slot) -> None:
@@ -92,10 +93,11 @@ def _write_bundle(custody: Path, attempt_id: str, slot: Slot) -> None:
     (custody / "raw" / "powermetrics.plist").write_bytes(
         b"\x00".join(plistlib.dumps({
             "timestamp": datetime.fromtimestamp(100 + index, timezone.utc),
-            "elapsed_ns": 132_000_000,
+            "elapsed_ns": (slot.native_frame_lengths_ms[index] * 1_000_000
+                           if slot.native_frame_lengths_ms is not None else 132_000_000),
             "processor": {"cpu_power": 10000, "gpu_power": 0, "ane_power": 0,
                           "cpu_energy": 1320, "gpu_energy": 0, "ane_energy": 0},
-        }) for index in range(4)) + b"\x00"
+        }) for index in range(len(slot.native_frame_lengths_ms) if slot.native_frame_lengths_ms is not None else 4)) + b"\x00"
         if slot.native_frames else b"raw-" + attempt_id.encode()
     )
     (custody / "events.jsonl").write_text('{"timestamp_s": 99.0}\n', encoding="utf-8")
@@ -185,7 +187,8 @@ def build_derivation_ledger(
     runs = root / "runs"
     runs.mkdir()
     ledger = runs / "calibration_observation_ledger.jsonl"
-    pin = runs / "calibration_ledger_head_pin.json"
+    pin = root / "configs/calibration/calibration_ledger_head.json"
+    pin.parent.mkdir(parents=True, exist_ok=True)
     pin.write_text(
         json.dumps(
             {"sequence": 0, "head_digest": "0" * 64, "ledger_schema": LEDGER_SCHEMA},

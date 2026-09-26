@@ -2577,12 +2577,15 @@ git commit -m "Harvest $SESSION_ID: ledger head pin and battery-float verdict"
 print -r -- "$SESSION_ID: battery=<pass|confounded|evidence_missing> verdict_sha256=$(shasum -a 256 "configs/calibration/battery_float_verdicts/$SESSION_ID.json" | cut -d' ' -f1) verdict_commit=$(git rev-parse HEAD)"
 # (vi) The cadence report (refuses without the committed verdict).
 "$PY" scripts/calibration_cadence_report.py \
-  --window "W=$RUNS_ROOT/instrument_validation" \
+  --window "W=$RUNS_ROOT/instrument_validation/$SESSION_ID-*" \
   --calibration-ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
-  --session "W=$SESSION_ID"
+  --session "W=$SESSION_ID" \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256"
 # (vii) The count-only dry run of §2.2 (blocks without the committed verdict).
 "$PY" scripts/issue_calibration_acceptance_generation.py check \
-  --session-ids "$SESSION_ID"
+  --session-ids "$SESSION_ID" \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256"
 # (viii) Only now: the §2.1 reads of derivation-chain.log slot lines, the
 #        night's ledger rows and the capture evidence files.
 ```

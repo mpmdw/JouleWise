@@ -480,7 +480,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             # Preserve the real terminal derivation history in the capture's
             # ledger; preflight must cross-check it before opening a capture.
             shutil.copy2(continuation_root / "night/runs/calibration_observation_ledger.jsonl", ledger)
-            shutil.copy2(continuation_root / "night/runs/calibration_ledger_head_pin.json", pin)
+            shutil.copy2(continuation_root / "night/configs/calibration/calibration_ledger_head.json", pin)
         subprocess.run(
             ["git", "add", str(pin.relative_to(self.repo))],
             cwd=self.repo,
@@ -608,6 +608,8 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         recovery leaves, the slot never contributes a passing battery verdict:
         either it has no finalized row (no B value can exist) or its row is
         `battery_float_evidence_missing`.
+        `test_battery_brackets_are_authenticated_and_outside_anchor_spans`
+        guards the post-observation when a row exists.
         """
 
         self._rekey_acceptance()

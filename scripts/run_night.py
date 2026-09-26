@@ -44,7 +44,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # so importing this driver during preflight catches failures before installation.
 from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
-from joulewise import night_gate, t0_rehearsal, quiet_admission
+from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission
 from joulewise.measurement_liveness import observe_identity  # noqa: E402
 
 from joulewise.night_gate import (  # noqa: E402
@@ -339,12 +339,14 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
 
     started = time.monotonic_ns()
     command = tuple(str(part) for part in argv)
+    timeout_s = (battery_float.PROBE_TIMEOUT_S
+                 if command == battery_float.IOREG_BATTERY_ARGV else PROBE_TIMEOUT_S)
     try:
         completed = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            timeout=PROBE_TIMEOUT_S,
+            timeout=timeout_s,
             check=False,
         )
         return ProbeResult(
@@ -365,7 +367,7 @@ def _probe_runner(argv: tuple[str, ...] | list[str]) -> ProbeResult:
             argv=command,
             exit_code=124,
             stdout=stdout,
-            stderr=stderr + f"ProbeError: timeout after {PROBE_TIMEOUT_S} s",
+            stderr=stderr + f"ProbeError: timeout after {timeout_s} s",
             monotonic_ns=time.monotonic_ns(),
         )
     except OSError as error:

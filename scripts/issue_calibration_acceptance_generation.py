@@ -180,6 +180,7 @@ DRY_RUN_INADMISSIBLE_EXIT = 5
 
 def registration_dry_run(
     snapshot: Any, session_ids: Sequence[str], *, repo_root: Path | None = None,
+    preregistration_sha256: str | None = None,
 ) -> tuple[int, list[str]]:
     """Report whether a registration WOULD be admissible, naming no value.
 
@@ -201,7 +202,14 @@ def registration_dry_run(
     blockers: list[str] = []
     by_id = snapshot.bracket_session_by_id
     root = Path(snapshot.ledger_path).resolve().parent.parent if repo_root is None else Path(repo_root)
-    revision_five_named = False
+    revision_five_named = any(
+        session.session_kind == SESSION_KIND_DERIVATION
+        and session.state in TERMINAL_SESSION_STATES
+        and any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+                for row in session.finalized_slots.values())
+        for session in snapshot.bracket_sessions
+    )
+    battery_gate_blocked = False
     for session_id in session_ids:
         session = by_id.get(session_id)
         if session is None:
@@ -226,15 +234,22 @@ def registration_dry_run(
             if any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
                    for row in session.finalized_slots.values()):
                 revision_five_named = True
+                if preregistration_sha256 is None:
+                    blockers.append(f"session {session_id}: --preregistration and "
+                                    "--preregistration-sha256 are required")
+                    battery_gate_blocked = True
+                    continue
                 try:
                     recomputed = battery_float.validate_window(session)
                 except battery_float.CustodyFailure as failure:
                     blockers.append(f"session {session_id}: battery custody failure: {failure.detail}")
+                    battery_gate_blocked = True
                     continue
                 label = recomputed["status"].removeprefix("battery_float_")
                 try:
                     record = battery_float.load_committed_verdict(
-                        root, session_id, session=session, preregistration_sha256=None,
+                        root, session_id, session=session,
+                        preregistration_sha256=preregistration_sha256,
                     )
                 except battery_float.NoRecord as missing:
                     lines.append(f"{session_id}: battery={label} recorded=absent")
@@ -242,6 +257,8 @@ def registration_dry_run(
                         f"session {session_id}: battery harvest verdict missing or "
                         f"uncommitted ({missing.reason})"
                     )
+                    battery_gate_blocked = True
+                    continue
                 else:
                     difference = battery_float.compare_verdict(record, recomputed)
                     recorded = record["status"].removeprefix("battery_float_")
@@ -251,6 +268,8 @@ def registration_dry_run(
                             f"session {session_id}: battery harvest verdict cannot be "
                             f"re-established ({difference})"
                         )
+                        battery_gate_blocked = True
+                        continue
                 if recomputed["status"] != "pass":
                     lines.append(
                         f"{session_id}: kind={session.session_kind} state={session.state} "
@@ -293,8 +312,9 @@ def registration_dry_run(
         if observation.content_id is None
         or observation.classification_disposition not in PRIOR_SET_DISPOSITIONS
     )
-    if revision_five_named:
-        blockers.extend(_dry_run_epoch_bound(snapshot, session_ids, root))
+    if revision_five_named and not battery_gate_blocked:
+        blockers.extend(_dry_run_epoch_bound(
+            snapshot, session_ids, root, preregistration_sha256))
     # A COUNT, not the attempt ids: naming rows invites reading them, and the
     # count is all a desk decision needs.
     lines.append(f"prefix pending or unresolved rows: {unresolved}")
@@ -309,7 +329,8 @@ def registration_dry_run(
     return (0 if not blockers else DRY_RUN_INADMISSIBLE_EXIT), lines
 
 
-def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path) -> list[str]:
+def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path,
+                         preregistration_sha256: str | None) -> list[str]:
     """The A-R5b one-replacement bound over the recorded verdicts of the epoch.
 
     Counts the recorded non-pass sessions among the issuer's own computed set
@@ -323,6 +344,8 @@ def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path) 
         return [refusal.reason]
     non_pass = []
     computed = _battery_computed_set(snapshot, set(session_ids), REVISION_FIVE_EPOCH, dispositions)
+    if preregistration_sha256 is None:
+        return ["--preregistration and --preregistration-sha256 are required for Revision 5"]
     for candidate_id in sorted(computed, key=str):
         session = snapshot.bracket_session_by_id.get(candidate_id)
         if (session is None or session.session_kind != SESSION_KIND_DERIVATION
@@ -330,15 +353,19 @@ def _dry_run_epoch_bound(snapshot: Any, session_ids: Sequence[str], root: Path) 
             continue
         try:
             record = battery_float.load_committed_verdict(
-                root, candidate_id, session=session, preregistration_sha256=None,
+                root, candidate_id, session=session,
+                preregistration_sha256=preregistration_sha256,
             )
         except battery_float.NoRecord:
             continue
         if record["status"] != "pass":
             non_pass.append(candidate_id)
+    omitted = sorted(set(non_pass) - set(session_ids))
+    blockers = [f"computed non-pass session omitted: {session_id}" for session_id in omitted]
     if len(non_pass) > 1:
-        return ["more than one battery-float non-pass window in this epoch: " + ", ".join(non_pass)]
-    return []
+        blockers.append("more than one battery-float non-pass window in this epoch: "
+                        + ", ".join(sorted(set(non_pass))))
+    return blockers
 
 
 def _excluded_summary(excluded: Mapping[str, int]) -> str:
@@ -371,7 +398,7 @@ def check(args: argparse.Namespace) -> int:
     # loads the same way and authenticates each member's bytes itself.
     snapshot = load_calibration_ledger_snapshot(
         args.ledger, args.head_pin, require_committed_pin=True,
-        verify_custody=False, mode="read_replay", repo_root=REPO_ROOT,
+        verify_custody=False, mode="read_replay", repo_root=args.repo_root,
     )
     if snapshot.refusal_reasons:
         errors.append("ledger: " + ", ".join(snapshot.refusal_reasons))
@@ -396,9 +423,10 @@ def check(args: argparse.Namespace) -> int:
     preregistration_failed = False
     if args.preregistration is not None:
         try:
-            text = Path(args.preregistration).read_text(encoding="utf-8")
+            preregistration_bytes = Path(args.preregistration).read_bytes()
+            text = preregistration_bytes.decode("utf-8")
             _, registered_powermetrics = preregistration_epoch_pins(text)
-        except (OSError, PrepareRefusal) as error:
+        except (OSError, UnicodeDecodeError, PrepareRefusal) as error:
             preregistration_lines.append(f"pre-registration: unusable ({error})")
             preregistration_failed = True
         else:
@@ -408,6 +436,11 @@ def check(args: argparse.Namespace) -> int:
                 + ("match" if agrees else "MISMATCH — the registration is void")
             )
             if not agrees:
+                preregistration_failed = True
+            if (args.preregistration_sha256 is not None
+                    and hashlib.sha256(preregistration_bytes).hexdigest()
+                    != args.preregistration_sha256):
+                preregistration_lines.append("pre-registration sha256: MISMATCH")
                 preregistration_failed = True
     print("Desk epoch watch (identity comparison only; no capture authorization)")
     print(f"ACTIVE acceptance: {ACTIVE_ACCEPTANCE_ID}")
@@ -432,9 +465,17 @@ def check(args: argparse.Namespace) -> int:
     named = [session_id for session_id in args.session_ids if session_id]
     if not named:
         return 3 if errors or mismatches or preregistration_failed else 0
-    dry_run_code, lines = registration_dry_run(snapshot, named)
+    digest = (args.preregistration_sha256 if args.preregistration is not None
+              and not any(line.startswith("pre-registration: unusable")
+                          or "sha256: MISMATCH" in line for line in preregistration_lines)
+              else None)
+    dry_run_code, lines = registration_dry_run(
+        snapshot, named, repo_root=args.repo_root, preregistration_sha256=digest)
     for line in lines:
         print(line)
+    if preregistration_failed and digest is None and dry_run_code == 0:
+        print("  blocker: pre-registration sha256 mismatch")
+        return DRY_RUN_INADMISSIBLE_EXIT
     # When a registration is named, the ANSWER is the registration's: the epoch
     # watch above still prints in full, but an epoch that has drifted is the
     # whole reason a new corpus is being captured, so it must not mask the
@@ -1357,9 +1398,11 @@ def _battery_verdict(args: argparse.Namespace) -> Path:
             f"pinned {args.preregistration_sha256}"
         )
     snapshot = load_calibration_ledger_snapshot(
-        args.ledger, args.head_pin, require_committed_pin=True,
+        args.ledger, args.head_pin, require_committed_pin=False,
         verify_custody=False, mode="read_replay", repo_root=repo_root,
     )
+    if Path(args.head_pin).resolve() != (repo_root / battery_float.LEDGER_HEAD_PIN).resolve():
+        raise PrepareRefusal("head pin must be configs/calibration/calibration_ledger_head.json")
     if snapshot.refusal_reasons:
         raise PrepareRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
     session = snapshot.bracket_session_by_id.get(args.session_id)
@@ -2159,12 +2202,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="the ACTIVE issued acceptance artifact whose epoch is compared",
     )
     watch.add_argument(
+        "--repo-root", type=Path, default=REPO_ROOT,
+        help="checkout authenticating the committed ledger head pin and harvest verdicts",
+    )
+    watch.add_argument(
         "--preregistration", type=Path, default=None,
         help=(
             "compare the machine's observed powermetrics sha256 against the one "
             "this pre-registration is registered under; omitted, the watch "
             "output is unchanged"
         ),
+    )
+    watch.add_argument(
+        "--preregistration-sha256", default=None,
+        help="arm-notice digest of the pre-registration; required with --preregistration for Revision 5",
     )
     watch.add_argument(
         "--session-ids", action="append", default=[],

@@ -85,6 +85,8 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
     _refuse(bool(snapshot.refusal_reasons), "ledger: " + ", ".join(snapshot.refusal_reasons))
     if any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
            for row in session.finalized_slots.values()):
+        _refuse(args.preregistration_sha256 is None,
+                "preregistration_sha256_required_for_revision_five")
         # Obligations v1.1 §4.5: the committed harvest verdict governs; the
         # recomputation from raw bytes is only its custody check.
         try:
@@ -94,7 +96,7 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
         try:
             battery_result = battery_float.load_committed_verdict(
                 Path(args.repo_root), args.session_id, session=session,
-                preregistration_sha256=None,
+                preregistration_sha256=args.preregistration_sha256,
             )
         except battery_float.NoRecord as missing:
             raise ContinuationRefusal(f"battery_float_verdict_missing: {missing.reason}") from missing
@@ -367,6 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--head-pin", type=Path, required=True, help="committed digest and sequence of the ledger head")
     prepare.add_argument("--acceptance", type=Path, required=True, help="byte-pinned issued acceptance supplying both screens")
     prepare.add_argument("--repo-root", type=Path, required=True, help="repository authenticating the committed head pin")
+    prepare.add_argument("--preregistration-sha256", help="arm-notice registration digest, required for Revision 5")
     prepare.add_argument("--d102-addendum-date", required=True, help="owner ruling date, YYYY-MM-DD; preparation does not issue the addendum")
     prepare.add_argument("--out", type=Path, required=True, help="candidate output outside every configs/calibration directory")
     prepare.add_argument("--force", action="store_true", help="allow replacement of the explicitly named output")

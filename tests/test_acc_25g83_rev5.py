@@ -307,6 +307,8 @@ class RevisionFiveTests(unittest.TestCase):
             night_two = fixture["root"] / "configs/calibration/battery_float_verdicts/derivation-night-2.json"
             write_verdict_record(fixture, "derivation-night-3", record={
                 **json.loads(night_two.read_text()), "session_id": "derivation-night-3"})
+            fixture["pin"].write_text(
+                json.dumps(json.loads(fixture["pin"].read_text()), sort_keys=True) + "\n")
             build_module._commit(fixture["root"], "harvest derivation-night-3")
             snapshot = load_calibration_ledger_snapshot(
                 fixture["ledger"], fixture["pin"], require_committed_pin=True,

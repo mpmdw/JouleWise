@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import glob
+import hashlib
 import json
 from pathlib import Path
 import plistlib
 import statistics
+import sys
 from typing import Any
+
+sys.dont_write_bytecode = True
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise import battery_float
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot
@@ -34,18 +42,26 @@ def native_intervals_ms(raw: bytes) -> list[float]:
 
 
 def capture_paths(window: Path) -> list[Path]:
+    if any(character in str(window) for character in "*?["):
+        roots = [Path(path) for path in glob.glob(str(window))]
+        paths = sorted({capture for root in roots for capture in capture_paths(root)})
+        if not paths:
+            raise ValueError(f"{window}: no raw/powermetrics.plist captures")
+        return paths
     if window.is_file():
-        return [window]
-    paths = sorted(window.glob("*/raw/powermetrics.plist"))
-    if not paths:
-        paths = sorted(window.glob("**/raw/powermetrics.plist"))
+        return [window.resolve()]
+    paths = sorted(path.resolve() for path in window.rglob("powermetrics.plist")
+                   if path.parent.name == "raw")
     if not paths:
         raise ValueError(f"{window}: no raw/powermetrics.plist captures")
     return paths
 
 
 def report_window(label: str, window: Path, *, ledger: Path, session_id: str,
-                  head_pin: Path | None = None) -> dict[str, Any]:
+                  head_pin: Path | None = None,
+                  preregistration_sha256: str | None = None) -> dict[str, Any]:
+    if preregistration_sha256 is None:
+        raise ValueError("--preregistration-sha256 is required")
     root = ledger.resolve().parent.parent
     pin = head_pin or root / "configs/calibration/calibration_ledger_head.json"
     snapshot = load_calibration_ledger_snapshot(
@@ -67,7 +83,8 @@ def report_window(label: str, window: Path, *, ledger: Path, session_id: str,
         raise ValueError(f"battery-float custody failure: {failure.detail}") from failure
     try:
         record = battery_float.load_committed_verdict(
-            root, session_id, session=session, preregistration_sha256=None,
+            root, session_id, session=session,
+            preregistration_sha256=preregistration_sha256,
         )
     except battery_float.NoRecord as missing:
         raise ValueError(
@@ -77,10 +94,23 @@ def report_window(label: str, window: Path, *, ledger: Path, session_id: str,
     if difference is not None:
         raise ValueError(f"battery-float harvest verdict cannot be re-established: {difference}")
     battery_verdict = record["status"]
+    derived: dict[Path, str] = {}
+    for observation in session.finalized_slots.values():
+        path = (Path(observation.custody_locator) / "raw/powermetrics.plist").resolve()
+        digest = observation.artifact_sha256.get("raw/powermetrics.plist")
+        if not isinstance(digest, str) or len(digest) != 64 or path in derived:
+            raise ValueError(f"session {session_id}: capture inventory is incomplete or duplicated")
+        derived[path] = digest
+    supplied = set(capture_paths(window))
+    if supplied != set(derived):
+        raise ValueError(f"session {session_id}: --window capture paths disagree with ledger inventory")
     captures = []
     all_lengths: list[float] = []
-    for path in capture_paths(window):
-        lengths = native_intervals_ms(path.read_bytes())
+    for path, digest in sorted(derived.items()):
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest:
+            raise ValueError(f"session {session_id}: capture digest disagrees with ledger for {path}")
+        lengths = native_intervals_ms(raw)
         all_lengths.extend(lengths)
         captures.append({
             "path": str(path), "interval_count": len(lengths),
@@ -107,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--calibration-ledger", type=Path, required=True)
     parser.add_argument("--head-pin", type=Path)
     parser.add_argument("--session", action="append", required=True, metavar="LABEL=SESSION_ID")
+    parser.add_argument("--preregistration-sha256", required=True)
     args = parser.parse_args(argv)
     reports = []
     try:
@@ -132,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             reports.append(report_window(
                 label, path, ledger=args.calibration_ledger,
                 session_id=sessions[label], head_pin=args.head_pin,
+                preregistration_sha256=args.preregistration_sha256,
             ))
     except (OSError, ValueError, plistlib.InvalidFileException) as error:
         parser.error(str(error))

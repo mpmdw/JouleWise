@@ -1057,15 +1057,15 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
-        """The ruled 600 s = (post-R1 ``_fresh_probe`` sites) × 45 s + 105 s.
+        """The ruled 610 s = eleven 45 s sites + one 10 s battery site + 105 s.
 
         What this test pins: the PROVENANCE ARITHMETIC of cold gate T26
         item 3, which states the constant as eleven governed post-R1 probe
-        sites times ``_PROBE_TIMEOUT_SECONDS`` plus 105 s of ungoverned
+        sites times ``_PROBE_TIMEOUT_SECONDS``, one 10 s battery site, plus 105 s of ungoverned
         work. Each factor is read from the code (the sites by an AST
         census of direct ``_fresh_probe`` calls, the timeout from the
         module constant), so an edit to either factor fails here while
-        the constant stays 600 s. The one site inside
+        the constant stays 610 s. The one site inside
         ``_fresh_clock_reference_batch`` IS R1 and is excluded.
 
         What this test does NOT protect: the runtime R1→stamp envelope.
@@ -1075,8 +1075,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         stamp, a retry inside ``_fresh_probe``, or a wait in another
         module all change the envelope while this test stays green. The
         ruling's 2026-09-02 correction already records the fixed subtotal
-        as 715 s (495 s probes + 220 s git ceilings) against the ruled
-        600 s; the runtime interval is unmeasured and is carried by kernel
+        as 725 s (505 s probes + 220 s git ceilings) against the ruled
+        610 s; the runtime interval is unmeasured and is carried by kernel
         row ``T0-LIVENESS-BOUND-EMPIRICAL-01`` (the census-the-resource
         hardening is ``T0-PROBE-CENSUS-RESOURCE-01``).
 

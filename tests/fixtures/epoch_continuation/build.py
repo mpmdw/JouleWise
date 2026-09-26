@@ -10,7 +10,7 @@ from unittest.mock import patch
 from joulewise import calibration_bracketing as bracket
 from scripts import issue_epoch_continuation as issuer
 from tests.fixtures.epoch_bootstrap.build import (
-    SESSION_ID, Slot, build_derivation_ledger,
+    PREREGISTRATION_SHA256, SESSION_ID, Slot, build_derivation_ledger,
 )
 
 
@@ -39,6 +39,7 @@ def build_issued_continuation(
             "prepare-candidate", "--session-id", SESSION_ID,
             "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
             "--repo-root", str(fixture["root"]), "--acceptance", str(acceptance_path),
+            "--preregistration-sha256", PREREGISTRATION_SHA256,
             "--d102-addendum-date", "2026-09-10", "--out", str(candidate),
         ])
     if rc != 0:

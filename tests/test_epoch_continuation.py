@@ -22,7 +22,7 @@ from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from joulewise.schemas import CalibrationBracketingPolicy
 from scripts import issue_epoch_continuation as issuer
 from tests.fixtures.epoch_bootstrap.build import (
-    SESSION_ID, TARGET_EPOCH, T1_BINDINGS, Slot, build_derivation_ledger,
+    PREREGISTRATION_SHA256, SESSION_ID, TARGET_EPOCH, T1_BINDINGS, Slot, build_derivation_ledger,
     tamper_member_bundle,
 )
 from tests.test_calibration_bracketing import _fixture_snapshot, _synthetic_issued_snapshot
@@ -37,6 +37,17 @@ def _seal(value):
 
 
 class EpochContinuationTests(unittest.TestCase):
+    def test_revision_five_registration_digest_missing_or_wrong_refuses(self):
+        self.build()
+        for digest in (None, "0" * 64):
+            with self.subTest(digest=digest):
+                args = issuer.build_parser().parse_args(self.args())
+                args.preregistration_sha256 = digest
+                expected = ("preregistration_sha256_required" if digest is None
+                            else "identity mismatch: preregistration_sha256")
+                with self.assertRaisesRegex(continuation.ContinuationRefusal, expected):
+                    issuer.derive_record(args)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -63,6 +74,7 @@ class EpochContinuationTests(unittest.TestCase):
             "prepare-candidate", "--session-id", SESSION_ID,
             "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
             "--repo-root", str(fixture["root"]),
+            "--preregistration-sha256", PREREGISTRATION_SHA256,
             "--acceptance", str(bracket.DEFAULT_ACCEPTANCE_BOUND_PATH),
             "--d102-addendum-date", "2026-09-10", "--out", str(self.out), *extra,
         ]
