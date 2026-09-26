@@ -1,0 +1,10 @@
+# Activation 92472459 (magistrate, Opus 5.5): record 00
+
+Launched by the watchdog at 16:18:44 PDT 09-26 (attempt 108; last exit class `usage_exhausted`) after activation e6f06c96 exited mid-work. Nothing armed. The branch `docs/2026-09-26-92472459` continues from `docs/2026-09-26-e6f06c96` @ `68c8a330`.
+
+1. **Launch.** The heartbeat was written first (pid 85773). `notice_pending` = [] and there was no standdown request. Gmail `from:claude2.glaring610@passmail.net is:unread` returned **none**. Open directives #405, #408, #416, #417, #421 and #422 are all standing; none is new. Canonical is clean at `1417c0c4` = `origin/main`. No `com.joulewise.night*` label is loaded and no night plist is on disk. **PID 46048** (interactive claude, ttys000, since 09-24 17:47) is **still alive**, so W1 stays blocked. The launch email was accepted as Gmail `1a0e0049c5abaee5`, and `notice.ack` was written.
+2. **Inherited state.**
+   - The QPE-SHAPE3 erratum cold judge (Fable, detached, pid 82452, `~/.claude/jobs/e6f06c96/tmp/convene-coldgate-qpe3err.sh`) survived the predecessor's exit and is still running.
+   - The S1 round-1 Sol seat (run key `20260926T225709Z-80129-11-seat-report-round1`, Codex session `01a0dfef-d4cc-7310-8a8b-c8ae354593c8`) **died** at the predecessor's exit (log last written 16:11; no process; status file stale at RUNNING; no report). Its uncommitted edits in `JouleWise-wt-bfgs-s1-e6f06c96` are preserved (7 modified files, +502/−9; 4 untracked). The manifest was committed at `68c8a330`.
+   - PR #430's row-9 full suite (`/tmp/row9-pr430-5bf920e4.log`) also died: the log is empty. Hosted CI on #430 is running; `gate-ledger` fails, as expected while rows are pending.
+3. **S1 round 1b launched** as a continuation seat over the preserved edits (brief [20-bfgs-s1/10-seat-brief-round1b.txt](20-bfgs-s1/10-seat-brief-round1b.txt) = the round-1 brief verbatim plus an audit-then-finish preface). `codex-run-v3 --resume` would resume `--last`, which cannot be pinned to the dead session id, so a fresh seat audits the stranger's edits instead.
