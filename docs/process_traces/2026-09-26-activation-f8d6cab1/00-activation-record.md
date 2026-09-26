@@ -47,3 +47,18 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
    - NITs:
      - say in a comment that the post-KILL `join(1)` is widened too, which is harmless because TERM has already failed by then;
      - a follow-up is needed for a SIGTERM-ignoring fixture child, so that a test covers KILL. That follow-up is noted here for the next bookkeeping pass. It is not a merge condition.
+9. **S0 delta re-audit returned, with a split verdict** ([10](10-s0-delta/10-sol-execution-lens.md), [11](10-s0-delta/11-opus-contract-lens.md)).
+   - **Sol execution:** two BLOCKERs, "same signature: yes".
+     - F1: an unreadable `session.json`, `metadata.json` or `instrument_evidence.json` becomes `{}`, which turns a deleted-raw `CustodyFailure` into a status.
+     - F2: deleting `rounds.jsonl` turns a recorded-digest mismatch into `pass`, because C1 ruled "Missing: zero rows".
+   - **Opus contract:** no BLOCKERs, "same signature: no" (it reads F1's case as ruled by text 2(a)). Every C1–C13 item and in-scope amendment is CLOSED. The freeze fence is verified: all 39 closure definitions are byte-identical to `5d5a0b75`, and all 39 pins equal the base.
+     - SHOULD-FIX S-1: the pins are blind to decorators and nested rebinding.
+     - SHOULD-FIX S-2: the C8(ii) guard misses `copy.replace` and `__replace__`.
+   - **Magistrate reading.**
+     - F2 is a real accepting path: the journal is the only digest recorded before finalization for a mutable `session.json`.
+     - F1 converts a whole-computation refusal into a per-member exclusion wherever a consumer excludes on `evidence_missing`, which text 2(b) forbids for custody.
+     - Both closures need ruled text changed (C1 and text 2(a)), and this is a second consecutive round with the same class. That is rule 11's mandatory trigger plus the standing escalation trigger, so a **cold gate**, not fix round 4.
+   - **Addendum 3 convened** (charge [20-coldgate/00](10-s0-delta/20-coldgate/00-charge.md), packet commit `b08b4adc`):
+     - cold Fable judge: `claude -p --model fable --effort high` in `JouleWise-wt-s0cg-fable-f8d6cab1`, output `/tmp/f8d6-coldgate-fable.out`;
+     - Opus paired contract refuter: independent answers first, then refutation, in `JouleWise-wt-s0cg-opus-f8d6cab1`.
+   - Sol's reproducer is preserved as `10-s0-delta/10-sol-repro.py`.
