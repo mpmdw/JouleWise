@@ -354,9 +354,13 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
                 raw = (root / observation["raw_path"]).read_bytes()
                 self.assertEqual(hashlib.sha256(raw).hexdigest(), observation["raw_stdout_sha256"])
                 self.assertTrue(observation["passed"])
-                before = observation["monotonic_before_ns"] / 1e9
-                after = observation["monotonic_after_ns"] / 1e9
-                self.assertLessEqual(after, anchor_start) if phase == "pre" else self.assertGreaterEqual(before, anchor_end)
+                # Compare in the observation's own integer-ns domain: under the
+                # logical clock the post-observation starts at the very instant
+                # of `post_parse`, so the spans may touch but never overlap.
+                if phase == "pre":
+                    self.assertLessEqual(observation["monotonic_after_ns"], int(anchor_start * 1e9))
+                else:
+                    self.assertGreaterEqual(observation["monotonic_before_ns"], int(anchor_end * 1e9))
             self.assertEqual(evidence["battery_float"]["pre"]["monotonic_after_ns"]
                              - evidence["battery_float"]["pre"]["monotonic_before_ns"],
                              int(duration * 1e9))
