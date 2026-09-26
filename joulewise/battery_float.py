@@ -773,6 +773,11 @@ def authenticate_pair(record: Any, custody_root: Path | str, *, phases: tuple[st
     capacities: dict[str, int | None] = {"pre": None, "post": None}
     confounded = False
     root = Path(custody_root)
+    span_unavailable = (kind == "bundle" and span is not None
+                        and (len(span) != 2
+                             or any(not isinstance(bound, int) or isinstance(bound, bool)
+                                    or bound < 0 for bound in span)
+                             or span[1] < span[0]))
     for phase, expected in zip(("pre", "post"), phases):
         stored = record.get(phase) if isinstance(record, dict) else None
         path = f"raw/battery_float.{phase}.ioreg"
@@ -821,12 +826,16 @@ def authenticate_pair(record: Any, custody_root: Path | str, *, phases: tuple[st
             confounded = True
             reasons.extend(f"{phase} {reason}" for reason in parsed["reasons"])
         if span is not None:
-            stamp = stored.get("monotonic_after_ns" if phase == "pre" else "monotonic_before_ns")
-            bound = span[0] if phase == "pre" else span[1]
-            if (not isinstance(stamp, int) or isinstance(stamp, bool)
-                    or not isinstance(bound, int) or isinstance(bound, bool)
-                    or (stamp > bound if phase == "pre" else stamp < bound)):
-                reasons.append(f"{phase} evidence missing: {expected} outside measured span")
+            if span_unavailable:
+                if "bundle span unavailable" not in reasons:
+                    reasons.append("bundle span unavailable")
+            else:
+                stamp = stored.get("monotonic_after_ns" if phase == "pre" else "monotonic_before_ns")
+                bound = span[0] if phase == "pre" else span[1]
+                if (not isinstance(stamp, int) or isinstance(stamp, bool)
+                        or not isinstance(bound, int) or isinstance(bound, bool)
+                        or (stamp > bound if phase == "pre" else stamp < bound)):
+                    reasons.append(f"{phase} evidence missing: {expected} outside measured span")
     status = ("battery_float_confounded" if confounded else
               "battery_float_evidence_missing" if reasons else "pass")
     pre_q, post_q = capacities["pre"], capacities["post"]
@@ -874,6 +883,38 @@ def authenticate_quiet_session(envelope_dir: Path | str) -> PairVerdict:
                                            "artifact": relative, "expected_sha256": expected,
                                            "observed_sha256": observed}])
     return verdict
+
+
+def authenticate_bundle(bundle_path: Path | str) -> PairVerdict:
+    """Authenticate bundle battery probes against controller monotonic stage bounds."""
+    root = Path(bundle_path)
+    try:
+        metadata = json.loads((root / "metadata.json").read_bytes())
+    except (OSError, ValueError):
+        metadata = None
+    if not isinstance(metadata, dict):
+        metadata = {}
+    try:
+        events = [json.loads(line) for line in (root / "events.jsonl").read_text().splitlines()
+                  if line.strip()]
+    except (OSError, ValueError):
+        events = []
+    first_start = next((event for event in events if isinstance(event, dict)
+                        and event.get("event_type") == "stage_started"
+                        and event.get("phase") == "idle_baseline"), None)
+    last_end = next((event for event in reversed(events) if isinstance(event, dict)
+                     and event.get("event_type") == "stage_completed"
+                     and event.get("phase") == "idle_drift_sentinel"), None)
+    start_metadata = first_start.get("metadata") if first_start else None
+    end_metadata = last_end.get("metadata") if last_end else None
+    start = start_metadata.get("monotonic_ns") if isinstance(start_metadata, dict) else None
+    end = end_metadata.get("monotonic_ns") if isinstance(end_metadata, dict) else None
+    span = ((start, end) if isinstance(start, int) and not isinstance(start, bool)
+            and isinstance(end, int) and not isinstance(end, bool)
+            and start >= 0 and end >= start else (None, None))
+    return authenticate_pair(metadata.get("battery_float"), root,
+                             phases=("bundle_pre", "bundle_post"),
+                             identity=metadata.get("run_id"), span=span)
 
 
 def authenticate_capture(capture_dir: Path | str) -> PairVerdict:

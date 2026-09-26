@@ -163,6 +163,135 @@ class PairAuthenticationTests(unittest.TestCase):
             self.assertEqual(battery_float.authenticate_capture(tmp).status, "pass")
 
 
+class BundleAuthenticationTests(unittest.TestCase):
+    @staticmethod
+    def event(phase, event_type, monotonic_ns):
+        return {"timestamp_s": 100, "event_type": event_type, "phase": phase,
+                "message": "stage boundary", "metadata": {"monotonic_ns": monotonic_ns}}
+
+    def bundle(self, root, *, pre=None, post=None, events=None):
+        directory = Path(root)
+        (directory / "raw").mkdir(exist_ok=True)
+        pair = {}
+        for phase, body in (("pre", raw() if pre is None else pre),
+                            ("post", raw() if post is None else post)):
+            path = f"raw/battery_float.{phase}.ioreg"
+            (directory / path).write_bytes(body)
+            clock = iter((10, 20) if phase == "pre" else (80, 90))
+            pair[phase], _ = battery_float.observe(
+                phase=f"bundle_{phase}", raw_path=path, session_id="run-1",
+                wall_time_s=UPDATE + 1, monotonic_ns=lambda: next(clock),
+                runner=lambda argv, body=body: subprocess.CompletedProcess(argv, 0, body, b""))
+        (directory / "metadata.json").write_text(json.dumps({
+            "run_id": "run-1", "battery_float": pair,
+        }))
+        if events is None:
+            events = [self.event("idle_baseline", "stage_started", 20),
+                      self.event("idle_drift_sentinel", "stage_completed", 80)]
+        (directory / "events.jsonl").write_text(
+            "".join(json.dumps(event) + "\n" for event in events))
+        return pair
+
+    def test_span_passes_at_inclusive_probe_boundaries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp)
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual((verdict.kind, verdict.status, verdict.reasons),
+                             ("bundle", "pass", ()))
+
+    def test_pre_outside_span_is_evidence_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp, events=[self.event("idle_baseline", "stage_started", 19),
+                                     self.event("idle_drift_sentinel", "stage_completed", 80)])
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual(verdict.status, "battery_float_evidence_missing")
+            self.assertEqual(verdict.reasons,
+                             ("pre evidence missing: bundle_pre outside measured span",))
+
+    def test_post_outside_span_is_evidence_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp, events=[self.event("idle_baseline", "stage_started", 20),
+                                     self.event("idle_drift_sentinel", "stage_completed", 81)])
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual(verdict.status, "battery_float_evidence_missing")
+            self.assertEqual(verdict.reasons,
+                             ("post evidence missing: bundle_post outside measured span",))
+
+    def test_missing_event_or_field_refuses_as_unavailable_span(self):
+        start = self.event("idle_baseline", "stage_started", 20)
+        end = self.event("idle_drift_sentinel", "stage_completed", 80)
+        cases = (("start event", [end]), ("end event", [start]),
+                 ("start field", [{**start, "metadata": {}}, end]),
+                 ("end field", [start, {**end, "metadata": {}}]))
+        for name, events in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                self.bundle(tmp, events=events)
+                verdict = battery_float.authenticate_bundle(tmp)
+                self.assertEqual(verdict.status, "battery_float_evidence_missing")
+                self.assertEqual(verdict.reasons, ("bundle span unavailable",))
+
+    def test_invalid_or_reversed_monotonic_bounds_refuse(self):
+        for start_value, end_value in ((-1, 80), (True, 80), (20.0, 80),
+                                       ("20", 80), (20, -1), (20, False),
+                                       (20, 80.0), (20, "80"), (81, 80)):
+            with self.subTest(bounds=(start_value, end_value)), tempfile.TemporaryDirectory() as tmp:
+                self.bundle(tmp, events=[self.event("idle_baseline", "stage_started", start_value),
+                                         self.event("idle_drift_sentinel", "stage_completed", end_value)])
+                verdict = battery_float.authenticate_bundle(tmp)
+                self.assertEqual(verdict.status, "battery_float_evidence_missing")
+                self.assertEqual(verdict.reasons, ("bundle span unavailable",))
+
+    def test_first_start_and_last_end_govern_repeated_stages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp, events=[
+                self.event("idle_baseline", "stage_started", 20),
+                self.event("idle_baseline", "stage_started", 25),
+                self.event("idle_drift_sentinel", "stage_completed", 75),
+                self.event("idle_drift_sentinel", "stage_completed", 80),
+            ])
+            self.assertEqual(battery_float.authenticate_bundle(tmp).status, "pass")
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp, events=[
+                self.event("idle_baseline", "stage_started", 19),
+                self.event("idle_baseline", "stage_started", 20),
+                self.event("idle_drift_sentinel", "stage_completed", 80),
+                self.event("idle_drift_sentinel", "stage_completed", 81),
+            ])
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual(verdict.status, "battery_float_evidence_missing")
+            self.assertEqual(len(verdict.reasons), 2)
+
+    def test_custody_precedes_unavailable_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp, events=[])
+            (Path(tmp) / "raw/battery_float.post.ioreg").unlink()
+            with self.assertRaises(battery_float.CustodyFailure):
+                battery_float.authenticate_bundle(tmp)
+
+    def test_probe_and_parse_precede_unavailable_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pair = self.bundle(tmp, events=[])
+            pair["pre"]["exit_code"] = 2
+            (Path(tmp) / "metadata.json").write_text(json.dumps({
+                "run_id": "run-1", "battery_float": pair,
+            }))
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual(verdict.status, "battery_float_evidence_missing")
+            self.assertIn("probe failed", verdict.reasons[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp, pre=b"invalid ioreg\n", events=[])
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual(verdict.status, "battery_float_evidence_missing")
+            self.assertIn("header", verdict.reasons[0])
+
+    def test_predicate_precedes_unavailable_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.bundle(tmp, pre=raw("charging-synthetic-from-real.ioreg"), events=[])
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual(verdict.status, "battery_float_confounded")
+            self.assertTrue(any("IsCharging" in reason for reason in verdict.reasons))
+
+
 class S0FreezeTests(unittest.TestCase):
     def test_frozen_function_sources_match_base(self):
         for name, pinned in FROZEN_FUNCTION_SOURCE_SHA256.items():
