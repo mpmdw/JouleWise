@@ -55,15 +55,23 @@ class CheckGateLedgerTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.temporary.cleanup()
 
-    def body(self) -> str:
+    def body(self, tier: str | None = None) -> str:
         rows = [
             f"| {key} | gate {key} | RUN evidence.txt |" for key in range(1, 12)
         ]
         rows.append(f"| 12 | final head | RUN {self.head} |")
-        return "\n".join([
+        body = "\n".join([
             "## Gate ledger (D-118 / D-121)", "",
             "| # | Gate item | Evidence |", "| --- | --- | --- |", *rows,
         ]) + "\n"
+        return f"Tier: {tier}\n\n{body}" if tier is not None else body
+
+    def light_body(self) -> str:
+        body = self.body("light")
+        for key in CHECKER_MODULE.LIGHT_NA:
+            body = body.replace(f"| {key} | gate {key} | RUN evidence.txt |",
+                                f"| {key} | gate {key} | N/A (light tier) |")
+        return body
 
     def run_checker(
         self, body: str, *, repo_root: Path | None = None,
@@ -80,6 +88,84 @@ class CheckGateLedgerTests(unittest.TestCase):
         result = self.run_checker(body)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn(expected, result.stdout.splitlines())
+
+    def test_full_tier_and_missing_tier_keep_twelve_run_rows(self) -> None:
+        for body in (self.body("full"), self.body()):
+            with self.subTest(body_start=body.splitlines()[0]):
+                result = self.run_checker(body)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_declared_light_tier_accepts_exact_eight_na_rows(self) -> None:
+        result = self.run_checker(self.light_body())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: 4/4 RUN; 8/8 N/A (light tier)\n")
+
+    def test_indented_light_tier_line_reports_full_twelve_rows(self) -> None:
+        # An indented `Tier: light` is not a declaration; the body is checked
+        # as full and the success line must say so (TIER01-GATE-01 F3).
+        result = self.run_checker(" Tier: light\n\n" + self.body())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_light_na_is_refused_in_full_or_missing_tier(self) -> None:
+        for tier in ("full", None):
+            for key in CHECKER_MODULE.LIGHT_NA:
+                with self.subTest(tier=tier, key=key):
+                    body = self.body(tier).replace(
+                        f"| {key} | gate {key} | RUN evidence.txt |",
+                        f"| {key} | gate {key} | N/A (light tier) |",
+                    )
+                    self.assert_rejected(
+                        body,
+                        f"gate-ledger: item {key}: N/A (light tier) is allowed only in light-tier rows 2-8 and 10",
+                    )
+
+    def test_light_tier_requires_evidence_in_rows_one_nine_eleven_twelve(self) -> None:
+        for key in CHECKER_MODULE.LIGHT_REQUIRED:
+            with self.subTest(key=key):
+                original = f"RUN {self.head}" if key == 12 else "RUN evidence.txt"
+                body = self.light_body().replace(
+                    f"| {key} | gate {key} | {original} |" if key != 12
+                    else f"| 12 | final head | {original} |",
+                    f"| {key} | gate {key} | N/A (light tier) |" if key != 12
+                    else "| 12 | final head | N/A (light tier) |",
+                )
+                self.assert_rejected(
+                    body,
+                    f"gate-ledger: item {key}: N/A (light tier) is allowed only in light-tier rows 2-8 and 10",
+                )
+
+    def test_light_tier_rejects_run_or_not_run_in_na_rows(self) -> None:
+        for key in CHECKER_MODULE.LIGHT_NA:
+            for replacement in ("RUN evidence.txt", "NOT-RUN", "N/A (light tier) extra"):
+                with self.subTest(key=key, replacement=replacement):
+                    body = self.light_body().replace(
+                        f"| {key} | gate {key} | N/A (light tier) |",
+                        f"| {key} | gate {key} | {replacement} |",
+                    )
+                    self.assert_rejected(
+                        body,
+                        f"gate-ledger: item {key}: light tier requires N/A (light tier)",
+                    )
+
+    def test_light_tier_still_refuses_missing_and_invalid_required_evidence(self) -> None:
+        body = self.light_body().replace("| 9 | gate 9 | RUN evidence.txt |\n", "")
+        self.assert_rejected(body, "gate-ledger: item 9: missing")
+        body = self.light_body().replace("| 1 | gate 1 | RUN evidence.txt |",
+                                         "| 1 | gate 1 | NOT-RUN |")
+        self.assert_rejected(body, "gate-ledger: item 1: NOT-RUN")
+        body = self.light_body().replace("| 9 | gate 9 | RUN evidence.txt |",
+                                         "| 9 | gate 9 | RUN missing.txt |")
+        self.assert_rejected(body,
+                             "gate-ledger: item 9: neither a commit nor a path: missing.txt")
+        body = self.light_body().replace(f"RUN {self.head}", "RUN deadbee")
+        self.assert_rejected(body, "gate-ledger: item 12: commit sha does not resolve: deadbee")
+
+    def test_invalid_or_duplicate_tier_declaration_is_refused(self) -> None:
+        self.assert_rejected(self.body("full|light"), "gate-ledger: Tier must be full or light")
+        self.assert_rejected("Tier: full\n" + self.body("light"),
+                             "gate-ledger: duplicate Tier declaration")
 
     def test_missing_key_is_refused(self) -> None:
         self.assert_rejected(self.body().replace("| 4 | gate 4 | RUN evidence.txt |\n", ""),
@@ -399,10 +485,7 @@ class CheckGateLedgerTests(unittest.TestCase):
         template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
         result = self.run_checker(template)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertEqual(
-            result.stdout.splitlines(),
-            [f"gate-ledger: item {key}: NOT-RUN" for key in range(1, 13)],
-        )
+        self.assertEqual(result.stdout, "gate-ledger: Tier must be full or light\n")
 
     def test_acceptance_command_aliases_refuse_the_template(self) -> None:
         result = subprocess.run(
@@ -411,10 +494,7 @@ class CheckGateLedgerTests(unittest.TestCase):
             text=True, capture_output=True, check=False,
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertEqual(
-            result.stdout.splitlines(),
-            [f"gate-ledger: item {key}: NOT-RUN" for key in range(1, 13)],
-        )
+        self.assertEqual(result.stdout, "gate-ledger: Tier must be full or light\n")
 
 
 if __name__ == "__main__":
