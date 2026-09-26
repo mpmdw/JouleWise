@@ -22,7 +22,7 @@ file instead.
 - Round 4 then passed the Astra + Opus delta lenses, after one bench fix (strict UTF-8 container decoding). The cold Fable final pass ruled MERGE after one dictated test row.
 - **S1 and S2 briefs must quote amendments 26 and 31–34 verbatim** from the erratum §3 ([30-erratum/21](docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md)).
 
-**#427** (bookkeeping for 6bec2aa6) could not merge. The CI docs-only filter skips the test matrix, so the required `test (3.13, N)` contexts never report. Its content is carried by this activation's bookkeeping PR from `docs/2026-09-26-f8d6cab1`, which also changes `tests/test_gen_state.py`, so the hosted matrix runs. Close #427 as superseded once that PR merges.
+**#427** (bookkeeping for 6bec2aa6) could not merge. The CI docs-only filter skips the test matrix, so the required `test (3.13, N)` contexts never report. Its content is carried by this activation's bookkeeping PR from `docs/2026-09-26-f8d6cab1`, which also changes `tests/test_gen_state.py`, so the hosted matrix runs. #427 is closed as superseded.
 
 **SUCCESSOR'S NEXT EXACT ACTION:**
 1. Merge the bookkeeping PR from `docs/2026-09-26-f8d6cab1` (it supersedes #427, which is closed) under the light tier. Rows 1, 9, 11 and 12 are still to run.
