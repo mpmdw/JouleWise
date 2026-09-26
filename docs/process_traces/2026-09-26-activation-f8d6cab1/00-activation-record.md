@@ -138,3 +138,13 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
     - The full suite runs there (`JouleWise-wt-s0integ-f8d6cab1`, `/tmp/f8d6-row9-s0integ.log`).
     - The PR head stays `747596a3`, so this creates no post-review commit. GitHub's merge commit will carry the same tree.
     - **Canonical is behind `origin/main`** (it is at `5d5a0b75`). The plan is one fast-forward after #429 merges, then exit so that a fresh supervisor starts (D-183). W1 stays blocked by pid 46048 in the meantime.
+24. **#429 (S0) MERGED → main `1417c0c4`** (full tier, 12/12; `--match-head-commit 747596a3`).
+    - Row 9 on the integration tree `1eeebc40`: 7,454 tests, 0 failures, 0 errors.
+    - All hosted jobs are green.
+    - **Post-merge look:** the tree of `1417c0c4` is `fb277a15…`, identical to the tree of `1eeebc40`, so main is exactly the tree that passed.
+    - A308 BATTERY-FLOAT-GATE-01 continues with S1 ∥ S2, after QPE-SHAPE3-NIGHT-BLANK-01 is ruled.
+25. **Exit (D-183).** Main now contains #428 and #429.
+    - The canonical fast-forward from `5d5a0b75` to `1417c0c4` happens after this commit, once the checks confirm no `com.joulewise.night*` label is loaded and no such plist is on disk. That leaves the resident supervisor stale for arming, so this session exits for the watchdog's successor.
+    - This branch becomes the bookkeeping PR, which supersedes #427; #427 is closed with a pointer.
+    - Lanes this activation: retired A309 and A310; registered A311–A312 and BFGS-S0-FOLLOWUPS-01, QPE-SHAPE3-NIGHT-BLANK-01 and TEST-LOAD-LADDER-KILL-COVERAGE-01.
+    - No Codex child or background process is left running at exit.
