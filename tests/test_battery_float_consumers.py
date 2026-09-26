@@ -118,6 +118,8 @@ class _Checker(ast.NodeVisitor):
         self.direct_battery_import = False
         self.dataclass_modules: set[str] = set()
         self.dataclass_replaces: set[str] = set()
+        self.copy_modules: set[str] = set()
+        self.copy_replaces: set[str] = set()
         self.allowed_type_loads: set[int] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("isinstance", "issubclass") and len(node.args) >= 2:
@@ -136,6 +138,8 @@ class _Checker(ast.NodeVisitor):
                 for alias in node.names:
                     if alias.name == "dataclasses":
                         self.dataclass_modules.add(alias.asname or "dataclasses")
+                    if alias.name == "copy":
+                        self.copy_modules.add(alias.asname or "copy")
                     if alias.name == MODULE:
                         if alias.asname:
                             self.module_aliases.add(alias.asname)
@@ -160,6 +164,10 @@ class _Checker(ast.NodeVisitor):
                     for alias in node.names:
                         if alias.name == "replace":
                             self.dataclass_replaces.add(alias.asname or alias.name)
+                elif module == "copy":
+                    for alias in node.names:
+                        if alias.name == "replace":
+                            self.copy_replaces.add(alias.asname or alias.name)
         self.imports_battery_float = bool(self.module_aliases or self.package_aliases
                                           or self.direct_battery_import)
 
@@ -212,9 +220,11 @@ class _Checker(ast.NodeVisitor):
                 if self.relative not in FACTORY_ALLOWLIST:
                     self._flag(node, callee.id if isinstance(callee, ast.Name) else callee.attr)
             if self.imports_battery_float and (
-                isinstance(callee, ast.Name) and callee.id in self.dataclass_replaces
+                isinstance(callee, ast.Name) and callee.id in (self.dataclass_replaces | self.copy_replaces)
                 or isinstance(callee, ast.Attribute) and callee.attr == "replace"
-                and isinstance(callee.value, ast.Name) and callee.value.id in self.dataclass_modules
+                and isinstance(callee.value, ast.Name)
+                and callee.value.id in (self.dataclass_modules | self.copy_modules)
+                or isinstance(callee, ast.Attribute) and callee.attr == "__replace__"
             ):
                 site = (self.relative, ".".join(self.qualname), ast.unparse(node))
                 self.replace_sites.append(site)
@@ -303,6 +313,9 @@ class ConsumerGuardTests(unittest.TestCase):
             ("from joulewise import battery_float as bf\nPV = bf.PairVerdict\nPV()\n", "PairVerdict"),
             ("from joulewise import battery_float as bf\nimport dataclasses as dc\ndc.replace(v, status='pass')\n", "dataclasses.replace"),
             ("from joulewise import battery_float as bf\nfrom dataclasses import replace as rep\nrep(v, status='pass')\n", "dataclasses.replace"),
+            ("from joulewise import battery_float as bf\nimport copy as cp\ncp.replace(v, status='pass')\n", "dataclasses.replace"),
+            ("from joulewise import battery_float as bf\nfrom copy import replace as rep\nrep(v, status='pass')\n", "dataclasses.replace"),
+            ("from joulewise import battery_float as bf\nv.__replace__(status='pass')\n", "dataclasses.replace"),
             ("from joulewise import battery_float as bf\ntype(v)()\n", "type(...)(...)"),
             ("from joulewise import battery_float as bf\ngetattr(bf, 'PairVerdict')()\n", "getattr(battery_float, ...)"),
         )

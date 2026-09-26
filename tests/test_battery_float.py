@@ -37,8 +37,8 @@ FROZEN_FUNCTION_SOURCE_SHA256 = {
     "authenticate_committed_verdict": "1a4d783b9937e6d5dee26e1b02295898abd2170ef5b354573e2a88b7cad73522",
     "load_committed_verdict": "43900752071c16b8d4fe7b603c0d30ec573e185aa48e40515b24ed9b587ca1ea",
     "compare_verdict": "d375ca6c5d514a2d2c62fd3ce999a3679936677463771b13cdb210ec677fa143",
-    "AuthenticatedSlot": "61200f491c133abd27cd3bc0c1e413314b2b86fed3c16d076f4d91cb7783bc53",
-    "AuthenticatedVerdict": "e7c3684e4efede62ac4754b1a0fb95d32829c52a44c554f5b1a3868f2d8423bf",
+    "AuthenticatedSlot": "b0f493c94be9efe77f555250fb8ad85f02b87c49b2ae9e4a5449c7a8a878f8e7",
+    "AuthenticatedVerdict": "70adf088e78290667bb59b6888d5839418851c51603c195612abfbda1c5aa117",
     "BatteryVerdictRefusal": "29acdbfbd45625ec97608150fb64502f8c0efa590cfcd50c3a486c6586ad63f6",
     "CommittedVerdict": "4d9d9c1bf381907734c0654a7e8234a1a79d05c8ad388156963c6cb8a2e0fcd1",
     "CustodyFailure": "af27587c69dc2b4e69cfad2eff52affd3e2dd293997470b4ccc8725fafb51dbf",
@@ -177,7 +177,7 @@ class PairAuthenticationTests(unittest.TestCase):
             (root / "session.json").write_text(json.dumps({
                 "session": "session-1", "battery_float": record,
                 "start_stamp": {"monotonic_before_s": 30e-9},
-                "end_stamp": {"monotonic_after_s": 70e-9},
+                "end_stamp": {"monotonic_after_s": 70e-9}, "journal_rows": 1,
             }))
             hashes = {record[phase]["raw_path"]: record[phase]["raw_stdout_sha256"]
                       for phase in ("pre", "post")}
@@ -332,7 +332,7 @@ class BundleAuthenticationTests(unittest.TestCase):
 class RoundThreeAuthenticationTests(unittest.TestCase):
     """T15: wrapper custody, span/stamp rungs, digest and capture binding."""
 
-    def quiet(self, root, *, refusal=False, rounds=False):
+    def quiet(self, root, *, refusal=False, rounds=True):
         pair = PairAuthenticationTests().pair(root)
         session = {"session": "session-1", "battery_float": pair,
                    "start_stamp": {"monotonic_before_s": 20e-9, "monotonic_after_s": 20e-9}}
@@ -340,6 +340,8 @@ class RoundThreeAuthenticationTests(unittest.TestCase):
             session["error_class"] = "network_time_provenance"
         else:
             session["end_stamp"] = {"monotonic_after_s": 80e-9}
+            session["journal_rows"] = 1 if rounds else 0
+        session["round_workers"] = [] if refusal or not rounds else [{}]
         root = Path(root)
         (root / "session.json").write_text(json.dumps(session))
         if refusal:
@@ -347,6 +349,8 @@ class RoundThreeAuthenticationTests(unittest.TestCase):
         elif rounds:
             hashes = {pair[p]["raw_path"]: pair[p]["raw_stdout_sha256"] for p in ("pre", "post")}
             (root / "rounds.jsonl").write_text(json.dumps({"raw": {"sha256": hashes}}) + "\n")
+        else:
+            (root / "rounds.jsonl").write_text("")
         return session, pair
 
     def test_round_journal_mismatch_and_malformed_both_raise(self):
@@ -363,17 +367,19 @@ class RoundThreeAuthenticationTests(unittest.TestCase):
             with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
                 battery_float.authenticate_quiet_session(tmp)
             journal.write_text("  \n")
-            with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
+            with self.assertRaisesRegex(battery_float.CustodyFailure, "holds 0 rows"):
                 battery_float.authenticate_quiet_session(tmp)
 
     def test_unreadable_round_journal_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.quiet(tmp)
+            (Path(tmp) / "rounds.jsonl").unlink()
             (Path(tmp) / "rounds.jsonl").mkdir()
             with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
                 battery_float.authenticate_quiet_session(tmp)
         with tempfile.TemporaryDirectory() as tmp:
             self.quiet(tmp)
+            (Path(tmp) / "rounds.jsonl").unlink()
             (Path(tmp) / "rounds.jsonl").symlink_to("missing")
             with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
                 battery_float.authenticate_quiet_session(tmp)
@@ -386,8 +392,8 @@ class RoundThreeAuthenticationTests(unittest.TestCase):
             hashes = {pair[phase]["raw_path"]: pair[phase]["raw_stdout_sha256"]
                       for phase in ("pre", "post")}
             (Path(tmp) / "rounds.jsonl").write_text(json.dumps({"raw": {"sha256": hashes}}) + "\n")
-            self.assertEqual(battery_float.authenticate_quiet_session(tmp).reasons,
-                             ("quiet span unavailable",))
+            with self.assertRaisesRegex(battery_float.CustodyUnreadable, "refusal envelope records none"):
+                battery_float.authenticate_quiet_session(tmp)
         with tempfile.TemporaryDirectory() as tmp:
             session, _ = self.quiet(tmp)
             del session["end_stamp"]
@@ -616,36 +622,287 @@ class RoundThreeAuthenticationTests(unittest.TestCase):
         self.assertEqual(battery_float.QUIET_REFUSAL_ERROR_CLASS, "network_time_provenance")
 
 
+class MandatoryContainerAndJournalTests(unittest.TestCase):
+    def quiet(self, root, *, refusal=False, rounds=True):
+        return RoundThreeAuthenticationTests().quiet(root, refusal=refusal, rounds=rounds)
+
+    def test_t16_a_mandatory_containers_refuse_after_raw_loss(self):
+        kinds = (("quiet", "session.json", lambda root: self.quiet(root),
+                  battery_float.authenticate_quiet_session),
+                 ("bundle", "metadata.json", lambda root: BundleAuthenticationTests().bundle(root),
+                  battery_float.authenticate_bundle),
+                 ("capture", "instrument_evidence.json", self._capture,
+                  battery_float.authenticate_capture))
+        for kind, name, make, authenticate in kinds:
+            for form in ("truncated", "array", "string", "directory", "dangling",
+                         "external_symlink", "non_utf8", "deleted"):
+                with self.subTest(kind=kind, form=form), tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+                    make(tmp)
+                    root = Path(tmp)
+                    path = root / name
+                    original = path.read_bytes()
+                    (root / "raw/battery_float.post.ioreg").unlink()
+                    with self.assertRaises(battery_float.CustodyFailure):
+                        authenticate(root)
+                    path.unlink()
+                    if form == "directory":
+                        path.mkdir()
+                    elif form == "dangling":
+                        path.symlink_to("absent")
+                    elif form == "external_symlink":
+                        target = Path(outside) / name
+                        target.write_bytes(original)
+                        path.symlink_to(target)
+                    elif form != "deleted":
+                        path.write_bytes({"truncated": b"{", "array": b"[]", "string": b'"x"',
+                                          "non_utf8": b"\xff\xfe"}[form])
+                    with self.assertRaisesRegex(battery_float.CustodyUnreadable, "unreadable"):
+                        authenticate(root)
+
+    @staticmethod
+    def _capture(root):
+        pair = PairAuthenticationTests().pair(root)
+        for phase in ("pre", "post"):
+            pair[phase]["phase"] = f"slot_{phase}"
+            pair[phase]["session_id"] = None
+        (Path(root) / "instrument_evidence.json").write_text(json.dumps({
+            "validation_id": "validation-1", "battery_float": pair}))
+        return pair
+
+    def test_t16_b_readable_missing_key_and_bad_digest_are_statuses(self):
+        kinds = (("quiet", "session.json", lambda root: self.quiet(root), battery_float.authenticate_quiet_session),
+                 ("bundle", "metadata.json", lambda root: BundleAuthenticationTests().bundle(root), battery_float.authenticate_bundle),
+                 ("capture", "instrument_evidence.json", self._capture, battery_float.authenticate_capture))
+        for kind, name, make, authenticate in kinds:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                make(tmp)
+                path = Path(tmp) / name
+                record = json.loads(path.read_text())
+                battery = record.pop("battery_float")
+                path.write_text(json.dumps(record))
+                self.assertEqual(authenticate(tmp).status, "battery_float_evidence_missing")
+                battery["pre"]["raw_stdout_sha256"] = "bad"
+                record["battery_float"] = battery
+                path.write_text(json.dumps(record))
+                self.assertIn("pre evidence missing: raw digest not recorded", authenticate(tmp).reasons)
+
+    def test_t16_c_duplicate_top_level_key_refuses(self):
+        kinds = (("quiet", "session.json", lambda root: self.quiet(root), battery_float.authenticate_quiet_session),
+                 ("bundle", "metadata.json", lambda root: BundleAuthenticationTests().bundle(root), battery_float.authenticate_bundle),
+                 ("capture", "instrument_evidence.json", self._capture, battery_float.authenticate_capture))
+        for kind, name, make, authenticate in kinds:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                make(tmp)
+                (Path(tmp) / name).write_text('{"same": 1, "same": 2}')
+                with self.assertRaisesRegex(battery_float.CustodyUnreadable,
+                                            f"duplicate JSON key same in {name}"):
+                    authenticate(tmp)
+
+    def test_t30_a_deleted_journal_after_mismatch_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp)
+            journal = Path(tmp) / "rounds.jsonl"
+            row = json.loads(journal.read_text())
+            row["raw"]["sha256"]["raw/battery_float.pre.ioreg"] = "0" * 64
+            journal.write_text(json.dumps(row) + "\n")
+            with self.assertRaises(battery_float.CustodyFailure):
+                battery_float.authenticate_quiet_session(tmp)
+            journal.unlink()
+            with self.assertRaisesRegex(battery_float.CustodyUnreadable, "round journal missing"):
+                battery_float.authenticate_quiet_session(tmp)
+
+    def test_t30_b_empty_completed_journal_refuses_even_with_rewritten_raw(self):
+        for rewrite in (False, True):
+            with self.subTest(rewrite=rewrite), tempfile.TemporaryDirectory() as tmp:
+                session, pair = self.quiet(tmp)
+                if rewrite:
+                    path = Path(tmp) / "raw/battery_float.pre.ioreg"
+                    path.write_bytes(path.read_bytes() + b"x")
+                    pair["pre"]["raw_stdout_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+                    (Path(tmp) / "session.json").write_text(json.dumps(session))
+                (Path(tmp) / "rounds.jsonl").write_text("")
+                with self.assertRaisesRegex(battery_float.CustodyUnreadable, "holds 0 rows; session records 1"):
+                    battery_float.authenticate_quiet_session(tmp)
+
+    def test_t30_c_zero_round_completion_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp, rounds=False)
+            self.assertEqual(battery_float.authenticate_quiet_session(tmp).status, "pass")
+
+    def test_t30_d_refusal_missing_journal_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp, refusal=True)
+            (Path(tmp) / "rounds.jsonl").unlink()
+            with self.assertRaisesRegex(battery_float.CustodyUnreadable, "round journal missing"):
+                battery_float.authenticate_quiet_session(tmp)
+
+    def test_t30_f_provisional_journal_is_not_input_but_raw_custody_remains(self):
+        for journal in (None, '{"raw":{"paths":[],"sha256":{}}}\n', '{'):
+            with self.subTest(journal=journal), tempfile.TemporaryDirectory() as tmp:
+                session, _ = self.quiet(tmp)
+                del session["end_stamp"]
+                (Path(tmp) / "session.json").write_text(json.dumps(session))
+                path = Path(tmp) / "rounds.jsonl"
+                path.unlink()
+                if journal is not None:
+                    path.write_text(journal)
+                verdict = battery_float.authenticate_quiet_session(tmp)
+                self.assertEqual((verdict.status, verdict.reasons),
+                                 ("battery_float_evidence_missing", ("quiet span unavailable",)))
+                (Path(tmp) / "raw/battery_float.pre.ioreg").unlink()
+                with self.assertRaises(battery_float.CustodyFailure):
+                    battery_float.authenticate_quiet_session(tmp)
+
+    def test_t30_g_historical_missing_key_keeps_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp)
+            path = Path(tmp) / "session.json"
+            record = json.loads(path.read_text())
+            del record["battery_float"]
+            path.write_text(json.dumps(record))
+            (Path(tmp) / "rounds.jsonl").unlink()
+            self.assertEqual(battery_float.authenticate_quiet_session(tmp).status,
+                             "battery_float_evidence_missing")
+
+    def test_t30_i_witness_validation_and_failed_round(self):
+        for witness in (None, True, "1", -1):
+            with self.subTest(witness=witness), tempfile.TemporaryDirectory() as tmp:
+                session, _ = self.quiet(tmp)
+                if witness is None:
+                    del session["journal_rows"]
+                else:
+                    session["journal_rows"] = witness
+                (Path(tmp) / "session.json").write_text(json.dumps(session))
+                with self.assertRaisesRegex(battery_float.CustodyUnreadable, "round count not recorded"):
+                    battery_float.authenticate_quiet_session(tmp)
+        with tempfile.TemporaryDirectory() as tmp:
+            session, _ = self.quiet(tmp)
+            session["round_workers"].append({"error": "sampler parse"})
+            (Path(tmp) / "session.json").write_text(json.dumps(session))
+            self.assertEqual(battery_float.authenticate_quiet_session(tmp).status, "pass")
+
+    def test_t30_j_two_rows_and_truncation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session, _ = self.quiet(tmp)
+            session["journal_rows"] = 2
+            (Path(tmp) / "session.json").write_text(json.dumps(session))
+            journal = Path(tmp) / "rounds.jsonl"
+            good = journal.read_text()
+            bad = json.loads(good)
+            bad["raw"]["sha256"]["raw/battery_float.pre.ioreg"] = "0" * 64
+            journal.write_text(good + json.dumps(bad) + "\n")
+            with self.assertRaises(battery_float.CustodyFailure):
+                battery_float.authenticate_quiet_session(tmp)
+            journal.write_text(good)
+            with self.assertRaisesRegex(battery_float.CustodyUnreadable, "holds 1 rows; session records 2"):
+                battery_float.authenticate_quiet_session(tmp)
+
+    def test_events_non_object_missing_and_malformed_refuse(self):
+        for body in (b'[]\n"x"\n', b'"x"\n', b'{', b'\xff\xfe', None, "directory", "symlink"):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+                BundleAuthenticationTests().bundle(tmp)
+                path = Path(tmp) / "events.jsonl"
+                path.unlink()
+                if body == "directory":
+                    path.mkdir()
+                elif body == "symlink":
+                    target = Path(outside) / "events.jsonl"
+                    target.write_text("{}\n")
+                    path.symlink_to(target)
+                elif body is not None:
+                    path.write_bytes(body)
+                with self.assertRaises(battery_float.CustodyUnreadable):
+                    battery_float.authenticate_bundle(tmp)
+
+
+def _frozen_closure_issues(source: str) -> list[str]:
+    """Return changed pins or extra module-scope bindings in the frozen closure."""
+    from collections import Counter
+
+    issues = []
+    tree = ast.parse(source)
+    definitions = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            definitions[node.name] = node
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    definitions[target.id] = node
+    pending, closure = list(FROZEN_ROOTS), set()
+    while pending:
+        name = pending.pop()
+        if name in closure:
+            continue
+        closure.add(name)
+        pending.extend(node.id for node in ast.walk(definitions[name])
+                       if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+                       and node.id in definitions and node.id not in closure)
+    if set(FROZEN_FUNCTION_SOURCE_SHA256) != closure:
+        issues.append("closure changed")
+
+    bindings = Counter()
+
+    class ModuleBindings(ast.NodeVisitor):
+        def visit_FunctionDef(self, node):
+            bindings[node.name] += 1
+            for expression in (*node.decorator_list, *node.args.defaults,
+                               *(item for item in node.args.kw_defaults if item is not None)):
+                self.visit(expression)
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_ClassDef(self, node):
+            bindings[node.name] += 1
+            for expression in (*node.decorator_list, *node.bases,
+                               *(keyword.value for keyword in node.keywords)):
+                self.visit(expression)
+
+        def visit_Name(self, node):
+            if isinstance(node.ctx, ast.Store):
+                bindings[node.id] += 1
+
+        def visit_Import(self, node):
+            for alias in node.names:
+                bindings[alias.asname or alias.name.split(".")[0]] += 1
+
+        def visit_ImportFrom(self, node):
+            for alias in node.names:
+                bindings[alias.asname or alias.name] += 1
+
+    ModuleBindings().visit(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Global):
+            for name in node.names:
+                bindings[name] += 1
+    lines = source.splitlines(keepends=True)
+    for name in closure:
+        if bindings[name] != 1:
+            issues.append(f"{name}: {bindings[name]} module-level bindings")
+        node = definitions[name]
+        if name in FROZEN_ROOTS:
+            segment = inspect.getsource(getattr(battery_float, name))
+        elif isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.decorator_list:
+            segment = "".join(lines[min(item.lineno for item in node.decorator_list)-1:node.end_lineno])
+        else:
+            segment = ast.get_source_segment(source, node)
+        digest = hashlib.sha256(segment.encode()).hexdigest()
+        if digest != FROZEN_FUNCTION_SOURCE_SHA256.get(name):
+            issues.append(f"{name}: source pin changed")
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            runtime = inspect.getsource(getattr(battery_float, name))
+            if name not in FROZEN_ROOTS and not node.decorator_list:
+                runtime = runtime.rstrip("\n")
+            if hashlib.sha256(runtime.encode()).hexdigest() != FROZEN_FUNCTION_SOURCE_SHA256.get(name):
+                issues.append(f"{name}: runtime pin changed")
+    return issues
+
+
 class S0FreezeTests(unittest.TestCase):
     def test_frozen_function_sources_match_base(self):
         """10-liveness/ex-01-dictated-closure-M1.md is the load_committed_verdict baseline."""
-        source = Path(battery_float.__file__).read_text()
-        tree = ast.parse(source)
-        definitions = {}
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                definitions[node.name] = node
-            elif isinstance(node, (ast.Assign, ast.AnnAssign)):
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                for target in targets:
-                    if isinstance(target, ast.Name):
-                        definitions[target.id] = node
-        pending, closure = list(FROZEN_ROOTS), set()
-        while pending:
-            name = pending.pop()
-            if name in closure:
-                continue
-            closure.add(name)
-            pending.extend(node.id for node in ast.walk(definitions[name])
-                           if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
-                           and node.id in definitions and node.id not in closure)
-        self.assertEqual(set(FROZEN_FUNCTION_SOURCE_SHA256), closure)
-        for name, pinned in FROZEN_FUNCTION_SOURCE_SHA256.items():
-            with self.subTest(name=name):
-                segment = (inspect.getsource(getattr(battery_float, name)) if name in FROZEN_ROOTS
-                           else ast.get_source_segment(source, definitions[name]))
-                actual = hashlib.sha256(segment.encode()).hexdigest()
-                self.assertEqual(actual, pinned)
+        self.assertEqual(_frozen_closure_issues(Path(battery_float.__file__).read_text()), [])
 
     def test_custody_unreadable_refuses_as_custody_failure(self):
         exc = battery_float.CustodyUnreadable("round journal unreadable: x")
@@ -662,6 +919,18 @@ class S0FreezeTests(unittest.TestCase):
         nodes = {node.name: node for node in ast.parse(mutant).body if isinstance(node, ast.FunctionDef)}
         digest = hashlib.sha256(ast.get_source_segment(mutant, nodes["_signed"]).encode()).hexdigest()
         self.assertNotEqual(digest, FROZEN_FUNCTION_SOURCE_SHA256["_signed"])
+
+    def test_mutating_decorator_turns_pin_red(self):
+        source = Path(battery_float.__file__).read_text()
+        mutant = source.replace("@dataclasses.dataclass(frozen=True, slots=True)\nclass AuthenticatedVerdict",
+                                "@dataclasses.dataclass(frozen=False, slots=True)\nclass AuthenticatedVerdict")
+        self.assertNotEqual(mutant, source)
+        self.assertIn("AuthenticatedVerdict: source pin changed", _frozen_closure_issues(mutant))
+
+    def test_nested_rebinding_turns_pin_red(self):
+        source = Path(battery_float.__file__).read_text()
+        mutant = source + "\nif True:\n    def _is_sha256(value): return True\n"
+        self.assertIn("_is_sha256: 2 module-level bindings", _frozen_closure_issues(mutant))
 
     def test_observe_seven_old_phases_match_pre_s0_bytes(self):
         for phase in ("arm_check", "publish_install", "t0", "validate_install",

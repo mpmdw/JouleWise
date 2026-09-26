@@ -803,6 +803,37 @@ def _json_pairs(filename: str):
     return unique
 
 
+def _required_file(root: Path, name: str) -> bytes:
+    path = root / name
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as exc:
+        raise CustodyUnreadable(f"{name} unreadable: missing") from exc
+    except OSError as exc:
+        raise CustodyUnreadable(f"{name} unreadable: {exc}") from exc
+    if stat.S_ISLNK(mode):
+        raise CustodyUnreadable(f"{name} unreadable: symlink")
+    if not stat.S_ISREG(mode):
+        raise CustodyUnreadable(f"{name} unreadable: not a regular file")
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        raise CustodyUnreadable(f"{name} unreadable: {exc}") from exc
+
+
+def _required_object(root: Path, name: str) -> dict[str, Any]:
+    body = _required_file(root, name)
+    try:
+        value = json.loads(body, object_pairs_hook=_json_pairs(name))
+    except CustodyFailure:
+        raise
+    except (ValueError, UnicodeError) as exc:
+        raise CustodyUnreadable(f"{name} unreadable: {exc}") from exc
+    if not isinstance(value, dict):
+        raise CustodyUnreadable(f"{name} unreadable: not a JSON object")
+    return value
+
+
 def _raw_bytes(root: Path, relative: str) -> bytes | None:
     """Inspect each container-relative component and refuse symlink traversal."""
     path = root
@@ -923,35 +954,47 @@ def authenticate_pair(record: Any, custody_root: Path | str, *, phases: tuple[st
 def authenticate_quiet_session(envelope_dir: Path | str) -> PairVerdict:
     """Authenticate a collector envelope from its mutable session journal and raw bytes."""
     root = Path(envelope_dir)
-    try:
-        session = json.loads((root / "session.json").read_bytes(),
-                             object_pairs_hook=_json_pairs("session.json"))
-    except (OSError, ValueError):
-        session = None
-    if not isinstance(session, dict):
-        session = {}
-    rows_path = root / "rounds.jsonl"
+    session = _required_object(root, "session.json")
     rows = []
-    if rows_path.exists() or rows_path.is_symlink():
+    battery_recorded = "battery_float" in session
+    refusal = ("end_stamp" not in session and
+               session.get("error_class") == QUIET_REFUSAL_ERROR_CLASS)
+    completed = "end_stamp" in session
+    if battery_recorded and (refusal or completed):
         try:
-            lines = rows_path.read_text().splitlines()
-            for line in lines:
-                if line:
-                    row = json.loads(line, object_pairs_hook=_json_pairs("rounds.jsonl"))
-                    if not isinstance(row, dict):
-                        raise ValueError("row is not a JSON object")
-                    rows.append(row)
-        except CustodyFailure:
-            raise
-        except (OSError, ValueError) as exc:
+            lines = _required_file(root, "rounds.jsonl").decode("utf-8").splitlines()
+        except CustodyUnreadable as exc:
+            if exc.detail == "rounds.jsonl unreadable: missing":
+                raise CustodyUnreadable("round journal missing")
+            raise CustodyUnreadable(f"round journal unreadable: {exc.detail}") from exc
+        except UnicodeError as exc:
             raise CustodyUnreadable(f"round journal unreadable: {exc}") from exc
+        for number, line in enumerate(lines, 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line, object_pairs_hook=_json_pairs("rounds.jsonl"))
+            except CustodyFailure:
+                raise
+            except ValueError as exc:
+                raise CustodyUnreadable(f"round journal unreadable: line {number}: {exc}") from exc
+            if not isinstance(row, dict):
+                raise CustodyUnreadable(f"round journal unreadable: line {number}: not a JSON object")
+            rows.append(row)
+        if refusal and rows:
+            raise CustodyUnreadable(f"round journal holds {len(rows)} rows; refusal envelope records none")
+        if completed:
+            count = session.get("journal_rows")
+            if type(count) is not int or count < 0:
+                raise CustodyUnreadable("round count not recorded")
+            if len(rows) != count:
+                raise CustodyUnreadable(f"round journal holds {len(rows)} rows; session records {count}")
     start, end = session.get("start_stamp"), session.get("end_stamp")
     try:
         first = monotonic_ns_from_s(start["monotonic_before_s"])
         if end is not None:
             last = monotonic_ns_from_s(end["monotonic_after_s"])
-        elif (session.get("error_class") == QUIET_REFUSAL_ERROR_CLASS
-              and rows_path.exists() and not rows):
+        elif refusal:
             last = monotonic_ns_from_s(start["monotonic_after_s"])
         else:
             raise ValueError("quiet span unavailable")
@@ -961,7 +1004,7 @@ def authenticate_quiet_session(envelope_dir: Path | str) -> PairVerdict:
     verdict = authenticate_pair(session.get("battery_float"), root,
                                 phases=("quiet_pre", "quiet_post"),
                                 identity=session.get("session"), span=span)
-    if rows_path.exists():
+    if battery_recorded and (refusal or completed):
         battery = session.get("battery_float")
         for index, row in enumerate(rows):
             for phase in ("pre", "post"):
@@ -982,19 +1025,26 @@ def authenticate_quiet_session(envelope_dir: Path | str) -> PairVerdict:
 def authenticate_bundle(bundle_path: Path | str) -> PairVerdict:
     """Authenticate bundle battery probes against controller monotonic stage bounds."""
     root = Path(bundle_path)
+    metadata = _required_object(root, "metadata.json")
     try:
-        metadata = json.loads((root / "metadata.json").read_bytes(),
-                              object_pairs_hook=_json_pairs("metadata.json"))
-    except (OSError, ValueError):
-        metadata = None
-    if not isinstance(metadata, dict):
-        metadata = {}
-    try:
-        events = [json.loads(line, object_pairs_hook=_json_pairs("events.jsonl"))
-                  for line in (root / "events.jsonl").read_text().splitlines()
-                  if line.strip()]
-    except (OSError, ValueError):
-        events = []
+        lines = _required_file(root, "events.jsonl").decode("utf-8").splitlines()
+    except CustodyFailure:
+        raise
+    except UnicodeError as exc:
+        raise CustodyUnreadable(f"events.jsonl unreadable: {exc}") from exc
+    events = []
+    for number, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line, object_pairs_hook=_json_pairs("events.jsonl"))
+        except CustodyFailure:
+            raise
+        except ValueError as exc:
+            raise CustodyUnreadable(f"events.jsonl line {number} unreadable: {exc}") from exc
+        if not isinstance(event, dict):
+            raise CustodyUnreadable(f"events.jsonl line {number} unreadable: not a JSON object")
+        events.append(event)
     first_start = next((event for event in events if isinstance(event, dict)
                         and event.get("event_type") == "stage_started"
                         and event.get("phase") == "idle_baseline"), None)
@@ -1019,11 +1069,7 @@ def authenticate_capture(capture_dir: Path | str, *,
                          expected: Mapping[str, str | None] | None = None) -> PairVerdict:
     """Authenticate the pair alongside instrument_evidence.json."""
     root = Path(capture_dir)
-    try:
-        evidence = json.loads((root / "instrument_evidence.json").read_bytes(),
-                              object_pairs_hook=_json_pairs("instrument_evidence.json"))
-    except (OSError, ValueError):
-        evidence = None
+    evidence = _required_object(root, "instrument_evidence.json")
     battery = evidence.get("battery_float") if isinstance(evidence, dict) else None
     pre = battery.get("pre") if isinstance(battery, dict) else None
     post = battery.get("post") if isinstance(battery, dict) else None
