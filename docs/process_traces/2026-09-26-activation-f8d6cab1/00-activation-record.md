@@ -109,3 +109,16 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
     - Independent recomputation: all 39 frozen definitions are byte-identical to `5d5a0b75`, both decorator-inclusive pins equal the base segments under the test's rule, and S0 removes no line of base `battery_float.py`.
     - Committed unchanged as `c9081c6e` and pushed.
     - **Round-4 delta pair launched** (charge [50](10-s0-delta/50-delta-r4-charge.md)): Astra 6 high (execution, a different model family from the Sol implementer) and Opus (contract). Both are charged with the same-signature class and with the honest-failure side (P-A, P-B, shape iii).
+18. **Round-4 delta returned, with a split verdict** ([51](10-s0-delta/51-astra-execution-lens.md), [52](10-s0-delta/52-opus-contract-lens.md)).
+    - **Opus contract: PASS**, "same signature: no", five NITs.
+      - Everything is CLOSED: all 39 frozen definitions are byte-identical, and the new tests RED against round 3.
+      - P-A and P-B were driven through the real collector with no raise.
+    - **Astra execution: R1 BLOCKER and R2 SHOULD-FIX**, "same signature: yes".
+      - R1: `json.loads(bytes)` auto-detects UTF-16/32, so a re-encoded container passed. Amendment 29 names non-UTF-8 as custody.
+      - R2: a pre-only shape-(iii) envelope gives `post evidence missing: phase not recorded`, not "quiet span unavailable".
+    - **Magistrate synthesis.**
+      - R1 is a conformance gap against amendment 29's enumeration. It is *not* the ruled idiom (a failure turned into an empty value), and the content is semantically identical, so no number changes. It is a new defect and smaller than a contract, so it was fixed at the bench as `b7df341b`: a strict `body.decode("utf-8")` in `_required_object`, plus a test that re-encodes each passing container as UTF-16 and UTF-32 (RED 6/6, then GREEN; battery suites OK). The journals already decoded UTF-8 strictly.
+      - R2 is the same non-pass status. The erratum also keeps rung order (a)–(f), and rung (a) precedes the span rung (f), so the code stands. The reading is carried to the Fable final pass for ruling.
+      - Opus NITs 1–4 are deferred to a follow-up lane.
+      - No cold gate is needed for R1: it is not a recurrence of the ruled class, and it is the first round on this defect.
+19. **The S0 cold Fable final pass is convened** on `b7df341b` (charge [60-s0-gate/20](60-s0-gate/20-fable-final-pass-charge.md), worktree `JouleWise-wt-s0fp-f8d6cab1`). It is also the row-10 fresh-eyes review of the bench commit. It must rule on the R2 reading and the deferrals.
