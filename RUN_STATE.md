@@ -16,18 +16,17 @@ file instead.
 - #418, the Revision 5 seal → `e9ed7a98`.
 - #423, the A-R5b battery-float amendment (directive #421, approved in #422) → `935cef2d`. The registration digest is now `81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1`.
 - #419, the TIER-01 light tier → `cab01506`; #415 is closed.
-- **#424 BFG-D**, the battery gate for derivation windows: see the record's last item for its merge state.
+- **#424 BFG-D**, the battery gate for derivation windows → `64e39bb9` (merged ≈08:25 PDT 09-26). This activation exited for a fresh supervisor.
 
 Four cold gates govern BFG-D: BATTERY-FLOAT-01, HARVEST-VERDICT-FINAL-01, BFG-D-PARSER-ESC-01 and CONSUMER-DRIFT-ESC-01. Each ran with a paired refuter plus an addendum. The final passes: Fable ruled MERGE; Opus dissented with M-1, which is carried as lane BFGD-VERDICT-MERGE-LIVENESS-01.
 
 **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item, then:
-1. If #424 is merged and the bookkeeping PR for `docs/2026-09-25-152c9255` is merged, arm **W1** under NIGHT_HANDBACK, using the scripts on `docs/2026-09-25-817355d2-w1arm` @ `c79816c9` with its README prerequisites checklist:
+1. Merge the open bookkeeping PR for `docs/2026-09-25-152c9255` under the light tier (TIER-01). Then arm **W1** under NIGHT_HANDBACK, using the scripts on `docs/2026-09-25-817355d2-w1arm` @ `c79816c9` with its README prerequisites checklist:
    - Fill `__H__` = main after #424 and the bookkeeping merge, `__T0__`, and `__PREREG__` = `81b65f08…ddf1`.
    - The frozen plan is `9ab4776f…a072`.
    - The battery gate runs at step0 and again before publication.
    - Include the #422 digest pin, then remove the two `.claude/settings.local.json` entries #422 names.
    - Seat 4b is gone; check with `ps` for other interactive sessions and email Ed if any are found.
-2. If #424 is not merged: finish its gate (row 9 replay, CI), then merge.
 
 Lanes now open:
 - BATTERY-FLOAT-GATE-01 (BFG-S) must land before any non-derivation window.
