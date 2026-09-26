@@ -87,3 +87,22 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - **PR #426 opened** (full tier). Rows 1–8 and 10 are RUN (`8af29bb5`). Row 9 (full suite at `58bfd3b0`) is running; rows 11 and 12 follow.
 20. **S0 round 2 returned complete**, committed as `26ab7234`. `authenticate_bundle` implements the span gap-fill, with span-rung tests. The only failure is the sandbox sysctl live probe, which is bench-verified elsewhere.
     - Three S0 lenses launched at `26ab7234` under charge `60-bfgs-s0/30-lens-charge.md`: Sol execution (xhigh, 31), Astra execution (cross-family, high, 32) and Opus contract (33).
+21. **S0 lenses returned at `26ab7234`.**
+    - Opus contract lens (33): BLOCKER B-1 (the quiet span is unruled, and the refusal-shape envelope comes out `evidence_missing`, voiding a QPE night). SHOULD-FIXes S-1 (pin dependency closure), S-2 (guard evasions), S-3 (the `bundle_sha256` and `authenticate_window_members` homes) and S-4 (stale `check.json` bypasses the fence). Six NITs.
+    - Sol execution lens (31): BLOCKERs F1 (capture identity), F2 (reversed span passes) and F3 (a malformed `rounds.jsonl` masks a custody failure). SHOULD-FIXes F4 (symlink), F5 (duplicate JSON keys) and F6 (a missing attribute escapes the fence journal).
+    - Astra execution lens (32): the same defect set, found independently (R1–R6). This is cross-family confirmation.
+22. **Cold addendum 2** ([60-bfgs-s0/40-addendum2/21](../2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md)) ruled the three questions that needed a ruling (B-1, S-3, capture identity) as **amendments 20–28**:
+    - quiet span, with the refusal shape passing;
+    - a shared floor conversion;
+    - span validity for every kind;
+    - a stamp-order rung;
+    - a `bundle_sha256` field;
+    - status factories;
+    - `authenticate_window_members` moved to `bundle_read` (S1's scope is unchanged);
+    - capture identity binding.
+
+    The ten text-3 pins are unchanged.
+23. **S0 fix round 3 launched** (Sol xhigh; brief `42`). It carries the lead's fix contract `41` (closures C1–C11, dictated) plus amendments 20–25 and 27 verbatim.
+    - Next: a delta re-audit of round 3, by a cross-family lens pair.
+    - After #426 merges: rebase and regenerate the pins at the bench, naming the M-1 baseline.
+    - Then the S0 cold Fable final pass, the integration full suite and the PR.
