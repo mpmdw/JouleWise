@@ -130,3 +130,11 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
     - The one FIX is the dictated T30-f pre-only first-write row. It was applied verbatim as `747596a3` (`tests.test_battery_float` OK).
     - Design notes D-1 to D-5; none stops S0. D-1: S1/S2 must pass real directories, never a symlink.
 21. **PR #429 opened** (S0, full tier). Rows 1–8 and 10 are RUN, with evidence in [60-s0-gate/30](60-s0-gate/30-ledger-evidence.md) (`d76d136d`). Row 9 (full suite at `747596a3`) is running, and rows 11 and 12 are pending.
+22. **#428 row 9 PASS:** 7,384 tests, 0 failures, 0 errors at `d8aed7cd`, under heavy concurrent load (a second full suite, a Sol seat, two lenses). The ladder test passed. Evidence is in [81-pr428-ledger](81-pr428-ledger/00-ledger-evidence.md) (`b3de15a3`), and all hosted jobs are green.
+    - The gate-ledger check first failed on `Tier: light (test-only; TIER-01)`. The checker needs the bare `Tier: light`, and that was fixed.
+    - **#428 MERGED → main `560914be`** (`--match-head-commit d8aed7cd`).
+23. **S0 row 9 moved to the integration tree.** Main moved with #428, so the branch-only suite at `747596a3` was stopped (exit 144, killed by me, not a test failure).
+    - A local integration merge, `1eeebc40` = `747596a3` + main `560914be`, differs from the candidate only by #428's test file.
+    - The full suite runs there (`JouleWise-wt-s0integ-f8d6cab1`, `/tmp/f8d6-row9-s0integ.log`).
+    - The PR head stays `747596a3`, so this creates no post-review commit. GitHub's merge commit will carry the same tree.
+    - **Canonical is behind `origin/main`** (it is at `5d5a0b75`). The plan is one fast-forward after #429 merges, then exit so that a fresh supervisor starts (D-183). W1 stays blocked by pid 46048 in the meantime.
