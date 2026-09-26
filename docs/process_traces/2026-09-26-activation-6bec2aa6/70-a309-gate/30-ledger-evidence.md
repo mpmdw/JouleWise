@@ -13,3 +13,27 @@
 | 7. Fable final pass | [21](21-fable-final-pass.md): **MERGE** `58bfd3b0`. It also rules that merging A309 BEFORE BFG-S S0 is consistent with BFGS-DESIGN-01 text 3, and sets three S0 obligations (§4). |
 | 8. Overbuild prune | The diff is limited to the dictated closure: two history flags, one blob check, one comment, the header comment and three tests. Nothing beyond the closure. |
 | 10. Fresh eyes after post-review commits | The Fable final pass ran on the final head `58bfd3b0`, after the NIT commit. |
+
+| Row | Evidence |
+|---|---|
+| 9. Full-suite replay | `scripts/shard_tests.py --workers 6` on the integration head `58bfd3b0` (fix + NITs + main `6a463e87`): **7,384 tests, 0 failures, 0 errors, 109 skipped, PASS**. Tail: [row9-fullsuite-58bfd3b0-tail.txt](row9-fullsuite-58bfd3b0-tail.txt); log: `row9-fullsuite-58bfd3b0.log.gz`. |
+| 11. CI green on the final head | Hosted checks for `58bfd3b0` at 11:26 PDT: all pass except `gate-ledger` (this ledger). The post-merge integration look is done after merge. |
+| 12. Magistrate terminal review | Opus 5.5, activation 6bec2aa6, of `58bfd3b0`. The production diff is exactly the dictated closure plus the header comment; tests (a), (b) and (c) are as ruled. Both lenses PASS or have dispositioned findings. The Fable final pass is MERGE, with the ordering ruled. Row 9 is clean. **MERGE.** |
+
+```
+build	pass
+calibration-exits-exclusive (3.13)	pass
+calibration-writer-crash-matrix-exclusive (3.13, 1)	pass
+calibration-writer-crash-matrix-exclusive (3.13, 2)	pass
+changes	pass
+fences	pass
+gate-ledger	fail
+installed-wheel	pass
+quick	pass
+test (3.13, 1)	pass
+test (3.13, 2)	pass
+test (3.13, 3)	pass
+test (3.13, 4)	pass
+test (3.13, 5)	pass
+test (3.13, 6)	pass
+```
