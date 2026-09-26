@@ -45,7 +45,7 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
         root = self.root / "night"
         snapshot = load_calibration_ledger_snapshot(
             root / "runs/calibration_observation_ledger.jsonl",
-            root / "runs/calibration_ledger_head_pin.json",
+            root / "configs/calibration/calibration_ledger_head.json",
             repo_root=root, require_committed_pin=True,
             verify_custody=False, mode="read_replay",
         )

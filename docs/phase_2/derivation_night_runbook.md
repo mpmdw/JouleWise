@@ -2641,6 +2641,8 @@ boolean is NOT the equivalence check and never stands in for it: the check
 compares every retained value against that screen AND the night's own range
 against the bracket screen, computed from the values themselves (§2.5).
 
+**Revision 5 route for epoch 25G83:** Registration Revision 5 takes no equivalence look for this epoch. `epoch_equivalence_check` and `issue_epoch_continuation` refuse its sessions. W1 and W2 follow Revision 5's derivation procedure instead. The equivalence-night PASS route in §2.4–§2.5 and its §4 continuation text below remain as the historical record.
+
 ### 2.4 The writer-status dispatch: how a slot ends, and how a night ends early
 
 Every capture hands the chain a status number, and the chain **dispatches** on

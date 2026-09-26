@@ -27,6 +27,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     canonical_sha256,
     content_id_from_artifact_hashes,
 )
+from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH  # noqa: E402
 
 
 BACKFILL_SCHEMA = "joulewise.calibration_ledger_backfill_candidates.v1"
@@ -44,6 +45,14 @@ def _candidate(directory: Path) -> dict[str, Any]:
     evidence_path = directory / "instrument_evidence.json"
     manifest = _json_object(manifest_path)
     evidence = _json_object(evidence_path)
+    bindings = evidence.get("bindings")
+    identity_epoch = evidence.get("identity_epoch")
+    if "battery_float" in evidence or any(
+        isinstance(epoch, Mapping)
+        and all(epoch.get(field) == value for field, value in REVISION_FIVE_EPOCH.items())
+        for epoch in (identity_epoch, bindings)
+    ):
+        raise ValueError(f"{directory}: revision_five evidence is not a backfill candidate")
     hashes = artifact_hashes(directory)
     manifest_artifacts = manifest.get("artifacts")
     if not isinstance(manifest_artifacts, Mapping):

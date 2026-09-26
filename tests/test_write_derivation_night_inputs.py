@@ -35,7 +35,7 @@ from scripts import generate_g2a_probe_inputs as probe_inputs
 from scripts import validate_powermetrics_fiducial as validation_script
 from scripts import write_derivation_night_inputs as script
 from tests.fixtures.epoch_bootstrap.build import TARGET_EPOCH
-from tests.fixtures.epoch_continuation.build import registered_continuation
+from tests.fixtures.epoch_continuation.build import CONTINUED_EPOCH, registered_continuation
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ACCEPTANCE_PATH = validation_script.DEFAULT_ACCEPTANCE_BOUND_PATH
@@ -100,7 +100,7 @@ class WriteDerivationNightInputsTests(unittest.TestCase):
             root = Path(raw)
             out = root / "inputs"
             out.mkdir()
-            with registered_continuation(root), mocked_machine(os_build=TARGET_EPOCH["os_build"]):
+            with registered_continuation(root), mocked_machine(os_build=CONTINUED_EPOCH["os_build"]):
                 code, stdout, stderr = run_main(["--out-dir", str(out)])
             self.assertEqual(code, 2, stderr)
             self.assertIn("ORDINARY night, not a derivation night", stderr)
