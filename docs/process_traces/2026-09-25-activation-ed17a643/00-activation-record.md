@@ -64,3 +64,21 @@ Headless magistrate (Opus 5.5), launched by the watchdog at 14:17:42 PDT 2026-09
 39. **Integration replay** at `80fe9969` (main + #419 + #423): 7,239 tests, 1 failure, 109 skipped. The failure is the same load-timing ladder as on #418 (`test_load_join_ladder…escalates_a_stuck_child`, SIGKILL delivered where SIGTERM was expected under concurrent seat load); the isolated rerun on the integration tree passed. It has recurred twice today under load, so the flake deserves its own lane.
 40. **MERGED:** **#423 A-R5b → `935cef2d`**, then **#419 TIER-01 → `cab01506`**. Both gate ledgers pass and hosted CI is green. Canonical was fast-forwarded to `cab01506` after confirming no night label or plist. The supervisor is not stale: neither PR touches `night_gate` or `run_night`. Directive #415 was commented and **closed**. #422 stays open until the W1 notice pins digest `81b65f08…`; after that, the two settings entries are removed.
 41. **Cold gate BFG-D-PARSER-ESC-01** (`42-coldgate-packet-parser-esc/`). Inputs: blind consults by Sol 6.0 high and Astra 6 high; a real capture; both delta reports. The cold Fable ruling AFFIRMS the round-2 defects (BLOCKER). It issues an exact whitelist grammar, fail-closed by construction and tested on 2 real captures and 85 negatives. It rules that `epoch_equivalence_check` refuses Revision 5 outright; that the dry run propagates `NoRecord`; and that the runbook flags be fixed. It issues the fix-round-2 plan R2-1..R2-7, including a same-signature sweep that names every reader of B and every verdict consumer, a stop rule (any structural false GO in the round-2 delta goes to council), and the requirement that the delta reviewer be of a different model family. It sees no need to ask Ed for `-a`. The paired Opus refuter found **no BLOCKER** and 4 MATERIAL items, all tightening in the ruling's direction: type-check the recorded properties, freeze the grammar for the Revision-5 epoch, have `issue_epoch_continuation` refuse Revision 5 outright, and require bytes-only feeders (CR-smuggling was executed through the `text=True` runners). **The lead adopted these as R2-8..R2-11 in the fix contract rather than convening a second addendum.** They add no reversal and no new design question; the cold Fable final pass reviews the adoption. The contract is `bfg-d/18-fix-contract-r6.md` (`d0f275cc`). The implementer is a fresh Opus 5.5 session, and the round-2 delta goes to Sol and Astra (OpenAI family), as the ruling requires.
+42. **BFG-D fix round 2** (fresh Opus seat, `cf3ba566`/`dedc683b`/`f5525aac`, report `bfg-d/19-fix-seat-report-r6.md`) is complete. Its content:
+    - **R2-1:** the whole-document grammar. At `faf0ea01`, 68 of 108 corpus negatives passed; after the fix, all 108 are refused at all four sites.
+    - **R2-2/R2-10:** the equivalence and continuation tools refuse Revision 5 outright.
+    - **R2-3:** the dry-run bound now propagates NoRecord.
+    - **R2-4:** runbook flags.
+    - **R2-8:** recorded properties are type-checked.
+    - **R2-9:** a grammar freeze pin.
+    - **R2-11:** bytes-only feeders.
+    - **R2-5:** a sweep table.
+    - 16 contract modules pass. The stop rule was not triggered.
+    
+    Seat findings:
+    - **F1:** the fixtures were all Revision-5-epoch, so the tool-mechanics tests moved to a hypothetical 25G99. The delta must confirm this.
+    - **F2:** three ungated B readers remain: backfill, paper_anchor, and controller/run_campaign.
+    - **F6:** the runbook narrative still describes the equivalence route for 25G83.
+    - **F4:** 5 failures in `tests.test_validate_powermetrics_fiducial`. The lead **bisected** them: OK at `df33888f`, FAILED at `faf0ea01`. Fix round 1 introduced a regression that its seat and both delta reviewers missed, because none of them ran that module. **Lesson:** a fix round's verification list must include every module that imports a changed fixture builder.
+    
+    Round 6b (contract `bfg-d/20-fix-contract-r6b.md`, `0c5b8ded`; C-1 regression at root cause, C-2 three R2-2-shaped refusals, C-3 runbook banner) runs on Sol 6.0 xhigh. F3 was dispositioned: ruling copies are immutable records, and the R2-5 sweep table in report 19 is the consumer list of record.
