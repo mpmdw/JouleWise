@@ -2480,6 +2480,7 @@ coordinates from the arm record instead and treat the discrepancy as a finding.
 | launchd `.out`/`.err` for both labels | Present or absent, complete bytes, sizes, nanosecond mtimes — compare against the arm-time baseline. |
 | `night-results/<plan_id>` branch; `docs/process_traces/night-results/<plan_id>/` within it | The driver's best-effort published copies of night artifacts. Both destinations use the full plan ID, not the civil date; verify the push before relying on them. Local publication checkout: `<custody_root>/results-clone`. |
 | `check --session-ids <SESSION_ID>` (§2.2) | The night's session kind, state, terminality, declared and filled slot counts, exclusion counts by mechanism. |
+| `configs/calibration/battery_float_verdicts/<SESSION_ID>.json` in `$MEASUREMENT_ROOT` (§2.2a) | The window's battery-float verdict (`pass`, `battery_float_confounded` or `battery_float_evidence_missing`), written by `battery-verdict` and committed with the ledger head pin **before** any slot line, ledger row or evidence file below is read. This committed file is the window verdict. |
 | The night's own ledger rows in `$CALIBRATION_LEDGER`, and each capture's `manifest.json` and `instrument_evidence.json` under `$RUNS_ROOT` | The twelve slot outcomes, and — for the captures that are `valid` and whose stored anchor record resolves — the **retained values** the equivalence rule compares (§2.5). Reading these AFTER this night has closed is what the check IS; §2.3 draws the line. |
 
 Preserve the full custody root byte-exact outside watchdog discovery before any
@@ -2515,10 +2516,89 @@ night one and two more follow, the expected code after nights one and two is
 the correct mid-campaign answer there. On the PASS route nothing is ever
 prepared, and this code decides nothing.
 
+### 2.2a Record the battery-float verdict before reading any result (Revision 5 windows)
+
+**Why this step exists.** Every Revision 5 capture brackets itself with two
+readings of the battery (`raw/battery_float.pre.ioreg` and
+`raw/battery_float.post.ioreg`). A window whose readings show the Mac drawing
+charge current is excluded and replaced (registration amendment A-R5b). For
+that exclusion to be unable to select on results, the verdict must be fixed
+**before anyone reads a result**, and it must be impossible to change it
+afterwards. So the verdict is computed once, at harvest, from the raw battery
+bytes alone, written to one file, and committed in the same commit as the
+ledger head pin (the committed file naming the ledger's row count and last row
+digest, §2.0). That committed file is the window verdict (decision log
+A-R5b-1). Every later tool (`check`, the cadence report, `prepare-candidate`,
+the continuation tool) recomputes the verdict from the same raw bytes only to
+confirm the file, and refuses on any disagreement.
+
+**Custody failure.** When a capture finishes, the writer records a SHA-256
+fingerprint of each battery reading's raw bytes inside
+`instrument_evidence.json`, and the ledger row records the fingerprint of
+`instrument_evidence.json` itself. If any of those fingerprinted files is later
+missing or no longer matches its fingerprint, that is a *custody failure*: the
+tools compute no verdict, write nothing and refuse, and the one cure is to
+restore the bytes byte-exact from the preservation copy §2.1 requires. A
+custody failure is never an exclusion: it cannot remove or replace a window.
+A reading the writer itself recorded as failed (non-zero exit, timeout, stale
+or unparseable bytes that still match their fingerprint) is a verdict,
+`battery_float_evidence_missing`, because it is fixed instrument state.
+
+**The order, one block.** Steps (i)–(v) complete before anything in step
+(viii) is opened. `night.log`, `night/result.json`, the receipt or refusal and
+the launchd files may be read before step (iii), because they hold no
+measured value and no slot disposition.
+
+```zsh
+cd "$MEASUREMENT_ROOT"
+# (i) §2.0 done: the ledger is rebuilt and authenticated at head-equals-pin.
+# (ii) Any desk recovery the existing subcommands provide, so the session is
+#      terminal. The custody root of an unissued epoch is never moved,
+#      relocated or offloaded.
+# (iii) Record the verdict. PREREGISTRATION_SHA256 is the digest the arm
+#       notice pinned (§0.5).
+"$PY" scripts/issue_calibration_acceptance_generation.py battery-verdict \
+  --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
+  --repo-root "$MEASUREMENT_ROOT" --session-id "$SESSION_ID" \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "$PREREGISTRATION_SHA256"
+echo "rc=$?"
+#   rc=0 prints exactly one line: <SESSION_ID>: battery=<pass|confounded|evidence_missing>
+#   rc=3 prints REFUSED: <reason>. On "REFUSED: custody failure", restore the
+#   named bytes from the byte-exact preservation copy and re-run; do nothing
+#   else until it exits 0.
+# (iv) One commit: the ledger head pin and the verdict, together.
+git add configs/calibration/calibration_ledger_head.json \
+  "configs/calibration/battery_float_verdicts/$SESSION_ID.json"
+git commit -m "Harvest $SESSION_ID: ledger head pin and battery-float verdict"
+# (v) The harvest notice carries one line for this window and for every
+#     earlier harvested window of the epoch (the next arm notice repeats them):
+print -r -- "$SESSION_ID: battery=<pass|confounded|evidence_missing> verdict_sha256=$(shasum -a 256 "configs/calibration/battery_float_verdicts/$SESSION_ID.json" | cut -d' ' -f1) verdict_commit=$(git rev-parse HEAD)"
+# (vi) The cadence report (refuses without the committed verdict).
+"$PY" scripts/calibration_cadence_report.py \
+  --window "W=$RUNS_ROOT/instrument_validation" \
+  --calibration-ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
+  --session "W=$SESSION_ID"
+# (vii) The count-only dry run of §2.2 (blocks without the committed verdict).
+"$PY" scripts/issue_calibration_acceptance_generation.py check \
+  --session-ids "$SESSION_ID"
+# (viii) Only now: the §2.1 reads of derivation-chain.log slot lines, the
+#        night's ledger rows and the capture evidence files.
+```
+
+The verdict file counts only if exactly one commit in the checkout's history
+touches its path and that commit added it: a file that is later edited,
+deleted or deleted and re-added is treated as no verdict, and every consumer
+refuses. The reading order above is procedure; the guarantee is the custody
+rule, which makes every excluding verdict a function of bytes fingerprinted
+before the slot was finalized.
+
 ### 2.3 When a value may be read, and when it may not
 
 The boundary moved with directive issue 316, and it is a boundary in TIME, not
-a prohibition on looking at all. Three rules, in force in this order:
+a prohibition on looking at all. On a Revision 5 window, the battery-float
+verdict is recorded and committed (§2.2a) before any slot line, ledger row or
+evidence file of the session is read. Three rules, in force in this order:
 
 1. **While the night is running, nothing is read.** No `b_fiducial_s`, no
    minimum, maximum, range, mean or SD, no screen, no statistic, no comparison

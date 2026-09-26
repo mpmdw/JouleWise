@@ -176,6 +176,27 @@ A retry-class abort recorded by a prior activation authorises a successor's ordi
 Follow runbook §1.4a for classification, refreshed notice evidence, byte checks
 and cleanup. This applies to every plan class; pack authorization stays hard.
 
+## Battery-float verdict line (Revision 5 derivation windows)
+
+Standing template text for every harvest notice and arm notice of a Revision 5
+derivation window (runbook §2.2a; decision log A-R5b-1). At harvest, as soon as
+the one commit holding the ledger head pin and the window's battery-float
+verdict file lands, the harvest notice carries one line for the harvested
+window and one for every earlier harvested window of the same epoch:
+
+```
+<session_id>: battery=<pass|confounded|evidence_missing> verdict_sha256=<64 hex of the committed file> verdict_commit=<40 hex>
+```
+
+`verdict_sha256` is the SHA-256 of the committed
+`configs/calibration/battery_float_verdicts/<session_id>.json`, and
+`verdict_commit` is the commit that added it. The next arm notice, and the arm
+record it is sent from, repeat every line. The last window of an epoch is
+followed by issuance rather than an arm, so its harvest notice is the copy
+held outside the machine that matters. The lines are disclosure: the tools
+themselves accept a verdict file only when exactly one commit touches its
+path and that commit added it.
+
 ## Arm-time census for rehearsal plans
 
 Follow [runbook §0.6 step 3b and §1.4](../phase_2/derivation_night_runbook.md#06-census-clean-and-the-night-is-agent-free): only a parsed `REHEARSAL_STUB` plan may treat an idle interactive Claude or Node/T3 session as not foreign, unknown observations count as idle, the caller's own PPID chain is exempt, the own interactive or headless root receives the same stub-only idle-tree exemption (workload descendants still block; sibling seats outside its subtree remain foreign), and the new census blocks publication only for that stub class while other classes retain the existing all-agents-closed rule with diagnostic output.
