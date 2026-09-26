@@ -82,3 +82,13 @@ Headless magistrate (Opus 5.5), launched by the watchdog at 14:17:42 PDT 2026-09
     - **F4:** 5 failures in `tests.test_validate_powermetrics_fiducial`. The lead **bisected** them: OK at `df33888f`, FAILED at `faf0ea01`. Fix round 1 introduced a regression that its seat and both delta reviewers missed, because none of them ran that module. **Lesson:** a fix round's verification list must include every module that imports a changed fixture builder.
     
     Round 6b (contract `bfg-d/20-fix-contract-r6b.md`, `0c5b8ded`; C-1 regression at root cause, C-2 three R2-2-shaped refusals, C-3 runbook banner) runs on Sol 6.0 xhigh. F3 was dispositioned: ruling copies are immutable records, and the R2-5 sweep table in report 19 is the consumer list of record.
+43. **Round 6b** was committed at `e02350ff`. It covers:
+    - **C-1:** the fix-round-1 regression. Its root cause was a test helper still reading the old fixture pin path, and a mock still using the old continuation epoch. The fix is at the helper and the mock, with assertions unchanged. The importer sweep turned up one more stale mock, now fixed.
+    - **C-2:** backfill, paper_anchor and the controller attachment now refuse Revision-5 evidence. Each change was RED, then GREEN.
+    - **C-3:** the runbook banner.
+    
+    The lead reran the issuer, validate_powermetrics_fiducial, write_derivation_night_inputs, revision_five_b_readers and battery_float modules, the live identity test included: **221 OK**.
+    
+    The round-2 delta (R2-6) runs on Astra 6 xhigh (science and bypass, a different family from the round-2 implementer) and a fresh Sol 6.0 xhigh session (execution). The charge is `bfg-d/22-delta-charge-r2.md` (`80753b97`), and it requires each reviewer's own ten mutations plus the importer-sweep test run.
+    
+    **Integration tree** `integ/2026-09-25-ed17a643-w1b`: main `cab01506` + BFG-D `80753b97` → `137cc9ee`. One conflict was resolved in the decision log: the A-R5b entry comes first, then A-R5b-1, per F-8. `gen_state --check` passes. The full suite started at ≈23:25 and runs concurrently with the delta seats.
