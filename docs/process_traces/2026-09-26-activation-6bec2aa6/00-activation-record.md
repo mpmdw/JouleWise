@@ -39,3 +39,13 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
    - Blocking lead rulings: F1 (non-derivation evidence contract), F2 (the nine frozen d117 packs require successor generations), F3 (the QPE-01 frozen protocol has no battery exclusion).
    - These are design-bearing, so under D-184 there is a blind four-seat consult with charge `40-bfgs-consult/00-charge.md` and seats Sol 6.0 xhigh (10), Astra high (11), Opus 5.5 (12) and Fable 5.1 (13). A cold Fable gate plus an Opus refuter then rules the final texts.
    - The first Sol and Astra launches exited 64 because the prompt lacked a bare `WRITE_SCOPE:` line; both were relaunched.
+10. **BFG-S consult returned. Four seats ran blind (40-bfgs-consult/10–13).**
+    - Unanimous: explicit phases; bracketing the 600 s envelope only; QPE-01 failing closed at the summary level; a content-pinned historical set; a loader gate before physics; the wall-meter bar remains.
+    - Split on the failed pre-read: Fable says record and continue, citing the ex-01 §5.3 item 6 writer rule; Opus, Astra and Sol say stop the night.
+    - Split on the packs: Sol and Astra say the existing `_v5` successors; Opus and Fable say `_v4` and call `_v5` unfreezable. I settled this by code: `arm_readiness.py:79` `_RULED_V5_PREDECESSOR_PACK_IDS` maps `_v5`←`_v3`, and `author_arm_readiness_evidence.py:76` consumes it.
+    - The magistrate synthesis is [20](../2026-09-26-activation-6bec2aa6/40-bfgs-consult/20-magistrate-synthesis.md): D1–D11, Q12 obligations 1–8, and cold-gate asks R1–R3.
+    - **Science flag, germane under #421 §2:** every published number, and the two QPE pilot nights, were measured with battery state unobserved. The lane HISTORICAL-BATTERY-STATE-01 is proposed (a `pmset -g log` audit, otherwise disclosure, otherwise re-measurement).
+11. **Cold gate BFGS-DESIGN-01 convened.**
+    - Fable judge: [ruling 50/10](../2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/10-coldgate-fable-ruling.md). It accepts most items and amends D2, D3a, D5, D8, D9 and D11. It adds obligations 9–11. Obligations 5 and 8 become separate lanes, and 8 must block the paper renderer in code.
+    - Paired Opus contract refuter: [50/11](../2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/11-opus-contract-refuter.md). **M1 and M2 are BLOCKERs (text):** the QPE early return books a non-battery refusal as battery `evidence_missing`, and D8's loader outcome is unspecified. It also raised MATERIAL findings M3–M11.
+    - A cold Fable addendum was convened at `d710aa5a` (worktree `JouleWise-wt-bfgs-cgadd-6bec2aa6`). It produces Final texts v1.1 for the S0–S3 briefs.
