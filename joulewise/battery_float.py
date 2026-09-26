@@ -19,8 +19,10 @@ import dataclasses
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import time
 from typing import Any, Callable, Mapping
@@ -29,6 +31,8 @@ IOREG_BATTERY_ARGV = ("/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery")
 PROBE_TIMEOUT_S = 10
 SCHEMA = "joulewise.battery_float.v1"
 POLICY_ID = "bfg-01"
+PHASES = ("arm_check", "publish_install", "t0", "validate_install", "t0_power_row",
+          "slot_pre", "slot_post", "quiet_pre", "quiet_post", "bundle_pre", "bundle_post")
 LIMIT_MA = 200
 MAX_UPDATE_AGE_S = 180
 _REQUIRED = ("ExternalConnected", "IsCharging", "InstantAmperage", "UpdateTime")
@@ -41,6 +45,7 @@ _SESSION_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
 VERDICT_SCHEMA = "joulewise.battery_float_verdict.v1"
 VERDICT_DIRECTORY = "configs/calibration/battery_float_verdicts"
 LEDGER_HEAD_PIN = "configs/calibration/calibration_ledger_head.json"
+QUIET_REFUSAL_ERROR_CLASS = "network_time_provenance"
 
 
 class ProbeError(ValueError):
@@ -63,6 +68,20 @@ class CustodyFailure(RuntimeError):
             for item in failures
         )
         super().__init__(f"custody failure: {self.detail}")
+
+
+class CustodyUnreadable(CustodyFailure):
+    """Custody bytes that cannot be read as recorded: an unreadable journal, a
+    symlinked raw path or a duplicate JSON key.
+
+    A subclass, so every consumer that refuses on ``CustodyFailure`` refuses
+    here too, while ``CustodyFailure`` itself keeps its frozen base bytes.
+    """
+
+    def __init__(self, detail: str) -> None:
+        self.failures = []
+        self.detail = detail
+        RuntimeError.__init__(self, detail)
 
 
 class NoRecord(ValueError):
@@ -737,3 +756,342 @@ def authenticate_committed_verdict(
         file_sha256=record.file_sha256,
         commit=record.commit,
     )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class PairVerdict:
+    kind: str
+    status: str
+    reasons: tuple[str, ...]
+    pre_raw_sha256: str | None
+    post_raw_sha256: str | None
+    pre_update_age_s: float | None
+    post_update_age_s: float | None
+    delta_q_mah: int | None
+    bundle_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.status not in ("pass", "battery_float_confounded", "battery_float_evidence_missing",
+                               "not_applicable", "unobserved_historical"):
+            raise ValueError(f"unregistered battery pair status: {self.status}")
+
+
+def unobserved_historical_verdict(kind: str, *, bundle_sha256: str | None = None) -> PairVerdict:
+    return PairVerdict(kind, "unobserved_historical", (), None, None, None, None, None,
+                       bundle_sha256)
+
+
+def not_applicable_verdict(kind: str, *, bundle_sha256: str | None = None) -> PairVerdict:
+    return PairVerdict(kind, "not_applicable", (), None, None, None, None, None,
+                       bundle_sha256)
+
+
+def monotonic_ns_from_s(seconds: float) -> int:
+    if isinstance(seconds, bool) or not isinstance(seconds, (float, int)) or not math.isfinite(seconds) or seconds < 0:
+        raise ValueError("monotonic seconds must be finite and nonnegative")
+    return math.floor(seconds * 1_000_000_000)
+
+
+def _json_pairs(filename: str):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise CustodyUnreadable(f"duplicate JSON key {key} in {filename}")
+            result[key] = value
+        return result
+    return unique
+
+
+def _required_file(root: Path, name: str) -> bytes:
+    path = root / name
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as exc:
+        raise CustodyUnreadable(f"{name} unreadable: missing") from exc
+    except OSError as exc:
+        raise CustodyUnreadable(f"{name} unreadable: {exc}") from exc
+    if stat.S_ISLNK(mode):
+        raise CustodyUnreadable(f"{name} unreadable: symlink")
+    if not stat.S_ISREG(mode):
+        raise CustodyUnreadable(f"{name} unreadable: not a regular file")
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        raise CustodyUnreadable(f"{name} unreadable: {exc}") from exc
+
+
+def _required_object(root: Path, name: str) -> dict[str, Any]:
+    body = _required_file(root, name)
+    try:
+        # Decode strictly: json.loads(bytes) would auto-detect UTF-16/32.
+        value = json.loads(body.decode("utf-8"), object_pairs_hook=_json_pairs(name))
+    except CustodyFailure:
+        raise
+    except (ValueError, UnicodeError) as exc:
+        raise CustodyUnreadable(f"{name} unreadable: {exc}") from exc
+    if not isinstance(value, dict):
+        raise CustodyUnreadable(f"{name} unreadable: not a JSON object")
+    return value
+
+
+def _raw_bytes(root: Path, relative: str) -> bytes | None:
+    """Inspect each container-relative component and refuse symlink traversal."""
+    path = root
+    try:
+        if stat.S_ISLNK(path.lstat().st_mode):
+            raise CustodyUnreadable(f"raw path traverses a symlink: {path}")
+        for part in Path(relative).parts:
+            path = path / part
+            if stat.S_ISLNK(path.lstat().st_mode):
+                raise CustodyUnreadable(f"raw path traverses a symlink: {path}")
+        if not path.resolve().is_relative_to(root.resolve()):
+            raise CustodyUnreadable(f"raw path traverses a symlink: {path}")
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
+            return stream.read()
+    except CustodyFailure:
+        raise
+    except OSError:
+        return None
+
+
+def authenticate_pair(record: Any, custody_root: Path | str, *, phases: tuple[str, str],
+                      identity: str | None, span: tuple[int, int] | None = None,
+                      identity_reasons: tuple[str, ...] = ()) -> PairVerdict:
+    """Recompute a pair from recorded raw bytes; custody defects always raise.
+
+    A malformed phase does not hide a custody failure in its other phase.
+    The stored predicate and stored charge delta have no authority here.
+    """
+    if phases not in (("quiet_pre", "quiet_post"), ("bundle_pre", "bundle_post"),
+                      ("slot_pre", "slot_post")):
+        raise ValueError("unregistered battery pair phases")
+    kind = {"quiet_pre": "quiet", "bundle_pre": "bundle", "slot_pre": "capture"}[phases[0]]
+    if kind in ("quiet", "bundle") and span is None:
+        raise ValueError(f"{kind} pairs owe a span")
+    reasons: list[str] = list(identity_reasons)
+    if kind == "capture" and not identity_reasons and isinstance(record, dict):
+        pre, post = record.get("pre"), record.get("post")
+        if isinstance(pre, dict) and isinstance(post, dict) and any(
+            pre.get(field) != post.get(field) for field in ("session_id", "slot", "attempt_id")
+        ):
+            reasons.append("pair identity disagreement")
+    digests: dict[str, str | None] = {"pre": None, "post": None}
+    ages: dict[str, float | None] = {"pre": None, "post": None}
+    capacities: dict[str, int | None] = {"pre": None, "post": None}
+    confounded = False
+    root = Path(custody_root)
+    span_unavailable = (span is not None and
+                        (not isinstance(span, tuple) or len(span) != 2
+                         or any(type(bound) is not int or bound < 0 for bound in span)
+                         or span[1] < span[0]))
+    stamps: dict[str, tuple[Any, Any]] = {}
+    for phase, expected in zip(("pre", "post"), phases):
+        stored = record.get(phase) if isinstance(record, dict) else None
+        path = f"raw/battery_float.{phase}.ioreg"
+        try:
+            wall_valid = isinstance(stored, dict) and _is_wall_time(stored.get("wall_time_s"))
+        except (OverflowError, ValueError):
+            wall_valid = False
+        fault = (
+            "phase not recorded" if not isinstance(stored, dict) else
+            "phase mismatch" if stored.get("phase") != expected else
+            "session identity missing" if kind in ("quiet", "bundle") and (
+                not isinstance(identity, str) or not identity) else
+            "session identity mismatch" if kind != "capture" and stored.get("session_id") != identity else
+            "slot identity mismatch" if kind in ("quiet", "bundle") and (
+                stored.get("slot") is not None or stored.get("attempt_id") is not None) else
+            "raw path mismatch" if stored.get("raw_path") != path else
+            "raw digest not recorded" if not _is_sha256(stored.get("raw_stdout_sha256")) else
+            "wall time not recorded" if not wall_valid else
+            None
+        )
+        if fault is not None:
+            reasons.append(f"{phase} evidence missing: {fault}")
+            continue
+        expected_digest = stored["raw_stdout_sha256"]
+        body = _raw_bytes(root, path)
+        observed_digest = None if body is None else hashlib.sha256(body).hexdigest()
+        if observed_digest != expected_digest:
+            raise CustodyFailure([{"slot": identity, "attempt_id": None, "artifact": phase,
+                                   "expected_sha256": expected_digest,
+                                   "observed_sha256": observed_digest}])
+        digests[phase] = observed_digest
+        if type(stored.get("exit_code")) is not int or stored["exit_code"] != 0 or stored.get("timed_out"):
+            reasons.append(f"{phase} evidence missing: probe failed")
+            continue
+        try:
+            parsed = parse(body, float(stored["wall_time_s"]))
+        except (ProbeError, ValueError, TypeError) as exc:
+            reasons.append(f"{phase} evidence missing: {exc}")
+            continue
+        ages[phase] = parsed["update_age_s"]
+        capacities[phase] = parsed["apple_raw_current_capacity_mah"]
+        stamps[phase] = (stored.get("monotonic_before_ns"), stored.get("monotonic_after_ns"))
+        if not parsed["passed"]:
+            confounded = True
+            reasons.extend(f"{phase} {reason}" for reason in parsed["reasons"])
+    if len(stamps) == 2:
+        valid_stamps = all(type(value) is int and value >= 0 for pair in stamps.values() for value in pair)
+        stamps_malformed = (not valid_stamps or any(before > after for before, after in stamps.values())
+                            or stamps["pre"][1] > stamps["post"][0])
+        if stamps_malformed:
+            reasons.append("pair stamps malformed")
+        if span_unavailable:
+            reasons.append(f"{kind} span unavailable")
+        elif span is not None and not stamps_malformed:
+            if stamps["pre"][1] > span[0]:
+                reasons.append(f"pre evidence missing: {phases[0]} outside measured span")
+            if stamps["post"][0] < span[1]:
+                reasons.append(f"post evidence missing: {phases[1]} outside measured span")
+    status = ("battery_float_confounded" if confounded else
+              "battery_float_evidence_missing" if reasons else "pass")
+    pre_q, post_q = capacities["pre"], capacities["post"]
+    return PairVerdict(kind, status, tuple(reasons), digests["pre"], digests["post"],
+                       ages["pre"], ages["post"],
+                       None if pre_q is None or post_q is None else post_q - pre_q)
+
+
+def authenticate_quiet_session(envelope_dir: Path | str) -> PairVerdict:
+    """Authenticate a collector envelope from its mutable session journal and raw bytes."""
+    root = Path(envelope_dir)
+    session = _required_object(root, "session.json")
+    rows = []
+    battery_recorded = "battery_float" in session
+    refusal = ("end_stamp" not in session and
+               session.get("error_class") == QUIET_REFUSAL_ERROR_CLASS)
+    completed = "end_stamp" in session
+    if battery_recorded and (refusal or completed):
+        try:
+            lines = _required_file(root, "rounds.jsonl").decode("utf-8").splitlines()
+        except CustodyUnreadable as exc:
+            if exc.detail == "rounds.jsonl unreadable: missing":
+                raise CustodyUnreadable("round journal missing")
+            raise CustodyUnreadable(f"round journal unreadable: {exc.detail}") from exc
+        except UnicodeError as exc:
+            raise CustodyUnreadable(f"round journal unreadable: {exc}") from exc
+        for number, line in enumerate(lines, 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line, object_pairs_hook=_json_pairs("rounds.jsonl"))
+            except CustodyFailure:
+                raise
+            except ValueError as exc:
+                raise CustodyUnreadable(f"round journal unreadable: line {number}: {exc}") from exc
+            if not isinstance(row, dict):
+                raise CustodyUnreadable(f"round journal unreadable: line {number}: not a JSON object")
+            rows.append(row)
+        if refusal and rows:
+            raise CustodyUnreadable(f"round journal holds {len(rows)} rows; refusal envelope records none")
+        if completed:
+            count = session.get("journal_rows")
+            if type(count) is not int or count < 0:
+                raise CustodyUnreadable("round count not recorded")
+            if len(rows) != count:
+                raise CustodyUnreadable(f"round journal holds {len(rows)} rows; session records {count}")
+    start, end = session.get("start_stamp"), session.get("end_stamp")
+    try:
+        first = monotonic_ns_from_s(start["monotonic_before_s"])
+        if end is not None:
+            last = monotonic_ns_from_s(end["monotonic_after_s"])
+        elif refusal:
+            last = monotonic_ns_from_s(start["monotonic_after_s"])
+        else:
+            raise ValueError("quiet span unavailable")
+        span = (first, last)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        span = (None, None)
+    verdict = authenticate_pair(session.get("battery_float"), root,
+                                phases=("quiet_pre", "quiet_post"),
+                                identity=session.get("session"), span=span)
+    if battery_recorded and (refusal or completed):
+        battery = session.get("battery_float")
+        for index, row in enumerate(rows):
+            for phase in ("pre", "post"):
+                stored = battery.get(phase) if isinstance(battery, dict) else None
+                expected = stored.get("raw_stdout_sha256") if isinstance(stored, dict) else None
+                if not _is_sha256(expected):
+                    continue
+                relative = f"raw/battery_float.{phase}.ioreg"
+                raw_map = row.get("raw", {}).get("sha256", {}) if isinstance(row.get("raw"), dict) else {}
+                observed = raw_map.get(relative) if isinstance(raw_map, dict) else None
+                if observed != expected:
+                    raise CustodyFailure([{"slot": session.get("session"), "attempt_id": index,
+                                           "artifact": relative, "expected_sha256": expected,
+                                           "observed_sha256": observed}])
+    return verdict
+
+
+def authenticate_bundle(bundle_path: Path | str) -> PairVerdict:
+    """Authenticate bundle battery probes against controller monotonic stage bounds."""
+    root = Path(bundle_path)
+    metadata = _required_object(root, "metadata.json")
+    try:
+        lines = _required_file(root, "events.jsonl").decode("utf-8").splitlines()
+    except CustodyFailure:
+        raise
+    except UnicodeError as exc:
+        raise CustodyUnreadable(f"events.jsonl unreadable: {exc}") from exc
+    events = []
+    for number, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line, object_pairs_hook=_json_pairs("events.jsonl"))
+        except CustodyFailure:
+            raise
+        except ValueError as exc:
+            raise CustodyUnreadable(f"events.jsonl line {number} unreadable: {exc}") from exc
+        if not isinstance(event, dict):
+            raise CustodyUnreadable(f"events.jsonl line {number} unreadable: not a JSON object")
+        events.append(event)
+    first_start = next((event for event in events if isinstance(event, dict)
+                        and event.get("event_type") == "stage_started"
+                        and event.get("phase") == "idle_baseline"), None)
+    last_end = next((event for event in reversed(events) if isinstance(event, dict)
+                     and event.get("event_type") == "stage_completed"
+                     and event.get("phase") == "idle_drift_sentinel"), None)
+    start_metadata = first_start.get("metadata") if first_start else None
+    end_metadata = last_end.get("metadata") if last_end else None
+    start = start_metadata.get("monotonic_ns") if isinstance(start_metadata, dict) else None
+    end = end_metadata.get("monotonic_ns") if isinstance(end_metadata, dict) else None
+    span = ((start, end) if isinstance(start, int) and not isinstance(start, bool)
+            and isinstance(end, int) and not isinstance(end, bool)
+            and start >= 0 and end >= start else (None, None))
+    verdict = authenticate_pair(metadata.get("battery_float"), root,
+                                phases=("bundle_pre", "bundle_post"),
+                                identity=metadata.get("run_id"), span=span)
+    from joulewise.detection_floor import complete_bundle_sha256
+    return dataclasses.replace(verdict, bundle_sha256=complete_bundle_sha256(root))
+
+
+def authenticate_capture(capture_dir: Path | str, *,
+                         expected: Mapping[str, str | None] | None = None) -> PairVerdict:
+    """Authenticate the pair alongside instrument_evidence.json."""
+    root = Path(capture_dir)
+    evidence = _required_object(root, "instrument_evidence.json")
+    battery = evidence.get("battery_float") if isinstance(evidence, dict) else None
+    pre = battery.get("pre") if isinstance(battery, dict) else None
+    post = battery.get("post") if isinstance(battery, dict) else None
+    validation_id = evidence.get("validation_id") if isinstance(evidence, dict) else None
+    reasons = []
+    if not isinstance(validation_id, str) or not validation_id:
+        reasons.append("capture identity missing")
+    if isinstance(pre, dict) and isinstance(post, dict):
+        if any(pre.get(key) != post.get(key) for key in ("session_id", "slot", "attempt_id")):
+            reasons.append("pair identity disagreement")
+        attempt_id = pre.get("attempt_id")
+        if attempt_id is not None and attempt_id != validation_id:
+            reasons.append("attempt identity mismatch")
+        if attempt_id is None and (pre.get("session_id") is not None or pre.get("slot") is not None):
+            reasons.append("partial identity")
+        if expected is not None and (
+            validation_id != expected["attempt_id"] or
+            pre.get("session_id") != expected["session_id"] or
+            pre.get("slot") != expected["slot"]
+        ):
+            reasons.append("ledger identity mismatch")
+    identity = pre.get("session_id") if isinstance(pre, dict) and isinstance(post, dict) and pre.get("session_id") == post.get("session_id") else None
+    return authenticate_pair(battery, root, phases=("slot_pre", "slot_post"), identity=identity,
+                             identity_reasons=tuple(reasons))
