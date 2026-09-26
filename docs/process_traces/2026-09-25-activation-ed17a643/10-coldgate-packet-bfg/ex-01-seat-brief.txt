@@ -1,0 +1,23 @@
+SESSION_MODE: delegated
+WRITE_SCOPE: []
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+ROLE: blind design consultant (read-only; write nothing in the repository; /tmp is fine). You have explicit licence to disagree with anything below, including the framing.
+
+PROBLEM. Ed's binding directive #421 (read it: `gh issue view 421 --repo mpmdw/JouleWise`) makes a battery-float check mandatory for EVERY measurement window on this Mac (an M3 Max MacBook Pro measured with powermetrics; the charge limit is now 100 %, and the battery charged at 1.7-3.9 A this afternoon). Charging adds SoC heat and leakage and invalidates wall-meter readings. Required: (1) at arm and immediately before publication/t0: ExternalConnected=Yes, IsCharging=No, |InstantAmperage| <= 200 mA from `ioreg -r -c AppleSmartBattery` (two's complement), raw values logged, failure postpones and is never waived; (2) harvest: if any slot records is_charging=true or battery current beyond the bound, the window is confounded and not used for any claim or acceptance.
+
+FACTS ALREADY ESTABLISHED (verify each; cite file:line):
+- joulewise/night_gate.py:1488-1495 reads `pmset -g batt` at the t0 gate (row C3) and only requires "AC Power"; the raw text is stored as C3 measured ac_power_raw.
+- joulewise/environment.py:215/:259 records is_charging from pmset in some environment snapshots, but derivation slots run scripts/validate_powermetrics_fiducial.py, whose sampler set (joulewise/adapters/powermetrics.py:58 SAMPLERS = cpu_power,gpu_power,ane_power,thermal) has no battery sampler, and a Sol seat reported no per-slot charge record exists.
+- The next window, W1, is a derivation window: v2 night plan, DIAGNOSTIC_NO_PACK, 9,000 s, 12 slots, via scripts/gen_derivation_night.py and scripts/run_night.py. It will be followed by W2 and later scored (MATH) windows, so the design must cover every window kind.
+
+DELIVER a design for lane BATTERY-FLOAT-GATE-01, covering:
+D1. The t0 refusal: where it goes (night_gate row? new row id? arm_readiness_evidence_t0?), exact predicate and parser (ioreg output format; InstantAmperage signedness, with a worked example of a negative value as ioreg prints it), what it records, the refusal code, and how it interacts with the existing zero-capture refusal fast-retry (A212) so a charging battery postpones cheaply.
+D2. Per-slot recording: the least invasive way to record charge state before and after every slot (and ideally during it) for EVERY window kind WITHOUT changing the registered powermetrics sampler set or protocol digests (confirm whether adding `battery` to SAMPLERS would change a registered digest; if it would, say so and do not propose it). Name the exact write site(s) and the field names, and where they land in the evidence bundle so they are digest-covered.
+D3. Harvest/acceptance consumption: which code consumes the per-slot record and refuses or labels the window confounded (derivation chain, calibration acceptance, scored reducer), with exact call sites, so the check cannot be skipped by a caller.
+D4. Interaction with registration text: does any registered document (configs/calibration/preregistration_d079_epoch_25g83_rev1.md Revision 5, protocol_v3) need an amendment for W1 to use this, or is it an admission/instrument-state check outside the registered estimand? Cite text.
+D5. Test plan: defect-shaped tests (a charging fixture refuses at t0; a slot record with charging=true makes the harvest refuse; the two's complement parser on real ioreg byte strings), and the production call sites each test drives.
+D6. Size estimate and a recommended split (one PR or two), plus anything you think is wrong with the directive's thresholds physically (e.g., is 200 mA sensible for float on this machine; what does InstantAmperage read at float).
+
+RULES: read-only; do not run launchctl, powermetrics, the installer or full test discovery; you MAY run `ioreg -r -c AppleSmartBattery` and `pmset -g batt` once each to show real output. No subagents, no background jobs. Final message: the design, with file:line citations and executed evidence.
