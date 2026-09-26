@@ -96,3 +96,10 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
     - Report: `41-seat-report-round4.md`.
     - Deferred Opus NITs N-3, N-4 and N-5 (the ruling says they need no ruling) are kept out of this round to hold its scope.
     - This round is ordered by the cold gate, so rule 11's trigger is satisfied. A recurrence of the same signature after it returns to a cold gate, not to round 5.
+15. **#427 row 9 PASS:** 7,384 tests, 0 failures, 0 errors, 109 skipped, at `58e21ebf` ([80-pr427-ledger](80-pr427-ledger/00-ledger-evidence.md), `38e0d6b8`). Rows 1, 9, 11 and 12 are RUN in the PR body, and the gate-ledger check passes.
+    - **The merge is blocked by branch protection.** The required contexts `test (3.13, 1..6)` never report on a docs-only diff, because the `changes` job's docs-only filter skips the matrix. #411 merged because its tests ran; #425 merged because it touched `tests/test_gen_state.py`. `enforce_admins` is false, but **I did not use `--admin`**: bypassing protection is not this seat's call.
+    - Route instead: #427's content lands inside this activation's bookkeeping PR from `docs/2026-09-26-f8d6cab1`. That branch stacks on `58e21ebf` and changes `tests/test_gen_state.py` (`5802743f`), so the hosted matrix runs. #427 carries a comment saying so and will be closed as superseded when that PR opens.
+    - Structural note for CI-DOCS-ONLY-SKIP-MASKS-RED-01: every pure-docs PR is now unmergeable without admin.
+16. **#428:** hosted CI is green except `test (3.13, 3)` (pending) and gate-ledger (not yet updated). The row-9 full suite at `d8aed7cd` is running in `JouleWise-wt-flake-6bec2aa6` (`/tmp/f8d6-row9-428.log`).
+    - **Canonical fast-forward timing.** Merging #428 moves `origin/main`. Fast-forwarding canonical then makes the supervisor stale (the predecessor's lesson), which obliges an exit.
+    - I will fast-forward canonical once, at a durable boundary: after the S0 round-4 seat returns and its result is committed. The alternative, exiting mid-seat, would kill the running Sol child. W1 is blocked in any case by the live interactive pid 46048, so no arm is lost by the delay.
