@@ -1,0 +1,3 @@
+codex-run-v3: another scoped runner holds the worktree lock
+rc=75
+stale lock (dead pid 80129) removed 16:27; relaunch
