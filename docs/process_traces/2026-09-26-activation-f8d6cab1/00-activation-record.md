@@ -103,3 +103,9 @@ The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, 
 16. **#428:** hosted CI is green except `test (3.13, 3)` (pending) and gate-ledger (not yet updated). The row-9 full suite at `d8aed7cd` is running in `JouleWise-wt-flake-6bec2aa6` (`/tmp/f8d6-row9-428.log`).
     - **Canonical fast-forward timing.** Merging #428 moves `origin/main`. Fast-forwarding canonical then makes the supervisor stale (the predecessor's lesson), which obliges an exit.
     - I will fast-forward canonical once, at a durable boundary: after the S0 round-4 seat returns and its result is committed. The alternative, exiting mid-seat, would kill the running Sol child. W1 is blocked in any case by the live interactive pid 46048, so no arm is lost by the delay.
+17. **S0 round 4 returned complete** ([41](10-s0-delta/41-seat-report-round4.md), Sol xhigh, about 18 minutes).
+    - The RED run gave 32 failures and 6 errors, then GREEN; the seat reports "same signature: no". Its V3 failure is the sandbox's `sysctl` live probe only.
+    - **Bench:** V1 134 OK, V2 181 OK.
+    - Independent recomputation: all 39 frozen definitions are byte-identical to `5d5a0b75`, both decorator-inclusive pins equal the base segments under the test's rule, and S0 removes no line of base `battery_float.py`.
+    - Committed unchanged as `c9081c6e` and pushed.
+    - **Round-4 delta pair launched** (charge [50](10-s0-delta/50-delta-r4-charge.md)): Astra 6 high (execution, a different model family from the Sol implementer) and Opus (contract). Both are charged with the same-signature class and with the honest-failure side (P-A, P-B, shape iii).
