@@ -38,7 +38,9 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
+
+from joulewise import battery_float
 
 from joulewise.authentication_io import (
     open_authentication_input,
@@ -92,6 +94,8 @@ __all__ = [
     "AXI_VALIDATOR_REASON_CODES",
     "BundleReadError",
     "BundleReader",
+    "WindowBatteryRefusal",
+    "authenticate_window_members",
     "ItemWindow",
     "PROMPT_REALIZATION_PROBLEM_CODES",
     "TracePoint",
@@ -181,6 +185,87 @@ class BundleReadError(Exception):
     """A structured, non-crashing bundle read/interpretation failure."""
 
 
+# SHA-256 of the exact committed JSON bytes, set by the historical-set builder.
+HISTORICAL_BUNDLE_SET_SHA256 = "6cbdd1aa5bbda2b77338444a86b39b2fc0e8985fe08291cb34bdd7316f4d1a53"
+
+
+class WindowBatteryRefusal(RuntimeError):
+    """Every named non-pass member in a claim-bearing window."""
+
+    def __init__(self, members: list[dict[str, Any]]) -> None:
+        self.members = members
+        super().__init__("window battery refusal: " + "; ".join(
+            f"{item['label']}: {item['status']} ({', '.join(item['reasons'])})"
+            for item in members
+        ))
+
+
+def _historical_bundles() -> frozenset[str]:
+    path = Path(__file__).resolve().parents[1] / "configs/battery_float/historical_bundles.json"
+    try:
+        raw = read_authentication_input(
+            path, grammar="raw", label="historical battery bundle set",
+        )
+    except OSError as exc:
+        raise BundleReadError(f"historical bundle set cannot be read: {exc}") from exc
+    if hashlib.sha256(raw).hexdigest() != HISTORICAL_BUNDLE_SET_SHA256:
+        raise BundleReadError("historical bundle set SHA-256 mismatch")
+    try:
+        rows = json.loads(raw)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise BundleReadError(f"historical bundle set is invalid JSON: {exc}") from exc
+    if not isinstance(rows, list) or any(
+        not isinstance(row, dict) or set(row) != {"complete_bundle_sha256", "run_id", "source"}
+        or not isinstance(row["complete_bundle_sha256"], str)
+        or not isinstance(row["run_id"], str) or not isinstance(row["source"], str)
+        for row in rows
+    ):
+        raise BundleReadError("historical bundle set has invalid entries")
+    return frozenset(row["complete_bundle_sha256"] for row in rows)
+
+
+def authenticate_window_members(
+    members: Iterable[tuple[str, Path]],
+) -> dict[str, battery_float.PairVerdict]:
+    """Classify each member before any window energy is read."""
+
+    verdicts: dict[str, battery_float.PairVerdict] = {}
+    refused: list[dict[str, Any]] = []
+    for label, path in members:
+        reader = BundleReader(path)
+        try:
+            metadata = reader._strict_json("metadata.json")
+            if not isinstance(metadata, dict):
+                raise BundleReadError("metadata.json is not a JSON object")
+            if isinstance(metadata.get("battery_float"), dict) and (
+                "not_reached" in metadata["battery_float"]
+            ):
+                # A failure before idle_baseline has no pair obligation. The
+                # journal must still be parsed before deciding that fact.
+                obliged = any(
+                    event.get("event_type") == "stage_started"
+                    and event.get("phase") == "idle_baseline"
+                    for event in reader.events()
+                )
+                if not obliged:
+                    continue
+            verdict = reader._battery_verdict(metadata)
+        except BundleReadError as exc:
+            raise battery_float.CustodyUnreadable(f"{label}: {exc}") from exc
+        verdicts[label] = verdict
+        if verdict.status in {
+            "battery_float_confounded", "battery_float_evidence_missing", "not_applicable"
+        }:
+            refused.append({
+                "label": label, "status": verdict.status,
+                "reasons": list(verdict.reasons),
+                "bundle_sha256": verdict.bundle_sha256,
+            })
+    if refused:
+        raise WindowBatteryRefusal(refused)
+    return verdicts
+
+
 @dataclass(frozen=True)
 class TracePoint:
     """One point or interval-average observation on the summed power trace."""
@@ -245,6 +330,7 @@ class BundleReader:
     def __init__(self, path: Path) -> None:
         self._path = Path(path)
         self._cache: dict[str, Any] = {}
+        self.battery_float_status: str | None = None
 
     @property
     def path(self) -> Path:
@@ -275,12 +361,75 @@ class BundleReader:
             raw = self._strict_json("metadata.json")
             if not isinstance(raw, dict):
                 raise BundleReadError("metadata.json is not a JSON object")
+            verdict = self._battery_verdict(raw)
+            if verdict.status not in {"pass", "unobserved_historical", "not_applicable"}:
+                raise BundleReadError(
+                    f"{verdict.status}: {'; '.join(verdict.reasons)}"
+                )
+            self.battery_float_status = verdict.status
+            self._cache["battery_verdict"] = verdict
             self._cache["metadata"] = raw
         return self._cache["metadata"]
 
+    def _battery_verdict(self, raw: dict[str, Any]) -> battery_float.PairVerdict:
+        from joulewise.detection_floor import complete_bundle_sha256
+
+        battery = raw.get("battery_float")
+        if "battery_float" in raw and isinstance(battery, dict) and "not_reached" in battery:
+            # Absence of a baseline start is established only by a parsed journal.
+            obliged = any(
+                row.get("event_type") == "stage_started"
+                and row.get("phase") == "idle_baseline"
+                for row in self.events()
+            )
+            if not obliged:
+                raise BundleReadError("battery_float_evidence_missing: not_reached")
+            # Authenticate the pair to obtain a digest-bound verdict for the
+            # whole-window refusal, while metadata() still rejects non-pass.
+            return battery_float.authenticate_bundle(self._path)
+        if "battery_float" in raw and isinstance(battery, dict) and (
+            "pre" in battery and "post" in battery
+            and "not_applicable" not in battery
+        ):
+            return battery_float.authenticate_bundle(self._path)
+        if "battery_float" not in raw:
+            digest = complete_bundle_sha256(self._path)
+            if digest in _historical_bundles():
+                return battery_float.unobserved_historical_verdict(
+                    "bundle", bundle_sha256=digest
+                )
+        else:
+            digest = complete_bundle_sha256(self._path)
+        if battery is None and "battery_float" in raw:
+            raise BundleReadError("battery_float_evidence_missing: invalid record")
+        if ("battery_float" not in raw or (
+            isinstance(battery, dict) and battery == {
+                "pre": None, "post": None, "not_applicable": "mock"
+            }
+        )) and self._digest_bound_mock_config(raw):
+            return battery_float.not_applicable_verdict(
+                "bundle", bundle_sha256=digest
+            )
+        if "battery_float" not in raw:
+            raise BundleReadError("battery_float_evidence_missing: prospective bundle")
+        raise BundleReadError("battery_float_evidence_missing: invalid record")
+
+    def _digest_bound_mock_config(self, metadata: dict[str, Any]) -> bool:
+        try:
+            raw = read_authentication_input(
+                self._path / "config.json", grammar="raw",
+                label=f"bundle {self._path.name} config.json",
+            )
+        except OSError as exc:
+            raise BundleReadError(f"config.json cannot be read: {exc}") from exc
+        if hashlib.sha256(raw).hexdigest() != metadata.get("config_sha256"):
+            raise BundleReadError("config.json digest does not match metadata.config_sha256")
+        return self.config().hardware_target.telemetry_backend.value == "mock"
+
     def events(self) -> list[dict[str, Any]]:
-        """Parsed ``events.jsonl`` records (a missing file is an empty list;
-        a malformed line raises :class:`BundleReadError`).
+        """Parsed ``events.jsonl`` records (missing is empty only for legacy
+        bundles; a battery record requires the file). Malformed lines raise
+        :class:`BundleReadError`.
 
         Field types are validated centrally here (2N follow-up, 2026-07-06
         status review P1): every record's ``timestamp_s`` must be a finite
@@ -291,6 +440,10 @@ class BundleReader:
         if "events" not in self._cache:
             path = self._path / "events.jsonl"
             if not path.is_file():
+                if (self._path / "metadata.json").is_file():
+                    raw = self._strict_json("metadata.json")
+                    if isinstance(raw, dict) and "battery_float" in raw:
+                        raise BundleReadError("events.jsonl missing")
                 self._cache["events"] = []
                 return self._cache["events"]
             events: list[dict[str, Any]] = []
@@ -300,15 +453,24 @@ class BundleReader:
                     grammar="jsonl",
                     label=f"bundle {self._path.name} events",
                 )
-            except OSError as exc:
+            except (OSError, UnicodeError) as exc:
                 raise BundleReadError(f"events.jsonl cannot be read: {exc}") from exc
+
+            def unique_pairs(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError(f"duplicate key {key!r}")
+                    result[key] = value
+                return result
+
             for index, line in enumerate(text.splitlines()):
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    record = json.loads(line)
-                except json.JSONDecodeError as exc:
+                    record = json.loads(line, object_pairs_hook=unique_pairs)
+                except (json.JSONDecodeError, ValueError) as exc:
                     raise BundleReadError(
                         f"events.jsonl line {index + 1} is not valid JSON: {exc}"
                     ) from exc
@@ -332,6 +494,7 @@ class BundleReader:
 
     def trace_rows(self) -> list[dict[str, str]]:
         """Raw ``power_trace.csv`` rows (a missing file is an empty list)."""
+        self.metadata()
         if "trace_rows" not in self._cache:
             path = self._path / "power_trace.csv"
             if not path.is_file():
@@ -360,6 +523,7 @@ class BundleReader:
         producing an interleaved, undersummed curve. An empty manifest yields
         an empty curve (no fallback summation policy exists - 2N.7).
         """
+        self.metadata()
         if "summed_curve" in self._cache:
             return self._cache["summed_curve"]
         trace = _validate_trace_rows(self.trace_rows(), self.rail_manifest())
@@ -463,6 +627,8 @@ class BundleReader:
     def source_curve(self, source_identity: str) -> list[TracePoint]:
         """Power curve for one persisted event-v2 source identity."""
 
+        self.metadata()
+
         key = f"source_curve:{source_identity}"
         if key not in self._cache:
             rows = [
@@ -526,6 +692,7 @@ class BundleReader:
         markers existed (pre-2N.2) fall back to the ``measured_run`` stage
         boundaries.
         """
+        self.metadata()
         marker_start: float | None = None
         marker_end: float | None = None
         stage_start: float | None = None

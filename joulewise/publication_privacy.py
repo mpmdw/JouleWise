@@ -124,6 +124,7 @@ _METADATA_KEYS = frozenset(
         "marker_to_last_sample_phase_bound_s",
         "idle_drift_bound_w",
         "trace_window_margins",
+        "battery_float",
         "workload_observed",
         "workload_provenance",
         "suite",
@@ -269,6 +270,8 @@ _REQUIRED_CORE_PATHS = frozenset(
 _RAW_PATHS = frozenset(
     {
         "raw/mock_samples.json",
+        "raw/battery_float.pre.ioreg",
+        "raw/battery_float.post.ioreg",
         "raw/powermetrics.plist",
         "raw/powermetrics_idle.plist",
         "raw/powermetrics_idle_post.plist",

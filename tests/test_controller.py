@@ -15,6 +15,7 @@ from typing import Any
 from unittest.mock import patch
 
 import joulewise.adapters as adapters
+from joulewise.adapters.mock_telemetry import MockTelemetryAdapter
 from joulewise.adapters.powermetrics import (
     RICH_IDLE_NAME,
     PowermetricsTelemetryAdapter,
@@ -1106,6 +1107,153 @@ class ControllerTestCase(unittest.TestCase):
     def assert_timestamps_non_decreasing(self, events: list[dict[str, Any]]) -> None:
         timestamps = [event["timestamp_s"] for event in events]
         self.assertEqual(timestamps, sorted(timestamps))
+
+
+class BatteryBracketTests(ControllerTestCase):
+    class Registry:
+        def resolve_runtime(self, config, clock):
+            return adapters.resolve_runtime(config, clock)
+
+        def resolve_transport(self, config):
+            return adapters.resolve_transport(config)
+
+        def resolve_telemetry(self, config, clock):
+            return MockTelemetryAdapter(clock), None
+
+    def nonmock_config(self, run_id: str) -> BenchmarkConfig:
+        payload = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        payload["run_id"] = run_id
+        payload["hardware_target"]["telemetry_backend"] = "powermetrics"
+        return BenchmarkConfig.from_mapping(payload)
+
+    def test_mock_records_not_applicable_without_a_probe(self) -> None:
+        with patch("joulewise.battery_float.observe", side_effect=AssertionError("probe")):
+            path, summary = run_benchmark(make_config("battery-mock"), self.runs_root, self.clock)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        battery = json.loads((path / "metadata.json").read_text())["battery_float"]
+        self.assertEqual(battery, {"pre": None, "post": None, "not_applicable": "mock"})
+
+    def test_probe_brackets_and_two_second_probe_preserve_window_differences(self) -> None:
+        from joulewise import battery_float
+        raw = (REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes()
+        _, reference = run_benchmark(make_config("battery-reference"),
+                                     self.runs_root / "reference", FakeClock(1790373526))
+        observed = []
+        for delay in (0.0, 2.0):
+            clock = FakeClock(1790373526)
+            class Attachment:
+                metadata = {"b_fiducial_s": 0.031}
+
+                def install(self, _path):
+                    pass
+
+            def runner(argv):
+                if len(calls) == 0:
+                    clock.sleep(delay)
+                calls.append(argv)
+                return subprocess.CompletedProcess(argv, 0, raw, b"")
+            calls = []
+            with patch("joulewise.controller._runtime_powermetrics_digest",
+                       return_value="a" * 64), patch(
+                "joulewise.controller._load_instrument_calibration_attachment",
+                return_value=Attachment(),
+            ):
+                path, summary = run_benchmark(
+                    self.nonmock_config(f"battery-delay-{int(delay)}"),
+                    self.runs_root / f"delay-{int(delay)}", clock,
+                    registry=self.Registry(), reducer=lambda _: reference,
+                    instrument_calibration_dir=self.runs_root / "sealed-capture",
+                    battery_runner=runner,
+                )
+            self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+            self.assertEqual(calls, [battery_float.IOREG_BATTERY_ARGV] * 2)
+            record = json.loads((path / "metadata.json").read_text())["battery_float"]
+            metadata = json.loads((path / "metadata.json").read_text())
+            self.assertEqual(metadata["instrument_calibration"]["b_fiducial_s"], 0.031)
+            self.assertEqual(record["pre"]["phase"], "bundle_pre")
+            self.assertEqual(record["post"]["phase"], "bundle_post")
+            self.assertEqual(record["pre"]["session_id"], path.name)
+            self.assertEqual(record["post"]["session_id"], path.name)
+            for phase in ("pre", "post"):
+                self.assertEqual(record[phase]["raw_path"], f"raw/battery_float.{phase}.ioreg")
+                self.assertIsInstance(record[phase]["monotonic_before_ns"], int)
+                self.assertIsInstance(record[phase]["monotonic_after_ns"], int)
+            events = self.read_events(path)
+            times = [event["timestamp_s"] for event in events
+                     if event["event_type"] in {"sampling_started", "sampling_stopped"}]
+            baseline_start = next(event["metadata"]["monotonic_ns"] for event in events
+                                  if event["event_type"] == "stage_started" and
+                                  event["phase"] == "idle_baseline")
+            sentinel_end = next(event["metadata"]["monotonic_ns"] for event in events
+                                if event["event_type"] == "stage_completed" and
+                                event["phase"] == "idle_drift_sentinel")
+            observed.append((record, times, (baseline_start, sentinel_end),
+                             metadata["instrument_calibration"]["b_fiducial_s"]))
+        self.assertEqual(observed[0][1][1] - observed[0][1][0],
+                         observed[1][1][1] - observed[1][1][0])
+        self.assertEqual(observed[1][0]["pre"]["monotonic_after_ns"] -
+                         observed[0][0]["pre"]["monotonic_after_ns"], 2_000_000_000)
+        self.assertEqual(observed[0][3], observed[1][3])
+        self.assertEqual(observed[0][2][1] - observed[0][2][0],
+                         observed[1][2][1] - observed[1][2][0])
+
+    def test_default_runner_uses_bounded_real_probe(self) -> None:
+        raw = (REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes()
+        _, reference = run_benchmark(make_config("default-reference"),
+                                     self.runs_root / "reference", FakeClock(1790373526))
+        with patch("joulewise.battery_float.subprocess.run",
+                   return_value=subprocess.CompletedProcess(
+                       ("/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery"), 0, raw, b""
+                   )) as probe:
+            path, summary = run_benchmark(
+                self.nonmock_config("default-probe"), self.runs_root / "default",
+                FakeClock(1790373526), registry=self.Registry(),
+                reducer=lambda _: reference,
+            )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertEqual(probe.call_count, 2)
+        for call in probe.call_args_list:
+            self.assertEqual(call.kwargs["timeout"], 10)
+            self.assertTrue(call.kwargs["capture_output"])
+        self.assertTrue((path / "raw/battery_float.pre.ioreg").is_file())
+
+    def test_failure_before_baseline_records_not_reached(self) -> None:
+        from joulewise.adapters.mock_runtime import MockRuntimeAdapter
+        with patch.object(MockRuntimeAdapter, "prepare", return_value=AdapterResult(
+            ok=False, failure_reason=FailureReason.UNKNOWN_ERROR,
+            message="injected prepare failure",
+        )):
+            path, summary = run_benchmark(
+                self.nonmock_config("not-reached"), self.runs_root, FakeClock(1790373526),
+                registry=self.Registry(), battery_runner=lambda _: self.fail("probe ran"),
+            )
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        battery = json.loads((path / "metadata.json").read_text())["battery_float"]
+        self.assertEqual(battery, {"pre": None, "post": None, "not_reached": "prepare"})
+        self.assertFalse(any(event["phase"] == "idle_baseline" and
+                             event["event_type"] == "stage_started"
+                             for event in self.read_events(path)))
+
+    def test_failure_after_pre_salvages_post(self) -> None:
+        from joulewise.adapters.mock_runtime import MockRuntimeAdapter
+        raw = (REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes()
+        calls = []
+        def runner(argv):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0, raw, b"")
+        with patch.object(MockRuntimeAdapter, "warmup", return_value=AdapterResult(
+            ok=False, failure_reason=FailureReason.UNKNOWN_ERROR,
+            message="injected warmup failure",
+        )):
+            path, summary = run_benchmark(
+                self.nonmock_config("salvage-post"), self.runs_root,
+                FakeClock(1790373526), registry=self.Registry(), battery_runner=runner,
+            )
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(len(calls), 2)
+        battery = json.loads((path / "metadata.json").read_text())["battery_float"]
+        self.assertIsInstance(battery["pre"], dict)
+        self.assertIsInstance(battery["post"], dict)
 
 
 class StatusByReasonTests(unittest.TestCase):

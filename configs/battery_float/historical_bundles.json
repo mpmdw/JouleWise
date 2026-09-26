@@ -1,0 +1,67 @@
+[
+  {
+    "complete_bundle_sha256": "19c0d18054afc11ecb3640c186614630924eeab0141dfbd554270d95dad6110e",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-b2",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b02-b2/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "229029cb968cdbb73a55aa50cdfdca31bd0ef560ee02b5ef46dd784e2f2d7df9",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-a1",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-a1/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "4967e4609c426a721189fabe9dc64f9fcf0a426bf568fab5e35f0c03e304ad8a",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-a2",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-a2/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "58c734804b14a481b3005e1b77b24a596fcc9f549e500231af2ad3e8d1e16fe1",
+    "run_id": "seed",
+    "source": "tests/fixtures/d117_v2_production/strict_seed_bundle/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "727139df64a3ec13a4706f255957f75bbbf7eb30ba6095b1c68018c5d04e487f",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-b1",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b02-b1/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "7b2b8ebc11ada1afaf90a8893339a4f18ad359897eaa9a29cb52f90c645f6453",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-b1",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-b1/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "91f8ac61e7bbf7a45b5a7dc7d7419b42d122e192497bccb20e51925996c0bb6a",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-a2",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b02-a2/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "a21028b734280f3ff3757473cf0a01afeae1493a01cf505ee62c8b2b52add62a",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-b2",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-b2/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "aa2b4c81c830a4376f31152cde7cedc1110ab3ead0d12c809d9e2f063234e89c",
+    "run_id": "legacy_reducer_current_behavior",
+    "source": "tests/fixtures/legacy_reducer_current_behavior/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "af2b58875dcc06453a1f29c68a94dcb693818013c58bb499c8b937488b7496bd",
+    "run_id": "axi-ap-spec-draft-template",
+    "source": "tests/fixtures/axi_valid_burst/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "b05cc99778dc8eaeff4323c16205b2203dec59dbc7f9a119a92b38af5baf415b",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-a1",
+    "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b02-a1/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "b1328247c2e436b060b283b195238eefa3e9471931cce7cbb56cb3e64106c448",
+    "run_id": "p2015-df-rq-short-abs-r01",
+    "source": "tests/fixtures/d078_r01/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "cb668a06afadb96b05942979034869548a9a13cf23c39549a31a52d3afdd62e0",
+    "run_id": "d100-dangler-r5a",
+    "source": "tests/fixtures/salvage_dangler/r5a_idle_abort/metadata.json"
+  }
+]

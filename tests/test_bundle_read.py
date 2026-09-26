@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +19,7 @@ from joulewise.bundle import RunBundleWriter
 from joulewise.bundle_read import (
     BundleReader,
     BundleReadError,
+    HISTORICAL_BUNDLE_SET_SHA256,
     Window,
     _marker_pair_problems,
 )
@@ -153,6 +155,144 @@ class ReaderTestCase(unittest.TestCase):
 
 
 class StrictAccessorTests(ReaderTestCase):
+    def test_historical_set_bytes_and_protected_base_paths_are_pinned(self) -> None:
+        path = REPO_ROOT / "configs/battery_float/historical_bundles.json"
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.assertEqual(digest, "6cbdd1aa5bbda2b77338444a86b39b2fc0e8985fe08291cb34bdd7316f4d1a53")
+        self.assertEqual(digest, HISTORICAL_BUNDLE_SET_SHA256)
+        protected = [
+            "joulewise/reduce.py", "joulewise/bundle.py",
+            "joulewise/powermetrics_fiducial.py",
+            "joulewise/uncertainty_evidence.py",
+            "joulewise/adapters/powermetrics.py",
+            "scripts/paper_excursion_decomposition.py",
+            "scripts/paper_anchor_correction_quantified.py",
+            "scripts/render_results_fills.py",
+            "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json",
+            "configs/calibration", "configs/campaigns/d117_",
+        ]
+        tracked = subprocess.check_output(
+            ["git", "ls-files", "configs/campaigns/d117_*"], cwd=REPO_ROOT,
+            text=True,
+        ).splitlines()
+        protected = protected[:-1] + tracked
+        result = subprocess.run(
+            ["git", "diff", "--exit-code", "--no-ext-diff", "1417c0c4", "--", *protected],
+            cwd=REPO_ROOT, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_tracked_fixture_is_unobserved_historical(self) -> None:
+        bundle = REPO_ROOT / "tests/fixtures/d078_r01"
+        reader = BundleReader(bundle)
+        self.assertEqual(reader.metadata()["run_id"], "p2015-df-rq-short-abs-r01")
+        self.assertEqual(reader.battery_float_status, "unobserved_historical")
+
+    def test_historical_set_pin_is_checked_before_parsing(self) -> None:
+        from unittest.mock import patch
+
+        bundle = REPO_ROOT / "tests/fixtures/d078_r01"
+        with patch("joulewise.bundle_read.HISTORICAL_BUNDLE_SET_SHA256", "0" * 64):
+            with self.assertRaisesRegex(BundleReadError, "SHA-256 mismatch"):
+                BundleReader(bundle).metadata()
+
+    def test_prospective_unbracketed_bundle_refuses(self) -> None:
+        writer = self.make_bundle("prospective-battery")
+        self.write_metadata(writer, ["mock"])
+        config_path = writer.path / "config.json"
+        config = json.loads(config_path.read_text())
+        config["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config_path.write_text(json.dumps(config))
+        metadata_path = writer.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        metadata_path.write_text(json.dumps(metadata))
+        for accessor in (
+            lambda reader: reader.metadata(),
+            lambda reader: reader.summed_curve(),
+            lambda reader: reader.source_curve("mock"),
+            lambda reader: reader.trace_rows(),
+            lambda reader: reader.measured_window(),
+        ):
+            with self.subTest(accessor=accessor):
+                with self.assertRaisesRegex(BundleReadError, "prospective bundle"):
+                    accessor(BundleReader(writer.path))
+
+    def test_key_absent_mock_is_not_applicable_only_with_digest_bound_config(self) -> None:
+        writer = self.make_bundle("mock-no-battery-key")
+        self.write_metadata(writer, ["mock"])
+        reader = BundleReader(writer.path)
+        self.assertEqual(reader.metadata()["run_id"], "mock-no-battery-key")
+        self.assertEqual(reader.battery_float_status, "not_applicable")
+        config_path = writer.path / "config.json"
+        config_path.write_bytes(config_path.read_bytes() + b" ")
+        with self.assertRaisesRegex(BundleReadError, "config.json digest"):
+            BundleReader(writer.path).metadata()
+
+    def test_explicit_mock_not_applicable_refuses_nonmock_config(self) -> None:
+        writer = self.make_bundle("false-mock")
+        self.write_metadata(writer, ["mock"])
+        config_path = writer.path / "config.json"
+        config = json.loads(config_path.read_text())
+        config["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config_path.write_text(json.dumps(config))
+        metadata_path = writer.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        metadata["battery_float"] = {
+            "pre": None, "post": None, "not_applicable": "mock",
+        }
+        metadata_path.write_text(json.dumps(metadata))
+        with self.assertRaisesRegex(BundleReadError, "invalid record"):
+            BundleReader(writer.path).metadata()
+
+    def test_battery_bundle_missing_events_refuses(self) -> None:
+        writer = self.make_bundle("battery-missing-events")
+        self.write_metadata(writer, ["mock"])
+        metadata_path = writer.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["battery_float"] = {"pre": {}, "post": {}}
+        metadata_path.write_text(json.dumps(metadata))
+        (writer.path / "events.jsonl").unlink()
+        with self.assertRaisesRegex(BundleReadError, "events.jsonl missing"):
+            BundleReader(writer.path).events()
+
+    def test_battery_bundle_malformed_events_refuses_before_not_reached(self) -> None:
+        writer = self.make_bundle("battery-malformed-events")
+        self.write_metadata(writer, ["mock"])
+        metadata_path = writer.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["battery_float"] = {"pre": None, "post": None, "not_reached": "validate"}
+        metadata_path.write_text(json.dumps(metadata))
+        (writer.path / "events.jsonl").write_text("{\n")
+        with self.assertRaisesRegex(BundleReadError, "events.jsonl line 1"):
+            BundleReader(writer.path).metadata()
+
+    def test_battery_bundle_duplicate_event_key_refuses(self) -> None:
+        writer = self.make_bundle("battery-duplicate-event")
+        self.write_metadata(writer, ["mock"])
+        metadata_path = writer.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["battery_float"] = {"pre": None, "post": None, "not_reached": "validate"}
+        metadata_path.write_text(json.dumps(metadata))
+        (writer.path / "events.jsonl").write_text(
+            '{"timestamp_s":1,"event_type":"stage_started","event_type":"token",'
+            '"phase":"idle_baseline","message":"","metadata":{}}\n'
+        )
+        with self.assertRaisesRegex(BundleReadError, "duplicate key"):
+            BundleReader(writer.path).metadata()
+
+    def test_battery_bundle_invalid_utf8_events_is_read_error(self) -> None:
+        writer = self.make_bundle("battery-invalid-utf8-event")
+        self.write_metadata(writer, ["mock"])
+        metadata_path = writer.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["battery_float"] = {"pre": None, "post": None, "not_reached": "validate"}
+        metadata_path.write_text(json.dumps(metadata))
+        (writer.path / "events.jsonl").write_bytes(b"\xff")
+        with self.assertRaisesRegex(BundleReadError, "events.jsonl cannot be read"):
+            BundleReader(writer.path).metadata()
+
     def test_legacy_v1_suite_manifest_names_synthesized_cache_marker(self) -> None:
         writer = self.make_bundle("legacy-suite-manifest")
         legacy = json.loads(SUITE_MANIFEST_PATH.read_text())
@@ -768,6 +908,7 @@ class PromptRealizationExpectationTests(ReaderTestCase):
 class MeasuredWindowTests(ReaderTestCase):
     def test_markers_preferred_over_stage_boundaries(self) -> None:
         writer = self.make_bundle("markers")
+        self.write_metadata(writer, ["mock"])
         self.add_event(writer, "stage_started", "measured_run", 10.0)
         self.add_event(writer, "sampling_started", "measured_run", 13.0)
         self.add_event(writer, "sampling_stopped", "measured_run", 20.0)
@@ -777,6 +918,7 @@ class MeasuredWindowTests(ReaderTestCase):
 
     def test_stage_boundaries_are_the_pre_2n_fallback(self) -> None:
         writer = self.make_bundle("stage-fallback")
+        self.write_metadata(writer, ["mock"])
         self.add_event(writer, "stage_started", "measured_run", 10.0)
         self.add_event(writer, "stage_completed", "measured_run", 22.0)
         window = BundleReader(writer.path).measured_window()
@@ -784,6 +926,7 @@ class MeasuredWindowTests(ReaderTestCase):
 
     def test_no_window_when_events_missing(self) -> None:
         writer = self.make_bundle("no-window")
+        self.write_metadata(writer, ["mock"])
         self.assertIsNone(BundleReader(writer.path).measured_window())
 
 
@@ -1474,6 +1617,7 @@ class SuiteReaderTests(ReaderTestCase):
         (writer.path / "config.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
         metadata = json.loads((writer.path / "metadata.json").read_text())
         metadata["suite"]["manifest_sha256"] = new_hash
+        metadata["config_sha256"] = hashlib.sha256((writer.path / "config.json").read_bytes()).hexdigest()
         (writer.path / "metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
         problems = BundleReader(writer.path).problems()
@@ -1652,6 +1796,7 @@ class SuiteReaderTests(ReaderTestCase):
         (writer.path / "config.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
         metadata = json.loads((writer.path / "metadata.json").read_text())
         metadata["suite"]["manifest_sha256"] = "bad"
+        metadata["config_sha256"] = hashlib.sha256((writer.path / "config.json").read_bytes()).hexdigest()
         (writer.path / "metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
         raw_manifest = json.loads((writer.path / "suite_manifest.json").read_text())
         file_hash = suite_manifest_sha256(canonical_effective_manifest(raw_manifest))

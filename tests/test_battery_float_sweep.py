@@ -71,6 +71,10 @@ READERS = {
 
 # file -> the runner each `battery_float.observe(` call there uses.
 OBSERVE_CALLERS = {
+    "joulewise/controller.py": [
+        "bundle_pre: battery_runner or observe's bounded bytes subprocess.run",
+        "bundle_post: battery_runner or observe's bounded bytes subprocess.run",
+    ],
     "joulewise/night_gate.py": ["t0: probes.run (run_night._probe_runner captures bytes)"],
     "joulewise/evidence_night.py": ["arm_check: probe_command (bytes for the ioreg argv)",
                                     "publish_install: probe_command (bytes for the ioreg argv)"],
@@ -130,7 +134,7 @@ class SweepGuardTests(unittest.TestCase):
                     self.assertEqual(ast.unparse(phase), "f'slot_{phase}'")
                     self.assertTrue({"slot_pre", "slot_post"} <= set(battery_float.PHASES))
                     seen.update(("slot_pre", "slot_post"))
-        self.assertEqual(seen, set(battery_float.PHASES[:7]))
+        self.assertEqual(seen, set(battery_float.PHASES[:7]) | {"bundle_pre", "bundle_post"})
 
     def test_aliased_out_of_set_phase_is_visible(self):
         forms = (

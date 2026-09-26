@@ -64,6 +64,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import joulewise.adapters
+from joulewise import battery_float
 from joulewise.aggregate import aggregate_experiment
 from joulewise import reduce as reduce_module
 from joulewise.bundle import (
@@ -249,6 +250,7 @@ def run_benchmark(
     instrument_calibration_dir: Path | None = None,
     instrument_power_policy: str | None = None,
     post_window_sampling_dwell_s: float | None = None,
+    battery_runner: Callable | None = None,
 ) -> tuple[Path, SummaryMetrics | SummaryMetricsV060]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
@@ -347,6 +349,7 @@ def run_benchmark(
         attachment.metadata if attachment is not None else None,
         pre_resolved_telemetry,
         float(post_window_sampling_dwell_s),
+        battery_runner,
     ).execute()
 
 
@@ -436,15 +439,18 @@ def _load_instrument_calibration_attachment(
         raise ValueError("instrument calibration evidence is invalid JSON") from exc
     from joulewise.calibration_bracketing import REVISION_FIVE_EPOCH  # noqa: PLC0415
 
-    if isinstance(evidence, dict) and (
-        "battery_float" in evidence
-        or any(
+    if isinstance(evidence, dict) and any(
             isinstance(epoch, dict)
             and all(epoch.get(field) == value for field, value in REVISION_FIVE_EPOCH.items())
             for epoch in (evidence.get("identity_epoch"), evidence.get("bindings"))
-        )
-    ):
+        ):
         raise ValueError("revision_five evidence cannot be attached as instrument calibration")
+    verdict = battery_float.authenticate_capture(root)
+    if verdict.status != "pass":
+        raise ValueError(f"instrument calibration {verdict.status}: {'; '.join(verdict.reasons)}")
+    for phase in ("pre", "post"):
+        relative = f"raw/battery_float.{phase}.ioreg"
+        files[relative] = (root / relative).read_bytes()
     bindings = evidence.get("bindings") if isinstance(evidence, dict) else None
     bound = evidence.get("b_fiducial_s") if isinstance(evidence, dict) else None
     if (
@@ -740,6 +746,7 @@ class _Execution:
         instrument_calibration: dict[str, Any] | None = None,
         pre_resolved_telemetry: TelemetryAdapter | None = None,
         post_window_sampling_dwell_s: float = 0.0,
+        battery_runner: Callable | None = None,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -764,6 +771,8 @@ class _Execution:
         )
         self._pre_resolved_telemetry = pre_resolved_telemetry
         self._post_window_sampling_dwell_s = post_window_sampling_dwell_s
+        self._battery_runner = battery_runner
+        self._battery_float: dict[str, Any] = {"pre": None, "post": None}
         self._trace_window_margins: dict[str, float] | None = None
         self._environment_admission: dict[str, Any] | None = None
         # D-024: one immutable context, constructed after bundle creation,
@@ -867,16 +876,41 @@ class _Execution:
         self._log(self._controller_log, f"run {self._writer.run_id} started")
         self._stage_validate()
         self._stage_prepare()
+        self._observe_battery_float("pre")
         self._stage_idle_baseline()
         self._stage_warmup()
         self._stage_measured_run()
         self._stage_idle_drift_sentinel()
+        self._observe_battery_float("post")
         self._stage_cleanup()
         # Current claim reduction consumes the post-run environment/admission
         # record.  Capture it at the lifecycle boundary immediately before
         # metadata is persisted and the pure reducer reads that metadata.
         self._capture_post_run_environment_observation()
         return self._stage_reduce()
+
+    def _observe_battery_float(self, phase: str) -> None:
+        if self._config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+            return
+        relative = f"raw/battery_float.{phase}.ioreg"
+        kwargs = dict(
+            runner=self._battery_runner,
+            wall_time_s=self._clock.now(),
+            monotonic_ns=lambda: battery_float.monotonic_ns_from_s(
+                _clock_stamp(self._clock).monotonic_after_s
+            ),
+            raw_path=relative, session_id=self._writer.run_id,
+        )
+        if phase == "pre":
+            record, raw = battery_float.observe(phase="bundle_pre", **kwargs)
+        else:
+            record, raw = battery_float.observe(phase="bundle_post", **kwargs)
+        (self._writer.path / relative).write_bytes(raw)
+        self._battery_float[phase] = record
+
+    def _salvage_battery_float_post(self) -> None:
+        if self._battery_float["pre"] is not None and self._battery_float["post"] is None:
+            self._observe_battery_float("post")
 
     # ------------------------------------------------------------------
     # Stages
@@ -1354,6 +1388,9 @@ class _Execution:
         """Collect the short post-run idle sentinel outside the measured window."""
 
         if not isinstance(self._telemetry, IdleDriftEvidenceProvider):
+            if self._config.hardware_target.telemetry_backend != TelemetryBackend.MOCK:
+                self._begin_stage("idle_drift_sentinel")
+                self._complete_stage("idle_drift_sentinel", {"status": "unavailable"})
             return
         self._begin_stage("idle_drift_sentinel")
         assert self._baseline is not None
@@ -1476,6 +1513,7 @@ class _Execution:
         # Every salvage action is independent: one broken writer or adapter
         # cannot prevent later evidence and cleanup attempts.
         self._attempt_salvage_step("stop_sampling", self._stop_sampling_best_effort)
+        self._attempt_salvage_step("battery_float_post", self._salvage_battery_float_post)
         self._attempt_salvage_step("adapter_custody", self._salvage_adapter_custody)
         self._attempt_salvage_step("runtime_cleanup", self._cleanup_best_effort)
         self._attempt_salvage_step(
@@ -1523,6 +1561,7 @@ class _Execution:
         )
         actions: list[tuple[str, Callable[[], Any]]] = [
             ("stop_sampling", self._stop_sampling_best_effort),
+            ("battery_float_post", self._salvage_battery_float_post),
             ("adapter_custody", self._salvage_adapter_custody),
             ("runtime_cleanup", self._cleanup_best_effort),
             ("failure_environment", self._capture_failure_fallback_environment),
@@ -2077,6 +2116,19 @@ class _Execution:
         if self._metadata_written:
             return
         extra: dict[str, Any] = {}
+        if self._config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+            extra["battery_float"] = {
+                "pre": None, "post": None, "not_applicable": "mock",
+            }
+        elif not any(
+            event.event_type == "stage_started" and event.phase == "idle_baseline"
+            for event in self._events
+        ):
+            extra["battery_float"] = {
+                "pre": None, "post": None, "not_reached": self._current_stage,
+            }
+        else:
+            extra["battery_float"] = dict(self._battery_float)
         if self._is_axi_run():
             policy = self._config.batch_policy
             speculation = self._config.speculation
@@ -2370,9 +2422,19 @@ class _Execution:
 
     def _begin_stage(self, name: str) -> None:
         self._current_stage = name
-        self._buffer_event("stage_started", name, f"stage {name} started")
+        metadata = None
+        if name == "idle_baseline":
+            metadata = {"monotonic_ns": battery_float.monotonic_ns_from_s(
+                _clock_stamp(self._clock).monotonic_after_s
+            )}
+        self._buffer_event("stage_started", name, f"stage {name} started", metadata)
 
     def _complete_stage(self, name: str, metadata: dict[str, Any] | None = None) -> None:
+        if name == "idle_drift_sentinel":
+            metadata = dict(metadata or {})
+            metadata["monotonic_ns"] = battery_float.monotonic_ns_from_s(
+                _clock_stamp(self._clock).monotonic_after_s
+            )
         self._buffer_event("stage_completed", name, f"stage {name} completed", metadata)
 
     def _log(self, buffer: list[str], message: str) -> None:

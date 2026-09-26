@@ -15,6 +15,7 @@ import importlib.util
 import json
 import math
 import plistlib
+import subprocess
 import tempfile
 import unittest
 from dataclasses import asdict
@@ -23,6 +24,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise import reduce as reduce_module
+from joulewise import battery_float
 from joulewise.adapters.powermetrics import duration_weighted_mean_and_sample_variance
 from joulewise.analysis_engine.inputs import (
     AnalysisInputError,
@@ -49,6 +51,103 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
 SUITE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_suite_local.json"
 SUITE_MANIFEST_PATH = REPO_ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
+
+
+def _bracket_test_bundle(bundle: Path) -> Path:
+    """Give a mutable copy of a historical fixture a real passing bundle pair."""
+    metadata_path = bundle / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    if "battery_float" in metadata:
+        return bundle
+    raw = (REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes()
+    records = {}
+    for phase, stamps in (("pre", (10, 20)), ("post", (90, 100))):
+        relative = f"raw/battery_float.{phase}.ioreg"
+        path = bundle / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+        ticks = iter(stamps)
+        records[phase], _ = battery_float.observe(
+            phase=f"bundle_{phase}", raw_path=relative,
+            session_id=metadata["run_id"], wall_time_s=1790373526,
+            monotonic_ns=lambda ticks=ticks: next(ticks),
+            runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw, b""),
+        )
+    events_path = bundle / "events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+    for event in events:
+        if event["event_type"] == "stage_started" and event["phase"] == "idle_baseline":
+            event["metadata"]["monotonic_ns"] = 30
+        if event["event_type"] == "stage_completed" and event["phase"] == "idle_drift_sentinel":
+            event["metadata"]["monotonic_ns"] = 80
+    events_path.write_text("".join(json.dumps(event) + "\n" for event in events))
+    metadata["battery_float"] = records
+    metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+    return bundle
+
+
+def _run_p2038_with_battery(root: Path, mode: str):
+    """Run the old production fixture with in-memory, passing probe bytes."""
+    import inspect
+    import time
+    from joulewise.clock import ClockStamp
+    from joulewise import controller as controller_module
+    from tests import test_p2038_production_path as p2038
+
+    raw = (REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes()
+    bundle_raw = raw.replace(
+        b'"UpdateTime" = 1790373525',
+        f'"UpdateTime" = {int(time.time())}'.encode(), 1,
+    )
+    original_install = p2038.install_complete_calibration
+    original_observe = battery_float.observe
+    original_stamp = controller_module._clock_stamp
+    extra_stamps = {
+        "_observe_battery_float": iter((10.0, 20.0, 260.0, 270.0)),
+        "_begin_stage": iter((50.0,)),
+        "_complete_stage": iter((250.0,)),
+    }
+
+    def install(directory: Path) -> None:
+        original_install(directory)
+        evidence_path = directory / "instrument_evidence.json"
+        evidence = json.loads(evidence_path.read_text())
+        pair = {}
+        for phase, stamps in (("pre", (10, 20)), ("post", (90, 100))):
+            relative = f"raw/battery_float.{phase}.ioreg"
+            (directory / relative).write_bytes(raw)
+            ticks = iter(stamps)
+            pair[phase], _ = original_observe(
+                phase=f"slot_{phase}", raw_path=relative, wall_time_s=1790373526,
+                monotonic_ns=lambda ticks=ticks: next(ticks),
+                runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw, b""),
+            )
+        evidence["battery_float"] = pair
+        evidence_raw = (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode()
+        evidence_path.write_bytes(evidence_raw)
+        manifest_path = directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["artifacts"]["instrument_evidence.json"] = hashlib.sha256(evidence_raw).hexdigest()
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    def observe(**kwargs):
+        kwargs.setdefault("runner", lambda argv: subprocess.CompletedProcess(argv, 0, bundle_raw, b""))
+        return original_observe(**kwargs)
+
+    def stamp(clock):
+        caller = next((frame.function for frame in inspect.stack()[1:]
+                       if frame.function in extra_stamps), None)
+        if caller not in extra_stamps:
+            return original_stamp(clock)
+        monotonic_s = next(extra_stamps[caller])
+        return ClockStamp(clock._now, monotonic_s, monotonic_s, 0.0, 0.0)
+
+    with patch.object(p2038, "install_complete_calibration", side_effect=install), patch.object(
+        battery_float, "observe", side_effect=observe,
+    ), patch.object(
+        controller_module, "_clock_stamp", side_effect=stamp,
+    ):
+        return p2038.P2038ProductionPathTests().run_mode(root, mode)
 
 #: Idle-baseline metadata block the controller writes (asdict of IdleBaseline).
 DEFAULT_IDLE = {
@@ -1544,10 +1643,17 @@ class SuiteReduceTests(ReduceTestCase):
             (bundle / "raw").mkdir(parents=True)
             (bundle / "raw" / "powermetrics.plist").write_bytes(raw)
             (bundle / "raw" / "powermetrics_idle.plist").write_bytes(raw)
+            config = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+            config["run_id"] = bundle_name
+            config_raw = (json.dumps(config) + "\n").encode()
+            (bundle / "config.json").write_bytes(config_raw)
             (bundle / "metadata.json").write_text(
                 json.dumps(
                     {
                         "run_id": bundle_name,
+                        "config_sha256": hashlib.sha256(config_raw).hexdigest(),
+                        "battery_float": {"pre": None, "post": None,
+                                          "not_applicable": "mock"},
                         "uncertainty_evidence": {
                             "clock_anchor": {
                                 "first_sample_end_point_epoch_s": 2.0
@@ -2434,10 +2540,9 @@ class D078R01RegressionTests(unittest.TestCase):
     def test_current_admission_gap_overlap_and_post_bracket_fail_independently(self) -> None:
         from joulewise.bundle_read import BundleReader
         from joulewise.environment_admission import current_environment_refusals
-        from tests.test_p2038_production_path import P2038ProductionPathTests
 
         with tempfile.TemporaryDirectory() as tmp:
-            bundle, summary = P2038ProductionPathTests().run_mode(Path(tmp), "normal")
+            bundle, summary = _run_p2038_with_battery(Path(tmp), "normal")
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
             reader = BundleReader(bundle)
             measured_window = reader.measured_window()
@@ -2748,7 +2853,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             trace = (bundle / "power_trace.csv").read_text().splitlines()
             row = trace[2].split(",")
             row[1] = str(float(row[1]) + 0.5)
@@ -2766,7 +2871,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             metadata = json.loads((bundle / "metadata.json").read_text())
             del metadata["uncertainty_evidence"]["clock_anchor"]["clock_stamps"][
                 "pre_spawn"
@@ -2795,7 +2900,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             (bundle / "raw" / "powermetrics.plist").unlink()
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
@@ -2822,7 +2927,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             metadata = json.loads((bundle / "metadata.json").read_text())
             metadata["instrument_calibration"] = {"b_fiducial_s": -1.0}
             (bundle / "metadata.json").write_text(
@@ -2844,7 +2949,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             metadata_path = bundle / "metadata.json"
             metadata = json.loads(metadata_path.read_text())
             final = metadata["environment_admission"]["attempts"][-1]
@@ -2948,7 +3053,7 @@ class D078R01RegressionTests(unittest.TestCase):
         import shutil
 
         bundle = Path(tmp) / "bundle"
-        shutil.copytree(measurement_fixture or self.FIXTURE, bundle)
+        _bracket_test_bundle(shutil.copytree(measurement_fixture or self.FIXTURE, bundle))
         evidence = json.loads(json.dumps(evidence))
         evidence_protocol_id = evidence.get("protocol_id")
         calibration_first_endpoint_s = None
@@ -3092,10 +3197,9 @@ class D078R01RegressionTests(unittest.TestCase):
             CLOCK_METHOD_V3,
             SCHEMA_VERSION_V3,
         )
-        from tests.test_p2038_production_path import P2038ProductionPathTests
 
         root = Path(tmp)
-        measurement, source_summary = P2038ProductionPathTests().run_mode(
+        measurement, source_summary = _run_p2038_with_battery(
             root / "v3-measurement-source", "normal"
         )
         self.assertEqual(source_summary.status, RunStatus.SUCCEEDED)
@@ -3274,7 +3378,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             reader = BundleReader(bundle)
             original = reduce_module._derive_anchor_context(
                 reader, reader.metadata(), reducer_version="0.5.2"
@@ -3308,7 +3412,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             reader = BundleReader(bundle)
             context = reduce_module._derive_anchor_context(
                 reader, reader.metadata(), reducer_version="0.5.2"
@@ -3563,7 +3667,7 @@ class D078R01RegressionTests(unittest.TestCase):
         for label, admission in cases.items():
             with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
                 bundle = Path(tmp) / "bundle"
-                shutil.copytree(self.FIXTURE, bundle)
+                _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
                 metadata_path = bundle / "metadata.json"
                 metadata = json.loads(metadata_path.read_text())
                 metadata["environment_admission"] = admission
@@ -3594,7 +3698,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
+            _bracket_test_bundle(shutil.copytree(self.FIXTURE, bundle))
             metadata = json.loads((bundle / "metadata.json").read_text())
             metadata["instrument_calibration"] = {
                 "artifact_path": "instrument_evidence.json",
