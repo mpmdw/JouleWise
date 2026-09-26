@@ -555,6 +555,11 @@ def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: A
     from joulewise.authentication_io import ingest_git_authentication_input
 
     root = Path(repo_root)
+    # The caller's digest is validated on its own, so a record that omits the
+    # field can never match an absent digest (final delta, Astra R3).
+    if not (isinstance(preregistration_sha256, str)
+            and re.fullmatch(r"[0-9a-f]{64}", preregistration_sha256)):
+        raise NoRecord("identity mismatch: preregistration_sha256")
     try:
         rel = verdict_relative_path(session_id)
     except ValueError:

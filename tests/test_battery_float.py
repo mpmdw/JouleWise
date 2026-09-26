@@ -595,6 +595,17 @@ class AuthenticatedVerdictSeamTests(unittest.TestCase):
             battery_float.load_committed_verdict(self.repo, "W1", session=self.session,
                                                  preregistration_sha256=None)
 
+    def test_v_b_a_record_without_a_digest_never_loads_against_none(self):
+        # Final delta (Astra R3): a committed record that omits the field must
+        # not authenticate against an absent caller digest (None == None).
+        record = dict(self.record)
+        record.pop("preregistration_sha256", None)
+        self.write(record)
+        self.commit("harvest")
+        with self.assertRaisesRegex(battery_float.NoRecord, "identity mismatch: preregistration_sha256"):
+            battery_float.load_committed_verdict(self.repo, "W1", session=self.session,
+                                                 preregistration_sha256=None)
+
     def test_vii_custody_failure_code_text_and_cause(self):
         self.write()
         self.commit("harvest")

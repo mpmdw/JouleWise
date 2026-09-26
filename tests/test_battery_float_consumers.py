@@ -57,6 +57,22 @@ def _docstring_nodes(tree: ast.AST) -> set[int]:
     return found
 
 
+def _absolute_module(relative: str, node: ast.ImportFrom) -> str | None:
+    """The absolute module an ``ImportFrom`` names, resolving ``from . import x``.
+
+    A relative import in ``joulewise/night_gate.py`` (``from . import
+    battery_float``) names the same module as the absolute form; the guard must
+    see both (final delta, Astra R1).
+    """
+    if not node.level:
+        return node.module
+    package = relative[:-3].split("/")[:-1]          # "joulewise/x.py" -> ["joulewise"]
+    if node.level - 1 > len(package):
+        return None
+    base = package[: len(package) - (node.level - 1)]
+    return ".".join(base + ([node.module] if node.module else [])) or None
+
+
 class _Checker(ast.NodeVisitor):
     def __init__(self, relative: str, tree: ast.AST, source: str) -> None:
         self.relative = relative
@@ -80,11 +96,12 @@ class _Checker(ast.NodeVisitor):
                         else:
                             self.package_aliases.add("joulewise")
             elif isinstance(node, ast.ImportFrom):
-                if node.module == "joulewise":
+                module = _absolute_module(relative, node)
+                if module == "joulewise":
                     for alias in node.names:
                         if alias.name == "battery_float":
                             self.module_aliases.add(alias.asname or alias.name)
-                elif node.module == MODULE:
+                elif module == MODULE:
                     for alias in node.names:
                         if alias.name in GUARDED:
                             self.bound[alias.asname or alias.name] = alias.name
@@ -109,7 +126,7 @@ class _Checker(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.module == MODULE:
+        if _absolute_module(self.relative, node) == MODULE:
             for alias in node.names:
                 if alias.name in GUARDED:
                     self.found.append((self.relative, node.lineno, alias.name))
@@ -193,6 +210,20 @@ class ConsumerGuardTests(unittest.TestCase):
         )
         self.assertEqual(violations("scripts/x.py", source),
                          [("scripts/x.py", 1, "compare_verdict"), ("scripts/x.py", 4, "validate_window")])
+
+    def test_self_test_relative_imports_are_resolved(self) -> None:
+        # Final delta (Astra R1): a relative import in the package names the
+        # same module and must be caught exactly like the absolute form.
+        source = ("from . import battery_float as rbf\n"
+                  "from .battery_float import compare_verdict\n"
+                  "def f(s, a, b):\n"
+                  "    rbf.validate_window(s)\n"
+                  "    return compare_verdict(a, b)\n")
+        self.assertEqual(violations("joulewise/night_gate.py", source), [
+            ("joulewise/night_gate.py", 2, "compare_verdict"),
+            ("joulewise/night_gate.py", 4, "validate_window"),
+            ("joulewise/night_gate.py", 5, "compare_verdict"),
+        ])
 
     def test_self_test_a_producer_status_read_outside_the_allowlist_is_one(self) -> None:
         source = (
