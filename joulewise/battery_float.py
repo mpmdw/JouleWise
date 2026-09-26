@@ -15,8 +15,6 @@ import subprocess
 import time
 from typing import Any, Callable, Mapping
 
-from joulewise.authentication_io import ingest_git_authentication_input
-
 IOREG_BATTERY_ARGV = ("/usr/sbin/ioreg", "-r", "-c", "AppleSmartBattery")
 PROBE_TIMEOUT_S = 10
 SCHEMA = "joulewise.battery_float.v1"
@@ -415,6 +413,11 @@ def load_committed_verdict(repo_root: Path | str, session_id: str, *, session: A
     registration digest; ``None`` is passed only by the count-only and
     diagnostic consumers that hold no pinned digest (report finding).
     """
+    # Imported here, not at module scope: night_gate imports this module on
+    # every arm and t0 path, and those minimal import surfaces carry no
+    # authentication layer.
+    from joulewise.authentication_io import ingest_git_authentication_input
+
     root = Path(repo_root)
     try:
         rel = verdict_relative_path(session_id)
