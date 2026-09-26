@@ -1,0 +1,11 @@
+The ruling is written to `docs/process_traces/2026-09-25-activation-ed17a643/42-coldgate-packet-parser-esc/20-coldgate-fable-parser-esc-ruling.md` (untracked, the only change in the tree). Scratch worktree and directory are removed.
+
+**Verdicts**
+
+- **E1 AFFIRM, BLOCKER.** Both round-2 defects reproduce at `faf0ea01`. The class-field case passes because the header regex accepts anything inside the angle brackets. The depth-leak case passes because a nested opener is skipped while depth is nonzero, so the inner close returns to top level. Both reach gate GO and window `pass`. Both consult prototypes, still on disk, accept the real capture and a fresh live capture and refuse every counterexample they list.
+- **E2 issued.** An exact whole-stdout whitelist grammar with byte framing, four positional line types, a recursive-descent value grammar, and named refusal classes. My reference implementation accepted 11 positives and refused 85 negatives. The current parser still passes 47 of those 85. No `-a` switch for W1, and the owner should not be asked now.
+- **E3.** Sol F1 AFFIRM BLOCKER: the equivalence checker writes B values for Revision-5 sessions with no verdict and has no verdict flag at all. Closure is outright refusal, since Revision 5 says the equivalence look is not taken. Astra M1 AFFIRM MATERIAL: the dry-run bound swallows a missing verdict, so `check` says admissible where `prepare-candidate` refuses. Runbook flags AFFIRM MATERIAL: sections 2.2 and 4.1 both exit 5 as documented.
+- **E4 issued.** Seven ordered obligations with RED-then-GREEN tests, and a same-signature sweep naming every reader of B-bearing evidence and every verdict consumer found by grep, with an explicit stop rule: any further structural false GO goes to council, not round three.
+
+**Packet hygiene notes.** PR #423 is open, not merged. The obligations v1.1 consumer list never named the equivalence checker, which is why the sweep is the cure. One unverified item is flagged as my own: whether every production runner feeds the parser bytes rather than decoded text.
+rc=0
