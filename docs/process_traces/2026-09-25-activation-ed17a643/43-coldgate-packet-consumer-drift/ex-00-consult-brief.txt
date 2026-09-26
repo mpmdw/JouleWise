@@ -1,0 +1,23 @@
+SESSION_MODE: delegated
+WRITE_SCOPE: []
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+ROLE: blind design consultant (read-only; /tmp allowed). You have licence to disagree.
+
+PROBLEM. Branch origin/feat/2026-09-25-bfg-d (this worktree, commit 3e984ecc) implements a battery-float verdict for Revision-5 derivation windows. Per window there is a committed verdict file. Every consumer must (1) load it through `battery_float.load_committed_verdict` with the registration digest, (2) recompute `battery_float.validate_window` from raw bytes, and (3) require `compare_verdict(record, recomputed) is None`. A missing record, a custody failure or a disagreement is a refusal, never an exclusion. The authoritative consumer is `_prepare_candidate` in scripts/issue_calibration_acceptance_generation.py. The count-only dry run (`registration_dry_run` and `_dry_run_epoch_bound` in the same file) is the desk decision the registration uses to stop or continue W1/W2.
+
+Three consecutive review rounds found the dry run handling computed (unnamed) sessions differently from the issuer:
+- round 1: an omitted non-pass session was reported admissible;
+- round 2: NoRecord was swallowed;
+- round 3 (now): a computed session's record is loaded but never replayed or compared. With W1's raw bytes altered and only W2 named, `check` exits 0 with "admissible" while `prepare-candidate` refuses.
+
+This is the same signature three times: a consumer re-implements the gate and drifts. It is an escalation, so we are asking for a design consult, not another patch.
+
+DELIVER:
+1. A structural cure that makes consumer drift impossible by construction. For example, one shared function in joulewise/battery_float.py that does load, authenticate, replay and compare, and returns an immutable authenticated verdict or raises; every consumer (issuer, dry run, dry-run bound, cadence report, anything else) calls ONLY it; plus a mechanical test (AST or import-graph) proving no consumer calls `load_committed_verdict` / `validate_window` / `compare_verdict` directly. Also cover how the set S of computed sessions is derived once and shared between the dry run and the issuer.
+2. The exact function signature, its refusal types and messages, and the call-site changes (file:line at 3e984ecc).
+3. Tests that would have caught all three rounds' defects.
+4. Anything else in the consumer set with the same exposure. Grep for every caller of the three primitives at 3e984ecc and list them.
+
+Final message: the design, with executed evidence (greps, and a prototype run in /tmp if useful).

@@ -515,6 +515,54 @@ class CommittedVerdictTests(unittest.TestCase):
         self.git("merge", "--no-ff", "-q", "tamper")
         self.assert_no_record("path history is not a single adding commit")
 
+    def test_honest_harvest_merged_no_ff_into_moved_main_loads(self):
+        (self.repo / "README").write_text("genesis\n")
+        self.commit("genesis")
+        main_branch = subprocess.check_output(
+            ("git", "-C", str(self.repo), "symbolic-ref", "--short", "HEAD"), text=True).strip()
+        self.git("checkout", "-q", "-b", "harvest")
+        self.write()
+        self.commit("harvest")
+        harvest_commit = subprocess.check_output(
+            ("git", "-C", str(self.repo), "rev-parse", "HEAD"), text=True).strip()
+        self.git("checkout", "-q", main_branch)
+        (self.repo / "README").write_text("genesis\nmain moved\n")
+        self.commit("unrelated main change")
+        self.git("merge", "--no-ff", "-q", "harvest")
+        self.assertEqual(self.load().commit, harvest_commit)
+
+    def test_evil_merge_rewriting_record_is_no_record(self):
+        self.write()
+        self.commit("harvest")
+        main_branch = subprocess.check_output(
+            ("git", "-C", str(self.repo), "symbolic-ref", "--short", "HEAD"), text=True).strip()
+        self.git("checkout", "-q", "-b", "unrelated")
+        (self.repo / "README").write_text("unrelated branch\n")
+        self.commit("unrelated change")
+        self.git("checkout", "-q", main_branch)
+        self.git("merge", "--no-ff", "--no-commit", "-q", "unrelated")
+        self.write({**self.record, "status": "battery_float_evidence_missing"})
+        self.commit("rewrite verdict in merge")
+        self.assert_no_record("adding commit's bytes differ")
+
+    def test_add_add_theirs_conflict_still_refuses(self):
+        (self.repo / "README").write_text("genesis\n")
+        self.commit("genesis")
+        main_branch = subprocess.check_output(
+            ("git", "-C", str(self.repo), "symbolic-ref", "--short", "HEAD"), text=True).strip()
+        self.git("checkout", "-q", "-b", "forged")
+        self.write({**self.record, "status": "battery_float_evidence_missing"})
+        self.commit("forged side record")
+        self.git("checkout", "-q", main_branch)
+        self.write()
+        self.commit("honest main record")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.git("merge", "--no-ff", "--no-commit", "-q", "forged")
+        self.git("checkout", "--theirs", "--", self.rel)
+        self.git("add", self.rel)
+        self.git("commit", "-q", "-m", "resolve record with theirs")
+        self.assert_no_record("path history is not a single adding commit (2 commits, 2 adding)")
+
     def test_uncommitted_edit_is_no_record(self):
         self.write()
         self.commit("harvest")
