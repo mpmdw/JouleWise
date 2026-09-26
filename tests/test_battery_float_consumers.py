@@ -14,6 +14,7 @@ the parser (`parse`).
 from __future__ import annotations
 
 import ast
+from collections import Counter
 from pathlib import Path
 import subprocess
 import tarfile
@@ -26,6 +27,30 @@ GUARDED = frozenset({"load_committed_verdict", "validate_window", "compare_verdi
                      "verdict_record", "parse"})
 FACTORIES = frozenset({"unobserved_historical_verdict", "not_applicable_verdict"})
 FACTORY_ALLOWLIST = {"joulewise/bundle_read.py": "text 8 reader states"}
+REPLACE_REASON = "predates PairVerdict (64e39bb9); cannot receive a PairVerdict"
+# (repo-relative path, enclosing function qualname, ast.unparse(call)).
+# The replaced values are, in order: _ProbeResult; ProbeResult; Receipt;
+# Receipt; Refusal; Receipt; Probes; FiducialDetection; FiducialDetection.
+REPLACE_CALL_ALLOWLIST = {
+    ("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
+     "_replace(battery, stdout=battery.stdout_bytes)"): REPLACE_REASON,
+    ("joulewise/night_gate.py", "_check_machine.battery_runner",
+     "replace(battery_result, stdout=battery_result.stdout_bytes)"): REPLACE_REASON,
+    ("joulewise/night_gate.py", "evaluate_static",
+     "replace(_finish(plan, probes, rows, None), verdict='PENDING')"): REPLACE_REASON,
+    ("joulewise/night_gate.py", "evaluate_dynamic_hard",
+     "replace(_finish(plan, probes, rows, None, authored_monotonic_ns=rows['C4'].measured['clock_monotonic_ns']), verdict='PENDING')"): REPLACE_REASON,
+    ("scripts/run_night.py", "bind_until_quiet",
+     "replace(refusal, detail=refusal.detail + '; ' + json.dumps(dict(samples_total=lines, last_busy_cores=metrics.get('busy_cores'), top_consumers=summary['top_consumers_at_decision'], quiet_samples_sha256=digest, quiet_samples_lines=lines), sort_keys=True))"): REPLACE_REASON,
+    ("scripts/run_night.py", "bind_until_quiet",
+     "replace(current, schema=night_gate.QUIET_RECEIPT_SCHEMA, admission=summary, verdict='REFUSED' if refusal else 'REHEARSAL_ONLY' if plan.receipt_class == 'REHEARSAL_STUB' else 'GO', refusal=refusal, authored_monotonic_ns=max(0, int(monotonic() * 1000000000.0)))"): REPLACE_REASON,
+    ("scripts/run_night.py", "run_night",
+     "replace(probes, run=first_census)"): REPLACE_REASON,
+    ("scripts/validate_powermetrics_fiducial.py", "_label_active_capture_detection",
+     "replace(detection, anchor_method=method, derivation_role='prospective')"): REPLACE_REASON,
+    ("scripts/validate_powermetrics_fiducial.py", "rederive_artifact",
+     "replace(fresh, b_fiducial_s=max(float(stored_bound), float(fresh.b_fiducial_s)))"): REPLACE_REASON,
+}
 # file::function -> the guarded names it may reference; exactly seven rows.
 ALLOWLIST = {
     ("joulewise/battery_float.py", "authenticate_committed_verdict"):
@@ -90,6 +115,7 @@ class _Checker(ast.NodeVisitor):
         self.bound: dict[str, str] = {}            # local name -> guarded name it was imported as
         self.pair_constructors: set[str] = set()
         self.factory_names: set[str] = set()
+        self.direct_battery_import = False
         self.dataclass_modules: set[str] = set()
         self.dataclass_replaces: set[str] = set()
         self.allowed_type_loads: set[int] = set()
@@ -102,6 +128,8 @@ class _Checker(ast.NodeVisitor):
             if isinstance(node, ast.AnnAssign):
                 self.allowed_type_loads.update(id(part) for part in ast.walk(node.annotation))
         self.functions: list[str] = []
+        self.qualname: list[str] = []
+        self.replace_sites: list[tuple[str, str, str]] = []
         self.found: list[tuple[str, int, str]] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -120,6 +148,7 @@ class _Checker(ast.NodeVisitor):
                         if alias.name == "battery_float":
                             self.module_aliases.add(alias.asname or alias.name)
                 elif module == MODULE:
+                    self.direct_battery_import = True
                     for alias in node.names:
                         if alias.name in GUARDED:
                             self.bound[alias.asname or alias.name] = alias.name
@@ -131,7 +160,8 @@ class _Checker(ast.NodeVisitor):
                     for alias in node.names:
                         if alias.name == "replace":
                             self.dataclass_replaces.add(alias.asname or alias.name)
-        self.imports_battery_float = bool(self.module_aliases or self.package_aliases or self.pair_constructors or self.bound or self.factory_names)
+        self.imports_battery_float = bool(self.module_aliases or self.package_aliases
+                                          or self.direct_battery_import)
 
     def _flag(self, node: ast.AST, name: str) -> None:
         function = self.functions[-1] if self.functions else None
@@ -147,10 +177,17 @@ class _Checker(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.AST) -> None:
         self.functions.append(node.name)
+        self.qualname.append(node.name)
         self.generic_visit(node)
+        self.qualname.pop()
         self.functions.pop()
 
     visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.qualname.append(node.name)
+        self.generic_visit(node)
+        self.qualname.pop()
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if _absolute_module(self.relative, node) == MODULE:
@@ -179,7 +216,10 @@ class _Checker(ast.NodeVisitor):
                 or isinstance(callee, ast.Attribute) and callee.attr == "replace"
                 and isinstance(callee.value, ast.Name) and callee.value.id in self.dataclass_modules
             ):
-                self._flag(node, "dataclasses.replace")
+                site = (self.relative, ".".join(self.qualname), ast.unparse(node))
+                self.replace_sites.append(site)
+                if site not in REPLACE_CALL_ALLOWLIST:
+                    self._flag(node, "dataclasses.replace")
             if self.imports_battery_float and isinstance(callee, ast.Call) and isinstance(callee.func, ast.Name) and callee.func.id == "type":
                 self._flag(node, "type(...)(...)")
             if (isinstance(callee, ast.Name) and callee.id == "getattr" and len(node.args) >= 2
@@ -201,10 +241,13 @@ class _Checker(ast.NodeVisitor):
             self._flag(node, node.value)
 
 
-def violations(relative: str, source: str) -> list[tuple[str, int, str]]:
+def violations(relative: str, source: str,
+               replace_sites: list[tuple[str, str, str]] | None = None) -> list[tuple[str, int, str]]:
     tree = ast.parse(source, filename=relative)
     checker = _Checker(relative, tree, source)
     checker.visit(tree)
+    if replace_sites is not None:
+        replace_sites.extend(checker.replace_sites)
     return sorted(checker.found)
 
 
@@ -269,6 +312,35 @@ class ConsumerGuardTests(unittest.TestCase):
         self.assertEqual(violations("scripts/x.py",
             "from joulewise import battery_float as bf\nisinstance(v, bf.PairVerdict)\n"
             "issubclass(cls, bf.PairVerdict)\n"), [])
+
+    def test_replace_call_allowlist_is_exact_and_only_covers_older_types(self) -> None:
+        sites: list[tuple[str, str, str]] = []
+        for directory in ("joulewise", "scripts"):
+            for path in sorted((ROOT / directory).rglob("*.py")):
+                relative = path.relative_to(ROOT).as_posix()
+                if _tracked(ROOT, relative):
+                    violations(relative, path.read_text(encoding="utf-8", errors="replace"), sites)
+        self.assertEqual(Counter(sites), Counter(REPLACE_CALL_ALLOWLIST.keys()))
+        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 9)
+        self.assertEqual(set(REPLACE_CALL_ALLOWLIST.values()), {REPLACE_REASON})
+
+    def test_new_replace_is_flagged_existing_one_is_allowed_and_stale_row_fails(self) -> None:
+        site = ("joulewise/night_gate.py", "evaluate_static",
+                "replace(_finish(plan, probes, rows, None), verdict='PENDING')")
+        imports = "from joulewise import battery_float\nfrom dataclasses import replace\n"
+        allowed = imports + "def evaluate_static():\n    return " + site[2] + "\n"
+        seen: list[tuple[str, str, str]] = []
+        self.assertEqual(violations(site[0], allowed, seen), [])
+        self.assertEqual(seen, [site])
+        added = allowed + "    replace(value, status='pass')\n"
+        self.assertIn("dataclasses.replace", [row[2] for row in violations(site[0], added)])
+        direct = "from joulewise.battery_float import observe\nfrom dataclasses import replace\nreplace(value, status='pass')\n"
+        self.assertIn("dataclasses.replace", [row[2] for row in violations("joulewise/x.py", direct)])
+        removed = imports + "def evaluate_static():\n    return None\n"
+        seen = []
+        violations(site[0], removed, seen)
+        with self.assertRaises(AssertionError):
+            self.assertEqual(Counter(seen), Counter([site]))
 
     def test_factory_calls_have_one_named_reader_exemption(self) -> None:
         source = "from joulewise import battery_float as bf\nbf.not_applicable_verdict('bundle')\n"
