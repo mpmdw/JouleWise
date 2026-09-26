@@ -36,3 +36,22 @@ Headless magistrate (Opus 5.5), launched by the watchdog at 14:17:42 PDT 2026-09
 32. **Codex RECOVERED** at 18:41 PDT: a trivial `codex exec` PONG succeeded. Sol and Astra are available again, so BFG-D's gate uses a Sol execution lens and an Astra cross-family refuter alongside Opus and Fable.
 33. **BFG-D round 4** is complete at `e5af8e59`. §4.10 items 1–11 are implemented, and 15 focused modules pass. Report: `bfg-d/08-seat-report-r4.md`, findings F-1..F-12; notably F-9 fixes a round-3 allowlist omission, and F-7 closes a NaN hole in wall time. Its NEEDS_SCOPE N-1, runbook §1.5 arm-record item 6, was applied at the bench at `df33888f`.
 34. **BFG-D review gate** on candidate `df33888f` (charge `bfg-d/10-review-charge.md` at `6b5efdc3`). Three independent lenses are running in parallel: Sol 6.0 xhigh execution, Astra 6 high science and bypass, and Opus 5.5 contract. Outputs go to `/tmp/ed17a643/bfgd-review/`. After triage and any fixes come the cold Fable final pass, then the integration replay (main + #419 + #423 + BFG-D), then CI.
+35. **BFG-D lenses on `df33888f`** (copies in `bfg-d/11-review/` on the branch):
+    - **Sol 6.0 xhigh execution lens: FIX-FIRST.**
+      - BLOCKER F1: the cadence report reads caller-supplied capture paths. W1's plist was accepted under a clean W2 session.
+      - BLOCKER F2: the dry run opens B-bearing member evidence before the verdict gate.
+      - MATERIAL F3: `check` reports "admissible" when a non-pass session is omitted.
+      - MATERIAL F4: consumers skip the registration-digest check.
+      - MATERIAL F5: test 8 cannot reach its ruled assertion.
+    - **Astra 6 high science and bypass lens: FIX-FIRST.**
+      - BLOCKER B1: malformed or other-class ioreg output reaches GO.
+      - BLOCKER B2: the ruled harvest order cannot complete, because `battery-verdict` needs a committed pin that step (iv) only commits afterwards.
+      - MATERIAL M1: merged branch edits evade the history check.
+      - MATERIAL M2: same as Sol F1.
+      - MATERIAL M3: the cadence CLI raises ModuleNotFoundError.
+      - MATERIAL M4: same as Sol F4.
+      - MATERIAL M5: the production t0 ioreg timeout is 30 s, not 10 s.
+    - **Opus 5.5 contract lens: MERGE**, with one MATERIAL (M-1, same as Astra M1) and nine mutation kills.
+    - **Scorecard:** for implementation review, the OpenAI-family execution and science lenses caught four BLOCKERs that the Opus contract lens missed. The contract lens is necessary but was not sufficient here. D-184's four-family council paid for itself.
+    - All three lenses affirm 610 s over 645 s.
+36. **Fix contract FX-1..FX-11** (`bfg-d/12-fix-contract-r5.md`, `32456d40`) dictates the closure shapes and RED-then-GREEN tests. FX-2 is a lead deviation from the literal §4.2: `battery-verdict` authenticates the working-tree pin against the ledger head instead of requiring a committed pin, and consumers add check 5, that the verdict was committed together with its pin. The cold Fable final pass must rule on it. The fix seat is running: Sol 6.0 xhigh, with WRITE_SCOPE adding `scripts/run_night.py` for FX-9.
