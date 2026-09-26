@@ -10014,7 +10014,7 @@
       "dependencies": [
         {
           "evidence": {
-            "label": "D-170 item 3 installed: test_t0_liveness_bound_refuses_at_600s_plus_1ns fails when the 600 s liveness conjunct is absent (PR #274)",
+            "label": "D-170 item 3 installed: test_t0_liveness_bound_refuses_at_610s_plus_1ns fails when the liveness conjunct is absent (PR #274; bound 600 s -> 610 s with the battery-float ioreg site, BFG-D)",
             "path": "tests/test_arm_readiness.py"
           },
           "kind": "decision",

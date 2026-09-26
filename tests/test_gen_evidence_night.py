@@ -18,6 +18,7 @@ from unittest.mock import patch
 from joulewise import night_gate
 from joulewise import quiet_predicate_campaign as campaign
 from scripts import gen_evidence_night as generator
+from tests import battery_float_fixture
 from tests.git_fixture import init_git_fixture
 from tests.test_night_gate import make_plan
 
@@ -74,7 +75,10 @@ class EvidenceFixture:
         courier.chmod(0o755)
         saved = {number: signal.getsignal(number) for number in installer.SIGNALS}
         try:
-            with patch.dict(os.environ, {"PATH": str(bin_dir) + os.pathsep + os.environ.get("PATH", "")}):
+            # The installer's battery-float probe answers from the real float
+            # capture (tests/fixtures/battery_float), never the host battery.
+            with patch.dict(os.environ, {"PATH": str(bin_dir) + os.pathsep + os.environ.get("PATH", "")}), \
+                    patch.object(installer, "BATTERY_PROBE_RUNNER", battery_float_fixture.runner()):
                 yield
         finally:
             for number, handler in saved.items():

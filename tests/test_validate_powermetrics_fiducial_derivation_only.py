@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -31,9 +32,12 @@ from joulewise.calibration_ledger import (
     LEDGER_SCHEMA,
     SESSION_KIND_DERIVATION,
     T1_FIELDS,
+    abort_bracket_session,
     append_bracket_session_receipt,
     derivation_session_slots,
+    load_calibration_ledger_snapshot,
 )
+from joulewise import battery_float
 from tests.git_fixture import init_git_fixture
 from tests.owned_process_runner import (
     OwnedPublicProcessRunner,
@@ -41,7 +45,7 @@ from tests.owned_process_runner import (
 )
 import scripts.validate_powermetrics_fiducial as validation_script
 from tests.test_calibration_exits import _install_fake_writer_dependencies
-from tests.fixtures.epoch_continuation.build import build_issued_continuation
+from tests.fixtures.epoch_continuation.build import CONTINUED_EPOCH, build_issued_continuation
 from tests.test_validate_powermetrics_fiducial import documented_keys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -225,6 +229,79 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
         )
 
 
+class RevisionFiveRederiveTests(unittest.TestCase):
+    """Obligation R2-5 sweep row: `--rederive-from` cannot read a v3 capture's B.
+
+    Re-derivation accepts only the compatible 40-pulse v1/v2 evidence, and
+    every registration-Revision-5 capture is protocol v3, so the replay
+    refuses on the protocol check before it recomputes or reads any bound
+    and before it writes anything.
+    """
+
+    def test_revision_five_capture_is_refused_before_any_bound_is_read(self) -> None:
+        from unittest import mock
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "W1-d01"
+            (source / "raw").mkdir(parents=True)
+            (source / "manifest.json").write_text(json.dumps({"artifacts": {}}) + "\n")
+            (source / "instrument_evidence.json").write_text(json.dumps({
+                "protocol_id": PROTOCOL_ID, "pulse_count": 40, "b_fiducial_s": 0.03,
+                "battery_float": {"pre": {}, "post": {}},
+            }) + "\n")
+            output = Path(tmp) / "rederived"
+            with mock.patch.object(validation_script, "rederive_detection_from_artifacts",
+                                   side_effect=AssertionError("bound recomputed")) as rederive:
+                with self.assertRaisesRegex(ValueError, "requires compatible 40-pulse v1/v2 evidence"):
+                    validation_script.rederive_artifact(source, output)
+            rederive.assert_not_called()
+            self.assertFalse(output.exists())
+
+
+class BatteryFloatPinRegressionTests(unittest.TestCase):
+    """Final texts v1.1 §5.6 test 5, pin half: BFG-D moves no estimator input.
+
+    The writer's battery brackets add raw files and one evidence key; the
+    sampler set, the protocol v3 bytes, the four estimator-code digests the
+    active r7 acceptance pins, and the registered derivation-chain digest must
+    all be what they were before BFG-D.  The literals below were read at
+    ``c6814dd8`` and are independent of the implementation.
+    """
+
+    def test_sampler_protocol_estimator_and_chain_pins_are_unchanged(self) -> None:
+        from joulewise.adapters.powermetrics import SAMPLERS
+        from joulewise.calibration_bracketing import ESTIMATOR_CODE_PATHS
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID, protocol_sha256
+        from tests.test_preregistration_chain_digest import (
+            CHAIN, PREREGISTRATION, _digest_in_force,
+        )
+
+        self.assertEqual(SAMPLERS, "cpu_power,gpu_power,ane_power,thermal")
+        protocol = REPO_ROOT / "configs/calibration/powermetrics_fiducial/protocol_v3.json"
+        self.assertEqual(
+            hashlib.sha256(protocol.read_bytes()).hexdigest(),
+            "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+        )
+        self.assertEqual(
+            protocol_sha256(PROTOCOL_ID),
+            "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+        )
+        acceptance = json.loads((REPO_ROOT / _ACCEPTANCE_RELATIVE).read_text(encoding="utf-8"))
+        pinned = acceptance["prospective_rederivation"]["estimator_code_sha256"]
+        self.assertEqual(set(pinned), set(ESTIMATOR_CODE_PATHS))
+        self.assertEqual(len(ESTIMATOR_CODE_PATHS), 4)
+        for relative in ESTIMATOR_CODE_PATHS:
+            with self.subTest(path=relative):
+                self.assertEqual(
+                    hashlib.sha256((REPO_ROOT / relative).read_bytes()).hexdigest(),
+                    pinned[relative],
+                )
+        self.assertEqual(
+            _digest_in_force(PREREGISTRATION.read_text(encoding="utf-8")),
+            hashlib.sha256(CHAIN.read_bytes()).hexdigest(),
+        )
+
+
 class DerivationOnlyLiveCaptureTests(unittest.TestCase):
     """Ledger-bearing behaviour, driven by the fixture sampler only."""
 
@@ -272,6 +349,55 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls.tmp.cleanup()
+
+    def test_battery_brackets_are_authenticated_and_outside_anchor_spans(self) -> None:
+        captures = []
+        for duration in (0.0, 2.0):
+            self._rekey_acceptance()
+            epoch, t1 = self._epoch("25G83")
+            token = f"battery-duration-{int(duration)}"
+            declared = derivation_session_slots(2)
+            ledger, pin, session_id, custody = self._session(
+                token, slots=declared, session_kind=SESSION_KIND_DERIVATION,
+                epoch=epoch, t1=t1,
+            )
+            completed = self._writer(
+                ledger=ledger, pin=pin, session_id=session_id,
+                slot=declared[0], custody=custody[declared[0]], epoch=epoch,
+                battery_probe_duration_for_test=duration,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            root = custody[declared[0]]
+            evidence = json.loads((root / "instrument_evidence.json").read_text())
+            manifest = json.loads((root / "manifest.json").read_text())
+            expected_artifacts = {"events.jsonl", "power_trace.csv",
+                                  "instrument_evidence.json", "raw/powermetrics.plist"}
+            self.assertEqual(set(manifest["artifacts"]), expected_artifacts)
+            self.assertEqual(set(evidence["artifact_sha256"]), expected_artifacts - {"instrument_evidence.json"})
+            self.assertEqual(set(evidence["battery_float"]), {"pre", "post"})
+            stamps = evidence["clock_anchor"]["clock_stamps"]
+            anchor_start = stamps["pre_spawn"]["monotonic_before_s"]
+            anchor_end = stamps["post_parse"]["monotonic_after_s"]
+            for phase in ("pre", "post"):
+                observation = evidence["battery_float"][phase]
+                raw = (root / observation["raw_path"]).read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), observation["raw_stdout_sha256"])
+                self.assertTrue(observation["passed"])
+                # Compare in the observation's own integer-ns domain: under the
+                # logical clock the post-observation starts at the very instant
+                # of `post_parse`, so the spans may touch but never overlap.
+                if phase == "pre":
+                    self.assertLessEqual(observation["monotonic_after_ns"], int(anchor_start * 1e9))
+                else:
+                    self.assertGreaterEqual(observation["monotonic_before_ns"], int(anchor_end * 1e9))
+            self.assertEqual(evidence["battery_float"]["pre"]["monotonic_after_ns"]
+                             - evidence["battery_float"]["pre"]["monotonic_before_ns"],
+                             int(duration * 1e9))
+            deltas = {name: (stamp["monotonic_before_s"] - anchor_start,
+                             stamp["monotonic_after_s"] - anchor_start)
+                      for name, stamp in stamps.items()}
+            captures.append((deltas, evidence["b_fiducial_s"]))
+        self.assertEqual(captures[0], captures[1])
 
     # ---- private-repo acceptance custody ---------------------------------
     def _rekey_acceptance(self) -> dict:
@@ -383,7 +509,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             # Preserve the real terminal derivation history in the capture's
             # ledger; preflight must cross-check it before opening a capture.
             shutil.copy2(continuation_root / "night/runs/calibration_observation_ledger.jsonl", ledger)
-            shutil.copy2(continuation_root / "night/runs/calibration_ledger_head_pin.json", pin)
+            shutil.copy2(continuation_root / "night/configs/calibration/calibration_ledger_head.json", pin)
         subprocess.run(
             ["git", "add", str(pin.relative_to(self.repo))],
             cwd=self.repo,
@@ -438,6 +564,8 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         epoch: dict,
         derivation_only: bool = True,
         extra_env: dict[str, str] | None = None,
+        battery_probe_duration_for_test: float | None = None,
+        crash_stage: str | None = None,
     ):
         identity = custody.parent / f"{session_id}-{slot}-identity.json"
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -465,6 +593,8 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             "--sampler-direct-for-test",
             "--time-scale-for-test",
             "0.001",
+            "--battery-probe-fixture-for-test",
+            str(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg"),
             "--sampler-ready-timeout-s",
             str(_SAMPLER_ACK_TIMEOUT_S),
             "--rollover-timeout-s",
@@ -474,6 +604,10 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         ]
         if derivation_only:
             command.append("--derivation-only")
+        if battery_probe_duration_for_test is not None:
+            command.extend([
+                "--battery-probe-duration-for-test", str(battery_probe_duration_for_test),
+            ])
         return self.runner.run(
             command,
             cwd=self.repo,
@@ -487,7 +621,73 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
                 "JW_FAKE_TIME_ORIGIN": str(time.time()),
                 **(extra_env or {}),
             },
+            **({} if crash_stage is None else {
+                "crash_stage": crash_stage, "authorize_crash": True,
+            }),
         )
+
+    def test_writer_exit_before_post_observation_never_passes_a_slot(self) -> None:
+        """Final texts v1.1 §5.6 test 8 at the production call sites.
+
+        The real derivation writer is killed after its sampler teardown, i.e.
+        after the pre-observation and before the post-observation (the
+        production `_writer_stage` boundary, harness-authorized).  Governed
+        recovery (`recover_calibration_ledger.py repair`, then the session
+        closure the writer's own `abandon` would append) follows.  Whatever
+        recovery leaves, the slot never contributes a passing battery verdict:
+        either it has no finalized row (no B value can exist) or its row is
+        `battery_float_evidence_missing`.
+        `test_battery_brackets_are_authenticated_and_outside_anchor_spans`
+        guards the post-observation when a row exists.
+        """
+
+        self._rekey_acceptance()
+        epoch, t1 = self._epoch("25G83")
+        declared = derivation_session_slots(2)
+        ledger, pin, session_id, custody = self._session(
+            "battery-exit-before-post", slots=declared,
+            session_kind=SESSION_KIND_DERIVATION, epoch=epoch, t1=t1,
+        )
+        slot = declared[0]
+        killed = self._writer(
+            ledger=ledger, pin=pin, session_id=session_id, slot=slot,
+            custody=custody[slot], epoch=epoch, battery_probe_duration_for_test=0.0,
+            crash_stage=validation_script.WriterStage.AFTER_SAMPLER_TEARDOWN.value,
+        )
+        self.assertEqual(killed.returncode, -signal.SIGKILL, killed.stdout + killed.stderr)
+        root = custody[slot]
+        self.assertTrue((root / "raw/battery_float.pre.ioreg").is_file())
+        self.assertFalse((root / "raw/battery_float.post.ioreg").exists())
+        self.assertFalse((root / "instrument_evidence.json").exists())
+        repaired = subprocess.run(
+            [sys.executable, str(self.repo / "scripts" / "recover_calibration_ledger.py"),
+             "--ledger", str(ledger), "--head-pin", str(pin), "repair"],
+            cwd=self.repo, text=True, capture_output=True, env=_fresh_env(), check=False,
+        )
+        self.assertEqual(repaired.returncode, 0, repaired.stdout + repaired.stderr)
+        snapshot = load_calibration_ledger_snapshot(
+            ledger, pin, require_committed_pin=False, verify_custody=False,
+            mode="read_replay", repo_root=self.repo,
+        )
+        if snapshot.bracket_session_by_id[session_id].state == "open":
+            abort_bracket_session(ledger, session_id=session_id, reason="writer_exit_before_post")
+            snapshot = load_calibration_ledger_snapshot(
+                ledger, pin, require_committed_pin=False, verify_custody=False,
+                mode="read_replay", repo_root=self.repo,
+            )
+        session = snapshot.bracket_session_by_id[session_id]
+        self.assertIn(session.state, {"finalized", "aborted"})
+        verdict = battery_float.validate_window(session)
+        verdicts = {row["slot"]: row["verdict"] for row in verdict["slots"]}
+        if slot in session.finalized_slots:
+            self.assertEqual(verdicts[slot], "battery_float_evidence_missing")
+            self.assertEqual(verdict["status"], "battery_float_evidence_missing")
+        else:
+            self.assertNotIn(slot, verdicts)
+            self.assertFalse(any(
+                observation.attempt_id == f"{session_id}-{slot}"
+                for observation in snapshot.observations
+            ))
 
     def _refusal(self, completed) -> dict:
         self.assertEqual(
@@ -500,7 +700,9 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
     def test_ordinary_continued_epoch_capture_requires_registered_continuation(self):
         """The real writer CLI reaches a fixture capture only with a valid pin."""
         acceptance = self._rekey_acceptance()
-        epoch, t1 = self._epoch("25G83")
+        # The fixture continuation continues into a successor build: no
+        # continuation can exist for registration Revision 5 (R2-10).
+        epoch, t1 = self._epoch(CONTINUED_EPOCH["os_build"])
         continuation_root = Path(self.tmp.name) / "continuation"
         _, registry = build_issued_continuation(
             continuation_root, acceptance_path=self.repo / _ACCEPTANCE_RELATIVE,
@@ -950,6 +1152,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             "bindings", "binding_evidence", "artifact_sha256", "pulses",
             "capture_wall_time_s", "max_age_s", "clock_anchor",
             "clock_anchor_resolved", "acceptance_preflight",
+            "battery_float",
         })
         manifest = json.loads((custody["pre"] / "manifest.json").read_bytes())
         self.assertEqual(set(manifest), {

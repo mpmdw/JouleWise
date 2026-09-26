@@ -32,10 +32,15 @@ def result(
     argv: tuple[str, ...],
     *,
     exit_code: int = 0,
-    stdout: str = "",
+    stdout: str | bytes = "",
     stderr: str = "",
     monotonic_ns: int = 10,
 ) -> night_gate.ProbeResult:
+    # A bytes stdout is what a bytes-capturing runner returns (the battery
+    # probe, obligation R2-11); its text is the lossless decode.
+    if isinstance(stdout, bytes):
+        return night_gate.ProbeResult(argv, exit_code, stdout.decode("utf-8", errors="replace"),
+                                      stderr, monotonic_ns, stdout_bytes=stdout)
     return night_gate.ProbeResult(argv, exit_code, stdout, stderr, monotonic_ns)
 
 
@@ -51,6 +56,10 @@ def green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
         night_gate.PMSET_BATT_ARGV: result(
             night_gate.PMSET_BATT_ARGV,
             stdout="Now drawing from 'AC Power'\n",
+        ),
+        night_gate.IOREG_BATTERY_ARGV: result(
+            night_gate.IOREG_BATTERY_ARGV,
+            stdout=(Path(__file__).parent / "fixtures/battery_float/float.ioreg").read_bytes(),
         ),
         night_gate.PMSET_GENERAL_ARGV: result(
             night_gate.PMSET_GENERAL_ARGV,
@@ -1298,7 +1307,12 @@ class NightGateTests(unittest.TestCase):
                 source.results[night_gate.PMSET_BATT_ARGV] = result(
                     night_gate.PMSET_BATT_ARGV, stdout="Now drawing from 'AC Power'\n"
                 )
-            if index > 7:
+            if index == 7:
+                source.results[night_gate.IOREG_BATTERY_ARGV] = result(
+                    night_gate.IOREG_BATTERY_ARGV,
+                    stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_bytes(),
+                )
+            if index > 8:
                 source.results[night_gate.BOOT_SESSION_ARGV] = result(
                     night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
                 )
@@ -1324,6 +1338,7 @@ class NightGateTests(unittest.TestCase):
                 night_gate.AGENT_CENSUS_ARGV,
                 night_gate.HID_IDLE_ARGV,
                 night_gate.PMSET_BATT_ARGV,
+                night_gate.IOREG_BATTERY_ARGV,
                 night_gate.PMSET_GENERAL_ARGV,
                 night_gate.LOAD_AVG_ARGV,
                 night_gate.THERMAL_ARGV,
@@ -1577,6 +1592,7 @@ class NightGateTests(unittest.TestCase):
         expected = {
             "night_refused_agent_present",
             "night_refused_not_quiet",
+            "night_refused_battery_float",
             "night_refused_bind_expired",
             "night_refused_hid_idle",
             "night_refused_boot_clock",
@@ -1597,6 +1613,7 @@ class NightGateTests(unittest.TestCase):
             "night_refused_bind_expired": "test_bind_expiry_code_is_v3_only",
             "night_refused_agent_present": "test_a_census_that_finds_lines_refuses_and_preserves_them",
             "night_refused_not_quiet": "test_each_quiet_predicate_fails_closed_with_its_name_in_detail",
+            "night_refused_battery_float": "test_battery_float_charging_refuses_at_c3",
             "night_refused_hid_idle": "test_hid_idle_requires_the_exact_zero_value",
             "night_refused_boot_clock": "test_boot_clock_uses_a_canonical_uuid_and_never_invokes_sntp",
             "night_refused_registration": "test_a_wrong_registration_hash_refuses_after_every_machine_gate",
@@ -1616,6 +1633,16 @@ class NightGateTests(unittest.TestCase):
         for code, method_name in coverage.items():
             with self.subTest(code=code):
                 self.assertIn(method_name, methods)
+
+    def test_battery_float_charging_refuses_at_c3(self) -> None:
+        source = FakeProbeSource()
+        source.results[night_gate.IOREG_BATTERY_ARGV] = result(
+            night_gate.IOREG_BATTERY_ARGV,
+            stdout=(Path(__file__).parent / "fixtures/battery_float/charging-synthetic-from-real.ioreg").read_bytes(),
+        )
+        receipt = self.evaluate(make_plan(), source)
+        self.assertEqual(receipt.refusal.reason, "night_refused_battery_float")
+        self.assertFalse(receipt.conditions[2].measured["battery_float"]["passed"])
 
     def test_driver_codes_are_registered_here_but_never_emitted_by_the_gate(self) -> None:
         self.assertEqual(
@@ -1747,6 +1774,11 @@ class QuietGatePhaseTests(unittest.TestCase):
         baseline.AGENT_CENSUS_ARGV = night_gate.AGENT_CENSUS_ARGV
         def legacy_projection(value):
             for row in value["conditions"]:
+                if row["condition_id"] == "C3":
+                    row["measured"].pop("battery_float", None)
+                    row["evidence"] = [citation for citation in row["evidence"]
+                                       if citation != night_gate._probe_citation(
+                                           green_results()[night_gate.IOREG_BATTERY_ARGV])]
                 if row["condition_id"] == "C5":
                     row["measured"].pop("measurement_checkout_porcelain", None)
                     row["measured"].pop("measurement_checkout_porcelain_truncated", None)
@@ -1756,7 +1788,8 @@ class QuietGatePhaseTests(unittest.TestCase):
             if value["refusal"] is not None:
                 value["refusal"]["evidence"] = [
                     probe for probe in value["refusal"]["evidence"]
-                    if probe["argv"] != list(checkout_status_argv("/measurement-checkout"))
+                    if probe["argv"] not in (list(checkout_status_argv("/measurement-checkout")),
+                                              list(night_gate.IOREG_BATTERY_ARGV))
                 ]
             return value
         scenarios = [(None, None, 1005),
@@ -1775,8 +1808,11 @@ class QuietGatePhaseTests(unittest.TestCase):
                         source = FakeProbeSource(now_epoch_s=now)
                         if argv:
                             source.results[argv] = result(argv, stdout=stdout)
-                        source.results = {key: engine.ProbeResult(**dataclasses.asdict(value))
-                                          for key, value in source.results.items()}
+                        # The pre-v4 engine has no stdout_bytes field (R2-11).
+                        names = {field.name for field in dataclasses.fields(engine.ProbeResult)}
+                        source.results = {key: engine.ProbeResult(**{
+                            name: item for name, item in dataclasses.asdict(value).items()
+                            if name in names}) for key, value in source.results.items()}
                         with mock.patch.object(engine, 'D166_REGISTRATION_SHA256',
                                                hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()):
                             receipt = engine.evaluate_night(make_plan(receipt_class), source.probes())
@@ -1798,8 +1834,10 @@ class QuietGatePhaseTests(unittest.TestCase):
                 source = FakeProbeSource()
                 source.results[night_gate.BOOT_SESSION_ARGV] = result(
                     night_gate.BOOT_SESSION_ARGV, exit_code=code, stdout=stdout)
-                source.results = {key: engine.ProbeResult(**dataclasses.asdict(value))
-                                  for key, value in source.results.items()}
+                names = {field.name for field in dataclasses.fields(engine.ProbeResult)}
+                source.results = {key: engine.ProbeResult(**{
+                    name: item for name, item in dataclasses.asdict(value).items()
+                    if name in names}) for key, value in source.results.items()}
                 receipt = engine.evaluate_night(make_plan(), source.probes())
                 self.assertEqual(receipt.refusal.reason, 'night_refused_boot_clock')
                 receipts.append(receipt.to_json_bytes())

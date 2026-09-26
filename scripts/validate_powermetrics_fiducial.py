@@ -36,6 +36,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import signal
 import stat
 import subprocess
@@ -54,6 +55,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise.calibration_exits import RefusalCode, emit_calibration_refusal  # noqa: E402
 from joulewise.calibration_epoch_continuation import acceptance_judged_epochs  # noqa: E402
 from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
+from joulewise import battery_float  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,
     SAMPLERS,
@@ -1838,6 +1840,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--sampler-direct-for-test", action="store_true", help=argparse.SUPPRESS
     )
+    parser.add_argument("--battery-probe-fixture-for-test", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--battery-probe-duration-for-test", type=float, default=0.0,
+                        help=argparse.SUPPRESS)
     parser.add_argument(
         "--time-scale-for-test", type=float, default=1.0, help=argparse.SUPPRESS
     )
@@ -1886,6 +1891,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    if args.battery_probe_fixture_for_test is not None and (
+        not args.sampler_direct_for_test or args.time_scale_for_test == 1
+    ):
+        parser.error("battery probe fixture requires the logical sampler test mode")
+    if (not math.isfinite(args.battery_probe_duration_for_test)
+            or args.battery_probe_duration_for_test < 0
+            or (args.battery_probe_duration_for_test and args.battery_probe_fixture_for_test is None)):
+        parser.error("battery probe test duration requires a fixture and must be nonnegative")
     custody_deadline = None
     ledger_lifecycle = None
 
@@ -2139,6 +2152,32 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     clock = SystemClock() if logical_test_clock is None else logical_test_clock
+    def observe_battery(phase: str):
+        raw_path = f"raw/battery_float.{phase}.ioreg"
+        probe_options = {}
+        if logical_test_clock is not None:
+            probe_options = {
+                "wall_time_s": clock.now(),
+                "monotonic_ns": lambda: int(clock.stamp().monotonic_before_s * 1_000_000_000),
+            }
+            fixture_path = (args.battery_probe_fixture_for_test
+                            or REPO_ROOT / "tests/fixtures/battery_float/float.ioreg")
+            def fixture_runner(argv):
+                # The fixture's own UpdateTime line is re-stamped to the
+                # logical clock so the observation is fresh by construction.
+                raw = re.sub(
+                    rb'(?m)^(\s+"UpdateTime" = )[0-9]+$',
+                    lambda match: match.group(1) + str(int(clock.now())).encode(),
+                    fixture_path.read_bytes(), count=1,
+                )
+                logical_test_clock.advance(args.battery_probe_duration_for_test)
+                return subprocess.CompletedProcess(argv, 0, raw, b"")
+            probe_options["runner"] = fixture_runner
+        return battery_float.observe(
+            phase=f"slot_{phase}", raw_path=raw_path,
+            session_id=args.session_id, slot=args.slot, attempt_id=args.attempt_id,
+            **probe_options,
+        )
     validation_id = (
         args.attempt_id
         if bracket_mode
@@ -2227,6 +2266,8 @@ def main(argv: list[str] | None = None) -> int:
     _writer_stage(WriterStage.AFTER_EXIT_HANDLER_REGISTRATION)
     (out_dir / "raw").mkdir(parents=True, exist_ok=False)
     _writer_stage(WriterStage.AFTER_CUSTODY_DIRECTORY_CREATION)
+    battery_pre, battery_pre_raw = observe_battery("pre")
+    (out_dir / "raw/battery_float.pre.ioreg").write_bytes(battery_pre_raw)
     capture_path = out_dir / "raw" / "powermetrics.plist"
     events_path = out_dir / "events.jsonl"
     events = events_path.open("w", encoding="utf-8")
@@ -2453,6 +2494,9 @@ def main(argv: list[str] | None = None) -> int:
         post_parse = clock.stamp()
         active_sampler = None
 
+    battery_post, battery_post_raw = observe_battery("post")
+    (out_dir / "raw/battery_float.post.ioreg").write_bytes(battery_post_raw)
+
     if logical_driver is not None:
         logical_driver.acknowledgement_path.unlink(missing_ok=True)
 
@@ -2582,6 +2626,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     evidence_payload["clock_anchor"] = evidence["clock_anchor"]
+    evidence_payload["battery_float"] = {"pre": battery_pre, "post": battery_post}
     evidence_payload["clock_anchor_resolved"] = anchor_resolved
     if not anchor_resolved:
         evidence_payload["status"] = "invalid"

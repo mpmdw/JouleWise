@@ -681,21 +681,21 @@ class T0RehearsalTests(unittest.TestCase):
         )
         return rehearsal._run_real_arm_boundary(receipt, 4_999_999)
 
-    def test_rehearsal_t0_liveness_bound_refuses_at_600s_plus_1ns(self) -> None:
+    def test_rehearsal_t0_liveness_bound_refuses_at_610s_plus_1ns(self) -> None:
         self.assertEqual(
-            self._run_rehearsal_arm_liveness_boundary(600_000_000_001),
+            self._run_rehearsal_arm_liveness_boundary(610_000_000_001),
             ("REFUSE", "readiness_clock_preflight_refused"),
         )
 
-    def test_rehearsal_t0_liveness_bound_passes_at_600s_minus_1ns(self) -> None:
+    def test_rehearsal_t0_liveness_bound_passes_at_610s_minus_1ns(self) -> None:
         self.assertEqual(
-            self._run_rehearsal_arm_liveness_boundary(599_999_999_999),
+            self._run_rehearsal_arm_liveness_boundary(609_999_999_999),
             ("PASS", None),
         )
 
-    def test_rehearsal_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+    def test_rehearsal_t0_liveness_bound_passes_at_exactly_610s(self) -> None:
         self.assertEqual(
-            self._run_rehearsal_arm_liveness_boundary(600_000_000_000),
+            self._run_rehearsal_arm_liveness_boundary(610_000_000_000),
             ("PASS", None),
         )
 

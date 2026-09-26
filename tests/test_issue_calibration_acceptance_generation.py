@@ -20,7 +20,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -45,8 +45,11 @@ import tests.fixtures.epoch_bootstrap.build as build_module
 from tests.fixtures.epoch_bootstrap.build import (
     TARGET_EPOCH,
     Slot,
+    add_session,
     build_derivation_ledger,
+    rerecord_verdict,
     tamper_member_bundle,
+    write_verdict_record,
 )
 
 
@@ -823,7 +826,8 @@ class PrepareCandidateTest(unittest.TestCase):
         ).hexdigest()
         # n = 20 retained, range 0.0114 > the 0.010818 floor, maximum 0.0314
         # below r6's level screen: the ordinary admit case, df 19 (ODD).
-        cls.wide = build_derivation_ledger(root / "wide", [Slot(v) for v in _grid(20, "0.0200", "0.0006")])
+        cls.wide = build_derivation_ledger(root / "wide", [Slot(v) for v in _grid(20, "0.0200", "0.0006")],
+                                           verdict_records=True)
         # 17 retained: 17 valid-and-resolved, two ordinary-invalid, one valid
         # row the replay refuses.  df 16 (EVEN).
         seventeen = [Slot(v) for v in _grid(17, "0.0200", "0.0007")]
@@ -1570,7 +1574,8 @@ class PrepareCandidateTest(unittest.TestCase):
             fixture["ledger"], fixture["pin"], require_committed_pin=True,
             verify_custody=False, mode="read_replay", repo_root=fixture["root"],
         )
-        code, lines = issuer.registration_dry_run(snapshot, list(session_ids))
+        code, lines = issuer.registration_dry_run(
+            snapshot, list(session_ids), preregistration_sha256=PREREGISTRATION_SHA256)
         return code, "\n".join(lines)
 
     def test_the_dry_run_reports_a_terminal_registration_as_admissible(self) -> None:
@@ -1600,7 +1605,7 @@ class PrepareCandidateTest(unittest.TestCase):
         rows.append(Slot("0.0260", unresolved_detail="affine_clock_fit_empty"))
         rows[2] = Slot(values[2], disposition="abandoned")
         with tempfile.TemporaryDirectory() as tmp:
-            fixture = build_derivation_ledger(Path(tmp) / "dryexcl", rows)
+            fixture = build_derivation_ledger(Path(tmp) / "dryexcl", rows, verdict_records=True)
             code, text = self.dry_run_output(fixture, SESSION)
         self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
         self.assertIn("affine_clock_fit_empty:1", text)
@@ -1776,7 +1781,7 @@ class PrepareCandidateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = build_derivation_ledger(
                 Path(tmp) / "aborted", rows, fill_slots=20,
-                abort_reason="window_exhausted",
+                abort_reason="window_exhausted", verdict_records=True,
             )
             code, text = self.dry_run_output(fixture, SESSION)
             self.assertEqual(self.run_issuer(fixture), 0)
@@ -1794,7 +1799,10 @@ class PrepareCandidateTest(unittest.TestCase):
         stream = io.StringIO()
         args = issuer.build_parser().parse_args(
             ["check", "--ledger", str(fixture["ledger"]),
-             "--head-pin", str(fixture["pin"]), "--acceptance", str(R6), *extra]
+             "--head-pin", str(fixture["pin"]), "--acceptance", str(R6),
+             "--repo-root", str(fixture["root"]),
+             "--preregistration", str(PREREGISTRATION),
+             "--preregistration-sha256", PREREGISTRATION_SHA256, *extra]
         )
         with redirect_stdout(stream):
             code = issuer.check(args)
@@ -1898,18 +1906,19 @@ class PrepareCandidateTest(unittest.TestCase):
         rows = [Slot(v) for v in values]
         rows.append(Slot("0.0260", unresolved_detail="affine_clock_fit_empty"))
         with tempfile.TemporaryDirectory() as tmp:
-            fixture = build_derivation_ledger(Path(tmp) / "template", rows)
+            fixture = build_derivation_ledger(Path(tmp) / "template", rows, verdict_records=True)
             _, text = self.dry_run_output(fixture, SESSION, "absent-session")
         lines = text.splitlines()
         self.assertEqual(lines[0], "")
         self.assertEqual(lines[1], issuer.DRY_RUN_HEADER)
-        self.assertIsNotNone(self.DRY_RUN_SESSION_PATTERN.match(lines[2]))
-        self.assertEqual(lines[3], "absent-session: absent")
-        self.assertRegex(lines[4], r"^prefix pending or unresolved rows: \d+$")
+        self.assertEqual(lines[2], f"{SESSION}: battery=pass recorded=pass")
+        self.assertIsNotNone(self.DRY_RUN_SESSION_PATTERN.match(lines[3]))
+        self.assertEqual(lines[4], "absent-session: absent")
+        self.assertRegex(lines[5], r"^prefix pending or unresolved rows: \d+$")
         self.assertRegex(
-            lines[5], r"^registration admissible for prepare-candidate: (yes|no)$"
+            lines[6], r"^registration admissible for prepare-candidate: (yes|no)$"
         )
-        for line in lines[6:]:
+        for line in lines[7:]:
             self.assertRegex(line, r"^  blocker: .+$")
         self.assert_no_measured_value_leaked(text)
 
@@ -2206,6 +2215,1092 @@ class PrepareCandidateTest(unittest.TestCase):
                 "--nights-ruling", "",
             )
         self.assert_refused(code, "registration names 1 sessions, not the pre-registered 3")
+
+
+RUNBOOK = Path(__file__).resolve().parents[1] / "docs/phase_2/derivation_night_runbook.md"
+
+
+def runbook_dry_run_invocations() -> list[list[str]]:
+    """Every fenced `issue_calibration_acceptance_generation.py check` command
+    in the runbook that names sessions, as argv tokens (continuations joined)."""
+    import shlex
+    commands = []
+    for block in re.findall(r"```zsh\n(.*?)```", RUNBOOK.read_text(encoding="utf-8"), re.S):
+        for line in re.sub(r"\\\n\s*", " ", block).splitlines():
+            if "issue_calibration_acceptance_generation.py check" in line and "--session-ids" in line:
+                commands.append(shlex.split(line))
+    return commands
+
+
+class RunbookDryRunFlagsTests(unittest.TestCase):
+    """Cold ruling BFG-D-PARSER-ESC-01 §5.3 (obligation R2-4), light tier."""
+
+    def test_every_documented_dry_run_carries_both_registration_flags(self) -> None:
+        commands = runbook_dry_run_invocations()
+        self.assertEqual(len(commands), 4)  # §2.2, §2.2a step vii, §4.1, §4.1 replacement route
+        for argv in commands:
+            with self.subTest(argv=" ".join(argv)):
+                self.assertIn("--preregistration", argv)
+                self.assertIn("--preregistration-sha256", argv)
+                self.assertEqual(argv[argv.index("--preregistration") + 1],
+                                 "configs/calibration/preregistration_d079_epoch_25g83_rev1.md")
+                self.assertEqual(argv[argv.index("--preregistration-sha256") + 1],
+                                 "$PREREGISTRATION_SHA256")
+
+
+class BatteryFloatRevisionFiveTests(unittest.TestCase):
+    def test_terminal_uncommitted_pin_verdict_commit_and_three_cli_consumers(self) -> None:
+        fixture = self.fresh("cli-order",
+            ("W1", self.values), ("W2", self.values), recorded=False)
+        fixture["pin"].write_text(json.dumps(json.loads(fixture["pin"].read_text()),
+                                              sort_keys=True) + "\n")
+
+        def cli(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [sys.executable, str(ROOT / "scripts/issue_calibration_acceptance_generation.py"),
+                 *args], cwd=fixture["root"], capture_output=True, text=True, check=False)
+
+        for session_id in ("W1", "W2"):
+            result = cli("battery-verdict", "--ledger", str(fixture["ledger"]),
+                "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+                "--session-id", session_id, "--preregistration", str(self.registration),
+                "--preregistration-sha256", self.registration_sha)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        build_module._commit(fixture["root"], "pin and verdicts")
+        check = cli("check", "--ledger", str(fixture["ledger"]),
+            "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+            "--preregistration", str(self.registration),
+            "--preregistration-sha256", self.registration_sha,
+            "--session-ids", "W1", "--session-ids", "W2")
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+        cadence = subprocess.run([
+            sys.executable, str(ROOT / "scripts/calibration_cadence_report.py"),
+            "--window", f"W={fixture['runs']}/instrument_validation/W1-*",
+            "--calibration-ledger", str(fixture["ledger"]),
+            "--head-pin", str(fixture["pin"]), "--session", "W=W1",
+            "--preregistration-sha256", self.registration_sha],
+            cwd=fixture["root"], capture_output=True, text=True, check=False)
+        self.assertEqual(cadence.returncode, 0, cadence.stdout + cadence.stderr)
+        candidate = self.root / "e2e-candidate.json"
+        candidate.unlink(missing_ok=True)
+        # This synthetic ledger has no eleven historical disposed rows from
+        # the production registry. Patch only that fixture input while running
+        # the real CLI parser and preparation path in a separate interpreter.
+        fixture_entry = (
+            f"import sys; sys.path.insert(0, {str(ROOT)!r}); "
+            "from scripts import issue_calibration_acceptance_generation as tool; "
+            "tool._registered_dispositions = lambda: {}; "
+            "raise SystemExit(tool.main(sys.argv[1:]))"
+        )
+        prepared = subprocess.run([sys.executable, "-c", fixture_entry,
+            "prepare-candidate", "--ledger", str(fixture["ledger"]),
+            "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+            "--preregistration", str(self.registration),
+            "--preregistration-sha256", self.registration_sha,
+            "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--registration-session-id", "W1", "--registration-session-id", "W2",
+            "--d125-ruling", D125_REFERENCE,
+            "--out", str(candidate)], cwd=fixture["root"],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls._tmp.cleanup)
+        cls.root = Path(cls._tmp.name)
+        text = PREREGISTRATION.read_text(encoding="utf-8")
+        text = text.replace("<PR-L-MERGE-SHA>", "a" * 40)
+        text = text.replace("<TEMPLATE-SHA256:night>", "b" * 64)
+        text = text.replace("<TEMPLATE-SHA256:probe>", "c" * 64)
+        cls.registration = cls.root / "sealed-revision-5.md"
+        cls.registration.write_text(text, encoding="utf-8")
+        cls.registration_sha = hashlib.sha256(cls.registration.read_bytes()).hexdigest()
+        values = [Slot(v, native_frames=True) for v in _grid(12, "0.0300", "0.0010")]
+        # The confounded window's B values are 0.999 s, far above
+        # PLATEAU_INSET_S: if the issuer ever read one as a member, issuance
+        # would refuse, so a clean issue proves they were never read.
+        unreadable = [Slot("0.9990", native_frames=True)] * 11
+        cls.values = values
+        # Every window of these fixtures carries its committed harvest verdict
+        # (obligations v1.1 §4.10 item 6), written under the sealed registration.
+        recorded = {"verdict_records": True, "preregistration_sha256": cls.registration_sha}
+        cls.recorded = recorded
+        cls.fixture = build_derivation_ledger(
+            cls.root / "confounded",
+            [Slot("0.9990", battery_mode="charging", native_frames=True), *unreadable],
+            session_id="W1", second_session=("W1-prime", values), third_session=("W2", values),
+            **recorded,
+        )
+        cls.clean_fixture = build_derivation_ledger(
+            cls.root / "clean", values, session_id="W1",
+            second_session=("W1-prime", values), third_session=("W2", values), **recorded,
+        )
+        cls.missing_fixture = build_derivation_ledger(
+            cls.root / "missing",
+            [Slot("0.9990", battery_mode="missing", native_frames=True), *unreadable],
+            session_id="W1", second_session=("W1-prime", values), third_session=("W2", values),
+            **recorded,
+        )
+        cls.night_one_fixture = build_derivation_ledger(
+            cls.root / "night-one", values, session_id="W1", **recorded,
+        )
+        cls._scenario_cache = {}
+        cls.two_non_pass_fixture = build_derivation_ledger(
+            cls.root / "two-non-pass",
+            [Slot("0.9990", battery_mode="charging", native_frames=True), *unreadable],
+            session_id="W1",
+            second_session=("W1-prime", [Slot("0.0300", battery_mode="missing", native_frames=True), *values[1:]]),
+            third_session=("W2", values), **recorded,
+        )
+
+    def prepare(self, fixture: dict[str, Path], *extra: str,
+                registration: tuple[str, ...] = ("W1-prime", "W2"),
+                tool: ModuleType = issuer) -> tuple[int, str, Path]:
+        out = self.root / f"candidate-{self._testMethodName}.json"
+        out.unlink(missing_ok=True)
+        argv = [
+            "prepare-candidate", "--ledger", str(fixture["ledger"]),
+            "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+            "--preregistration", str(self.registration),
+            "--preregistration-sha256", self.registration_sha,
+            "--predecessor-acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            *(item for session_id in registration
+              for item in ("--registration-session-id", session_id)),
+            "--d125-ruling", D125_REFERENCE, "--out", str(out), *extra,
+        ]
+        stream = io.StringIO()
+        with redirect_stdout(stream), mock.patch.object(tool, "_registered_dispositions", return_value={}):
+            code = tool.main(argv)
+        return code, stream.getvalue(), out
+
+    def verdict(self, fixture: dict[str, Path], session_id: str, *,
+                registration_sha: str | None = None) -> tuple[int, str]:
+        """`battery-verdict` through `issuer.main` (obligations v1.1 §4.2)."""
+        # Exercise harvest order: the authentic physical head pin is present
+        # but has uncommitted bytes until the verdict is committed with it.
+        fixture["pin"].write_text(json.dumps(json.loads(fixture["pin"].read_text()),
+                                              sort_keys=True) + "\n")
+        stream = io.StringIO()
+        with redirect_stdout(stream):
+            code = issuer.main([
+                "battery-verdict", "--ledger", str(fixture["ledger"]),
+                "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+                "--session-id", session_id, "--preregistration", str(self.registration),
+                "--preregistration-sha256", registration_sha or self.registration_sha,
+            ])
+        return code, stream.getvalue()
+
+    def fresh(self, name: str, *sessions: tuple[str, list], recorded: bool = True) -> dict[str, Path]:
+        """A per-test fixture this test may mutate; ``sessions`` in ledger order."""
+        (first_id, first), *rest = sessions
+        extra = dict(zip(("second_session", "third_session"), rest))
+        return build_derivation_ledger(
+            self.root / f"{self._testMethodName}-{name}", first, session_id=first_id,
+            **extra, verdict_records=recorded, preregistration_sha256=self.registration_sha,
+        )
+
+    def test_replacement_issues_without_reading_confounded_b_or_a7_refusal(self) -> None:
+        code, printed, out = self.prepare(
+            self.fixture, "--battery-confounded-session-id", "W1",
+        )
+        self.assertEqual(code, 0, printed)
+        payload = json.loads(out.read_text())
+        self.assertEqual(payload["derivation_notes"]["battery_confounded_sessions"][0]["session_id"], "W1")
+        self.assertEqual(payload["derivation_notes"]["battery_confounded_sessions"][0]["status"],
+                         "battery_float_confounded")
+        self.assertNotIn("b_fiducial_s", json.dumps(payload["derivation_notes"]["battery_confounded_sessions"]))
+        self.assertEqual(payload["registered_generation_row"]["registration_session_ids"][0], "W1-prime")
+        [disclosed] = payload["derivation_notes"]["battery_confounded_sessions"]
+        [failing] = disclosed["slots"]
+        self.assertEqual(failing["slot"], "d01")
+        self.assertEqual(failing["attempt_id"], "W1-d01")
+        self.assertRegex(failing["pre_raw_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(failing["post_raw_sha256"], r"^[0-9a-f]{64}$")
+        self.assertTrue(any("IsCharging" in reason for reason in failing["reasons"]))
+
+    def test_confounded_session_named_as_registration_session_refuses(self) -> None:
+        code, printed, out = self.prepare(self.fixture, registration=("W1", "W1-prime", "W2"))
+        self.assertEqual(code, 3)
+        self.assertIn("computed non-pass session omitted: W1", printed)
+        self.assertFalse(out.exists())
+        code, printed, out = self.prepare(
+            self.fixture, "--battery-confounded-session-id", "W1",
+            registration=("W1", "W1-prime", "W2"),
+        )
+        self.assertEqual(code, 3)
+        self.assertIn("session named both", printed)
+        self.assertFalse(out.exists())
+
+    def test_evidence_missing_is_excluded_identically_and_a_second_non_pass_window_stops(self) -> None:
+        code, printed, out = self.prepare(
+            self.missing_fixture, "--battery-confounded-session-id", "W1",
+        )
+        self.assertEqual(code, 0, printed)
+        [disclosed] = json.loads(out.read_text())["derivation_notes"]["battery_confounded_sessions"]
+        self.assertEqual(disclosed["status"], "battery_float_evidence_missing")
+        code, printed, out = self.prepare(self.missing_fixture)
+        self.assertEqual(code, 3)
+        self.assertIn("computed non-pass session omitted: W1", printed)
+        code, printed, out = self.prepare(
+            self.two_non_pass_fixture,
+            "--battery-confounded-session-id", "W1",
+            "--battery-confounded-session-id", "W1-prime",
+            registration=("W2",),
+        )
+        self.assertEqual(code, 3)
+        self.assertIn("more than one battery-float non-pass window", printed)
+        self.assertFalse(out.exists())
+
+    def test_omission_clean_declaration_and_overlap_refuse(self) -> None:
+        code, printed, _ = self.prepare(self.fixture)
+        self.assertEqual(code, 3)
+        self.assertIn("computed non-pass session omitted: W1", printed)
+        code, printed, _ = self.prepare(self.clean_fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 3)
+        self.assertIn("clean session declared confounded", printed)
+        code, printed, _ = self.prepare(self.fixture, "--battery-confounded-session-id", "W1-prime")
+        self.assertEqual(code, 3)
+        self.assertIn("session named both", printed)
+
+    def test_confounded_dry_run_counts_none_and_tampered_raw_is_missing(self) -> None:
+        snapshot = load_calibration_ledger_snapshot(
+            self.fixture["ledger"], self.fixture["pin"],
+            require_committed_pin=True, verify_custody=False,
+            mode="read_replay", repo_root=self.fixture["root"],
+        )
+        code, lines = issuer.registration_dry_run(
+            snapshot, ["W1"], preregistration_sha256=self.registration_sha)
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertIn("W1: battery=confounded recorded=confounded", lines)
+        self.assertTrue(any("valid=0" in line for line in lines))
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "tampered", [Slot("0.03")], session_id="W1",
+            )
+            raw = fixture["runs"] / "instrument_validation/W1-d01/raw/battery_float.pre.ioreg"
+            raw.write_bytes(raw.read_bytes() + b"tampered")
+            snapshot = load_calibration_ledger_snapshot(
+                fixture["ledger"], fixture["pin"], require_committed_pin=True,
+                verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+            )
+            # Obligations v1.1 §4.10 item 4 / A10: a custody failure, not a verdict.
+            with self.assertRaisesRegex(issuer.battery_float.BatteryVerdictRefusal,
+                                        r"^battery-float custody failure for W1: d01/pre expected ") as caught:
+                issuer.battery_float.authenticate_committed_verdict(
+                    fixture["root"], session=snapshot.bracket_session_by_id["W1"],
+                    preregistration_sha256=self.registration_sha)
+            self.assertEqual(caught.exception.code, "custody_failure")
+            self.assertIsInstance(caught.exception.__cause__, issuer.battery_float.CustodyFailure)
+
+    # ---- obligations v1.1 §4.10 item 2: the `battery-verdict` subcommand ----
+
+    def test_battery_verdict_writes_one_record_once_and_prints_one_line(self) -> None:
+        fixture = self.fresh("w", ("W1", self.values), recorded=False)
+        code, printed = self.verdict(fixture, "W1")
+        self.assertEqual((code, printed), (0, "W1: battery=pass\n"))
+        self.assertNotIn("b_fiducial_s", printed)
+        path = fixture["root"] / "configs/calibration/battery_float_verdicts/W1.json"
+        record = json.loads(path.read_text())
+        self.assertEqual(set(record), {
+            "schema", "policy_id", "session_id", "session_kind", "session_state",
+            "identity_epoch", "preregistration_sha256", "ledger_head", "computed_wall_time_s",
+            "tool_commit", "battery_float_module_sha256", "status", "slots"})
+        self.assertEqual((record["schema"], record["policy_id"], record["session_id"], record["status"]),
+                         ("joulewise.battery_float_verdict.v1", "bfg-01", "W1", "pass"))
+        self.assertEqual(record["identity_epoch"], TARGET_EPOCH)
+        self.assertEqual(record["preregistration_sha256"], self.registration_sha)
+        self.assertRegex(record["tool_commit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(record["battery_float_module_sha256"], hashlib.sha256(
+            (fixture["root"] / "joulewise/battery_float.py").read_bytes()).hexdigest())
+        self.assertEqual(len(record["slots"]), 12)
+        self.assertEqual(set(record["slots"][0]), {
+            "slot", "attempt_id", "verdict", "reasons", "pre_raw_sha256", "post_raw_sha256",
+            "pre_update_age_s", "post_update_age_s", "delta_q_mah", "instrument_evidence_sha256"})
+        self.assertNotIn("b_fiducial_s", path.read_text())
+        before = path.read_bytes()
+        code, printed = self.verdict(fixture, "W1")
+        self.assertEqual((code, printed), (3, "REFUSED: record exists\n"))
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_battery_verdict_refuses_custody_failure_and_writes_nothing(self) -> None:
+        fixture = self.fresh("w", ("W1", self.values), recorded=False)
+        (fixture["runs"] / "instrument_validation/W1-d03/raw/battery_float.post.ioreg").unlink()
+        code, printed = self.verdict(fixture, "W1")
+        self.assertEqual(code, 3)
+        self.assertRegex(printed, r"^REFUSED: custody failure: d03/post expected [0-9a-f]{64} observed absent; "
+                                  r"restore the custody bytes byte-exact from the harvest archive\n$")
+        self.assertFalse((fixture["root"] / "configs/calibration/battery_float_verdicts").exists())
+
+    def test_battery_verdict_refuses_open_wrong_digest_empty_and_pre_a_r5b_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            open_fixture = build_derivation_ledger(Path(tmp) / "open", self.values, session_id="W1",
+                                                   fill_slots=6)
+            code, printed = self.verdict(open_fixture, "W1")
+            # An open session is refused by the ledger load (§4.2 step 2)
+            # before the terminal check (step 3) is reached.
+            self.assertEqual((code, printed), (3, "REFUSED: ledger: calibration_ledger_bracket_session_open\n"))
+            fixture = build_derivation_ledger(Path(tmp) / "clean", self.values, session_id="W1")
+            code, printed = self.verdict(fixture, "W1", registration_sha="0" * 64)
+            self.assertEqual(code, 3)
+            self.assertIn("does not match the pinned", printed)
+            empty = build_derivation_ledger(Path(tmp) / "empty", self.values, session_id="W1",
+                                            fill_slots=0, abort_reason="window_exhausted")
+            code, printed = self.verdict(empty, "W1")
+            self.assertEqual((code, printed), (3, "REFUSED: no finalized slot; nothing to record\n"))
+            # Rows finalized over evidence that authenticates and has no key.
+            with mock.patch.object(build_module, "_write_bundle", _bundle_without_battery):
+                predates = build_derivation_ledger(Path(tmp) / "pre", self.values, session_id="W1")
+            code, printed = self.verdict(predates, "W1")
+            self.assertEqual((code, printed), (3, "REFUSED: pre-A-R5b session\n"))
+            for root in (open_fixture, fixture, empty, predates):
+                self.assertFalse((root["root"] / "configs/calibration/battery_float_verdicts").exists())
+
+    # ---- obligations v1.1 §4.10 item 3: `_prepare_candidate` ----
+
+    def test_m1_closed_deleted_raw_refuses_as_custody_until_restored(self) -> None:
+        fixture = self.fresh("m1", ("W1", self.values), ("W2", self.values))
+        code, printed, _ = self.prepare(fixture, registration=("W1", "W2"))
+        self.assertEqual(code, 0, printed)
+        add_session(fixture, "W2-prime", self.values, **self.recorded)
+        raw = fixture["runs"] / "instrument_validation/W2-d03/raw/battery_float.post.ioreg"
+        kept = raw.read_bytes()
+        raw.unlink()
+        code, printed, out = self.prepare(fixture, "--battery-confounded-session-id", "W2",
+                                          registration=("W1", "W2-prime"))
+        self.assertEqual(code, 3)
+        self.assertIn("REFUSED: battery-float custody failure for W2: d03/post expected ", printed)
+        self.assertIn("restore the custody bytes byte-exact from the harvest archive; not issued", printed)
+        self.assertFalse(out.exists())
+        code, printed, _ = self.prepare(fixture, registration=("W1", "W2"))
+        self.assertEqual(code, 3)
+        self.assertIn("battery-float custody failure for W2: d03/post", printed)
+        self.assertNotIn("omitted", printed)
+        raw.write_bytes(kept)
+        code, printed, _ = self.prepare(fixture, registration=("W1", "W2"))
+        self.assertEqual(code, 3)
+        self.assertIn("valid same-epoch observations outside this registration: W2-prime-d01", printed)
+
+    def test_e8_closed_two_tampered_windows_refuse_as_custody_not_the_epoch_stop(self) -> None:
+        fixture = self.fresh("e8", ("W1", self.values), ("W2", self.values), ("W2-prime", self.values))
+        for attempt in ("W1-d01", "W2-d01"):
+            (fixture["runs"] / f"instrument_validation/{attempt}/raw/battery_float.pre.ioreg").unlink()
+        code, printed, _ = self.prepare(
+            fixture, "--battery-confounded-session-id", "W1",
+            "--battery-confounded-session-id", "W2", registration=("W2-prime",))
+        self.assertEqual(code, 3)
+        self.assertIn("battery-float custody failure for W1", printed)
+        self.assertNotIn("more than one", printed)
+
+    def test_p2e1_closed_a_re_recorded_verdict_is_no_record(self) -> None:
+        fixture = self.fresh("p2e1", ("W1", self.values), ("W2", self.values), ("W2-prime", self.values))
+        rerecord_verdict(fixture, "W2", "battery_float_evidence_missing")
+        code, printed, _ = self.prepare(fixture, "--battery-confounded-session-id", "W2",
+                                        registration=("W1", "W2-prime"))
+        self.assertEqual(code, 3)
+        self.assertIn("battery-float harvest verdict missing or uncommitted for W2: path history is not a "
+                      "single adding commit (3 commits, 2 adding); not issued", printed)
+
+    def test_missing_then_uncommitted_then_committed_record(self) -> None:
+        fixture = self.fresh("rec", ("W1", self.values), ("W2", self.values), recorded=False)
+        code, printed, _ = self.prepare(fixture, registration=("W1", "W2"))
+        self.assertEqual(code, 3)
+        self.assertIn("battery-float harvest verdict missing or uncommitted for W1: absent or uncommitted",
+                      printed)
+        for session_id in ("W1", "W2"):
+            self.assertEqual(self.verdict(fixture, session_id)[0], 0)
+        code, printed, _ = self.prepare(fixture, registration=("W1", "W2"))
+        self.assertEqual(code, 3)
+        self.assertIn("ledger: calibration_ledger_head_uncommitted", printed)
+        build_module._commit(fixture["root"], "harvest verdicts")
+        code, printed, _ = self.prepare(fixture, registration=("W1", "W2"))
+        self.assertEqual(code, 0, printed)
+
+    def test_recorded_non_pass_whose_raw_bytes_are_replaced_to_pass_refuses(self) -> None:
+        fixture = self.fresh(
+            "swap", ("W1", [Slot("0.9990", battery_mode="charging", native_frames=True),
+                            *[Slot("0.9990", native_frames=True)] * 11]),
+            ("W1-prime", self.values), ("W2", self.values))
+        code, printed, _ = self.prepare(fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 0, printed)
+        for phase in ("pre", "post"):
+            charging = fixture["runs"] / f"instrument_validation/W1-d01/raw/battery_float.{phase}.ioreg"
+            float_bytes = (fixture["runs"] / "instrument_validation/W1-d02/raw/battery_float.pre.ioreg").read_bytes()
+            charging.write_bytes(float_bytes)
+        code, printed, _ = self.prepare(fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 3)
+        self.assertIn("battery-float custody failure for W1: d01/pre expected ", printed)
+
+    def test_n1_closed_zero_valid_confounded_window_must_be_declared_and_counts(self) -> None:
+        charging_invalid = [Slot("0.9990", disposition="ordinary-invalid", battery_mode="charging",
+                                 native_frames=True)] * 12
+        fixture = self.fresh("n1", ("W1", charging_invalid), ("W1-prime", self.values), ("W2", self.values))
+        code, printed, _ = self.prepare(fixture)
+        self.assertEqual(code, 3)
+        self.assertIn("computed non-pass session omitted: W1", printed)
+        code, printed, out = self.prepare(fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 0, printed)
+        notes = json.loads(out.read_text())["derivation_notes"]
+        [excluded] = notes["battery_confounded_sessions"]
+        verdict_file = fixture["root"] / "configs/calibration/battery_float_verdicts/W1.json"
+        self.assertEqual(excluded["session_id"], "W1")
+        self.assertEqual(excluded["verdict_file_sha256"], hashlib.sha256(verdict_file.read_bytes()).hexdigest())
+        self.assertRegex(excluded["verdict_commit"], r"^[0-9a-f]{40}$")
+        add_session(fixture, "W3", charging_invalid, **self.recorded)
+        code, printed, _ = self.prepare(fixture, "--battery-confounded-session-id", "W1",
+                                        "--battery-confounded-session-id", "W3")
+        self.assertEqual(code, 3)
+        self.assertIn("more than one battery-float non-pass window in this epoch: W1, W3", printed)
+
+    def test_derivation_notes_list_every_computed_set_record_without_values(self) -> None:
+        code, printed, out = self.prepare(self.fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 0, printed)
+        records = json.loads(out.read_text())["derivation_notes"]["battery_verdict_records"]
+        self.assertEqual([row["session_id"] for row in records], ["W1", "W1-prime", "W2"])
+        self.assertEqual([row["status"] for row in records], ["battery_float_confounded", "pass", "pass"])
+        for row in records:
+            self.assertEqual(set(row), {"session_id", "status", "verdict_file_sha256", "verdict_commit"})
+            path = self.fixture["root"] / f"configs/calibration/battery_float_verdicts/{row['session_id']}.json"
+            self.assertEqual(row["verdict_file_sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertNotIn("b_fiducial_s", json.dumps(records))
+
+    # ---- obligations v1.1 §4.10 item 4: dry run, cadence report, continuation ----
+
+    def dry_run(self, fixture: dict[str, Path], *session_ids: str) -> tuple[int, list[str]]:
+        snapshot = load_calibration_ledger_snapshot(
+            fixture["ledger"], fixture["pin"], require_committed_pin=True,
+            verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+        )
+        with mock.patch.object(issuer, "_registered_dispositions", return_value={}):
+            return issuer.registration_dry_run(
+                snapshot, list(session_ids), preregistration_sha256=self.registration_sha)
+
+    def test_dry_run_names_the_recorded_verdict_and_blocks_without_one(self) -> None:
+        fixture = self.fresh("dry", ("W1", self.values), ("W2", self.values), recorded=False)
+        code, lines = self.dry_run(fixture, "W1")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        # The battery line renders only an authenticated verdict (§3.8 step 4);
+        # a refused window gets its blocker and no label.
+        self.assertFalse(any(line.startswith("W1: battery=") for line in lines), lines)
+        self.assertIn("  blocker: session W1: battery harvest verdict missing or uncommitted "
+                      "(absent or uncommitted)", lines)
+        self.assertEqual(self.verdict(fixture, "W1")[0], 0)
+        # R2-3: W2 is computed for the epoch too, so the dry run is
+        # admissible only once W2 also carries its committed verdict.  Both
+        # are named: W2's valid rows outside a W1-only registration are A-7.
+        self.assertEqual(self.verdict(fixture, "W2")[0], 0)
+        build_module._commit(fixture["root"], "harvest W1 and W2")
+        code, lines = self.dry_run(fixture, "W1", "W2")
+        self.assertEqual(code, 0, lines)
+        self.assertIn("W1: battery=pass recorded=pass", lines)
+        (fixture["runs"] / "instrument_validation/W1-d05/raw/battery_float.pre.ioreg").unlink()
+        code, lines = self.dry_run(fixture, "W1", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertTrue(any(line.startswith("  blocker: session W1: battery custody failure: d05/pre expected ")
+                            for line in lines), lines)
+        self.assertFalse(any("0.03" in line for line in lines))
+
+    def test_dry_run_never_reads_member_evidence_without_authentic_verdict(self) -> None:
+        fixture = self.fresh("unrecorded", ("W1", self.values),
+                             ("W2", self.values), recorded=False)
+        snapshot = load_calibration_ledger_snapshot(
+            fixture["ledger"], fixture["pin"], require_committed_pin=True,
+            verify_custody=False, mode="read_replay", repo_root=fixture["root"])
+        with mock.patch.object(issuer, "_read_member_evidence",
+                               side_effect=AssertionError("B-bearing member evidence opened")) as reader, \
+                mock.patch.object(issuer.battery_float, "predates_battery_float",
+                                  side_effect=AssertionError("B-bearing evidence opened")) as exemption:
+            code, lines = issuer.registration_dry_run(
+                snapshot, ["W1"], preregistration_sha256=self.registration_sha)
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertTrue(any("harvest verdict missing" in line for line in lines))
+        reader.assert_not_called()
+        exemption.assert_not_called()
+
+    def test_dry_run_blocks_an_unnamed_computed_session_without_an_authentic_verdict(self) -> None:
+        # Cold ruling BFG-D-PARSER-ESC-01 §5.2 (obligation R2-3, Astra M1):
+        # W1 is computed but not named, and its committed verdict no longer
+        # authenticates.  The dry run must agree with prepare-candidate.
+        from joulewise import battery_float
+        fixture = self.fresh("unnamed-deleted", ("W1", self.values), ("W1-prime", self.values),
+                             ("W2", self.values))
+        (fixture["root"] / battery_float.verdict_relative_path("W1")).unlink()
+        code, lines = self.dry_run(fixture, "W1-prime", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT, lines)
+        self.assertIn("registration admissible for prepare-candidate: no", lines)
+        self.assertIn("  blocker: computed session W1: battery harvest verdict missing or "
+                      "uncommitted (working tree differs from HEAD)", lines)
+        code, printed, out = self.prepare(fixture)
+        self.assertEqual(code, 3)
+        self.assertIn("working tree differs from HEAD", printed)
+        self.assertFalse(out.exists())
+
+    def test_dry_run_blocks_an_unnamed_computed_session_recorded_under_another_registration(self) -> None:
+        # R2-3, second case: W1's verdict is committed but under a different
+        # registration digest (`NoRecord("identity mismatch: preregistration_sha256")`).
+        fixture = self.fresh("unnamed-wrong-registration", ("W1", self.values),
+                             ("W1-prime", self.values), ("W2", self.values), recorded=False)
+        build_module.write_verdict_record(fixture, "W1", preregistration_sha256="0" * 64)
+        build_module.write_verdict_record(fixture, "W1-prime", preregistration_sha256=self.registration_sha)
+        build_module.write_verdict_record(fixture, "W2", preregistration_sha256=self.registration_sha)
+        fixture["pin"].write_text(json.dumps(json.loads(fixture["pin"].read_text()),
+                                              sort_keys=True) + "\n")
+        build_module._commit(fixture["root"], "harvest with the pin")
+        code, lines = self.dry_run(fixture, "W1-prime", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT, lines)
+        self.assertIn("  blocker: computed session W1: battery harvest verdict missing or "
+                      "uncommitted (identity mismatch: preregistration_sha256)", lines)
+        self.assertIn("registration admissible for prepare-candidate: no", lines)
+
+    def test_every_documented_dry_run_shape_is_admissible_on_a_clean_revision_five_epoch(self) -> None:
+        # R2-4: each runbook invocation, executed on a Revision-5 fixture whose
+        # every window carries its committed verdict, exits 0 as documented.
+        # Each shape runs on the ledger state it is documented for (§3.11):
+        # the per-harvest query on night one's ledger (a later night's rows
+        # would be A-7 rows outside the one named session), §4.1 on the three
+        # clean nights, and the replacement route on the confounded epoch.
+        _, registered_powermetrics = issuer.preregistration_epoch_pins(
+            self.registration.read_text(encoding="utf-8"))
+        common = {
+            "$PREREGISTRATION_SHA256": self.registration_sha,
+            "configs/calibration/preregistration_d079_epoch_25g83_rev1.md": str(self.registration),
+        }
+        shapes = 0
+        for command in runbook_dry_run_invocations():
+            if "--battery-confounded-session-id" in command:
+                fixture = self.fixture
+                substitutions = {**common, "<S1>": "W1-prime", "<S2>": "W2", "<WX>": "W1"}
+            elif "$SESSION_ID" in command:
+                fixture = self.night_one_fixture
+                substitutions = {**common, "$SESSION_ID": "W1"}
+            else:
+                fixture = self.clean_fixture
+                substitutions = {**common, "<S1>": "W1", "<S2>": "W1-prime", "<S3>": "W2"}
+            shapes += "--battery-confounded-session-id" in command
+            with self.subTest(argv=" ".join(command)):
+                argv = [substitutions.get(token, token) for token in command[2:]] + [
+                    "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
+                    "--repo-root", str(fixture["root"])]
+                stream = io.StringIO()
+                with redirect_stdout(stream), mock.patch.object(
+                        issuer, "observe_machine",
+                        return_value={"powermetrics_sha256": registered_powermetrics}), \
+                        mock.patch.object(issuer, "_registered_dispositions", return_value={}):
+                    code = issuer.main(argv)
+                self.assertEqual(code, 0, stream.getvalue())
+                self.assertIn("registration admissible for prepare-candidate: yes", stream.getvalue())
+        self.assertEqual(shapes, 1)
+
+    def test_dry_run_blocks_one_computed_non_pass_session_omitted(self) -> None:
+        code, lines = self.dry_run(self.fixture, "W1-prime", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertIn("  blocker: computed non-pass session omitted: W1", lines)
+        self.assertIn("registration admissible for prepare-candidate: no", lines)
+
+    def test_check_requires_registration_file_and_matching_digest(self) -> None:
+        fixture = self.clean_fixture
+        snapshot = load_calibration_ledger_snapshot(
+            fixture["ledger"], fixture["pin"], require_committed_pin=True,
+            verify_custody=False, mode="read_replay", repo_root=fixture["root"])
+        for prereg, digest in ((None, None), (self.registration, None),
+                               (self.registration, "0" * 64)):
+            with self.subTest(prereg=prereg, digest=digest):
+                argv = ["check", "--ledger", str(fixture["ledger"]),
+                        "--head-pin", str(fixture["pin"]),
+                        "--session-ids", "W1-prime", "--session-ids", "W2"]
+                if prereg is not None:
+                    argv += ["--preregistration", str(prereg)]
+                args = issuer.build_parser().parse_args(argv)
+                args.repo_root = fixture["root"]
+                args.preregistration_sha256 = digest
+                stream = io.StringIO()
+                with redirect_stdout(stream), mock.patch.object(
+                    issuer, "load_calibration_ledger_snapshot", return_value=snapshot), mock.patch.object(
+                    issuer, "observe_machine", return_value={"powermetrics_sha256": "0" * 64}):
+                    code = issuer.check(args)
+                self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT, stream.getvalue())
+                self.assertIn("preregistration", stream.getvalue().replace("pre-registration", "preregistration"))
+
+    def test_separate_pin_and_verdict_commits_refused_by_all_consumers(self) -> None:
+        from scripts import calibration_cadence_report as cadence
+        from scripts import issue_epoch_continuation as continuation_issuer
+        fixture = self.fresh("separate-commits", ("W1", self.values),
+                             ("W2", self.values), recorded=False)
+        fixture["pin"].write_text(json.dumps(json.loads(fixture["pin"].read_text()),
+                                              sort_keys=True) + "\n")
+        build_module._commit(fixture["root"], "pin alone")
+        self.assertEqual(self.verdict(fixture, "W1")[0], 0)
+        self.assertEqual(self.verdict(fixture, "W2")[0], 0)
+        build_module._commit(fixture["root"], "verdicts later")
+        code, lines = self.dry_run(fixture, "W1", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertTrue(any("verdict not committed with its ledger head pin" in line
+                            for line in lines))
+        with self.assertRaisesRegex(ValueError, "verdict not committed with its ledger head pin"):
+            cadence.report_window("W1", fixture["runs"] / "instrument_validation/W1-*",
+                ledger=fixture["ledger"], head_pin=fixture["pin"], session_id="W1",
+                preregistration_sha256=self.registration_sha)
+        code, output, _ = self.prepare(fixture, registration=("W1", "W2"))
+        self.assertEqual(code, 3)
+        self.assertIn("verdict not committed with its ledger head pin", output)
+        stream = io.StringIO()
+        with redirect_stderr(stream):
+            code = continuation_issuer.main([
+                "prepare-candidate", "--session-id", "W1", "--ledger", str(fixture["ledger"]),
+                "--head-pin", str(fixture["pin"]), "--repo-root", str(fixture["root"]),
+                "--preregistration-sha256", self.registration_sha,
+                "--acceptance", str(issuer.DEFAULT_ACCEPTANCE_BOUND_PATH),
+                "--d102-addendum-date", "2026-09-10",
+                "--out", str(self.root / "separate-continuation.json")])
+        self.assertEqual(code, 3)
+        # R2-10: the continuation refuses a Revision-5 session outright,
+        # before it would look for a verdict at all.
+        self.assertIn("revision_five_session", stream.getvalue())
+        self.assertFalse((self.root / "separate-continuation.json").exists())
+
+    def test_dry_run_blocks_more_than_one_recorded_non_pass_window(self) -> None:
+        code, lines = self.dry_run(self.two_non_pass_fixture, "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertIn("W2: battery=pass recorded=pass", lines)
+        self.assertIn("  blocker: more than one battery-float non-pass window in this epoch: W1, W1-prime",
+                      lines)
+
+    def test_cadence_report_requires_the_record_and_labels_from_it(self) -> None:
+        from scripts import calibration_cadence_report as report
+        fixture = self.fresh("cad", ("W1", self.values), recorded=False)
+        kwargs = {"ledger": fixture["ledger"], "head_pin": fixture["pin"],
+                  "session_id": "W1", "preregistration_sha256": self.registration_sha}
+        window = fixture["runs"] / "instrument_validation"
+        with self.assertRaisesRegex(ValueError, "^battery-float harvest verdict missing or uncommitted "
+                                                "for W1: absent or uncommitted$"):
+            report.report_window("W1", window, **kwargs)
+        self.verdict(fixture, "W1")
+        build_module._commit(fixture["root"], "harvest W1")
+        self.assertNotIn("diagnostic_only", report.report_window("W1", window, **kwargs))
+        (window / "W1-d02/raw/battery_float.post.ioreg").unlink()
+        with self.assertRaisesRegex(ValueError, "^battery-float custody failure for W1: d02/post expected "):
+            report.report_window("W1", window, **kwargs)
+        charging = self.fresh("cad-c", ("W1", [Slot("0.03", battery_mode="charging", native_frames=True)]))
+        row = report.report_window("W1", charging["runs"] / "instrument_validation",
+                                   ledger=charging["ledger"], head_pin=charging["pin"],
+                                   session_id="W1", preregistration_sha256=self.registration_sha)
+        self.assertEqual(row["diagnostic_only"], "battery_float_confounded")
+
+    # ---- consumer-drift final texts v1.1 §3.12 ----
+
+    def check_main(self, fixture: dict[str, Path], *session_ids: str, confounded: tuple[str, ...] = (),
+                   digest: bool = True, tool: ModuleType = issuer) -> tuple[int, str]:
+        """`check --session-ids` through ``tool.main`` on the machine the registration names."""
+        _, registered_powermetrics = issuer.preregistration_epoch_pins(
+            self.registration.read_text(encoding="utf-8"))
+        argv = ["check", "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
+                "--repo-root", str(fixture["root"])]
+        if digest:
+            argv += ["--preregistration", str(self.registration),
+                     "--preregistration-sha256", self.registration_sha]
+        argv += [item for session_id in session_ids for item in ("--session-ids", session_id)]
+        argv += [item for session_id in confounded
+                 for item in ("--battery-confounded-session-id", session_id)]
+        stream = io.StringIO()
+        with redirect_stdout(stream), mock.patch.object(
+                tool, "observe_machine", return_value={"powermetrics_sha256": registered_powermetrics}), \
+                mock.patch.object(tool, "_registered_dispositions", return_value={}):
+            code = tool.main(argv)
+        return code, stream.getvalue()
+
+    @classmethod
+    def scenario_fixture(cls, name: str, build) -> dict[str, Path]:
+        """A class-lifetime fixture shared by a RED/GREEN test and its mutation kills."""
+        if name not in cls._scenario_cache:
+            cls._scenario_cache[name] = build(cls.root / f"scenario-{name}")
+        return cls._scenario_cache[name]
+
+    def three_clean_windows(self) -> dict[str, Path]:
+        return self.scenario_fixture("three-clean", lambda root: build_derivation_ledger(
+            root, self.values, session_id="W1", second_session=("W1-prime", self.values),
+            third_session=("W2", self.values), **self.recorded))
+
+    def forged_record_fixture(self, name: str, first: list, status: str) -> dict[str, Path]:
+        """W1's committed record claims ``status`` over bytes that recompute otherwise.
+
+        The record is added in ONE commit with the head pin, so it authenticates
+        as a record: only the recomputation from raw bytes can catch it.
+        """
+        def build(root: Path) -> dict[str, Path]:
+            fixture = build_derivation_ledger(
+                root, first, session_id="W1", second_session=("W1-prime", self.values),
+                third_session=("W2", self.values))
+            path = build_module.write_verdict_record(fixture, "W1", preregistration_sha256=self.registration_sha)
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["status"] = status
+            for slot in record["slots"]:
+                slot["verdict"] = status
+            build_module.write_verdict_record(fixture, "W1", record=record)
+            for session_id in ("W1-prime", "W2"):
+                build_module.write_verdict_record(fixture, session_id,
+                                                  preregistration_sha256=self.registration_sha)
+            fixture["pin"].write_text(json.dumps(json.loads(fixture["pin"].read_text()),
+                                                  sort_keys=True) + "\n")
+            build_module._commit(fixture["root"], "harvest with the pin")
+            return fixture
+        return self.scenario_fixture(name, build)
+
+    def two_epochs_fixture(self) -> dict[str, Path]:
+        """H1 captured under a non-Revision-5 epoch; W1 under Revision 5, recorded."""
+        other_epoch = {**TARGET_EPOCH, "os_build": "25G84"}
+        return self.scenario_fixture("two-epochs", lambda root: build_derivation_ledger(
+            root, self.values, session_id="H1", session_epoch=other_epoch,
+            second_session=("W1", self.values), verdict_records=True,
+            preregistration_sha256=self.registration_sha))
+
+    # Scenarios return the list of broken expectations (empty = the rule holds),
+    # so the same body is the RED/GREEN test and each mutant's kill.
+
+    def scenario_omitted(self, tool: ModuleType = issuer) -> list[str]:
+        broken = []
+        code, output = self.check_main(self.fixture, "W1-prime", "W2", tool=tool)
+        if code != 5 or "  blocker: computed non-pass session omitted: W1" not in output:
+            broken.append(f"check: {code} {output}")
+        code, printed, _ = self.prepare(self.fixture, tool=tool)
+        if code != 3 or "computed non-pass session omitted: W1" not in printed:
+            broken.append(f"prepare: {code} {printed}")
+        return broken
+
+    def scenario_custody_then_parity(self, tool: ModuleType = issuer) -> list[str]:
+        fixture = self.three_clean_windows()
+        raw = fixture["runs"] / "instrument_validation/W1-d01/raw/battery_float.pre.ioreg"
+        kept = raw.read_bytes()
+        broken = []
+        raw.write_bytes(kept + b"\n")
+        try:
+            code, output = self.check_main(fixture, "W1-prime", "W2", tool=tool)
+            if code != 5 or "  blocker: computed session W1: battery custody failure: d01/pre expected " \
+                    not in output:
+                broken.append(f"check, W1 pre +1 byte: {code} {output}")
+            code, printed, out = self.prepare(fixture, tool=tool)
+            if (code != 3 or "REFUSED: battery-float custody failure for W1: d01/pre expected " not in printed
+                    or out.exists()):
+                broken.append(f"prepare, W1 pre +1 byte: {code} {printed}")
+        finally:
+            raw.write_bytes(kept)
+        # Restored byte-exact: parity, which on this epoch is A-7 on both tools.
+        code, output = self.check_main(fixture, "W1-prime", "W2", tool=tool)
+        if (code != 5 or "  blocker: valid same-epoch observations outside this registration: 12 rows owned "
+                "by W1 (ruling 46 addendum A-7)" not in output or "omitted" in output or "custody" in output):
+            broken.append(f"check, restored: {code} {output}")
+        code, printed, out = self.prepare(fixture, tool=tool)
+        if (code != 3 or "REFUSED: valid same-epoch observations outside this registration: W1-d01, "
+                not in printed or out.exists()):
+            broken.append(f"prepare, restored: {code} {printed}")
+        return broken
+
+    def scenario_forged_records(self, tool: ModuleType = issuer) -> list[str]:
+        confounded = [Slot("0.9990", battery_mode="charging", native_frames=True),
+                      *[Slot("0.9990", native_frames=True)] * 11]
+        broken = []
+        for name, first, status, recomputed in (
+                ("forged-pass", confounded, "pass", "battery_float_confounded"),
+                ("forged-missing", self.values, "battery_float_evidence_missing", "pass")):
+            fixture = self.forged_record_fixture(name, first, status)
+            difference = f"status recorded {status} recomputed {recomputed}"
+            code, output = self.check_main(fixture, "W1-prime", "W2", tool=tool)
+            if (code != 5 or "  blocker: computed session W1: battery harvest verdict cannot be "
+                    f"re-established ({difference})" not in output or "omitted" in output):
+                broken.append(f"check, {name}: {code} {output}")
+            code, printed, out = self.prepare(fixture, tool=tool)
+            if (code != 3 or f"REFUSED: battery-float harvest verdict for W1 cannot be re-established from "
+                    f"raw bytes ({difference}); custody failure; not issued" not in printed or out.exists()):
+                broken.append(f"prepare, {name}: {code} {printed}")
+        return broken
+
+    def scenario_p3(self, tool: ModuleType = issuer) -> list[str]:
+        broken = []
+        code, output = self.check_main(self.clean_fixture, "W1-prime", "W2", tool=tool)
+        if code != 5 or ("  blocker: valid same-epoch observations outside this registration: 12 rows "
+                         "owned by W1 (ruling 46 addendum A-7)") not in output:
+            broken.append(f"check: {code} {output}")
+        code, printed, _ = self.prepare(self.clean_fixture, tool=tool)
+        if code != 3 or "valid same-epoch observations outside this registration: W1-d01, " not in printed:
+            broken.append(f"prepare: {code} {printed}")
+        return broken
+
+    def scenario_p5(self, tool: ModuleType = issuer) -> list[str]:
+        fixture = self.scenario_fixture("p5", lambda root: build_derivation_ledger(
+            root, self.values, session_id="W1", second_session=("W2", self.values), **self.recorded))
+        broken = []
+        code, output = self.check_main(fixture, "W1", "W2", tool=tool)
+        if code != 0 or "registration admissible for prepare-candidate: yes" not in output:
+            broken.append(f"control check: {code} {output}")
+        code, printed, _ = self.prepare(fixture, registration=("W1", "W2"), tool=tool)
+        if code != 0:
+            broken.append(f"control prepare: {code} {printed}")
+        kept = fixture["pin"].read_bytes()
+        fixture["pin"].write_text(json.dumps(json.loads(kept), sort_keys=True) + "\n")
+        try:
+            code, output = self.check_main(fixture, "W1", "W2", tool=tool)
+            if code != 5 or "  blocker: ledger: calibration_ledger_head_uncommitted" not in output:
+                broken.append(f"check: {code} {output}")
+            code, printed, _ = self.prepare(fixture, registration=("W1", "W2"), tool=tool)
+            if code != 3 or "REFUSED: ledger: calibration_ledger_head_uncommitted" not in printed:
+                broken.append(f"prepare: {code} {printed}")
+            # The collector refuses a refused ledger for every caller (§3.5 step 0).
+            snapshot = load_calibration_ledger_snapshot(
+                fixture["ledger"], fixture["pin"], require_committed_pin=True, verify_custody=False,
+                mode="read_replay", repo_root=fixture["root"])
+            try:
+                with mock.patch.object(tool, "_registered_dispositions", return_value={}):
+                    tool.authenticate_battery_epoch(
+                        snapshot, ["W1", "W2"], repo_root=fixture["root"], target_epoch=TARGET_EPOCH,
+                        preregistration_sha256=self.registration_sha)
+            except tool.PrepareRefusal as refusal:
+                if refusal.reason != "ledger: calibration_ledger_head_uncommitted":
+                    broken.append(f"collector: {refusal.reason}")
+            else:
+                broken.append("collector admitted a refused ledger")
+        finally:
+            fixture["pin"].write_bytes(kept)
+        return broken
+
+    def test_r2_dry_run_blocks_an_unnamed_window_whose_verdict_was_re_recorded(self) -> None:
+        # §3.12 (ii).
+        fixture = self.fresh("unnamed-rerecorded", ("W1", self.values), ("W1-prime", self.values),
+                             ("W2", self.values))
+        rerecord_verdict(fixture, "W1", "battery_float_evidence_missing")
+        code, lines = self.dry_run(fixture, "W1-prime", "W2")
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT, lines)
+        self.assertIn("  blocker: computed session W1: battery harvest verdict missing or uncommitted "
+                      "(path history is not a single adding commit (3 commits, 2 adding))", lines)
+
+    def test_r3a_unnamed_custody_failure_blocks_both_tools_and_restore_gives_parity(self) -> None:
+        # §3.12 (iii); RED at 3e984ecc (the dry run never replayed an unnamed window).
+        self.assertEqual(self.scenario_custody_then_parity(), [])
+
+    def test_r3b_a_record_the_raw_bytes_contradict_blocks_both_tools_without_omitted(self) -> None:
+        # §3.12 (iv); RED at 3e984ecc in both arms.
+        self.assertEqual(self.scenario_forged_records(), [])
+
+    def test_r6_no_member_evidence_is_read_behind_an_unnamed_custody_failure(self) -> None:
+        # §3.12 (vi), extending the named case above.
+        fixture = self.three_clean_windows()
+        raw = fixture["runs"] / "instrument_validation/W1-d01/raw/battery_float.pre.ioreg"
+        kept = raw.read_bytes()
+        raw.write_bytes(kept + b"\n")
+        self.addCleanup(raw.write_bytes, kept)
+        with mock.patch.object(issuer, "_read_member_evidence",
+                               side_effect=AssertionError("B-bearing member evidence opened")) as reader:
+            code, lines = self.dry_run(fixture, "W1-prime", "W2")
+            self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT, lines)
+            code, printed, _ = self.prepare(fixture)
+            self.assertEqual(code, 3, printed)
+            self.assertIn("battery-float custody failure for W1", printed)
+        reader.assert_not_called()
+
+    # §3.12 (x): the parity matrix.  Each row runs `check` and `prepare-candidate`
+    # on one fixture; both refuse on the same session or both admit.
+
+    def test_parity_p3_clean_epoch_with_w1_unnamed_is_a7_on_both(self) -> None:
+        self.assertEqual(self.scenario_p3(), [])
+
+    def test_parity_p4_declared_replacement_admits_on_both(self) -> None:
+        code, output = self.check_main(self.fixture, "W1-prime", "W2", confounded=("W1",))
+        self.assertEqual(code, 0, output)
+        self.assertIn("battery-confounded declared: W1", output)
+        self.assertIn("registration admissible for prepare-candidate: yes", output)
+        code, printed, out = self.prepare(self.fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 0, printed)
+        self.assertTrue(out.exists())
+
+    def test_parity_p4_undeclared_is_omitted_on_both(self) -> None:
+        self.assertEqual(self.scenario_omitted(), [])
+
+    def test_parity_p4_named_and_declared_is_named_both_on_both(self) -> None:
+        code, output = self.check_main(self.fixture, "W1", "W1-prime", "W2", confounded=("W1",))
+        self.assertEqual(code, 5, output)
+        self.assertIn("  blocker: session named both as registration and battery-confounded", output)
+        code, printed, _ = self.prepare(self.fixture, "--battery-confounded-session-id", "W1",
+                                        registration=("W1", "W1-prime", "W2"))
+        self.assertEqual((code, printed),
+                         (3, "REFUSED: session named both as registration and battery-confounded\n"))
+
+    def test_parity_p5_uncommitted_pin_is_the_ledger_refusal_on_both(self) -> None:
+        self.assertEqual(self.scenario_p5(), [])
+
+    def test_parity_clean_window_declared_confounded_refuses_on_both(self) -> None:
+        code, output = self.check_main(self.clean_fixture, "W1-prime", "W2", confounded=("W1",))
+        self.assertEqual(code, 5, output)
+        self.assertIn("  blocker: clean session declared confounded: W1", output)
+        code, printed, _ = self.prepare(self.clean_fixture, "--battery-confounded-session-id", "W1")
+        self.assertEqual(code, 3)
+        self.assertIn("battery-confounded set mismatch: clean session declared confounded: W1", printed)
+
+    def test_parity_a_non_revision_five_registration_skips_the_battery_gate_on_both(self) -> None:
+        fixture = self.two_epochs_fixture()
+        code, output = self.check_main(fixture, "H1", digest=False)
+        dry_run = output.split(issuer.DRY_RUN_HEADER, 1)[1]
+        self.assertNotIn("--preregistration and --preregistration-sha256 are required", dry_run)
+        self.assertNotIn("battery", dry_run)
+        self.assertEqual(code, 0, output)
+        with mock.patch.object(issuer.battery_float, "authenticate_committed_verdict",
+                               side_effect=AssertionError("battery gate ran")) as seam:
+            code, printed, _ = self.prepare(fixture, registration=("H1",))
+        self.assertEqual(code, 3)
+        self.assertNotIn("battery", printed)
+        seam.assert_not_called()
+
+    def test_r11_named_windows_of_two_epochs_refuse_on_both(self) -> None:
+        # §3.12 (xi).
+        fixture = self.two_epochs_fixture()
+        code, output = self.check_main(fixture, "H1", "W1")
+        self.assertEqual(code, 5, output)
+        self.assertIn("  blocker: registration: rows disagree on the identity epoch", output)
+        code, printed, _ = self.prepare(fixture, registration=("H1", "W1"))
+        self.assertEqual((code, printed), (3, "REFUSED: registration: rows disagree on the identity epoch\n"))
+
+    def test_check_without_the_declaration_prints_no_declaration_line(self) -> None:
+        # §3.8 step 6: with no flag the dry run's lines are today's.
+        code, output = self.check_main(self.fixture, "W1-prime", "W2")
+        self.assertNotIn("battery-confounded declared", output)
+        args = issuer.build_parser().parse_args(["check", "--battery-confounded-session-id", "W1"])
+        self.assertEqual(args.battery_confounded_session_id, ["W1"])
+
+    # §3.12 (viii): mutation kills, with the branch's importlib pattern.
+
+    def load_mutant(self, module: ModuleType, *edits: tuple[str, str]) -> ModuleType:
+        source = Path(module.__file__).read_text(encoding="utf-8")
+        for old, new in edits:
+            self.assertEqual(source.count(old), 1, old)
+            source = source.replace(old, new)
+        mutant = ModuleType(f"{module.__name__}_mutant")
+        mutant.__file__ = module.__file__
+        sys.modules[mutant.__name__] = mutant
+        try:
+            exec(compile(source, module.__file__, "exec"), mutant.__dict__)
+        finally:
+            del sys.modules[mutant.__name__]
+        return mutant
+
+    def assert_killed(self, tool: ModuleType, *scenarios) -> None:
+        for scenario in scenarios:
+            try:
+                if scenario(tool):
+                    return
+            except Exception:  # a crash under the mutant is a kill
+                return
+        self.fail(f"mutant survived {[scenario.__name__ for scenario in scenarios]}")
+
+    def test_mutation_kills_for_the_seam_collector_and_dry_run(self) -> None:
+        seam = issuer.battery_float
+        mutants = {
+            "a: the seam skips validate_window": (seam, (
+                ("        recomputed = validate_window(session)\n", "        recomputed = None\n"),
+                ("    difference = compare_verdict(record, recomputed)\n",
+                 "    difference = compare_verdict(record, recomputed or record)\n"),
+            ), (self.scenario_forged_records, self.scenario_custody_then_parity)),
+            "b: the seam skips compare_verdict": (seam, (
+                ("    difference = compare_verdict(record, recomputed)\n", "    difference = None\n"),
+            ), (self.scenario_forged_records,)),
+            "c: the collector continues past a refusal": (issuer, ((
+                "            verdicts[session_id] = battery_float.authenticate_committed_verdict(\n"
+                "                repo_root, session=by_id[session_id],\n"
+                "                preregistration_sha256=preregistration_sha256,\n"
+                "            )\n",
+                "            try:\n"
+                "                verdicts[session_id] = battery_float.authenticate_committed_verdict(\n"
+                "                    repo_root, session=by_id[session_id],\n"
+                "                    preregistration_sha256=preregistration_sha256,\n"
+                "                )\n"
+                "            except battery_float.BatteryVerdictRefusal:\n"
+                "                continue\n"),
+            ), (self.scenario_custody_then_parity,)),
+            "d: the collector stops at the named windows": (issuer, (
+                ("    authenticate(eligible - set(verdicts))\n", ""),
+            ), (self.scenario_omitted, self.scenario_custody_then_parity)),
+            "e: the dry run drops the policy": (issuer, (
+                ("    if epoch is not None and not battery_gate_blocked:\n",
+                 "    if False:\n"),
+            ), (self.scenario_omitted, self.scenario_p3)),
+            "f: the dry run swallows a seam refusal": (issuer, (
+                ("                blockers.append(_dry_run_refusal_line(refusal, session_ids))\n"
+                 "                battery_gate_blocked = True\n", "                pass\n"),
+            ), (self.scenario_custody_then_parity,)),
+            "g: the collector finds no A-7 rows": (issuer, (
+                ("        foreign_rows=_foreign_rows(snapshot, registration | non_pass, target_epoch, "
+                 "dispositions),\n", "        foreign_rows=(),\n"),
+            ), (self.scenario_p3,)),
+            "h: the collector skips the ledger refusal": (issuer, (
+                ("    refuse_ledger(snapshot)\n    by_id = snapshot.bracket_session_by_id\n",
+                 "    by_id = snapshot.bracket_session_by_id\n"),
+            ), (self.scenario_p5,)),
+        }
+        for label, (module, edits, scenarios) in mutants.items():
+            with self.subTest(mutant=label):
+                mutant = self.load_mutant(module, *edits)
+                if module is seam:
+                    tool = self.load_mutant(issuer)
+                    tool.battery_float = mutant
+                else:
+                    tool = mutant
+                self.assert_killed(tool, *scenarios)
+
+    # §3.12 (ix): the cadence report through the seam.
+
+    def test_r9_cadence_report_refuses_through_the_seam_and_checks_the_kind(self) -> None:
+        from scripts import calibration_cadence_report as report
+        fixture = self.forged_record_fixture(
+            "forged-missing", self.values, "battery_float_evidence_missing")
+        kwargs = {"ledger": fixture["ledger"], "head_pin": fixture["pin"], "session_id": "W1",
+                  "preregistration_sha256": self.registration_sha}
+        window = fixture["runs"] / "instrument_validation/W1-*"
+        with self.assertRaises(ValueError) as caught:
+            report.report_window("W1", window, **kwargs)
+        self.assertEqual(str(caught.exception),
+                         "battery-float harvest verdict for W1 cannot be re-established from raw bytes "
+                         "(status recorded battery_float_evidence_missing recomputed pass); custody failure")
+        self.assertIsInstance(caught.exception.__cause__, issuer.battery_float.BatteryVerdictRefusal)
+        clean = self.three_clean_windows()
+        raw = clean["runs"] / "instrument_validation/W1-d01/raw/battery_float.pre.ioreg"
+        kept = raw.read_bytes()
+        raw.write_bytes(kept + b"\n")
+        try:
+            with self.assertRaisesRegex(ValueError, r"^battery-float custody failure for W1: d01/pre expected "
+                                                    r"[0-9a-f]{64} observed [0-9a-f]{64}; restore the custody "
+                                                    r"bytes byte-exact from the harvest archive$"):
+                report.report_window("W1", clean["runs"] / "instrument_validation/W1-*",
+                                     ledger=clean["ledger"], head_pin=clean["pin"], session_id="W1",
+                                     preregistration_sha256=self.registration_sha)
+        finally:
+            raw.write_bytes(kept)
+        with tempfile.TemporaryDirectory() as tmp:
+            bracket = build_derivation_ledger(Path(tmp) / "bracket", [Slot("0.03"), Slot("0.03")],
+                                              session_id="B1", session_kind="bracket")
+            with mock.patch.object(report.battery_float, "authenticate_committed_verdict",
+                                   side_effect=AssertionError("seam reached")):
+                with self.assertRaisesRegex(ValueError, "^session B1 is kind bracket, not derivation$"):
+                    report.report_window("B1", bracket["runs"] / "instrument_validation",
+                                         ledger=bracket["ledger"], head_pin=bracket["pin"],
+                                         session_id="B1", preregistration_sha256=self.registration_sha)
+        charging = self.fresh("cad-seam", ("W1", [Slot("0.03", battery_mode="charging", native_frames=True)]))
+        with mock.patch.object(report.battery_float, "authenticate_committed_verdict",
+                               wraps=report.battery_float.authenticate_committed_verdict) as seam:
+            row = report.report_window("W1", charging["runs"] / "instrument_validation",
+                                       ledger=charging["ledger"], head_pin=charging["pin"],
+                                       session_id="W1", preregistration_sha256=self.registration_sha)
+        self.assertEqual(row["diagnostic_only"], "battery_float_confounded")
+        seam.assert_called_once()
+
+
+def _bundle_without_battery(custody: Path, attempt_id: str, slot: Slot) -> None:
+    """A capture written before A-R5b: its evidence has no `battery_float` key."""
+    _ORIGINAL_WRITE_BUNDLE(custody, attempt_id, slot)
+    evidence = custody / "instrument_evidence.json"
+    body = json.loads(evidence.read_text(encoding="utf-8"))
+    del body["battery_float"]
+    evidence.write_text(json.dumps(body), encoding="utf-8")
+    for phase in ("pre", "post"):
+        (custody / f"raw/battery_float.{phase}.ioreg").unlink(missing_ok=True)
+
+
+_ORIGINAL_WRITE_BUNDLE = build_module._write_bundle
 
 
 if __name__ == "__main__":

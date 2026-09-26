@@ -44,7 +44,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     content_id_from_artifact_hashes, load_calibration_ledger_snapshot,
 )
 from scripts.issue_calibration_acceptance_generation import (  # noqa: E402
-    PrepareRefusal, _read_member_evidence, anchor_v3_replay_outcome,
+    PrepareRefusal, REVISION_FIVE_EPOCH, _read_member_evidence, anchor_v3_replay_outcome,
 )
 
 VERDICT_EXITS = {"pass": 0, "fail": 4, "inconclusive": 5}
@@ -78,6 +78,14 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
     snapshot = _load_snapshot(args)
     session = snapshot.bracket_session_by_id.get(args.session_id)
     _refuse(session is None, "session_absent")
+    # Obligation R2-10 (refuter M-3): registration Revision 5 registers no
+    # continuation branch for epoch 25G83/v3 ("no PASS continuation branch or
+    # FAIL branch for this epoch"), so such a session is refused outright,
+    # before any member evidence is read and before anything is written.
+    _refuse(any(dict(row.identity_epoch) == REVISION_FIVE_EPOCH
+                for row in session.finalized_slots.values()),
+            "revision_five_session: registration Revision 5 registers no continuation "
+            "branch for epoch 25G83/v3; this tool does not judge it")
     _refuse(session.session_kind != SESSION_KIND_DERIVATION, "session_not_derivation")
     _refuse(session.state not in TERMINAL_STATES, "session_not_terminal")
     _refuse(len(session.declared_slots) != DECLARED_SLOT_COUNT, "session_requires_12_declared_slots")
@@ -344,6 +352,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--head-pin", type=Path, required=True, help="committed digest and sequence of the ledger head")
     prepare.add_argument("--acceptance", type=Path, required=True, help="byte-pinned issued acceptance supplying both screens")
     prepare.add_argument("--repo-root", type=Path, required=True, help="repository authenticating the committed head pin")
+    prepare.add_argument("--preregistration-sha256",
+                         help="accepted for invocation compatibility; Revision-5 sessions are refused outright")
     prepare.add_argument("--d102-addendum-date", required=True, help="owner ruling date, YYYY-MM-DD; preparation does not issue the addendum")
     prepare.add_argument("--out", type=Path, required=True, help="candidate output outside every configs/calibration directory")
     prepare.add_argument("--force", action="store_true", help="allow replacement of the explicitly named output")
