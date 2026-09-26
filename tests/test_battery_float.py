@@ -659,6 +659,25 @@ class MandatoryContainerAndJournalTests(unittest.TestCase):
                     with self.assertRaisesRegex(battery_float.CustodyUnreadable, "unreadable"):
                         authenticate(root)
 
+    def test_t16_a_valid_json_in_another_encoding_refuses(self):
+        # Delta r4 Astra R1: json.loads(bytes) auto-detects UTF-16/32, so a
+        # re-encoded, otherwise passing container returned pass.
+        kinds = (("quiet", "session.json", lambda root: self.quiet(root),
+                  battery_float.authenticate_quiet_session),
+                 ("bundle", "metadata.json", lambda root: BundleAuthenticationTests().bundle(root),
+                  battery_float.authenticate_bundle),
+                 ("capture", "instrument_evidence.json", self._capture,
+                  battery_float.authenticate_capture))
+        for kind, name, make, authenticate in kinds:
+            for encoding in ("utf-16", "utf-32"):
+                with self.subTest(kind=kind, encoding=encoding), tempfile.TemporaryDirectory() as tmp:
+                    make(tmp)
+                    path = Path(tmp) / name
+                    self.assertEqual(authenticate(tmp).status, "pass")
+                    path.write_bytes(path.read_text(encoding="utf-8").encode(encoding))
+                    with self.assertRaisesRegex(battery_float.CustodyUnreadable, f"{name} unreadable"):
+                        authenticate(tmp)
+
     @staticmethod
     def _capture(root):
         pair = PairAuthenticationTests().pair(root)

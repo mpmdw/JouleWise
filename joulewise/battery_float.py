@@ -824,7 +824,8 @@ def _required_file(root: Path, name: str) -> bytes:
 def _required_object(root: Path, name: str) -> dict[str, Any]:
     body = _required_file(root, name)
     try:
-        value = json.loads(body, object_pairs_hook=_json_pairs(name))
+        # Decode strictly: json.loads(bytes) would auto-detect UTF-16/32.
+        value = json.loads(body.decode("utf-8"), object_pairs_hook=_json_pairs(name))
     except CustodyFailure:
         raise
     except (ValueError, UnicodeError) as exc:
