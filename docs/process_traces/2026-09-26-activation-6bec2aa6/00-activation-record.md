@@ -108,7 +108,7 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - Then the S0 cold Fable final pass, the integration full suite and the PR.
 24. **HISTORICAL-BATTERY-STATE-01, an evidence-retention fact** (read-only probe `/usr/bin/pmset -g log`, 11:19 PDT).
     - The macOS power log reaches back only to **2026-09-19 11:28** (6,458 lines), and it rolls over.
-    - Its 22 `Using AC(Charge: N)` summaries show the charge held at 80 % from 09-20 onward. That is consistent with the 80 % cap before #420, but it is not per-capture evidence.
+    - Its 22 charge summaries break down as 16 × `Using AC(Charge: 80)`, 4 × `Using AC(Charge: 100)` (after Ed raised the cap, #420) and **2 × `Using Batt(Charge: 80)`**, meaning the machine was running on battery at those instants. These are sparse assertion-summary samples, not per-capture evidence.
     - **Consequence:** no OS-log battery evidence exists for any capture before 09-19. Those numbers can only be disclosed as "battery state unobserved (pre-directive)" or re-measured, and the lane text in Final texts v1.1 text 19 already allows for that.
     - The 09-19 → 09-26 window is lost within days unless archived. It is archived read-only at `~/night-archive/pmset-log/pmset-g-log-*.txt` with a `.sha256` sidecar.
     - The lane should re-archive each week until it lands.
