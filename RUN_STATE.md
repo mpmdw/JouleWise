@@ -10,23 +10,31 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION ed17a643 — from 14:17 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the running log. The resume point is its last item.
+**▶▶ ACTIVATION ed17a643 — 14:17 PDT 09-25 → ≈06:45 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the full account; items 1–53 are its log.
 
 **MERGED:**
 - #418, the Revision 5 seal → `e9ed7a98`.
-- #423, A-R5b v1.1 battery-float amendment (directive #421, approved in #422) → `935cef2d`. The registration digest is now `81b65f08…ddf1`.
-- #419, TIER-01 light tier → `cab01506`. #415 is closed.
+- #423, the A-R5b battery-float amendment (directive #421, approved in #422) → `935cef2d`. The registration digest is now `81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1`.
+- #419, the TIER-01 light tier → `cab01506`; #415 is closed.
+- **#424 BFG-D**, the battery gate for derivation windows: see the record's last item for its merge state.
 
-**W1 is held on BFG-D** (branch `feat/2026-09-25-bfg-d`): the battery gate code, the committed per-window harvest verdict, and the whitelist ioreg grammar. Three cold gates ruled it: BATTERY-FLOAT-01, HARVEST-VERDICT-FINAL-01 and BFG-D-PARSER-ESC-01, each with a paired refuter and, where one was needed, an addendum.
-- Fix round 2 (contract `bfg-d/18-fix-contract-r6.md`) is running on a fresh Opus seat.
-- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item.
-- Then run BFG-D's round-2 delta (Sol plus Astra, a different family from the implementer), the cold Fable final pass, the integration replay and CI, and merge.
-- Then the bookkeeping PR for this branch (light tier), which must reach main before the W1 notice.
-- Then arm W1 with scripts `docs/2026-09-25-817355d2-w1arm` @ `c79816c9`. Fill `__H__`, `__T0__` and `__PREREG__` = `81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1`.
+Four cold gates govern BFG-D: BATTERY-FLOAT-01, HARVEST-VERDICT-FINAL-01, BFG-D-PARSER-ESC-01 and CONSUMER-DRIFT-ESC-01. Each ran with a paired refuter plus an addendum. The final passes: Fable ruled MERGE; Opus dissented with M-1, which is carried as lane BFGD-VERDICT-MERGE-LIVENESS-01.
 
-Other owner notes:
-- Codex had a 401 outage from 15:40 to 18:41. It has recovered.
-- Seat 4b is closed and Ed is away for about a day. Owner items go by email.
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item, then:
+1. If #424 is merged and the bookkeeping PR for `docs/2026-09-25-152c9255` is merged, arm **W1** under NIGHT_HANDBACK, using the scripts on `docs/2026-09-25-817355d2-w1arm` @ `c79816c9` with its README prerequisites checklist:
+   - Fill `__H__` = main after #424 and the bookkeeping merge, `__T0__`, and `__PREREG__` = `81b65f08…ddf1`.
+   - The frozen plan is `9ab4776f…a072`.
+   - The battery gate runs at step0 and again before publication.
+   - Include the #422 digest pin, then remove the two `.claude/settings.local.json` entries #422 names.
+   - Seat 4b is gone; check with `ps` for other interactive sessions and email Ed if any are found.
+2. If #424 is not merged: finish its gate (row 9 replay, CI), then merge.
+
+Lanes now open:
+- BATTERY-FLOAT-GATE-01 (BFG-S) must land before any non-derivation window.
+- BFGD-VERDICT-MERGE-LIVENESS-01 must land before the first issuance.
+- TEST-LOAD-JOIN-LADDER-FLAKE-01.
+
+Codex had an auth outage from 15:40 to 18:41 and recovered on its own.
 
 **▶▶ ACTIVATION 817355d2 — from 13:52 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-817355d2/00-activation-record.md) is the running log.
 - **Revision 5 seal:** branch `feat/2026-09-25-rev5-seal`, commit `23dd9909` (values bench-verified; placeholder count 0; 234 tests OK). It is under the full gate: a cold Fable final pass, Opus and Sol lenses, and a full-suite replay.
