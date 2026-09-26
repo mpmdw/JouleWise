@@ -734,7 +734,24 @@ def make_t0_fixture(
 
 
 def _probe_result(argv, cwd, exit_code=0, stdout="", stderr=""):
+    # A bytes stdout is what `_execute_probe` captures (the battery probe's
+    # grammar reads those exact bytes, obligation R2-11).
+    if isinstance(stdout, bytes):
+        return t0._ProbeResult(tuple(argv), str(Path(cwd).resolve()), exit_code,
+                               stdout.decode("utf-8", errors="replace"), stderr, stdout)
     return t0._ProbeResult(tuple(argv), str(Path(cwd).resolve()), exit_code, stdout, stderr)
+
+
+def _float_ioreg(name="float.ioreg", *, age_s=0) -> bytes:
+    """A real capture (tests/fixtures/battery_float) whose `UpdateTime` is
+    `age_s` before the authoring clock's now: fixed under the synthetic clock
+    (so re-authoring stays byte-idempotent), fresh under the real one."""
+    from datetime import datetime
+    now = datetime.fromisoformat(t0._production_clock().utc_now().replace("Z", "+00:00"))
+    raw = (Path(__file__).parent / "fixtures/battery_float" / name).read_bytes()
+    return raw.replace(
+        b'"UpdateTime" = 1790373525', f'"UpdateTime" = {int(now.timestamp()) - age_s}'.encode(), 1
+    )
 
 
 def passing_probe(argv, *, cwd):
@@ -763,6 +780,8 @@ def passing_probe(argv, *, cwd):
         return _probe_result(command, cwd, stdout="Now drawing from 'AC Power'\n")
     if command[-2:] == ("-g", "custom"):
         return _probe_result(command, cwd, stdout=" lowpowermode 0\n")
+    if command == t0._battery_float.IOREG_BATTERY_ARGV:
+        return _probe_result(command, cwd, stdout=_float_ioreg())
     if "SPPowerDataType" in command:
         return _probe_result(
             command,
@@ -1018,40 +1037,40 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             1,
         )
 
-    def test_issuance_refuses_t0_when_r1_batch_is_stale_by_600s_plus_1ns(
+    def test_issuance_refuses_t0_when_r1_batch_is_stale_by_610s_plus_1ns(
         self,
     ) -> None:
         with self.assertRaises(T0EvidenceAuthoringError) as caught:
-            self._author_with_r1_age(600_000_000_001)
+            self._author_with_r1_age(610_000_000_001)
         self.assertEqual(
             caught.exception.reason_code,
             "evidence_author_t0_predicate_refused",
         )
 
-    def test_issuance_passes_t0_when_r1_batch_is_600s_minus_1ns_old(
+    def test_issuance_passes_t0_when_r1_batch_is_610s_minus_1ns_old(
         self,
     ) -> None:
         self.assertEqual(
-            self._author_with_r1_age(599_999_999_999)["status"],
+            self._author_with_r1_age(609_999_999_999)["status"],
             "PASS",
         )
 
-    def test_issuance_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+    def test_issuance_t0_liveness_bound_passes_at_exactly_610s(self) -> None:
         self.assertEqual(
-            self._author_with_r1_age(600_000_000_000)["status"],
+            self._author_with_r1_age(610_000_000_000)["status"],
             "PASS",
         )
 
     def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
-        """The ruled 600 s = (post-R1 ``_fresh_probe`` sites) × 45 s + 105 s.
+        """The ruled 610 s = eleven 45 s sites + one 10 s battery site + 105 s.
 
         What this test pins: the PROVENANCE ARITHMETIC of cold gate T26
         item 3, which states the constant as eleven governed post-R1 probe
-        sites times ``_PROBE_TIMEOUT_SECONDS`` plus 105 s of ungoverned
+        sites times ``_PROBE_TIMEOUT_SECONDS``, one 10 s battery site, plus 105 s of ungoverned
         work. Each factor is read from the code (the sites by an AST
         census of direct ``_fresh_probe`` calls, the timeout from the
         module constant), so an edit to either factor fails here while
-        the constant stays 600 s. The one site inside
+        the constant stays 610 s. The one site inside
         ``_fresh_clock_reference_batch`` IS R1 and is excluded.
 
         What this test does NOT protect: the runtime R1→stamp envelope.
@@ -1061,8 +1080,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         stamp, a retry inside ``_fresh_probe``, or a wait in another
         module all change the envelope while this test stays green. The
         ruling's 2026-09-02 correction already records the fixed subtotal
-        as 715 s (495 s probes + 220 s git ceilings) against the ruled
-        600 s; the runtime interval is unmeasured and is carried by kernel
+        as 725 s (505 s probes + 220 s git ceilings) against the ruled
+        610 s; the runtime interval is unmeasured and is carried by kernel
         row ``T0-LIVENESS-BOUND-EMPIRICAL-01`` (the census-the-resource
         hardening is ``T0-PROBE-CENSUS-RESOURCE-01``).
 
@@ -1129,11 +1148,16 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
         post_r1_sites = len(direct_call_names) - 1
         self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
-        self.assertEqual(post_r1_sites, 11, sites_by_function)
+        self.assertEqual(post_r1_sites, 12, sites_by_function)
         self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
         self.assertEqual(
             readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
-            (post_r1_sites * t0._PROBE_TIMEOUT_SECONDS + 105) * 1_000_000_000,
+            (
+                (post_r1_sites - 1) * t0._PROBE_TIMEOUT_SECONDS
+                + t0._PROBE_TIMEOUT_OVERRIDES[t0._battery_float.IOREG_BATTERY_ARGV]
+                + 105
+            )
+            * 1_000_000_000,
         )
 
     def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
@@ -2839,6 +2863,83 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
                 finally:
                     temporary.cleanup()
+
+    def test_power_row_battery_probe_passes_exact_bytes_and_refuses_cr_smuggle(self) -> None:
+        # Obligation R2-11 (refuter M-4): `_execute_probe` keeps the child's
+        # exact stdout bytes and the power row hands those bytes, not the
+        # decoded text, to the grammar.  A real child writes the refuter's
+        # CR-smuggled output.
+        import dataclasses
+        from datetime import datetime
+        import sys
+        from tests import battery_float_corpus
+        execute = t0._execute_probe
+        now = int(datetime.fromisoformat(t0._production_clock().utc_now().replace("Z", "+00:00")).timestamp())
+        smuggle = battery_float_corpus.negatives(now)["cr_smuggled_required"]
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        children = []
+        def probe(argv, *, cwd):
+            if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
+                child = execute((sys.executable, "-c",
+                                 "import sys; sys.stdout.buffer.write(bytes.fromhex(sys.argv[1]))",
+                                 smuggle.hex()), cwd=cwd)
+                children.append(child)
+                return dataclasses.replace(child, argv=tuple(argv))
+            return passing_probe(argv, cwd=cwd)
+        with author_environment(repository, probe=probe), self.assertRaises(
+            T0EvidenceAuthoringError
+        ) as caught:
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
+        self.assertRegex(str(caught.exception), "battery float probe error: .*framing: byte")
+        [child] = children
+        self.assertEqual(child.stdout_bytes, smuggle)
+        self.assertIn("\r", child.stdout)
+
+    def test_power_row_refuses_charging_and_stale_battery_and_records_float(self) -> None:
+        # Final texts v1.1 §5.3 item 5: the t0 power row's own ioreg probe.
+        cases = (
+            ("charging", "charging-synthetic-from-real.ioreg", 0, "battery not at float"),
+            ("stale", "float.ioreg", 181, "battery float probe error: .*UpdateTime stale"),
+        )
+        for label, name, age_s, detail in cases:
+            with self.subTest(case=label):
+                temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+                try:
+                    def probe(argv, *, cwd, name=name, age_s=age_s):
+                        if tuple(argv) == t0._battery_float.IOREG_BATTERY_ARGV:
+                            return _probe_result(argv, cwd, stdout=_float_ioreg(name, age_s=age_s))
+                        return passing_probe(argv, cwd=cwd)
+                    with author_environment(repository, probe=probe), self.assertRaises(
+                        T0EvidenceAuthoringError
+                    ) as caught:
+                        author_arm_readiness_evidence_t0(pack, custody)
+                    self.assertEqual(caught.exception.kind, "POWER_PREFLIGHT")
+                    self.assertRegex(str(caught.exception), detail)
+                    self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+                finally:
+                    temporary.cleanup()
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        seen = []
+        def recording_probe(argv, *, cwd):
+            seen.append(tuple(argv))
+            return passing_probe(argv, cwd=cwd)
+        with author_environment(repository, probe=recording_probe):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertIn(t0._battery_float.IOREG_BATTERY_ARGV, seen)
+        self.assertEqual(t0._PROBE_TIMEOUT_OVERRIDES, {t0._battery_float.IOREG_BATTERY_ARGV: 10})
+        source = json.loads(
+            (custody / pack.name / t0._SOURCE_DIRECTORY / "t0-power-path.json").read_text()
+        )
+        observation = source["derivation"]["battery_float"]
+        self.assertEqual(observation["phase"], "t0_power_row")
+        self.assertTrue(observation["passed"])
+        self.assertIn(
+            list(t0._battery_float.IOREG_BATTERY_ARGV),
+            [probe["argv"] for probe in source["probes"]],
+        )
 
     def test_existing_namespace_is_append_only_boot_bound_and_tamper_evident(self) -> None:
         temporary, repository, pack, custody, _context, inputs = make_t0_fixture()

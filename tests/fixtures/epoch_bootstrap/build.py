@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
+import plistlib
 import subprocess
 import sys
+from types import SimpleNamespace
 from typing import Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +29,7 @@ from joulewise.calibration_ledger import (
     finalize_bracket_session_slot,
     load_calibration_ledger_snapshot,
 )
+from joulewise import battery_float
 from joulewise.uncertainty_evidence import CLOCK_ANCHOR_UNRESOLVED, CLOCK_METHOD_V3
 from tests.git_fixture import init_git_fixture
 
@@ -56,6 +61,11 @@ T1_BINDINGS = {
     "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
 }
 SESSION_ID = "derivation-night-1"
+# The tracked registration's digest: the default a fixture's harvest verdict
+# records are written under (obligations v1.1 §4.2 `preregistration_sha256`).
+PREREGISTRATION_SHA256 = hashlib.sha256(
+    (REPO_ROOT / "configs/calibration/preregistration_d079_epoch_25g83_rev1.md").read_bytes()
+).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -73,12 +83,38 @@ class Slot:
     # The method the recorded clock anchor claims.  Anything other than the
     # anchor-v3 method is not an anchor-v3 replay at all.
     anchor_method: str = CLOCK_METHOD_V3
+    battery_mode: str = "pass"
+    native_frames: bool = False
+    native_frame_lengths_ms: tuple[int, ...] | None = None
 
 
 def _write_bundle(custody: Path, attempt_id: str, slot: Slot) -> None:
     (custody / "raw").mkdir(parents=True)
-    (custody / "raw" / "powermetrics.plist").write_bytes(b"raw-" + attempt_id.encode())
+    (custody / "raw" / "powermetrics.plist").write_bytes(
+        b"\x00".join(plistlib.dumps({
+            "timestamp": datetime.fromtimestamp(100 + index, timezone.utc),
+            "elapsed_ns": (slot.native_frame_lengths_ms[index] * 1_000_000
+                           if slot.native_frame_lengths_ms is not None else 132_000_000),
+            "processor": {"cpu_power": 10000, "gpu_power": 0, "ane_power": 0,
+                          "cpu_energy": 1320, "gpu_energy": 0, "ane_energy": 0},
+        }) for index in range(len(slot.native_frame_lengths_ms) if slot.native_frame_lengths_ms is not None else 4)) + b"\x00"
+        if slot.native_frames else b"raw-" + attempt_id.encode()
+    )
     (custody / "events.jsonl").write_text('{"timestamp_s": 99.0}\n', encoding="utf-8")
+    battery_records = {}
+    if slot.battery_mode != "missing":
+        fixture_name = ("charging-synthetic-from-real.ioreg"
+                        if slot.battery_mode == "charging" else "float.ioreg")
+        raw = (REPO_ROOT / "tests/fixtures/battery_float" / fixture_name).read_bytes()
+        raw = raw.replace(b'"UpdateTime" = 1790373525', b'"UpdateTime" = 100', 1)
+        for phase in ("pre", "post"):
+            raw_path = f"raw/battery_float.{phase}.ioreg"
+            (custody / raw_path).write_bytes(raw)
+            record, _ = battery_float.observe(
+                phase=f"slot_{phase}", wall_time_s=100, raw_path=raw_path,
+                runner=lambda argv: SimpleNamespace(args=argv, stdout=raw, stderr=b"", returncode=0),
+            )
+            battery_records[phase] = record
     if slot.unresolved_detail is None:
         anchor = {
             "method": slot.anchor_method,
@@ -103,7 +139,8 @@ def _write_bundle(custody: Path, attempt_id: str, slot: Slot) -> None:
         f'"validation_id": "{attempt_id}", '
         f'"b_fiducial_s": {slot.evidence_lexeme or slot.b_fiducial_s}, '
         f'"clock_anchor_resolved": {"true" if resolved else "false"}, '
-        f'"clock_anchor": {json.dumps(anchor)}'
+        f'"clock_anchor": {json.dumps(anchor)}, '
+        f'"battery_float": {json.dumps(battery_records)}'
         "}\n",
         encoding="utf-8",
     )
@@ -119,11 +156,14 @@ def build_derivation_ledger(
     session_id: str = SESSION_ID,
     session_kind: str = SESSION_KIND_DERIVATION,
     second_session: tuple[str, Sequence[Slot]] | None = None,
+    third_session: tuple[str, Sequence[Slot]] | None = None,
     fill_slots: int | None = None,
     abort_reason: str | None = None,
     second_session_epoch: Mapping[str, object] | None = None,
     t1_bindings: Mapping[str, object] | None = None,
     session_epoch: Mapping[str, object] | None = None,
+    verdict_records: bool = False,
+    preregistration_sha256: str = PREREGISTRATION_SHA256,
 ) -> dict[str, Path]:
     """Create a Git-committed ledger holding one or two closed sessions.
 
@@ -131,14 +171,24 @@ def build_derivation_ledger(
     without naming it in the registration, which is the addendum A-7
     counterfactual: valid, target-epoch rows that belong to no registered
     session.
+
+    ``verdict_records`` writes each recordable session's battery-float
+    harvest verdict (obligations v1.1 §4.2) and commits it with the terminal
+    pin in the same commit, as the harvest's step (iv) does.
     """
 
     root.mkdir(parents=True, exist_ok=True)
     init_git_fixture(root, "-q")
+    # `battery-verdict` records the digest of the judging module under
+    # --repo-root, so the fixture checkout carries the module's bytes.
+    (root / "joulewise").mkdir()
+    (root / "joulewise" / "battery_float.py").write_bytes(
+        (REPO_ROOT / "joulewise" / "battery_float.py").read_bytes())
     runs = root / "runs"
     runs.mkdir()
     ledger = runs / "calibration_observation_ledger.jsonl"
-    pin = runs / "calibration_ledger_head_pin.json"
+    pin = root / "configs/calibration/calibration_ledger_head.json"
+    pin.parent.mkdir(parents=True, exist_ok=True)
     pin.write_text(
         json.dumps(
             {"sequence": 0, "head_digest": "0" * 64, "ledger_schema": LEDGER_SCHEMA},
@@ -164,11 +214,97 @@ def build_derivation_ledger(
             second_session_epoch or TARGET_EPOCH,
             t1_bindings or T1_BINDINGS,
         )
-    snapshot = load_calibration_ledger_snapshot(
-        ledger, pin, require_committed_pin=False, verify_custody=False,
-        mode="read_replay", repo_root=root,
+    if third_session is not None:
+        _write_session(
+            ledger, runs, pin, third_session[0], third_session[1],
+            SESSION_KIND_DERIVATION, None, None, TARGET_EPOCH, t1_bindings or T1_BINDINGS,
+        )
+    fixture = {"root": root, "ledger": ledger, "pin": pin, "runs": runs}
+    written = [session_id, *(extra[0] for extra in (second_session, third_session) if extra)]
+    _terminal_pin(fixture, written if verdict_records else (), preregistration_sha256)
+    return fixture
+
+
+def add_session(
+    fixture: dict[str, Path],
+    session_id: str,
+    slots: Sequence[Slot],
+    *,
+    verdict_records: bool = False,
+    preregistration_sha256: str = PREREGISTRATION_SHA256,
+) -> None:
+    """Append one more closed derivation session to an existing fixture.
+
+    A later window of the same epoch: it is written after the committed
+    terminal pin, then pinned and (optionally) recorded in its own commit.
+    """
+
+    _write_session(
+        fixture["ledger"], fixture["runs"], fixture["pin"], session_id, slots,
+        SESSION_KIND_DERIVATION, None, None, TARGET_EPOCH, T1_BINDINGS,
     )
-    pin.write_text(
+    _terminal_pin(fixture, (session_id,) if verdict_records else (), preregistration_sha256)
+
+
+def write_verdict_record(
+    fixture: dict[str, Path], session_id: str, *,
+    preregistration_sha256: str = PREREGISTRATION_SHA256,
+    record: Mapping[str, object] | None = None,
+) -> Path:
+    """Write (not commit) one session's harvest verdict file.
+
+    ``record`` overrides the computed record: the direct construction a test
+    needs where the production writer would refuse.
+    """
+
+    root = fixture["root"]
+    if record is None:
+        snapshot = load_calibration_ledger_snapshot(
+            fixture["ledger"], fixture["pin"], require_committed_pin=False,
+            verify_custody=False, mode="read_replay", repo_root=root,
+        )
+        head = subprocess.run(("git", "-C", str(root), "rev-parse", "HEAD"),
+                              check=True, capture_output=True, text=True).stdout.strip()
+        record = battery_float.verdict_record(
+            snapshot.bracket_session_by_id[session_id], snapshot=snapshot,
+            preregistration_sha256=preregistration_sha256, tool_commit=head,
+            module_sha256=hashlib.sha256(
+                (root / "joulewise" / "battery_float.py").read_bytes()).hexdigest(),
+            wall_time_s=100.0,
+        )
+    path = root / battery_float.verdict_relative_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(battery_float.render_verdict(record))
+    return path
+
+
+def rerecord_verdict(fixture: dict[str, Path], session_id: str, status: str) -> None:
+    """`git rm` a committed verdict and commit a fresh one carrying ``status``.
+
+    Three ordinary commits touch the path (add, remove, re-add): the
+    delete-and-re-add route obligations v1.1 §4.3 check 2 refuses.
+    """
+
+    root = fixture["root"]
+    relative = battery_float.verdict_relative_path(session_id)
+    record = json.loads((root / relative).read_text(encoding="utf-8"))
+    record["status"] = status
+    for slot in record["slots"]:
+        slot["verdict"] = status
+    subprocess.run(("git", "-C", str(root), "rm", "-q", relative), check=True, capture_output=True)
+    _commit(root, f"remove {session_id} verdict")
+    write_verdict_record(fixture, session_id, record=record)
+    _commit(root, f"re-record {session_id} verdict")
+
+
+def _terminal_pin(
+    fixture: dict[str, Path], recorded: Sequence[str], preregistration_sha256: str,
+) -> None:
+    snapshot = load_calibration_ledger_snapshot(
+        fixture["ledger"], fixture["pin"], require_committed_pin=False,
+        verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+    )
+    fixture["pin"].write_text(
         json.dumps(
             {
                 "sequence": snapshot.head_sequence,
@@ -180,8 +316,11 @@ def build_derivation_ledger(
         + "\n",
         encoding="utf-8",
     )
-    _commit(root, "terminal pin")
-    return {"root": root, "ledger": ledger, "pin": pin, "runs": runs}
+    for session_id in recorded:
+        session = snapshot.bracket_session_by_id[session_id]
+        if session.finalized_slots and session.state in ("finalized", "aborted"):
+            write_verdict_record(fixture, session_id, preregistration_sha256=preregistration_sha256)
+    _commit(fixture["root"], "terminal pin")
 
 
 def _write_session(

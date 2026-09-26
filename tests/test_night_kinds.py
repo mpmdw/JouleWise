@@ -36,6 +36,7 @@ from scripts import gen_evidence_night
 
 from tests.git_fixture import init_git_fixture
 from tests.test_evidence_night import _census_clean_tempdir
+from tests import battery_float_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -190,8 +191,13 @@ class NightKindTests(unittest.TestCase):
         courier = stub_bin / "claude"
         courier.write_text("#!/bin/sh\necho 'courier must not run' >&2\nexit 99\n")
         courier.chmod(0o755)
-        self._path_patch = mock.patch.dict(
-            os.environ, {"PATH": str(stub_bin) + os.pathsep + os.environ.get("PATH", "")})
+        home = FIXTURE / "home"
+        self.assertTrue(battery_float_fixture.install_user_site_runner(home),
+                        "test interpreter must load the battery fixture in child Pythons")
+        self._path_patch = mock.patch.dict(os.environ, {
+            "HOME": str(home),
+            "PATH": str(stub_bin) + os.pathsep + os.environ.get("PATH", ""),
+        })
         self._path_patch.start()
         self.old_tz = os.environ.get("TZ")
         os.environ["TZ"] = "UTC"

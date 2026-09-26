@@ -22,11 +22,20 @@ from joulewise.calibration_ledger import load_calibration_ledger_snapshot
 from joulewise.schemas import CalibrationBracketingPolicy
 from scripts import issue_epoch_continuation as issuer
 from tests.fixtures.epoch_bootstrap.build import (
-    SESSION_ID, TARGET_EPOCH, T1_BINDINGS, Slot, build_derivation_ledger,
+    PREREGISTRATION_SHA256, SESSION_ID, TARGET_EPOCH, T1_BINDINGS, Slot, build_derivation_ledger,
     tamper_member_bundle,
 )
 from tests.test_calibration_bracketing import _fixture_snapshot, _synthetic_issued_snapshot
 from tests.fixtures.epoch_continuation.build import append_open_capture_session
+
+
+# Obligation R2-10 (refuter M-3): the tool refuses every registration-
+# Revision-5 session (epoch 25G83/v3, the fixture's default `TARGET_EPOCH`)
+# outright.  The continuation rule's own mechanics are therefore exercised on
+# a hypothetical successor build differing only in `os_build`.
+SUCCESSOR_EPOCH = {**TARGET_EPOCH, "os_build": "25G99"}
+SUCCESSOR = dict(session_epoch=SUCCESSOR_EPOCH, t1_bindings={**T1_BINDINGS, **SUCCESSOR_EPOCH})
+REVISION_FIVE = dict(session_epoch=TARGET_EPOCH, t1_bindings=T1_BINDINGS)
 
 
 def _seal(value):
@@ -37,6 +46,33 @@ def _seal(value):
 
 
 class EpochContinuationTests(unittest.TestCase):
+    def test_revision_five_registration_digest_missing_or_wrong_refuses(self):
+        # R2-10: whatever digest is supplied, a Revision-5 session is refused
+        # outright (there is no registration digest that licenses it).
+        self.build(**REVISION_FIVE)
+        for digest in (None, "0" * 64, PREREGISTRATION_SHA256):
+            with self.subTest(digest=digest):
+                args = issuer.build_parser().parse_args(self.args())
+                args.preregistration_sha256 = digest
+                with self.assertRaisesRegex(continuation.ContinuationRefusal, "revision_five_session"):
+                    issuer.derive_record(args)
+
+    def test_revision_five_session_with_a_passing_verdict_is_refused_outright(self):
+        # R2-10 (refuter M-3): Revision 5 registers no continuation branch, so
+        # even a 25G83/v3 night whose committed battery verdict PASSES exits
+        # non-zero, writes nothing and reads no member evidence.
+        self.build(**REVISION_FIVE)
+        from joulewise import battery_float
+        verdict = json.loads((self.fixture["root"] / battery_float.verdict_relative_path(SESSION_ID)).read_text())
+        self.assertEqual(verdict["status"], "pass")
+        with patch.object(issuer, "_read_member_evidence",
+                          side_effect=AssertionError("member evidence read")) as read:
+            rc, out, error = self.prepare()
+        self.assertEqual((rc, out), (3, ""))
+        self.assertIn("revision_five_session", error)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(read.call_count, 0)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -49,6 +85,12 @@ class EpochContinuationTests(unittest.TestCase):
         self.fixture = None
 
     def build(self, slots=None, **kwargs):
+        # Every window carries its committed harvest verdict (obligations
+        # v1.1 §4.5); the epoch is the successor build unless a test names
+        # Revision 5 (R2-10).
+        kwargs.setdefault("verdict_records", True)
+        for key, value in SUCCESSOR.items():
+            kwargs.setdefault(key, value)
         self.fixture = build_derivation_ledger(
             self.root / "fixture", slots or [Slot("0.025")] * 12, **kwargs,
         )
@@ -60,6 +102,7 @@ class EpochContinuationTests(unittest.TestCase):
             "prepare-candidate", "--session-id", SESSION_ID,
             "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
             "--repo-root", str(fixture["root"]),
+            "--preregistration-sha256", PREREGISTRATION_SHA256,
             "--acceptance", str(bracket.DEFAULT_ACCEPTANCE_BOUND_PATH),
             "--d102-addendum-date", "2026-09-10", "--out", str(self.out), *extra,
         ]
@@ -133,7 +176,7 @@ class EpochContinuationTests(unittest.TestCase):
         Only the unit-evaluation snapshot is composed; no ledger or r6 byte is
         rewritten. The prefix retains every r6 prior-set content/disposition.
         """
-        epoch = TARGET_EPOCH if epoch is None else epoch
+        epoch = SUCCESSOR_EPOCH if epoch is None else epoch
         bindings = {**T1_BINDINGS, **epoch}
         bindings["protocol_sha256"] = bracket.protocol_sha256(bracket.PROTOCOL_ID)
         candidates = []
@@ -251,6 +294,39 @@ class EpochContinuationTests(unittest.TestCase):
         self.assertIn("slots.d12.b_fiducial_s_required_for_valid_row", error)
         self.assertFalse(self.out.exists())
 
+    def test_revision_five_session_is_refused_whatever_its_battery_float(self):
+        # R2-10 supersedes lead ruling R1's battery gate here: a 25G83/v3
+        # session is refused outright, charging or evidence-missing alike.
+        for mode, status in (("charging", "revision_five_session"),
+                             ("missing", "revision_five_session")):
+            with self.subTest(mode=mode):
+                self.fixture = build_derivation_ledger(
+                    self.root / f"battery-{mode}",
+                    [Slot("0.025", battery_mode=mode)] + [Slot("0.025")] * 11,
+                    verdict_records=True,
+                )
+                rc, out, error = self.prepare()
+                self.assertEqual(rc, 3)
+                self.assertEqual(out, "")
+                self.assertIn(status, error)
+                self.assertFalse(self.out.exists())
+
+    def test_revision_five_session_refuses_without_a_record_or_on_custody_failure(self):
+        # R2-10: the outright refusal comes first, with or without a record
+        # and whatever the raw bytes' custody.
+        self.fixture = build_derivation_ledger(self.root / "unrecorded", [Slot("0.025")] * 12)
+        rc, out, error = self.prepare()
+        self.assertEqual((rc, out), (3, ""))
+        self.assertIn("revision_five_session", error)
+        self.assertFalse(self.out.exists())
+        self.build(**REVISION_FIVE)
+        (self.fixture["runs"] / "instrument_validation" / f"{SESSION_ID}-d04" / "raw"
+         / "battery_float.post.ioreg").unlink()
+        rc, out, error = self.prepare()
+        self.assertEqual((rc, out), (3, ""))
+        self.assertIn("revision_five_session", error)
+        self.assertFalse(self.out.exists())
+
     def test_candidate_recipe_marker_pin_and_check(self):
         payload = self.candidate()
         self.assertTrue(payload["candidate_not_issued"])
@@ -264,7 +340,7 @@ class EpochContinuationTests(unittest.TestCase):
             rc, out, err = self.run_cli(args)
             self.assertEqual((rc, err), (0, ""))
             self.assertEqual(json.loads(out)["ledger_cross_check"], "skipped_no_ledger_snapshot")
-            self.assertEqual(json.loads(out)["judged_epochs"], [self.artifact["identity_epoch"], TARGET_EPOCH])
+            self.assertEqual(json.loads(out)["judged_epochs"], [self.artifact["identity_epoch"], SUCCESSOR_EPOCH])
             rc, out, err = self.run_cli(args + ["--ledger", str(self.fixture["ledger"]),
                 "--head-pin", str(self.fixture["pin"]), "--repo-root", str(self.fixture["root"])])
             self.assertEqual((rc, err), (0, ""))
@@ -336,9 +412,9 @@ class EpochContinuationTests(unittest.TestCase):
 
     def test_machine_must_match_every_continued_identity_field(self):
         with self.issued():
-            for field, value in TARGET_EPOCH.items():
+            for field, value in SUCCESSOR_EPOCH.items():
                 with self.subTest(field=field):
-                    epoch = {**TARGET_EPOCH, field: value + 1 if isinstance(value, int) else value + "-other"}
+                    epoch = {**SUCCESSOR_EPOCH, field: value + 1 if isinstance(value, int) else value + "-other"}
                     result, reasons = self.evaluate(epoch=epoch)
                     self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
                     self.assertEqual(result["acceptance"]["freshness"]["status"], "stale")
@@ -560,7 +636,8 @@ class EpochContinuationTests(unittest.TestCase):
             self.assertEqual(result["acceptance"]["prospective_rederivation"]["observed_triggers"], ["new_valid_same_identity_capture_expands_observed_range"])
 
     def test_future_derivation_session_remains_in_range_trigger(self):
-        self.build(second_session=("later-night", [Slot("0.020")] * 12))
+        self.build(second_session=("later-night", [Slot("0.020")] * 12),
+                   second_session_epoch=SUCCESSOR_EPOCH)
         with self.issued():
             result, reasons = self.evaluate()
             self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
@@ -810,7 +887,8 @@ class EpochContinuationTests(unittest.TestCase):
                  ({}, 11, "session_requires_12_declared_slots")]
         for i, (kwargs, count, detail) in enumerate(cases):
             with self.subTest(detail=detail):
-                self.fixture = build_derivation_ledger(self.root / f"case-{i}", [Slot("0.025")] * count, **kwargs)
+                self.fixture = build_derivation_ledger(self.root / f"case-{i}", [Slot("0.025")] * count,
+                                                       **{**SUCCESSOR, **kwargs})
                 rc, _, error = self.prepare()
                 self.assertEqual(rc, 3)
                 self.assertIn(detail, error)
@@ -839,15 +917,25 @@ class EpochContinuationTests(unittest.TestCase):
         self.assertFalse(self.out.exists())
 
     def test_retained_epochs_must_be_unanimous_and_content_ids_recomputed(self):
-        self.build()
-        snapshot = self.snapshot()
-        session = snapshot.bracket_sessions[0]
-        name, row = next(iter(session.finalized_slots.items()))
-        for field, value, reason in (
-            ("identity_epoch", {**TARGET_EPOCH, "hardware_model": "other-machine"}, "identity_epoch_not_unanimous"),
-            ("content_id", "f" * 64, "content_id"),
+        # The unanimity refusal is exercised on a non-Revision-5 epoch: a
+        # 25G83/v3 session with any Revision-5 row is refused outright first
+        # (R2-10) -- asserted by the third case.
+        other_epoch = {**TARGET_EPOCH, "os_build": "25G99"}
+        for field, value, reason, epoch in (
+            ("identity_epoch", {**other_epoch, "hardware_model": "other-machine"},
+             "identity_epoch_not_unanimous", other_epoch),
+            ("content_id", "f" * 64, "content_id", other_epoch),
+            ("identity_epoch", {**TARGET_EPOCH, "hardware_model": "other-machine"},
+             "revision_five_session", TARGET_EPOCH),
         ):
-            with self.subTest(field=field):
+            self.fixture = build_derivation_ledger(
+                self.root / f"unanimity-{field}-{epoch['os_build']}-{len(reason)}", [Slot("0.025")] * 12,
+                session_epoch=epoch, t1_bindings={**T1_BINDINGS, **epoch}, verdict_records=True,
+            )
+            snapshot = self.snapshot()
+            session = snapshot.bracket_sessions[0]
+            name, row = next(iter(session.finalized_slots.items()))
+            with self.subTest(field=field, epoch=epoch["os_build"]):
                 altered = replace(row, **{field: value})
                 slots = dict(session.finalized_slots)
                 slots[name] = altered

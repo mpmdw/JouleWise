@@ -30,10 +30,22 @@ from joulewise.calibration_bracketing import (
 )
 from joulewise.calibration_ledger import SESSION_KIND_BRACKET
 from scripts import epoch_equivalence_check as checker
-from tests.fixtures.epoch_bootstrap.build import Slot, build_derivation_ledger
+from tests.fixtures.epoch_bootstrap.build import (
+    T1_BINDINGS,
+    TARGET_EPOCH,
+    Slot,
+    build_derivation_ledger,
+)
 
 
 SESSION = "derivation-night-1"
+# Obligation R2-2: the tool refuses every registration-Revision-5 session
+# (epoch 25G83/v3, the fixture's default `TARGET_EPOCH`) outright.  The rule's
+# own mechanics are therefore exercised on a hypothetical successor build that
+# differs from it only in `os_build`, which is the shape the tool was written
+# for (a point release changing one identity field).
+SUCCESSOR_EPOCH = dict(TARGET_EPOCH, os_build="25G99")
+SUCCESSOR_T1_BINDINGS = dict(T1_BINDINGS, os_build="25G99")
 # The envelope in force, read from the registry the tool itself consults.
 OPERATIVES = acceptance_generation_operatives(ACTIVE_ACCEPTANCE_ID)
 LEVEL_SCREEN = Decimal(OPERATIVES["preflight_level_screen_s"])
@@ -93,7 +105,45 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         return code, text, record
 
     def build(self, tmp: str, name: str, slots, **kwargs):
+        kwargs.setdefault("session_epoch", SUCCESSOR_EPOCH)
+        kwargs.setdefault("t1_bindings", SUCCESSOR_T1_BINDINGS)
         return build_derivation_ledger(Path(tmp) / name, slots, **kwargs)
+
+    # ---- registration Revision 5: refused outright (R2-2) ---------------
+
+    def test_revision_five_session_is_refused_before_any_member_read(self) -> None:
+        """Cold ruling BFG-D-PARSER-ESC-01 §5.1: Revision 5 takes no equivalence look.
+
+        With or without a committed battery verdict, a 25G83/v3 session exits
+        3, writes no record, prints no B value and reads no member evidence.
+        """
+
+        values = _tight_grid(12, LEVEL_SCREEN - Decimal("0.0005"), Decimal("0.00001"))
+        for verdict_records in (False, True):
+            with self.subTest(verdict_records=verdict_records), tempfile.TemporaryDirectory() as tmp:
+                fixture = build_derivation_ledger(
+                    Path(tmp) / "rev5", [Slot(v) for v in values], verdict_records=verdict_records)
+                with mock.patch.object(checker, "_read_member_evidence",
+                                       side_effect=AssertionError("member evidence read")) as read:
+                    code, text, record = self.run_check(fixture)
+                out = fixture["root"].parent / (fixture["root"].name + "-record.json")
+                self.assertEqual(code, checker.REFUSAL_EXIT)
+                self.assertIn("REFUSED: revision_five_session", text)
+                self.assertIsNone(record)
+                self.assertFalse(out.exists())
+                self.assertEqual(read.call_count, 0)
+                self.assertNotIn(values[0], text)
+
+    def test_revision_five_session_with_no_finalized_row_is_unaffected(self) -> None:
+        """No finalized row means no B to read: the refusal is not triggered."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "empty", [Slot("0.03")], fill_slots=0, abort_reason="window_exhausted")
+            code, text, record = self.run_check(fixture)
+        self.assertEqual(code, checker.INCONCLUSIVE_EXIT)
+        self.assertNotIn("revision_five_session", text)
+        self.assertEqual(record["m"], 0)
 
     # ---- the PASS arm ---------------------------------------------------
 

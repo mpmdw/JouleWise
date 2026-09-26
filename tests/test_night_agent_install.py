@@ -1935,6 +1935,29 @@ class EvidenceRenderOnlyTests(unittest.TestCase):
                          "render-only executed the evidence chain")
         return result, output.getvalue(), errors.getvalue()
 
+    def test_battery_not_at_float_refuses_install_validation_before_render(self):
+        """Final texts v1.1 §5.3 item 4 at `validate_install`: Refused(3).
+
+        The staged plan renders (exit 0) with the float capture; the same call
+        answered by the charging or the malformed capture refuses with code 3
+        before anything is rendered or printed.
+        """
+
+        from unittest import mock
+        from tests import battery_float_fixture
+        fixture_runner = battery_float_fixture.runner
+        for name in ("charging-synthetic-from-real.ioreg", "malformed-synthetic-from-real.ioreg"):
+            with self.subTest(capture=name), mock.patch.object(
+                battery_float_fixture, "runner", lambda *_args, name=name: fixture_runner(name)
+            ):
+                result, output, errors = self.render(self.staged)
+            self.assertEqual(result, 3, errors)
+            self.assertIn("battery not at float", errors)
+            self.assertNotIn('"input_digests"', output)
+            self.assertFalse((self.f.root / "rendered").exists())
+        result, output, errors = self.render(self.staged)
+        self.assertEqual(result, 0, errors)
+
     def test_staged_and_published_render_hash_same_bytes_without_chain_execution(self):
         chain = Path(self.f.plan.chain_path)
         manifest = chain.with_name("evidence_manifest.json")

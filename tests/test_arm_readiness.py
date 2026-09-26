@@ -58,14 +58,16 @@ class ClockProbePredicateLivenessTests(unittest.TestCase):
             live_clock_anchor=live_clock_anchor,
         )
 
-    def test_t0_liveness_bound_refuses_at_600s_plus_1ns(self) -> None:
-        self.assertFalse(self._predicate_passes(600_000_000_001))
+    def test_t0_liveness_bound_refuses_at_610s_plus_1ns(self) -> None:
+        # Formerly test_t0_liveness_bound_refuses_at_600s_plus_1ns (D-170 item 3,
+        # PR #274); BFG-D moved the bound to 610 s (the 10 s battery-float ioreg site).
+        self.assertFalse(self._predicate_passes(610_000_000_001))
 
-    def test_t0_liveness_bound_passes_at_600s_minus_1ns(self) -> None:
-        self.assertTrue(self._predicate_passes(599_999_999_999))
+    def test_t0_liveness_bound_passes_at_610s_minus_1ns(self) -> None:
+        self.assertTrue(self._predicate_passes(609_999_999_999))
 
-    def test_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
-        self.assertTrue(self._predicate_passes(600_000_000_000))
+    def test_t0_liveness_bound_passes_at_exactly_610s(self) -> None:
+        self.assertTrue(self._predicate_passes(610_000_000_000))
 
     def test_t0_liveness_bound_refuses_negative(self) -> None:
         self.assertFalse(self._predicate_passes(-1))

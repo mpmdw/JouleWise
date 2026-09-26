@@ -4535,6 +4535,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "--sampler-direct-for-test",
             "--time-scale-for-test",
             "0.025",
+            "--battery-probe-fixture-for-test",
+            str(REPO_ROOT / "tests/fixtures/battery_float/float.ioreg"),
             "--identity-epoch-json-for-test",
             str(state["identity_path"]),
             "--sampler-ready-timeout-s",
