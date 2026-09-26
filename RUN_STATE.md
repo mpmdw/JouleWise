@@ -10,14 +10,23 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION ed17a643 — from 14:17 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the running log.
-- **Directive #421 (Ed, binding):** the battery-float gate is mandatory for every window, and anything germane to the truth of a number is mandatory.
-- **W1 is held on four things:** code PR **BFG-D**, amendment **A-R5b**, the 4b logger being dead, and two clean float reads.
-- The cold gate BATTERY-FLOAT-01 has ruled. Its paired Opus refuter found 2 BLOCKERs, and a cold Fable addendum is convened to rule them.
-- **Seal PR #418:** all three reviews say MERGE. The row-9 full-suite replay at `7ee773c0` is running (`/tmp/ed17a643/fullsuite-7ee773c0.log`).
-- **TIER-01 PR #419:** the delta fixes are in at `5cfc2f39`. Still owed: a final-head fresh read, the full suite, CI, and the Fable final pass.
-- **W1 arm scripts:** at `6a6feb69` on `docs/2026-09-25-817355d2-w1arm`, carrying the C9 procedural battery gate. Their harvest check is void and is replaced by the ruling.
+**▶▶ ACTIVATION ed17a643 — from 14:17 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the running log. The resume point is its last item.
+
+**MERGED:**
+- #418, the Revision 5 seal → `e9ed7a98`.
+- #423, A-R5b v1.1 battery-float amendment (directive #421, approved in #422) → `935cef2d`. The registration digest is now `81b65f08…ddf1`.
+- #419, TIER-01 light tier → `cab01506`. #415 is closed.
+
+**W1 is held on BFG-D** (branch `feat/2026-09-25-bfg-d`): the battery gate code, the committed per-window harvest verdict, and the whitelist ioreg grammar. Three cold gates ruled it: BATTERY-FLOAT-01, HARVEST-VERDICT-FINAL-01 and BFG-D-PARSER-ESC-01, each with a paired refuter and, where one was needed, an addendum.
+- Fix round 2 (contract `bfg-d/18-fix-contract-r6.md`) is running on a fresh Opus seat.
 - **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item.
+- Then run BFG-D's round-2 delta (Sol plus Astra, a different family from the implementer), the cold Fable final pass, the integration replay and CI, and merge.
+- Then the bookkeeping PR for this branch (light tier), which must reach main before the W1 notice.
+- Then arm W1 with scripts `docs/2026-09-25-817355d2-w1arm` @ `c79816c9`. Fill `__H__`, `__T0__` and `__PREREG__` = `81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1`.
+
+Other owner notes:
+- Codex had a 401 outage from 15:40 to 18:41. It has recovered.
+- Seat 4b is closed and Ed is away for about a day. Owner items go by email.
 
 **▶▶ ACTIVATION 817355d2 — from 13:52 PDT 09-25 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-817355d2/00-activation-record.md) is the running log.
 - **Revision 5 seal:** branch `feat/2026-09-25-rev5-seal`, commit `23dd9909` (values bench-verified; placeholder count 0; 234 tests OK). It is under the full gate: a cold Fable final pass, Opus and Sol lenses, and a full-suite replay.
