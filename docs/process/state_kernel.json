@@ -874,37 +874,37 @@
       "priority": "p1_phase_gate",
       "rank": 308,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424; BFG-S not started. Required before any non-derivation window arms.",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); addendum 2 (amendments 20-28, docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md); S0 at 980138c7 on feat/2026-09-26-bfgs-s0-helper-fence awaiting rebase, delta re-audit, Fable final pass and full suite (activation 6bec2aa6 record item 29). Required before any non-derivation window arms. 2026-09-26 activation f8d6cab1: S0 delta re-audit split -> cold gate addendum 3 (amendments 29-32) + erratum (30 re-issued, 26/31/32 restated, 33/34 new for S2); round 4 c9081c6e; bench 783a09be (frozen CustodyFailure restored), b7df341b (strict UTF-8), 747596a3 (Fable-dictated T30-f row); cold Fable final pass MERGE; PR #429. S1/S2 briefs must quote amendments 26 and 31-34 verbatim from the erratum §3 and decide QPE-SHAPE3-NIGHT-BLANK-01 first.",
       "stop_card": null
     },
-    "BFGD-VERDICT-MERGE-LIVENESS-01": {
+    "BFGS-S0-FOLLOWUPS-01": {
       "acceptance": {
         "evidence": [
-          "docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/41-opus-counter-review.md §4 M-1 and §6 closure",
-          "docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/40-fable-final-pass.md §8 F-2/F-3 (fail-closed reading)"
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/52-opus-contract-lens.md NITs 1-4",
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/60-s0-gate/21-fable-final-pass.md §5 (deferral accepted; RecursionError mapping named as the tidy fix)"
         ],
         "pointer": {
-          "json_pointer": "/tasks/BFGD-VERDICT-MERGE-LIVENESS-01/acceptance",
-          "label": "BFGD-VERDICT-MERGE-LIVENESS-01 acceptance",
+          "json_pointer": "/tasks/BFGS-S0-FOLLOWUPS-01/acceptance",
+          "label": "BFGS-S0-FOLLOWUPS-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Apply the dictated closure: history calls gain --no-merges and --no-renames, plus an adding-blob check against HEAD bytes. Add tests (a) an honest harvest merged --no-ff into a moved main loads, RED at b2c31e5b; (b) an evil merge that rewrites the record is NoRecord; (c) the existing refusals stand. Must land before any harvest verdict reaches main through a merge and before the first Revision-5 issuance. Full gate (verdict authentication code)."
+        "summary": "Each NIT closed with a defect-shaped test (RED before, GREEN after) inside battery_float.py and its tests; the frozen closure and pins unchanged (regenerated only from base if any pin moves); full tier because battery_float.py is measurement-gating code."
       },
       "authority": {
-        "label": "BFG-D Opus row-6 counter-review M-1 (dissent recorded; Fable final pass MERGE prevails)",
-        "path": "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md"
+        "label": "S0 cold Fable final pass (deferrals accepted) and the addendum-3 erratum flag",
+        "path": "docs/process_traces/2026-09-26-activation-f8d6cab1/60-s0-gate/21-fable-final-pass.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Close the Opus row-6 dissent M-1 on BFG-D. load_committed_verdict's --full-history without --no-merges makes an honest harvest verdict commit that reaches main through a --no-ff merge fail to authenticate. That fails closed, but it is a liveness trap for issuance from main.",
-      "id": "BFGD-VERDICT-MERGE-LIVENESS-01",
+      "goal": "Close the four S0 NITs the cold Fable final pass deferred (none changes a number): whitespace-only journal lines are skipped although C1 says any non-empty line must be a JSON object; a deeply nested container escapes as RecursionError instead of CustodyUnreadable; the S-1 single-binding count misses match/case capture rebinding; symlinked or directory journals are labelled 'unreadable' where amendment 30 says 'missing'.",
+      "id": "BFGS-S0-FOLLOWUPS-01",
       "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 309,
+      "priority": "p3_hardening_candidates",
+      "rank": 313,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). Not W1-blocking: W1 arm and harvest run in the measurement clone on plain history.",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1) from the S0 final pass; not started; not blocking S1/S2.",
       "stop_card": null
     },
     "BIND-REQUEST-PAYLOAD-CAP-01": {
@@ -4100,6 +4100,36 @@
       "status_note": "2026-09-23 activation 1d3796d5: READY [AGENT], P2; independent blind seats are required before the scorer’s claim use. Packet A R5 recommends one blind model seat plus an Ed check on 20 rows; this registered follow-up asks for two independent blind model-family seats and per-level rates, so the protocol must state that extension explicitly.",
       "stop_card": null
     },
+    "HISTORICAL-BATTERY-STATE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md text 19 and N4 (the two pilot nights are this lane's population)",
+          "docs/process_traces/2026-09-26-activation-6bec2aa6/00-activation-record.md item 24 (pmset -g log reaches back only to 2026-09-19 11:28 and rolls over; 22 charge summaries incl. 2x on battery; archived read-only at ~/night-archive/pmset-log/ with a .sha256 sidecar)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/HISTORICAL-BATTERY-STATE-01/acceptance",
+          "label": "HISTORICAL-BATTERY-STATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Per Final texts v1.1 text 19: add a battery_state column with the values 'unobserved (pre-directive)', 'evidence of charging' or 'evidence of float' to every claim-bearing row of docs/paper/results-fill-registry.md and to the renderer's input; scripts/render_results_fills.py refuses to render a claim row whose column is empty; numbers with evidence of charging are re-measured or withdrawn; the 80 % charge-cap context is a presumption and is stated as one. The lane blocks the paper's claim renderers mechanically and does not block S0-S3 or the first QPE arm under S2."
+      },
+      "authority": {
+        "label": "Cold gate BFGS-DESIGN-01 addendum, Final texts v1.1 §4 text 19 (lanes)",
+        "path": "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Establish, for every number the paper claims, whether the laptop was on a charging battery, on a floating battery, or unobserved when it was measured. Directive #421 made battery float mandatory from 2026-09-25, but every published number and the two QPE pilot nights were measured with battery state unobserved, and charging adds SoC heat and leakage that bias energy readings.",
+      "id": "HISTORICAL-BATTERY-STATE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 311,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1) under Final texts v1.1 text 19; not started. Evidence-retention duty until it lands: re-archive `/usr/bin/pmset -g log` to ~/night-archive/pmset-log/ with a .sha256 sidecar at least weekly (the OS log keeps about 7 days). No OS-log battery evidence exists for any capture before 2026-09-19.",
+      "stop_card": null
+    },
     "ICLOUD-CUSTODY-LOCATOR-01": {
       "acceptance": {
         "evidence": [
@@ -7050,6 +7080,35 @@
       "status_note": "The default composed-member-envelope mean rule may be implemented now. The t95 plus window variant remains proposed and cannot govern _v5 collection until this cold gate rules it.",
       "stop_card": null
     },
+    "QPE-SHAPE3-NIGHT-BLANK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md §6 'Flag, not ruled'"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QPE-SHAPE3-NIGHT-BLANK-01/acceptance",
+          "label": "QPE-SHAPE3-NIGHT-BLANK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cold-gate ruling on text 6 (keep blanking, or exclude a shape-iii envelope as collect_error with its reason recorded), installed in S2's brief before S2 lands; the magistrate does not amend text 6 alone."
+      },
+      "authority": {
+        "label": "Addendum-3 erratum §6 flag",
+        "path": "docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Decide whether one timed-out collector envelope (shape iii: killed mid-envelope, evidence_missing) should blank the whole quiet-predicate night under text 6's 'blank on non-pass', while a collector that crashed before writing anything is excluded as collect_error and the night proceeds. No number escapes either way; the question is campaign cost and the asymmetry.",
+      "id": "QPE-SHAPE3-NIGHT-BLANK-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 314,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1); flagged by the erratum judge, not ruled; must be decided before S2 is briefed.",
+      "stop_card": null
+    },
     "QPE01-ABORT-SUCCESSOR-01": {
       "acceptance": {
         "evidence": [
@@ -8067,6 +8126,35 @@
       "status_note": "T38c 2026-09-08: D-176 implementation landed via PR #307 at edb4f0ed (99gl terminal review). Live obligations and existing close dependencies remain open; earlier unimplemented/design-next language below is historical. D-176 2026-09-08: closes through UNATTENDED-LAUNCH-01, not a separate implementation; required launch refusal remains unimplemented. UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 06 of the ruled-not-installed sweep). A window can currently reach execve without proving or custodying the five-condition D-149 T-0 GO.",
       "stop_card": null
     },
+    "SCORED-CEILING-BATTERY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md M6 and text 19"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SCORED-CEILING-BATTERY-01/acceptance",
+          "label": "SCORED-CEILING-BATTERY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Per Final texts v1.1 text 19 (and M6, v1 §6 obligation 5): a ruled design for the scored campaign's response to a confounded window at a ceiling decision (for example re-measure the window versus refuse the reduction), landed before the scored campaign arms. The lane blocks the scored campaign's arm and nothing in S0-S3."
+      },
+      "authority": {
+        "label": "Cold gate BFGS-DESIGN-01 addendum, Final texts v1.1 §4 text 19 (lanes)",
+        "path": "docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Decide how the scored campaign handles a battery-confounded window at a ceiling decision. Under Final texts v1.1 text 9 a ceiling decision on a confounded window already refuses the whole reduction, so correctness is protected; the open question is the campaign cost of losing a whole reduction to one confounded window.",
+      "id": "SCORED-CEILING-BATTERY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 312,
+      "status": "queued",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1) under Final texts v1.1 text 19; not started; a campaign-cost question, not a correctness gate.",
+      "stop_card": null
+    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
@@ -8896,34 +8984,33 @@
       "status_note": "2026-09-20 activation 21752427 — queued [AGENT], p3_tooling. CI-LEGACY-FIXTURE-LINUX-01 retired by removal after PR #370 (merge d8e6761f, 2026-09-20 05:00 PDT); post-merge matrix run 35509175943 SUCCESS, including test (3.11, 3). Closure evidence: records 02/06/07/08 in docs/process_traces/2026-09-20-activation-21752427/. These remaining host-path fixtures are follow-ups, latent/inert today as executed in records 06/07.",
       "stop_card": null
     },
-    "TEST-LOAD-JOIN-LADDER-FLAKE-01": {
+    "TEST-LOAD-LADDER-KILL-COVERAGE-01": {
       "acceptance": {
         "evidence": [
-          "docs/process_traces/2026-09-25-activation-ed17a643/30-seal-418/row9-fullsuite-7ee773c0-tail.txt",
-          "docs/process_traces/2026-09-25-activation-ed17a643/31-integ-137cc9ee/tail.txt"
+          "docs/process_traces/2026-09-26-activation-f8d6cab1/00-activation-record.md item 8 (#428 row-1 review, KILL-mutation passes at 5d5a0b75 and d8aed7cd)"
         ],
         "pointer": {
-          "json_pointer": "/tasks/TEST-LOAD-JOIN-LADDER-FLAKE-01/acceptance",
-          "label": "TEST-LOAD-JOIN-LADDER-FLAKE-01 acceptance",
+          "json_pointer": "/tasks/TEST-LOAD-LADDER-KILL-COVERAGE-01/acceptance",
+          "label": "TEST-LOAD-LADDER-KILL-COVERAGE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The root cause is identified. Either the timing margins derive from a measured budget or the test runs in an exclusive CI job, and the fix is verified in a loaded full-suite replay. Assertion semantics are unchanged."
+        "summary": "A fixture child that ignores SIGTERM, and a test showing load() escalates to SIGKILL and reports the escalation; a mutation removing the KILL branch turns it RED. Test-only, light tier."
       },
       "authority": {
-        "label": "Lead observation, activation ed17a643 (three occurrences under load)",
-        "path": "docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md"
+        "label": "#428 row-1 review follow-up",
+        "path": "docs/process_traces/2026-09-26-activation-f8d6cab1/00-activation-record.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Make tests.test_sample_quiet_predicate_evidence LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child (exit_delay=60) robust under concurrent machine load. It failed SIGKILL-for-SIGTERM in three full-suite replays on 2026-09-25/26 while implementation seats were running, and passed each isolated rerun.",
-      "id": "TEST-LOAD-JOIN-LADDER-FLAKE-01",
+      "goal": "No test covers the KILL step of the quiet-predicate load ladder: no fixture child survives SIGTERM, so removing the kill() branch from load() leaves every test green (found by the #428 row-1 reviewer, pre-existing on main).",
+      "id": "TEST-LOAD-LADDER-KILL-COVERAGE-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 310,
+      "rank": 315,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643).",
+      "status_note": "Registered 2026-09-26 (activation f8d6cab1); not started.",
       "stop_card": null
     },
     "TEST-PGREP-DIALECT-MULTILINE-01": {

@@ -1,0 +1,52 @@
+LANE: BFGD-VERDICT-MERGE-LIVENESS-01 (JouleWise). Seat: Sol 6.0 (gpt-6-sol), effort high, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-liveness-8e43cfa7 (branch fix/2026-09-26-bfgd-verdict-merge-liveness, at origin/main 64e39bb9).
+WRITE_SCOPE: ["joulewise/battery_float.py","tests/test_battery_float.py"]
+(WRITE_SCOPE is exhaustive; if anything else seems necessary, return NEEDS_SCOPE.)
+
+1. GOAL. Close the Opus row-6 dissent M-1 on BFG-D, exactly as dictated in the closure text below (copied verbatim from docs/process_traces/2026-09-25-activation-ed17a643/50-bfgd-final-pass/41-opus-counter-review.md §6 on branch docs/2026-09-25-152c9255).
+   The bug: `load_committed_verdict` uses `git log --full-history` without `--no-merges`. As a result, an honest harvest-verdict commit that reaches main through a `--no-ff` merge is counted as two touching commits and refused (NoRecord). That fails closed, but it would block issuance permanently.
+
+2. DICTATED CLOSURE (implement exactly; do not redesign):
+   (1) Both history calls in load_committed_verdict gain "--no-merges", "--no-renames" alongside "--full-history". Keep the existing `len(touching) != 1 or adding != touching` test unchanged. Adapt only the decode/split shape if the current code already differs; preserve the existing semantics.
+   (2) Immediately after that test, add a check that the bytes of the record at the adding commit (`git show <touching[0]>:<rel>`) equal the committed HEAD bytes the function already reads. If they differ, raise NoRecord("path history is not a single adding commit (the adding commit's bytes differ from HEAD)").
+   (3) Put this comment above step (2), verbatim: # --no-merges: an honest harvest commit reaching main through a --no-ff merge is one adding commit; a merge that rewrites the record is caught by the adding-blob check below (BFG-D row-6 M-1).
+
+3. TESTS in tests/test_battery_float.py, next to the existing merge-shape test (around the current :504), using the shared git-fixture helper the file already uses:
+   (a) test_honest_harvest_merged_no_ff_into_moved_main_loads: the harvest commit is on a branch; main gains an unrelated commit; then `merge --no-ff`. The record must load with commit == the harvest commit. Prove it is RED on the unmodified code: run it before your fix and paste the failure.
+   (b) test_evil_merge_rewriting_record_is_no_record: the record is on main; an unrelated branch; `merge --no-ff --no-commit`, rewrite the record, then commit. Expect NoRecord whose message contains "adding commit's bytes differ".
+   (c) The existing :504 test and any add/add --theirs refusal test must still refuse, unmodified. If no add/add --theirs test exists, add test_add_add_theirs_conflict_still_refuses: a side branch adds a forged record; main adds the honest one; merge, resolving the conflict with --theirs. Expect NoRecord.
+
+4. VERIFY. Run each of these and paste the exact last 5 lines:
+   python3 -m unittest tests.test_battery_float
+   python3 -m unittest tests.test_battery_float_consumers
+   python3 -m unittest tests.test_issue_calibration_acceptance_generation
+   Also run every OTHER test module that imports joulewise.battery_float: find them with `grep -l "battery_float" tests/*.py`, run them, and paste the tails. Do not touch `_structure` or `_recorded_values`; the freeze pin (R2-9) must stay green.
+
+5. DO NOT: commit, push, change any other file, or run the full suite. Leave your edits uncommitted in the worktree; the lead commits.
+
+6. REPORT (claude-codex-report/v1 envelope): the diff summary, the RED proof for (a), all test tails, and anything in the dictated text you could not apply literally (with the reason).
+## 6. Dictated closure texts
+
+**M-1 (FIX-FIRST).** In `joulewise/battery_float.py` `load_committed_verdict`:
+
+1. Both history calls become:
+   ```python
+   touching = (_git(root, "log", "--full-history", "--no-merges", "--no-renames", "--format=%H", "--", rel) or b"").decode().split()
+   adding = (_git(root, "log", "--full-history", "--no-merges", "--no-renames", "--diff-filter=A", "--format=%H", "--", rel) or b"").decode().split()
+   ```
+   The existing `len(touching) != 1 or adding != touching` test is unchanged.
+2. Immediately after that test, add:
+   ```python
+   if _git(root, "show", f"{touching[0]}:{rel}") != committed:
+       raise NoRecord("path history is not a single adding commit (the adding commit's bytes differ from HEAD)")
+   ```
+   This catches a merge commit that rewrites the record, which `--no-merges` no longer lists.
+3. Comment above step 2: `# --no-merges: an honest harvest commit reaching main through a --no-ff merge is one adding commit; a merge that rewrites the record is caught by the adding-blob check below (BFG-D row-6 M-1).`
+
+Tests in `tests/test_battery_float.py`, beside `:504`, through the shared git-fixture helper:
+- (a) `test_honest_harvest_merged_no_ff_into_moved_main_loads`: the harvest commit on a branch; main gains an unrelated commit; `merge --no-ff`. The record loads with `commit` equal to the harvest commit. It must be RED at `b2c31e5b`.
+- (b) `test_evil_merge_rewriting_record_is_no_record`: the record on main; an unrelated branch; a `merge --no-ff --no-commit` that rewrites the record, then commit. Expect `NoRecord` containing "adding commit's bytes differ".
+- (c) `:504` and the add/add `--theirs` shape still refuse.
+
+Run `tests.test_battery_float`, `tests.test_battery_float_consumers` and `tests.test_issue_calibration_acceptance_generation`, and paste the tails. The pin proof of E2 must stay empty. `_structure` and `_recorded_values` are untouched, so the R2-9 freeze pin stays green.
+
