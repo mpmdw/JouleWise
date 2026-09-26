@@ -10,14 +10,18 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION 6bec2aa6 — from 08:43 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-26-activation-6bec2aa6/00-activation-record.md) is the running log. The short-lived predecessor 8e43cfa7 (08:28–08:34, [record](docs/process_traces/2026-09-26-activation-8e43cfa7/00-activation-record.md)) exited on usage; its seats died without reports and were relaunched.
-- **#425 bookkeeping MERGED → `6a463e87`**; canonical fast-forwarded (no code changed, supervisor current).
-- **W1 is BLOCKED by a live interactive Claude session** (PID 46048 on ttys000, running since 09-24 17:47). The W1 README says: email Ed and do not arm. Ed was asked at 08:3x on thread `1a0de5570fb67de4`; no reply yet. The arm scripts are unchanged (`docs/2026-09-25-817355d2-w1arm` @ `c79816c9`), and the first battery-float observation (08:30:16) passed.
-- **A309 liveness fix** is at `87aad39c` on `fix/2026-09-26-bfgd-verdict-merge-liveness` and is under full gate. The Sol execution lens found one SHOULD-FIX with no truth impact; the Opus contract lens and the Fable final pass are pending. It must merge BEFORE BFG-S S0 (record item 13).
-- **BFG-S (BATTERY-FLOAT-GATE-01):** a four-model consult, then cold gate BFGS-DESIGN-01, then a paired refuter (2 text BLOCKERs), then a cold addendum produced **Final texts v1.1** ([ruling](docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md)). The PR order is S0 → S1 ∥ S2 → S3 → S4. S0 is in progress on `feat/2026-09-26-bfgs-s0-helper-fence`, round 2, after a magistrate gap-fill on the bundle span.
-- **New science lane proposed by the ruling:** HISTORICAL-BATTERY-STATE-01. Every published number was measured with battery state unobserved, so it gets a `battery_state` column that the paper renderer refuses to render without. The ruling also proposes SCORED-CEILING-BATTERY-01.
+**▶▶ ACTIVATION 6bec2aa6 — 08:43 → ≈11:40 PDT 09-26 (Opus 5.5; NOTHING ARMED; exited for a fresh supervisor after #426):** [Record 00](docs/process_traces/2026-09-26-activation-6bec2aa6/00-activation-record.md) items 1–29. The short-lived predecessor 8e43cfa7 (08:28–08:34, [record](docs/process_traces/2026-09-26-activation-8e43cfa7/00-activation-record.md)) exited on usage; its seats died and were relaunched.
+- **MERGED:**
+  - #425 (bookkeeping) → `6a463e87`;
+  - **#426 A309 BFG-D verdict-merge liveness** (the Opus M-1 closure; full gate, Fable MERGE, 7,384/0/0) → `5d5a0b75`.
+  Canonical is at `5d5a0b75`.
+- **W1 is BLOCKED by a live interactive Claude session** (PID 46048 on ttys000, running since 09-24 17:47). The W1 README says: email Ed and do not arm. Ed was asked at 08:3x on thread `1a0de5570fb67de4`; there was no reply by 11:35. When it clears, re-run the arm prerequisites from step 0 with `__H__` ≥ `5d5a0b75` and fresh battery observations.
+- **BFG-S (BATTERY-FLOAT-GATE-01):** a four-model consult, cold gate BFGS-DESIGN-01, a paired refuter and a cold addendum produced **Final texts v1.1** ([ruling](docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md)). The S0 lenses led to **addendum 2, amendments 20–28** ([ruling](docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md)). **S0** is on `feat/2026-09-26-bfgs-s0-helper-fence` @ `980138c7` after fix rounds 3/3b. Still to do: rebase and regenerate the pins, delta re-audit, Fable final pass, full suite, PR. After that, S1 ∥ S2 → S3 (`_v5` packs) → S4 (after the Rev-5 epoch).
+- **New science lanes (ruled text 19):**
+  - HISTORICAL-BATTERY-STATE-01: every published number was measured with battery state unobserved. `pmset -g log` only reaches back to 09-19; it was archived read-only at `~/night-archive/pmset-log/`.
+  - SCORED-CEILING-BATTERY-01.
 - **A310 flake fix** is `37f9b935` on `test/2026-09-26-load-join-ladder-flake`; its PR is not yet opened.
-- **SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item.
+- **SUCCESSOR'S NEXT EXACT ACTION:** record 00 item 29.
 
 **▶▶ ACTIVATION ed17a643 — 14:17 PDT 09-25 → ≈08:25 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the full account; items 1–57 are its log.
 

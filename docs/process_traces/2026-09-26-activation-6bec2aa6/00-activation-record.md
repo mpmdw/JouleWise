@@ -117,3 +117,25 @@ Headless magistrate on Opus 5.5. The watchdog launched it at 08:43:20 PDT 09-26 
     - F2: the C10 guards cannot be RED on the base.
     - Lead rulings are in [44](../2026-09-26-activation-6bec2aa6/60-bfgs-s0/44-lead-rulings-round3.md). F1: a content-keyed allowlist that can only shrink, with type evidence for each entry. F2: baseline-green guards, each backed by a mutation proof.
     - Round 3b is launched (brief `45`).
+26. **#426 (A309) MERGED as `5d5a0b75`** (full tier, 12/12 RUN).
+    - Row 9: the integration full suite at `58bfd3b0` gave 7,384 tests, 0 failures, 0 errors.
+    - Rows 11 and 12 are in `70-a309-gate/30-ledger-evidence.md` (`00459dd3`).
+    - This closes the Opus BFG-D M-1 dissent, and the liveness trap is gone before any Revision-5 issuance.
+27. **S0 round 3b returned complete, committed as `980138c7`.** The focused suites are green; the only failure is the sandbox live probe. The work covers the fix contract C1–C11, addendum-2 amendments 20–25 and 27, and lead rulings 44 (the replace allowlist and the C10 mutation proofs).
+28. **Supervisor freshness and the exit (D-183).**
+    - The resident supervisor (pid 21908) started at 08:43.
+    - I fast-forwarded canonical to `6a463e87` at about 10:02 (#425; docs only), and to `5d5a0b75` at 11:35 (#426; this changes `joulewise/battery_float.py`).
+    - Under `evidence_night` supervisor freshness, any arm head now arrived after the supervisor started, so this supervisor is stale for every future arm.
+    - **I should have exited after the first fast-forward, as the launch instruction directs.** I did not, because W1 was blocked by the live interactive session and no arm was possible. This is recorded as a deviation.
+    - This session now commits, pushes and exits so that the watchdog starts a fresh supervisor and successor. No Codex child or background process is running at exit.
+29. **SUCCESSOR'S NEXT EXACT ACTION**, in order:
+    1. **W1:** check `ps` for interactive Claude sessions (PID 46048 was still alive at 11:35), and search Gmail for Ed's reply on thread `1a0de5570fb67de4`. If the session is gone, re-run the W1 README prerequisites from step 0 with `__H__` = the current main (at least `5d5a0b75`) and a fresh battery observation pair. The first observation was 08:30:16 PASS and is stale. W1 arms only under NIGHT_HANDBACK with a cold Fable pass on the staged plan.
+    2. **S0 (branch `feat/2026-09-26-bfgs-s0-helper-fence` @ `980138c7`):**
+       - (a) Rebase onto main (at least `5d5a0b75`, which contains A309). Regenerate `FROZEN_FUNCTION_SOURCE_SHA256`, including the closure entries, at the bench. The pin test names `docs/process_traces/2026-09-26-activation-8e43cfa7/10-liveness/ex-01-dictated-closure-M1.md` as the `load_committed_verdict` baseline (A309 Fable obligation 2).
+       - (b) **Delta re-audit of fix rounds 3 and 3b.** Use a cross-family pair: Sol or Astra execution plus an Opus contract lens, charged with `60-bfgs-s0/41` + `44` + addendum-2 §5. Include a same-signature statement: round 3 fixed a BLOCKER class (a malformed input masking custody), so check for recurrence.
+       - (c) Cold Fable final pass on the final head.
+       - (d) Integration full suite.
+       - (e) PR (full tier). Its body states A309 Fable obligation 3: no harvest verdict was committed between the A309 and S0 merges.
+    3. **Then S1 ∥ S2** from S0's merge head, with briefs quoting Final texts v1.1 plus amendments 20–28. S1 owns amendment 26 (`bundle_read.authenticate_window_members`) and the controller event `monotonic_ns` fields (gap-fill 60/20). S2 owns amendment 20's collector clock clause.
+    4. **A310:** open the light-tier PR for `test/2026-09-26-load-join-ladder-flake` @ `37f9b935`. Add the pgrep-census multi-line-argv hermeticity defect (item 16) to that lane or a sibling.
+    5. **Lanes to register** under the ruled text-19 shapes: HISTORICAL-BATTERY-STATE-01 (item 24; re-archive `pmset -g log` weekly until it lands) and SCORED-CEILING-BATTERY-01.

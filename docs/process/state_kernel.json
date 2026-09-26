@@ -874,7 +874,7 @@
       "priority": "p1_phase_gate",
       "rank": 308,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); S0 in progress (activation 6bec2aa6). Required before any non-derivation window arms.",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); addendum 2 (amendments 20-28, docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md); S0 at 980138c7 on feat/2026-09-26-bfgs-s0-helper-fence awaiting rebase, delta re-audit, Fable final pass and full suite (activation 6bec2aa6 record item 29). Required before any non-derivation window arms.",
       "stop_card": null
     },
     "BFGD-VERDICT-MERGE-LIVENESS-01": {
@@ -904,7 +904,7 @@
       "priority": "p1_phase_gate",
       "rank": 309,
       "status": "queued",
-      "status_note": "Registered 2026-09-26 (activation ed17a643). Not W1-blocking: W1 arm and harvest run in the measurement clone on plain history. Implementation 87aad39c on fix/2026-09-26-bfgd-verdict-merge-liveness (activation 6bec2aa6), full gate in progress; merges before BFG-S S0 (record 6bec2aa6 item 13).",
+      "status_note": "Registered 2026-09-26 (activation ed17a643). MERGED as PR #426 -> 5d5a0b75 (activation 6bec2aa6; full gate, Fable final pass MERGE, full suite 7,384/0/0).",
       "stop_card": null
     },
     "BIND-REQUEST-PAYLOAD-CAP-01": {
