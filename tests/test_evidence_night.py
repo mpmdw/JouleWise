@@ -1685,7 +1685,37 @@ class LifecycleTests(unittest.TestCase):
                             "export NIGHT_PAYLOAD_KIND=quiet_predicate_evidence\n")
         record = self.checked("payload kind unreadable")
         self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "fail")
+        self.assertEqual(record["checks"]["battery_brackets"]["verdict"], "fail")
         self.assertFalse(record["armable"])
+
+    def test_missing_battery_brackets_attribute_records_normal_refusal(self):
+        bare = type("OldKind", (), {"corecaptured_at_arm_and_t0": False,
+                                     "non_observer_at_arm_and_t0": False})()
+        with patch.object(entry, "NIGHT_KINDS", {"calibration": bare}):
+            with self.assertRaisesRegex(entry.Refused, "battery_brackets"):
+                entry.check(**self.kw)
+        written = json.loads(self.journal("check.json").read_text())
+        self.assertEqual(written["checks"]["battery_brackets"]["verdict"], "fail")
+        self.assertFalse(written["armable"])
+
+    def test_battery_brackets_has_no_skipped_state_or_exemption(self):
+        calibration = self.checked()
+        self.assertEqual(calibration["checks"]["battery_brackets"]["verdict"], "pass")
+        with patch.object(entry, "candidate_payload_kind", return_value="unknown"):
+            with self.assertRaises(entry.Refused):
+                entry.check(**self.kw)
+        unknown = json.loads(self.journal("check.json").read_text())
+        self.assertEqual(unknown["checks"]["battery_brackets"]["verdict"], "fail")
+        source = inspect.getsource(entry.check)
+        self.assertIn('name in ("machine_quiet", "corecaptured")', source)
+        self.assertNotIn('name in ("machine_quiet", "corecaptured", "battery_brackets")', source)
+
+    def test_stale_check_without_battery_brackets_row_is_refused(self):
+        checked = self.checked()
+        del checked["checks"]["battery_brackets"]
+        entry.saved_json(self.journal("check.json"), checked)
+        with self.assertRaisesRegex(entry.Refused, "check.json predates the battery_brackets fence"):
+            entry.require_fresh_check(self.state, self.kw["launchctl_bin"])
 
     def test_unknown_payload_kind_has_a_failed_battery_brackets_check(self):
         with patch.object(entry, "candidate_payload_kind", return_value="unknown"):

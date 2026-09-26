@@ -24,6 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE = "joulewise.battery_float"
 GUARDED = frozenset({"load_committed_verdict", "validate_window", "compare_verdict",
                      "verdict_record", "parse"})
+FACTORIES = frozenset({"unobserved_historical_verdict", "not_applicable_verdict"})
+FACTORY_ALLOWLIST = {"joulewise/bundle_read.py": "text 8 reader states"}
 # file::function -> the guarded names it may reference; exactly seven rows.
 ALLOWLIST = {
     ("joulewise/battery_float.py", "authenticate_committed_verdict"):
@@ -87,11 +89,25 @@ class _Checker(ast.NodeVisitor):
         self.package_aliases: set[str] = set()     # `import joulewise.battery_float` binds `joulewise`
         self.bound: dict[str, str] = {}            # local name -> guarded name it was imported as
         self.pair_constructors: set[str] = set()
+        self.factory_names: set[str] = set()
+        self.dataclass_modules: set[str] = set()
+        self.dataclass_replaces: set[str] = set()
+        self.allowed_type_loads: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("isinstance", "issubclass") and len(node.args) >= 2:
+                self.allowed_type_loads.update(id(part) for part in ast.walk(node.args[1]))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                annotations = [node.returns, *(arg.annotation for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs))]
+                self.allowed_type_loads.update(id(part) for annotation in annotations if annotation for part in ast.walk(annotation))
+            if isinstance(node, ast.AnnAssign):
+                self.allowed_type_loads.update(id(part) for part in ast.walk(node.annotation))
         self.functions: list[str] = []
         self.found: list[tuple[str, int, str]] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
+                    if alias.name == "dataclasses":
+                        self.dataclass_modules.add(alias.asname or "dataclasses")
                     if alias.name == MODULE:
                         if alias.asname:
                             self.module_aliases.add(alias.asname)
@@ -109,6 +125,13 @@ class _Checker(ast.NodeVisitor):
                             self.bound[alias.asname or alias.name] = alias.name
                         if alias.name == "PairVerdict":
                             self.pair_constructors.add(alias.asname or alias.name)
+                        if alias.name in FACTORIES:
+                            self.factory_names.add(alias.asname or alias.name)
+                elif module == "dataclasses":
+                    for alias in node.names:
+                        if alias.name == "replace":
+                            self.dataclass_replaces.add(alias.asname or alias.name)
+        self.imports_battery_float = bool(self.module_aliases or self.package_aliases or self.pair_constructors or self.bound or self.factory_names)
 
     def _flag(self, node: ast.AST, name: str) -> None:
         function = self.functions[-1] if self.functions else None
@@ -138,19 +161,36 @@ class _Checker(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         if node.attr in GUARDED and self._resolves_to_module(node.value):
             self._flag(node, node.attr)
+        if (not self.in_module and node.attr == "PairVerdict"
+                and self._resolves_to_module(node.value) and id(node) not in self.allowed_type_loads):
+            self._flag(node, "PairVerdict")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         callee = node.func
-        if not self.in_module and (
-            isinstance(callee, ast.Name) and callee.id in self.pair_constructors
-            or isinstance(callee, ast.Attribute) and callee.attr == "PairVerdict"
-            and self._resolves_to_module(callee.value)
-        ):
-            self.found.append((self.relative, node.lineno, "PairVerdict"))
+        if not self.in_module:
+            if (isinstance(callee, ast.Name) and callee.id in self.factory_names
+                    or isinstance(callee, ast.Attribute) and callee.attr in FACTORIES
+                    and self._resolves_to_module(callee.value)):
+                if self.relative not in FACTORY_ALLOWLIST:
+                    self._flag(node, callee.id if isinstance(callee, ast.Name) else callee.attr)
+            if self.imports_battery_float and (
+                isinstance(callee, ast.Name) and callee.id in self.dataclass_replaces
+                or isinstance(callee, ast.Attribute) and callee.attr == "replace"
+                and isinstance(callee.value, ast.Name) and callee.value.id in self.dataclass_modules
+            ):
+                self._flag(node, "dataclasses.replace")
+            if self.imports_battery_float and isinstance(callee, ast.Call) and isinstance(callee.func, ast.Name) and callee.func.id == "type":
+                self._flag(node, "type(...)(...)")
+            if (isinstance(callee, ast.Name) and callee.id == "getattr" and len(node.args) >= 2
+                    and self._resolves_to_module(node.args[0]) and isinstance(node.args[1], ast.Constant)
+                    and isinstance(node.args[1].value, str)):
+                self._flag(node, "getattr(battery_float, ...)")
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
+        if not self.in_module and node.id in self.pair_constructors and isinstance(node.ctx, ast.Load) and id(node) not in self.allowed_type_loads:
+            self._flag(node, "PairVerdict")
         if node.id in self.bound:
             self._flag(node, self.bound[node.id])
         elif self.in_module and node.id in GUARDED:
@@ -214,6 +254,29 @@ class ConsumerGuardTests(unittest.TestCase):
                   "    bf.PairVerdict('quiet', 'pass', (), None, None, None, None, None)\n")
         self.assertEqual(violations("scripts/x.py", source), [
             ("scripts/x.py", 6, "PairVerdict"), ("scripts/x.py", 7, "PairVerdict")])
+
+    def test_pair_verdict_forgeries_are_flagged(self) -> None:
+        cases = (
+            ("from joulewise import battery_float as bf\nPV = bf.PairVerdict\nPV()\n", "PairVerdict"),
+            ("from joulewise import battery_float as bf\nimport dataclasses as dc\ndc.replace(v, status='pass')\n", "dataclasses.replace"),
+            ("from joulewise import battery_float as bf\nfrom dataclasses import replace as rep\nrep(v, status='pass')\n", "dataclasses.replace"),
+            ("from joulewise import battery_float as bf\ntype(v)()\n", "type(...)(...)"),
+            ("from joulewise import battery_float as bf\ngetattr(bf, 'PairVerdict')()\n", "getattr(battery_float, ...)"),
+        )
+        for source, label in cases:
+            with self.subTest(label=label):
+                self.assertIn(label, [row[2] for row in violations("scripts/x.py", source)])
+        self.assertEqual(violations("scripts/x.py",
+            "from joulewise import battery_float as bf\nisinstance(v, bf.PairVerdict)\n"
+            "issubclass(cls, bf.PairVerdict)\n"), [])
+
+    def test_factory_calls_have_one_named_reader_exemption(self) -> None:
+        source = "from joulewise import battery_float as bf\nbf.not_applicable_verdict('bundle')\n"
+        self.assertEqual(violations("joulewise/x.py", source),
+                         [("joulewise/x.py", 2, "not_applicable_verdict")])
+        self.assertEqual(violations("joulewise/bundle_read.py", source), [])
+        self.assertEqual(FACTORY_ALLOWLIST,
+                         {"joulewise/bundle_read.py": "text 8 reader states"})
 
     def test_only_core_references_parser_and_wrappers_only_call_core(self) -> None:
         tree = ast.parse((ROOT / "joulewise/battery_float.py").read_text())
@@ -283,7 +346,8 @@ class ConsumerGuardTests(unittest.TestCase):
             "    return parse(raw, 0)\n"
         )
         self.assertEqual(violations("scripts/x.py", source), [
-            ("scripts/x.py", 1, "parse"), ("scripts/x.py", 5, "validate_window"),
+            ("scripts/x.py", 1, "parse"), ("scripts/x.py", 5, "getattr(battery_float, ...)"),
+            ("scripts/x.py", 5, "validate_window"),
             ("scripts/x.py", 6, "parse")])
         self.assertEqual(violations("joulewise/x.py", "ERRORS = {'vm_stat': 'parse'}\n"), [])
         in_module = "def summary(session):\n    return validate_window(session)['status']\n"
@@ -306,7 +370,7 @@ class ConsumerGuardTests(unittest.TestCase):
             found = tree_violations(Path(tmp) / "tree")
         issuer = "scripts/issue_calibration_acceptance_generation.py"
         cadence = "scripts/calibration_cadence_report.py"
-        self.assertEqual([(name, line) for name, line, _ in found], [
+        self.assertEqual([(name, line) for name, line, primitive in found if primitive in GUARDED], [
             (cadence, 81), (cadence, 85), (cadence, 93),
             (issuer, 243), (issuer, 250), (issuer, 263), (issuer, 358),
             (issuer, 1586), (issuer, 1593), (issuer, 1602),

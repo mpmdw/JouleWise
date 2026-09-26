@@ -1389,7 +1389,7 @@ def check(*, candidate, canonical=CANONICAL, supervisor_state=SUPERVISOR_STATE,
             else:
                 row = NIGHT_KINDS.get(payload_kind)
                 def check_battery_brackets():
-                    if row is None or row.battery_brackets is not True:
+                    if row is None or getattr(row, "battery_brackets", None) is not True:
                         raise Refused(f"battery_brackets: {payload_kind!r} has no pair collector")
                     return {"payload_kind": payload_kind}
                 inspect("battery_brackets", check_battery_brackets)
@@ -1541,6 +1541,10 @@ def require_fresh_record(state, name, clearance, *, command="publish-install"):
 def require_fresh_check(state, launchctl_bin, *, command="publish-install"):
     fake = rehearsal_launchctl(launchctl_bin)
     checked = require_fresh_record(state, "check", "rehearsal_ready" if fake else "armable", command=command)
+    if (not isinstance(checked.get("checks"), dict)
+            or not isinstance(checked["checks"].get("battery_brackets"), dict)
+            or checked["checks"]["battery_brackets"].get("verdict") != "pass"):
+        raise Refused("check.json predates the battery_brackets fence")
     if (checked.get("launchctl_bin") != str(launchctl_bin)
             or checked.get("fake_launchctl") is not fake):
         raise Refused("check.json is not armable with this launchctl executable")

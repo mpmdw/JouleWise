@@ -36,7 +36,39 @@ FROZEN_FUNCTION_SOURCE_SHA256 = {
     "authenticate_committed_verdict": "1a4d783b9937e6d5dee26e1b02295898abd2170ef5b354573e2a88b7cad73522",
     "load_committed_verdict": "d1e9bc2257d908734a8433368fb8097ad769cea8bc1210b228025e0818a5809c",
     "compare_verdict": "d375ca6c5d514a2d2c62fd3ce999a3679936677463771b13cdb210ec677fa143",
+    "AuthenticatedSlot": "61200f491c133abd27cd3bc0c1e413314b2b86fed3c16d076f4d91cb7783bc53",
+    "AuthenticatedVerdict": "e7c3684e4efede62ac4754b1a0fb95d32829c52a44c554f5b1a3868f2d8423bf",
+    "BatteryVerdictRefusal": "29acdbfbd45625ec97608150fb64502f8c0efa590cfcd50c3a486c6586ad63f6",
+    "CommittedVerdict": "4d9d9c1bf381907734c0654a7e8234a1a79d05c8ad388156963c6cb8a2e0fcd1",
+    "CustodyFailure": "6e0e7ea1f511180ea5be612c4124199384ed7730e24276d0fe10b4b30ea14f5c",
+    "IOREG_BATTERY_ARGV": "938ae450fde51fff154cd5c2af01836eec2426b1380175fb1919c6e0cca3fd92",
+    "LEDGER_HEAD_PIN": "ef9889df272af5fdece3b6f2ad681f2e35e3c10036cd3ebd58c8c3ecba5ccf1f",
+    "LIMIT_MA": "0298b4e2433d25f8a7a17c02cd4eadb9005690374efd3f2a89a87553519a2e60",
+    "MAX_UPDATE_AGE_S": "82d2e7105d92d3d11063956e01ae73c65d7f43453365814ddecdd656525bea06",
+    "NoRecord": "ae35444c67b8b672ecd990e149e0862adbcb2fc7d8529c6d0483859e13197e79",
+    "POLICY_ID": "e896aeeb3c183096e6e997469b1ee5240dc27cd957c6b2660c9705c8808afdaa",
+    "PROBE_TIMEOUT_S": "2aede614e2ae18d7739ae17979f1af5e9fed697ccce9ba758b7558d966980a95",
+    "ProbeError": "8383ff7e1c7b33d971a307f08c492d3a0671b2532c01c331c05655e4b168afb6",
+    "REFUSAL_TEXT": "017cd99d2e73bf9d602a294a8aca6130651bd04ef4c5304ce31651d452a94652",
+    "SCHEMA": "716d6b07a7f70c047b08f460f8b8bdca46cb935e76d1c9c359f5bc0d507657fc",
+    "VERDICT_DIRECTORY": "10df00b324a3456785e16c3f918c7444e4a217ef2615275bd819e92b8c3e8fbd",
+    "VERDICT_SCHEMA": "d31b6f3d122c4b4a595c758ef30e1484602f3ab097cda1a2b2f6b756ff8b4fec",
+    "_COMMIT": "2180032f495eb79febde14e4455a93c2b4b213c08080855e38689d3bed92cb10",
+    "_OPTIONAL": "28e540c7133a0dab42e4a886e42b0d2c37e738a90f85c06deb0548cc1891a422",
+    "_REQUIRED": "0f59448f0574b50bdc75a470ab152a387b91ce6d5a36fc13445bb4b11b95770e",
+    "_SESSION_ID": "f75d6f4b3b35d4f389cf6b9a8e6cb8ada77eee92e1284c037da76b84bfe4cec6",
+    "_SHA256": "0ae4f61b4476696d75266386599163614e082804903c3f4aaeb7fded73d33334",
+    "_UINT": "bb81088fb3b64528f649e806972081cbfb2851594b4b19d59cfe51c23e2f3d0c",
+    "_git": "226cee6f2cea583774e26dc26712190284560809af5766e2b0a24b3c0f31998d",
+    "_is_sha256": "3d85b5391517d8bd80520bf83a0b7f3ab0f210b4ca4cd2dd87a38950dee2b1ca",
+    "_is_wall_time": "bb18d0432bfeea2f9720ecbe6439b63f0e2b9be12f2ada1ccf74d38de61d0e65",
+    "_signed": "4382ad39712e5db9e5546d9febe9349ebdb180c054c03eb54b7b47e7f8d0a60f",
+    "_unsigned": "eaefb6095996519ae18fdf550c302b2597f84e4a39be4c6c59c1bc9eef14e0ed",
+    "verdict_relative_path": "39fbf6c9f379d227806c610b1777877cf7260391e80e45844c368fcb0b0cef0c",
 }
+FROZEN_ROOTS = frozenset({"parse", "_structure", "_recorded_values", "observe", "require_pass",
+                          "validate_window", "predates_battery_float", "authenticate_committed_verdict",
+                          "load_committed_verdict", "compare_verdict"})
 
 # Exact canonical record from observe() at 64e39bb9 with a fixed clock and
 # the committed float.ioreg fixture. Only the phase lexeme changes per call.
@@ -71,7 +103,8 @@ class PairAuthenticationTests(unittest.TestCase):
 
     def authenticate(self, record, root, *, span=None):
         return battery_float.authenticate_pair(
-            record, root, phases=("quiet_pre", "quiet_post"), identity="session-1", span=span)
+            record, root, phases=("quiet_pre", "quiet_post"), identity="session-1",
+            span=(20, 80) if span is None else span)
 
     def test_custody_raises_before_confounded_or_missing_status(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -159,8 +192,11 @@ class PairAuthenticationTests(unittest.TestCase):
             record = self.pair(tmp)
             for phase in ("pre", "post"):
                 record[phase]["phase"] = f"slot_{phase}"
-            (Path(tmp) / "instrument_evidence.json").write_text(json.dumps({"battery_float": record}))
-            self.assertEqual(battery_float.authenticate_capture(tmp).status, "pass")
+                record[phase]["session_id"] = None
+            (Path(tmp) / "instrument_evidence.json").write_text(json.dumps({
+                "validation_id": "validation-1", "battery_float": record}))
+            verdict = battery_float.authenticate_capture(tmp)
+            self.assertEqual((verdict.status, verdict.bundle_sha256), ("pass", None))
 
 
 class BundleAuthenticationTests(unittest.TestCase):
@@ -292,12 +328,332 @@ class BundleAuthenticationTests(unittest.TestCase):
             self.assertTrue(any("IsCharging" in reason for reason in verdict.reasons))
 
 
+class RoundThreeAuthenticationTests(unittest.TestCase):
+    """T15: wrapper custody, span/stamp rungs, digest and capture binding."""
+
+    def quiet(self, root, *, refusal=False, rounds=False):
+        pair = PairAuthenticationTests().pair(root)
+        session = {"session": "session-1", "battery_float": pair,
+                   "start_stamp": {"monotonic_before_s": 20e-9, "monotonic_after_s": 20e-9}}
+        if refusal:
+            session["error_class"] = "network_time_provenance"
+        else:
+            session["end_stamp"] = {"monotonic_after_s": 80e-9}
+        root = Path(root)
+        (root / "session.json").write_text(json.dumps(session))
+        if refusal:
+            (root / "rounds.jsonl").write_text("")
+        elif rounds:
+            hashes = {pair[p]["raw_path"]: pair[p]["raw_stdout_sha256"] for p in ("pre", "post")}
+            (root / "rounds.jsonl").write_text(json.dumps({"raw": {"sha256": hashes}}) + "\n")
+        return session, pair
+
+    def test_round_journal_mismatch_and_malformed_both_raise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp, rounds=True)
+            journal = Path(tmp) / "rounds.jsonl"
+            journal.write_text('{"raw":{"sha256":{"raw/battery_float.pre.ioreg":"' + '0'*64 + '"}}}\n')
+            with self.assertRaises(battery_float.CustodyFailure):
+                battery_float.authenticate_quiet_session(tmp)
+            journal.write_text("{\n")
+            with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
+                battery_float.authenticate_quiet_session(tmp)
+            journal.write_text("[]\n")
+            with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
+                battery_float.authenticate_quiet_session(tmp)
+            journal.write_text("  \n")
+            with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
+                battery_float.authenticate_quiet_session(tmp)
+
+    def test_unreadable_round_journal_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp)
+            (Path(tmp) / "rounds.jsonl").mkdir()
+            with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
+                battery_float.authenticate_quiet_session(tmp)
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp)
+            (Path(tmp) / "rounds.jsonl").symlink_to("missing")
+            with self.assertRaisesRegex(battery_float.CustodyFailure, "round journal unreadable"):
+                battery_float.authenticate_quiet_session(tmp)
+
+    def test_quiet_refusal_span_and_missing_capture_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, pair = self.quiet(tmp, refusal=True)
+            verdict = battery_float.authenticate_quiet_session(tmp)
+            self.assertEqual((verdict.status, verdict.bundle_sha256), ("pass", None))
+            hashes = {pair[phase]["raw_path"]: pair[phase]["raw_stdout_sha256"]
+                      for phase in ("pre", "post")}
+            (Path(tmp) / "rounds.jsonl").write_text(json.dumps({"raw": {"sha256": hashes}}) + "\n")
+            self.assertEqual(battery_float.authenticate_quiet_session(tmp).reasons,
+                             ("quiet span unavailable",))
+        with tempfile.TemporaryDirectory() as tmp:
+            session, _ = self.quiet(tmp)
+            del session["end_stamp"]
+            (Path(tmp) / "session.json").write_text(json.dumps(session))
+            self.assertEqual(battery_float.authenticate_quiet_session(tmp).reasons,
+                             ("quiet span unavailable",))
+
+    def test_quiet_span_follows_custody_probe_parse_and_predicate(self):
+        for rung in ("custody", "probe", "parse", "predicate"):
+            with self.subTest(rung=rung), tempfile.TemporaryDirectory() as tmp:
+                session, pair = self.quiet(tmp)
+                del session["end_stamp"]
+                if rung == "custody":
+                    (Path(tmp) / "raw/battery_float.pre.ioreg").unlink()
+                elif rung == "probe":
+                    pair["pre"]["exit_code"] = 2
+                elif rung == "parse":
+                    body = b"invalid ioreg\n"
+                    (Path(tmp) / "raw/battery_float.pre.ioreg").write_bytes(body)
+                    pair["pre"]["raw_stdout_sha256"] = hashlib.sha256(body).hexdigest()
+                else:
+                    body = raw("charging-synthetic-from-real.ioreg")
+                    (Path(tmp) / "raw/battery_float.pre.ioreg").write_bytes(body)
+                    pair["pre"]["raw_stdout_sha256"] = hashlib.sha256(body).hexdigest()
+                (Path(tmp) / "session.json").write_text(json.dumps(session))
+                if rung == "custody":
+                    with self.assertRaises(battery_float.CustodyFailure):
+                        battery_float.authenticate_quiet_session(tmp)
+                else:
+                    verdict = battery_float.authenticate_quiet_session(tmp)
+                    self.assertIn({"probe": "probe failed", "parse": "header",
+                                   "predicate": "IsCharging"}[rung], str(verdict.reasons))
+
+    def test_malformed_spans_and_stamp_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, pair = self.quiet(tmp)
+            for span in ((80, 20), 42, (True, 80), (20.0, 80)):
+                with self.subTest(span=span):
+                    verdict = battery_float.authenticate_pair(pair, tmp,
+                        phases=("quiet_pre", "quiet_post"), identity="session-1", span=span)
+                    self.assertEqual(verdict.reasons, ("quiet span unavailable",))
+            with self.assertRaisesRegex(ValueError, "quiet pairs owe a span"):
+                battery_float.authenticate_pair(pair, tmp, phases=("quiet_pre", "quiet_post"),
+                                                identity="session-1")
+            for value in (-1, True, 10):
+                with self.subTest(stamp=value):
+                    pair["post"]["monotonic_before_ns"] = value
+                    verdict = battery_float.authenticate_pair(pair, tmp,
+                        phases=("quiet_pre", "quiet_post"), identity="session-1", span=(20, 80))
+                    self.assertIn("pair stamps malformed", verdict.reasons)
+
+    def test_bundle_span_owed_and_custody_precedes_malformed_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pair = BundleAuthenticationTests().bundle(tmp)
+            with self.assertRaisesRegex(ValueError, "bundle pairs owe a span"):
+                battery_float.authenticate_pair(pair, tmp, phases=("bundle_pre", "bundle_post"),
+                                                identity="run-1")
+            (Path(tmp) / "raw/battery_float.post.ioreg").unlink()
+            with self.assertRaises(battery_float.CustodyFailure):
+                battery_float.authenticate_pair(pair, tmp, phases=("bundle_pre", "bundle_post"),
+                                                identity="run-1", span=42)
+
+    def test_capture_pair_stamp_order_and_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pair = PairAuthenticationTests().pair(tmp)
+            for phase in ("pre", "post"):
+                pair[phase]["phase"] = f"slot_{phase}"
+                pair[phase]["session_id"] = None
+            evidence = {"validation_id": "v1", "battery_float": pair}
+            path = Path(tmp) / "instrument_evidence.json"
+            path.write_text(json.dumps(evidence))
+            self.assertEqual(battery_float.authenticate_capture(tmp).status, "pass")
+            pair["post"]["monotonic_before_ns"] = 5
+            path.write_text(json.dumps(evidence))
+            self.assertEqual(battery_float.authenticate_capture(tmp).reasons,
+                             ("pair stamps malformed",))
+            pair["post"]["monotonic_before_ns"] = True
+            path.write_text(json.dumps(evidence))
+            self.assertEqual(battery_float.authenticate_capture(tmp).reasons,
+                             ("pair stamps malformed",))
+            pair["post"]["monotonic_before_ns"] = 80
+            self.assertEqual(battery_float.authenticate_pair(pair, tmp,
+                phases=("slot_pre", "slot_post"), identity=None, span=42).reasons,
+                ("capture span unavailable",))
+            pair["post"]["slot"] = "other"
+            path.write_text(json.dumps(evidence))
+            self.assertEqual(battery_float.authenticate_capture(tmp).reasons,
+                             ("pair identity disagreement",))
+            pair["post"]["slot"] = None
+            for phase in ("pre", "post"):
+                pair[phase]["attempt_id"] = "wrong"
+            path.write_text(json.dumps(evidence))
+            self.assertEqual(battery_float.authenticate_capture(tmp).reasons,
+                             ("attempt identity mismatch",))
+            for phase in ("pre", "post"):
+                pair[phase]["attempt_id"] = None
+                pair[phase]["session_id"] = None
+            path.write_text(json.dumps(evidence))
+            self.assertEqual(battery_float.authenticate_capture(tmp).status, "pass")
+            self.assertEqual(battery_float.authenticate_capture(tmp, expected={
+                "attempt_id": "other", "session_id": None, "slot": None}).reasons,
+                ("ledger identity mismatch",))
+            del evidence["validation_id"]
+            path.write_text(json.dumps(evidence))
+            self.assertEqual(battery_float.authenticate_capture(tmp).reasons,
+                             ("capture identity missing",))
+
+    def test_capture_identity_binding_cases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = PairAuthenticationTests().pair(tmp)
+            for phase in ("pre", "post"):
+                base[phase]["phase"] = f"slot_{phase}"
+                base[phase]["session_id"] = None
+            path = Path(tmp) / "instrument_evidence.json"
+            cases = ("pair disagreement", "attempt mismatch", "ordinary null",
+                     "ledger mismatch", "missing validation")
+            for case in cases:
+                with self.subTest(case=case):
+                    pair = json.loads(json.dumps(base))
+                    evidence = {"validation_id": "v1", "battery_float": pair}
+                    expected = None
+                    if case == "pair disagreement":
+                        pair["post"]["slot"] = "other"
+                        reason = "pair identity disagreement"
+                    elif case == "attempt mismatch":
+                        for phase in ("pre", "post"):
+                            pair[phase]["attempt_id"] = "wrong"
+                        reason = "attempt identity mismatch"
+                    elif case == "ledger mismatch":
+                        expected = {"attempt_id": "other", "session_id": None, "slot": None}
+                        reason = "ledger identity mismatch"
+                    elif case == "missing validation":
+                        del evidence["validation_id"]
+                        reason = "capture identity missing"
+                    else:
+                        reason = None
+                    path.write_text(json.dumps(evidence))
+                    verdict = (battery_float.authenticate_capture(tmp) if expected is None else
+                               battery_float.authenticate_capture(tmp, expected=expected))
+                    self.assertEqual(verdict.reasons, () if reason is None else (reason,))
+
+    def test_symlink_raw_path_with_matching_bytes_is_custody_failure(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+            _, pair = self.quiet(tmp)
+            source = Path(tmp) / "raw/battery_float.pre.ioreg"
+            other = Path(outside) / "same.ioreg"
+            other.write_bytes(source.read_bytes())
+            source.unlink()
+            source.symlink_to(other)
+            with self.assertRaisesRegex(battery_float.CustodyFailure, "raw path traverses a symlink"):
+                battery_float.authenticate_pair(pair, tmp, phases=("quiet_pre", "quiet_post"),
+                                                identity="session-1", span=(20, 80))
+
+    def test_duplicate_keys_in_all_wrapper_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.quiet(tmp, rounds=True)
+            for name in ("session.json", "rounds.jsonl"):
+                with self.subTest(file=name):
+                    path = Path(tmp) / name
+                    original = path.read_text()
+                    path.write_text('{"phase":"foreign","phase":"expected"}\n')
+                    try:
+                        with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                                    f"duplicate JSON key phase in {name}"):
+                            battery_float.authenticate_quiet_session(tmp)
+                    finally:
+                        path.write_text(original)
+        with tempfile.TemporaryDirectory() as tmp:
+            BundleAuthenticationTests().bundle(tmp)
+            for name in ("metadata.json", "events.jsonl"):
+                with self.subTest(file=name):
+                    path = Path(tmp) / name
+                    original = path.read_text()
+                    path.write_text('{"phase":"foreign","phase":"expected"}\n')
+                    try:
+                        with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                                    f"duplicate JSON key phase in {name}"):
+                            battery_float.authenticate_bundle(tmp)
+                    finally:
+                        path.write_text(original)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "instrument_evidence.json"
+            path.write_text('{"validation_id":"foreign","validation_id":"expected"}')
+            with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                        "duplicate JSON key validation_id in instrument_evidence.json"):
+                battery_float.authenticate_capture(tmp)
+
+    def test_probe_exit_code_requires_exact_int_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, pair = self.quiet(tmp)
+            for code in (False, 0.0):
+                with self.subTest(code=code):
+                    pair["pre"]["exit_code"] = code
+                    verdict = battery_float.authenticate_pair(pair, tmp,
+                        phases=("quiet_pre", "quiet_post"), identity="session-1", span=(20, 80))
+                    self.assertEqual(verdict.status, "battery_float_evidence_missing")
+                    self.assertIn("probe failed", verdict.reasons[0])
+
+    def test_bundle_digest_and_symlink(self):
+        from joulewise.detection_floor import complete_bundle_sha256
+        with tempfile.TemporaryDirectory() as tmp:
+            BundleAuthenticationTests().bundle(tmp)
+            verdict = battery_float.authenticate_bundle(tmp)
+            self.assertEqual(verdict.bundle_sha256, complete_bundle_sha256(Path(tmp)))
+            (Path(tmp) / "foreign").symlink_to("missing")
+            with self.assertRaisesRegex(ValueError, "not a regular file"):
+                battery_float.authenticate_bundle(tmp)
+
+    def test_status_factories(self):
+        for factory, status in ((battery_float.unobserved_historical_verdict, "unobserved_historical"),
+                                (battery_float.not_applicable_verdict, "not_applicable")):
+            verdict = factory("bundle", bundle_sha256="a"*64)
+            self.assertEqual((verdict.status, verdict.reasons, verdict.bundle_sha256),
+                             (status, (), "a"*64))
+            self.assertEqual((verdict.pre_raw_sha256, verdict.post_raw_sha256,
+                              verdict.pre_update_age_s, verdict.post_update_age_s,
+                              verdict.delta_q_mah), (None,)*5)
+
+    def test_monotonic_conversion(self):
+        self.assertEqual(battery_float.monotonic_ns_from_s(1.000000001), 1000000001)
+        for value in (True, float("nan"), float("inf"), -1.0):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                battery_float.monotonic_ns_from_s(value)
+
+    def test_quiet_refusal_class_constant(self):
+        self.assertEqual(battery_float.QUIET_REFUSAL_ERROR_CLASS, "network_time_provenance")
+
+
 class S0FreezeTests(unittest.TestCase):
     def test_frozen_function_sources_match_base(self):
+        """10-liveness/ex-01-dictated-closure-M1.md is the load_committed_verdict baseline."""
+        source = Path(battery_float.__file__).read_text()
+        tree = ast.parse(source)
+        definitions = {}
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                definitions[node.name] = node
+            elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        definitions[target.id] = node
+        pending, closure = list(FROZEN_ROOTS), set()
+        while pending:
+            name = pending.pop()
+            if name in closure:
+                continue
+            closure.add(name)
+            pending.extend(node.id for node in ast.walk(definitions[name])
+                           if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+                           and node.id in definitions and node.id not in closure)
+        self.assertEqual(set(FROZEN_FUNCTION_SOURCE_SHA256), closure)
         for name, pinned in FROZEN_FUNCTION_SOURCE_SHA256.items():
             with self.subTest(name=name):
-                actual = hashlib.sha256(inspect.getsource(getattr(battery_float, name)).encode()).hexdigest()
+                segment = (inspect.getsource(getattr(battery_float, name)) if name in FROZEN_ROOTS
+                           else ast.get_source_segment(source, definitions[name]))
+                actual = hashlib.sha256(segment.encode()).hexdigest()
                 self.assertEqual(actual, pinned)
+
+    def test_mutating_signed_dependency_turns_pin_red(self):
+        source = Path(battery_float.__file__).read_text()
+        mutant = source.replace("return number - 2**64 if number >= 2**63 else number",
+                                "return number - 2**64 if number > 2**63 else number")
+        self.assertNotEqual(source, mutant)
+        nodes = {node.name: node for node in ast.parse(mutant).body if isinstance(node, ast.FunctionDef)}
+        digest = hashlib.sha256(ast.get_source_segment(mutant, nodes["_signed"]).encode()).hexdigest()
+        self.assertNotEqual(digest, FROZEN_FUNCTION_SOURCE_SHA256["_signed"])
 
     def test_observe_seven_old_phases_match_pre_s0_bytes(self):
         for phase in ("arm_check", "publish_install", "t0", "validate_install",
