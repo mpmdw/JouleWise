@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import ast
 from pathlib import Path
 import subprocess
 import tempfile
@@ -201,6 +202,85 @@ class WindowMembersTests(unittest.TestCase):
             with self.assertRaisesRegex(CustodyUnreadable, "second") as caught:
                 authenticate_window_members((("first", first), ("second", second)))
             self.assertEqual(caught.exception.window_member, "second")
+
+    def test_aggregate_authenticates_failed_member_before_numbers(self) -> None:
+        from joulewise.aggregate import aggregate_experiment
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.pair_bundle(root, "passing")
+            failed = self.pair_bundle(root, "failed", charging=True)
+            (failed / "summary_metrics.json").write_text(json.dumps({"status": "failed"}))
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                aggregate_experiment(root, {"members": ["passing", "failed"]})
+            self.assertEqual([(row["label"], row["status"])
+                              for row in caught.exception.members],
+                             [("failed", "battery_float_confounded")])
+
+    def test_aggregate_exposes_historical_battery_state(self) -> None:
+        from joulewise.aggregate import aggregate_experiment
+        fixtures = Path(__file__).parent / "fixtures"
+        result = aggregate_experiment(fixtures, {"members": ["d078_r01"]})
+        self.assertEqual(result["battery_float_members"],
+                         {"d078_r01": "unobserved_historical"})
+
+    def test_campaign_helper_includes_superseded_ordinary_and_axi_attempts(self) -> None:
+        from scripts.run_campaign import (
+            OrdinaryOccurrenceResolution, WholeWindowMemberSource,
+            WholeWindowMembershipResolution, _authenticate_whole_window_members,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            selected = self.pair_bundle(root, "selected")
+            superseded = self.pair_bundle(root, "superseded", charging=True)
+            membership = WholeWindowMembershipResolution(
+                sources=(WholeWindowMemberSource(path=selected),),
+                source_manifests=(), conditions=(), occurrence_supersessions=(),
+                occurrence_resolutions=(OrdinaryOccurrenceResolution(
+                    bundle_id="selected", status="selected", present_paths=(selected, superseded)
+                ),),
+            )
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                _authenticate_whole_window_members(membership, root)
+            self.assertIn(str(superseded), [row["label"] for row in caught.exception.members])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = root / "axi_attempt_bundles" / "manifest" / "entry"
+            (base / "a1").mkdir(parents=True)
+            (base / "a2").mkdir(parents=True)
+            old = self.pair_bundle(base / "a1", "old", charging=True)
+            selected = self.pair_bundle(base / "a2", "selected")
+            membership = WholeWindowMembershipResolution(
+                sources=(WholeWindowMemberSource(path=selected),),
+                source_manifests=(), conditions=(), occurrence_supersessions=(),
+            )
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                _authenticate_whole_window_members(membership, root)
+            self.assertIn(str(old), [row["label"] for row in caught.exception.members])
+
+    def test_eight_consumer_modules_call_reader_gate_without_battery_import(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        paths = (
+            "joulewise/whole_window.py", "joulewise/analysis_engine/inputs.py",
+            "joulewise/floor_extraction.py", "joulewise/aggregate.py",
+            "joulewise/window_duration_margins.py", "scripts/mint_floor_artifact.py",
+            "scripts/extract_detection_floors.py", "scripts/run_campaign.py",
+        )
+        for relative in paths:
+            with self.subTest(path=relative):
+                tree = ast.parse((root / relative).read_text())
+                calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                         and ((isinstance(node.func, ast.Name)
+                               and node.func.id == "authenticate_window_members")
+                              or (isinstance(node.func, ast.Attribute)
+                                  and node.func.attr == "authenticate_window_members"))]
+                self.assertTrue(calls, relative)
+                self.assertFalse(any(
+                    (isinstance(node, ast.ImportFrom) and
+                     "battery_float" in (node.module or ""))
+                    or (isinstance(node, ast.Import) and any(
+                        "battery_float" in alias.name for alias in node.names))
+                    for node in ast.walk(tree)
+                ), relative)
 
 
 if __name__ == "__main__":

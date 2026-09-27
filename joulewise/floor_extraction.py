@@ -109,7 +109,7 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.calibration_ledger import CalibrationLedgerSnapshot
-from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
+from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window, authenticate_window_members
 from joulewise.reduce import (
     _corner_composed_anchor_shift_envelope,
     _integrate,
@@ -356,7 +356,7 @@ def _common_mode_block_input_from_contrast(
         windows = tuple(tuple(window) for window in member_window_bounds_s)
     except CommonModeEstimatorRefusal:
         raise
-    except Exception as exc:
+    except (OSError, TypeError, ValueError, KeyError) as exc:
         _common_mode_refuse("common_mode_precondition_failed", str(exc))
     if clean_zero is None:
         _common_mode_refuse(
@@ -1973,7 +1973,7 @@ def _evaluate_member(
         # treated as a strict failure, never an implicit pass.
         try:
             strict_problems = tuple(strict_validator(path, True))
-        except Exception:  # noqa: BLE001 - validator failure is never a pass
+        except (OSError, TypeError, ValueError, KeyError):  # noqa: BLE001 - validator failure is never a pass
             strict_problems = ("strict validation raised",)
         if (
             telemetry_identity.custody_bound_config
@@ -2865,8 +2865,20 @@ def extract_cells(
         raise FloorExtractionError("evaluation_basis_sha256 must be 64 lowercase hex")
 
     runs_root = Path(runs_root)
-    cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
     referenced_bundle_ids = _spec_referenced_bundle_ids(cells)
+    cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
+    addressed = {
+        cooldown.get("manifest") for bundle_id, cooldown in cooldowns.items()
+        if bundle_id in referenced_bundle_ids and isinstance(cooldown, Mapping)
+        and isinstance(cooldown.get("manifest"), str)
+    }
+    window_bundle_ids = referenced_bundle_ids | {
+        bundle_id for bundle_id, cooldown in cooldowns.items()
+        if isinstance(cooldown, Mapping) and cooldown.get("manifest") in addressed
+    }
+    battery_verdicts = authenticate_window_members(
+        (bundle_id, runs_root / bundle_id) for bundle_id in sorted(window_bundle_ids)
+    )
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         referenced_bundle_ids,
@@ -3080,6 +3092,9 @@ def extract_cells(
         "schema_version": EXTRACTION_SCHEMA_VERSION,
         "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
         "runs_root": str(runs_root),
+        "battery_float_members": {
+            label: verdict.status for label, verdict in battery_verdicts.items()
+        },
         "manifest_id": manifest_id,
         "consumption_semantics_id": _ingested_consumption_semantics_id(
             consumption_session

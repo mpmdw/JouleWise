@@ -64,6 +64,7 @@ from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
     BundleReader,
     BundleReadError,
+    authenticate_window_members,
     PROMPT_REALIZATION_PROBLEM_CODES,
 )
 from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
@@ -1224,7 +1225,7 @@ def _normalized_benchmark_config(value: Any) -> dict[str, Any] | None:
         from joulewise.schemas import BenchmarkConfig
 
         return BenchmarkConfig.from_mapping(value).to_dict()
-    except Exception:  # noqa: BLE001 - malformed identities fail closed at callers.
+    except (OSError, TypeError, ValueError, KeyError):  # noqa: BLE001 - malformed identities fail closed at callers.
         return None
 
 
@@ -2797,13 +2798,15 @@ def evaluate_member(
     waivers: WaiverMap,
     cooldown_evidence: dict[str, Any] | None = None,
 ) -> MemberEvaluation:
+    if bundle_dir.is_dir():
+        authenticate_window_members(((bundle_dir.name, bundle_dir),))
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
     strict_valid = False
     if bundle_dir.exists():
         try:
             problems = validate_bundle(bundle_dir, strict=True)
-        except Exception as exc:
+        except (OSError, TypeError, ValueError) as exc:
             problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
         strict_valid = not problems
     else:
@@ -3006,7 +3009,7 @@ def read_config_infos(
                     order_entry=order_by_config.get(config_path.name),
                 )
             )
-        except Exception as exc:
+        except (OSError, TypeError, ValueError, KeyError) as exc:
             items.append(
                 ConfigError(
                     path=config_path,
@@ -4200,7 +4203,7 @@ def campaign_cooldown_before_member(
             )
         else:
             note.update({"result": "unknown", "reason": "cooldown trace was empty"})
-    except Exception as exc:  # noqa: BLE001 - evidence failure must stay fail-closed.
+    except (OSError, TypeError, ValueError, KeyError) as exc:  # noqa: BLE001 - evidence failure must stay fail-closed.
         note.update({"result": "unknown", "reason": f"{type(exc).__name__}: {exc}"})
     return note
 
@@ -5325,6 +5328,8 @@ def _whole_window_member(
     bundle_path = source.path
     """Strictly validate an existing bundle before whole-window admission."""
 
+    authenticate_window_members(((bundle_path.name, bundle_path),))
+
     summary, _summary_problem = _load_json_object(
         bundle_path / "summary_metrics.json", "summary_metrics.json"
     )
@@ -5334,7 +5339,7 @@ def _whole_window_member(
     status = summary.get("status") if isinstance(summary, dict) else None
     try:
         problems = validate_bundle(bundle_path, strict=True)
-    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
+    except (OSError, TypeError, ValueError) as exc:
         problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
     collection_flags = _prompt_realization_collection_flags(problems)
     telemetry_identity = custody_telemetry_identity(
@@ -6189,6 +6194,28 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
         release_campaign_lock(lock_token, in_flight=in_flight)
 
 
+def _authenticate_whole_window_members(
+    membership: WholeWindowMembershipResolution, runs_dir: Path,
+) -> dict[str, Any]:
+    """Authenticate selected, superseded, and finalized AXI attempts as one set."""
+    paths = {str(source.path): source.path for source in membership.sources}
+    for resolution in membership.occurrence_resolutions:
+        for path in resolution.present_paths:
+            paths[str(path)] = path
+    for source in membership.sources:
+        try:
+            relative = source.path.relative_to(runs_dir)
+        except ValueError:
+            continue
+        if len(relative.parts) >= 3 and relative.parts[0] == "axi_attempt_bundles":
+            attempt_root = runs_dir / relative.parts[0] / relative.parts[1]
+            for metadata_path in attempt_root.rglob("metadata.json"):
+                paths[str(metadata_path.parent)] = metadata_path.parent
+    return authenticate_window_members(
+        (str(path), path) for path in sorted(paths.values())
+    )
+
+
 def _run_whole_window_verdict_locked(
     args: argparse.Namespace,
     *,
@@ -6218,6 +6245,7 @@ def _run_whole_window_verdict_locked(
         waivers=args.waivers,
     )
     bundle_sources = list(membership.sources)
+    battery_verdicts = _authenticate_whole_window_members(membership, runs_dir)
     source_manifests = list(membership.source_manifests)
     selection_conditions = list(membership.conditions)
     occurrence_supersessions = list(membership.occurrence_supersessions)
@@ -6394,6 +6422,9 @@ def _run_whole_window_verdict_locked(
             for evaluation in excluded
         ],
         "member_failures": member_failures,
+        "battery_float_members": {
+            label: verdict.status for label, verdict in battery_verdicts.items()
+        },
         "idle_admission_core": core,
     }
     if membership.salvage_dangler_exclusion is not None:
@@ -6892,6 +6923,7 @@ def append_verdict(
     preflight: dict[str, Any],
     idle_admission_core: dict[str, Any] | None = None,
     prospective_analysis_manifest: ProspectiveManifestIdentity | None = None,
+    battery_float_members: Mapping[str, str] | None = None,
 ) -> None:
     row: dict[str, Any] = {
         "schema_version": CAMPAIGN_VERDICT_SCHEMA,
@@ -6922,6 +6954,8 @@ def append_verdict(
     }
     if idle_admission_core is not None:
         row["idle_admission_core"] = idle_admission_core
+    if battery_float_members is not None:
+        row["battery_float_members"] = dict(battery_float_members)
     if warning is not None:
         row["block_order_warning"] = warning
     append_log(log_path, row, lock_token=lock_token)
@@ -7318,7 +7352,7 @@ def run_axi_spec_campaign(
                     arm_countdown_s=int(getattr(args, "arm_countdown_s", 5)),
                     override_path=getattr(args, "environment_override", None),
                 )
-            except Exception as exc:  # noqa: BLE001 - fail before AXI member 1
+            except (OSError, TypeError, ValueError, KeyError) as exc:  # noqa: BLE001 - fail before AXI member 1
                 environment_error = {
                     "status": "error",
                     "reason": f"{type(exc).__name__}: {exc}",
@@ -8319,7 +8353,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     arm_countdown_s=args.arm_countdown_s,
                     override_path=args.environment_override,
                 )
-            except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
+            except (OSError, TypeError, ValueError, KeyError) as exc:  # noqa: BLE001 - preflight errors fail before member 1
                 environment_error = {
                     "status": "error",
                     "reason": f"{type(exc).__name__}: {exc}",
@@ -8891,6 +8925,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                 print(f"  {summary_status}: {counts[summary_status]}")
         if args.dry_run:
             return 0
+        battery_verdicts = authenticate_window_members(
+            (evaluation.bundle_id, evaluation.bundle_path)
+            for evaluation in all_evaluations
+            if evaluation.bundle_path.is_dir()
+        )
         categories = classify_campaign_members(all_evaluations, missing_members)
         collection_verdict, collection_reasons = collection_verdict_for(categories)
         sampling_audit = sampling_audit_for(analysis_manifest)
@@ -8941,6 +8980,9 @@ def run_campaign(args: argparse.Namespace) -> int:
             preflight=preflight,
             idle_admission_core=idle_admission_core,
             prospective_analysis_manifest=prospective_analysis_manifest,
+            battery_float_members={
+                label: verdict.status for label, verdict in battery_verdicts.items()
+            },
         )
         core_blocks_claim = bool(
             claim_bearing
@@ -8990,7 +9032,7 @@ def main(argv: list[str] | None = None) -> int:
     except (LaunchLineageError, SupersessionRecorderError) as exc:
         print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
         return 2
-    except Exception as exc:
+    except (OSError, TypeError, ValueError, KeyError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

@@ -27,7 +27,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.floor_extraction import FloorExtractionError, extract_cells  # noqa: E402
+from joulewise.floor_extraction import FloorExtractionError, extract_cells, _spec_referenced_bundle_ids  # noqa: E402
+from joulewise.bundle_read import authenticate_window_members  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -135,6 +136,13 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+
+    cells = spec.get("cells") if isinstance(spec, dict) else None
+    if isinstance(cells, list):
+        authenticate_window_members(
+            (bundle_id, args.runs_root / bundle_id)
+            for bundle_id in sorted(_spec_referenced_bundle_ids(cells))
+        )
 
     try:
         report = extract_cells(

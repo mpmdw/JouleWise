@@ -47,7 +47,7 @@ from joulewise.arm_readiness import (
     parse_json_bytes,
     validate_freeze_receipt,
 )
-from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.bundle_read import BundleReader, BundleReadError, authenticate_window_members
 from joulewise.campaign_provenance import (
     CAMPAIGN_PROVENANCE_SCHEMA_V1,
     legacy_existing_outcome,
@@ -547,6 +547,7 @@ class LoadedAnalysisInputs:
     valid_replacements: tuple[Mapping[str, Any], ...]
     unregistered_matching: tuple[Mapping[str, Any], ...]
     top_up_entry_ids: frozenset[str]
+    battery_float_members: Mapping[str, str] = field(default_factory=dict)
     floor_artifact_bytes: bytes = b""
     supersession_audit: tuple[Mapping[str, Any], ...] = ()
     supersession_diverged: bool = False
@@ -1239,7 +1240,7 @@ def declared_evidence_roots(
     try:
         authenticated = load_floor_artifact(floor_artifact_path)
         declared_root_ids = authenticated.root_ids
-    except Exception:
+    except (OSError, TypeError, ValueError, KeyError):
         # This pre-authentication read only narrows separation inputs. Preserve
         # the full, stricter mapping on every failure; authenticated loading
         # immediately follows and remains the authority for refusal details.
@@ -1860,6 +1861,12 @@ def bind_floor_artifact_evidence(
                         for row in members
                         if isinstance(row, Mapping)
                     )
+        authenticate_window_members(
+            (f"{evidence_root}:{bundle_id}", evidence_root / bundle_id)
+            for record, _block_id, evidence_root in records
+            if isinstance((bundle_id := record.get("bundle_id")), str)
+            and bundle_id and PurePosixPath(bundle_id).name == bundle_id
+        )
         observed_identity_hashes: set[str] = set()
         observed_stack_hashes: set[str] = set()
         cell_hashes: set[str] = set()
@@ -1883,7 +1890,7 @@ def bind_floor_artifact_evidence(
                 local_problems: list[str] = []
                 try:
                     strict = tuple(strict_validator(path, True))
-                except Exception as exc:
+                except (OSError, TypeError, ValueError) as exc:
                     strict = (f"strict validation raised {type(exc).__name__}: {exc}",)
                 reader = BundleReader(path)
                 summary = reader.raw_summary()
@@ -2778,9 +2785,11 @@ def _read_bundle(
             inclusion_status="excluded",
         )
 
+    authenticate_window_members(((relative, path),))
+
     try:
         strict_problems = tuple(strict_validator(path, True))
-    except Exception as exc:  # shared validator failures are input failures, never passes
+    except (OSError, TypeError, ValueError) as exc:  # ordinary validator input failures
         strict_problems = (f"strict validation raised {type(exc).__name__}: {exc}",)
     reader = BundleReader(path)
     raw_config = reader.raw_config()
@@ -3116,6 +3125,19 @@ def load_analysis_inputs(
         analysis_manifest_path,
         Path(runs_root),
     )
+    battery_paths: dict[str, Path] = {}
+    for entry in manifest["entries"]:
+        path = _registered_bundle_path(manifest, entry, runs_root)
+        if path.is_dir():
+            battery_paths[_safe_relative(path, runs_root)] = path
+        relative = _safe_relative(path, runs_root)
+        parts = PurePosixPath(relative).parts
+        if len(parts) >= 3 and parts[0] == "axi_attempt_bundles":
+            attempt_root = runs_root / parts[0] / parts[1]
+            for metadata_path in attempt_root.rglob("metadata.json"):
+                attempt_path = metadata_path.parent
+                battery_paths[_safe_relative(attempt_path, runs_root)] = attempt_path
+    battery_verdicts = authenticate_window_members(sorted(battery_paths.items()))
     authenticated_floor = load_floor_artifact(
         Path(floor_artifact_path)
     )
@@ -3339,6 +3361,9 @@ def load_analysis_inputs(
         valid_replacements=tuple(replacements),
         unregistered_matching=tuple(unregistered),
         top_up_entry_ids=frozenset(top_up_ids),
+        battery_float_members={
+            label: verdict.status for label, verdict in battery_verdicts.items()
+        },
         supersession_audit=tuple(supersession_audit),
         supersession_diverged=supersession_diverged,
     )

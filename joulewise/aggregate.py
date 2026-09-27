@@ -14,7 +14,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from joulewise.bundle_read import BundleReader
+from joulewise.bundle_read import BundleReader, authenticate_window_members
 from joulewise.schemas import UncertaintyInterval
 
 __all__ = ["aggregate_experiment", "student_t_critical_95"]
@@ -101,6 +101,12 @@ def aggregate_experiment(runs_root: Path, manifest: dict[str, Any]) -> dict[str,
     if not isinstance(member_names, list):
         member_names = []
 
+    battery_verdicts = authenticate_window_members(
+        (member, Path(runs_root) / member)
+        for member in member_names
+        if isinstance(member, str) and _is_plain_member_name(member)
+    )
+
     records = [_read_member(Path(runs_root), member) for member in member_names]
     metric_names = list(STANDARD_METRICS)
     metric_names.extend(_phase_metric_names(records))
@@ -115,6 +121,9 @@ def aggregate_experiment(runs_root: Path, manifest: dict[str, Any]) -> dict[str,
         "method": METHOD,
         "confidence": CONFIDENCE,
         "members_total": len(member_names),
+        "battery_float_members": {
+            label: verdict.status for label, verdict in battery_verdicts.items()
+        },
         "members_read": sum(1 for record in records if record["readable"]),
         "members_succeeded": sum(
             1 for record in records if record.get("status") == "succeeded"
@@ -143,6 +152,7 @@ def _read_member(runs_root: Path, member: Any) -> dict[str, Any]:
             "problem": "invalid member name",
         }
 
+    authenticate_window_members(((member, runs_root / member),))
     summary = BundleReader(runs_root / member).raw_summary()
     if not isinstance(summary, dict):
         return {

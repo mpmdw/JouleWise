@@ -24,7 +24,7 @@ from joulewise.authentication_io import (
     read_authentication_input,
     read_authentication_text,
 )
-from joulewise.bundle_read import BundleReadError, BundleReader
+from joulewise.bundle_read import BundleReadError, BundleReader, authenticate_window_members
 from joulewise.cli import _strict_raw_to_trace_problems
 from joulewise.reduce import (
     MIN_PHASE_SAMPLES,
@@ -54,6 +54,7 @@ RECEIPT_KEYS = frozenset(
         "cell_inventory_sha256",
         "cells",
         "authoritative_inputs",
+        "battery_float_members",
     }
 )
 CELL_KEYS = frozenset(
@@ -944,6 +945,9 @@ def derive_window_duration_margins(
                 authentication, repository_root, pack_root, pack_identity
             )
             member_paths = _resolve_member_paths(runs_root, cells)
+            battery_verdicts = authenticate_window_members(
+                (bundle_id, path) for bundle_id, path in sorted(member_paths.items())
+            )
             observations: dict[tuple[str, str], _MemberObservation] = {}
             expected_by_id: dict[str, str] = {}
             for cell in cells:
@@ -1000,6 +1004,9 @@ def derive_window_duration_margins(
                 "evaluation_basis_sha256": basis_sha,
                 "cell_inventory_sha256": _canonical_sha256(inventory),
                 "cells": cell_rows,
+                "battery_float_members": {
+                    label: verdict.status for label, verdict in battery_verdicts.items()
+                },
                 "authoritative_inputs": _authoritative_inputs(
                     authentication,
                     repository_root=repository_root,
@@ -1049,6 +1056,12 @@ def validate_window_duration_margins_receipt(receipt: Mapping[str, Any]) -> None
         if not isinstance(root.get(field), str) or _SHA256_RE.fullmatch(root[field]) is None:
             raise ValueError(f"receipt {field} is invalid")
     raw_cells = root.get("cells")
+    battery_members = root.get("battery_float_members")
+    if not isinstance(battery_members, dict) or any(
+        not isinstance(label, str) or not isinstance(status, str)
+        for label, status in battery_members.items()
+    ):
+        raise ValueError("receipt battery_float_members is invalid")
     if not isinstance(raw_cells, list) or not raw_cells:
         raise ValueError("receipt cells must be a nonempty array")
     cell_ids: list[str] = []

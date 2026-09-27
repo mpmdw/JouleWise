@@ -7,6 +7,7 @@ import json
 import math
 import re
 
+from joulewise.battery_float import PairVerdict
 import joulewise.scored_registration as sr
 from joulewise.scored_packer import executed_status, verify_executed_roster
 
@@ -21,6 +22,9 @@ ENERGY_MAX_J = 10**12
 INT_MAX = 2**53
 REDUCTION_CODES = (
     "reduce_input",
+    "battery_evidence_input", "battery_evidence_duplicate", "battery_evidence_unbound",
+    "battery_evidence_missing", "battery_float_confounded", "battery_float_evidence_missing",
+    "window_bundle_duplicate",
     "window_keys", "window_domain", "window_unknown", "window_binding", "window_duplicate",
     "window_envelope", "window_unstarted", "anchor_energy_envelope_unrecorded", "missing_live_window",
     "row_keys", "row_domain", "row_stop_reason_unknown", "row_scorer", "row_unknown", "row_binding",
@@ -88,6 +92,52 @@ def _classify(roster):
     return keys
 
 
+def _check_battery_evidence(keys, capture_windows, battery_evidence):
+    """Authenticate the placement universe before interpreting any window."""
+    _need(type(battery_evidence) is tuple, "battery_evidence_input", "expected tuple")
+    expected = {key for key, (_, _, status) in keys.items() if status != "not_started"}
+    by_key = {}
+    for row in battery_evidence:
+        _need(type(row) is tuple and len(row) == 3, "battery_evidence_input", "entry shape")
+        block_id, attempt, evidence = row
+        _need(_text(block_id) and _int(attempt), "battery_evidence_input", "placement key")
+        key = (block_id, attempt)
+        _need(key not in by_key, "battery_evidence_duplicate", repr(key))
+        by_key[key] = evidence
+    _need(set(by_key) <= expected, "battery_evidence_unbound", repr(sorted(set(by_key) - expected)))
+    _need(expected <= set(by_key), "battery_evidence_missing", repr(sorted(expected - set(by_key))))
+
+    windows = {}
+    digests = set()
+    for window in capture_windows:
+        if type(window) is not dict:
+            continue  # _check_window owns malformed window records.
+        block_id, attempt = window.get("block_id"), window.get("attempt")
+        if not (_text(block_id) and _int(attempt)):
+            continue
+        key = (block_id, attempt)
+        digest = window.get("bundle_sha256")
+        if key in expected and _hex(digest):
+            _need(digest not in digests, "window_bundle_duplicate", digest)
+            digests.add(digest)
+            windows[key] = digest
+
+    for key, evidence in by_key.items():
+        digest = windows.get(key)
+        if type(evidence) is dict and set(evidence) == {"no_bundle"}:
+            _need(digest is None and evidence["no_bundle"] == keys[key][2],
+                  "battery_evidence_unbound", repr(key))
+            continue
+        _need(isinstance(evidence, PairVerdict) and evidence.kind == "bundle"
+              and _hex(evidence.bundle_sha256), "battery_evidence_input", repr(key))
+        _need(digest is not None and evidence.bundle_sha256 == digest,
+              "battery_evidence_unbound", repr(key))
+        if evidence.status != "pass":
+            code = ("battery_float_confounded" if evidence.status == "battery_float_confounded"
+                    else "battery_float_evidence_missing")
+            raise ReductionRefusal(code, repr(key))
+
+
 def _check_window(w, registration, roster, keys, seen):
     _need(type(w) is dict and set(w) == WINDOW_KEYS, "window_keys", "window key set")
     anchor = w["energy_bound_terms_j"]
@@ -142,7 +192,7 @@ def _derived(row, cap_tokens_arm):
     return capped, row["scorer_match"] and not capped
 
 
-def reduce(registration, roster, predicted_decode_s, score_rows, capture_windows):
+def reduce(registration, roster, predicted_decode_s, score_rows, capture_windows, battery_evidence):
     verify_executed_roster(registration, roster, predicted_decode_s)
     _need(type(score_rows) is list and type(capture_windows) is list, "reduce_input", "score_rows and capture_windows must be lists")
     g = registration.to_mapping()
@@ -151,6 +201,7 @@ def reduce(registration, roster, predicted_decode_s, score_rows, capture_windows
     models = (g["role_to_model_id"]["8B"], g["role_to_model_id"]["1.7B"])
     blocks = {b["block_id"]: b for b in roster["blocks"]}
     keys = _classify(roster)
+    _check_battery_evidence(keys, capture_windows, battery_evidence)
 
     seen = set()
     window_by_key = {}

@@ -21,6 +21,7 @@ from joulewise.bundle_read import (
     BundleReader,
     BundleReadError,
     BatteryStatusRefusal,
+    WindowBatteryRefusal,
     HISTORICAL_BUNDLE_SET_SHA256,
     Window,
     _marker_pair_problems,
@@ -969,7 +970,7 @@ class PromptRealizationExpectationTests(ReaderTestCase):
             },
         )
 
-    def test_mismatch_reaches_floor_and_analysis_admission_as_neither_branch(self) -> None:
+    def test_mismatch_reaches_floor_but_analysis_window_refuses_not_applicable(self) -> None:
         from joulewise.analysis_engine.inputs import _read_bundle
         from joulewise.floor_extraction import _evaluate_member
 
@@ -1000,13 +1001,14 @@ class PromptRealizationExpectationTests(ReaderTestCase):
             strict_validator=strict_validator,
         )
         raw_config = json.loads((writer.path / "config.json").read_text())
-        analysis_evidence = _read_bundle(
-            {},
-            writer.path,
-            writer.path.parent,
-            raw_config,
-            strict_validator,
-        )
+        with self.assertRaises(WindowBatteryRefusal) as raised:
+            _read_bundle(
+                {},
+                writer.path,
+                writer.path.parent,
+                raw_config,
+                strict_validator,
+            )
 
         self.assertTrue(
             any(
@@ -1016,14 +1018,8 @@ class PromptRealizationExpectationTests(ReaderTestCase):
             named_problems,
         )
         self.assertIn("bundle_strict_invalid", floor_member.reasons)
-        self.assertFalse(analysis_evidence.included)
-        self.assertTrue(
-            any(
-                problem.startswith("prompt_realization_mismatch:")
-                for problem in analysis_evidence.strict_problems
-            ),
-            analysis_evidence.strict_problems,
-        )
+        self.assertEqual(len(raised.exception.members), 1)
+        self.assertEqual(raised.exception.members[0]["status"], "not_applicable")
 
 
 class MeasuredWindowTests(ReaderTestCase):

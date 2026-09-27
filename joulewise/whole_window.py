@@ -44,7 +44,7 @@ from joulewise.idle_admission import (
     extract_adapter_observation,
 )
 from joulewise.bundle import sanitize_id_component
-from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.bundle_read import BundleReader, BundleReadError, authenticate_window_members
 from joulewise.environment_admission import (
     current_environment_refusals,
     environment_admission_refusals,
@@ -531,6 +531,7 @@ class AuthenticatedConsumptionSession:
         self._preparation_identity: tuple[tuple[str, str], ...] | None = None
         self._summaries: dict[str, Mapping[str, Any]] = {}
         self._provenance: dict[str, Mapping[str, Any]] = {}
+        self.battery_float_members: dict[str, str] = {}
         self._row_validation_results: dict[
             tuple[str, str, tuple[str, ...], str | None],
             tuple[bool, tuple[str, ...]],
@@ -674,6 +675,13 @@ class AuthenticatedConsumptionSession:
                 {"whole_window_verdict_provenance_invalid"}
             )
             return
+
+        battery_verdicts = authenticate_window_members(
+            (bundle_id, path) for bundle_id, path in sorted(bundle_paths.items())
+        )
+        self.battery_float_members = {
+            label: verdict.status for label, verdict in battery_verdicts.items()
+        }
 
         bracket_binding = self._basis_bracket_binding()
         if (
@@ -3475,6 +3483,8 @@ def _reference_energy_evidence(
 ) -> tuple[dict[str, float] | None, float | None, str | None]:
     """Re-derive both current NEG-8 claim-family points from primary bytes."""
 
+    authenticate_window_members(((bundle_path.name, bundle_path),))
+
     stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
     stored_gross = _gross_fields(stored_summary)
     stored_idle = (
@@ -3499,7 +3509,7 @@ def _reference_energy_evidence(
         from joulewise.reduce import reduce_bundle
 
         reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
-    except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
+    except (OSError, TypeError, ValueError):
         return None, None, "provenance"
     fresh_gross = _gross_fields(reduced)
     fresh_idle = _finite_number(reduced.get("idle_subtracted_energy_j"))
@@ -3612,6 +3622,17 @@ def mint_neg8_drift_bound_artifact(
         raise ValueError(
             f"NEG-8 reference corpus requires n >= {NEG8_DRIFT_MINIMUM_N}"
         )
+
+    battery_members: dict[str, Path] = {}
+    for member in members:
+        if not isinstance(member, Mapping):
+            raise ValueError("NEG-8 corpus member descriptor is invalid")
+        bundle_id = member.get("bundle_id")
+        path = _safe_source_path(root, member.get("bundle_path"))
+        if not isinstance(bundle_id, str) or path is None:
+            raise ValueError("NEG-8 corpus member is invalid")
+        battery_members[bundle_id] = path
+    battery_verdicts = authenticate_window_members(sorted(battery_members.items()))
 
     evidence_members: list[dict[str, Any]] = []
     freshness_bindings: list[dict[str, str]] = []
@@ -3855,6 +3876,37 @@ def _derived_neg8_decision(
         policy = Neg8BracketPolicy.from_mapping(policy_value)
     except (TypeError, ValueError):
         return None, "provenance"
+    battery_paths: dict[str, Path] = {}
+    for manifest in manifests:
+        selection = manifest.get("attempt_ledger_selection")
+        if isinstance(selection, Mapping):
+            for descriptor in selection.get("selected_bundles", []):
+                if not isinstance(descriptor, Mapping):
+                    continue
+                path = _safe_source_path(runs_root, descriptor.get("path"))
+                if path is None:
+                    continue
+                battery_paths[str(path)] = path
+                try:
+                    parts = path.relative_to(runs_root).parts
+                except ValueError:
+                    continue
+                if len(parts) >= 3 and parts[0] == "axi_attempt_bundles":
+                    for metadata_path in (runs_root / parts[0] / parts[1]).rglob("metadata.json"):
+                        battery_paths[str(metadata_path.parent)] = metadata_path.parent
+        else:
+            ordinary_members = manifest.get("members")
+            for member in ordinary_members if isinstance(ordinary_members, list) else []:
+                if not isinstance(member, Mapping) or member.get("execution") != "invoked":
+                    continue
+                bundle_ids = member.get("bundle_ids")
+                for bundle_id in bundle_ids if isinstance(bundle_ids, list) else []:
+                    if isinstance(bundle_id, str):
+                        for path in ordinary_present_bundle_paths(runs_root, bundle_id):
+                            battery_paths[str(path)] = path
+    authenticate_window_members(
+        (label, path) for label, path in sorted(battery_paths.items())
+    )
     references: dict[
         str, list[tuple[dict[str, float] | None, float | None]]
     ] = {

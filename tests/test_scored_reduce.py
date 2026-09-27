@@ -13,6 +13,8 @@ row_tokens_over_cap, anchor, or internal_disagreement guards.
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
+from functools import lru_cache
 from collections import OrderedDict
 from contextlib import ExitStack
 from copy import deepcopy
@@ -24,11 +26,13 @@ import math
 from pathlib import Path
 import random
 import re
+import tempfile
 import unittest
 from unittest.mock import patch
 
 import joulewise.scored_packer as sp
 import joulewise.scored_registration as sr
+from joulewise.battery_float import authenticate_bundle
 from tests.scored_case_generator import generate_case, pending
 from tests.scored_reduce_checker import (check_reduction, ENERGY_MAX_J, INT_MAX,
                                          OUTPUT_KEYS, ROW_KEYS, WINDOW_KEYS)
@@ -100,7 +104,7 @@ def _inputs(g, reg, roster, *, optional=False, seed=0):
                       roster_sha256=_in_force(roster, p["envelope_index"]),
                       block_id=p["block_id"], attempt=p["attempt"],
                       envelope_index=p["envelope_index"], gross_j=float(position + 1),
-                      bundle_sha256="b" * 64,
+                      bundle_sha256=hashlib.sha256(repr((p["block_id"], p["attempt"])).encode()).hexdigest(),
                       energy_bound_terms_j={"E_clock_anchor_shift_bound_j": .125 if live else None})
         windows.append(window)
         for item_id in blocks[p["block_id"]]["items"]:
@@ -133,8 +137,112 @@ def _add_window(g, reg, roster, p, gross=7.0, anchor=None):
                 roster_sha256=_in_force(roster, p["envelope_index"]),
                 block_id=p["block_id"], attempt=p["attempt"],
                 envelope_index=p["envelope_index"], gross_j=gross,
-                bundle_sha256="c" * 64,
+                bundle_sha256=hashlib.sha256(repr((p["block_id"], p["attempt"], "extra")).encode()).hexdigest(),
                 energy_bound_terms_j={"E_clock_anchor_shift_bound_j": anchor})
+
+
+@lru_cache(maxsize=1)
+def _seed_battery_verdict():
+    """Authenticate one real fixture bundle before synthetic placement rebinding."""
+    from tests.test_bfgs_window_consumers import WindowMembersTests
+    with tempfile.TemporaryDirectory() as tmp:
+        return authenticate_bundle(WindowMembersTests().pair_bundle(Path(tmp), "scored-seed"))
+
+
+def _battery_fixture(roster, windows):
+    seed = _seed_battery_verdict()
+    window_by_key = {
+        (w.get("block_id"), w.get("attempt")): w.get("bundle_sha256")
+        for w in windows if type(w) is dict and isinstance(w.get("bundle_sha256"), str)
+        and isinstance(w.get("block_id"), str) and type(w.get("attempt")) is int
+        and re.fullmatch(r"[0-9a-f]{64}", w["bundle_sha256"])
+    }
+    entries = []
+    for p in roster["placements"]:
+        env = roster["envelopes"][p["envelope_index"]]
+        status = next(o["status"] for o in env["observations"] if o["block_id"] == p["block_id"])
+        if status == "not_started":
+            continue
+        key = (p["block_id"], p["attempt"])
+        digest = window_by_key.get(key)
+        entries.append((*key, replace(seed, bundle_sha256=digest) if digest else {"no_bundle": status}))
+    return tuple(entries)
+
+
+def _call_reduce(reducer, registration, roster, predictions, rows, windows):
+    try:
+        evidence = _battery_fixture(roster, windows)
+    except (KeyError, TypeError, StopIteration):
+        # These malformed-roster witnesses are rejected by roster verification.
+        evidence = ()
+    return reducer.reduce(registration, roster, predictions, rows, windows, evidence)
+
+
+class BatteryEvidenceReduceTests(unittest.TestCase):
+    def setUp(self):
+        self.g, self.reg, self.roster, self.predictions = _night()
+        self.rows, self.windows = _inputs(self.g, self.reg, self.roster)
+        self.evidence = _battery_fixture(self.roster, self.windows)
+
+    def _refusal(self, code, evidence=None, windows=None):
+        reducer = _reducer()
+        with self.assertRaises(reducer.ReductionRefusal) as caught:
+            reducer.reduce(self.reg, self.roster, self.predictions, self.rows,
+                           self.windows if windows is None else windows,
+                           self.evidence if evidence is None else evidence)
+        self.assertEqual(caught.exception.code, code)
+
+    def test_complete_placement_universe_and_no_bundle_vocabulary(self):
+        reducer = _reducer()
+        g, reg, roster, _ = _terminal_night(width=2, kind="ceiling_violation")
+        rows, windows = _inputs(g, reg, roster)
+        evidence = _battery_fixture(roster, windows)
+        expected = {key for key, (_, _, status) in reducer._classify(roster).items()
+                    if status != "not_started"}
+        self.assertEqual({(block, attempt) for block, attempt, _ in evidence}, expected)
+        markers = [value["no_bundle"] for _, _, value in evidence
+                   if isinstance(value, dict)]
+        self.assertTrue(markers)
+        self.assertTrue(set(markers) <= {"completed", "cut_off"})
+        reducer._check_battery_evidence(reducer._classify(roster), windows, evidence)
+
+    def test_missing_extra_duplicate_and_marker_disagreement(self):
+        self._refusal("battery_evidence_missing", self.evidence[1:])
+        self._refusal("battery_evidence_duplicate", self.evidence + self.evidence[:1])
+        self._refusal("battery_evidence_unbound",
+                      self.evidence + (("extra", 0, {"no_bundle": "completed"}),))
+        block, attempt, _ = self.evidence[0]
+        self._refusal("battery_evidence_unbound",
+                      ((block, attempt, {"no_bundle": "cut_off"}), *self.evidence[1:]))
+
+    def test_input_digest_binding_and_nonpass_statuses(self):
+        from joulewise import battery_float
+        self._refusal("battery_evidence_input", list(self.evidence))
+        block, attempt, value = self.evidence[0]
+        self._refusal("battery_evidence_unbound",
+                      ((block, attempt, replace(value, bundle_sha256="f" * 64)),
+                       *self.evidence[1:]))
+        for verdict in (
+            battery_float.unobserved_historical_verdict("bundle", bundle_sha256=value.bundle_sha256),
+            battery_float.not_applicable_verdict("bundle", bundle_sha256=value.bundle_sha256),
+        ):
+            self._refusal("battery_float_evidence_missing",
+                          ((block, attempt, verdict), *self.evidence[1:]))
+        from tests.test_bfgs_window_consumers import WindowMembersTests
+        with tempfile.TemporaryDirectory() as tmp:
+            charged = authenticate_bundle(WindowMembersTests().pair_bundle(
+                Path(tmp), "charged", charging=True))
+        self._refusal("battery_float_confounded",
+                      ((block, attempt, replace(charged, bundle_sha256=value.bundle_sha256)),
+                       *self.evidence[1:]))
+
+    def test_duplicate_bundle_digest_and_precheck_order(self):
+        duplicate = deepcopy(self.windows)
+        duplicate[1]["bundle_sha256"] = duplicate[0]["bundle_sha256"]
+        self._refusal("window_bundle_duplicate", windows=duplicate)
+        reducer = _reducer()
+        with patch.object(reducer, "_check_window", side_effect=AssertionError("window reached")):
+            self._refusal("battery_evidence_missing", self.evidence[1:])
 
 
 def _add_row(g, reg, roster, p):
@@ -263,7 +371,7 @@ class ScoredReduceTests(unittest.TestCase):
 
     def _invoke(self, rows=None, windows=None, roster=None, reg=None, predictions=None):
         reducer = _reducer()
-        return reducer.reduce(reg or self.reg, roster or self.roster,
+        return _call_reduce(reducer, reg or self.reg, roster or self.roster,
                               predictions or self.predictions,
                               self.rows if rows is None else rows,
                               self.windows if windows is None else windows)
@@ -277,7 +385,7 @@ class ScoredReduceTests(unittest.TestCase):
         score_rows = self.rows if rows is None else rows
         capture_windows = self.windows if windows is None else windows
         with self.assertRaises(reducer.ReductionRefusal) as caught:
-            reducer.reduce(reg or self.reg, r, p, score_rows, capture_windows)
+            _call_reduce(reducer, reg or self.reg, r, p, score_rows, capture_windows)
         self.assertEqual(caught.exception.code, code)
         self.assertTrue(hasattr(caught.exception, "detail"))
         if detail_contains is not None:
@@ -306,10 +414,10 @@ class ScoredReduceTests(unittest.TestCase):
         self.assertEqual(ast.unparse(first.value),
                          "verify_executed_roster(registration, roster, predicted_decode_s)")
 
-    def test_signature_five_positional(self):
+    def test_signature_six_positional(self):
         signature = inspect.signature(_reducer().reduce)
         self.assertEqual(list(signature.parameters),
-                         ["registration", "roster", "predicted_decode_s", "score_rows", "capture_windows"])
+                         ["registration", "roster", "predicted_decode_s", "score_rows", "capture_windows", "battery_evidence"])
         self.assertTrue(all(p.default is inspect.Parameter.empty and
                             p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
                             for p in signature.parameters.values()))
@@ -333,7 +441,7 @@ class ScoredReduceTests(unittest.TestCase):
         for reg, roster, p, code in cases:
             with self.subTest(code=code):
                 with self.assertRaises(sp.PackingRefusal) as caught:
-                    reducer.reduce(reg, roster, p, [], [])
+                    _call_reduce(reducer, reg, roster, p, [], [])
                 self.assertEqual(caught.exception.code, code)
 
     def test_reduce_input_not_list(self):
@@ -491,7 +599,13 @@ class ScoredReduceTests(unittest.TestCase):
         self._refuses("window_binding", rows=rows, windows=bad, roster=roster, reg=reg, predictions=p)
 
     def test_window_duplicate(self):
-        self._refuses("window_duplicate", windows=self.windows + [deepcopy(self.windows[0])])
+        # Text 9 names two windows carrying one bundle digest first.
+        with self.assertRaises(_reducer().ReductionRefusal) as caught:
+            self._invoke(windows=self.windows + [deepcopy(self.windows[0])])
+        self.assertEqual(caught.exception.code, "window_bundle_duplicate")
+        distinct = deepcopy(self.windows[0])
+        distinct["bundle_sha256"] = "f" * 64
+        self._refuses("window_duplicate", windows=self.windows + [distinct])
 
     def test_window_envelope_mismatch(self):
         w = deepcopy(self.windows); w[0]["envelope_index"] += 1
@@ -746,7 +860,7 @@ class ScoredReduceTests(unittest.TestCase):
             if hasattr(reducer, "executed_status"):
                 stack.enter_context(patch.object(reducer, "executed_status", flipped))
             with self.assertRaises(reducer.ReductionRefusal) as caught:
-                reducer.reduce(self.reg, self.roster, self.predictions, self.rows, self.windows)
+                _call_reduce(reducer, self.reg, self.roster, self.predictions, self.rows, self.windows)
         self.assertEqual(caught.exception.code, "internal_disagreement")
 
     def test_forged_single_prediction_refused_record_code(self):
@@ -756,7 +870,7 @@ class ScoredReduceTests(unittest.TestCase):
         single = next(b for b in forged["blocks"] if b["parent_block_id"] is not None)
         single["predicted_item_s"][0] += .01
         with self.assertRaises(sp.PackingRefusal) as caught:
-            reducer.reduce(reg, forged, p, [], [])
+            _call_reduce(reducer, reg, forged, p, [], [])
         self.assertIs(type(caught.exception.code), str)
         self.assertTrue(caught.exception.code)
 
@@ -1054,7 +1168,7 @@ class ScoredReduceTests(unittest.TestCase):
                     roster["events"][-1]["sha256"] = roster["sha256"]
                 self.assertIn(row, {v.inv_id for v in check_roster(self.g, roster, self.predictions)})
                 with self.assertRaises(sp.PackingRefusal) as caught:
-                    reducer.reduce(self.reg, roster, self.predictions, [], [])
+                    _call_reduce(reducer, self.reg, roster, self.predictions, [], [])
                 self.assertIsInstance(caught.exception.code, str)
         g_retry, reg_retry, retry, p_retry = _terminal_night(width=2, kind="ceiling_violation")
         retry_mutations = {
@@ -1074,7 +1188,7 @@ class ScoredReduceTests(unittest.TestCase):
                 roster["events"][-1]["sha256"] = roster["sha256"]
                 self.assertIn(row, {v.inv_id for v in check_roster(g_retry, roster, p_retry)})
                 with self.assertRaises(sp.PackingRefusal) as caught:
-                    reducer.reduce(reg_retry, roster, p_retry, [], [])
+                    _call_reduce(reducer, reg_retry, roster, p_retry, [], [])
                 self.assertIsInstance(caught.exception.code, str)
         def initial_culprit(roster, env, block):
             return (("cut_off", 1.1) if block["block_id"] == "large:decode:1:0"
@@ -1086,9 +1200,9 @@ class ScoredReduceTests(unittest.TestCase):
         wrong_reschedule["events"][-1]["sha256"] = wrong_reschedule["sha256"]
         self.assertIn("INV-31", {v.inv_id for v in check_roster(g_res, wrong_reschedule, p_res)})
         with self.subTest(row="INV-31"), self.assertRaises(sp.PackingRefusal):
-            reducer.reduce(reg_res, wrong_reschedule, p_res, [], [])
+            _call_reduce(reducer, reg_res, wrong_reschedule, p_res, [], [])
         with self.subTest(row="INV-51"), self.assertRaises(sp.PackingRefusal) as caught:
-            reducer.reduce(None, self.roster, self.predictions, [], [])
+            _call_reduce(reducer, None, self.roster, self.predictions, [], [])
         self.assertEqual(caught.exception.code, "inv_51")
         gp, regp, rp, pp = _night(mode="pilot")
         wrong = deepcopy(pp); wrong["large"][gp["item_ids_by_level"]["1"][0]] = .8
@@ -1098,7 +1212,7 @@ class ScoredReduceTests(unittest.TestCase):
         ):
             with self.subTest(row=row):
                 with self.assertRaises(sp.PackingRefusal) as caught:
-                    reducer.reduce(reg, roster, predictions, [], [])
+                    _call_reduce(reducer, reg, roster, predictions, [], [])
                 self.assertEqual(caught.exception.code, code)
 
     def test_differential_oracle_200_nights(self):
@@ -1111,7 +1225,7 @@ class ScoredReduceTests(unittest.TestCase):
                 sp.verify_executed_roster(reg, roster, p)
                 rows, windows = _inputs(g, reg, roster, optional=True, seed=seed * 1000 + index)
                 with self.subTest(seed=seed, index=index, variant="A"):
-                    candidate = reducer.reduce(reg, roster, p, rows, windows)
+                    candidate = _call_reduce(reducer, reg, roster, p, rows, windows)
                     self.assertEqual(check_reduction(g, roster, p, rows, windows, candidate), [])
                 live = [w for w in windows if w["block_id"] in roster["envelopes"][w["envelope_index"]]["blocks"]]
                 self.assertTrue(live)
@@ -1119,7 +1233,7 @@ class ScoredReduceTests(unittest.TestCase):
                 variant_b = [w for w in windows if w is not dropped]
                 with self.subTest(seed=seed, index=index, variant="B"):
                     with self.assertRaises(reducer.ReductionRefusal) as caught:
-                        reducer.reduce(reg, roster, p, rows, variant_b)
+                        _call_reduce(reducer, reg, roster, p, rows, variant_b)
                     self.assertEqual(caught.exception.code, "missing_live_window")
                     self.assertEqual(check_reduction(g, roster, p, rows, variant_b,
                                       {"refusal_code": caught.exception.code, "detail": caught.exception.detail}), [])

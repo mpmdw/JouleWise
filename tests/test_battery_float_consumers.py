@@ -31,7 +31,9 @@ REPLACE_REASON = "predates PairVerdict (64e39bb9); cannot receive a PairVerdict"
 # (repo-relative path, enclosing function qualname, ast.unparse(call)).
 # The replaced values are, in order: _ProbeResult; ProbeResult; Receipt;
 # Receipt; Refusal; Receipt; Probes; FiducialDetection; FiducialDetection;
-# RuntimeEvent; BenchmarkConfig; SamplingConfig; BenchmarkConfig.
+# RuntimeEvent; BenchmarkConfig; SamplingConfig; BenchmarkConfig;
+# CalibrationCandidate (calibration_bracketing.py:1521 typed loader return,
+# assigned to candidate at :1686; dataclass at :610).
 REPLACE_CALL_ALLOWLIST = {
     ("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
      "_replace(battery, stdout=battery.stdout_bytes)"): REPLACE_REASON,
@@ -59,6 +61,8 @@ REPLACE_CALL_ALLOWLIST = {
      "replace(config.sampling, idle_seconds=selected.subwindow_s)"): REPLACE_REASON,
     ("joulewise/controller.py", "run_experiment",
      "replace(config, run_id=f'{experiment_id}__r{rep}')"): REPLACE_REASON,
+    ("joulewise/calibration_bracketing.py", "_candidate_from_observation",
+     "replace(candidate, relative_path=observation.custody_locator, attempt_id=observation.attempt_id, content_id=observation.content_id, ledger_receipt_digest=observation.receipt_digest, bracket_session_id=observation.bracket_session_id, bracket_slot=observation.bracket_slot, bracket_window_id=observation.bracket_window_id, bracket_plan_id=observation.bracket_plan_id, bracket_plan_sha256=observation.bracket_plan_sha256, bracket_evidence_root_id=observation.bracket_evidence_root_id, bracket_runs_root=observation.bracket_runs_root)"): REPLACE_REASON,
 }
 # file::function -> the guarded names it may reference; exactly seven rows.
 ALLOWLIST = {
@@ -343,7 +347,7 @@ class ConsumerGuardTests(unittest.TestCase):
                 if _tracked(ROOT, relative):
                     violations(relative, path.read_text(encoding="utf-8", errors="replace"), sites)
         self.assertEqual(Counter(sites), Counter(REPLACE_CALL_ALLOWLIST.keys()))
-        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 13)
+        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 14)
         self.assertEqual(set(REPLACE_CALL_ALLOWLIST.values()), {REPLACE_REASON})
 
     def test_controller_replace_forgery_self_test(self) -> None:
@@ -370,6 +374,15 @@ class ConsumerGuardTests(unittest.TestCase):
             self.assertTrue(is_dataclass(cls))
             self.assertFalse(issubclass(cls, battery_float.PairVerdict))
             self.assertFalse(any("PairVerdict" in str(field.type) for field in fields(cls)))
+
+    def test_calibration_candidate_replace_type_is_not_pair_verdict(self) -> None:
+        from dataclasses import fields, is_dataclass
+        from joulewise import battery_float
+        from joulewise.calibration_bracketing import CalibrationCandidate
+        self.assertTrue(is_dataclass(CalibrationCandidate))
+        self.assertFalse(issubclass(CalibrationCandidate, battery_float.PairVerdict))
+        self.assertFalse(any("PairVerdict" in str(field.type)
+                             for field in fields(CalibrationCandidate)))
 
     def test_replace_rows_precede_s1(self) -> None:
         try:

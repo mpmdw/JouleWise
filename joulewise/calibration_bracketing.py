@@ -16,6 +16,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 
+from joulewise import battery_float
 from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.calibration_ledger import (
@@ -49,6 +50,8 @@ from joulewise.uncertainty_evidence import (
 )
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
+BFGS_HISTORICAL_LEDGER_SEQUENCE = 176
+BFGS_HISTORICAL_CUTOFF_WALL_S = 1790462247
 BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
 ACCEPTANCE_BOUND_SCHEMA = "joulewise.calibration_acceptance_bound.v2"
 ACCEPTANCE_FIXTURE_SCHEMA = (
@@ -1808,6 +1811,59 @@ def _capture_pipeline_refusal_for_observation(
     return None
 
 
+def _battery_classification_for_observation(
+    observation: LedgerObservation, *, custody: Path | None = None,
+) -> tuple[str, tuple[str, ...], str | None, str | None]:
+    """Classify ledger-bound capture bytes; a broken recorded digest is custody."""
+    root = Path(observation.custody_locator) if custody is None else Path(custody)
+    expected_sha = observation.artifact_sha256.get("instrument_evidence.json")
+    try:
+        raw = read_authentication_input(
+            root / "instrument_evidence.json", grammar="raw",
+            label=f"calibration capture {observation.attempt_id} instrument evidence",
+        )
+    except (OSError, ValueError) as exc:
+        raise battery_float.CustodyFailure([{
+            "slot": observation.bracket_slot or "capture",
+            "artifact": "instrument_evidence.json",
+            "expected_sha256": expected_sha,
+            "observed_sha256": None,
+        }]) from exc
+    observed_sha = hashlib.sha256(raw).hexdigest()
+    if expected_sha != observed_sha:
+        raise battery_float.CustodyFailure([{
+            "slot": observation.bracket_slot or "capture",
+            "artifact": "instrument_evidence.json",
+            "expected_sha256": expected_sha,
+            "observed_sha256": observed_sha,
+        }])
+    try:
+        evidence = json.loads(raw)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise battery_float.CustodyUnreadable(
+            f"{observation.attempt_id}: instrument_evidence.json unreadable: {exc}"
+        ) from exc
+    if not isinstance(evidence, Mapping):
+        raise battery_float.CustodyUnreadable(
+            f"{observation.attempt_id}: instrument_evidence.json is not an object"
+        )
+    if "battery_float" not in evidence:
+        status = ("unobserved_historical" if observation.sequence <= BFGS_HISTORICAL_LEDGER_SEQUENCE
+                  else "battery_float_evidence_missing")
+        return status, (() if status == "unobserved_historical" else ("capture pair absent",)), None, None
+    verdict = battery_float.authenticate_capture(root, expected={
+        "attempt_id": observation.attempt_id,
+        "session_id": observation.bracket_session_id,
+        "slot": observation.bracket_slot,
+    })
+    return verdict.status, verdict.reasons, verdict.pre_raw_sha256, verdict.post_raw_sha256
+
+
+def _battery_exclusion_for_observation(observation: LedgerObservation) -> str | None:
+    status, _, _, _ = _battery_classification_for_observation(observation)
+    return status if status in {"battery_float_confounded", "battery_float_evidence_missing"} else None
+
+
 def discover_calibration_candidates(
     ledger_snapshot: CalibrationLedgerSnapshot, *,
     mode: Literal["read_replay", "issuing"] = "issuing",
@@ -1849,6 +1905,8 @@ def discover_calibration_candidates(
         ):
             continue
         if _capture_pipeline_refusal_for_observation(observation) is not None:
+            continue
+        if _battery_exclusion_for_observation(observation) is not None:
             continue
         candidate = _candidate_from_observation(observation, mode=mode)
         if candidate is None:
@@ -1999,6 +2057,7 @@ def evaluate_calibration_bracket(
         "drift_s": None,
         "acceptance": None,
         "bracket_binding": None,
+        "battery_excluded_endpoints": [],
         "status": "not_required" if not policy.require_bracket else "failed",
     }
     if not policy.require_bracket:
@@ -2186,6 +2245,28 @@ def evaluate_calibration_bracket(
         for session in ledger_snapshot.bracket_sessions
         if session.state == "finalized"
     }
+    eligible_observations = [
+        observation for observation in ledger_snapshot.observations
+        if observation.disposition == "valid"
+        and not observation.is_historical_import
+        and _capture_pipeline_refusal_for_observation(observation) is None
+        and (observation.bracket_session_id is None
+             or observation.bracket_session_id in finalized_session_ids)
+        and not _is_derivation_kind_observation(observation, ledger_snapshot)
+    ]
+    discovered_battery_status_by_attempt: dict[str, str] = {}
+    if not _allow_unissued_fixture:
+        for observation in eligible_observations:
+            status, reasons, pre_sha, post_sha = _battery_classification_for_observation(observation)
+            discovered_battery_status_by_attempt[observation.attempt_id] = status
+            if status in {"battery_float_confounded", "battery_float_evidence_missing"}:
+                result["battery_excluded_endpoints"].append({
+                    "attempt_id": observation.attempt_id,
+                    "verdict": status,
+                    "reasons": list(reasons),
+                    "pre_raw_sha256": pre_sha,
+                    "post_raw_sha256": post_sha,
+                })
     registered_valid = {
         (
             observation.attempt_id,
@@ -2205,6 +2286,7 @@ def evaluate_calibration_bracket(
         # the registered universe that discovery never offers, and the exact
         # equality below would refuse every claim window on the machine.
         and not _is_derivation_kind_observation(observation, ledger_snapshot)
+        and (_allow_unissued_fixture or _battery_exclusion_for_observation(observation) is None)
     }
     supplied_valid = {
         (
@@ -2245,6 +2327,23 @@ def evaluate_calibration_bracket(
             or candidate.bracket_runs_root != observation.bracket_runs_root
         ):
             return result, ("calibration_ledger_off_ledger_artifact",)
+    battery_status_by_attempt: dict[str, str] = {}
+    for candidate in candidates:
+        observation = observations_by_attempt[candidate.attempt_id]
+        try:
+            candidate_path = Path(bracket_runs_root) / candidate.relative_path if bracket_runs_root is not None else Path(candidate.relative_path)
+            resolved = candidate_path.resolve(strict=True)
+        except (OSError, ValueError, RuntimeError):
+            if _allow_unissued_fixture:
+                continue
+            return result, ("calibration_battery_float_disagreement",)
+        status, _, _, _ = _battery_classification_for_observation(observation, custody=resolved)
+        if (not _allow_unissued_fixture
+                and status != discovered_battery_status_by_attempt.get(observation.attempt_id)):
+            return result, ("calibration_battery_float_disagreement",)
+        if status not in {"pass", "unobserved_historical"}:
+            return result, ("calibration_battery_float_disagreement",)
+        battery_status_by_attempt[observation.attempt_id] = status
     # A complete session pair makes the binding mandatory only for a window
     # that pair can causally and freshly bracket.  ``candidates`` still spans
     # the full registered universe above, preserving the anti-withholding
@@ -2498,6 +2597,11 @@ def evaluate_calibration_bracket(
             return result, ("calibration_bracket_binding_invalid",)
     pre_decimal = matching_decimals[id(pre)]
     post_decimal = matching_decimals[id(post)]
+    if window_end_s >= BFGS_HISTORICAL_CUTOFF_WALL_S and any(
+        battery_status_by_attempt.get(candidate.attempt_id) == "unobserved_historical"
+        for candidate in (pre, post)
+    ):
+        return result, ("calibration_battery_float_evidence_missing",)
     if (
         not pre_decimal.is_finite()
         or not post_decimal.is_finite()
@@ -2524,8 +2628,8 @@ def evaluate_calibration_bracket(
     maximum_excess = Decimal(operatives["max_budgetable_excess_s"])
     result.update(
         {
-            "pre": pre.descriptor(),
-            "post": post.descriptor(),
+            "pre": {**pre.descriptor(), "battery_float_status": battery_status_by_attempt.get(pre.attempt_id)},
+            "post": {**post.descriptor(), "battery_float_status": battery_status_by_attempt.get(post.attempt_id)},
             "endpoint_max_b_fiducial_s": float(endpoint_max_decimal),
             "drift_s": float(drift_decimal),
         }
@@ -2726,6 +2830,7 @@ def calibration_bracket_for_bundles(
             # `calibration_ledger_custody_invalid` for as long as the row is on
             # the ledger, which is forever.
             and not _is_derivation_kind_observation(observation, ledger_snapshot)
+            and (_allow_unissued_fixture or _battery_exclusion_for_observation(observation) is None)
             for observation in ledger_snapshot.observations
         )
         if ledger_snapshot.valid and len(candidates) != registered_valid:

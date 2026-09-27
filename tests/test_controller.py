@@ -3263,11 +3263,14 @@ class SuiteControllerTests(ControllerTestCase):
             self.assertTrue((bundle_path / artifact).exists(), artifact)
 
     def test_run_experiment_suite_uses_repetition_order_seed(self) -> None:
-        manifest_path, results = run_experiment(
-            make_suite_config("suite-experiment", repetitions=2),
-            self.runs_root,
-            self.clock,
-        )
+        # This checks collection ordering; mock bundles cannot enter a
+        # claim-bearing aggregate window under the battery gate.
+        with patch("joulewise.controller.aggregate_experiment", return_value={}):
+            manifest_path, results = run_experiment(
+                make_suite_config("suite-experiment", repetitions=2),
+                self.runs_root,
+                self.clock,
+            )
         self.assertTrue(manifest_path.is_file())
         self.assertEqual(len(results), 2)
         for rep, (bundle_path, summary) in enumerate(results, start=1):
