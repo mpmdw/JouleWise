@@ -10,6 +10,8 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 9e0367a1 — 23:34 → ≈23:45 PDT 09-26 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-9e0367a1/00-activation-record.md), items 1–7. It did bookkeeping only and exited before the t0 settle. Item 6 records that the watchdog relaunches between arm and harvest; that is a process question for the cold gate or Ed. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
 **▶▶ ACTIVATION 3930fc49 — 23:24 → ≈23:55 PDT 09-26 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-3930fc49/00-activation-record.md), items 1–6. It was relaunched by the watchdog after 22784e38 exited cleanly. It did bookkeeping only and exited before the t0 settle. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
 
 **▶▶ ACTIVATION 22784e38 — 22:34 PDT 09-26 → exit before 00:22 PDT 09-27 (Opus 5.5; W1 ARMED, t0 00:30 PDT 09-27):** [Record 00](docs/process_traces/2026-09-26-activation-22784e38/00-activation-record.md), items 1–17.
