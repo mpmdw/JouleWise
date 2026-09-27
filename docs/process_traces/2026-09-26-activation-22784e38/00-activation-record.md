@@ -46,3 +46,11 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
    > Explicit "YES ledger fix" . A and b approved.
 
    Applied: (a) `LEDGER_SOURCE` → the n2 ledger with `LEDGER_SOURCE_EXPECTED_SHA256 = 95d152f0…5302` plus a digest check in step 1; (b) the refused partial clone moves to `~/night-archive/`. The W1 steps are then re-run from step 0.
+8. **W1 re-run after Ed's approval.**
+   - (b) done: the refused clone was moved to `~/night-archive/w1-step1-refused-clone-22784e38`.
+   - (a) done: `arm-env.zsh` `LEDGER_SOURCE` → the n2 ledger plus `LEDGER_SOURCE_EXPECTED_SHA256`; `step1-clone.zsh` gains the digest check.
+   - **Step 1: PASS**: the digest check passed, the byte copy passed, and `authenticated head-equals-pin 176 0f7609ae…2512`; tree clean.
+   - **Step 2: STOPPED** at its epoch-watch expectation line. Every check before it passed: clone = H and clean; A-R5b, frozen plan and both template digests exact; 0 placeholders; A-R5b heading ×1; `check_rc=3 prereg_rc=3`; `pre-registered powermetrics sha256 b762e5bf…: match`.
+   - The script requires `mismatched fields: os_build, powermetrics_sha256`, but the watch now reports `mismatched fields: os_build` only.
+   - **Cause:** `scripts/issue_calibration_acceptance_generation.py` (lines ≈410–416) takes the expected `powermetrics_sha256`/`mlx_version` from the ledger's **last row's T1 bindings**. The script's expectation was written against the stale 76-row ledger, whose last row is 25F84 with sampler `d1dccad0…`. The correct 176-row ledger ends on n2 (25G83), whose sampler is `b762e5bf…`, equal to today's `/usr/bin/powermetrics` sha256. So the one remaining mismatch is the old r7 acceptance's `os_build` 25F84, which is the explained mismatch the runbook (§0.3) expects.
+9. **Expectation change DENIED** by the auto-mode classifier ("Security Test Removal"). The change was: replace the two `os_build, powermetrics_sha256` expectation lines with `os_build`, plus an explicit `powermetrics_sha256 … b762e5bf… b762e5bf… match` row. Running step 2 with it was denied; Ed approved (a) and (b) only. The edit was reverted: `step2-desk.zsh` is byte-identical to `c79816c9`. Nothing past step 2 ran: no `NIGHT_ROOT`, no plan, no notice. Ed is asked by email.
