@@ -215,3 +215,8 @@
       3. the tripwire text goes into the BFGS-RAWCAPTURE-01 brief;
       4. **one full V1 + V2 + builder run on main after the merge.**
     - Row 9 is running on the S1 integration tree `42e2af3e` (`c7593edb` merged with main `daaff807`). An Opus writer is drafting the PR description from the rulings (dictated fills).
+39. **Cold gate PREDECESSOR-PATH-01** (Fable 5.1, ≈16:10–16:20; [charge](60-prepare-record/10-predecessor-path-charge.md), [ruling](60-prepare-record/11-predecessor-path-ruling.md)): **RULING: (b).**
+    - The prepare step passes `--predecessor-acceptance configs/calibration/calibration_acceptance_d079_v2_n17_r7.json`, relative, from the run checkout.
+    - A synthetic trial showed that only the stored path string and the whole-file digest differ, and every substitution of different content was refused.
+    - This is recorded as a **disclosed amendment made before any measured value was read**. Ed's reply (asked as Gmail `1a0e4ac6d73738a2`; none yet) takes precedence if it arrives before the prepare step.
+    - The final pass's §4.6 N-1 rewording of "land the lane first" is noted against item 24's wording ("gates that only S1 provides").
