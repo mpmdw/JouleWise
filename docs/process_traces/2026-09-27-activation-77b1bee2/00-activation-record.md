@@ -118,3 +118,11 @@
     - **The seat's one suite failure** is the sandbox denying `sysctl`. The lead is re-running the issuer, reissue and bracketing suites outside the sandbox.
     - **Lenses launched on `c84b1dc2`:** Sol xhigh (execution, rows 1 and 2) and Opus 5.5 (contract, rows 2 and 6), [brief](50-custody-outside-repo/50-lens-brief.txt). Next come the fresh cold gate on the final diff (row 7 and statement item 6(c)) and row 9.
 23. **Custody repair, lead verification outside the sandbox** on `c84b1dc2`, run with `/opt/homebrew/bin/python3 -m unittest tests.test_issuer_corpus_root tests.test_issue_calibration_acceptance_generation tests.test_reissue_calibration_acceptance tests.test_calibration_bracketing`: **Ran 263 tests, OK (skipped=1), rc 0** ([tail](50-custody-outside-repo/42-lead-verify-tail.txt)). This includes the live `sysctl` OS probe that the sandbox had denied.
+24. **Cold gate S1-A3-ROUTE-01** (Fable 5.1, 13:07–13:22; [ruling](35-s1-refuter/20-coldgate/21-coldgate-fable-ruling.md)): **RULING: S1 MERGE NOT BLOCKED.**
+    - **F1** (cooldown anchor) and **F2** (capture pair not rechecked at reduction) both reproduce identically on main `b69c39eb`.
+    - S1's only lines inside the route functions are gate-exception handlers that re-raise, and the window gate itself. They narrow the route: with a planted custody failure, main passes 9.99 W on while the candidate raises.
+    - **Amendment 77** replaces test (iii) of 66 (a) with a checkable list. Every changed line in a route function is quoted, and only two closed forms count as off-route.
+    - **Amendment 78:** F2's item of BFGS-RAWCAPTURE-01 must merge before any whole-window verdict computed after S1 is used for a paper number. Until then a read-only capture pre-check stands in.
+    - "Land the lane first" is circular, because both fixes call gates that only S1 provides.
+    - **Question 4:** this is not the SWEEPCLASS class. But F1 has now been to three gates with no new fact, and F1, F2 and the salvage licence share one shape (a verdict fed by sources that are not window members). The ruling lists five items for one consult on the two lanes.
+    - The paired Opus refuter is pending. The lead's **A4** (V1, V2, builder ×2 on `4aefdd12`) is running.
