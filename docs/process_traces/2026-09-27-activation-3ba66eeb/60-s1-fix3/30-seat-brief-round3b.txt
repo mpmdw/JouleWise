@@ -1,0 +1,23 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S1, FIX ROUND 3 continued: steps 20–23 then 13–19. Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 (branch feat/2026-09-26-bfgs-s1-bundles @ 8953c7a5; your previous round's work is committed there unchanged).
+
+WRITE_SCOPE: ["tests/test_bfgs_consumer_sweep.py","tests/test_bundle_read.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_calibration_bracketing.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","tests/test_controller.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_publication_privacy.py"]
+(TEST FILES ONLY. joulewise/envelope_gate.py is no longer in scope: amendment 63 (a) is done. tests/test_battery_float_consumers.py only under amendment 36's round-2 rule. If any step seems to need another file, RETURN it; do not edit it.)
+
+AUTHORITY (the latest text wins where texts differ):
+- Cold ruling S1-FIX3-RETURNS-01: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/60-s1-fix3/21-coldgate-fable-ruling.md. §7 is YOUR ORDERED LIST (orders 1–11 = steps 20, 21, 22, 23, 13, 14, 15, 16, 17, 18, 19); amendments 72–76 are in §4–§6.
+- SAMESIG erratum: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/30-sweepclass-samesig/31-coldgate-fable-erratum-ruling.md. Amendments 66–71; steps 13–19 as written there, unless §7 above says otherwise.
+- SAMESIG ruling: …/30-sweepclass-samesig/21-coldgate-fable-ruling.md (amendments 61–65).
+- Your previous report: …/60-s1-fix3/11-seat-report.md.
+
+DELIVERABLES: every row named in §7 shown RED under its stated counterfactual and GREEN after; the counts (117 after order 1; raw-capture inventory 48 after order 4; 119 (≤121) after order 6 — a different count is returned with the differing rows listed); the allowlist table with class and reason per row; V1 and V2 green; the builder's forward check "byte-identical entries=69" twice; the three A5 fences.
+
+HARD CONSTRAINTS: no production file edited; joulewise/battery_float.py and FT §E's excluded list byte-identical to 1417c0c4; custody is never a status; authentication precedes every exclusion decision; the eight consumers do not import battery_float. A deliberate-evasion form (61 (b)) is never a finding. Early return: finish the independent work, then NEEDS_RULING.
+
+VERIFY (paste the exact last 5 lines of each):
+- V1: python3 -m unittest tests.test_controller tests.test_bundle_read tests.test_reduce tests.test_revision_five_b_readers tests.test_scored_reduce tests.test_bfgs_calibration_bracketing tests.test_bfgs_window_consumers tests.test_bfgs_consumer_sweep tests.test_bfgs_publication_privacy tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_evidence_night tests.test_night_kinds tests.test_envelope_gate
+- The builder forward check twice (byte-identical).
+Use python3 (/opt/homebrew/bin/python3), NOT a venv interpreter: the battery fixture needs the user site.
+TIME, HARD: a measurement window starts on this machine at 09:00 PDT and the machine must be agent-free and cool well before it. STOP at a clean order boundary by 08:00 PDT at the latest and report exactly which orders are complete; after 08:00 run no more test suites.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with a per-order table (order -> step -> amendment -> rows -> RED evidence with counterfactual -> GREEN evidence), the allowlist table, the counts, and the returns list.
