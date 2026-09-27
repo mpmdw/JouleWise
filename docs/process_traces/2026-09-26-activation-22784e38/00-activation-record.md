@@ -54,3 +54,15 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
    - The script requires `mismatched fields: os_build, powermetrics_sha256`, but the watch now reports `mismatched fields: os_build` only.
    - **Cause:** `scripts/issue_calibration_acceptance_generation.py` (lines ≈410–416) takes the expected `powermetrics_sha256`/`mlx_version` from the ledger's **last row's T1 bindings**. The script's expectation was written against the stale 76-row ledger, whose last row is 25F84 with sampler `d1dccad0…`. The correct 176-row ledger ends on n2 (25G83), whose sampler is `b762e5bf…`, equal to today's `/usr/bin/powermetrics` sha256. So the one remaining mismatch is the old r7 acceptance's `os_build` 25F84, which is the explained mismatch the runbook (§0.3) expects.
 9. **Expectation change DENIED** by the auto-mode classifier ("Security Test Removal"). The change was: replace the two `os_build, powermetrics_sha256` expectation lines with `os_build`, plus an explicit `powermetrics_sha256 … b762e5bf… b762e5bf… match` row. Running step 2 with it was denied; Ed approved (a) and (b) only. The edit was reverted: `step2-desk.zsh` is byte-identical to `c79816c9`. Nothing past step 2 ran: no `NIGHT_ROOT`, no plan, no notice. Ed is asked by email.
+10. **Owner instruction (Ed, Gmail message `1a0e16a14d318643`, thread `1a0e16172f3388bf`, 22:50:14 PDT 09-26), a reply to the (c) ask, verbatim above the quoted text:**
+
+    > Yes, explicit permission to do whatever you need to do to arm W1, replace old
+    > stuff, override old rules, anything you need to do as long as the science is
+    > sound. Even grant you permission to update the necessary config files or
+    > whatever, just solve this yourself
+
+    **The magistrate reads it as:**
+    - (c) is approved;
+    - so is any further arm-script correction needed to arm W1, as long as it leaves every science-bearing gate in place: the battery gate at step 0 and immediately before publication, ledger authentication, the digest pins, the epoch watch, the census, a cold Fable pass on the staged plan, and the arm notice with Ed's NO window.
+
+    Process-rule, decision-log and skill-doctrine changes stay with the cold gate or Ed (magistrate charter), and none is needed for this arm. Each correction is recorded here with its cause.
