@@ -130,7 +130,7 @@ def analyze_envelope_gate(
     summary_missing = [
         str(reader.path)
         for reader in readers
-        if not isinstance(reader.raw_summary().get("suite_metrics"), dict)
+        if not isinstance(_gated_summary(reader).get("suite_metrics"), dict)
     ]
     if summary_missing:
         return _refused(
@@ -223,6 +223,11 @@ def _refused(
     if extra:
         result.update(extra)
     return result
+
+
+def _gated_summary(reader: BundleReader) -> dict[str, Any] | None:
+    reader.metadata()
+    return reader.raw_summary()
 
 
 def _manifest_record(reader: BundleReader) -> dict[str, Any] | None:
@@ -651,7 +656,7 @@ def _evidence_dict(evidence: _ItemEvidence) -> dict[str, Any]:
 def _level_window_energy_records(readers: list[BundleReader]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for reader in readers:
-        summary = reader.raw_summary()
+        summary = _gated_summary(reader)
         suite_metrics = summary.get("suite_metrics") if isinstance(summary, dict) else None
         levels = suite_metrics.get("levels") if isinstance(suite_metrics, dict) else None
         if not isinstance(levels, list):
