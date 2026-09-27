@@ -1,0 +1,25 @@
+d01 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d01 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d02 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d02 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d03 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d03 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d04 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d04 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d05 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d05 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d06 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d06 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d07 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d07 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d08 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d08 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d09 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d09 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d10 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d10 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d11 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d11 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d12 pre probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+d12 post probe_error= False passed= True charging= False ext= True inst_mA= 0 raw_sha_match= True OK
+readings 24 failures 0
