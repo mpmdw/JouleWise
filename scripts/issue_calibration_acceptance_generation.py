@@ -947,9 +947,13 @@ def _corpus_relative_custody(
         except ValueError as error:
             raise ValueError("lies outside the declared corpus root") from error
         parts = relative.parts
-        if len(parts) < 2 or parts[0] != session_id:
+        if len(parts) != 4:
+            raise ValueError("custody path must have exactly four parts")
+        if parts[0] != session_id:
             raise ValueError("first path part does not equal the session id")
-        if parts[-1] != attempt_id:
+        if parts[1:3] != ("runs", "instrument_validation"):
+            raise ValueError("custody path must pass through runs/instrument_validation")
+        if parts[3] != attempt_id:
             raise ValueError("last path part does not equal the capture id")
         for name in ("manifest.json", "instrument_evidence.json"):
             primary = path / name
@@ -1267,12 +1271,14 @@ def _select_members(
     corpus_paths = {}
     if corpus_root is not None:
         # Check every valid row's path before opening any member evidence.
-        corpus_paths = {
-            row.attempt_id: _corpus_relative_custody(
+        for row in ordered:
+            if row.classification_disposition != "valid":
+                continue
+            if row.attempt_id in corpus_paths:
+                raise PrepareRefusal(f"duplicate valid attempt id {row.attempt_id}")
+            corpus_paths[row.attempt_id] = _corpus_relative_custody(
                 row.custody_locator, row.attempt_id, row.bracket_session_id, corpus_root,
             )
-            for row in ordered if row.classification_disposition == "valid"
-        }
     for observation in ordered:
         if observation.classification_disposition != "valid":
             continue
@@ -2380,13 +2386,18 @@ def _verify_corpus_member(
         matches = [row for row in prior_rows if isinstance(row, Mapping)
                    and row.get("content_id") == content_id
                    and row.get("attempt_id") == member_id
-                   and row.get("session_id") == parts[0]
                    and row.get("disposition") == "valid"]
         if content_id is None or len(matches) != 1:
             return False
+        session_id = matches[0].get("session_id")
+        if (not isinstance(session_id, str) or len(parts) != 4
+                or parts[0] != session_id
+                or parts[1:3] != ("runs", "instrument_validation")
+                or parts[3] != member_id):
+            return False
         root = Path(corpus_root).resolve(strict=True)
         canonical = _corpus_relative_custody(
-            str(root.joinpath(*parts)), member_id, parts[0], root,
+            str(root.joinpath(*parts)), member_id, session_id, root,
         )
         if canonical != stored:
             return False
@@ -2419,10 +2430,16 @@ def verify_members(args: argparse.Namespace) -> int:
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"REFUSED: artifact unreadable or malformed ({type(error).__name__})")
         return 3
+    member_ids = [member.get("member_id") if isinstance(member, Mapping) else None
+                  for member in members]
+    sources = [member.get("source_directory") if isinstance(member, Mapping) else None
+               for member in members]
     all_pass = True
     for member in members:
         member_id = member.get("member_id") if isinstance(member, Mapping) else None
-        passed = isinstance(member, Mapping) and _verify_corpus_member(
+        source = member.get("source_directory") if isinstance(member, Mapping) else None
+        unique = member_ids.count(member_id) == 1 and sources.count(source) == 1
+        passed = unique and isinstance(member, Mapping) and _verify_corpus_member(
             member, prior_rows, args.corpus_root,
         )
         print(f"member {json.dumps(member_id)}: {'PASS' if passed else 'FAIL'}")
@@ -2520,13 +2537,13 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument(
         "--repo-root", type=Path, default=REPO_ROOT,
         help=(
-            "the checkout the ledger and the evidence bundles live in; member "
-            "paths are recorded relative to it"
+            "the run checkout holding the ledger, head pin, and battery verdicts; "
+            "member paths are relative to it unless --corpus-root names a custody parent"
         ),
     )
     prepare.add_argument(
         "--corpus-root", type=Path, default=None,
-        help="parent of session custody directories; only member paths use it",
+        help="custody parent of session directories; only member paths use it",
     )
     prepare.add_argument(
         "--preregistration", type=Path, required=True,
