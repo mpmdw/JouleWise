@@ -238,3 +238,14 @@
       - the digests match custody, ledger and candidate;
       - all 276 receipts and 48 battery observations authenticate.
     - **The cold Fable science judge** (SCI-25G83-CANDIDATE-01, [charge](70-science-gate/20-science-gate-charge.md)) and a **paired Opus refuter** were convened at ≈16:35.
+44. **S1 row 9 FAILED. S1 is NOT mergeable despite the final pass's MERGE.**
+    - **The run:** `python3 scripts/shard_tests.py --workers 6` on the S1 integration tree `42e2af3e` (`c7593edb` merged with main `daaff807`): **7,647 tests, 115 failures, 418 errors, all 6 shards FAIL** ([tail](35-s1-refuter/60-row9-tail.txt), [log](35-s1-refuter/60-row9-integration-FAIL.log.gz)).
+    - **Attribution:** `tests.test_phase_share` and `tests.test_audit_amplification` give FAILED (failures=4, errors=3) on S1 `c7593edb` alone, and OK on main `e7c8bcc6`. **The regression is S1's own.**
+    - **Dominant signatures:**
+      - `battery_float_evidence_missing` (S1's gate refuses fixtures that carry no battery evidence);
+      - `stale supply-map receipt digest` (d165_closeout, reported_energy_parents);
+      - `RunStatus.FAILED`;
+      - missing `order_manifest.json` fallback warnings turned into failures.
+    - **Root of the miss:** every S1 round and every S1 gate ran only the targeted V1/V2 suites. No full suite ran on any S1 head until this row 9. The final pass listed "full V1 in one run" as not executed, and inferred the rest was green.
+    - **The gate worked:** row 9 caught what the lenses did not.
+    - **Next:** a classification scout (Sol high) over all 533 failures, then a consult on the fix shape. The options are fixture battery evidence, the historical-exemption scope, or gate placement. S1 is off the issuance critical path. No fix round runs before the scout.
