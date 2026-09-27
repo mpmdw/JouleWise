@@ -36,6 +36,35 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
    
    **W1 is ADMITTED** (battery pass, cadence CONTINUE).
 10. **Science note for W2 planning, not a gate.** The valid yield is 6/12 (50 %), below the pre-registration's projected valid rate near 30/38 (≈79 %). The rows were not opened. What the registration's stopping and replacement rules imply for W2 when the yield is this low is for the W2 planning step to read from the registration text itself.
-11. **Merge path for the harvest commit.** TIER-01 (i)/(iii)/(v) make the pin and verdict FULL-TIER. The branch-protected `main` requires the gate ledger, so the commit lands by PR. It must merge with a **merge commit, never squash or rebase**, because the verdict-file rule requires exactly one commit that adds the path. W2's arm needs this merged: W2's measurement head must carry pin 226.
+11. **Merge path for the harvest commit.** TIER-01 (i)/(iii)/(v) make the pin and verdict FULL-TIER. The branch-protected `main` requires the gate ledger, so the commit lands by PR. It must merge with a **merge commit, never squash or rebase**. Correction per the Opus contract lens S1: the code check (`battery_float.py:599–606`, `git log --full-history --no-merges`) would also pass after a squash, but squash and rebase rewrite the SHA already published as `verdict_commit=c5088b87` in the harvest line. W2's arm needs this merged: W2's measurement head must carry pin 226.
+
+12. **Harvest email** accepted as Gmail `1a0e259bfb22d25c` (thread `1a0e25449a3aa211`). It carried the harvest line, the 6/12 yield and the ordering departure. It did **not** carry arm-gate NIT-1 or NIT-6 (contract lens S2); the W2 arm notice text now carries both, plus NIT-3.
+13. **PR #432** opened (FULL tier). Gate so far:
+    - Row 1 + row 2 (execution lens): Sol 6.0 high, [11-sol-audit-report.md](20-harvest-gate/11-sol-audit-report.md), **AUDIT: PASS**. It re-derived the pin and the verdict byte-exact and read all 24 ioreg files: 0 mA in 23, −11 mA once (d10 post); all `probe_error=false`, `passed=true`. Its F1 and F2 are pre-existing gaps in frozen `battery_float.py`:
+      - F1: `validate_window` ignores the recorded `probe_error` and `passed` fields, so a false pass is possible in principle;
+      - F2: `compare_verdict` compares a field subset.
+      
+      Both go to a lane (BATTERY-VALIDATOR-PROBE-ERROR-01; F1 bears on verity per directive #421). **Until it lands, every harvest adds a manual check that all readings have `probe_error=false` and `passed=true`.**
+    - Row 2 (contract lens) + row 6: Opus 5.5, [12-opus-contract-lens.md](20-harvest-gate/12-opus-contract-lens.md), **CONTRACT LENS: PASS**, with S1–S3 should-fix (merge-reason correction; notice NITs; W2 material), all actioned.
+      
+      Science C: the registration stops only on fewer than 6 valid of 12, so W1 counts with 6 members. Issuance needs n ≥ 12 across windows, and W3 is allowed only on count. At a 50 % yield, W1+W2 fall short about 39 % of the time. **Revision 5 is silent on n < 12 after W3.** That goes to Ed or a cold gate before W3 is needed (lane REV5-POST-W3-SHORTFALL-01).
+    - Row 7: a cold Fable final pass was convened on `c5088b87` ([charge](20-harvest-gate/21-fable-finalpass-charge.md), committed at `59fd6fcd`).
+    - Row 9: `scripts/shard_tests.py --workers 6` running on worktree `JouleWise-wt-harvest-w1-3ba66eeb` @ `c5088b87`, which equals the integration tree because the base is main.
+14. **SWEEPCLASS: the rule-11 same-signature escalation → consult, not round three.** Two consecutive rounds each gave 0 BLOCKER and 5 SHOULD-FIX latent static-sweep evasion forms, with no current leak.
+    - Consult [charge](30-sweepclass-samesig/00-consult-charge.md) at `7a341228`. Blind seats: Sol 6.0 high ([11](30-sweepclass-samesig/11-sol-consult.md)), Astra 6 high ([12](30-sweepclass-samesig/12-astra-consult.md)), Opus 5.5 ([13](30-sweepclass-samesig/13-opus-consult.md)).
+    - **All three:** an exhaustive static guarantee is not closable, and this is the same signature. Close B-1 and B-5 as plausible accidents; record B-2 as a D-161 limitation.
+    - Sol and Astra both found the sweep test **currently failing** at S1 head `315364b2` on an allowlist inventory mismatch. That blocks S1's merge; it is not a leak.
+    - They split on B-3 and B-4. Opus adds the root cause: there is no gated `summary()` accessor.
+    - The cold Fable judge was convened on the [cold-gate charge](30-sweepclass-samesig/20-coldgate-charge.md) at `6820fed0`, with a paired Opus refuter (Section A independent, Section B after the ruling).
+15. **TEST-CENSUS-MULTILINE-ARGV-01**, bench fix on branch `test/2026-09-27-census-multiline-argv` (worktree `JouleWise-wt-census-3ba66eeb`). The scout's PID-only proposal would have deleted the per-hit text assertions (pattern match; no recorded service basename). The bench fix keeps them: `pgrep -f` supplies PIDs, then each hit's argv is read back with `ps -ww -o command= -p PID`.
+    - Counterfactual, with a live decoy whose argv holds a newline (`scripts/run_campaign\nimport time\n`): the original test **errors=1** (tree `c5088b87`), the fixed test **OK**. The decoy was killed afterwards.
+    - Light tier (test-only).
+16. **W2 arm scripts** were derived from the W1 set at [40-w2-arm/scripts/](40-w2-arm/scripts/):
+    - ids set to `w2`;
+    - `__H__` and `__T0__` placeholders;
+    - `LEDGER_SOURCE` = the W1 measurement root's 226-row ledger, with its expected sha256 `b03be938…c63f`;
+    - the notice carries W1's harvest line, the NITs and the ordering departure.
+    
+    These were not executed. Registration spacing puts W2 t0 at 09:00 PDT or later.
 
 **Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
