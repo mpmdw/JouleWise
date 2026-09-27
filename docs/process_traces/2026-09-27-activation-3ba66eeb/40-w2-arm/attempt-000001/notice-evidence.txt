@@ -1,0 +1,10 @@
+W2 arm attempt 000001 — notice evidence (magistrate activation 3ba66eeb)
+Gmail acceptance: message id 1a0e2a7251f65ea8, thread id 1a0e2a7251f65ea8, internalDate 1790508999000 ms (2026-09-27T11:36:39Z = 2026-09-27 04:36:39 PDT); labels SENT.
+To: claude2.glaring610@passmail.net (the generated header named the alias claude.ai.copper531@passmail.net; Ed, Gmail 1a0e17772e3044ca: both are aliases to his mailbox).
+Subject: NIGHT NOTICE — d079-epoch-25g83-derivation-w2-20260927 (DIAGNOSTIC_NO_PACK) — attempt 1
+Accepted body = notice-body.txt from line 4 (the To:/Subject: header lines and the blank separator removed), sha256 2cb4b91064ed4121bc9af8ae5e4047caf11ecf46358ac729e0f2f701a3bed7c3; notice-body.txt sha256 ed96f17946981c6f35633fa2eb642a14e4c7e8184b7bfe5c7e13d709a8dbc78a.
+Follow-up on the same thread: Gmail 1a0e2a740c6fa62e (04:36:46 PDT), plain daytime note (machine untouched 08:52-11:35; reply NO to re-plan for tonight), per arm-gate NIT-6.
+H = a71a5e7999b5364e8477685b13c6a1e440fa7b27; plan sha256 0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce.
+NO channels read after acceptance: Gmail from:claude2.glaring610@passmail.net is:unread across all threads — none; notice thread has no reply. Directives open (mpmdw): #422 #421 #417 #416 #408 #405 — none says NO or stop. standdown.request absent; STOP absent.
+Arm gate: cold Fable verdict ARM (40-w2-arm/50-armgate/06-armgate-fable-verdict.md, NIT 1-7) + Opus lens ARM (07-armgate-opus-lens.md, NIT 1-5).
+Unreadable-thread limitation: none.
