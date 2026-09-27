@@ -1,0 +1,8 @@
+LANE: BATTERY-FLOAT-GATE-01, S2 fix-round-2 delta re-audit (single execution lens; the round is test-only). Seat: Sol 6.0 (gpt-6-sol), effort high, review genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-s2lens-92472459 (detached @ d3f904d6)
+WRITE_SCOPE: []
+
+Candidate: feat/2026-09-26-bfgs-s2-qpe-collector @ d3f904d6. Delta: git diff a0e8e47f d3f904d6 (test files only). The round implemented amendments 44, 45 and 46 as restated in §8 of /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/70-consult-samesig/30-erratum/21-coldgate-fable-erratum-ruling.md. Brief: 30-bfgs-s2/50-fix2/10-fix-brief.txt; report: 50-fix2/11-seat-report.md (same activation directory).
+
+Questions: (1) does each test row the three amendments name exist, go through the named production call site, and die under its named counterfactual (run each mutant in a /tmp copy)? (2) Did the round change any production file (it must not)? (3) Is the writer-location inventory (amendment 45) exact against the current source, and does it go red when a write site is added inside collect? (4) Same-signature statement vs round 1/2 classes (unpinned authentication-binding condition).
+Output: findings tiered BLOCKER / SHOULD-FIX / NIT with executed evidence. The real-collector subprocess test may fail in the sandbox for want of /bin/ps (the lead has run V1 green outside: 493 OK); report, don't chase. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope.
