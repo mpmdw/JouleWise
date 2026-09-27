@@ -1,0 +1,33 @@
+ROLE: the ONE refuter pass on BFG-S stream S1's merge candidate (JouleWise), under the stop rule of amendment 61 (c) as amended by 66, plus three reading tasks. You are a non-author, adversarial reviewer. Read-only.
+WRITE_SCOPE: []
+Write nothing in any repository. Scratch only under /tmp/s1-refuter-77b1bee2/. Bridge depth is one hop: do not call Claude by any route. No git fetch/pull/checkout/reset/commit.
+Use /opt/homebrew/bin/python3 only (never .venv). macOS has no `timeout`; use `perl -e 'alarm N; exec @ARGV' …`. Kill any process you start by PID, never `pkill -f`.
+
+CANDIDATE: /Users/edr/code/JouleWise-wt-s1-refuter-77b1bee2, detached at 4aefdd12 = branch feat/2026-09-26-bfgs-s1-bundles (S1 head 204424e6 merged with main b69c39eb; tree 6e0dfda7). The S1 base is 1417c0c4.
+
+RULINGS that define the pass (all under /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/):
+- 30-sweepclass-samesig/21-coldgate-fable-ruling.md — amendment 61, especially (c), the stop rule with A1–A5 and the findings table, and §8, the test-row matrix.
+- 30-sweepclass-samesig/31-coldgate-fable-erratum-ruling.md — amendments 66–71. 66 amends 61 (c) and A3.
+- 60-s1-fix3/21-coldgate-fable-ruling.md (S1-FIX3-RETURNS-01) — amendments 72–76; §7 line ~428 adds the three reading tasks.
+- 60-s1-fix3/40-r72-2-erratum/21-coldgate-fable-ruling.md — the R72-2 row.
+The latest seat evidence, V1/V2/builders green and mutants (a)(b)(c) RED on 204424e6: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-77b1bee2/30-s1-steps23/11-seat-report.md
+
+DO, with executed evidence:
+- A2, the inventory. The reported keys equal the allowlist's keys; state the count. Check every allowlist row against its class condition, and every entry of `READER_METHODS` and `RAW_CAPTURE_READERS` against its kind. Report any that is false. Also confirm that the key for `_run_assertions.check_a3` exists and that `_run_assertions` holds no read of its own (returns ruling, §amendment 62 (a) note).
+- A3 as replaced by 66 (b). Find any energy-class value that reaches a claim artifact without a gate, on the routes through the eight consumers and through the envelope gate. Apply 66 (a)'s pre-existing branch rule: a pre-existing route unchanged by S1 needs three executed things plus a lane.
+- A5, the fences. `joulewise/battery_float.py` hashes to prefix `4b4d7bb20625`. It, `reduce.py` and `bundle.py` are byte-identical to base 1417c0c4. None of the eight consumers imports `battery_float`.
+- A1 spot check. Re-run at least the rows new in the SWEEPCLASS ruling (R51-23..R51-28, R59-3b, R60-2b, R60-6) plus R72-2: GREEN on the tree, and RED under their counterfactual applied in memory.
+- Reading task 1: the four `validation` members against 73 (b). Each writes no file, stores nothing on an object that outlives the call, and no tracked caller parses a number out of its strings.
+- Reading task 2: the third closure of 74 (c) at `_current_core_rederivation_reasons`. The value received from the member is compared and dropped.
+- Reading task 3: the limit of the returns ruling §5.4. Can a bundle pass the bundle gate (`:680`) while it carries a capture whose own battery readings fail or are absent (compare `controller.py:448`)? Trace it.
+- A4 is re-run by the lead at the merge gate. You need not re-run V1/V2 in full, but say if anything you found would change them.
+
+CLASSIFY each finding by the 61 (c) table as amended by 66 (a). The classes:
+(1) a failure of A1–A5;
+(2) a latent form in the deliberate class, which is not a finding and is named for 51 (h);
+(3) a latent form in a 51 (h) blind spot, which is not a finding;
+(4) a latent form in a supported form the sweep misses. Give the closure and whether it would be GREEN on the tree.
+If three or more are class (4), the rule-11 route applies: say so.
+Tier each finding BLOCKER / SHOULD-FIX / NIT, with file:line.
+
+REPORT: claude-codex-report/v1 envelope, review genre. Final line: `S1 REFUTER: A1-A5 HOLD` or `S1 REFUTER: A<n> FAILS`.
