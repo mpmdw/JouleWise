@@ -132,4 +132,18 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
     - Row 11: hosted CI green on `3a346c46` (every job except `gate-ledger`, which waits on these rows).
     - Row 12: magistrate terminal review of `3a346c46`. Test-only; the production census is untouched; the counterfactual and the `watchdogd` mutation were executed; the independent final review passed. **MERGE.** The merge lands before W2's publication, so no plan is armed at merge time. W2's H `a71a5e79` stays an ancestor of main.
 
+26. **#433 MERGED** (`670756f3`, before W2's publication); canonical was fast-forwarded to `670756f3` while no plan was armed.
+    - **S1 seat returned** at 05:54: `blocked`, `partial`, copied to [11-seat-report.md](60-s1-fix3/11-seat-report.md). Amendment 63(a) and the narrowed sweep are implemented and committed unchanged by the lead as `8953c7a5` on `feat/2026-09-26-bfgs-s1-bundles`.
+    - It raised three NEEDS_RULING items:
+      1. two watched reads that fit no class;
+      2. 12 raw-capture members outside `RAW_CAPTURE_READERS`, 11 of kind energy with no preceding gate;
+      3. the 64(b) conflict, which is exactly the cooldown-anchor route and is already ruled by the erratum's amendment 66.
+27. **W2 ARMED.**
+    - Pre-publication checks: NO channels (Gmail from Ed newer_than:1d holds only last night's W1 approvals), directives unchanged, no standdown or STOP file.
+    - **Step 4 `STEP4 OK`**: second battery gate PASS (0 mA, age 1 s); `retry_allowed` allowed; **PUBLISHED 05:54:46 PDT** (epoch 1790513686.39). Live launchd probe OK: 300 frames in 40.2 s, median 131.1 ms, p95 135.2 ms, max 137.4 ms; cleanup proven; receipt v2 `c3cadff0…`; install done.
+    - **Step 5 `STEP5 OK`**: night calendar 09-27 09:00, dead-man 12:35; installed plists equal the reviewed renders (night `1ed0240a…`, dead-man `9183da2e…`); chain OK. The install-time probe render is `418bbf2a…` against the staged `da82415f…`, as NIT-5 predicted.
+    - **Frozen triple:** (`d079-epoch-25g83-derivation-w2-20260927`, `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2`, `a71a5e7999b5364e8477685b13c6a1e440fa7b27`). **The canonical root must not move until the W2 harvest and uninstall.**
+    - Evidence is in [40-w2-arm/attempt-000001/](40-w2-arm/attempt-000001/) and `step4.out`/`step5.out`. The armed email to Ed was accepted as Gmail `1a0e2efcaf043edb`.
+    - **Exit rule:** every child is stopped by about 08:20, and the magistrate exits before 08:52 (REQUEST, epoch 1790524320).
+
 **Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
