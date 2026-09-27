@@ -159,7 +159,7 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
 29. **S1 seat round 3b returned** at 07:30 ([31-seat-report-round3b.md](60-s1-fix3/31-seat-report-round3b.md)): all eleven ordered test-only steps are implemented; V1, V2 and the builder's forward check ×2 are green; 119 allowlist rows are classified. It was committed unchanged by the lead as **`00b0dc68`** on `feat/2026-09-26-bfgs-s1-bundles` and pushed.
     - **One return, NEEDS_RULING R72-2:** the ruled counterfactual does not behave as stated. The executed probe shows the tree's failed-attempt fixture already carries measurand bytes, and without them the test sees an unknown non-null failed-summary field `gross_energy_j`.
     - This is a text-versus-fixture mismatch on one row, not a leak. It goes to a small erratum cold gate next activation.
-30. **Exit** (≈07:40 PDT). W2 is armed (published 05:54:46; t0 09:00).
+30. **Exit** (07:32 PDT; exit email accepted as Gmail `1a0e34742e577c07`). W2 is armed (published 05:54:46; t0 09:00).
     - No Codex seat, `claude -p` judge or subagent is running; only this session's MCP servers remain, and they exit with it.
     - Canonical is `670756f3` = `origin/main` and is not moved while W2 is armed.
     - No standdown or STOP file; no unread Gmail from Ed; directives unchanged (#422 #421 #417 #416 #408 #405).
