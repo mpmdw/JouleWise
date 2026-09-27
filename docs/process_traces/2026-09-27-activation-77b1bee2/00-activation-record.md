@@ -230,3 +230,11 @@
     - Sol 6.0 high mechanically assembles the packet on side branch `docs/2026-09-27-77b1bee2-packet` ([brief](70-science-gate/01-packet-brief.txt)).
     - Astra 6 xhigh independently re-derives every operative from the raw members ([brief](70-science-gate/02-rederivation-brief.txt)).
     - Next: a cold Fable 5.1 science judge with a paired Opus refuter. **The D-138 issuance transaction is out of scope for this turn** (runbook §4.4).
+43. **Science-gate inputs are complete.**
+    - **Packet:** Sol-assembled, all 8 items, byte-checked ([packet](70-science-gate/packet/00-index.md), side-branch commit `f1f6b3a5`, merged).
+    - **Astra 6 xhigh independent re-derivation: REDERIVATION: MATCH**, 0 findings ([12](70-science-gate/12-astra-rederivation-report.md)):
+      - it used 90-digit Decimal arithmetic and its own Student-t inversion;
+      - the 12 members are exactly the valid captures;
+      - the digests match custody, ledger and candidate;
+      - all 276 receipts and 48 battery observations authenticate.
+    - **The cold Fable science judge** (SCI-25G83-CANDIDATE-01, [charge](70-science-gate/20-science-gate-charge.md)) and a **paired Opus refuter** were convened at ≈16:35.
