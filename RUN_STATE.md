@@ -10,6 +10,8 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 267afda6 — 00:14 → ≈00:17 PDT 09-27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-267afda6/00-activation-record.md), items 1–7. It did bookkeeping only (the sixth quiet relaunch, 16 minutes before t0). No git operation touched the canonical root. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
 **▶▶ ACTIVATION cef6d3f5 — 00:04 → ≈00:08 PDT 09-27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-cef6d3f5/00-activation-record.md), items 1–8. It did bookkeeping only (the fifth quiet relaunch, 26 minutes before t0; see item 7). No git operation touched the canonical root. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
 
 **▶▶ ACTIVATION 2d9ded9c — 23:54 → ≈00:00 PDT 09-26/27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-2d9ded9c/00-activation-record.md), items 1–8. It did bookkeeping only (the fourth quiet relaunch between arm and harvest). Item 5 self-reports a `git fetch` in the canonical root (remote-tracking refs only; HEAD and tree unmoved). The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
