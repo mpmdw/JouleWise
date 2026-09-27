@@ -41,3 +41,8 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
    - The cold Fable judge runs in `JouleWise-wt-s1swcg-92472459` @ `cbfa9dc3`, pinned for the session. Script: `~/.claude/jobs/22784e38/tmp/convene-coldgate-swerr.sh`.
    - The paired Opus contract refuter runs in parallel (Section A independent; Section B after the ruling).
    - Astra is not seated: this is a design-closure erratum on test-code amendments, with no new science. The same omission was recorded for SAMESIG.
+7. **Owner instruction (Ed, Gmail message `1a0e163a9a06c137`, thread `1a0e16172f3388bf`, 22:43:13 PDT 09-26), verbatim above the quoted text:**
+
+   > Explicit "YES ledger fix" . A and b approved.
+
+   Applied: (a) `LEDGER_SOURCE` → the n2 ledger with `LEDGER_SOURCE_EXPECTED_SHA256 = 95d152f0…5302` plus a digest check in step 1; (b) the refused partial clone moves to `~/night-archive/`. The W1 steps are then re-run from step 0.
