@@ -157,3 +157,11 @@
     - 15 new tests OK; mutation cuts RED; R8 24/24 accepted, with wrong roots refused 24/24.
     - The seat's only failure is the sandboxed `sysctl`. The lead is re-running outside the sandbox.
     - **Delta re-audit** (rule 9): Astra 6 high (cross-family), [brief](50-custody-outside-repo/62-delta-brief.txt).
+29. **Custody repair after fix round 1** (`f783a3fd`).
+    - **Lead verification** outside the sandbox: 270 tests OK ([tail](50-custody-outside-repo/63-fix1-lead-verify-tail.txt)).
+    - **Astra 6 high delta re-audit: DELTA: PASS, 0 findings** ([64](50-custody-outside-repo/64-astra-delta-report.md)):
+      - C1–C3 are exact, and C1 holds in both functions against 10 adversarial shapes.
+      - The real ledger has 12 valid rows and 12 ordinary-invalid rows, with 0 duplicate valid attempt ids.
+      - Three cuts ran and all went RED.
+      - The Sol F1 class is closed (rule 11: no same signature).
+    - **Cold gate CUSTODY-REPAIR-FINAL-01** (Fable, [charge](50-custody-outside-repo/70-coldgate-final-diff-charge.md)) was convened on `f783a3fd`. It serves as gate row 7 and as statement item 6(c).
