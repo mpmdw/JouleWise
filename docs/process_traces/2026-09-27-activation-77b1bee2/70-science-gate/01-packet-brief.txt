@@ -2,7 +2,7 @@ ROLE: mechanical packet assembler for the cold science gate on the epoch-25G83 c
 WRITE_SCOPE: ["docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/packet/**"]
 Write ONLY inside that directory (in the working tree below). No git commit/fetch/pull/checkout. Do not call Claude. Read-only everywhere else (custody, measurement roots, ledgers: never modify).
 
-WORKING TREE: /Users/edr/code/JouleWise-wt-bk-77b1bee2 (branch docs/2026-09-27-77b1bee2).
+WORKING TREE: /Users/edr/code/JouleWise-wt-sci-packet-77b1bee2 (branch docs/2026-09-27-77b1bee2-packet).
 CANDIDATE: docs/process_traces/2026-09-27-activation-77b1bee2/60-prepare-record/30-run1/candidate_acceptance_25g83.json (sha256 dbad7cc782945691701c2ee11188179a61b333dbd0a5588b970636716554b5b2); run record 00-run1-record.md there.
 RUNBOOK: docs/phase_2/derivation_night_runbook.md §4.3 lists the packet items 1–8 (it was written for the three-night FAIL route; epoch 25G83 runs Revision 5 with TWO windows W1, W2 — adapt item wording to two sessions and say so).
 REGISTRATION: configs/calibration/preregistration_d079_epoch_25g83_rev1.md (sha256 81b65f08…ddf1) — include Revision 5 + A-R5b sections verbatim by line range.
