@@ -77,3 +77,8 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
       - F5 would block on the six benign open directives; the README makes directive review a lead act.
     - No other stale flag, key or receipt field was found. The scan notes step 2 cannot be re-run over an existing staged plan.
     - Ed was asked for "(d) probe plist in the render sets, (e) the address fix, (f) move tonight's partial W1 outputs (staged plan, rendered-agents, the `NIGHT_ROOT` folder) to `~/night-archive/` and re-run step 2" (Gmail `1a0e1735d1f7d166`).
+14. **Owner instruction (Ed, Gmail message `1a0e17772e3044ca`, thread `1a0e16172f3388bf`, 23:04:50 PDT 09-26), verbatim above the quoted text:**
+
+    > YES def the email change is superfluous, both are aliases to my real mailbox, so send to whichever, I'll get all the emails, as long as you can manage replies
+
+    Applied: (d) and (f). (e) is not applied: Ed calls it superfluous, and the notice is sent by hand to `claude2.glaring610@passmail.net`, where replies are searched. **Correction to the 23:00 email:** it said the installer's probe render dates from "a July change". `d1aadecc` is dated 2026-09-17.
