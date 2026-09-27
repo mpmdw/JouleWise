@@ -21,7 +21,8 @@ file instead.
   - **The S1 fix-round-3 seat** (Sol xhigh) is on steps 1–12; its report is `/tmp/harvest-3ba66eeb/s1-fix3-report.md`, copied into the record when harvested.
 - **New lane BFGS-COOLDOWN-ANCHOR-01** (the cold erratum found by execution that a charging bundle's idle baseline can become a stored cooldown anchor that decides later admissions). It is pre-existing, does not block S1, and **must merge before the next scored campaign.** Until then, run the §4.6 anchor pre-check before every scored campaign. The scout is in record `70-cooldown-anchor/`.
 - **#433 MERGED** (`670756f3`, before W2's publication): the census test survives multiline argv, with deterministic recorded-service decoys.
-- **S1:** the returns ruling S1-FIX3-RETURNS-01 needs no production code in S1 and opens lane BFGS-RAWCAPTURE-01. Seat round 3b (steps 20–23, 13–19) is test-only. After it: one refuter pass, then the S1 merge gate.
+- **S1:** the returns ruling S1-FIX3-RETURNS-01 needs no production code in S1 and opens lane BFGS-RAWCAPTURE-01. **Seat round 3b is done and committed as `00b0dc68`**: all steps green, with one return (R72-2 counterfactual) for a small erratum gate. Then one refuter pass, then the S1 merge gate.
+- **SUCCESSOR'S NEXT EXACT ACTION:** record 00 item 30. **Harvest W2 after 11:35 by runbook §2.2a, not the README**, with the manual `probe_error`/`passed` cross-check; then the R72-2 erratum; the cooldown-anchor cold gate; the bookkeeping PR (only while unarmed).
 - **Other lanes registered by this activation's rulings:**
   - BATTERY-VALIDATOR-PROBE-ERROR-01: the frozen validator ignores recorded `probe_error`/`passed`. **Until it lands, every harvest cross-checks those fields by hand.**
   - REV5-POST-W3-SHORTFALL-01: Revision 5 is silent if n < 12 after W3; that goes to Ed or a cold gate before W3.

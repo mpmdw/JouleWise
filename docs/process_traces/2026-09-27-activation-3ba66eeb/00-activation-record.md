@@ -156,4 +156,27 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
     
     **Seat round 3b** was launched at 06:18 ([brief](60-s1-fix3/30-seat-brief-round3b.txt) at `9b923643`; Sol xhigh; test files only; hard stop 08:00; codex timeout 6300 s). Its report goes to `/tmp/harvest-3ba66eeb/s1-fix3b-report.md`.
 
-**Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
+29. **S1 seat round 3b returned** at 07:30 ([31-seat-report-round3b.md](60-s1-fix3/31-seat-report-round3b.md)): all eleven ordered test-only steps are implemented; V1, V2 and the builder's forward check ×2 are green; 119 allowlist rows are classified. It was committed unchanged by the lead as **`00b0dc68`** on `feat/2026-09-26-bfgs-s1-bundles` and pushed.
+    - **One return, NEEDS_RULING R72-2:** the ruled counterfactual does not behave as stated. The executed probe shows the tree's failed-attempt fixture already carries measurand bytes, and without them the test sees an unknown non-null failed-summary field `gross_energy_j`.
+    - This is a text-versus-fixture mismatch on one row, not a leak. It goes to a small erratum cold gate next activation.
+30. **Exit** (≈07:40 PDT). W2 is armed (published 05:54:46; t0 09:00).
+    - No Codex seat, `claude -p` judge or subagent is running; only this session's MCP servers remain, and they exit with it.
+    - Canonical is `670756f3` = `origin/main` and is not moved while W2 is armed.
+    - No standdown or STOP file; no unread Gmail from Ed; directives unchanged (#422 #421 #417 #416 #408 #405).
+    - Durable pointer: the RUN_STATE top block on this branch.
+    - Self-reports this activation: the canonical `git fetch` while W1 was armed (item 3), the harvest read order (item 4), and the `pkill` bench slip (item 18).
+
+**Next exact action (successor):**
+1. **Harvest W2** after the completion boundary (courier deadline 11:35 PDT) using **runbook §2.2a, not the W1-text README** (arm-gate NIT-1).
+   - Preserve the custody root byte-exact (with an lstat inventory), and also the W2 clone's ledger. Then `install_night_agent.sh --plan <NIGHT_ROOT>/night_plan.json --uninstall`.
+   - §2.0 coordinates: plan `d079-epoch-25g83-derivation-w2-20260927`, root `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2`, H `a71a5e79`.
+   - `advance-head-pin` from 226 to W2's terminal head (dry run, then `--execute`); `battery-verdict`; ONE commit in the W2 clone; the harvest line.
+   - **By hand:** check that `probe_error=false` and `passed=true` for all 24 battery readings (lane BATTERY-VALIDATOR-PROBE-ERROR-01; final-pass S3).
+   - The cadence report (W2's is a disclosed diagnostic, arm-gate NIT-6), then `check --session-ids` for W1 **and** W2.
+   - Only then read the slot lines, at step (viii).
+   - Full-tier PR, **merge commit only**; row 9 with `python3`, never the venv.
+   - If W1+W2 hold fewer than 12 valid, W3 is permitted on count. Put REV5-POST-W3-SHORTFALL-01 (Revision 5 is silent on n < 12 after W3) to Ed or a cold gate before arming W3.
+   - Directive #416 (the three-family full-system audit) follows once W1 and W2 pass, before any claim-bearing run.
+2. **S1:** a small erratum cold gate on R72-2 (seat report round 3b, end). Then the seat applies it. Then **one refuter pass** on the merge candidate under stop rule 61 (c) as amended by 66, with the three extra reading tasks of S1-FIX3-RETURNS-01 §7. Then the S1 merge gate (full tier).
+3. **BFGS-COOLDOWN-ANCHOR-01:** its own cold gate on the code (the scout is in `70-cooldown-anchor/11-sol-scout.md`). It must merge before the next scored campaign; until then run the §4.6 anchor pre-check.
+4. **Bookkeeping PR** from `docs/2026-09-26-22784e38`, which carries records 92472459, 22784e38, the quiet slices and 3ba66eeb plus RUN_STATE. Touch `tests/test_gen_state.py` so CI runs. Light tier. Merge only while no plan is armed, then fast-forward canonical.
