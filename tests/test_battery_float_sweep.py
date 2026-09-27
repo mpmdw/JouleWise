@@ -71,6 +71,9 @@ READERS = {
 
 # file -> the runner each `battery_float.observe(` call there uses.
 OBSERVE_CALLERS = {
+    "scripts/sample_quiet_predicate_evidence.py": [
+        "quiet_pre: battery_read uses observe's own bytes subprocess.run or an injected bytes runner",
+        "quiet_post: battery_read uses observe's own bytes subprocess.run or an injected bytes runner"],
     "joulewise/night_gate.py": ["t0: probes.run (run_night._probe_runner captures bytes)"],
     "joulewise/evidence_night.py": ["arm_check: probe_command (bytes for the ioreg argv)",
                                     "publish_install: probe_command (bytes for the ioreg argv)"],

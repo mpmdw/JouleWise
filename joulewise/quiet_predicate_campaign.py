@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 
-from joulewise import night_gate
+from joulewise import battery_float, night_gate
 from joulewise.night_kinds import kind_row
 from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 
@@ -1140,12 +1140,41 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     """Apply ruling 46b to fixed pairs; preserve unfiltered diagnostics."""
     import statistics
     from scripts import sample_quiet_predicate_evidence as harness
-    values, all_rows, replay_recorders = [], [], []
+    values, all_rows, replay_recorders, battery_float_envelopes = [], [], [], []
+    battery_statuses = set()
     journal = directory.parent / protocol["recorder_journal"]
     covariates = [json.loads(line) for line in journal.read_text().splitlines() if line] if journal.exists() else []
     clean_busy = []
     rule = non_observer_rule(protocol)
     for entry in envelopes:
+        out = directory / f"envelope-{entry['index']:02d}"
+        code = entry.get("collector_exit", "absent")
+        witness = type(code) is int and code != 0
+        # An executor-observed crash before the first record has no custody
+        # claim. A lone pre raw is not yet bound by a session record.
+        if witness:
+            def has_entry(path):
+                try:
+                    path.lstat()
+                except FileNotFoundError:
+                    return False
+                return True
+            raw = out / "raw"
+            round_directories = any(p.is_dir() for p in raw.glob("round-*"))
+            if not has_entry(out / "session.json") and not has_entry(out / "rounds.jsonl") and not round_directories:
+                values.append({**entry, "excluded": ["collect_error", "incomplete_interior_support"],
+                               "error": f"collector left no record, collector_exit {code!r}",
+                               "joules": None, "combined_joules": None, "interior": None})
+                continue
+        verdict = battery_float.authenticate_quiet_session(out)
+        if verdict.status != "pass":
+            battery_float_envelopes.append({
+                "index": entry["index"], "status": verdict.status,
+                "reasons": list(verdict.reasons),
+                "pre_raw_sha256": verdict.pre_raw_sha256,
+                "post_raw_sha256": verdict.post_raw_sha256,
+                "collector_exit": code,
+                "disposition": "blanks_night"})
         excluded = []
         if entry.get("collector_exit", 0) != 0:
             excluded.append("collect_error")
@@ -1184,19 +1213,16 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
                 entry[EXECUTOR_NON_OBSERVER_VERDICT] = executor_verdict
                 entry[NON_OBSERVER_DISAGREEMENT] = (non_observer_verdict_key(offenders)
                                                     != non_observer_verdict_key(executor_verdict))
-        out = directory / f"envelope-{entry['index']:02d}"
-        # The session record is read FIRST and kept even when the rest of the
-        # envelope is unreadable, because the replay check below must see
-        # every session that exists.  Reading both inside one `try` meant a
-        # missing or unparseable `rounds.jsonl` skipped the envelope before
-        # the check, and a replay night whose journals were all lost failed
-        # OPEN -- INCONCLUSIVE, `partial`, rc 0 (execution lens 17b S1).
-        session, rows, unreadable = None, None, None
+        # The authenticated session is read again for routing and for the
+        # replay check. A record that changes between those reads is custody,
+        # never an incomplete-interior exclusion.
+        session = None
         try:
             session = json.loads((out / "session.json").read_text())
-            rows = [json.loads(line) for line in (out / "rounds.jsonl").read_text().splitlines() if line]
         except (OSError, ValueError) as exc:
-            unreadable = exc
+            raise battery_float.CustodyUnreadable(f"session.json unreadable after authentication: {exc}") from exc
+        if not isinstance(session, dict):
+            raise battery_float.CustodyUnreadable("session.json is not an object after authentication")
         # HARVEST-side fail-closed point of the bench replay (cold gate #3
         # ruling 10 Q7; brief D6).  Every session this summary reads must say,
         # in its own record, that a real `powermetrics` produced its frames.
@@ -1218,10 +1244,33 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             recorder_kind = power.get("recorder_kind") if isinstance(power, dict) else None
             if recorder_kind != harness.RECORDER_KIND_PRODUCTION:
                 replay_recorders.append({"index": entry["index"], "recorder_kind": recorder_kind})
-        if unreadable is not None:
-            values.append({**entry, "excluded": excluded + ["incomplete_interior_support"],
-                           "error": str(unreadable), "joules": None})
+        completed = "end_stamp" in session
+        refusal = not completed and session.get("error_class") == battery_float.QUIET_REFUSAL_ERROR_CLASS
+        pair = session.get("battery_float")
+        first_write = (not completed and not refusal and "journal_rows" not in session
+                       and isinstance(pair, dict) and isinstance(pair.get("pre"), dict)
+                       and "post" not in pair)
+        route_error = None
+        if verdict.status == "pass" and refusal and witness:
+            route_error = (f"collector refused before capture: {session['error_class']}, "
+                           f"collector_exit {code!r}")
+        elif verdict.status == "battery_float_evidence_missing" and first_write and witness:
+            route_error = f"collector did not finish: no end_stamp, collector_exit {code!r}"
+            battery_float_envelopes[-1]["disposition"] = "excluded_collect_error"
+        elif verdict.status != "pass":
+            battery_statuses.add(verdict.status)
+            if not completed:
+                rendered_code = repr(code) if "collector_exit" in entry else "absent"
+                route_error = f"collector record has no end_stamp, collector_exit {rendered_code}"
+        if route_error is not None:
+            values.append({**entry, "excluded": sorted(set(excluded + ["incomplete_interior_support"])),
+                           "error": route_error, "joules": None,
+                           "combined_joules": None, "interior": None})
             continue
+        try:
+            rows = [json.loads(line) for line in (out / "rounds.jsonl").read_text().splitlines() if line]
+        except (OSError, ValueError) as exc:
+            raise battery_float.CustodyUnreadable(f"rounds.jsonl unreadable after authentication: {exc}") from exc
         all_rows.extend(rows)
         hard = hard_exclusions(rows)
         excluded.extend(hard)
@@ -1348,6 +1397,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
     large_pairs = [d for d in overlapping if pair_sd is not None and abs(d["delta_j"]) > 3 * pair_sd]
     report = {"schema": "joulewise.quiet_predicate_pilot_summary.v1", "evidence_status": "PROVISIONAL",
         "status": "SPREAD_RECORDED" if sufficient else "INCONCLUSIVE", "envelopes": values,
+        "battery_float_envelopes": battery_float_envelopes,
         "retained": len(retained), "sizing_pairs": deltas, "retained_pairs": len(deltas),
         "adjacent_pairs": overlapping, "adjacent_pairs_role": "diagnostic_only; never used for sizing",
         "adjacent_pair_sd_j": statistics.stdev(d["delta_j"] for d in overlapping) if len(overlapping) >= 2 else None,
@@ -1387,7 +1437,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
         "whole_campaign_observer_cpu_s": observer_cpu_s,
         "observer_definition": OBSERVER_DEFINITION,
         "cutoff_authority": False, "top_up": False}
-    if replay_recorders:
+    if replay_recorders and not battery_statuses:
         # Nothing this night produced is a measurement.  The status, the
         # retained set and the spread bound are replaced outright rather than
         # annotated -- and so is EVERY energy number the document would
@@ -1417,7 +1467,38 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             "replay_recorder_envelopes": replay_recorders,
             "replay_recorder_reason": "one or more session.json records do not carry "
                                       f"power.recorder_kind == {harness.RECORDER_KIND_PRODUCTION!r}"})
+    if battery_statuses:
+        status = ("BATTERY_FLOAT_CONFOUNDED" if "battery_float_confounded" in battery_statuses
+                  else "BATTERY_FLOAT_EVIDENCE_MISSING")
+        report.update({
+            "status": status, "evidence_status": status,
+            "envelopes": [{**v, "joules": None, "combined_joules": None, "interior": None}
+                          for v in values],
+            "retained": None, "sizing_pairs": [], "retained_pairs": None,
+            "adjacent_pairs": [], "adjacent_pair_sd_j": None, "pair_sd_j": None,
+            "pair_df": None, "s_upper_factor": None, "single_envelope_sd_j": None,
+            "unfiltered_single_envelope_sd_j": None,
+            "first_to_last_retained_drift_j": None, "pairs_above_3_pair_sd": [],
+            "max_abs_delta_j": None, "s_upper": None, "block_two_pairs": None,
+            "block_two_stop": None,
+            "s_upper_reason": "battery float pair did not pass; no sizing or energy",
+            "block_two_pairs_reason": "battery float pair did not pass; no sizing or energy",
+        })
     harness.write_json(directory / "summary.json", report)
+    if battery_statuses:
+        excused = [r for r in battery_float_envelopes if r["disposition"] == "excluded_collect_error"]
+        refused = [v for v in values if str(v.get("error", "")).startswith("collector refused before capture")]
+        lines = [f"# QPE-01 {report['status']}", "",
+                 f"Status: {report['status']}. A battery float pair did not pass; "
+                 "all energy, retained counts, pairs, sizing and spreads are blank."]
+        lines += [f"Envelope {r['index']} battery float {r['status']}: "
+                  f"{', '.join(r['reasons'])}." for r in battery_float_envelopes]
+        lines += [f"Envelope {r['index']} excused after collector exit {r['collector_exit']!r}."
+                  for r in excused]
+        lines += [f"Envelope {v['index']} refused before capture after collector exit "
+                  f"{v.get('collector_exit', 'absent')!r}." for v in refused]
+        (directory / "summary.md").write_text("\n".join(lines) + "\n")
+        return report
     if replay_recorders:
         (directory / "summary.md").write_text(
             f"# QPE-01 {REPLAY_NEVER_EVIDENCE}\n\n"
@@ -1431,6 +1512,13 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
             "start-drift diagnostics in summary.json remain, because measuring the "
             "inter-slot tail is what the replay is for.\n")
         return report
+    notes = "".join(
+        f"Envelope {r['index']} excused after collector exit {r['collector_exit']!r}.\n"
+        for r in battery_float_envelopes if r["disposition"] == "excluded_collect_error")
+    notes += "".join(
+        f"Envelope {v['index']} refused before capture after collector exit "
+        f"{v.get('collector_exit', 'absent')!r}.\n"
+        for v in values if str(v.get("error", "")).startswith("collector refused before capture"))
     (directory / "summary.md").write_text(
         "# QPE-01 pilot (PROVISIONAL, descriptive)\n\n" +
         f"Status: {report['status']}. Retained {len(retained)}/{protocol['envelopes']} envelopes; {len(deltas)} disjoint pairs.\n\n" +
@@ -1445,7 +1533,7 @@ def pilot_summary(directory, protocol, envelopes, observer_cpu_s=None):
           f'{rule["bar_core_seconds"]:g} or more core-seconds inside an envelope excludes that envelope. ')
          if rule else "Busy cores are recorded covariates and never an exclusion input. ") +
         "Every exclusion and partial interior is retained in summary.json. No top-up, cutoff or activation authority. " +
-        "Block two is not authored by this summary.\n")
+        "Block two is not authored by this summary.\n" + notes)
     return report
 
 
@@ -1682,6 +1770,9 @@ def execute(plan, protocol, night_dir):
                 # inside the loop above, because those rows are the drift
                 # measurement the bench replay exists to take.
                 outcome, error = "refused", replay_refusal_error(error)
+        except battery_float.CustodyFailure as exc:
+            print(f"custody_failure: {exc}", flush=True)
+            raise
         except (OSError, ValueError, KeyError, TypeError) as exc:
             outcome, error = "refused", "pilot summary failed: " + str(exc)
         # The harvest-side refusal above reads the SESSIONS, so it is silent
