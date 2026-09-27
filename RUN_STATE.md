@@ -10,6 +10,29 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 77b1bee2 — from 11:36 PDT 09-27 (Opus 5.5; NOTHING ARMED; W2 HARVESTED + ADMITTED, #434 MERGED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) is the running log.
+
+**W2 is ADMITTED.** It passed the battery check and the cadence check (CONTINUE, 128.5 ms). **#434 merged as `b69c39eb`**, a merge commit that passed the full gate: Sol AUDIT PASS, Opus CONTRACT LENS PASS, cold Fable MERGE, and row 9 at 7,525/0/0.
+- Harvest line: `…w2-20260927: battery=pass verdict_sha256=51f49618…46ec verdict_commit=722f7bd1`.
+- With W1 and W2 together, 12 captures are valid. That is **exactly the Revision 5 floor**, and **W3 is not permitted**.
+
+**Issuance is BLOCKED on a value-blind tool fault.** `prepare-candidate` refuses whenever custody lies outside a git checkout, and all 24 W1/W2 locators are under `/Users/edr/night-custody` (lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01).
+- **What happens if issuance refuses** is now fixed in writing, before the run. Statement REV5-REFUSAL-BRANCH-01 was settled by a cold gate, a paired refuter and a cold addendum; its sha256 is `8717e33c…39a6`, at `60-prepare-record/00-refusal-branch-final-statement.md`. Ed was emailed.
+- **The repair's design is C**, chosen by the four-model council (Fable and Opus for C, Sol for A, Astra for B; [synthesis](docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md)). C changes the issuer only: it adds `--corpus-root`, a naming function bound to the session and the capture, and a read-only `verify-members` command.
+- **The implementation seat** (Sol xhigh) is on `fix/2026-09-27-issuer-corpus-root`, worktree `JouleWise-wt-corpus-root-77b1bee2`.
+
+**S1:** steps 2–3 came back GREEN on the tree, with mutants (a), (b) and (c) all RED. The merge candidate is `4aefdd12` (S1 with main merged in), and the one refuter pass (Sol xhigh) is running.
+
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item. Then:
+1. **Custody repair:** harvest the implementation seat (report `/tmp/corpus-root-impl-77b1bee2/report.md`). Then run the Opus and Sol lenses, then the **fresh cold gate on the final diff** (addendum §6.1, which also serves as statement item 6(c)), then a full-tier PR.
+2. **S1:** harvest the refuter (`/tmp/s1-refuter-77b1bee2/report.md`), classify its findings by the 61 (c)/66 table, then the S1 merge gate (full tier; A4 = V1/V2 re-run by the lead).
+3. **Prepare step,** only after the repair merges:
+   - bring the W2 measurement root to main by digest (statement item 2(d)/(e));
+   - check Ed's replies immediately before (S4) and re-run the dry run (S5);
+   - run `prepare-candidate` with the flag set in the refuter's A.5 plus `--corpus-root /Users/edr/night-custody`;
+   - then the cold science gate (runbook §4.3), then D-138.
+4. **Bookkeeping:** register today's lanes (synthesis ruling 5; record items 10–12) in the state kernel, TASK_QUEUE and `tests/test_gen_state.py`, then merge this branch's bookkeeping PR (light tier).
+
 **▶▶ ACTIVATION 896d11e2 — 08:35 → ≈08:38 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-896d11e2/00-activation-record.md), items 1–5. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
 
 **▶▶ ACTIVATION 121316f6 — 08:25 → ≈08:30 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-121316f6/00-activation-record.md), items 1–5. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
