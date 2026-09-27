@@ -82,3 +82,11 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
     > YES def the email change is superfluous, both are aliases to my real mailbox, so send to whichever, I'll get all the emails, as long as you can manage replies
 
     Applied: (d) and (f). (e) is not applied: Ed calls it superfluous, and the notice is sent by hand to `claude2.glaring610@passmail.net`, where replies are searched. **Correction to the 23:00 email:** it said the installer's probe render dates from "a July change". `d1aadecc` is dated 2026-09-17.
+15. **W1 steps 2–3 PASS; arm gate ARM; notice accepted.**
+    - (d) applied; (f) done: the partial outputs are archived at `~/night-archive/w1-partial-step2-22784e38/`.
+    - Step 2 re-run → `STEP2 OK`, with three Interactive plists: night `d082e61c…`, probe `562e4341…`, dead-man `f2074d38…`.
+    - Step 3 → attempt `000001`, `STEP3 OK`. The census foreign PIDs 70194/70213/70214 are this session's own Codex MCP server children.
+    - **Cold Fable arm gate: ARM** ([06](50-armgate/06-armgate-fable-verdict.md); 0 BLOCKER, 0 MATERIAL, NIT 1–7). **Opus lens: ARM** ([07](50-armgate/07-armgate-opus-lens.md); NITs only).
+    - Machine state at arm is in [10-w1-arm/arm-machine-state.txt](10-w1-arm/arm-machine-state.txt): no Wispr; AC, 100 %, charged.
+    - **Notice accepted** as Gmail `1a0e180925850ff6` at 23:14:55 PDT (epoch 1790489695), sent to `claude2.glaring610@passmail.net`. No NO on any thread; directives unchanged; no standdown or STOP. `notice.json` was filled from the observed acceptance and `notice-evidence.txt` written.
+    - Also harvested: the SWEEPCLASS erratum's paired Opus refuter. No BLOCKER; B-1..B-5 are SHOULD-FIX against the ruling, and B-4 proposes a production gate in `envelope_gate.py`. **They go to a second erratum cold gate after W1.**

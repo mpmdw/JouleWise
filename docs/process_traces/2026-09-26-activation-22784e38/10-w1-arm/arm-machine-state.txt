@@ -1,0 +1,68 @@
+Sat Sep 26 23:09:22 PDT 2026
+== mdutil clone
+/System/Volumes/Data/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w1:
+	Error: unknown indexing state.
+== pmset -g
+System-wide power settings:
+Currently in use:
+ standby              1
+ Sleep On Power Button 1
+ hibernatefile        /var/vm/sleepimage
+ powernap             1
+ networkoversleep     0
+ disksleep            10
+ sleep                0 (sleep prevented by AddressBookSourceSync, powerd)
+ hibernatemode        3
+ ttyskeepawake        1
+ displaysleep         0
+ tcpkeepalive         1
+ powermode            0
+ womp                 1
+== pmset -g assertions
+2026-09-26 23:09:22 -0700 
+Assertion status system-wide:
+   BackgroundTask                 0
+   ApplePushServiceTask           0
+   UserIsActive                   1
+   PreventUserIdleDisplaySleep    0
+   SoftwareUpdateTask             0
+   PreventSystemSleep             0
+   ExternalMedia                  0
+   PreventUserIdleSystemSleep     1
+   NetworkClientActive            0
+Listed by owning process:
+   pid 75978(AddressBookSourceSync): [0x000ad90800019d96] 00:00:04 PreventUserIdleSystemSleep named: "Address Book Source Sync"  
+	Timeout will fire in 1796 secs Action=TimeoutActionTurnOff
+   pid 351(powerd): [0x00082e40000199af] 48:33:16 PreventUserIdleSystemSleep named: "Powerd - Prevent sleep while display is on"  
+   pid 351(powerd): [0x000000280009800b] 197:28:03 UserIsActive named: "com.apple.powerd.ws.initialize"  
+   pid 411(WindowServer): [0x0000002800098005] 01:33:59 UserIsActive named: "com.apple.iohideventsystem.queue.tickle serviceID:100000d16 service:AppleHIDKeyboardEventDriverV2 product:Apple Internal Keyboard / Trackpad eventType:3"  
+Kernel Assertions: 0x104=USB,MAGICWAKE
+   id=582  level=255 0x100=MAGICWAKE creat=9/18/26, 17:48  mod=9/23/26, 01:40 description=en0 owner=IOSkywalkNetworkBSDClient
+   id=584  level=255 0x4=USB creat=9/21/26, 23:00 description=com.apple.usb.externaldevice.02100000 owner=POWER-Z KM003C
+== pmset -g batt
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=23003235)	100%; charged; 0:00 remaining present: true
+== displays
+          Display Type: Built-in Liquid Retina XDR Display
+          Resolution: 3456 x 2234 Retina
+          Main Display: Yes
+          Online: Yes
+          Automatically Adjust Brightness: Yes
+== load
+23:09  up 8 days,  5:29, 1 user, load averages: 1.90 2.11 1.94
+{ 1.90 2.11 1.94 }
+== wispr
+wispr: not running
+== top cpu
+  PID  %CPU COMM
+76090  28.0 find
+75728   2.5 /Users/edr/.local/bin/claude
+  411   1.9 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+70181   1.0 /Users/edr/.local/bin/claude
+  404   0.6 /usr/sbin/notifyd
+  412   0.4 /System/Library/PrivateFrameworks/TCC.framework/Support/tccd
+76093   0.3 /bin/zsh
+    1   0.3 /sbin/launchd
+  378   0.2 /usr/libexec/opendirectoryd
+  349   0.2 /usr/libexec/configd
+  337   0.2 /usr/libexec/logd
