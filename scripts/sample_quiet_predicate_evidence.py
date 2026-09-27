@@ -1106,8 +1106,8 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
         session["error_class"] = NETWORK_TIME_REFUSAL
         session["error_rounds"] = 0
         battery_read("post")
-        (out / "rounds.jsonl").write_text("")
         write_json(out / "session.json", session)
+        (out / "rounds.jsonl").write_text("")
         return session, []
     write_json(out / "session.json", session)
     recorder = None

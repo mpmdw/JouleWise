@@ -387,7 +387,11 @@ class BatteryCollectorTests(NetworkTimeOffMixin, unittest.TestCase):
                     self.assertNotIn(Path(event[1]).name, ('session.json', 'rounds.jsonl'))
                     self.assertEqual(events[index - 1][0], 'fsync')
 
-    def test_refusal_journal_precedes_session_even_if_session_write_fails(self):
+    def test_refusal_session_write_failure_leaves_no_journal(self):
+        # Lead bench (delta-1 B1): the refusal path keeps its pre-S2 order, session.json
+        # then rounds.jsonl, so a failed session write leaves no record at all and the
+        # amendment-32(1) no-record carve-out applies; a journal-first order made the
+        # same honest failure read as custody.
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
             out = Path(tmp) / 'refusal'
             real_write = harness.write_json
@@ -399,7 +403,8 @@ class BatteryCollectorTests(NetworkTimeOffMixin, unittest.TestCase):
                  patch.object(harness, 'write_json', side_effect=fail_session):
                 with self.assertRaisesRegex(OSError, 'session write failed'):
                     self.collect(out)
-            self.assertEqual((out / 'rounds.jsonl').read_bytes(), b'')
+            self.assertFalse((out / 'rounds.jsonl').exists())
+            self.assertFalse((out / 'session.json').exists())
 
     def test_summarize_detects_session_changed_during_authentication(self):
         root = Path(tempfile.mkdtemp(dir='/tmp'))
