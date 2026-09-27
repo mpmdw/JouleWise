@@ -109,7 +109,7 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.calibration_ledger import CalibrationLedgerSnapshot
-from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window, authenticate_window_members
+from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window, authenticate_window_members, GATE_EXCEPTIONS
 from joulewise.reduce import (
     _corner_composed_anchor_shift_envelope,
     _integrate,
@@ -354,9 +354,11 @@ def _common_mode_block_input_from_contrast(
         clean_zero = _common_mode_finite(zero_point)
         residuals = tuple(bundle_residual_half_widths_j)
         windows = tuple(tuple(window) for window in member_window_bounds_s)
+    except GATE_EXCEPTIONS:
+        raise
     except CommonModeEstimatorRefusal:
         raise
-    except (OSError, TypeError, ValueError, KeyError) as exc:
+    except Exception as exc:
         _common_mode_refuse("common_mode_precondition_failed", str(exc))
     if clean_zero is None:
         _common_mode_refuse(
@@ -1973,7 +1975,9 @@ def _evaluate_member(
         # treated as a strict failure, never an implicit pass.
         try:
             strict_problems = tuple(strict_validator(path, True))
-        except (OSError, TypeError, ValueError, KeyError):  # noqa: BLE001 - validator failure is never a pass
+        except GATE_EXCEPTIONS:
+            raise
+        except Exception:  # noqa: BLE001 - validator failure is never a pass
             strict_problems = ("strict validation raised",)
         if (
             telemetry_identity.custody_bound_config

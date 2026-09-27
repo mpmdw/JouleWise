@@ -14,7 +14,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from joulewise.bundle_read import BundleReader, authenticate_window_members
+from joulewise.bundle_read import BundleReader, authenticate_window_members, GATE_EXCEPTIONS
 from joulewise.schemas import UncertaintyInterval
 
 __all__ = ["aggregate_experiment", "student_t_critical_95"]

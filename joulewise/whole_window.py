@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import statistics
 import time
 from collections.abc import Mapping, Sequence
@@ -44,7 +45,7 @@ from joulewise.idle_admission import (
     extract_adapter_observation,
 )
 from joulewise.bundle import sanitize_id_component
-from joulewise.bundle_read import BundleReader, BundleReadError, authenticate_window_members
+from joulewise.bundle_read import BundleReader, BundleReadError, authenticate_window_members, GATE_EXCEPTIONS
 from joulewise.environment_admission import (
     current_environment_refusals,
     environment_admission_refusals,
@@ -2331,6 +2332,8 @@ def build_evaluation_basis(
                 _safe_source_path(runs_root, occurrence.get("bundle_path"))
                 for occurrence in occurrences
             ]
+        except GATE_EXCEPTIONS:
+            raise
         except (OSError, RuntimeError):
             bundle_paths = []
         if bundle_paths and all(path is not None for path in bundle_paths):
@@ -2416,6 +2419,8 @@ def _safe_source_path(root: Path, text: Any) -> Path | None:
     try:
         path = (root / Path(*pure.parts)).resolve()
         resolved_root = root.resolve()
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError):
         return None
     if path == resolved_root or resolved_root not in path.parents:
@@ -2770,6 +2775,53 @@ def _occurrence_descriptor_valid(
     )
 
 
+def supersession_record_field_valid(
+    entry: Mapping[str, Any], runs_root: Path
+) -> bool:
+    """Validate a supersession record without consulting quarantined bytes."""
+    root = Path(runs_root).resolve()
+    bundle_id = entry.get("bundle_id")
+    superseded = entry.get("superseded_occurrences")
+    quarantine = entry.get("quarantine")
+    if (
+        entry.get("schema_version") != OCCURRENCE_SUPERSESSION_SCHEMA
+        or entry.get("record_type") != "campaign_occurrence_supersession"
+        or entry.get("runs_root") != str(root)
+        or not isinstance(bundle_id, str) or not bundle_id
+        or not isinstance(entry.get("reason"), str) or not entry["reason"].strip()
+        or not isinstance(superseded, list) or not superseded
+        or not isinstance(quarantine, Mapping)
+        or entry.get("entry_sha256") != supersession_entry_sha256(entry)
+    ):
+        return False
+    selected = entry.get("selected_occurrence")
+    if not _occurrence_descriptor_valid(selected, root, bundle_id=bundle_id):
+        return False
+    if any(not _occurrence_descriptor_valid(value, root, bundle_id=bundle_id)
+           for value in superseded):
+        return False
+    hashes = [canonical_sha256(value) for value in superseded]
+    if len(set(hashes)) != len(hashes) or canonical_sha256(selected) in hashes:
+        return False
+    canonical = root / bundle_id
+    if ordinary_present_bundle_paths(root, bundle_id) != [canonical] or not canonical.is_dir():
+        return False
+    path_text = quarantine.get("path")
+    if not isinstance(path_text, str) or not path_text:
+        return False
+    try:
+        path = Path(path_text).resolve(strict=False)
+    except GATE_EXCEPTIONS:
+        raise
+    except (OSError, RuntimeError):
+        return False
+    if path == root or root in path.parents:
+        return False
+    return all(isinstance(quarantine.get(field), str)
+               and re.fullmatch(r"[0-9a-f]{64}", quarantine[field]) is not None
+               for field in ("config_sha256", "metadata_sha256", "summary_sha256"))
+
+
 def validate_occurrence_supersession_entry(
     entry: Mapping[str, Any], runs_root: Path
 ) -> bool:
@@ -2816,6 +2868,8 @@ def validate_occurrence_supersession_entry(
         return False
     try:
         quarantine_path = Path(quarantine_path_text).resolve(strict=True)
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError):
         return False
     if quarantine_path == root or root in quarantine_path.parents:
@@ -3023,6 +3077,106 @@ def supersession_entry_validation_results(
         entries.append(value)
         validations.append(validate_occurrence_supersession_entry(value, runs_root))
     return entries, validations
+
+
+def recorded_member_paths(
+    runs_root: Path, log_path: Path | None = None
+) -> frozenset[str] | None:
+    """Return bundle paths proved written by prior whole-window verdict rows."""
+    path = Path(log_path) if log_path is not None else Path(runs_root) / "campaign_log.jsonl"
+    try:
+        lines = read_authentication_text(
+            path, grammar="jsonl", label="recorded member campaign log", encoding="utf-8"
+        ).splitlines()
+    except FileNotFoundError:
+        return frozenset()
+    except (OSError, UnicodeDecodeError):
+        return None
+    result: set[str] = set()
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(row, dict):
+            return None
+        if row.get("record_type") != "idle_admission_whole_window_verdict":
+            continue
+        basis = row.get("evaluation_basis")
+        occurrences = basis.get("member_occurrences") if isinstance(basis, Mapping) else None
+        if not isinstance(occurrences, list):
+            continue
+        for occurrence in occurrences:
+            if not isinstance(occurrence, Mapping):
+                continue
+            relative = occurrence.get("bundle_path")
+            if isinstance(relative, str) and relative and any(
+                occurrence.get(field) is not None
+                for field in ("config_sha256", "metadata_sha256", "summary_sha256")
+            ):
+                result.add(relative)
+    return frozenset(result)
+
+
+def supersession_quarantine_members(
+    runs_root: Path, member_ids: set[str], log_path: Path | None = None
+) -> list[tuple[str, Path, dict[str, str]]]:
+    """Keep field-valid quarantines even when their recorded bytes are gone."""
+    result = supersession_entry_validation_results(runs_root, log_path)
+    if result is None:
+        return []
+    members = []
+    for entry in result[0]:
+        bundle_id = entry.get("bundle_id")
+        if bundle_id not in member_ids or not supersession_record_field_valid(entry, runs_root):
+            continue
+        quarantine = entry["quarantine"]
+        path = Path(quarantine["path"])
+        members.append((
+            f"superseded:{bundle_id}:{quarantine['path']}", path,
+            {"config.json": quarantine["config_sha256"],
+             "metadata.json": quarantine["metadata_sha256"],
+             "summary_metrics.json": quarantine["summary_sha256"]},
+        ))
+    return members
+
+
+def recorded_axi_attempt_members(
+    runs_root: Path,
+    manifest_ids: set[str] | None = None,
+) -> list[tuple[str, Path]]:
+    """Recover finalized physical attempts from ledger rows, including absent bundles."""
+    evidence_root = Path(runs_root) / "axi_attempt_evidence"
+    if not evidence_root.is_dir():
+        return []
+    members: list[tuple[str, Path]] = []
+    for manifest_root in sorted(evidence_root.iterdir()):
+        if (not manifest_root.is_dir() or
+                (manifest_ids is not None and manifest_root.name not in manifest_ids)):
+            continue
+        for row_path in sorted((manifest_root / "ledger_rows").glob("*.jsonl")):
+            raw = read_authentication_input(
+                row_path, grammar="jsonl", label="recorded AXI attempt")
+            rows = [json.loads(line) for line in raw.decode("utf-8").splitlines()
+                    if line.strip()]
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                entry_id = row.get("entry_id")
+                ordinal = row.get("attempt_ordinal")
+                run_id = row.get("run_id")
+                if not (isinstance(entry_id, str) and type(ordinal) is int
+                        and isinstance(run_id, str) and run_id):
+                    continue
+                path = (Path(runs_root) / "axi_attempt_bundles" / manifest_root.name
+                        / sanitize_id_component(entry_id) / f"a{ordinal}"
+                        / sanitize_id_component(run_id))
+                label = (f"{sanitize_id_component(entry_id)}__a{ordinal}__"
+                         f"{sanitize_id_component(run_id)}")
+                members.append((label, path))
+    return members
 
 
 def validated_supersession_entries(
@@ -3509,7 +3663,9 @@ def _reference_energy_evidence(
         from joulewise.reduce import reduce_bundle
 
         reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
-    except (OSError, TypeError, ValueError):
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
         return None, None, "provenance"
     fresh_gross = _gross_fields(reduced)
     fresh_idle = _finite_number(reduced.get("idle_subtracted_energy_j"))
@@ -3877,21 +4033,27 @@ def _derived_neg8_decision(
     except (TypeError, ValueError):
         return None, "provenance"
     battery_paths: dict[str, Path] = {}
+    member_ids: set[str] = set()
+    axi_manifest_ids: set[str] = set()
+    recorded = recorded_member_paths(runs_root)
     for manifest in manifests:
         selection = manifest.get("attempt_ledger_selection")
         if isinstance(selection, Mapping):
             for descriptor in selection.get("selected_bundles", []):
                 if not isinstance(descriptor, Mapping):
                     continue
+                if isinstance(descriptor.get("bundle_id"), str):
+                    member_ids.add(descriptor["bundle_id"])
                 path = _safe_source_path(runs_root, descriptor.get("path"))
                 if path is None:
                     continue
                 battery_paths[str(path)] = path
                 try:
-                    parts = path.relative_to(runs_root).parts
+                    parts = path.relative_to(runs_root.resolve()).parts
                 except ValueError:
                     continue
                 if len(parts) >= 3 and parts[0] == "axi_attempt_bundles":
+                    axi_manifest_ids.add(parts[1])
                     for metadata_path in (runs_root / parts[0] / parts[1]).rglob("metadata.json"):
                         battery_paths[str(metadata_path.parent)] = metadata_path.parent
         else:
@@ -3902,11 +4064,18 @@ def _derived_neg8_decision(
                 bundle_ids = member.get("bundle_ids")
                 for bundle_id in bundle_ids if isinstance(bundle_ids, list) else []:
                     if isinstance(bundle_id, str):
+                        member_ids.add(bundle_id)
                         for path in ordinary_present_bundle_paths(runs_root, bundle_id):
                             battery_paths[str(path)] = path
-    authenticate_window_members(
-        (label, path) for label, path in sorted(battery_paths.items())
-    )
+                        if recorded is not None and bundle_id in recorded:
+                            path = runs_root / bundle_id
+                            battery_paths[str(path)] = path
+    for label, path in recorded_axi_attempt_members(runs_root, axi_manifest_ids):
+        battery_paths[str(path)] = path
+    members: list[tuple[str, Path] | tuple[str, Path, dict[str, str]]] = sorted(
+        battery_paths.items())
+    members.extend(supersession_quarantine_members(runs_root, member_ids))
+    authenticate_window_members(members)
     references: dict[
         str, list[tuple[dict[str, float] | None, float | None]]
     ] = {
@@ -6167,10 +6336,14 @@ __all__ = [
     "neg8_claim_family_for_metric",
     "neg8_freshness_bindings_from_metadata",
     "ordinary_present_bundle_paths",
+    "recorded_member_paths",
+    "recorded_axi_attempt_members",
     "recognizable_occurrence_supersession_counts",
     "require_occurrence_supersession_recordable",
     "source_manifest_descriptors",
     "supersession_entry_sha256",
+    "supersession_quarantine_members",
+    "supersession_record_field_valid",
     "supersession_entry_validation_results",
     "validate_occurrence_supersession_entry",
     "validated_supersession_entries",

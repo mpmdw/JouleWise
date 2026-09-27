@@ -3283,6 +3283,17 @@ class SuiteControllerTests(ControllerTestCase):
             )
             self.assertEqual(metadata["suite"]["order_row"], rep)
 
+    def test_mock_experiment_refuses_at_aggregation(self) -> None:
+        from joulewise.bundle_read import WindowBatteryRefusal
+        with self.assertRaises(WindowBatteryRefusal) as caught:
+            run_experiment(
+                make_suite_config("suite-mock-refusal", repetitions=2),
+                self.runs_root, self.clock,
+            )
+        self.assertEqual(len(caught.exception.members), 1)
+        self.assertEqual({row["status"] for row in caught.exception.members},
+                         {"not_applicable"})
+
 
 if __name__ == "__main__":
     unittest.main()

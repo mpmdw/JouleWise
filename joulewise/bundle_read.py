@@ -98,6 +98,7 @@ __all__ = [
     "BatteryStatusRefusal",
     "BundleReader",
     "WindowBatteryRefusal",
+    "GATE_EXCEPTIONS",
     "authenticate_window_members",
     "ItemWindow",
     "PROMPT_REALIZATION_PROBLEM_CODES",
@@ -275,16 +276,38 @@ def _bundle_tree_sha256(path: Path) -> str:
     return tree_sha256(entries)
 
 
+GATE_EXCEPTIONS = (WindowBatteryRefusal, battery_float.CustodyFailure)
+
+
 def authenticate_window_members(
-    members: Iterable[tuple[str, Path]],
+    members: Iterable[tuple[str, Path] | tuple[str, Path, Mapping[str, str]]],
 ) -> dict[str, battery_float.PairVerdict]:
     """Classify each member before any window energy is read."""
 
     verdicts: dict[str, battery_float.PairVerdict] = {}
     refused: list[dict[str, Any]] = []
-    for label, path in members:
+    for member in members:
+        label, path = member[:2]
+        recorded = member[2] if len(member) == 3 else None
         reader = BundleReader(path)
         try:
+            if recorded is not None:
+                if path.is_symlink() or not path.is_dir():
+                    raise OSError(f"recorded bundle is not a real directory: {path}")
+                for name in sorted(recorded):
+                    artifact = path / name
+                    if artifact.is_symlink():
+                        raise OSError(f"recorded artifact is a symlink: {artifact}")
+                    observed = sha256_authentication_input(
+                        artifact, label=f"recorded window member {label} {name}")
+                    expected = recorded[name]
+                    if observed != expected:
+                        slot = ("supersession_quarantine" if label.startswith("superseded:")
+                                else "recorded_member")
+                        raise battery_float.CustodyFailure([{
+                            "slot": slot, "artifact": name,
+                            "expected_sha256": expected, "observed_sha256": observed,
+                        }])
             metadata = reader._strict_json("metadata.json")
             if not isinstance(metadata, dict):
                 raise BundleReadError("metadata.json is not a JSON object")
@@ -306,6 +329,10 @@ def authenticate_window_members(
                             "reasons": list(exc.reasons), "bundle_sha256": exc.bundle_sha256})
             continue
         except BundleReadError as exc:
+            unreadable = battery_float.CustodyUnreadable(f"{label}: {exc}")
+            unreadable.window_member = label
+            raise unreadable from exc
+        except OSError as exc:
             unreadable = battery_float.CustodyUnreadable(f"{label}: {exc}")
             unreadable.window_member = label
             raise unreadable from exc

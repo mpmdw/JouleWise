@@ -28,7 +28,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.floor_extraction import FloorExtractionError, extract_cells, _spec_referenced_bundle_ids  # noqa: E402
-from joulewise.bundle_read import authenticate_window_members  # noqa: E402
+from joulewise.bundle_read import authenticate_window_members, GATE_EXCEPTIONS  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,

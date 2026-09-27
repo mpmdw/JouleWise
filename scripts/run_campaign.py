@@ -60,7 +60,8 @@ from joulewise.uncertainty_evidence import (  # noqa: E402
     ACTIVE_CAPTURE_ANCHOR_METHOD,
     SCHEMA_FOR_ANCHOR_METHOD,
 )
-from joulewise.bundle_read import (  # noqa: E402
+from joulewise.bundle_read import (
+    GATE_EXCEPTIONS,  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
     BundleReader,
     BundleReadError,
@@ -165,11 +166,13 @@ from joulewise.whole_window import (  # noqa: E402
     load_neg8_drift_bound_artifact,
     mint_neg8_drift_bound_artifact,
     ordinary_present_bundle_paths,
+    recorded_member_paths,
     recognizable_occurrence_supersession_counts,
     require_occurrence_supersession_recordable,
     source_manifest_descriptors,
     supersession_entry_sha256,
     supersession_entry_validation_results,
+    supersession_quarantine_members,
     validated_attempt_selection,
     validate_occurrence_supersession_entry,
     validate_neg8_drift_bound_artifact,
@@ -1225,7 +1228,9 @@ def _normalized_benchmark_config(value: Any) -> dict[str, Any] | None:
         from joulewise.schemas import BenchmarkConfig
 
         return BenchmarkConfig.from_mapping(value).to_dict()
-    except (OSError, TypeError, ValueError, KeyError):  # noqa: BLE001 - malformed identities fail closed at callers.
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception:  # noqa: BLE001 - malformed identities fail closed at callers.
         return None
 
 
@@ -2798,15 +2803,15 @@ def evaluate_member(
     waivers: WaiverMap,
     cooldown_evidence: dict[str, Any] | None = None,
 ) -> MemberEvaluation:
-    if bundle_dir.is_dir():
-        authenticate_window_members(((bundle_dir.name, bundle_dir),))
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
     strict_valid = False
     if bundle_dir.exists():
         try:
             problems = validate_bundle(bundle_dir, strict=True)
-        except (OSError, TypeError, ValueError) as exc:
+        except GATE_EXCEPTIONS:
+            raise
+        except Exception as exc:
             problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
         strict_valid = not problems
     else:
@@ -3009,7 +3014,9 @@ def read_config_infos(
                     order_entry=order_by_config.get(config_path.name),
                 )
             )
-        except (OSError, TypeError, ValueError, KeyError) as exc:
+        except GATE_EXCEPTIONS:
+            raise
+        except Exception as exc:
             items.append(
                 ConfigError(
                     path=config_path,
@@ -3209,10 +3216,14 @@ def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
         if fd >= 0:
             try:
                 os.close(fd)
+            except GATE_EXCEPTIONS:
+                raise
             except BaseException as exc:
                 cleanup_exc = exc
         try:
             lock_path.unlink(missing_ok=True)
+        except GATE_EXCEPTIONS:
+            raise
         except BaseException as exc:
             if cleanup_exc is None:
                 cleanup_exc = exc
@@ -3222,6 +3233,8 @@ def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
                     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
                         if _CAMPAIGN_LOCK_OWNERSHIP.get(lock_path) is token:
                             _CAMPAIGN_LOCK_OWNERSHIP.pop(lock_path)
+                except GATE_EXCEPTIONS:
+                    raise
                 except BaseException as exc:
                     if cleanup_exc is None:
                         cleanup_exc = exc
@@ -3684,6 +3697,8 @@ def verify_cooldown_raw_provenance(
     try:
         manifest_dir = manifest_dir.resolve()
         raw_path = (manifest_dir / raw_path_text).resolve()
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError):
         return False
     if manifest_dir not in raw_path.parents:
@@ -4203,7 +4218,9 @@ def campaign_cooldown_before_member(
             )
         else:
             note.update({"result": "unknown", "reason": "cooldown trace was empty"})
-    except (OSError, TypeError, ValueError, KeyError) as exc:  # noqa: BLE001 - evidence failure must stay fail-closed.
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception as exc:  # noqa: BLE001 - evidence failure must stay fail-closed.
         note.update({"result": "unknown", "reason": f"{type(exc).__name__}: {exc}"})
     return note
 
@@ -4945,6 +4962,8 @@ def _load_bracket_binding_for_evaluation(
         if not stat.S_ISREG(resolved.stat().st_mode):
             return None
         raw = resolved.read_bytes()
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError, ValueError):
         return None
     return _strict_bracket_binding_bytes(raw)
@@ -5339,7 +5358,9 @@ def _whole_window_member(
     status = summary.get("status") if isinstance(summary, dict) else None
     try:
         problems = validate_bundle(bundle_path, strict=True)
-    except (OSError, TypeError, ValueError) as exc:
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
     collection_flags = _prompt_realization_collection_flags(problems)
     telemetry_identity = custody_telemetry_identity(
@@ -5614,6 +5635,8 @@ def _whole_window_campaign_membership(
                 policy_sha256=policy_sha256,
                 catalog=catalog,
             )
+        except GATE_EXCEPTIONS:
+            raise
         except (OSError, RuntimeError, ValueError):
             catalog = None
     if catalog is not None:
@@ -5701,6 +5724,8 @@ def _whole_window_campaign_membership(
                         and validated_attempt_selection(selection, runs_dir)
                         == set(selected_ids)
                     )
+                except GATE_EXCEPTIONS:
+                    raise
                 except (OSError, RuntimeError):
                     selection_ok = False
                 if selection_ok:
@@ -6196,24 +6221,39 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
 
 def _authenticate_whole_window_members(
     membership: WholeWindowMembershipResolution, runs_dir: Path,
+    log_path: Path | None = None,
 ) -> dict[str, Any]:
     """Authenticate selected, superseded, and finalized AXI attempts as one set."""
     paths = {str(source.path): source.path for source in membership.sources}
     for resolution in membership.occurrence_resolutions:
         for path in resolution.present_paths:
             paths[str(path)] = path
+    recorded = recorded_member_paths(runs_dir, log_path)
+    for resolution in membership.occurrence_resolutions:
+        if (resolution.status == "terminal_absent" and recorded is not None
+                and resolution.bundle_id in recorded):
+            path = runs_dir / resolution.bundle_id
+            paths[str(path)] = path
+    axi_manifest_ids: set[str] = set()
     for source in membership.sources:
         try:
             relative = source.path.relative_to(runs_dir)
         except ValueError:
             continue
         if len(relative.parts) >= 3 and relative.parts[0] == "axi_attempt_bundles":
+            axi_manifest_ids.add(relative.parts[1])
             attempt_root = runs_dir / relative.parts[0] / relative.parts[1]
             for metadata_path in attempt_root.rglob("metadata.json"):
                 paths[str(metadata_path.parent)] = metadata_path.parent
-    return authenticate_window_members(
+    for manifest_id in sorted(axi_manifest_ids):
+        for label, path in _axi_recorded_finalized_bundles(runs_dir, manifest_id):
+            paths[str(path)] = path
+    members: list[tuple[str, Path] | tuple[str, Path, dict[str, str]]] = [
         (str(path), path) for path in sorted(paths.values())
-    )
+    ]
+    member_ids = {resolution.bundle_id for resolution in membership.occurrence_resolutions}
+    members.extend(supersession_quarantine_members(runs_dir, member_ids, log_path))
+    return authenticate_window_members(members)
 
 
 def _run_whole_window_verdict_locked(
@@ -6245,7 +6285,7 @@ def _run_whole_window_verdict_locked(
         waivers=args.waivers,
     )
     bundle_sources = list(membership.sources)
-    battery_verdicts = _authenticate_whole_window_members(membership, runs_dir)
+    battery_verdicts = _authenticate_whole_window_members(membership, runs_dir, log_path)
     source_manifests = list(membership.source_manifests)
     selection_conditions = list(membership.conditions)
     occurrence_supersessions = list(membership.occurrence_supersessions)
@@ -7189,6 +7229,34 @@ def _axi_load_rows(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _axi_recorded_finalized_bundles(
+    runs_dir: Path, manifest_id: str | None = None
+) -> list[tuple[str, Path]]:
+    """Recover every finalized attempt from its ledger, including absent paths."""
+    result: list[tuple[str, Path]] = []
+    evidence_root = runs_dir / "axi_attempt_evidence"
+    if not evidence_root.is_dir():
+        return result
+    for manifest_root in sorted(evidence_root.iterdir()):
+        if not manifest_root.is_dir() or (manifest_id is not None and
+                                           manifest_root.name != manifest_id):
+            continue
+        for row in _axi_load_rows(manifest_root / "ledger_rows"):
+            entry_id = row.get("entry_id")
+            attempt = row.get("attempt_ordinal")
+            run_id = row.get("run_id")
+            if not (isinstance(entry_id, str) and type(attempt) is int
+                    and isinstance(run_id, str) and run_id):
+                continue
+            path = _axi_attempt_bundle_path(
+                runs_dir, manifest_root.name, entry_id, attempt, run_id)
+            physical_id = (
+                f"{sanitize_id_component(entry_id)}__a{attempt}__"
+                f"{sanitize_id_component(run_id)}")
+            result.append((physical_id, path))
+    return result
+
+
 def _axi_evidence_map(path: Path, pattern: str) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     if not path.is_dir():
@@ -7322,6 +7390,8 @@ def run_axi_spec_campaign(
             registry_entry = publish_campaign(
                 lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
             )
+        except GATE_EXCEPTIONS:
+            raise
         except RuntimeError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -7352,7 +7422,9 @@ def run_axi_spec_campaign(
                     arm_countdown_s=int(getattr(args, "arm_countdown_s", 5)),
                     override_path=getattr(args, "environment_override", None),
                 )
-            except (OSError, TypeError, ValueError, KeyError) as exc:  # noqa: BLE001 - fail before AXI member 1
+            except GATE_EXCEPTIONS:
+                raise
+            except Exception as exc:  # noqa: BLE001 - fail before AXI member 1
                 environment_error = {
                     "status": "error",
                     "reason": f"{type(exc).__name__}: {exc}",
@@ -7762,6 +7834,20 @@ def run_axi_spec_campaign(
             return 1
         receipts = _axi_evidence_map(receipts_dir, "*.json")
         strict_evidence = _axi_evidence_map(strict_dir, "*.json")
+        if policy_binding is not None:
+            gate_paths = {path: label for label, path in
+                          _axi_recorded_finalized_bundles(runs_dir, manifest_id)}
+            attempt_root = runs_dir / "axi_attempt_bundles" / manifest_id
+            if attempt_root.is_dir():
+                for metadata_path in attempt_root.rglob("metadata.json"):
+                    path = metadata_path.parent
+                    relative = path.relative_to(attempt_root)
+                    if len(relative.parts) == 3:
+                        entry_part, attempt_part, run_part = relative.parts
+                        gate_paths[path] = f"{entry_part}__{attempt_part}__{run_part}"
+            authenticate_window_members(
+                (label, path) for path, label in sorted(gate_paths.items())
+            )
         finalized_bundles = _axi_discover_finalized_bundles(runs_dir, manifest)
         selected = validate_attempt_ledger(
             rows,
@@ -8285,6 +8371,8 @@ def run_campaign(args: argparse.Namespace) -> int:
     else:
         try:
             lock_path = acquire_campaign_lock(runs_dir)
+        except GATE_EXCEPTIONS:
+            raise
         except RuntimeError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -8295,6 +8383,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                 registry_entry = publish_campaign(
                     lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
                 )
+            except GATE_EXCEPTIONS:
+                raise
             except RuntimeError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
@@ -8353,7 +8443,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                     arm_countdown_s=args.arm_countdown_s,
                     override_path=args.environment_override,
                 )
-            except (OSError, TypeError, ValueError, KeyError) as exc:  # noqa: BLE001 - preflight errors fail before member 1
+            except GATE_EXCEPTIONS:
+                raise
+            except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
                 environment_error = {
                     "status": "error",
                     "reason": f"{type(exc).__name__}: {exc}",
@@ -8925,11 +9017,19 @@ def run_campaign(args: argparse.Namespace) -> int:
                 print(f"  {summary_status}: {counts[summary_status]}")
         if args.dry_run:
             return 0
-        battery_verdicts = authenticate_window_members(
+        battery_members = [
             (evaluation.bundle_id, evaluation.bundle_path)
             for evaluation in all_evaluations
-            if evaluation.bundle_path.is_dir()
-        )
+            if (evaluation.bundle_path.is_dir() or evaluation.status is not None
+                or evaluation.summary is not None or evaluation.metadata is not None)
+        ]
+        seen_battery_paths = {str(path) for _, path in battery_members}
+        for evaluation in all_evaluations:
+            for path in ordinary_present_bundle_paths(runs_dir, evaluation.bundle_id):
+                if str(path) not in seen_battery_paths:
+                    battery_members.append((str(path), path))
+                    seen_battery_paths.add(str(path))
+        battery_verdicts = authenticate_window_members(battery_members)
         categories = classify_campaign_members(all_evaluations, missing_members)
         collection_verdict, collection_reasons = collection_verdict_for(categories)
         sampling_audit = sampling_audit_for(analysis_manifest)
@@ -9029,10 +9129,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
         return run_campaign(args)
+    except GATE_EXCEPTIONS:
+        raise
     except (LaunchLineageError, SupersessionRecorderError) as exc:
         print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
         return 2
-    except (OSError, TypeError, ValueError, KeyError) as exc:
+    except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

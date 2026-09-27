@@ -165,7 +165,9 @@ def _battery_fixture(roster, windows):
             continue
         key = (p["block_id"], p["attempt"])
         digest = window_by_key.get(key)
-        entries.append((*key, replace(seed, bundle_sha256=digest) if digest else {"no_bundle": status}))
+        if digest is None:
+            digest = hashlib.sha256(repr((*key, "no-window")).encode()).hexdigest()
+        entries.append((*key, replace(seed, bundle_sha256=digest)))
     return tuple(entries)
 
 
@@ -192,7 +194,7 @@ class BatteryEvidenceReduceTests(unittest.TestCase):
                            self.evidence if evidence is None else evidence)
         self.assertEqual(caught.exception.code, code)
 
-    def test_complete_placement_universe_and_no_bundle_vocabulary(self):
+    def test_complete_placement_universe_uses_verdicts_without_markers(self):
         reducer = _reducer()
         g, reg, roster, _ = _terminal_night(width=2, kind="ceiling_violation")
         rows, windows = _inputs(g, reg, roster)
@@ -200,11 +202,76 @@ class BatteryEvidenceReduceTests(unittest.TestCase):
         expected = {key for key, (_, _, status) in reducer._classify(roster).items()
                     if status != "not_started"}
         self.assertEqual({(block, attempt) for block, attempt, _ in evidence}, expected)
-        markers = [value["no_bundle"] for _, _, value in evidence
-                   if isinstance(value, dict)]
-        self.assertTrue(markers)
-        self.assertTrue(set(markers) <= {"completed", "cut_off"})
+        self.assertFalse(any(isinstance(value, dict) for _, _, value in evidence))
         reducer._check_battery_evidence(reducer._classify(roster), windows, evidence)
+
+    def test_terminal_no_window_verdict_and_marker_rules(self):
+        from tests.test_bfgs_window_consumers import WindowMembersTests
+        reducer = _reducer()
+        _, reg, roster, predictions = _terminal_night(width=2, kind="ceiling_violation")
+        rows, windows = _inputs(reg.to_mapping(), reg, roster)
+        evidence = _battery_fixture(roster, windows)
+        key = ("large:decode:1:0", 0)
+        index = next(i for i, row in enumerate(evidence) if row[:2] == key)
+        self.assertNotIn(key, {(w["block_id"], w["attempt"]) for w in windows})
+
+        def changed(value):
+            copy = list(evidence)
+            copy[index] = (*key, value)
+            return tuple(copy)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            charged = authenticate_bundle(WindowMembersTests().pair_bundle(
+                Path(tmp), "charged-terminal", charging=True))
+        charged = replace(charged, bundle_sha256=evidence[index][2].bundle_sha256)
+        with self.assertRaises(reducer.ReductionRefusal) as caught:
+            reducer.reduce(reg, roster, predictions, rows, windows, changed(charged))
+        self.assertEqual(caught.exception.code, "battery_float_confounded")
+        reducer.reduce(reg, roster, predictions, rows, windows, evidence)
+        for marker in ({"no_bundle": "cut_off"}, {"no_bundle": "completed"}):
+            with self.assertRaises(reducer.ReductionRefusal) as caught:
+                reducer.reduce(reg, roster, predictions, rows, windows, changed(marker))
+            self.assertEqual(caught.exception.code, "battery_evidence_unbound")
+
+        completed_index = next(i for i, row in enumerate(evidence)
+                               if reducer._classify(roster)[row[:2]][1:] == ("voided", "completed"))
+        completed_marker = list(evidence)
+        completed_marker[completed_index] = (*evidence[completed_index][:2],
+                                             {"no_bundle": "completed"})
+        with self.assertRaises(reducer.ReductionRefusal) as caught:
+            reducer.reduce(reg, roster, predictions, rows, windows, tuple(completed_marker))
+        self.assertEqual(caught.exception.code, "battery_evidence_unbound")
+
+        borrowed = next(w["bundle_sha256"] for w in windows)
+        with self.assertRaises(reducer.ReductionRefusal) as caught:
+            reducer.reduce(reg, roster, predictions, rows, windows,
+                           changed(replace(evidence[index][2], bundle_sha256=borrowed)))
+        self.assertEqual(caught.exception.code, "battery_evidence_unbound")
+
+        other = next(i for i, row in enumerate(evidence)
+                     if i != index and (row[0], row[1]) not in
+                     {(w["block_id"], w["attempt"]) for w in windows})
+        duplicate = list(evidence)
+        duplicate[other] = (*duplicate[other][:2], replace(
+            duplicate[other][2], bundle_sha256=evidence[index][2].bundle_sha256))
+        with self.assertRaises(reducer.ReductionRefusal) as caught:
+            reducer.reduce(reg, roster, predictions, rows, windows, tuple(duplicate))
+        self.assertEqual(caught.exception.code, "battery_evidence_unbound")
+
+        first = evidence[0]
+        later = evidence[-1]
+        from joulewise import battery_float
+        missing = battery_float.unobserved_historical_verdict(
+            "bundle", bundle_sha256=first[2].bundle_sha256)
+        charging = replace(charged, bundle_sha256=later[2].bundle_sha256)
+        statuses = list(evidence)
+        statuses[0] = (*first[:2], missing)
+        statuses[-1] = (*later[:2], charging)
+        with self.assertRaises(reducer.ReductionRefusal) as caught:
+            reducer.reduce(reg, roster, predictions, rows, windows, tuple(statuses))
+        self.assertEqual(caught.exception.code, "battery_float_confounded")
+        self.assertIn(repr(first[:2]), caught.exception.detail)
+        self.assertIn(repr(later[:2]), caught.exception.detail)
 
     def test_missing_extra_duplicate_and_marker_disagreement(self):
         self._refusal("battery_evidence_missing", self.evidence[1:])

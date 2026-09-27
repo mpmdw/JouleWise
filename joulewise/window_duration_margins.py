@@ -24,7 +24,7 @@ from joulewise.authentication_io import (
     read_authentication_input,
     read_authentication_text,
 )
-from joulewise.bundle_read import BundleReadError, BundleReader, authenticate_window_members
+from joulewise.bundle_read import BundleReadError, BundleReader, authenticate_window_members, GATE_EXCEPTIONS
 from joulewise.cli import _strict_raw_to_trace_problems
 from joulewise.reduce import (
     MIN_PHASE_SAMPLES,
@@ -427,6 +427,8 @@ def _pack_inventory(
             )
         try:
             authentication.allow_governed_extraction_spec(registry_path)
+        except GATE_EXCEPTIONS:
+            raise
         except (ValueError, RuntimeError) as exc:
             _refuse(
                 "authoritative_input_invalid",

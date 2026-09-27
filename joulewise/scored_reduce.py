@@ -109,9 +109,12 @@ def _check_battery_evidence(keys, capture_windows, battery_evidence):
 
     windows = {}
     digests = set()
+    all_window_digests = set()
     for window in capture_windows:
         if type(window) is not dict:
             continue  # _check_window owns malformed window records.
+        if _hex(window.get("bundle_sha256")):
+            all_window_digests.add(window["bundle_sha256"])
         block_id, attempt = window.get("block_id"), window.get("attempt")
         if not (_text(block_id) and _int(attempt)):
             continue
@@ -122,20 +125,28 @@ def _check_battery_evidence(keys, capture_windows, battery_evidence):
             digests.add(digest)
             windows[key] = digest
 
-    for key, evidence in by_key.items():
+    entry_digests = set()
+    for key in keys:
+        if key not in by_key:
+            continue
+        evidence = by_key[key]
         digest = windows.get(key)
         if type(evidence) is dict and set(evidence) == {"no_bundle"}:
-            _need(digest is None and evidence["no_bundle"] == keys[key][2],
-                  "battery_evidence_unbound", repr(key))
-            continue
+            raise ReductionRefusal("battery_evidence_unbound", repr(key))
         _need(isinstance(evidence, PairVerdict) and evidence.kind == "bundle"
               and _hex(evidence.bundle_sha256), "battery_evidence_input", repr(key))
-        _need(digest is not None and evidence.bundle_sha256 == digest,
+        _need((evidence.bundle_sha256 == digest if digest is not None else
+               evidence.bundle_sha256 not in all_window_digests)
+              and evidence.bundle_sha256 not in entry_digests,
               "battery_evidence_unbound", repr(key))
-        if evidence.status != "pass":
-            code = ("battery_float_confounded" if evidence.status == "battery_float_confounded"
-                    else "battery_float_evidence_missing")
-            raise ReductionRefusal(code, repr(key))
+        entry_digests.add(evidence.bundle_sha256)
+    refused = [(key, by_key[key].status) for key in keys if key in by_key
+               and by_key[key].status != "pass"]
+    if refused:
+        code = ("battery_float_confounded" if any(status == "battery_float_confounded"
+                                                  for _, status in refused)
+                else "battery_float_evidence_missing")
+        raise ReductionRefusal(code, repr(refused))
 
 
 def _check_window(w, registration, roster, keys, seen):

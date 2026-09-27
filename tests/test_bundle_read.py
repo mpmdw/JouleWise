@@ -347,6 +347,28 @@ class StrictAccessorTests(ReaderTestCase):
             ])
             self.assertIn("unparseable broken.json", err.getvalue())
 
+    def test_invalid_json_keyed_candidate_is_unclassified(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "broken.json").write_text("{\nbundle_tree_sha256: " + "a" * 64)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaisesRegex(
+                ValueError, "unclassified candidate pair.*bundle_tree_sha256.*broken.json"
+            ):
+                build(root, ["broken.json"])
+            self.assertIn("unparseable broken.json", err.getvalue())
+
+    def test_invalid_json_without_key_has_no_candidate(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "broken.json").write_text("{\n" + "a" * 64)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(build(root, ["broken.json"]), ([], []))
+            self.assertIn("unparseable broken.json", err.getvalue())
+
     def test_non_utf8_scan_skip_is_named(self) -> None:
         from scripts.build_battery_float_historical_bundles import build
         with tempfile.TemporaryDirectory() as tmp:
@@ -540,6 +562,7 @@ class StrictAccessorTests(ReaderTestCase):
         self.assertEqual(digest, HISTORICAL_BUNDLE_SET_SHA256)
         protected = [
             "joulewise/reduce.py", "joulewise/bundle.py",
+            "joulewise/battery_float.py",
             "joulewise/powermetrics_fiducial.py",
             "joulewise/uncertainty_evidence.py",
             "joulewise/adapters/powermetrics.py",
@@ -548,12 +571,17 @@ class StrictAccessorTests(ReaderTestCase):
             "scripts/render_results_fills.py",
             "configs/campaigns/quiet_predicate_evidence_01/pilot_protocol_v3.json",
             "configs/calibration", "configs/campaigns/d117_",
+            "tests/test_calibration_bracketing.py",
+            "tests/test_calibration_ledger.py",
+            "tests/receipt_corpus.py",
         ]
         tracked = subprocess.check_output(
-            ["git", "ls-files", "configs/campaigns/d117_*"], cwd=REPO_ROOT,
+            ["git", "ls-files", "configs/campaigns/d117_*", "tests/test_mint_floor_artifact*.py"], cwd=REPO_ROOT,
             text=True,
         ).splitlines()
-        protected = protected[:-1] + tracked
+        protected.remove("configs/campaigns/d117_")
+        protected.extend(tracked)
+        self.assertFalse((REPO_ROOT / "configs/battery_float/historical_captures.json").exists())
         result = subprocess.run(
             ["git", "diff", "--exit-code", "--no-ext-diff", "1417c0c4", "--", *protected],
             cwd=REPO_ROOT, capture_output=True, text=True,

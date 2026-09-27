@@ -104,8 +104,14 @@ class BatteryBracketingTests(unittest.TestCase):
                 _battery_exclusion_for_observation(observation)
 
     def test_historical_boundary_and_prospective_missing(self) -> None:
-        self.assertEqual(bracket.BFGS_HISTORICAL_LEDGER_SEQUENCE, 176)
-        self.assertGreater(bracket.BFGS_HISTORICAL_CUTOFF_WALL_S, 0)
+        root = Path(__file__).resolve().parents[1]
+        head = json.loads(subprocess.check_output(
+            ["git", "show", "1417c0c4:configs/calibration/calibration_ledger_head.json"],
+            cwd=root, text=True))
+        cutoff = int(subprocess.check_output(
+            ["git", "log", "-1", "--format=%ct", "1417c0c4"], cwd=root, text=True))
+        self.assertEqual(bracket.BFGS_HISTORICAL_LEDGER_SEQUENCE, head["sequence"])
+        self.assertEqual(bracket.BFGS_HISTORICAL_CUTOFF_WALL_S, cutoff)
         with tempfile.TemporaryDirectory() as tmp:
             old = _capture(Path(tmp) / "old", "old", battery_key=False,
                            sequence=bracket.BFGS_HISTORICAL_LEDGER_SEQUENCE)
@@ -220,6 +226,48 @@ class BatteryBracketingTests(unittest.TestCase):
                 )
             self.assertEqual(reasons, ("calibration_battery_float_disagreement",))
 
+    def test_issued_discovery_pass_then_reread_historical_refuses(self) -> None:
+        fixture = legacy.CalibrationBracketingTests()
+        fixture.setUp()
+        artifact = legacy._synthetic_issued_artifact()
+        baseline = legacy._synthetic_issued_snapshot(artifact)
+        with tempfile.TemporaryDirectory() as tmp:
+            captured = _capture(Path(tmp) / "capture", "capture")
+            hashes = {"manifest.json": hashlib.sha256(b"capture").hexdigest(),
+                      "instrument_evidence.json": captured.artifact_sha256["instrument_evidence.json"]}
+            observation = LedgerObservation(
+                sequence=177, receipt_digest="e" * 64, attempt_id="capture",
+                content_id=content_id_from_artifact_hashes(hashes), artifact_sha256=hashes,
+                identity_epoch=artifact["identity_epoch"], t1_bindings=fixture.bindings,
+                capture_wall_time_s="99", exact_bound_lexeme_s="0.025",
+                disposition="valid", custody_locator=captured.custody_locator,
+            )
+            snapshot = replace(baseline, observations=(*baseline.observations, observation),
+                               head_sequence=177, head_digest="e" * 64)
+            candidate = replace(fixture.candidate("capture", 99.0, "0.025"),
+                                relative_path=captured.custody_locator,
+                                manifest_sha256=hashes["manifest.json"],
+                                evidence_sha256=hashes["instrument_evidence.json"],
+                                attempt_id="capture", content_id=observation.content_id,
+                                ledger_receipt_digest=observation.receipt_digest)
+
+            def classify(_observation, *, custody=None):
+                return ("pass" if custody is None else "unobserved_historical", (), None, None)
+
+            with (patch("joulewise.calibration_bracketing._candidate_from_observation",
+                        return_value=candidate),
+                  patch("joulewise.calibration_bracketing._battery_classification_for_observation",
+                        side_effect=classify),
+                  patch("joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                        return_value=artifact)):
+                self.assertEqual(discover_calibration_candidates(snapshot), (candidate,))
+                _result, reasons = evaluate_calibration_bracket(
+                    (candidate,), window_start_s=100.0, window_end_s=110.0,
+                    bindings=fixture.bindings, policy=fixture.policy,
+                    ledger_snapshot=snapshot,
+                )
+            self.assertEqual(reasons, ("calibration_battery_float_disagreement",))
+
     def test_late_window_cannot_use_historical_endpoint(self) -> None:
         fixture = legacy.CalibrationBracketingTests()
         fixture.setUp()
@@ -241,6 +289,12 @@ class BatteryBracketingTests(unittest.TestCase):
                 ledger_snapshot=snapshot, _allow_unissued_fixture=True,
             )
             self.assertEqual(reasons, ("calibration_battery_float_evidence_missing",))
+            _result, at_cutoff = legacy._evaluate_with_unissued_acceptance(
+                normalized, window_start_s=cutoff - 1.0, window_end_s=cutoff,
+                bindings=fixture.bindings, policy=fixture.policy,
+                ledger_snapshot=snapshot, _allow_unissued_fixture=True,
+            )
+            self.assertEqual(at_cutoff, ("calibration_battery_float_evidence_missing",))
 
 
 if __name__ == "__main__":

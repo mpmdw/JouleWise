@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.bundle_read import authenticate_window_members  # noqa: E402
+from joulewise.bundle_read import authenticate_window_members, GATE_EXCEPTIONS  # noqa: E402
 
 from joulewise.authentication_io import (  # noqa: E402
     V2AuthenticationInputError,
@@ -378,7 +378,9 @@ def _strict_bundle(
     authenticate_window_members(((bundle_id, bundle_path),))
     try:
         problems = tuple(strict_validator(bundle_path, True))
-    except (OSError, TypeError, ValueError) as exc:
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception as exc:
         raise MintError(
             f"{bundle_id}: strict validation raised {type(exc).__name__}: {exc}"
         ) from exc
@@ -1118,7 +1120,9 @@ def _authenticate_component(
             consumption_session=allowance_session,
             consumption_semantics_id=expected_consumption_semantics_id,
         )
-    except (OSError, TypeError, ValueError, KeyError) as exc:
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception as exc:
         if (
             _sha256_file(campaign_log_path, "campaign log")
             != campaign_log_sha256
@@ -1987,7 +1991,7 @@ def _exclusive_write(path: Path, payload: bytes) -> None:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-    except (OSError, TypeError, ValueError, KeyError):
+    except Exception:
         try:
             path.unlink()
         except OSError:
@@ -2016,7 +2020,7 @@ def write_outputs_exclusive(
     _exclusive_write(floor_path, artifact_payload)
     try:
         _exclusive_write(statement_path, statement_payload)
-    except (OSError, TypeError, ValueError, KeyError):
+    except Exception:
         try:
             floor_path.unlink()
         except OSError:

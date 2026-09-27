@@ -47,7 +47,7 @@ from joulewise.arm_readiness import (
     parse_json_bytes,
     validate_freeze_receipt,
 )
-from joulewise.bundle_read import BundleReader, BundleReadError, authenticate_window_members
+from joulewise.bundle_read import BundleReader, BundleReadError, authenticate_window_members, GATE_EXCEPTIONS
 from joulewise.campaign_provenance import (
     CAMPAIGN_PROVENANCE_SCHEMA_V1,
     legacy_existing_outcome,
@@ -85,8 +85,12 @@ from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
+    ordinary_present_bundle_paths,
     recognizable_occurrence_supersession_counts,
+    recorded_axi_attempt_members,
+    recorded_member_paths,
     supersession_entry_validation_results,
+    supersession_quarantine_members,
     supersession_selected_occurrence_identity,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
@@ -726,6 +730,8 @@ def _lexical_child_path(
         resolved = candidate.resolve(strict=True)
         resolved.relative_to(root)
         mode = resolved.stat().st_mode
+    except GATE_EXCEPTIONS:
+        raise
     except AnalysisInputError:
         raise
     except (OSError, RuntimeError, ValueError) as exc:
@@ -802,6 +808,8 @@ def _finalized_runs_root(
             label="supplied runs root",
             require_directory=True,
         )
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError, ValueError) as exc:
         raise AnalysisInputError(
             "analysis_manifest_runs_root_mismatch: supplied root is not canonical"
@@ -851,6 +859,22 @@ def _registered_bundle_path(
             require_directory=False,
         )
     return bundle
+
+
+def _registered_gate_path(
+    manifest: Mapping[str, Any], entry: Mapping[str, Any], runs_root: Path
+) -> Path:
+    """Name a registered member without requiring recorded bytes to remain on disk."""
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        return _registered_bundle_path(manifest, entry, runs_root)
+    relative = entry.get("bundle_path")
+    if not isinstance(relative, str) or not relative or "\\" in relative:
+        raise AnalysisInputError("registered bundle path_resolution_refused")
+    parsed = PurePosixPath(relative)
+    if (parsed.is_absolute() or parsed.as_posix() != relative
+            or any(part in {"", ".", ".."} for part in parsed.parts)):
+        raise AnalysisInputError("registered bundle path_resolution_refused")
+    return Path(runs_root).joinpath(*parsed.parts)
 
 
 def _enforce_finalized_floor_attachment(
@@ -1240,7 +1264,9 @@ def declared_evidence_roots(
     try:
         authenticated = load_floor_artifact(floor_artifact_path)
         declared_root_ids = authenticated.root_ids
-    except (OSError, TypeError, ValueError, KeyError):
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception:
         # This pre-authentication read only narrows separation inputs. Preserve
         # the full, stricter mapping on every failure; authenticated loading
         # immediately follows and remains the authority for refusal details.
@@ -1443,6 +1469,8 @@ def _campaign_order_binding_problems(
             plan_root = floor_path.parent.resolve()
             plan_path = (plan_root / relative_plan).resolve()
             plan_path.relative_to(plan_root)
+        except GATE_EXCEPTIONS:
+            raise
         except (OSError, RuntimeError, ValueError) as exc:
             problems.append(f"calibration_plan_path_invalid: {exc}")
         else:
@@ -1748,6 +1776,8 @@ def bind_floor_artifact_evidence(
                         consumption_session=session,
                         consumption_semantics_id=consumption_semantics_id,
                     )
+                except GATE_EXCEPTIONS:
+                    raise
                 except (OSError, RuntimeError, TypeError, ValueError):
                     reasons = ("whole_window_verdict_provenance_invalid",)
                 if reasons:
@@ -1890,7 +1920,9 @@ def bind_floor_artifact_evidence(
                 local_problems: list[str] = []
                 try:
                     strict = tuple(strict_validator(path, True))
-                except (OSError, TypeError, ValueError) as exc:
+                except GATE_EXCEPTIONS:
+                    raise
+                except Exception as exc:
                     strict = (f"strict validation raised {type(exc).__name__}: {exc}",)
                 reader = BundleReader(path)
                 summary = reader.raw_summary()
@@ -2067,6 +2099,8 @@ def _verified_cooldown_raw_artifact(
         payload = _read_analysis_input(
             raw_path, label="campaign cooldown raw evidence"
         )
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError, ValueError):
         return None
     if hashlib.sha256(payload).hexdigest() != expected_sha:
@@ -2520,6 +2554,8 @@ def _safe_relative(path: Path, root: Path) -> str:
         raise AnalysisInputError(f"invalid bundle relative path: {relative!r}")
     try:
         path.resolve().relative_to(root.resolve())
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError) as exc:
         raise AnalysisInputError(
             f"bundle path_resolution_refused: {path}"
@@ -2789,7 +2825,9 @@ def _read_bundle(
 
     try:
         strict_problems = tuple(strict_validator(path, True))
-    except (OSError, TypeError, ValueError) as exc:  # ordinary validator input failures
+    except GATE_EXCEPTIONS:
+        raise
+    except Exception as exc:  # shared validator failures are input failures, never passes
         strict_problems = (f"strict validation raised {type(exc).__name__}: {exc}",)
     reader = BundleReader(path)
     raw_config = reader.raw_config()
@@ -2955,6 +2993,8 @@ def _scan_replacements_and_topups(
 
     try:
         registered_paths = {e.path.resolve() for e in registered.values()}
+    except GATE_EXCEPTIONS:
+        raise
     except (OSError, RuntimeError) as exc:
         raise AnalysisInputError("bundle path_resolution_refused during closed-set scan") from exc
     candidates: dict[str, list[BundleEvidence]] = {}
@@ -2967,6 +3007,8 @@ def _scan_replacements_and_topups(
     for path in sorted((item for item in runs_root.iterdir() if item.is_dir()), key=lambda p: p.name):
         try:
             resolved_path = path.resolve()
+        except GATE_EXCEPTIONS:
+            raise
         except (OSError, RuntimeError) as exc:
             raise AnalysisInputError(
                 f"bundle path_resolution_refused during closed-set scan: {path}"
@@ -3126,18 +3168,31 @@ def load_analysis_inputs(
         Path(runs_root),
     )
     battery_paths: dict[str, Path] = {}
+    member_ids: set[str] = set()
+    axi_manifest_ids: set[str] = set()
+    recorded = recorded_member_paths(runs_root)
     for entry in manifest["entries"]:
-        path = _registered_bundle_path(manifest, entry, runs_root)
-        if path.is_dir():
-            battery_paths[_safe_relative(path, runs_root)] = path
+        path = _registered_gate_path(manifest, entry, runs_root)
+        member_ids.add(path.name)
         relative = _safe_relative(path, runs_root)
+        if path.is_dir() or (recorded is not None and relative in recorded):
+            battery_paths[_safe_relative(path, runs_root)] = path
+        for present in ordinary_present_bundle_paths(runs_root, path.name):
+            battery_paths[_safe_relative(present, runs_root.resolve())] = present
         parts = PurePosixPath(relative).parts
         if len(parts) >= 3 and parts[0] == "axi_attempt_bundles":
+            axi_manifest_ids.add(parts[1])
             attempt_root = runs_root / parts[0] / parts[1]
             for metadata_path in attempt_root.rglob("metadata.json"):
                 attempt_path = metadata_path.parent
                 battery_paths[_safe_relative(attempt_path, runs_root)] = attempt_path
-    battery_verdicts = authenticate_window_members(sorted(battery_paths.items()))
+    for label, path in recorded_axi_attempt_members(runs_root, axi_manifest_ids):
+        if path not in battery_paths.values():
+            battery_paths[label] = path
+    members: list[tuple[str, Path] | tuple[str, Path, dict[str, str]]] = sorted(
+        battery_paths.items())
+    members.extend(supersession_quarantine_members(runs_root, member_ids))
+    battery_verdicts = authenticate_window_members(members)
     authenticated_floor = load_floor_artifact(
         Path(floor_artifact_path)
     )
