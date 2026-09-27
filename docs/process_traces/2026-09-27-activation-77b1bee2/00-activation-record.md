@@ -181,3 +181,21 @@
     - **Why it fails:** main's W1 and W2 harvests (#432 and #434) added `configs/calibration/battery_float_verdicts/*.json` and moved `calibration_ledger_head.json`. Those are legitimate harvest-written state, and the fence was written before them.
     - **Consequence:** this is a merge conflict of meaning between S1's fence and main. It **blocks S1's merge**, and as written it would fail after every future harvest.
     - Awaiting the Opus counter-review (its Q3 asks exactly this) before a dictated test-only fix and an S1 final pass that also ratifies the fence change.
+34. **Opus 5.5 counter-review of S1 `4aefdd12`** ([30](35-s1-refuter/30-opus-counter-review.md)): **COUNTER-REVIEW: FAIL**, on **B-1** only (the same fence failure as item 33).
+    - **What holds:**
+      - scope is exact: 27 files, the same set as the fix-3 WRITE_SCOPE, and no unruled production change;
+      - the fences hold;
+      - the merge is mechanically clean;
+      - all 12 post-cutoff valid observations and all 24 W1/W2 captures pass.
+    - **SHOULD-FIX:**
+      - S-1: the PR description obligations;
+      - S-2: the 78 (b) pre-check script;
+      - S-3: `test_raw_capture_lane_files_match_main` has the same latent flaw, pinned to `97082508`.
+    - **NIT N-1:** constant 176 is read as the S1 branch base, which is the stricter reading.
+35. **B-1 bench fix, test-only, 1 line.** The fence now diffs S1's own commits, `1417c0c4 204424e6` (option (a)). Committed as **`c7593edb`** on `feat/2026-09-26-bfgs-s1-bundles` and pushed.
+    - GREEN on the head.
+    - **RED under the counterfactual** in which the compared commit touches `configs/calibration` (main `b69c39eb`): FAILED (failures=1).
+    - `git diff --quiet 1417c0c4 204424e6 -- configs/calibration` gives rc 0.
+    - `tests.test_bundle_read` ran **118 OK**, after clearing a stale `__pycache__`.
+    - **Lesson (self-report):** the counterfactual was run by swapping the test file in place. The swapped file had the same size and the same second's mtime, so Python kept the counterfactual bytecode and the first module re-run showed a false RED. Run counterfactuals on a copy, or clear `__pycache__`.
+    - The S1 cold final pass (row 7) ratifies B-1 (a), rules S-3, and gives the 77/78 erratum ([charge](35-s1-refuter/50-fable-finalpass-charge.md), updated to `c7593edb`).
