@@ -1,0 +1,17 @@
+rows_with_locator 24 valid 12
+d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d04
+d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d05
+d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d06
+d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d07
+d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d10
+d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d12
+d079-epoch-25g83-derivation-w2-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d01
+d079-epoch-25g83-derivation-w2-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d03
+d079-epoch-25g83-derivation-w2-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d04
+d079-epoch-25g83-derivation-w2-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d05
+d079-epoch-25g83-derivation-w2-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d09
+d079-epoch-25g83-derivation-w2-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w2-20260927-d10
+accepted 12
+/Users/edr refused 12 / 12
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927 refused 12 / 12
+/ refused 12 / 12
