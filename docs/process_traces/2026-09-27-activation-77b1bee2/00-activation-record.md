@@ -82,3 +82,8 @@
     - **S1/S2 email to Ed:** Gmail `1a0e45d2f203a0cb`.
     - **Still owed before the issuance step:** S4 (check Ed's replies immediately before) and S5 (re-run the dry run at the run's commit).
     - **Council seats** (all blind, on [20-consult-charge.md](50-custody-outside-repo/20-consult-charge.md)): Sol 6.0 xhigh (scout, recommends A), Astra 6 high, Opus 5.5 and Fable 5.1 (cold `claude -p`), all running.
+15. **Custody-repair council closed: design C adopted** ([synthesis](50-custody-outside-repo/30-lead-synthesis.md)).
+    - Fable 5.1 (cold) and Opus 5.5 both recommended C. Sol recommended A and Astra recommended B; both dissents are recorded.
+    - C is a change to the issuer only. It adds `--corpus-root`, and a naming function that ties the first part of each stored path to the session id and the last part to the capture id. It adds a read-only `verify-members` command and a fixed-text `member_custody` note. The validator, loader, verifier, reissue tool and `configs/` are untouched.
+    - Astra's path-hardening is folded in. Five lanes are registered (synthesis ruling 5).
+    - The implementation seat (Sol 6.0 xhigh) was launched on branch `fix/2026-09-27-issuer-corpus-root`, worktree `JouleWise-wt-corpus-root-77b1bee2`, [brief](50-custody-outside-repo/40-impl-brief.txt).
