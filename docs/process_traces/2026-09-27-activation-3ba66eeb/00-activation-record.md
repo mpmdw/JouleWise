@@ -127,4 +127,9 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
     - **Notice accepted**: Gmail `1a0e2a7251f65ea8` at 04:36:39 PDT (epoch 1790508999). `notice.json` filled and `notice-evidence.txt` written ([attempt-000001/](40-w2-arm/attempt-000001/)).
     - **Remaining:** re-check NO, directives and stop files → `step4-publish-install.zsh` (after the S1 seat ends, and no later than about 08:15) → `step5` → stop every child → exit before 08:52.
 
+25. **PR #433 (census, light tier), rows 9, 11 and 12.**
+    - Row 9: integration tree `a441703a` (main `a71a5e79` + `3a346c46`), `python3 scripts/shard_tests.py --workers 6`: **7,525 tests, 0 failures, 0 errors, 109 skipped; result PASS** ([tail](50-census/21-row9-fullsuite-a441703a-tail.txt), [log](50-census/21-row9-fullsuite-a441703a.log.gz)). This also re-confirms main after #432 under the correct interpreter.
+    - Row 11: hosted CI green on `3a346c46` (every job except `gate-ledger`, which waits on these rows).
+    - Row 12: magistrate terminal review of `3a346c46`. Test-only; the production census is untouched; the counterfactual and the `watchdogd` mutation were executed; the independent final review passed. **MERGE.** The merge lands before W2's publication, so no plan is armed at merge time. W2's H `a71a5e79` stays an ancestor of main.
+
 **Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
