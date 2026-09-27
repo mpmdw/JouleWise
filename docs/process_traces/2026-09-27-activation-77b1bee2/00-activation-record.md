@@ -149,3 +149,11 @@
       5. The 78 (b) pre-check script exits 1 on the historical exemption.
     - **Disposition:** the S1 merge stands unblocked. The five items go to a cold erratum, **combined into S1's cold Fable final pass** (row 7), which rules on them before 77 binds a later pass.
     - **Outside the charge:** the 69-entry historical pin list has no `202609` bundles, so how W1/W2 bundles are admitted after S1 must be confirmed. W1/W2 are calibration captures, not scored bundles; this goes to the final pass as a question.
+27. **S1 merge gate in progress on `4aefdd12`.**
+    - **Lead A4:** V2 Ran 343 OK (778 s); B1 and B2 both `byte-identical entries=69`, rc 0 ([tails](35-s1-refuter/)). V1 is still running.
+    - The Opus 5.5 counter-review (rows 2 and 6) was launched.
+28. **Custody fix round 1** ([report](50-custody-outside-repo/61-fix1-seat-report.md)) was committed unchanged as **`f783a3fd`**.
+    - It adds C1 (exact 4-part shape in both the naming function and `verify-members`), C2 (a Revision-5 guard-F2 test and a flag-equivalence test) and C3 (nits).
+    - 15 new tests OK; mutation cuts RED; R8 24/24 accepted, with wrong roots refused 24/24.
+    - The seat's only failure is the sandboxed `sysctl`. The lead is re-running outside the sandbox.
+    - **Delta re-audit** (rule 9): Astra 6 high (cross-family), [brief](50-custody-outside-repo/62-delta-brief.txt).
