@@ -80,3 +80,4 @@ Launched by the watchdog at 16:18:44 PDT 09-26 (attempt 108; last exit class `us
     - RSW-5: raw meter-capture reads, a second unwatched energy channel in 28 functions.
     
     Plus NITs RSW-6..9. Per precedent these go to an **erratum cold gate before S1 fix round 3 resumes**. This activation did not convene it: W1 is unblocked and takes priority, and arming needs a quiet machine and a fresh supervisor.
+36. **Exit** (≈22:30). Exit email accepted as Gmail `1a0e15326fc68841`. At exit: no Codex child, `claude -p` judge or full suite running; no night label loaded; canonical clean at `97082508` = `origin/main`; no standdown request; Gmail unread from Ed: none; directives unchanged. Next exact action: RUN_STATE top block on this branch (arm W1 first).
