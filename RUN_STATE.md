@@ -10,6 +10,26 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 3ba66eeb — 03:05 → ≤08:52 PDT 09-27 (Opus 5.5; W1 HARVESTED + ADMITTED; W2 ARMING for t0 09:00 PDT):** [Record 00](docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md) items 1–24+.
+- **W1 admitted.** Harvested by runbook §2.2a: uninstall rc 0; pin 176 → 226; `battery=pass`; cadence CONTINUE (median 128.5 ms); 6/12 valid, which is exactly the registration's stop line (fewer than 6 stops); admissible.
+  - **#432 MERGED** (`a71a5e79`, merge commit). It passed the full gate: Sol AUDIT PASS, Opus CONTRACT LENS PASS, cold Fable MERGE.
+  - The harvest line is `…w1-20260927: battery=pass verdict_sha256=07bcc13b… verdict_commit=c5088b87`.
+- **W2** (`d079-epoch-25g83-derivation-w2-20260927`, H `a71a5e79`, t0 09:00 PDT). Steps 0–3 passed; cold Fable arm gate ARM; Opus lens ARM; notice accepted as Gmail `1a0e2a7251f65ea8`. Step 4/5 status is in record item 25. **This is the epoch's first daytime window: Ed was asked to leave the Mac untouched 08:52–11:35.**
+- **SWEEPCLASS** (the S1 static read-site sweep) was escalated by rule 11 after two same-signature rounds.
+  - A four-model consult (Sol, Astra, Opus, then a cold Fable judge) produced **SWEEPCLASS-SAMESIG-01**: the promise narrows to accidental edits; amendments 61–65; fix round 3 restated as steps 1–12, with a finite stop rule (A1–A5 plus one refuter pass).
+  - Its erratum (refuter F1–F6; amendments 66–71) adds steps 13–19.
+  - **The S1 fix-round-3 seat** (Sol xhigh) is on steps 1–12; its report is `/tmp/harvest-3ba66eeb/s1-fix3-report.md`, copied into the record when harvested.
+- **New lane BFGS-COOLDOWN-ANCHOR-01** (the cold erratum found by execution that a charging bundle's idle baseline can become a stored cooldown anchor that decides later admissions). It is pre-existing, does not block S1, and **must merge before the next scored campaign.** Until then, run the §4.6 anchor pre-check before every scored campaign. The scout is in record `70-cooldown-anchor/`.
+- **#433** (TEST-CENSUS-MULTILINE-ARGV-01, light tier): final review PASS; the row-9 suite is running on the integration tree `a441703a`. **Do not merge while W2 is armed.**
+- **Other lanes registered by this activation's rulings:**
+  - BATTERY-VALIDATOR-PROBE-ERROR-01: the frozen validator ignores recorded `probe_error`/`passed`. **Until it lands, every harvest cross-checks those fields by hand.**
+  - REV5-POST-W3-SHORTFALL-01: Revision 5 is silent if n < 12 after W3; that goes to Ed or a cold gate before W3.
+  - BFGS-READER-ROOT-01, BFGS-GATED-SUMMARY-01: both after S1 merges.
+- **Lessons:**
+  - Run the suite with `python3`, never the venv interpreter (user site is off there, so the battery fixture fails 50 tests).
+  - Kill decoys by PID, never with `pkill -f` on a string the calling shell contains.
+  - Never `git fetch` in canonical while a plan is armed (self-report, item 3).
+
 **▶▶ ACTIVATION 267afda6 — 00:14 → ≈00:17 PDT 09-27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-267afda6/00-activation-record.md), items 1–7. It did bookkeeping only (the sixth quiet relaunch, 16 minutes before t0). No git operation touched the canonical root. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
 
 **▶▶ ACTIVATION cef6d3f5 — 00:04 → ≈00:08 PDT 09-27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-cef6d3f5/00-activation-record.md), items 1–8. It did bookkeeping only (the fifth quiet relaunch, 26 minutes before t0; see item 7). No git operation touched the canonical root. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
