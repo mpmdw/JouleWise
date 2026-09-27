@@ -2783,6 +2783,16 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                                 self.assertIn(decoy.pid, reported, probe.stdout)
                             else:
                                 self.assertNotIn(decoy.pid, reported, probe.stdout)
+                    # The recorded-service check also runs over the whole
+                    # ``-lf`` text, continuation lines included, so a hit that
+                    # exits before its ``ps`` read below cannot hide a service.
+                    listed = subprocess.run(
+                        ["/usr/bin/pgrep", "-lf", pattern],
+                        capture_output=True, text=True, check=False,
+                    )
+                    self.assertIn(listed.returncode, (0, 1), listed.stderr)
+                    for basename in _RECORDED_CENSUS_SERVICE_BASENAMES:
+                        self.assertNotIn(basename, listed.stdout)
                     for pid in sorted(reported):
                         shown = subprocess.run(
                             ["/bin/ps", "-ww", "-o", "command=", "-p", str(pid)],
