@@ -10,6 +10,8 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 121316f6 — 08:25 → ≈08:30 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-121316f6/00-activation-record.md), items 1–5. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
+
 **▶▶ ACTIVATION f179383b — 08:15 → ≈08:22 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-f179383b/00-activation-record.md), items 1–5. A `git fetch` ran in canonical again (item 2, fourth occurrence; refs only, HEAD unmoved); a mechanical guard is proposed for the cold gate or Ed. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
 
 **▶▶ ACTIVATION d881cd7b — 08:05 → ≈08:10 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-d881cd7b/00-activation-record.md), items 1–4. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
