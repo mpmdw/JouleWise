@@ -10,6 +10,8 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 3930fc49 — 23:24 → ≈23:55 PDT 09-26 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-3930fc49/00-activation-record.md), items 1–6. It was relaunched by the watchdog after 22784e38 exited cleanly. It did bookkeeping only and exited before the t0 settle. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
 **▶▶ ACTIVATION 22784e38 — 22:34 PDT 09-26 → exit before 00:22 PDT 09-27 (Opus 5.5; W1 ARMED, t0 00:30 PDT 09-27):** [Record 00](docs/process_traces/2026-09-26-activation-22784e38/00-activation-record.md), items 1–17.
 
 **W1 ARMED** at 23:16:40 PDT. Triple: (`d079-epoch-25g83-derivation-w1-20260927`, `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w1`, `97082508`).
