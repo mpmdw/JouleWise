@@ -199,3 +199,7 @@
     - `tests.test_bundle_read` ran **118 OK**, after clearing a stale `__pycache__`.
     - **Lesson (self-report):** the counterfactual was run by swapping the test file in place. The swapped file had the same size and the same second's mtime, so Python kept the counterfactual bytecode and the first module re-run showed a false RED. Run counterfactuals on a copy, or clear `__pycache__`.
     - The S1 cold final pass (row 7) ratifies B-1 (a), rules S-3, and gives the 77/78 erratum ([charge](35-s1-refuter/50-fable-finalpass-charge.md), updated to `c7593edb`).
+36. **Custody repair, rows 9 and 11 prep.**
+    - **Row 9:** `python3 scripts/shard_tests.py --workers 6` on `f783a3fd` gave **7,540 tests, 0 failures, 0 errors, PASS** ([tail](50-custody-outside-repo/72-row9-tail.txt)).
+    - **Main moved after that run.** Main moved from `b69c39eb` to `daaff807` (#435), touching only README, RUN_STATE, TASK_QUEUE and `tests/test_gen_state.py`.
+    - **Integration tree `06ecc12c`** (`f783a3fd` merged with `origin/main`): `tests.test_gen_state` plus `tests.test_issuer_corpus_root` ran 59 OK; `gen_state --check` rc 0.
