@@ -203,3 +203,15 @@
     - **Row 9:** `python3 scripts/shard_tests.py --workers 6` on `f783a3fd` gave **7,540 tests, 0 failures, 0 errors, PASS** ([tail](50-custody-outside-repo/72-row9-tail.txt)).
     - **Main moved after that run.** Main moved from `b69c39eb` to `daaff807` (#435), touching only README, RUN_STATE, TASK_QUEUE and `tests/test_gen_state.py`.
     - **Integration tree `06ecc12c`** (`f783a3fd` merged with `origin/main`): `tests.test_gen_state` plus `tests.test_issuer_corpus_root` ran 59 OK; `gen_state --check` rc 0.
+37. **PR #436** (custody repair) was opened from `f783a3fd` with the full ledger. The gate-ledger check passes; hosted tests are queued.
+38. **S1 cold Fable final pass** ([51](35-s1-refuter/51-fable-finalpass-ruling.md)): **VERDICT: MERGE `c7593edb`.**
+    - **B-1 fix RATIFIED** (§3.1). It is GREEN on the candidate and RED when S1's head is swapped for scratch commits touching a calibration file, `reduce.py` or main's harvest state.
+    - **S-3 is NOT fixed the same way** (§3.2). The tripwire text goes into lane BFGS-RAWCAPTURE-01's brief.
+    - **Erratum E1:** all five refuter items are adopted (items 1 and 2 amended), with a replacement 78 (b) pre-check script (§4).
+    - **§5:** after the merge, the battery gate refuses all 57 on-disk `runs_window_7bfloor_20260729` bundles as `prospective bundle`, as ruled (amendment 40 erratum; lane HISTORICAL-BATTERY-STATE-01).
+    - **Merge conditions:**
+      1. merge commit only;
+      2. the PR description carries text 15 verbatim, the registry refresh list, both lanes with their orders and pre-checks, 77/78 as replaced by E1, the reading of the constants, and the 7bfloor sentence;
+      3. the tripwire text goes into the BFGS-RAWCAPTURE-01 brief;
+      4. **one full V1 + V2 + builder run on main after the merge.**
+    - Row 9 is running on the S1 integration tree `42e2af3e` (`c7593edb` merged with main `daaff807`). An Opus writer is drafting the PR description from the rulings (dictated fills).
