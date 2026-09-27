@@ -176,3 +176,8 @@
     - **Row 9** is running on `f783a3fd`, which contains main `b69c39eb`.
 31. **PR #435 gate complete.** Row 9 ran `python3 scripts/shard_tests.py --workers 6` on `f25bae33`, which contains main `b69c39eb`: **7,525 tests, 0 failures, 0 errors, PASS** ([tail](82-pr435-row9-tail.txt)). Hosted CI is green on `f25bae33`, apart from the ledger check awaiting this evidence. **Row 12**, magistrate terminal review of `f25bae33`: docs, state and the test count only; the audit passed; the full suite is green. MERGE.
 32. **PR #435 MERGED** as `daaff807` (merge commit, light tier), and canonical was fast-forwarded. **S1 A4 complete on `4aefdd12`:** V1 (tail in [40-a4-v1-tail.txt](35-s1-refuter/40-a4-v1-tail.txt)), V2 343 OK, B1 and B2 `byte-identical entries=69`.
+33. **Correction to item 32: A4 is NOT complete.** V1 on `4aefdd12` ran 477 tests with **FAILED (failures=1), rc 1** (5,510 s under contention).
+    - **The failing test:** `tests.test_bundle_read.StrictAccessorTests.test_historical_set_bytes_and_protected_base_paths_are_pinned`. It runs `git diff --exit-code 1417c0c4 -- <protected>`, and `<protected>` includes the whole of `configs/calibration`.
+    - **Why it fails:** main's W1 and W2 harvests (#432 and #434) added `configs/calibration/battery_float_verdicts/*.json` and moved `calibration_ledger_head.json`. Those are legitimate harvest-written state, and the fence was written before them.
+    - **Consequence:** this is a merge conflict of meaning between S1's fence and main. It **blocks S1's merge**, and as written it would fail after every future harvest.
+    - Awaiting the Opus counter-review (its Q3 asks exactly this) before a dictated test-only fix and an S1 final pass that also ratifies the fence change.
