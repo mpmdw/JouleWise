@@ -67,4 +67,17 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
     
     These were not executed. Registration spacing puts W2 t0 at 09:00 PDT or later.
 
+17. **Harvest PR #432, row 7: the cold Fable 5.1 final pass ruled `VERDICT: MERGE`** ([22-fable-finalpass-ruling.md](20-harvest-gate/22-fable-finalpass-ruling.md)). It found 0 BLOCKER. Its SHOULD-FIX items:
+    - S1: the gate is incomplete on GitHub (rows 9 and 11 are owed).
+    - S2: merge with `gh pr merge 432 --merge`, and build W2 from a full clone.
+    - S3: cross-check F1/F2 by hand at every remaining harvest of this epoch; the code change goes to its own lane.
+    - S4: the notices carry the harvest line, both early touches, and d11's +9 mAh gauge re-estimate (0 mA). This is added to the W2 step-3 text.
+    
+    NITs N1–N5 (runbook §2.1 caveat; registration "pin-free" wording drift) are carried to lanes.
+    
+    **Rows 3, 4, 5, 8 and 10:** there was no fix round and no post-review commit. No reviewer (Sol AUDIT PASS, Opus CONTRACT LENS PASS, Fable MERGE) raised a finding against the commit's bytes; every SHOULD-FIX concerns notices, merge method, W2 material or a pre-existing frozen-file validator lane. The merge candidate is the reviewed commit `c5088b87`; it is two generated files, with nothing to prune.
+18. **Census fix review:** Sol independent review `REVIEW: FAIL` on one finding ([copy](50-census/11-sol-review.md)). F1: an unrelated hit that exits between `pgrep` and `ps` skipped the basename check.
+    - **Fixed at the bench** (`2b4f0a86` on `test/2026-09-27-census-multiline-argv`): a whole-output `pgrep -lf` recorded-service check that also covers continuation lines, at least as strong as the original per-line check. With the live newline decoy the test is OK.
+    - **Bench slip:** `pkill -f 'scripts/run_campaign'` killed the background job whose own command line held that string, so the module run died (rc 144). Kill decoys by PID only. The full suite (row 9) was running at the time; any `run_campaign`-spawning test failure in its tail is suspect and gets a module rerun.
+
 **Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
