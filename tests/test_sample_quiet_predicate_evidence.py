@@ -14,6 +14,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from scripts import sample_quiet_predicate_evidence as harness
+from joulewise import battery_float
+from tests.test_battery_float import PairAuthenticationTests, UPDATE, raw as battery_raw
 
 
 # Headroom on the kernel-charged CPU ceiling: measured child start-up plus
@@ -130,6 +132,404 @@ def fake_round(interval, deadline, raw_dir, clock):
             "error": "deadline" if partial else None,
             "observation": None if partial else {"metrics": {"busy_cores": .2, "host_busy_cores": .2}},
             "observer_cpu_s": .01, "end_stamp": asdict(clock.stamp()), "workers": [], "argv": []}
+
+
+def fresh_battery_runner(argv):
+    body = battery_raw().replace(b"1790373525", str(int(harness.time.time())).encode())
+    return subprocess.CompletedProcess(argv, 0, body, b"")
+
+
+def write_authentic_rounds(root, rows):
+    """Give legacy descriptive rows their own authenticated envelope files."""
+    import shutil
+    root = Path(root)
+    for old in root.glob("fixture-envelope-*"):
+        shutil.rmtree(old)
+    for index, row in enumerate(rows):
+        out = root / f"fixture-envelope-{index:03d}"
+        out.mkdir()
+        pair = PairAuthenticationTests().pair(out)
+        for record in pair.values():
+            record["session_id"] = row.get("session", "fixture")
+        session = {"session": row.get("session", "fixture"), "battery_float": pair,
+                   "start_stamp": {"monotonic_before_s": 20e-9, "monotonic_after_s": 20e-9},
+                   "end_stamp": {"monotonic_before_s": 80e-9, "monotonic_after_s": 80e-9},
+                   "journal_rows": 1}
+        if "os_build" in row:
+            session["os_build"] = row["os_build"]
+        (out / "session.json").write_text(json.dumps(session))
+        with_raw = {**row, "raw": {"sha256": {
+            pair[phase]["raw_path"]: pair[phase]["raw_stdout_sha256"]
+            for phase in ("pre", "post")}}}
+        (out / "rounds.jsonl").write_text(json.dumps(with_raw) + "\n")
+
+
+class BatteryCollectorTests(NetworkTimeOffMixin, unittest.TestCase):
+    def runner(self, argv):
+        return subprocess.CompletedProcess(argv, 0, battery_raw(), b"")
+
+    def collect(self, out, *, round_runner=fake_round, **kwargs):
+        with patch.object(battery_float.time, "time", return_value=UPDATE + 1):
+            return harness.collect(collect_args(out, duration_s=4, sample_interval_s=2),
+                                   clock=FakeClock(), round_runner=round_runner,
+                                   metadata_reader=lambda: {"os_build": "25G83"},
+                                   battery_runner=self.runner, **kwargs)
+
+    def test_t5_capture_pair_clock_and_two_row_witness(self):
+        self.assertEqual(harness.NETWORK_TIME_REFUSAL, battery_float.QUIET_REFUSAL_ERROR_CLASS)
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope"
+            session, rows = self.collect(out)
+            self.assertEqual(len(rows), session["journal_rows"])
+            self.assertEqual(session["journal_rows"], 2)
+            self.assertEqual(len((out / "rounds.jsonl").read_text().splitlines()), 2)
+            self.assertEqual(battery_float.authenticate_quiet_session(out).status, "pass")
+            for phase in ("pre", "post"):
+                path = f"raw/battery_float.{phase}.ioreg"
+                self.assertEqual(rows[0]["raw"]["sha256"][path],
+                                 session["battery_float"][phase]["raw_stdout_sha256"])
+            self.assertLessEqual(session["battery_float"]["pre"]["monotonic_after_ns"],
+                                 battery_float.monotonic_ns_from_s(session["start_stamp"]["monotonic_before_s"]))
+            self.assertGreaterEqual(session["battery_float"]["post"]["monotonic_before_ns"],
+                                    battery_float.monotonic_ns_from_s(session["end_stamp"]["monotonic_after_s"]))
+
+    def test_t5_scripted_clock_conversion_on_capture_and_refusal(self):
+        class ScriptedClock(FakeClock):
+            def __init__(self, sequence):
+                super().__init__()
+                self.reads = iter(sequence)
+
+            def monotonic(self):
+                return next(self.reads)
+
+        for refusal, sequence in ((False, [0, 0, 0, 0, 2, 2, 2, 2, 4, 4, 4, 4, 4]),
+                                  (True, [0, 0, 0, 0])):
+            with self.subTest(refusal=refusal), tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                clock = ScriptedClock(sequence)
+                control = ({harness.NETWORK_TIME_RECORD_ENV: "/no-such-control"} if refusal else {})
+                with patch.dict(os.environ, control), \
+                        patch.object(battery_float.time, "time", return_value=UPDATE + 1):
+                    session, _ = harness.collect(
+                        collect_args(tmp, duration_s=4, sample_interval_s=2), clock=clock,
+                        round_runner=fake_round, metadata_reader=lambda: {"os_build": "25G83"},
+                        battery_runner=self.runner)
+                self.assertEqual(battery_float.authenticate_quiet_session(tmp).status, "pass")
+                pair = session["battery_float"]
+                self.assertLessEqual(pair["pre"]["monotonic_after_ns"],
+                                     battery_float.monotonic_ns_from_s(
+                                         session["start_stamp"]["monotonic_before_s"]))
+                end = session["start_stamp"] if refusal else session["end_stamp"]
+                self.assertGreaterEqual(pair["post"]["monotonic_before_ns"],
+                                        battery_float.monotonic_ns_from_s(end["monotonic_after_s"]))
+                with self.assertRaises(StopIteration):
+                    clock.monotonic()
+
+    def test_t5_partial_sampler_keeps_finalized_row_count(self):
+        calls = 0
+        def broken_round(*args):
+            nonlocal calls
+            calls += 1
+            result = fake_round(*args)
+            if calls == 2:
+                (args[2] / "sampler.json").write_text("{")
+            return result
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope"
+            session, rows = self.collect(out, round_runner=broken_round)
+            self.assertIn("end_stamp", session)
+            self.assertEqual((session["journal_rows"], len(rows), len(session["round_workers"])), (1, 1, 2))
+            self.assertEqual(battery_float.authenticate_quiet_session(out).status, "pass")
+
+    def test_t5_refusal_has_both_reads_and_no_count(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope"
+            with patch.dict(os.environ, {harness.NETWORK_TIME_RECORD_ENV: "/no-such-control"}):
+                session, rows = self.collect(out)
+            self.assertEqual(rows, [])
+            self.assertNotIn("journal_rows", session)
+            self.assertEqual(set(session["battery_float"]), {"pre", "post"})
+            self.assertEqual((out / "rounds.jsonl").read_text(), "")
+            self.assertEqual(battery_float.authenticate_quiet_session(out).status, "pass")
+
+    def test_t5_pre_is_in_first_writes_and_failed_probe_does_not_abort(self):
+        real_write = harness.write_json
+        first_writes = []
+        def capture_write(path, value):
+            if Path(path).name == "session.json":
+                first_writes.append(json.loads(json.dumps(value)))
+            return real_write(path, value)
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "capture"
+            with patch.object(harness, "write_json", side_effect=capture_write):
+                self.collect(out)
+            self.assertEqual(set(first_writes[0]["battery_float"]), {"pre"})
+            self.assertNotIn("journal_rows", first_writes[0])
+            self.assertEqual(set(first_writes[-1]["battery_float"]), {"pre", "post"})
+            self.assertIn("journal_rows", first_writes[-1])
+        first_writes.clear()
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "refusal"
+            with patch.dict(os.environ, {harness.NETWORK_TIME_RECORD_ENV: "/no-such-control"}), \
+                    patch.object(harness, "write_json", side_effect=capture_write):
+                self.collect(out)
+            self.assertEqual(set(first_writes[0]["battery_float"]), {"pre", "post"})
+            self.assertNotIn("journal_rows", first_writes[0])
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "probe-error"
+            def failing_runner(_argv):
+                raise OSError("probe unavailable")
+            session, rows = harness.collect(collect_args(out, duration_s=4, sample_interval_s=2),
+                clock=FakeClock(), round_runner=fake_round,
+                metadata_reader=lambda: {"os_build": "25G83"},
+                battery_runner=failing_runner)
+            self.assertEqual(len(rows), 2)
+            self.assertIsNone(session["error"])
+            self.assertEqual(set(session["battery_float"]), {"pre", "post"})
+            self.assertEqual(battery_float.authenticate_quiet_session(out).status,
+                             "battery_float_evidence_missing")
+
+    def test_t5_attestation_rewrite_does_not_repair_row_digest_disagreement(self):
+        from joulewise import quiet_predicate_campaign as campaign
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "envelope"
+            self.collect(out)
+            self.assertTrue(campaign.record_attestation(out, {"state": "authenticated"}))
+            self.assertEqual(battery_float.authenticate_quiet_session(out).status, "pass")
+            session = json.loads((out / "session.json").read_text())
+            body = battery_raw("charging-synthetic-from-real.ioreg")
+            (out / "raw/battery_float.pre.ioreg").write_bytes(body)
+            import hashlib
+            session["battery_float"]["pre"]["raw_stdout_sha256"] = hashlib.sha256(body).hexdigest()
+            harness.write_json(out / "session.json", session)
+            with self.assertRaises(battery_float.CustodyFailure):
+                battery_float.authenticate_quiet_session(out)
+
+    def test_t5_missing_post_on_both_collector_paths_is_evidence_missing(self):
+        for refusal in (False, True):
+            with self.subTest(refusal=refusal), tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                out = Path(tmp) / "envelope"
+                if refusal:
+                    with patch.dict(os.environ, {harness.NETWORK_TIME_RECORD_ENV: "/no-such-control"}):
+                        self.collect(out)
+                else:
+                    self.collect(out)
+                session = json.loads((out / "session.json").read_text())
+                session["battery_float"].pop("post")
+                (out / "raw/battery_float.post.ioreg").unlink()
+                harness.write_json(out / "session.json", session)
+                self.assertEqual(battery_float.authenticate_quiet_session(out).status,
+                                 "battery_float_evidence_missing")
+
+    def test_t5_atomic_replace_failure_preserves_previous_json_and_journal(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            path = Path(tmp) / "session.json"
+            harness.write_json(path, {"before": True})
+            original = path.read_bytes()
+            with patch.object(harness.os, "replace", side_effect=OSError("replace failed")):
+                with self.assertRaisesRegex(OSError, "replace failed"):
+                    harness.write_json(path, {"after": True})
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(list(Path(tmp).glob(".session.json.*")), [])
+            path.unlink()
+            with patch.object(harness.os, "replace", side_effect=OSError("replace failed")):
+                with self.assertRaisesRegex(OSError, "replace failed"):
+                    harness.write_json(path, {"new": True})
+            self.assertFalse(path.exists())
+            self.assertEqual(list(Path(tmp).glob(".session.json.*")), [])
+
+            journal = Path(tmp) / "rounds.jsonl"
+            journal.write_text("complete old row\n")
+            with patch.object(harness.os, "replace", side_effect=OSError("replace failed")):
+                with self.assertRaisesRegex(OSError, "replace failed"):
+                    harness.atomic_write_text(journal, "new row\n")
+            self.assertEqual(journal.read_text(), "complete old row\n")
+            self.assertFalse(any(Path(tmp).glob(".rounds.jsonl.*")))
+
+    def test_t5_atomic_final_journal_failure_uses_collect(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            out = Path(tmp) / "collector"
+            real_replace = harness.os.replace
+            def fail_final_journal(source, target):
+                if Path(target).name == "rounds.jsonl":
+                    raise OSError("journal replace failed")
+                return real_replace(source, target)
+            with patch.object(harness.os, "replace", side_effect=fail_final_journal):
+                with self.assertRaisesRegex(OSError, "journal replace failed"):
+                    self.collect(out)
+            first = json.loads((out / "session.json").read_text())
+            self.assertNotIn("end_stamp", first)
+            self.assertNotIn("journal_rows", first)
+            provisional = (out / "rounds.jsonl").read_text().splitlines()
+            self.assertEqual(len(provisional), 2)
+            self.assertTrue(all(json.loads(line)["raw"]["sha256"] == {} for line in provisional))
+            self.assertFalse(any(out.glob(".rounds.jsonl.*")))
+
+    def test_atomic_session_and_final_journal_fsync_before_replace(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            out = Path(tmp) / 'collector'
+            events = []
+            real_fsync, real_replace = harness.os.fsync, harness.os.replace
+            def fsync(fd):
+                events.append(('fsync', fd))
+                return real_fsync(fd)
+            def replace(source, target):
+                self.assertEqual(events[-1][0], 'fsync')
+                events.append(('replace', str(source), str(target)))
+                return real_replace(source, target)
+            with patch.object(harness.os, 'fsync', side_effect=fsync), \
+                 patch.object(harness.os, 'replace', side_effect=replace):
+                self.collect(out)
+            for target in ('session.json', 'rounds.jsonl'):
+                replacements = [(i, event) for i, event in enumerate(events)
+                                if event[0] == 'replace' and Path(event[2]).name == target]
+                self.assertTrue(replacements)
+                for index, event in replacements:
+                    self.assertNotIn(Path(event[1]).name, ('session.json', 'rounds.jsonl'))
+                    self.assertEqual(events[index - 1][0], 'fsync')
+
+    def test_refusal_session_write_failure_leaves_no_journal(self):
+        # Lead bench (delta-1 B1): the refusal path keeps its pre-S2 order, session.json
+        # then rounds.jsonl, so a failed session write leaves no record at all and the
+        # amendment-32(1) no-record carve-out applies; a journal-first order made the
+        # same honest failure read as custody.
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            out = Path(tmp) / 'refusal'
+            real_write = harness.write_json
+            def fail_session(path, value):
+                if Path(path).name == 'session.json':
+                    raise OSError('session write failed')
+                return real_write(path, value)
+            with patch.dict(os.environ, {harness.NETWORK_TIME_RECORD_ENV: '/absent'}), \
+                 patch.object(harness, 'write_json', side_effect=fail_session):
+                with self.assertRaisesRegex(OSError, 'session write failed'):
+                    self.collect(out)
+            self.assertFalse((out / 'rounds.jsonl').exists())
+            self.assertFalse((out / 'session.json').exists())
+
+    def test_summarize_detects_session_changed_during_authentication(self):
+        root = Path(tempfile.mkdtemp(dir='/tmp'))
+        self.addCleanup(lambda: __import__('shutil').rmtree(root))
+        write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+        real = battery_float.authenticate_quiet_session
+        def swap(out):
+            verdict = real(out)
+            session_path = out / 'session.json'
+            session = json.loads(session_path.read_text())
+            session.pop('end_stamp')
+            session['error_class'] = battery_float.QUIET_REFUSAL_ERROR_CLASS
+            session_path.write_text(json.dumps(session))
+            return verdict
+        with patch.object(battery_float, 'authenticate_quiet_session', side_effect=swap):
+            with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                        'session.json changed during authentication'):
+                harness.summarize(root)
+        self.assertFalse((root / 'summary.json').exists())
+
+    def test_r44_summarize_detects_appended_and_deleted_journal(self):
+        real = battery_float.authenticate_quiet_session
+        for change in ('append', 'delete'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+                root = Path(tmp)
+                write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+                def mutate(out):
+                    verdict = real(out)
+                    journal = out / 'rounds.jsonl'
+                    if change == 'append':
+                        with journal.open('a') as stream:
+                            stream.write('{}\n')
+                    else:
+                        journal.unlink()
+                    return verdict
+                with patch.object(battery_float, 'authenticate_quiet_session', side_effect=mutate):
+                    with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                                r'rounds\.jsonl changed during authentication'):
+                        harness.summarize(root)
+                self.assertFalse((root / 'summary.json').exists())
+
+    def test_r44_summarize_detects_session_repair_before_authentication(self):
+        real = battery_float.authenticate_quiet_session
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            root = Path(tmp)
+            write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+            path = next(root.glob('fixture-envelope-*/session.json'))
+            passing = path.read_bytes()
+            session = json.loads(passing)
+            session['battery_float']['pre']['exit_code'] = 2
+            path.write_text(json.dumps(session))
+            def repair(out):
+                path.write_bytes(passing)
+                verdict = real(out)
+                self.assertEqual(verdict.status, 'pass')
+                return verdict
+            with patch.object(battery_float, 'authenticate_quiet_session', side_effect=repair):
+                with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                            r'session\.json changed during authentication'):
+                    harness.summarize(root)
+            self.assertFalse((root / 'summary.json').exists())
+
+    def test_r44_summarize_opens_each_routing_file_twice(self):
+        real_authenticate = battery_float.authenticate_quiet_session
+        real_open = Path.open
+        authenticating = False
+        reads = []
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            root = Path(tmp)
+            write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+            def authenticate(out):
+                nonlocal authenticating
+                authenticating = True
+                try:
+                    return real_authenticate(out)
+                finally:
+                    authenticating = False
+            def opened(path, *args, **kwargs):
+                if not authenticating and path.name in ('session.json', 'rounds.jsonl'):
+                    reads.append(path.name)
+                return real_open(path, *args, **kwargs)
+            with patch.object(battery_float, 'authenticate_quiet_session', side_effect=authenticate), \
+                 patch.object(Path, 'open', opened):
+                harness.summarize(root)
+            self.assertEqual(reads.count('session.json'), 2)
+            self.assertEqual(reads.count('rounds.jsonl'), 2)
+
+    def test_t5_two_second_pre_probe_moves_start_drift_only(self):
+        frame = placed(aligned_fixture()[0], 1000., 1600., elapsed_s=600)
+        observations = []
+        for delay in (0, 2):
+            with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+                clock = FakeClock()
+                calls = 0
+                def runner(argv):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        clock.sleep(delay)
+                    return subprocess.CompletedProcess(argv, 0, battery_raw(), b"")
+                def one_round(*arguments):
+                    result = fake_round(*arguments)
+                    result.update(status="partial", error="fixture stops after one round")
+                    return result
+                recorder = Mock()
+                recorder.metadata = {"cleanup": {"returncode": 0}}
+                recorder.finish.return_value = ([frame], {
+                    "status": "bounded", "effective_clock_anchor_bound_s": 0,
+                    "admissible_lower_epoch_s": 1000,
+                    "admissible_upper_epoch_s": 1000})
+                args = collect_args(tmp, power=True, duration_s=600,
+                                    sample_interval_s=100, interior_offset_s=60,
+                                    interior_s=480, envelope_start_mono_s=0)
+                with patch.object(battery_float.time, "time", return_value=UPDATE + 1):
+                    session, rows = harness.collect(args, clock=clock,
+                        round_runner=one_round, recorder_factory=Mock(return_value=recorder),
+                        metadata_reader=lambda: {"os_build": "25G83"}, battery_runner=runner)
+                self.assertEqual(battery_float.authenticate_quiet_session(tmp).status, "pass")
+                observations.append((session, rows))
+        plain, delayed = (item[0] for item in observations)
+        self.assertEqual(delayed["start_drift_s"] - plain["start_drift_s"], 2)
+        self.assertEqual(delayed["deadline_mono_s"], plain["deadline_mono_s"])
+        self.assertEqual(delayed["interior"], plain["interior"])
+        self.assertEqual(delayed["end_stamp"]["monotonic_after_s"] - delayed["start_stamp"]["monotonic_before_s"],
+                         plain["end_stamp"]["monotonic_after_s"] - plain["start_stamp"]["monotonic_before_s"])
 
 
 def delayed_exit_load_worker(connection, config):
@@ -391,7 +791,8 @@ class CollectionTests(NetworkTimeOffMixin, unittest.TestCase):
             with self.subTest(build=build), tempfile.TemporaryDirectory() as tmp, \
                     patch.object(harness.subprocess, "Popen", side_effect=AssertionError("no subprocess")):
                 session, rows = harness.collect(collect_args(tmp), clock=FakeClock(),
-                    round_runner=fake_round, metadata_reader=lambda: {"boot_id": "fixture", "os_build": build})
+                    round_runner=fake_round, metadata_reader=lambda: {"boot_id": "fixture", "os_build": build},
+                    battery_runner=fresh_battery_runner)
                 valid = build == "25G83"
                 self.assertEqual(session["os_build"], build)  # Raw metadata preserved.
                 persisted = [json.loads(line) for line in (Path(tmp) / "rounds.jsonl").read_text().splitlines()]
@@ -1007,7 +1408,8 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
         for field, replacement in (("os_build", "25G80"), ("session", "other-session")):
             with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
                 harness.collect(collect_args(tmp), clock=FakeClock(), round_runner=fake_round,
-                    metadata_reader=lambda: {"boot_id": "fixture", "os_build": "25G83"})
+                    metadata_reader=lambda: {"boot_id": "fixture", "os_build": "25G83"},
+                    battery_runner=fresh_battery_runner)
                 path = Path(tmp) / "rounds.jsonl"
                 rows = [json.loads(line) for line in path.read_text().splitlines()]
                 rows[0][field] = replacement
@@ -1029,7 +1431,7 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
                     for row, build in zip(rows, builds):
                         if build is not None:
                             row["os_build"] = build
-                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+                write_authentic_rounds(root, rows)
                 harness.summarize(root, "idle")
                 markdown = (root / "summary.md").read_text()
                 tables = markdown.split("| State | ")[1:]
@@ -1055,7 +1457,7 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
                 for state, extra in (("idle", 0), ("loaded", 2)):
                     rows.append({**self.fixture_row(state, "1", watts + extra), "census_clean": clean})
             root = Path(tmp)
-            (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+            write_authentic_rounds(root, rows)
             result = harness.summarize(root, "idle")
             self.assertIsNone(result["reference"])
             self.assertEqual(len(result["references_by_census"]), 3)
@@ -1066,7 +1468,7 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
                     self.assertEqual(group["delta_j_480"]["cpu_w"], 960)
             # A missing matching reference must not borrow the clean reference.
             rows = [r for r in rows if r["state"] != "idle" or r["census_clean"] is True]
-            (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+            write_authentic_rounds(root, rows)
             result = harness.summarize(root, "idle")
             for group in result["groups"]:
                 if group["census_clean"] is not True:
@@ -1080,7 +1482,7 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
                 rows = [{**self.fixture_row("idle", "1", watts), "boot_id": "same-boot",
                          field: value, "census_clean": True}
                         for value, watts in zip(identities, (1, 9))]
-                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+                write_authentic_rounds(root, rows)
                 result = harness.summarize(root, "idle")
                 self.assertEqual(len(result["groups"]), 2)
                 self.assertEqual({g[field]: g["power"]["cpu_w"] for g in result["groups"]},
@@ -1091,12 +1493,12 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
                               result["reference_reason"])
                 self.assertEqual(len(result["references_by_census"]), 2)
                 rows.append({**rows[1], "state": "loaded", "power": self.fixture_row("loaded", "1", 5)["power"]})
-                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+                write_authentic_rounds(root, rows)
                 result = harness.summarize(root, "idle")
                 loaded = next(g for g in result["groups"] if g["state"] == "loaded")
                 self.assertEqual(loaded["delta_j_480"]["cpu_w"], -1920)
                 # Without the matching reference, do not borrow another boot/build.
-                (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in (rows[0], rows[2])))
+                write_authentic_rounds(root, (rows[0], rows[2]))
                 result = harness.summarize(root, "idle")
                 loaded = next(g for g in result["groups"] if g["state"] == "loaded")
                 self.assertIsNone(loaded["delta_j_480"]["cpu_w"])
@@ -1118,7 +1520,7 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
     def test_summary_preserves_exact_session_provenance(self):
         with tempfile.TemporaryDirectory() as tmp:
             harness.collect(collect_args(tmp), clock=FakeClock(), round_runner=fake_round,
-                            metadata_reader=lambda: {})
+                            metadata_reader=lambda: {}, battery_runner=fresh_battery_runner)
             session = json.loads((Path(tmp) / "session.json").read_text())
             result = harness.summarize(tmp, "idle")
             persisted = json.loads((Path(tmp) / "summary.json").read_text())
@@ -1151,7 +1553,7 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
                     self.fixture_row("idle", "2", 3, coverage=30),
                     self.fixture_row("loaded", "1", 5, coverage=20, busy=.3),
                     self.fixture_row("loaded", "1", 99, status="partial")]
-            (root / "rounds.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+            write_authentic_rounds(root, rows)
             result = harness.summarize(root, "idle")
             loaded = next(g for g in result["groups"] if g["state"] == "loaded")
             # Reference = (1*10+3*30)/40 = 2.5 W; 480*(5-2.5)=1200 J.
@@ -1171,7 +1573,7 @@ class SummaryTests(NetworkTimeOffMixin, unittest.TestCase):
             row = self.fixture_row("idle", "1", 1)
             row["alignment"] = {}
             row["load_setting"] = None
-            (root / "rounds.jsonl").write_text(json.dumps(row))
+            write_authentic_rounds(root, [row])
             result = harness.summarize(root)
             self.assertIsNone(result["groups"][0]["delta_j_480"]["cpu_w"])
             result = harness.summarize(root, "idle")

@@ -385,9 +385,9 @@ class NightKindTests(unittest.TestCase):
         finally:
             case.doCleanups()
 
-    def test_battery_bracket_flags_are_a_pre_s2_arm_fence(self):
+    def test_battery_bracket_flags_open_qpe_without_changing_derivation(self):
         self.assertTrue(kind_row("calibration").battery_brackets)
-        self.assertFalse(kind_row("quiet_predicate_evidence").battery_brackets)
+        self.assertTrue(kind_row("quiet_predicate_evidence").battery_brackets)
 
     @unittest.skipUnless(Path("/bin/zsh").is_file(), "candidate sealing requires zsh")
     def test_prepare_authors_row_paths_and_seals_candidate_at_head(self):

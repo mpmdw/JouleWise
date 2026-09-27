@@ -68,7 +68,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import quiet_admission
+from joulewise import battery_float, quiet_admission
 from joulewise.adapters import powermetrics as pm
 from joulewise.arm_readiness import EXPECTED_NETWORK_TIME_OFF_STDOUT
 from joulewise.clock import ClockStamp
@@ -83,7 +83,7 @@ SCHEMA = "joulewise.quiet_predicate_evidence.v1"
 # before powermetrics is spawned; it never records an unknown clock regime as
 # if it were a measurement.
 NETWORK_TIME_RECORD_ENV = "EVIDENCE_NETWORK_TIME_RECORD"
-NETWORK_TIME_REFUSAL = "network_time_provenance"
+NETWORK_TIME_REFUSAL = battery_float.QUIET_REFUSAL_ERROR_CLASS
 NETWORK_TIME_REFUSAL_EXIT = 3
 NETWORK_TIME_PROVENANCE_METHOD = "systemsetup_setusingnetworktime_off_exact_stdout"
 NETWORK_TIME_PROVENANCE_REASON = "established by the evidence chain before settle"
@@ -140,8 +140,23 @@ def reasons(value, reason="not available in source evidence"):
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(reasons(value), sort_keys=True, indent=2,
-                               allow_nan=False) + "\n")
+    atomic_write_text(path, json.dumps(reasons(value), sort_keys=True, indent=2,
+                                       allow_nan=False) + "\n")
+
+
+def atomic_write_text(path, body):
+    """Replace a collector record only after its complete bytes reach disk."""
+    path = Path(path)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                     prefix=f".{path.name}.", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(body)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def number(value):
@@ -1026,7 +1041,7 @@ def new_row(session, args, index, start, end, result):
 
 
 def collect(args, *, clock=None, round_runner=production_round, recorder_factory=PowerRecorder,
-            metadata_reader=None):
+            metadata_reader=None, battery_runner=None):
     clock = clock or Clock()
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -1063,6 +1078,18 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
                "network_time_provenance_reason": provenance_reason,
                "observer_definition": "SELF + reaped CHILDREN over production smoke incl. raw/stamp hooks; recorder CPU excluded",
                "round_workers": [], "power": None, "error": None, "error_rounds": 0}
+    def battery_read(phase):
+        name = f"raw/battery_float.{phase}.ioreg"
+        kwargs = {"runner": battery_runner, "raw_path": name, "session_id": session_id,
+                  "monotonic_ns": lambda: battery_float.monotonic_ns_from_s(clock.monotonic())}
+        if phase == "pre":
+            record, body = battery_float.observe(phase="quiet_pre", **kwargs)
+        else:
+            record, body = battery_float.observe(phase="quiet_post", **kwargs)
+        (out / name).write_bytes(body)
+        session.setdefault("battery_float", {})[phase] = record
+
+    battery_read("pre")
     envelope_cpu_start = cpu_total()
     start = clock.stamp()
     scheduled = getattr(args, "envelope_start_mono_s", None)
@@ -1078,6 +1105,7 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
         session["error"] = "network time provenance not established: " + provenance_reason
         session["error_class"] = NETWORK_TIME_REFUSAL
         session["error_rounds"] = 0
+        battery_read("post")
         write_json(out / "session.json", session)
         (out / "rounds.jsonl").write_text("")
         return session, []
@@ -1163,6 +1191,7 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
         session["end_stamp"] = asdict(clock.stamp())
         session["whole_envelope_observer_cpu_s"] = cpu_total() - envelope_cpu_start
         session["whole_envelope_observer_definition"] = "SELF + all reaped CHILDREN, including power recorder; never subtracted"
+        battery_read("post")
     session["error_rounds"] = sum(row["status"] == "error" for row in rows)
     if session["error_rounds"] and not any(row["status"] == "complete" for row in rows):
         session["error"] = session["error"] or "no round completed successfully"
@@ -1202,9 +1231,9 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
         row["raw"] = {"paths": [str(p.relative_to(out)) for p in paths],
                       "sha256": {str(p.relative_to(out)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}}
     # Final reduction replaces only this session's provisional derived journal.
-    with (out / "rounds.jsonl").open("w") as stream:
-        for row in rows:
-            stream.write(json.dumps(reasons(row), sort_keys=True, allow_nan=False) + "\n")
+    session["journal_rows"] = len(rows)
+    atomic_write_text(out / "rounds.jsonl", "".join(
+        json.dumps(reasons(row), sort_keys=True, allow_nan=False) + "\n" for row in rows))
     write_json(out / "session.json", session)
     return session, rows
 
@@ -1461,13 +1490,43 @@ def aggregate(rows):
 
 def summarize(directory, reference_state=None, load_logs=()):
     directory = Path(directory)
-    paths = sorted(directory.rglob("rounds.jsonl"))
+    envelope_dirs = sorted({path.parent for name in ("session.json", "rounds.jsonl")
+                            for path in directory.rglob(name)})
+    paths = []
     rows = []
+    sessions = {}
     reports = [(Path(path), json.loads(Path(path).read_text())) for path in load_logs]
-    for path in paths:
-        session_path = path.parent / "session.json"
-        session = json.loads(session_path.read_text()) if session_path.exists() else None
-        for line in path.read_text().splitlines():
+    def snapshot(path):
+        try:
+            return path.read_bytes()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            return exc
+    for envelope_dir in envelope_dirs:
+        session_bytes = snapshot(envelope_dir / "session.json")
+        journal_bytes = snapshot(envelope_dir / "rounds.jsonl")
+        verdict = battery_float.authenticate_quiet_session(envelope_dir)
+        session_after = snapshot(envelope_dir / "session.json")
+        journal_after = snapshot(envelope_dir / "rounds.jsonl")
+        for name, value in (("session.json", session_bytes), ("rounds.jsonl", journal_bytes),
+                            ("session.json", session_after), ("rounds.jsonl", journal_after)):
+            if isinstance(value, OSError):
+                raise battery_float.CustodyUnreadable(
+                    f"{envelope_dir.name}: {name} unreadable: {value}")
+        if session_after != session_bytes:
+            raise battery_float.CustodyUnreadable(
+                f"{envelope_dir.name}: session.json changed during authentication")
+        if journal_after != journal_bytes:
+            raise battery_float.CustodyUnreadable(
+                f"{envelope_dir.name}: rounds.jsonl changed during authentication")
+        if verdict.status != "pass":
+            raise ValueError(f"{envelope_dir}: {verdict.status}: {', '.join(verdict.reasons)}")
+        path = envelope_dir / "rounds.jsonl"
+        paths.append(path)
+        session = json.loads(session_bytes)
+        sessions[envelope_dir] = session
+        for line in journal_bytes.decode("utf-8").splitlines():
             if not line.strip():
                 continue
             row = json.loads(line)
@@ -1536,9 +1595,8 @@ def summarize(directory, reference_state=None, load_logs=()):
                 if bound is not None and ref_bound is not None else None)
         groups.append(reasons(entry, "reference or finite alignment evidence unavailable"))
     provenance = []
-    for path in sorted(directory.rglob("session.json")):
-        session = json.loads(path.read_text())
-        provenance.append({"source": str(path.relative_to(directory)),
+    for envelope_dir, session in sorted(sessions.items()):
+        provenance.append({"source": str((envelope_dir / "session.json").relative_to(directory)),
                            **{key: session[key] for key in (
                                "evidence_status", "alignment_model", "network_time_provenance",
                                "network_time_provenance_reason") if key in session}})
