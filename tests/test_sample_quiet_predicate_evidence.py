@@ -425,6 +425,73 @@ class BatteryCollectorTests(NetworkTimeOffMixin, unittest.TestCase):
                 harness.summarize(root)
         self.assertFalse((root / 'summary.json').exists())
 
+    def test_r44_summarize_detects_appended_and_deleted_journal(self):
+        real = battery_float.authenticate_quiet_session
+        for change in ('append', 'delete'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+                root = Path(tmp)
+                write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+                def mutate(out):
+                    verdict = real(out)
+                    journal = out / 'rounds.jsonl'
+                    if change == 'append':
+                        with journal.open('a') as stream:
+                            stream.write('{}\n')
+                    else:
+                        journal.unlink()
+                    return verdict
+                with patch.object(battery_float, 'authenticate_quiet_session', side_effect=mutate):
+                    with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                                r'rounds\.jsonl changed during authentication'):
+                        harness.summarize(root)
+                self.assertFalse((root / 'summary.json').exists())
+
+    def test_r44_summarize_detects_session_repair_before_authentication(self):
+        real = battery_float.authenticate_quiet_session
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            root = Path(tmp)
+            write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+            path = next(root.glob('fixture-envelope-*/session.json'))
+            passing = path.read_bytes()
+            session = json.loads(passing)
+            session['battery_float']['pre']['exit_code'] = 2
+            path.write_text(json.dumps(session))
+            def repair(out):
+                path.write_bytes(passing)
+                verdict = real(out)
+                self.assertEqual(verdict.status, 'pass')
+                return verdict
+            with patch.object(battery_float, 'authenticate_quiet_session', side_effect=repair):
+                with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                            r'session\.json changed during authentication'):
+                    harness.summarize(root)
+            self.assertFalse((root / 'summary.json').exists())
+
+    def test_r44_summarize_opens_each_routing_file_twice(self):
+        real_authenticate = battery_float.authenticate_quiet_session
+        real_open = Path.open
+        authenticating = False
+        reads = []
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            root = Path(tmp)
+            write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+            def authenticate(out):
+                nonlocal authenticating
+                authenticating = True
+                try:
+                    return real_authenticate(out)
+                finally:
+                    authenticating = False
+            def opened(path, *args, **kwargs):
+                if not authenticating and path.name in ('session.json', 'rounds.jsonl'):
+                    reads.append(path.name)
+                return real_open(path, *args, **kwargs)
+            with patch.object(battery_float, 'authenticate_quiet_session', side_effect=authenticate), \
+                 patch.object(Path, 'open', opened):
+                harness.summarize(root)
+            self.assertEqual(reads.count('session.json'), 2)
+            self.assertEqual(reads.count('rounds.jsonl'), 2)
+
     def test_t5_two_second_pre_probe_moves_start_drift_only(self):
         frame = placed(aligned_fixture()[0], 1000., 1600., elapsed_s=600)
         observations = []

@@ -1,5 +1,7 @@
 """Campaign mechanics and negative scientific branches using fixtures only."""
 import json
+import ast
+from collections import Counter
 import math
 import os
 from pathlib import Path
@@ -3861,6 +3863,207 @@ class ObserverFloorTests(unittest.TestCase):
         self.assertEqual([v["excluded"] for v in quiet["envelopes"]], [[]] * 12)
 
 
+WRITE_SITE_TARGETS = frozenset(('session.json', 'rounds.jsonl'))
+WRITE_SITE_CALLS = frozenset((
+    'write_text', 'write_bytes', 'write_json', 'atomic_write_text', 'replace',
+    'rename', 'move', 'copy', 'copy2', 'copyfile', 'copytree', 'unlink', 'rmtree',
+    'truncate', 'touch', 'symlink_to', 'hardlink_to', 'symlink', 'link'))
+PATH_BUILDING_CALLS = frozenset((
+    'Path', 'PurePath', 'with_name', 'with_suffix', 'resolve', 'absolute',
+    'joinpath', 'str', 'join'))
+
+
+def write_site_inventory(root, *, write_calls=WRITE_SITE_CALLS, learn_module=True):
+    """Amendment 45's source inventory, keyed by file, function, call and target."""
+    def call_name(call):
+        func = call.func
+        if isinstance(func, ast.Attribute):
+            return func.attr
+        if isinstance(func, ast.Name):
+            return func.id
+        return None
+
+    def path_building(expr):
+        allowed = (ast.Name, ast.Attribute, ast.Constant, ast.BinOp, ast.Div,
+                   ast.Add, ast.Tuple, ast.List, ast.JoinedStr, ast.FormattedValue,
+                   ast.Load, ast.Store, ast.keyword)
+        for node in ast.walk(expr):
+            if isinstance(node, ast.Call):
+                if call_name(node) not in PATH_BUILDING_CALLS:
+                    return False
+            elif isinstance(node, ast.BinOp):
+                if not isinstance(node.op, (ast.Div, ast.Add)):
+                    return False
+            elif not isinstance(node, allowed):
+                return False
+        return True
+
+    def reached(expr, names):
+        hits = set()
+        for node in ast.walk(expr):
+            if isinstance(node, ast.Constant) and node.value in WRITE_SITE_TARGETS:
+                hits.add(node.value)
+            elif isinstance(node, ast.Name):
+                hits.update(names.get(node.id, ()))
+        return hits
+
+    def bind(target, hits, names):
+        changed = False
+        for node in ast.walk(target):
+            if isinstance(node, ast.Name) and not hits <= names.get(node.id, set()):
+                names.setdefault(node.id, set()).update(hits)
+                changed = True
+        return changed
+
+    def learn(nodes, names):
+        changed = True
+        while changed:
+            changed = False
+            for node in nodes:
+                if isinstance(node, ast.Assign) and path_building(node.value):
+                    hits = reached(node.value, names)
+                    if hits:
+                        for target in node.targets:
+                            changed |= bind(target, hits, names)
+                elif isinstance(node, ast.AnnAssign) and node.value is not None \
+                        and path_building(node.value):
+                    hits = reached(node.value, names)
+                    if hits:
+                        changed |= bind(node.target, hits, names)
+                elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)) \
+                        and path_building(node.iter):
+                    hits = reached(node.iter, names)
+                    if hits:
+                        changed |= bind(node.target, hits, names)
+
+    def functions(tree):
+        found = []
+        def walk(node, prefix):
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    name = prefix + child.name
+                    found.append((name, child))
+                    walk(child, name + '.')
+                elif isinstance(child, ast.ClassDef):
+                    walk(child, prefix + child.name + '.')
+                else:
+                    walk(child, prefix)
+        walk(tree, '')
+        return found
+
+    def own_nodes(scope):
+        pending = list(ast.iter_child_nodes(scope))
+        while pending:
+            node = pending.pop()
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            yield node
+            pending.extend(ast.iter_child_nodes(node))
+
+    def is_write(call):
+        name = call_name(call)
+        if name in write_calls:
+            return True
+        if name != 'open':
+            return False
+        mode = next((kw.value for kw in call.keywords if kw.arg == 'mode'), None)
+        if mode is None:
+            position = 0 if isinstance(call.func, ast.Attribute) else 1
+            mode = call.args[position] if len(call.args) > position else None
+        return (isinstance(mode, ast.Constant) and isinstance(mode.value, str)
+                and any(flag in mode.value for flag in 'wax+'))
+
+    sites = Counter()
+    root = Path(root)
+    for top in ('joulewise', 'scripts'):
+        for path in sorted((root / top).rglob('*.py')):
+            tree = ast.parse(path.read_text())
+            module_names = {}
+            if learn_module:
+                learn([node for node in tree.body if isinstance(node, (ast.Assign, ast.AnnAssign))],
+                      module_names)
+            scopes = [('<module>', list(own_nodes(tree)))]
+            scopes.extend((name, list(own_nodes(node))) for name, node in functions(tree))
+            for name, nodes in scopes:
+                names = {key: set(value) for key, value in module_names.items()}
+                learn(nodes, names)
+                for node in nodes:
+                    if isinstance(node, ast.Call) and is_write(node):
+                        for target in reached(node, names):
+                            sites[(path.relative_to(root).as_posix(), name,
+                                   call_name(node), target)] += 1
+    return sites
+
+
+class WriteSiteInventoryTests(unittest.TestCase):
+    EXPECTED = Counter({
+        ('joulewise/quiet_predicate_campaign.py', 'record_attestation',
+         'write_text', 'session.json'): 1,
+        ('joulewise/quiet_predicate_campaign.py', 'record_attestation',
+         'replace', 'session.json'): 1,
+        ('joulewise/quiet_predicate_campaign.py', 'record_attestation',
+         'unlink', 'session.json'): 1,
+        ('scripts/sample_quiet_predicate_evidence.py', 'collect',
+         'write_json', 'session.json'): 3,
+        ('scripts/sample_quiet_predicate_evidence.py', 'collect',
+         'write_text', 'rounds.jsonl'): 1,
+        ('scripts/sample_quiet_predicate_evidence.py', 'collect',
+         'open', 'rounds.jsonl'): 1,
+        ('scripts/sample_quiet_predicate_evidence.py', 'collect',
+         'atomic_write_text', 'rounds.jsonl'): 1,
+    })
+
+    def copy_writers(self, root):
+        for relative in ('joulewise/quiet_predicate_campaign.py',
+                         'scripts/sample_quiet_predicate_evidence.py'):
+            target = Path(root) / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT / relative).read_bytes())
+        return Path(root) / 'scripts/sample_quiet_predicate_evidence.py'
+
+    def test_r45_1_repository_has_exactly_nine_write_sites(self):
+        self.assertEqual(write_site_inventory(ROOT), self.EXPECTED)
+        self.assertEqual(sum(self.EXPECTED.values()), 9)
+
+    def test_r45_2_new_session_writer_is_listed(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            collector = self.copy_writers(tmp)
+            collector.write_text(collector.read_text() +
+                '\ndef rollback_session(out, body):\n'
+                '    (out / "session.json").write_text(body)\n')
+            expected = self.EXPECTED.copy()
+            expected[('scripts/sample_quiet_predicate_evidence.py', 'rollback_session',
+                      'write_text', 'session.json')] = 1
+            self.assertEqual(write_site_inventory(tmp), expected)
+
+    def test_r45_3_rollback_inside_collect_recounts_site(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            collector = self.copy_writers(tmp)
+            source = collector.read_text()
+            marker = '    write_json(out / "session.json", session)\n    return session, rows\n'
+            self.assertEqual(source.count(marker), 1)
+            collector.write_text(source.replace(marker,
+                '    write_json(out / "session.json", session)\n'
+                '    write_json(out / "session.json", first_record)\n'
+                '    return session, rows\n'))
+            expected = self.EXPECTED.copy()
+            expected[('scripts/sample_quiet_predicate_evidence.py', 'collect',
+                      'write_json', 'session.json')] = 4
+            self.assertEqual(write_site_inventory(tmp), expected)
+
+    def test_r45_4_module_constant_reaches_new_writer(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            collector = self.copy_writers(tmp)
+            collector.write_text(collector.read_text() +
+                '\nSESSION_NAME = "session.json"\n'
+                'def restore_session(out, body):\n'
+                '    (out / SESSION_NAME).write_text(body)\n')
+            expected = self.EXPECTED.copy()
+            expected[('scripts/sample_quiet_predicate_evidence.py', 'restore_session',
+                      'write_text', 'session.json')] = 1
+            self.assertEqual(write_site_inventory(tmp), expected)
+
+
 class BatteryFloatSummaryTests(unittest.TestCase):
     """Ruled T6 counterfactuals through the real pilot_summary call site."""
 
@@ -4233,6 +4436,122 @@ class BatteryFloatSummaryTests(unittest.TestCase):
                 with self.assertRaisesRegex(battery_float.CustodyFailure,
                                             'envelope-05: session.json changed during authentication'):
                     self.summarize(evidence, entries)
+            self.assertFalse((evidence / 'summary.json').exists())
+
+    def test_r44_pilot_detects_appended_and_deleted_journal(self):
+        real = battery_float.authenticate_quiet_session
+        for change in ('append', 'delete'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+                evidence, entries = self.night(Path(tmp))
+                def mutate(out):
+                    verdict = real(out)
+                    if out.name == 'envelope-05':
+                        journal = out / 'rounds.jsonl'
+                        if change == 'append':
+                            with journal.open('a') as stream:
+                                stream.write('{}\n')
+                        else:
+                            journal.unlink()
+                    return verdict
+                with patch.object(battery_float, 'authenticate_quiet_session', side_effect=mutate):
+                    with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                                r'rounds\.jsonl changed during authentication'):
+                        self.summarize(evidence, entries)
+                self.assertFalse((evidence / 'summary.json').exists())
+
+    def test_r44_pilot_detects_session_repair_before_authentication(self):
+        real = battery_float.authenticate_quiet_session
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            path = evidence / 'envelope-05/session.json'
+            passing = path.read_bytes()
+            session = json.loads(passing)
+            session['battery_float']['pre']['exit_code'] = 2
+            path.write_text(json.dumps(session))
+            def repair(out):
+                if out.name == 'envelope-05':
+                    path.write_bytes(passing)
+                verdict = real(out)
+                if out.name == 'envelope-05':
+                    self.assertEqual(verdict.status, 'pass')
+                return verdict
+            with patch.object(battery_float, 'authenticate_quiet_session', side_effect=repair):
+                with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                            r'session\.json changed during authentication'):
+                    self.summarize(evidence, entries)
+            self.assertFalse((evidence / 'summary.json').exists())
+
+    def test_r44_pilot_opens_each_routing_file_twice(self):
+        real_authenticate = battery_float.authenticate_quiet_session
+        real_open = Path.open
+        authenticating = False
+        reads = []
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            def authenticate(out):
+                nonlocal authenticating
+                authenticating = True
+                try:
+                    return real_authenticate(out)
+                finally:
+                    authenticating = False
+            def opened(path, *args, **kwargs):
+                if not authenticating and path.name in ('session.json', 'rounds.jsonl'):
+                    reads.append((path.parent.name, path.name))
+                return real_open(path, *args, **kwargs)
+            with patch.object(battery_float, 'authenticate_quiet_session', side_effect=authenticate), \
+                 patch.object(Path, 'open', opened):
+                self.summarize(evidence, entries)
+            for index in range(1, 13):
+                for name in ('session.json', 'rounds.jsonl'):
+                    self.assertEqual(reads.count((f'envelope-{index:02d}', name)), 2)
+
+    def test_r46_failed_refusal_session_write_is_no_record_collect_error(self):
+        from scripts import sample_quiet_predicate_evidence as harness
+        from tests.test_sample_quiet_predicate_evidence import FakeClock, collect_args, fake_round
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            out = evidence / 'envelope-05'
+            shutil.rmtree(out)
+            real_write = harness.write_json
+            def fail_session(path, value):
+                if Path(path).name == 'session.json':
+                    raise OSError('session write failed')
+                return real_write(path, value)
+            with patch.dict(os.environ, {harness.NETWORK_TIME_RECORD_ENV: '/absent'}), \
+                 patch.object(harness, 'write_json', side_effect=fail_session):
+                with self.assertRaisesRegex(OSError, 'session write failed'):
+                    harness.collect(collect_args(out), clock=FakeClock(), round_runner=fake_round,
+                                    metadata_reader=lambda: {'os_build': '25G83'},
+                                    battery_runner=lambda argv: subprocess.CompletedProcess(argv, 0,
+                                                                                               battery_raw(), b''))
+            self.assertFalse((out / 'session.json').exists())
+            self.assertFalse((out / 'rounds.jsonl').exists())
+            entries[4]['collector_exit'] = 3
+            report = self.summarize(evidence, entries)
+            self.assertTrue({'collect_error', 'incomplete_interior_support'}
+                            <= set(report['envelopes'][4]['excluded']))
+            self.assertTrue((evidence / 'summary.json').exists())
+
+    def test_r46_refusal_session_without_journal_is_custody(self):
+        from scripts import sample_quiet_predicate_evidence as harness
+        from tests.test_sample_quiet_predicate_evidence import FakeClock, collect_args, fake_round
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            out = evidence / 'envelope-05'
+            shutil.rmtree(out)
+            with patch.dict(os.environ, {harness.NETWORK_TIME_RECORD_ENV: '/absent'}):
+                session, rows = harness.collect(
+                    collect_args(out), clock=FakeClock(), round_runner=fake_round,
+                    metadata_reader=lambda: {'os_build': '25G83'},
+                    battery_runner=lambda argv: subprocess.CompletedProcess(argv, 0,
+                                                                               battery_raw(), b''))
+            self.assertEqual(session['error_class'], battery_float.QUIET_REFUSAL_ERROR_CLASS)
+            self.assertEqual(rows, [])
+            (out / 'rounds.jsonl').unlink()
+            entries[4]['collector_exit'] = 3
+            with self.assertRaisesRegex(battery_float.CustodyFailure, 'round journal missing'):
+                self.summarize(evidence, entries)
             self.assertFalse((evidence / 'summary.json').exists())
 
     def test_missing_historical_journal_is_custody_with_accurate_message(self):
