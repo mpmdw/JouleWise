@@ -5,3 +5,4 @@
 3. **Launch email** accepted: Gmail `1a0e3701b592319a`. `notice.ack` written.
 4. **Slice decision:** bookkeeping only, as in d881cd7b item 3. The S1 mutant REDs and V1/V2 checks are CPU-heavy and stay deferred past W2. No Codex seat, no `claude -p` judge and no background job were started.
 5. **Exit** (≈08:22). Canonical `670756f3` was not moved. **Next exact action:** unchanged. Follow the RUN_STATE top block: harvest W2 after 11:35 by runbook §2.2a with the manual `probe_error`/`passed` cross-check; then S1 per ruling §7 steps 2–3, one refuter pass, and the merge gate.
+6. **Exit email** accepted: Gmail `1a0e370a2d7ff70b` (thread `1a0e3701b592319a`).
