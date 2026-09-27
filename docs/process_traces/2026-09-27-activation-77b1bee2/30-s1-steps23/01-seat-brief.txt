@@ -1,5 +1,6 @@
 ROLE: execution seat for BFG-S stream S1, cold ruling S1-R72-2-ERRATUM-01 §7 steps 2 and 3 (verification only).
-WRITE_SCOPE: [] — edit NO tracked file. Scratch only under /tmp/s1-steps23-77b1bee2/. Commit nothing.
+WRITE_SCOPE: []
+Edit NO tracked file. Scratch only under /tmp/s1-steps23-77b1bee2/. Commit nothing.
 Bridge depth is one hop: do not call Claude by any route. No git fetch/pull/checkout/reset in any checkout.
 
 WORKING TREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96, branch feat/2026-09-26-bfgs-s1-bundles at 204424e6 (step 1, the dictated R72-2 block, is already applied there by the lead as commit 204424e6). Confirm HEAD = 204424e6 and `git status --porcelain` empty before and after.
