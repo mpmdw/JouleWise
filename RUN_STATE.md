@@ -10,7 +10,7 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATIONS e6f06c96 + 92472459 — 15:48 → ≈22:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; 92472459 exits so a fresh supervisor can arm W1):** e6f06c96 exited on usage at 16:11 ([record](docs/process_traces/2026-09-26-activation-e6f06c96/00-activation-record.md)). 92472459's [record 00](docs/process_traces/2026-09-26-activation-92472459/00-activation-record.md), items 1–33, is the full account.
+**▶▶ ACTIVATIONS e6f06c96 + 92472459 — 15:48 → ≈22:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; 92472459 exits so a fresh supervisor can arm W1):** e6f06c96 exited on usage at 16:11 ([record](docs/process_traces/2026-09-26-activation-e6f06c96/00-activation-record.md)). 92472459's [record 00](docs/process_traces/2026-09-26-activation-92472459/00-activation-record.md), items 1–35, is the full account.
 
 **MERGED:**
 - #430, the bookkeeping PR for 8e43cfa7, 6bec2aa6 and f8d6cab1 (light tier) → `97a48451`.
@@ -24,7 +24,7 @@ file instead.
 - BFGS-S1-SCOPE-01 plus erratum (amendments 36–43; the historical set grows to 69 = 13 fixtures + 50 floor-file bundles + 6 RPT001 tree digests).
 - BFGS-SAMESIG-01 plus erratum (amendments 44–48; a rule-11 same-signature consult).
 - BFGS-S1-R2-01 plus erratum (amendments 49–56).
-- BFGS-S1-SWEEPCLASS-01 (amendments 57–59; its refuter's section B may be missing if the activation exited first; check the file).
+- BFGS-S1-SWEEPCLASS-01 (amendments 57–59). Its paired refuter found no BLOCKER but five SHOULD-FIXes (RSW-1..5); **the erratum is not yet convened.**
 
 **BFG-S S1** is on `feat/2026-09-26-bfgs-s1-bundles` @ `315364b2` (fix round 3 partial `cbfa9dc3` + main `97082508` merged; the sweep line is `set(PHASES)`). Amendments 36–50 and 52–56 are implemented. **Amendment 51 (the read sweep) is not yet done**; amendments 57–59 now unblock it.
 
@@ -34,7 +34,7 @@ file instead.
    - A fresh battery pair.
    - `__PREREG__` = `81b65f08…ddf1`.
    - Get a cold Fable pass on the staged plan, email Ed, arm, and exit by the request deadline.
-2. After the window: **S1 fix round 3 resume.** Implement amendment 51 as amended by 57–59 (`20-bfgs-s1/90-coldgate-sweep/21-coldgate-fable-ruling.md` §7 and §11). Also apply the §9 N-1 comment fix in `tests/test_battery_float_consumers.py`, which is authorized. Then: delta lenses (contract lens checks every allowlist row, per the S1-R2 erratum §14 step 2) → round F (amendment 38 plus magistrate-named test paths; V3 had A 146 / B 362) → the supply-map receipt → full gate → PR.
+2. After the window: first convene the **SWEEPCLASS erratum cold gate** on RSW-1..RSW-9 (packet: `20-bfgs-s1/90-coldgate-sweep/`, where `11-opus-contract-refuter.md` holds sections A and B; the judge's worktree is detached @ `cbfa9dc3`). Then the **S1 fix round 3 resume.** Implement amendment 51 as amended by 57–59 (`20-bfgs-s1/90-coldgate-sweep/21-coldgate-fable-ruling.md` §7 and §11). Also apply the §9 N-1 comment fix in `tests/test_battery_float_consumers.py`, which is authorized. Then: delta lenses (contract lens checks every allowlist row, per the S1-R2 erratum §14 step 2) → round F (amendment 38 plus magistrate-named test paths; V3 had A 146 / B 362) → the supply-map receipt → full gate → PR.
 3. **Lanes registered this block:**
    - BFGS-MANIFEST-CUSTODY-01 (`analysis_manifest_v3.py` converts gate exceptions; must close before any analysis manifest is finalized over a post-S1 bundle).
    - BFGS-S2-FOLLOWUPS-01 (three final-pass NITs).

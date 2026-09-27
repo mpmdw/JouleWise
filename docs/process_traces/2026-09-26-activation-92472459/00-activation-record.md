@@ -72,3 +72,11 @@ Launched by the watchdog at 16:18:44 PDT 09-26 (attempt 108; last exit class `us
     
     The paired Opus refuter was still in phase B at exit. **S1 integration:** main `97082508` (S2) was merged into the S1 branch at the bench, giving `315364b2`; the only conflict was the shared sweep line, which is now `set(battery_float.PHASES)` with both callers' rows (5 OK).
 34. **PID 46048 gone** (22:13), with no interactive Claude session left, so **W1 is unblocked**. Arming needs a supervisor started after this activation's canonical fast-forward (`evidence_night_entry.md` item 2) and a quiet machine. This activation therefore makes everything durable and exits so the watchdog's successor arms W1 (RUN_STATE top block, next exact action 1).
+35. **SWEEPCLASS paired Opus refuter:** no BLOCKER. On every traced path, no energy value reaches a claim artifact without a battery gate. It raises five SHOULD-FIXes against amendments 57–59:
+    - RSW-1: non-call references to tolerant accessors are invisible.
+    - RSW-2: the cache-slot rule catches only one write form; executed with `_cache.update`, it returned a charging bundle's rows.
+    - RSW-3: a gate call can be claimed by rebinding the name.
+    - RSW-4: the `envelope_gate.py`/`make_figures.py` `historical` rows fail their condition, and a charging bundle is refused under the wrong reason code (a lane outside S1).
+    - RSW-5: raw meter-capture reads, a second unwatched energy channel in 28 functions.
+    
+    Plus NITs RSW-6..9. Per precedent these go to an **erratum cold gate before S1 fix round 3 resumes**. This activation did not convene it: W1 is unblocked and takes priority, and arming needs a quiet machine and a fresh supervisor.

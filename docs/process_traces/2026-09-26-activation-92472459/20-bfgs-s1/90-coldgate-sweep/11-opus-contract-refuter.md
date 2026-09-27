@@ -97,3 +97,121 @@ Seat: Opus 5.5, contract lens. Code: detached worktree `/Users/edr/code/JouleWis
 - The (ii) reader search for `report.py`'s HTML output and `corpus_compat_receipt.py`'s receipt.
 - `analyze_envelope_gate` on a refused suite bundle (no suite fixture was at hand); the gating claim rests on code reading (A7).
 - A full re-classification of the 120 rows; the prototype with amendment 51's (b) 3 and (d) 2–5.
+
+---
+
+## Section B: refutation of `21-coldgate-fable-ruling.md` (read at 22:16 PDT, after Section A was written)
+
+### B.0 Where the ruling and Section A agree (independent convergence)
+
+These points were reached independently, before I read the ruling:
+- `raw_summary` is not one of text 8's four; it is tolerant by ruled text; do not gate it.
+- The seat's third row is the accessor's **definition**, inventoried at its callers by (b) 1. The ruling's `tolerant_definition` matches my "body is exactly `return self._tolerant_json(<const>)`" check.
+- The gates need a closed class, checked by structure. `authenticate_window_members` is a third gate-body row the seat did not list.
+- (d) 2 must accept `return`: `reduce.py:2651`. `derive_idle_mean_uncertainty` is mis-classed; it is `behind_gate` through `reduce_bundle`.
+- The stage journal (`events()`, `idle_baseline.power_w_mean`) is an unwatched energy channel.
+
+I confirm the ruling's X1 count (120 rows / 89 functions) and its X12/X15 facts from my own runs (A1, and `git status` empty).
+
+### B.1 Executed evidence (new in Section B; `/tmp/oc_sw92/`, SHA-256 prefix)
+
+| Id | Probe | Result (exact) |
+|---|---|---|
+| B1 | `alias.py` (`6cb3252d585493c4`): the judge's own detector `/tmp/cg_sweep/sweep59.py`, `S.sweep("joulewise/zz_new.py", src, {})`, on four sources | `A1 bound-method alias -> silent` (`get = BundleReader(b).raw_summary; return get()["gross_energy_j"]`); `A2 getattr by string -> silent`; `A3 map over readers -> silent` (`map(BundleReader.raw_summary, …)`); `A4 direct call (control) -> REPORTED` |
+| B2 | an AST scan of tracked `joulewise/`, `scripts/`: every attribute named `raw_metadata`/`raw_config`/`raw_summary`/`raw_artifact_bytes` that is not a callee, and every string constant equal to one | `non-call attribute refs 17 string refs 0`; all 17 are `raw_config` (dataclass fields in `analysis_engine/inputs.py`, `scripts/mint_floor_artifact.py`); **zero** for `raw_summary`, `raw_metadata`, `raw_artifact_bytes` |
+| B3 | `cache_probe.py` (`bc7042a2a202fa38`): the judge's charging bundle (`reader_probe_lib.build(charging=True)`); `r._cache.update(metadata=r.raw_metadata())`; then `r.trace_rows()` | `trace_rows after _cache.update on a CHARGING bundle: RETURNED 2 rows; sentinel True` |
+| B4 | AST scan for writes to `_cache` in tracked `joulewise/`, `scripts/`; `grep '\._cache\b'` outside `bundle_read.py` | only `ASSIGN joulewise/bundle_read.py 420 self._cache` (`__init__`); no `update`/`setdefault`/`pop`/`clear` call on `_cache`; no `._cache` outside `bundle_read.py` |
+| B5 | `rebind.py` (`cf36ebbb20fafb88`), the judge's `sweep59.py` | `R1 import then module-level rebind -> silent` (`from joulewise.bundle_read import authenticate_window_members` / `authenticate_window_members = lambda members: {}` / gate call / read); `R2 import then local def of same name -> silent`; `R3 … raw_summary on reader rebound from a param -> REPORTED` |
+| B6 | AST scan: any binding of the names `authenticate_window_members` or `BundleReader` in tracked `joulewise/`, `scripts/` other than `from joulewise.bundle_read import <name>` (and the one definition in `bundle_read.py`) | none (`done`, no line) |
+| B7 | `envelope_probe.py` (`d60ee9f109d11b99`): the judge's charging bundle, `BundleReader.suite_manifest` stubbed so `_manifest_record` is reached, `analyze_envelope_gate([b], lambda p: [])` | `tree: bundle_refused ['suite_manifest_missing'] battery_float_confounded: pre IsCharging is not No; …  \| energy key present: False`. So the battery gate is reached **only** through the callee `_manifest_record` (`envelope_gate.py:233`, the one `metadata()` call in the file), and the verdict reports it under the wrong reason code. The counterfactual (callee without `metadata()`) crashed on my stub (`config` is `None`): NOT EXECUTED. |
+| B8 | `grep -rn 'envelope_gate.v1\|level_window_gross_energies_j\|envelope-gate'` over `joulewise scripts docs/paper configs analysis`; `grep extract_rows` | only `envelope_gate.py`, `cli.py`, and a comment hit in `reduce.py` (no reader of the verdict JSON); `extract_rows` is called only by `tests/test_rpt001_report_slice.py:269` |
+| B9 | `journal58e.py` (`ae1fa9d48361837a`) / `journal58e_eq.py` (`8fb822ce1978926e`): amendment 58 (e)'s screen over **every** function of tracked `joulewise/`, `scripts/`, with "holds the constant `events.jsonl`" read as *contains* and as *equals or ends in `/events.jsonl`* | contains: `count 5`, the four of X14 **plus `joulewise/reduce.py::_reduce`** (it holds `"no measured_run window in events.jsonl "`); equals: `count 4`, exactly X14's |
+| B10 | AST scan for functions (outside `joulewise/adapters/`) that hold a string constant matching `^(raw/)?(powermetrics(_idle)?\.plist\|nvidia_smi[^ ]*\.csv)$` | `functions 28`. Among them are `window_duration_margins.py::_observe_member` (a consumer; called after the window gate at `:950`), `floor_reconciliation_receipt.py::_anchored_records` (called after `reader.metadata()` `:103`), `paper_anchor_correction_quantified.py::analyse_capture`, `paper_excursion_decomposition.py::rederive`/`build_payload`, and `check_paper_replay_fence.py::derive_from_artifacts` (digest-pinned timing re-derivations for the paper). **None is visible to the sweep.** |
+| B11 | `joulewise/controller.py:2030-2068`: the keys written to `outputs/requests.jsonl` | `acceptance_rate batch_group_id failure_reason output_policy_name output_token_count request_id request_input_id request_ordinal requested_output_tokens response_text stop_reason target_emitted_count terminal_status tokens_accepted tokens_proposed`: no energy-class key (resolves the ruling's §9 NOT EXECUTED item for `request_rows`) |
+| B12 | `git status --short` in the working tree after every probe | `0` lines |
+
+### B.2 Findings
+
+**No BLOCKER.** I found no energy value that reaches a claim artifact without a battery gate at `cbfa9dc3` on any path I traced (Section A.3 and B7, B10). Every finding below is a hole in the **self-verification** the charge asked for, or a row the seat will be forced to return again. Each closure is GREEN on the tree today (B2, B4, B6), so it costs nothing to land now.
+
+#### RSW-1 (SHOULD-FIX). 57 (d)'s premise is false: a tolerant accessor used without a call expression is not a read site
+
+The ruling justifies `tolerant_definition` with this sentence (§4.4): "membership of that constant is exactly what causes every call to be reported". But (b) 1 matches only a **call whose callee is an attribute** with that name. A bound-method alias, a `getattr` by string, or a `map(BundleReader.raw_summary, …)` returns a charging bundle's energy, and the ruled detector reports nothing (B1: A1–A3 silent, A4 reported). So a new ungated energy read can be added and nothing fails. The tree has zero such references for the three energy-bearing names (B2), so the closure is free.
+
+**Replacement text.** Append to amendment 57 (d):
+
+> 5. Amendment 51 (b) 1 is extended: a read site is also **any reference to the name `raw_summary`, `raw_metadata` or `raw_artifact_bytes` that is not the callee of a call**: an attribute of that name on any expression, or a string constant equal to it. It is reported as operation `ref:<name>`, watched name `-`. (`raw_config` is excluded: 17 tracked references are dataclass fields of that name, and `config.json` holds no energy-class value.)
+
+**Test row.** R57-10: sources A1, A2, A3 of B1 → each reported as `ref:raw_summary`. Counterfactual: (b) 1 as ruled (executed silent on the judge's `sweep59.py`, B1).
+
+#### RSW-2 (SHOULD-FIX). 57 (b) 4 guards the gate's cache slot against one write form only
+
+Rule 4 looks only for an assignment whose target is `<expr>._cache["metadata"]`. `r._cache.update(metadata=r.raw_metadata())` fills the same slot. After it, `trace_rows()` returns a charging bundle's power rows (B3). The gated energy accessors trust that slot, because `self.metadata()` returns it without re-checking. R57-6 tests only the subscript form. On the tree, `_cache` is named only in `bundle_read.py`, and is written only by `__init__` and by subscript assignments (B4).
+
+**Replacement text** for 57 (b) 4:
+
+> 4. **The cache slot.** The attribute name `_cache` occurs in no tracked file under `joulewise/` or `scripts/` other than `joulewise/bundle_read.py`. Inside that file, `_cache` is written only by the assignment `self._cache = {}` in `BundleReader.__init__` and by assignments to a subscript of `self._cache`. No method of `self._cache` other than `get` is called. An assignment whose target is `self._cache["metadata"]` occurs in `BundleReader.metadata` and in no other function.
+
+**Test row.** R57-6b: a function in `joulewise/zz_new.py` with `r = BundleReader(b); r._cache.update(metadata=r.raw_metadata()); return r.trace_rows()` → fails, naming the file and the call. Counterfactual: rule 4 as ruled (it has no subscript target to find). Behaviour companion, executed: B3.
+
+#### RSW-3 (SHOULD-FIX). A gate **call** can still be claimed by name alone
+
+The charge asks that no new function claim the gate by name. 57 (b) 1 blocks a second *definition* of the gate. But it asserts "not assigned at the module's top level" **only for `joulewise/bundle_read.py`**. In any other module, 51 (c) accepts `authenticate_window_members(...)` as the window gate if the module imports the name, even when the module then rebinds it. With a module-level rebinding (R1) or a local `def` of the same name (R2), the read after the call is silent (B5). No tracked module binds either name other than by importing it (B6).
+
+**Replacement text.** Append to 57 (b) 1:
+
+> … and that in every tracked file under `joulewise/` and `scripts/`, the names `authenticate_window_members` and `BundleReader` are bound only by `from joulewise.bundle_read import <name>` without `as`, or by their one definition in `joulewise/bundle_read.py`. No assignment, `def`, `class`, parameter, `for`/`with`/`except` target, comprehension target, or other import may bind either name.
+
+**Test row.** R57-11: sources R1 and R2 of B5 → the sweep fails, naming the binding. Counterfactual: 51 (c) as ruled (executed silent, B5).
+
+#### RSW-4 (SHOULD-FIX). Two row groups keep a class whose condition is false, so the seat must return them
+
+The ruling leaves the eight `historical` rows of 51 (g) 4 to "the seat's and the refuter's" check (§5.2), and it states "No further site needs a new class" (§6). The condition of `historical` is that the function "cannot be pointed at a later bundle". That is false for two files:
+- `envelope_gate.py::analyze_envelope_gate` and `::_level_window_energy_records` (`raw_summary`). The command takes any `bundle_dirs` (A7). The rows emit `level_window_gross_energies_j`. They are safe only because the callee `_manifest_record` calls `reader.metadata()` on every reader. The sweep cannot see that, and no `behind_gate` form describes a gate in a callee. Executed: a charging bundle yields `bundle_refused`. The verdict reports the refusal as **`suite_manifest_missing`** (B7).
+- `make_figures.py` (`gate_inputs`, `extract_rows` ×3, `realized_output_tokens`). `--input-manifest` and `--bootstrap-input-manifest` re-point the corpus. The outputs are void placeholders, and `extract_rows` has no production caller (A8, B8).
+
+Under 58 (d), the envelope rows (which return energy) may carry only `behind_gate`, `historical`, or `non_claim` (ii). Only (ii) is true. I found no reader of the verdict JSON (B8).
+
+**Replacement text.** A new paragraph in §6 and 51 (g) 4:
+
+> 51 (g) 4 is amended. The two `joulewise/envelope_gate.py` rows carry `non_claim` (ii). Their reason is: "writes the envelope-gate verdict (`envelope_gate.v1`), returned only to `joulewise/cli.py::_cmd_envelope_gate`, which writes `--output` or stdout; no tracked file reads it. Every reader passes `reader.metadata()` in `_manifest_record` first (a callee; the sweep cannot check it, see (h))." `scripts/make_figures.py::gate_inputs` carries `non_claim` (i), field read `status`. `extract_rows` (three rows) and `realized_output_tokens` carry `non_claim` (ii): no production caller, and `main` writes void placeholders. `historical` stays on the rows whose corpus is pinned by committed code. The refuter re-checks each of those against the condition. 51 (h) gains: "**A gate in a callee.** A gate call inside a function that the row's function calls first is not seen."
+
+**Lane (outside S1's WRITE_SCOPE).** `envelope_gate` reports a battery refusal under `suite_manifest_missing` (B7). It should name the battery status.
+
+#### RSW-5 (SHOULD-FIX). The raw meter capture is a second unwatched energy channel, and (h) does not name it
+
+58 (e) names the stage journal. It does not name path reads of `raw/powermetrics.plist`, `raw/powermetrics_idle.plist` or `nvidia_smi` captures. Those files hold `cpu_energy`, `combined_power` and similar keys (A3). Twenty-eight functions name them (B10), including one consumer and three scripts that re-derive paper numbers. Each one I read is gated by its caller, is digest-pinned, or derives timing only. But the sweep sees none of them. So text 8's sentence "every byte-level re-derivation passes the gate" holds only for re-derivation through the reader. 58 (a) says this for the tolerant accessors and not for path reads.
+
+**Replacement text.** A new 58 (f):
+
+> (f) **The meter's raw capture.** Amendment 51 (h) gains: "**A read of the meter's raw capture by path.** `raw/powermetrics.plist`, `raw/powermetrics_idle.plist` and `nvidia_smi` captures are not watched files, and they hold energy-class values." The sweep holds the constant `RAW_CAPTURE_READERS`: the set of `path::qualified function` for every function in a tracked file under `joulewise/` (excluding `joulewise/adapters/`) or `scripts/` that holds a string constant matching `^(raw/)?(powermetrics(_idle)?\.plist|nvidia_smi[^ ]*\.csv)$`. The computed set must equal the constant (28 at `cbfa9dc3`). The refuter states, for each new member, whether its energy-class content reaches a claim artifact ungated.
+
+**Test row.** R58-7: a function added to `joulewise/aggregate.py` that reads `(p / "raw" / "powermetrics.plist").read_bytes()` → the sweep fails. Counterfactual: no such constant.
+
+#### RSW-6 (NIT). 58 (e)'s screen is ambiguous by one function
+
+"holds the constant `events.jsonl`" gives X14's four when read as equality, and five when read as containment (it adds `reduce.py::_reduce` through a message string) (B9). **Replacement:** "holds a string constant equal to `events.jsonl` or ending in `/events.jsonl` (the form of a watched constant in 51 (a))".
+
+#### RSW-7 (NIT). 58 (b) files `events` as `other`, against its own last sentence
+
+§5.1 and 58 (e) say `events` returns an energy-class value (`power_w_mean`). 58 (b)'s last sentence says that giving such a method `other` "is a finding". **Replacement:** add the kind `journal`, with the name `events`, and the assertion: "the one public method that parses `events.jsonl`; its energy-class content is governed by 58 (e)". Remove `events` from `other`.
+
+#### RSW-8 (NIT, resolves a NOT EXECUTED item). `request_rows` and `request_token_rows` hold no energy-class key
+
+B11 lists the keys the controller writes. `other` is correct for them. No text change.
+
+#### RSW-9 (NIT, no text change). 59 (a) still counts a handler ending in an always-raising helper as a branch
+
+`window_duration_margins.py:944`'s handlers end in `_refuse(...)`, and `_refuse` always raises (`:134`). X3 shows no watched read after that `try`, so no row arises today. If one arises, the seat classes it or returns it. It does not widen the rule by name.
+
+### B.3 Answers to the three refutation questions
+
+- **Wrong or incomplete?** The rulings on Q1 and Q2 are right in substance and agree with Section A. The ruling is incomplete in RSW-1 to RSW-5.
+- **Could a new function claim the new class by name alone?** `gate_body`: no. Rules (b) 1, 2 and 6 hold, and I found no way around them. `tolerant_definition`: no, but the protection behind it (every use is a read site) fails for non-call uses (RSW-1). The gate **call** can still be claimed by name after a rebinding (RSW-3), and the gate's **cache slot** can be filled without the gate (RSW-2).
+- **Does an ungated energy read survive?** Not one that reaches a claim artifact on any path I traced at `cbfa9dc3`. Latent paths that the sweep cannot see do survive: RSW-1, RSW-2, RSW-3 and RSW-5. Each closure is GREEN on the tree (B2, B4, B6, B10).
+
+### B.4 Not executed in Section B
+
+- The `envelope_gate` counterfactual (B7; my stub could not go past `config`).
+- A full re-read of the 28 raw-capture functions of B10: I read six.
+- The R57-10, R57-11, R57-6b and R58-7 rows as mutations of the repository's sweep: they were run against the judge's prototype (B1, B5) or as behaviour (B3) only.
