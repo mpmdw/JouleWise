@@ -165,3 +165,12 @@
       - Three cuts ran and all went RED.
       - The Sol F1 class is closed (rule 11: no same signature).
     - **Cold gate CUSTODY-REPAIR-FINAL-01** (Fable, [charge](50-custody-outside-repo/70-coldgate-final-diff-charge.md)) was convened on `f783a3fd`. It serves as gate row 7 and as statement item 6(c).
+30. **Cold gate CUSTODY-REPAIR-FINAL-01** (Fable 5.1, ≈13:45–14:00; [ruling](50-custody-outside-repo/71-coldgate-final-diff-ruling.md)): **VERDICT: MERGE; ITEM 6(c): TOOL REPAIR.**
+    - **Evidence:** the judge re-ran 270 tests, ran R8 24/24 on the real paths, and tried 47 hostile inputs; nothing broke. The lead's F1 exact-shape ruling is within design C. The prepare argument is fixed as `--corpus-root /Users/edr/night-custody`, with `--repo-root` omitted.
+    - **Conditions before the prepare step** (none blocks the merge):
+      - **S1:** the default `--predecessor-acceptance` is an absolute path, and it would be stored in `derivation_notes.predecessor.relative_path` (base behaviour; R4 says no absolute path is stored). This needs a value-blind ruling now. The judge recommends that the owner permit passing the relative r7 path.
+      - **S2:** lane ISSUANCE-ARCHIVE-PACKET-01 must key the archive layout on **session id**, not plan id, because W1 and W2 share one plan id.
+      - **S3:** the R7/R9 disclosures go into the PR and the prepare record.
+      - **S4:** the run checkout is still at `722f7bd1`. Advance it after the merge and recheck the item 2(d) digests.
+    - The ruling's §8 lists 11 value-blind prepare checks.
+    - **Row 9** is running on `f783a3fd`, which contains main `b69c39eb`.
