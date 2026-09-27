@@ -1,0 +1,16 @@
+ROLE: review lens on the custody repair (lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01, JouleWise), full tier. Read-only, non-author.
+WRITE_SCOPE: []
+Write nothing in any repository; scratch only under /tmp/corpus-lens-<seat>-77b1bee2/. No git fetch/pull/checkout/commit. No subagents; do not call other models.
+OUTCOME-BLIND (binding): open no epoch 25G83 W1/W2 measured value (no B / b_fiducial_s, ledger value fields, manifest/instrument_evidence contents under /Users/edr/night-custody). Path strings, attempt/session ids and file existence only.
+
+CANDIDATE: /Users/edr/code/JouleWise-wt-corpus-lens-77b1bee2, detached at c84b1dc2 (branch fix/2026-09-27-issuer-corpus-root = seat commit cc8346c2 merged with main b69c39eb). Diff under review: `git diff b69c39eb c84b1dc2` (issuer, fixture builder, new tests/test_issuer_corpus_root.py).
+
+CONTRACT (read): /Users/edr/code/JouleWise-wt-bk-77b1bee2/docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md (design C + rulings 1–5), 14-fable-consult.md §5, and constraints R1–R9 in item 6(d) of ../60-prepare-record/00-refusal-branch-final-statement.md. Seat report: /tmp/corpus-root-impl-77b1bee2/report.md.
+
+CHECK and answer with executed evidence (use /opt/homebrew/bin/python3; never .venv):
+1. Does the diff implement design C exactly — sites 1–7, rulings 1–4 (flag name --corpus-root; member_custody fixed text with no absolute path; guard F2: --corpus-root reaches ONLY the naming function, ledger/pin/battery/git stay on --repo-root; Astra hardening: raw-string canonical checks before normalization, no-follow containment of directories AND primary files, path checks before any member-value parse, missing file refuses whole run)? Anything beyond scope (R7 smallest change)?
+2. Is _repo_relative_custody byte-identical to base and is behaviour without --corpus-root byte-identical (existing tests unchanged)? Any way the flag's absence/presence changes derivation inputs (derivation_input_sha256) or member selection/order?
+3. Could any code path let a member be dropped or a root be chosen based on data (R1/R5)? Could a relative/`..`/absolute/symlink path or a different session's directory be admitted? Try to break the naming function and verify-members with adversarial synthetic inputs of your own (not the seat's).
+4. Re-run the R8 value-blind probe yourself on the 24 real locators (project only custody_locator, attempt_id, session_id from /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/runs/calibration_observation_ledger.jsonl) with the candidate's naming function: 24 accepted; wrong roots refuse.
+5. Tests: are the new tests defect-shaped (RED on base code)? Name any missing refusal case.
+Tier findings BLOCKER / SHOULD-FIX / NIT with file:line. Final line: `LENS: PASS` or `LENS: FAIL`.
