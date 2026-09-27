@@ -30,7 +30,8 @@ FACTORY_ALLOWLIST = {"joulewise/bundle_read.py": "text 8 reader states"}
 REPLACE_REASON = "predates PairVerdict (64e39bb9); cannot receive a PairVerdict"
 # (repo-relative path, enclosing function qualname, ast.unparse(call)).
 # The replaced values are, in order: _ProbeResult; ProbeResult; Receipt;
-# Receipt; Refusal; Receipt; Probes; FiducialDetection; FiducialDetection.
+# Receipt; Refusal; Receipt; Probes; FiducialDetection; FiducialDetection;
+# RuntimeEvent; BenchmarkConfig; SamplingConfig; BenchmarkConfig.
 REPLACE_CALL_ALLOWLIST = {
     ("joulewise/arm_readiness_evidence_t0.py", "_derive_power",
      "_replace(battery, stdout=battery.stdout_bytes)"): REPLACE_REASON,
@@ -50,6 +51,14 @@ REPLACE_CALL_ALLOWLIST = {
      "replace(detection, anchor_method=method, derivation_role='prospective')"): REPLACE_REASON,
     ("scripts/validate_powermetrics_fiducial.py", "rederive_artifact",
      "replace(fresh, b_fiducial_s=max(float(stored_bound), float(fresh.b_fiducial_s)))"): REPLACE_REASON,
+    ("joulewise/controller.py", "_Execution._axi_request_events",
+     "replace(event, metadata=metadata)"): REPLACE_REASON,
+    ("joulewise/controller.py", "cooldown_gate",
+     "replace(config, run_id=run_id if run_id is not None else config.run_id, sampling=replace(config.sampling, idle_seconds=selected.subwindow_s))"): REPLACE_REASON,
+    ("joulewise/controller.py", "cooldown_gate",
+     "replace(config.sampling, idle_seconds=selected.subwindow_s)"): REPLACE_REASON,
+    ("joulewise/controller.py", "run_experiment",
+     "replace(config, run_id=f'{experiment_id}__r{rep}')"): REPLACE_REASON,
 }
 # file::function -> the guarded names it may reference; exactly seven rows.
 ALLOWLIST = {
@@ -334,8 +343,52 @@ class ConsumerGuardTests(unittest.TestCase):
                 if _tracked(ROOT, relative):
                     violations(relative, path.read_text(encoding="utf-8", errors="replace"), sites)
         self.assertEqual(Counter(sites), Counter(REPLACE_CALL_ALLOWLIST.keys()))
-        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 9)
+        self.assertEqual(len(REPLACE_CALL_ALLOWLIST), 13)
         self.assertEqual(set(REPLACE_CALL_ALLOWLIST.values()), {REPLACE_REASON})
+
+    def test_controller_replace_forgery_self_test(self) -> None:
+        source = (ROOT / "joulewise/controller.py").read_text()
+        line = "    verdict = battery_float.authenticate_capture(root)\n"
+        self.assertEqual(source.count(line), 1)
+        self.assertEqual(violations("joulewise/controller.py", source), [])
+        forged = source.replace(line, line + "    verdict = replace(verdict, status='pass')\n")
+        self.assertEqual(violations("joulewise/controller.py", forged), [
+            ("joulewise/controller.py", source[:source.index(line)].count("\n") + 2,
+             "dataclasses.replace")])
+        borrowed = source + "\ndef unlisted():\n    " + (
+            "replace(config, run_id=f'{experiment_id}__r{rep}')") + "\n"
+        self.assertEqual([row[2] for row in violations("joulewise/controller.py", borrowed)],
+                         ["dataclasses.replace"])
+
+    def test_controller_replaced_types_are_not_pair_verdicts(self) -> None:
+        from dataclasses import fields, is_dataclass
+        from joulewise import battery_float
+        from joulewise.interfaces import RuntimeEvent
+        from joulewise.schemas import BenchmarkConfig, SamplingConfig
+
+        for cls in (RuntimeEvent, BenchmarkConfig, SamplingConfig):
+            self.assertTrue(is_dataclass(cls))
+            self.assertFalse(issubclass(cls, battery_float.PairVerdict))
+            self.assertFalse(any("PairVerdict" in str(field.type) for field in fields(cls)))
+
+    def test_replace_rows_precede_s1(self) -> None:
+        try:
+            subprocess.check_output(["git", "cat-file", "-e", "1417c0c4^{commit}"],
+                                    cwd=ROOT, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            self.skipTest("base commit absent")
+        archived: dict[str, set[tuple[str, str, str]]] = {}
+        for path, _, _ in REPLACE_CALL_ALLOWLIST:
+            if path in archived:
+                continue
+            source = subprocess.check_output(["git", "show", f"1417c0c4:{path}"],
+                                             cwd=ROOT, text=True)
+            sites: list[tuple[str, str, str]] = []
+            violations(path, source + "\nfrom joulewise import battery_float\n", sites)
+            archived[path] = set(sites)
+        self.assertTrue(set(REPLACE_CALL_ALLOWLIST).issubset(
+            {(path, qualname, call) for sites in archived.values()
+             for path, qualname, call in sites}))
 
     def test_new_replace_is_flagged_existing_one_is_allowed_and_stale_row_fails(self) -> None:
         site = ("joulewise/night_gate.py", "evaluate_static",

@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
+import traceback
 import unittest
 
 from joulewise import battery_float
 from joulewise.battery_float import CustodyFailure, CustodyUnreadable
 from joulewise.bundle import RunBundleWriter
 from joulewise.bundle_read import WindowBatteryRefusal, authenticate_window_members
+from joulewise.detection_floor import complete_bundle_sha256
 from joulewise.clock import FakeClock
 from tests.test_bundle_read import load_config
 
@@ -77,6 +80,66 @@ class WindowMembersTests(unittest.TestCase):
             with self.assertRaises(CustodyFailure):
                 authenticate_window_members((("lost-raw", bundle),))
 
+    def test_two_prospective_members_are_both_named(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            members = []
+            for label in ("a", "b"):
+                bundle = self.pair_bundle(root, label)
+                config_path = bundle / "config.json"
+                config = json.loads(config_path.read_text())
+                config["hardware_target"]["telemetry_backend"] = "powermetrics"
+                config_path.write_text(json.dumps(config))
+                metadata_path = bundle / "metadata.json"
+                metadata = json.loads(metadata_path.read_text())
+                metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+                del metadata["battery_float"]
+                metadata_path.write_text(json.dumps(metadata))
+                members.append((label, bundle))
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                authenticate_window_members(members)
+            self.assertEqual([(row["label"], row["status"], row["bundle_sha256"])
+                              for row in caught.exception.members],
+                             [(label, "battery_float_evidence_missing", complete_bundle_sha256(path))
+                              for label, path in members])
+
+    def test_confounded_then_prospective_names_both(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            charging = self.pair_bundle(root, "charging", charging=True)
+            prospective = self.pair_bundle(root, "prospective")
+            config_path = prospective / "config.json"
+            config = json.loads(config_path.read_text())
+            config["hardware_target"]["telemetry_backend"] = "powermetrics"
+            config_path.write_text(json.dumps(config))
+            metadata_path = prospective / "metadata.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+            del metadata["battery_float"]
+            metadata_path.write_text(json.dumps(metadata))
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                authenticate_window_members((("charging", charging), ("prospective", prospective)))
+            self.assertEqual([(row["label"], row["status"]) for row in caught.exception.members],
+                             [("charging", "battery_float_confounded"),
+                              ("prospective", "battery_float_evidence_missing")])
+
+    def test_custody_second_member_has_label_note_and_original_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = self.pair_bundle(root, "good")
+            second = self.pair_bundle(root, "bad")
+            (second / "raw/battery_float.post.ioreg").unlink()
+            with self.assertRaises(CustodyFailure) as direct:
+                battery_float.authenticate_bundle(second)
+            with self.assertRaises(CustodyFailure) as caught:
+                authenticate_window_members((("good", first), ("member-7", second)))
+            exc = caught.exception
+            self.assertIs(type(exc), CustodyFailure)
+            self.assertEqual(exc.window_member, "member-7")
+            self.assertIn("window member: member-7", exc.__notes__)
+            self.assertIn("member-7", "".join(traceback.format_exception(exc)))
+            self.assertEqual(exc.failures, direct.exception.failures)
+
     def test_historical_member_returns_digest_bound_verdict(self) -> None:
         bundle = Path(__file__).parent / "fixtures/d078_r01"
         verdicts = authenticate_window_members((("historical", bundle),))
@@ -135,8 +198,9 @@ class WindowMembersTests(unittest.TestCase):
             }})
             second.mkdir()
             (second / "metadata.json").write_text("{")
-            with self.assertRaisesRegex(CustodyUnreadable, "second"):
+            with self.assertRaisesRegex(CustodyUnreadable, "second") as caught:
                 authenticate_window_members((("first", first), ("second", second)))
+            self.assertEqual(caught.exception.window_member, "second")
 
 
 if __name__ == "__main__":

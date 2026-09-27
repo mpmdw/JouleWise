@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -19,9 +20,12 @@ from joulewise.bundle import RunBundleWriter
 from joulewise.bundle_read import (
     BundleReader,
     BundleReadError,
+    BatteryStatusRefusal,
     HISTORICAL_BUNDLE_SET_SHA256,
     Window,
     _marker_pair_problems,
+    _bundle_tree_sha256,
+    _historical_bundles,
 )
 from joulewise.cli import (
     _strict_budgeted_suite_prompt_count_problems,
@@ -155,10 +159,127 @@ class ReaderTestCase(unittest.TestCase):
 
 
 class StrictAccessorTests(ReaderTestCase):
+    def test_historical_sources_and_builder_forward_check(self) -> None:
+        rows = json.loads((REPO_ROOT / "configs/battery_float/historical_bundles.json").read_text())
+        self.assertEqual(len(rows), 69)
+        self.assertEqual(sum("complete_bundle_sha256" in row for row in rows), 63)
+        self.assertEqual(sum("bundle_tree_sha256" in row for row in rows), 6)
+        self.assertIn({"complete_bundle_sha256": "c285172881235ef1ed0e29731c412706604e8cd182182981a5ed44cc2df986bf",
+                       "run_id": "p2015-df-ph-decode-abs-r03", "source": "df-ph-decode-floor-mint1.json"}, rows)
+        self.assertEqual(len(_historical_bundles().complete), 63)
+        self.assertEqual(len(_historical_bundles().tree), 6)
+        checked = subprocess.run(["python3", "scripts/build_battery_float_historical_bundles.py", "--check"],
+                                 cwd=REPO_ROOT, capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+        self.assertIn("forward check: byte-identical entries=69", checked.stdout)
+
+    def test_candidate_from_unnamed_source_is_listed_not_included(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "other.json").write_text(json.dumps({
+                "schema_version": "joulewise.detection_floor_artifact.v2",
+                "bundle_sha256": "a" * 64, "bundle_id": "other-run",
+            }))
+            rows, listed = build(root, ["other.json"])
+            self.assertEqual(rows, [])
+            self.assertEqual(listed, [("other.json", "bundle_sha256", "complete",
+                                       "a" * 64, "source not named by amendment 40")])
+
+    def test_rpt001_tree_entry_and_mutation(self) -> None:
+        from scripts.make_figures import bundle_tree_sha256
+        source = REPO_ROOT.parent / "JouleWise/runs/example-mac-mlx-local__r1"
+        if not source.is_dir():
+            self.skipTest("controlled RPT001 corpus unavailable")
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / source.name
+            shutil.copytree(source, bundle)
+            self.assertEqual(_bundle_tree_sha256(bundle), bundle_tree_sha256(bundle))
+            reader = BundleReader(bundle)
+            reader.metadata()
+            self.assertEqual(reader.battery_float_status, "unobserved_historical")
+            with (bundle / "power_trace.csv").open("ab") as handle:
+                handle.write(b"x")
+            with self.assertRaisesRegex(BatteryStatusRefusal, "prospective bundle"):
+                BundleReader(bundle).metadata()
+
+    def test_historical_set_rejects_wrong_tree_identity_and_duplicate(self) -> None:
+        from unittest.mock import patch
+        from joulewise import bundle_read
+        original = (REPO_ROOT / "configs/battery_float/historical_bundles.json").read_bytes()
+        rows = json.loads(original)
+        for bad in (dict(rows[-1], tree_identity="other"), rows[0]):
+            modified = rows + [bad]
+            data = (json.dumps(modified) + "\n").encode()
+            with self.subTest(bad=bad), patch.object(bundle_read, "HISTORICAL_BUNDLE_SET_SHA256", hashlib.sha256(data).hexdigest()), \
+                 patch.object(bundle_read, "read_authentication_input", return_value=data):
+                with self.assertRaisesRegex(BundleReadError, "invalid entries"):
+                    _historical_bundles()
+
+    def test_status_refusals_are_typed_and_unreadable_metadata_is_not(self) -> None:
+        from joulewise.detection_floor import complete_bundle_sha256
+        for kind in ("prospective", "not_bound", "invalid", "not_reached"):
+            with self.subTest(kind=kind):
+                writer = self.make_bundle("typed-" + kind)
+                self.write_metadata(writer, ["mock"])
+                path = writer.path / "metadata.json"
+                raw = json.loads(path.read_text())
+                if kind in ("prospective", "not_bound"):
+                    config = json.loads((writer.path / "config.json").read_text())
+                    config["hardware_target"]["telemetry_backend"] = "powermetrics"
+                    (writer.path / "config.json").write_text(json.dumps(config))
+                    raw["config_sha256"] = hashlib.sha256((writer.path / "config.json").read_bytes()).hexdigest()
+                if kind == "not_bound":
+                    raw["battery_float"] = {"pre": None, "post": None, "not_applicable": "mock"}
+                elif kind == "invalid":
+                    raw["battery_float"] = None
+                elif kind == "not_reached":
+                    raw["battery_float"] = {"not_reached": "prepare"}
+                path.write_text(json.dumps(raw))
+                with self.assertRaises(BatteryStatusRefusal) as caught:
+                    BundleReader(writer.path).metadata()
+                self.assertIsInstance(caught.exception, BundleReadError)
+                self.assertEqual(caught.exception.status, "battery_float_evidence_missing")
+                self.assertEqual(caught.exception.bundle_sha256,
+                                 None if kind == "not_reached" else complete_bundle_sha256(writer.path))
+        (writer.path / "metadata.json").write_text("{")
+        with self.assertRaises(BundleReadError) as caught:
+            BundleReader(writer.path).metadata()
+        self.assertNotIsInstance(caught.exception, BatteryStatusRefusal)
+
+    def test_nonmock_missing_key_config_binding_details(self) -> None:
+        for mode in ("altered", "deleted"):
+            with self.subTest(mode=mode):
+                writer = self.make_bundle("missing-key-" + mode)
+                self.write_metadata(writer, ["mock"])
+                config = writer.path / "config.json"
+                metadata = writer.path / "metadata.json"
+                raw = json.loads(metadata.read_text())
+                if mode == "altered":
+                    raw["config_sha256"] = "0" * 64
+                    metadata.write_text(json.dumps(raw))
+                else:
+                    config.unlink()
+                with self.assertRaisesRegex(BatteryStatusRefusal,
+                                            r"^battery_float_evidence_missing: prospective bundle \("):
+                    BundleReader(writer.path).metadata()
+
+    def test_marker_config_digest_mismatch_has_not_bound_prefix(self) -> None:
+        writer = self.make_bundle("marker-mismatch")
+        self.write_metadata(writer, ["mock"])
+        path = writer.path / "metadata.json"
+        raw = json.loads(path.read_text())
+        raw["config_sha256"] = "0" * 64
+        raw["battery_float"] = {"pre": None, "post": None, "not_applicable": "mock"}
+        path.write_text(json.dumps(raw))
+        with self.assertRaisesRegex(BatteryStatusRefusal,
+                                    r"^battery_float_evidence_missing: not_applicable not bound \("):
+            BundleReader(writer.path).metadata()
+
     def test_historical_set_bytes_and_protected_base_paths_are_pinned(self) -> None:
         path = REPO_ROOT / "configs/battery_float/historical_bundles.json"
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        self.assertEqual(digest, "6cbdd1aa5bbda2b77338444a86b39b2fc0e8985fe08291cb34bdd7316f4d1a53")
+        self.assertEqual(digest, "207a3d40730500e5f83b5885720be1c7e5f42beb4a5245f99614d491c871c18a")
         self.assertEqual(digest, HISTORICAL_BUNDLE_SET_SHA256)
         protected = [
             "joulewise/reduce.py", "joulewise/bundle.py",
@@ -226,7 +347,7 @@ class StrictAccessorTests(ReaderTestCase):
         self.assertEqual(reader.battery_float_status, "not_applicable")
         config_path = writer.path / "config.json"
         config_path.write_bytes(config_path.read_bytes() + b" ")
-        with self.assertRaisesRegex(BundleReadError, "config.json digest"):
+        with self.assertRaisesRegex(BundleReadError, r"^battery_float_evidence_missing: prospective bundle \(config\.json digest does not match"):
             BundleReader(writer.path).metadata()
 
     def test_explicit_mock_not_applicable_refuses_nonmock_config(self) -> None:
@@ -243,7 +364,7 @@ class StrictAccessorTests(ReaderTestCase):
             "pre": None, "post": None, "not_applicable": "mock",
         }
         metadata_path.write_text(json.dumps(metadata))
-        with self.assertRaisesRegex(BundleReadError, "invalid record"):
+        with self.assertRaisesRegex(BundleReadError, "^battery_float_evidence_missing: not_applicable not bound$"):
             BundleReader(writer.path).metadata()
 
     def test_battery_bundle_missing_events_refuses(self) -> None:

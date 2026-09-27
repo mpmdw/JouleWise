@@ -1133,6 +1133,45 @@ class BatteryBracketTests(ControllerTestCase):
         battery = json.loads((path / "metadata.json").read_text())["battery_float"]
         self.assertEqual(battery, {"pre": None, "post": None, "not_applicable": "mock"})
 
+    def test_wall_meter_unavailable_sentinel_marks_span_without_drift_measurement(self) -> None:
+        from joulewise import battery_float
+        from joulewise.bundle_read import BundleReader, BatteryStatusRefusal
+        from joulewise.cli import validate_bundle
+        payload = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        payload["run_id"] = "wall-meter-span"
+        payload["hardware_target"]["telemetry_backend"] = "wall_meter"
+        config = BenchmarkConfig.from_mapping(payload)
+        raw = (REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes()
+        path, summary = run_benchmark(
+            config, self.runs_root, FakeClock(1790373526), registry=self.Registry(),
+            battery_runner=lambda argv: subprocess.CompletedProcess(argv, 0, raw, b""),
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        events = self.read_events(path)
+        sentinel = [event for event in events if event["phase"] == "idle_drift_sentinel"]
+        self.assertEqual([event["event_type"] for event in sentinel],
+                         ["stage_started", "stage_completed"])
+        self.assertEqual(set(sentinel[1]["metadata"]), {"status", "monotonic_ns"})
+        self.assertEqual(sentinel[1]["metadata"]["status"], "unavailable")
+        self.assertIsInstance(sentinel[1]["metadata"]["monotonic_ns"], int)
+        self.assertEqual(battery_float.authenticate_bundle(path).status, "pass")
+        reader = BundleReader(path)
+        reader.metadata()
+        self.assertEqual(reader.battery_float_status, "pass")
+        self.assertFalse(any("battery_float" in problem for problem in validate_bundle(path, strict=True)))
+        (path / "events.jsonl").write_text("".join(
+            json.dumps(event) + "\n" for event in events
+            if event["phase"] != "idle_drift_sentinel"))
+        with self.assertRaisesRegex(BatteryStatusRefusal,
+                                    "battery_float_evidence_missing: bundle span unavailable"):
+            BundleReader(path).metadata()
+
+    def test_mock_has_no_idle_drift_sentinel_event(self) -> None:
+        path, _ = run_benchmark(make_config("mock-no-drift-sentinel"),
+                                self.runs_root, self.clock)
+        self.assertFalse(any(event["phase"] == "idle_drift_sentinel"
+                             for event in self.read_events(path)))
+
     def test_probe_brackets_and_two_second_probe_preserve_window_differences(self) -> None:
         from joulewise import battery_float
         raw = (REPO_ROOT / "tests/fixtures/battery_float/float.ioreg").read_bytes()

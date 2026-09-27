@@ -1,8 +1,43 @@
 [
   {
+    "complete_bundle_sha256": "0a22a02caa28f0c75bc460339dd420604638cf5f7aa17a0ca2e4fd1c8afbb9ae",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "0a76e5fbcffdccb44ebc22b8d9d86e259b49d2c529ec89bcc0a24c6f22994899",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b08-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "0eb6a006b4afc1cc031a3786a0cc1180686cdb78cb9375788370a3bfd86e8060",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b05-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "153af6c4d94ba5f9e67f23cf4151703b27d430717dc3d9b773258f7ffdd40593",
+    "run_id": "p2015-df-ph-decode-abs-r08",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "1624fc548379c427d047187df164fa297bec2080062f28bb809a2dba80c94a00",
+    "run_id": "p2015-df-ph-decode-abs-r10",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "195b495930c4cdd532cfdd4773260ba3de73e585c7a3a9e55bac179e3b984195",
+    "run_id": "p2015-df-ph-decode-abs-r01",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
     "complete_bundle_sha256": "19c0d18054afc11ecb3640c186614630924eeab0141dfbd554270d95dad6110e",
     "run_id": "p2015-df-cmp-abba-ph-decode-b02-b2",
     "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b02-b2/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "1a7a291dd1b789f95faf8c873a459fd4d8bb6b26257f8866726151f6c156cb96",
+    "run_id": "p2015-df-ph-decode-abs-r09",
+    "source": "df-ph-decode-floor-mint1.json"
   },
   {
     "complete_bundle_sha256": "229029cb968cdbb73a55aa50cdfdca31bd0ef560ee02b5ef46dd784e2f2d7df9",
@@ -10,9 +45,59 @@
     "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-a1/metadata.json"
   },
   {
+    "complete_bundle_sha256": "2863fa61af00fb8e23c68bd6848c9eb7f630d21827aefa4ba9af9b09a05537c9",
+    "run_id": "p2015-df-ph-decode-abs-r07",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "2d1c88636ad93b0727cb01d8d4c70253fc5318ce3033b9d11e2bc0e4d8a68733",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "2ecceeb9237077c2f3a6577c9d7bce24d3deeb926df1e15f1b389bad0db02147",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b04-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "32c53e61cdbb8f507eed269af1eeeef69f4105fba8c9d9d2f43f06f8ba9acaf9",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b07-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "377f6a786c341eef39d6836cb2d12921ab4a05d434c5a241f5c581d8f4d4a2ee",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b09-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "39054c62e30e8362a0ef473fb674aed5d1c87df7c630d0f4daadfd296874439e",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b05-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "48a8bb2a6f23c6531eae6f8d99c043e0500379aff9427956fee1b74de75694ff",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b04-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
     "complete_bundle_sha256": "4967e4609c426a721189fabe9dc64f9fcf0a426bf568fab5e35f0c03e304ad8a",
     "run_id": "p2015-df-cmp-abba-ph-decode-b01-a2",
     "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-a2/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "5135406fa3ba08b4df498cfbe12a463607a829db546a13d273e7b97fdb1aab50",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b06-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "584b8d1b73e7f5a5d8fe4b1e6b0f5e3a6382bb84a57c5cd6015eda31a26c31e5",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "589b17f6a10c6275407367f7f90bea8ced63dabb70850798e0808626924168fe",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b08-b1",
+    "source": "df-ph-decode-floor-mint1.json"
   },
   {
     "complete_bundle_sha256": "58c734804b14a481b3005e1b77b24a596fcc9f549e500231af2ad3e8d1e16fe1",
@@ -20,9 +105,34 @@
     "source": "tests/fixtures/d117_v2_production/strict_seed_bundle/metadata.json"
   },
   {
+    "complete_bundle_sha256": "59aade4961b9e59f1696f88f263204f3739cb7d81adc754cc3380a0133f92691",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b03-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "5c7a8a6ce946d88fdd5ea0124bafa1ffad8c289308d5e9b600d2f95e280bb025",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b05-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "6a090490fd08e646bc39c4eaa112fffcdf87e0d5f03599af10595512957997f4",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b08-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "6cdd0c795befd568798a4ef4538bf6db1ccd930f240de873a77ab36263927561",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b10-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
     "complete_bundle_sha256": "727139df64a3ec13a4706f255957f75bbbf7eb30ba6095b1c68018c5d04e487f",
     "run_id": "p2015-df-cmp-abba-ph-decode-b02-b1",
     "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b02-b1/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "769d1d1378e3603fe40013fadeda35504eca0c235f773106233323fba5a61163",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b04-a2",
+    "source": "df-ph-decode-floor-mint1.json"
   },
   {
     "complete_bundle_sha256": "7b2b8ebc11ada1afaf90a8893339a4f18ad359897eaa9a29cb52f90c645f6453",
@@ -30,9 +140,29 @@
     "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-b1/metadata.json"
   },
   {
+    "complete_bundle_sha256": "8a9216a68466a432fe65e7ff9d48664d1c1e8b297b9a011cbe4f462e291220b4",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "8bc66888f356e9e123d356db3dd1f538e71dada51037f953b8f3055e901447f4",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b09-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "8eaba1d3b0069dd913aafabff74f6d2b6dfab066a0b30e8f4f68322a84973903",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b03-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
     "complete_bundle_sha256": "91f8ac61e7bbf7a45b5a7dc7d7419b42d122e192497bccb20e51925996c0bb6a",
     "run_id": "p2015-df-cmp-abba-ph-decode-b02-a2",
     "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b02-a2/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "9d67992e7cdd70a86bbbf82ca6a9b587d42779c14a28f72256900331d9f8fece",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b05-a1",
+    "source": "df-ph-decode-floor-mint1.json"
   },
   {
     "complete_bundle_sha256": "a21028b734280f3ff3757473cf0a01afeae1493a01cf505ee62c8b2b52add62a",
@@ -40,9 +170,19 @@
     "source": "tests/fixtures/fcm_r4_real_blocks/p2015-df-cmp-abba-ph-decode-b01-b2/metadata.json"
   },
   {
+    "complete_bundle_sha256": "a71d5519ecbf8a1659cbdca66d0d80b34e0350a9746ef5637e84e76771e5eea3",
+    "run_id": "p2015-df-ph-decode-abs-r02",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
     "complete_bundle_sha256": "aa2b4c81c830a4376f31152cde7cedc1110ab3ead0d12c809d9e2f063234e89c",
     "run_id": "legacy_reducer_current_behavior",
     "source": "tests/fixtures/legacy_reducer_current_behavior/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "acd77e1d5a8a5bc82493315b772fa616a3cf5c579fda5586e04902fdda388459",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b09-b1",
+    "source": "df-ph-decode-floor-mint1.json"
   },
   {
     "complete_bundle_sha256": "af2b58875dcc06453a1f29c68a94dcb693818013c58bb499c8b937488b7496bd",
@@ -60,8 +200,154 @@
     "source": "tests/fixtures/d078_r01/metadata.json"
   },
   {
+    "complete_bundle_sha256": "b200324cffed9a1db87323a5961d28dbdc593e743d623423b6862e5f643f5273",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "b25522da721b5a7deb6060fa1ed4ce22c174bcefa6d47617a76bfb90b23f4755",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b01-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "b27c6af7109a5734079ad311df84f812680daa957e2b5121de46372fe6871bf3",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b03-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "b2b10d7dc7c70820ffa7be4cd6e5c7d99bfb723c24ecc8aa143b92b28a18cca2",
+    "run_id": "p2015-df-ph-decode-abs-r05",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "b446e7a59d38287578918f273a1fa512f89f8da1ca4e8304f1f83d7af27dc568",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b10-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "b65b79bb3f7d7a6c570d882abc6b75bef14c1c56223bfb062f6b40c708a4ad8e",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b06-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "c285172881235ef1ed0e29731c412706604e8cd182182981a5ed44cc2df986bf",
+    "run_id": "p2015-df-ph-decode-abs-r03",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "cac899e4c3fa84eec27f5fc26e0c105f25abc6948190821552f3a89f317fd681",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b07-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
     "complete_bundle_sha256": "cb668a06afadb96b05942979034869548a9a13cf23c39549a31a52d3afdd62e0",
     "run_id": "d100-dangler-r5a",
     "source": "tests/fixtures/salvage_dangler/r5a_idle_abort/metadata.json"
+  },
+  {
+    "complete_bundle_sha256": "d88ffadb420cf59aa20a7efc7615a1d7817f91814b0754756b0bc65e51cd57bf",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b10-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "dc1e56aa1d27fc6ac0bb5d7a80b7881e635a5050e7ffc9536b62c75dd22cee5a",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b09-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "e339de0c0f2e5b464e73e2423e94ad6a4fa72c2abca68cebeb2d97f3af893109",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b07-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "e35798402f4af613c21e7bd5069875a4194b6672c3c3ab1c3073fff3ec05b17d",
+    "run_id": "p2015-df-ph-decode-abs-r04",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "e7ee36928bac0e65b8004f8f7b7fae0babe3ac706171b26b8dd92015a1f87058",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b06-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "eb05f32d37b1c8e8969f097a0ff112ea95e7ca9c1110e03127b7538267414449",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b04-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "ec172522b7ba17c83008f32994e0c727cad2bc857aee4b6a18b4c6ac4ed14446",
+    "run_id": "p2015-df-ph-decode-abs-r06",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "ec6fda56898612837eb76d658c9057ab0e08e26689e44b1dea1a296dd17674b2",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b03-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "ed743899e603951287cce29814371c4949b452a36b65550992535a3e3ffeef3e",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b07-b2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "edbaba1c823c33bbc51164f96947a590ab0f4d96569ca221669942500d4ff2cc",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b06-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "f29039135ac92d31ea88c277682ff79aae0474ac741c2a18d2a1930f71be620b",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-b1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "f39fcdfe56370dc2ed33f53c6901ebcfda3362193f5f0f865d8b366c0a3eb80d",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b02-a1",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "fb12d40f5a418462a268587fa9ad8e9bbbef5e32e47132f112e2f3f9d540c5e1",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b08-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "complete_bundle_sha256": "ffacb0680cf37794804f7af1f5e0bd39fab26160bf134a0cf63525c293155f13",
+    "run_id": "p2015-df-cmp-abba-ph-decode-b10-a2",
+    "source": "df-ph-decode-floor-mint1.json"
+  },
+  {
+    "bundle_tree_sha256": "2888c9d205df62e1136a376997ea8a6947683e4311eedaee20e3135bd559e213",
+    "run_id": "example-mac-mlx-qwen35-122b-512t__r2",
+    "source": "analysis/rpt001-v2/input_manifest.json",
+    "tree_identity": "joulewise.bundle-tree.nul-v1"
+  },
+  {
+    "bundle_tree_sha256": "5ec71ed301ba9c0a48b137b5bdce00b8893c62d4f1397f55aac3c1943ccc9180",
+    "run_id": "example-mac-mlx-local__r3",
+    "source": "analysis/rpt001-v2/input_manifest.json",
+    "tree_identity": "joulewise.bundle-tree.nul-v1"
+  },
+  {
+    "bundle_tree_sha256": "8a99d7a851c55e53631df6f910d17ee097cbf8bd19f33d44bcef911a6502e82f",
+    "run_id": "example-mac-mlx-local__r2",
+    "source": "analysis/rpt001-v2/input_manifest.json",
+    "tree_identity": "joulewise.bundle-tree.nul-v1"
+  },
+  {
+    "bundle_tree_sha256": "9376dbc16848e03d3bd54e4fac5598b34e1391d376ef11db527ac1fe25f08773",
+    "run_id": "example-mac-mlx-local__r1",
+    "source": "analysis/rpt001-v2/input_manifest.json",
+    "tree_identity": "joulewise.bundle-tree.nul-v1"
+  },
+  {
+    "bundle_tree_sha256": "9f162f058bfceb949f34e0c24042c83e8d7f353f97d87b4cf6e0e6dff0912398",
+    "run_id": "example-mac-mlx-qwen35-122b-512t__r1",
+    "source": "analysis/rpt001-v2/input_manifest.json",
+    "tree_identity": "joulewise.bundle-tree.nul-v1"
+  },
+  {
+    "bundle_tree_sha256": "c72cdc34ef3ce9ccfb0a015bed5ace8e4efa7d18f457ac5cd8a0c894acc21268",
+    "run_id": "example-mac-mlx-qwen35-122b-512t__r3",
+    "source": "analysis/rpt001-v2/input_manifest.json",
+    "tree_identity": "joulewise.bundle-tree.nul-v1"
   }
 ]
