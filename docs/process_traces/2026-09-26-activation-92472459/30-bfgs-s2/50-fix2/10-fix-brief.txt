@@ -1,0 +1,13 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S2, FIX ROUND 2. Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s2-92472459 (branch feat/2026-09-26-bfgs-s2-qpe-collector @ a0e8e47f: fix round 1 + the lead's F7 revert).
+WRITE_SCOPE: ["scripts/sample_quiet_predicate_evidence.py","joulewise/quiet_predicate_campaign.py","tests/test_sample_quiet_predicate_evidence.py","tests/test_quiet_predicate_campaign.py"]
+
+AUTHORITY: ONE text. Implement amendments 44, 45 and 46 EXACTLY as they stand in §8 of
+  /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/70-consult-samesig/30-erratum/21-coldgate-fable-erratum-ruling.md
+(cold gate BFGS-SAMESIG-01, erratum; §8 supersedes the texts in /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/70-consult-samesig/21-coldgate-fable-ruling.md). Read §3–§7 for the reasons and the judge's probes. Amendments 47 and 48 are S1's, not yours. The S2 texts already implemented are listed in 30-bfgs-s2/10-seat-brief.txt and 30-bfgs-s2/30-fix1/10-fix-contract.txt; they stand except where §8 amends them. Amendment 46 ratifies the order already at a0e8e47f; implement only what its text adds (tests/notes). Amendment 45's option-(b) mandatory tests are owed ONLY if the cure is adopted; it is NOT adopted — do not implement the snapshot.
+
+Every row the amendments name goes through the real production call site and is shown RED under its named counterfactual (e.g. the journal-comparison deletion at both call sites for amendment 44; the rollback-write insertion for amendment 45's writer inventory) and GREEN after.
+
+HARD CONSTRAINTS: as in the S2 brief (battery_float.py and the excluded paths byte-identical; registration digest 69321c69… unchanged; no exclusion reason added or removed; custody is never a status).
+VERIFY (paste the exact last 5 lines of each): V1 python3 -m unittest tests.test_sample_quiet_predicate_evidence tests.test_quiet_predicate_campaign tests.test_night_kinds tests.test_evidence_night tests.test_battery_float_sweep (the real-collector subprocess test needs /bin/ps; if denied, say so); V2 python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. NEEDS_RULING / NEEDS_SCOPE early returns as before. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with a per-amendment table (amendment → files/functions → tests → RED evidence with counterfactual → GREEN evidence).

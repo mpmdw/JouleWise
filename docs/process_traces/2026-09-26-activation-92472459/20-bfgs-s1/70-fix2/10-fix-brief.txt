@@ -1,0 +1,14 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S1, FIX ROUND 2. Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 (branch feat/2026-09-26-bfgs-s1-bundles @ 21213be7: rounds 1/1b, fix round 1, round 2).
+WRITE_SCOPE: ["joulewise/bundle_read.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_bundle_read.py","tests/test_bfgs_window_consumers.py"]
+
+AUTHORITY:
+1. Amendments 47 and 48 EXACTLY as they stand in §8 of /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/70-consult-samesig/30-erratum/21-coldgate-fable-erratum-ruling.md (BFGS-SAMESIG-01 erratum; supersedes the earlier ruling's texts; §5 and §7 give NIT-B2 and J-1's reasons and the corrected expected counts).
+2. The §B3.3 closures of /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/70-consult-samesig/21-coldgate-fable-ruling.md (no amendment number; test and label fixes for the S1 delta-1 findings): Opus SF-1 (the amendment-39 identity test masked by duplicate rejection: give the bad row a new digest, add a positive twin, show the identity-check-deleted mutant fails), Opus SF-2 (a digest-matching config.json that fails re-validation: one reader row and one window-gate row, typed prospective refusal, never custody), Opus SF-3 / Sol F5 (duplicate RPT001 labels decided after all inclusions, independent of file order), Sol F3 (split identity and duplicate cases), Sol F4 (assert PINNED_BUNDLE_SHA256's listed class file_digest and its reason). Where §B3.3's text differs from this summary, §B3.3 governs.
+The delta-1 lens reports that motivate these: 20-bfgs-s1/55-delta1/11-sol-execution-delta.md and 12-opus-contract-delta.md (probe scripts under /tmp as cited).
+Round 2's consumer files and round F's fixture files are NOT yours.
+
+DELIVERABLES: each item's tests RED under the named counterfactual and GREEN after; the builder's forward check (byte-identical twice, still 69 entries unless an amendment says otherwise — say so if it changes) and the amended reverse witness output pasted verbatim, with the corrected counts per J-1.
+HARD CONSTRAINTS: joulewise/battery_float.py, reduce.py, bundle.py and FT §E's excluded list byte-identical; custody is never a status; the set gains or loses no entry except as an amendment rules.
+VERIFY (paste the exact last 5 lines of each): V1 python3 -m unittest tests.test_bundle_read tests.test_bfgs_window_consumers tests.test_controller tests.test_battery_float_sweep tests.test_bfgs_consumer_sweep; V2 python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. NEEDS_RULING / NEEDS_SCOPE early returns as before. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with a per-item table.
