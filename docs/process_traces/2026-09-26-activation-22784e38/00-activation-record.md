@@ -37,3 +37,7 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
      - the partial clone above (step 1 requires the measurement root to be absent, so a re-arm must move it);
      - staging `/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w1-20260927/` (step 0 requires it absent; a re-arm with a new t0 changes `NIGHT_DATE` only if the date changes, otherwise it must be moved);
      - the untracked `10-w1-arm/` directory in this worktree (filled scripts, `step0.out`, `step1.out`).
+6. **Owner email: the W1 block** (Gmail `1a0e16172f3388bf`). It asks Ed for "YES ledger fix" (approve (a) + (b) of item 5, optionally with an allow rule), or for (b) done by hand. **Fallback lane: the SWEEPCLASS erratum cold gate was convened** (charge [20-coldgate-sweep-erratum/00-charge.md](20-coldgate-sweep-erratum/00-charge.md), commit `405199bd`, sha256 prefix `683a014c`).
+   - The cold Fable judge runs in `JouleWise-wt-s1swcg-92472459` @ `cbfa9dc3`, pinned for the session. Script: `~/.claude/jobs/22784e38/tmp/convene-coldgate-swerr.sh`.
+   - The paired Opus contract refuter runs in parallel (Section A independent; Section B after the ruling).
+   - Astra is not seated: this is a design-closure erratum on test-code amendments, with no new science. The same omission was recorded for SAMESIG.

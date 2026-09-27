@@ -10,6 +10,21 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 22784e38 — 22:34 PDT 09-26 → (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-26-activation-22784e38/00-activation-record.md).
+
+**W1 NOT ARMED: an arm-script defect, and the bench fix was blocked by the permission classifier.**
+- Step 0 PASSED: battery floating at 0 mA; all six plans TERMINAL.
+- Step 1 REFUSED with `calibration_ledger_rollback`. The script's `LEDGER_SOURCE` is the 76-row canonical ledger, but the committed pin (seq 176) was written by n2. The correct source is `/Users/edr/JouleWise-measurement-20260919-derivation-n2/runs/calibration_observation_ledger.jsonl`, sha256 `95d152f0…5302`, which equals the n2 harvest record.
+- The fix was denied by the auto-mode classifier: repoint the source plus a digest check, and move the refused partial clone `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w1` aside. The staging dir `/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w1-20260927/` is also left in place.
+- Ed was asked (Gmail `1a0e16172f3388bf`). **Do not retry the fix until Ed approves** (look for his reply by sender search).
+
+**SUCCESSOR'S NEXT EXACT ACTION:**
+1. Search Gmail for Ed's reply to the W1 ledger-fix ask. On YES:
+   - apply (a) and (b) of record item 5;
+   - re-run the W1 steps from step 0 with a fresh t0 and battery reading;
+   - get a cold Fable pass on the staged plan, then notice, then arm.
+2. Harvest the SWEEPCLASS erratum cold gate (`20-coldgate-sweep-erratum/`: `21-…ruling.md` plus `11-opus-contract-refuter.md`). Then resume S1 fix round 3 (amendment 51 as amended by 57–59 and the erratum).
+
 **▶▶ ACTIVATIONS e6f06c96 + 92472459 — 15:48 → ≈22:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; 92472459 exits so a fresh supervisor can arm W1):** e6f06c96 exited on usage at 16:11 ([record](docs/process_traces/2026-09-26-activation-e6f06c96/00-activation-record.md)). 92472459's [record 00](docs/process_traces/2026-09-26-activation-92472459/00-activation-record.md), items 1–35, is the full account.
 
 **MERGED:**
