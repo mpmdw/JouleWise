@@ -30,3 +30,15 @@
    3. The headline pipeline freezes, after S1–S4 and BFGS-COOLDOWN-ANCHOR-01.
    4. The #416 audit follows, and its auditors re-derive W1/W2 from the raw bundles.
    5. Only then does a claim-bearing run happen.
+10. **Harvest PR #434 gate, first two lenses.**
+    - **Row 1 + row 2 (execution lens):** Sol 6.0 high, [11-sol-audit-report.md](20-harvest-gate/11-sol-audit-report.md). **AUDIT: PASS**, with 0 findings.
+      - It confirmed rows 227–276 are all W2 and rows 1–226 are byte-identical to W1's ledger.
+      - The pin and the verdict re-derive byte-exact.
+      - It read all 24 raw ioreg files: 0 mA, not charging, external power connected.
+      - Its one residual risk is already disclosed by A-R5b: a charging excursion that falls entirely between the two endpoint readings of a slot cannot be seen.
+    - **Row 2 (contract lens) + row 6:** Opus 5.5, [12-opus-contract-lens.md](20-harvest-gate/12-opus-contract-lens.md). **CONTRACT LENS: PASS**, with 0 BLOCKER. Dispositions:
+      - **S1** (merge commit only): adopted. The merge uses `gh pr merge 434 --merge`.
+      - **S2** (harvest notice content): the notice had already gone out, as Gmail `1a0e42d7ad74be5f`, carrying both battery lines. A **correction was sent as Gmail `1a0e43cab8a8ea93`**. It says W3 is *not permitted* (prereg: permitted only if fewer than 12 valid after W2; the issuer refuses it, `issue_…py:1838`), that n = 12 has zero margin, that the yield was 50 % against ≈79 % assumed, and that there is no top-up.
+      - **Item 8 is corrected:** "W3 not needed" should read **"W3 not permitted"**. REV5-POST-W3-SHORTFALL-01 is **not moot**: it governs what happens if `prepare-candidate` refuses after W2, and that goes to Ed or a cold gate **before** `prepare-candidate` runs.
+      - **S3** (`prepare-candidate` preconditions): these are carried into the issuance lane brief. Record the five checks no tool performs (6 h spacing, Interactive launch context, MLX 0.31.2 on every row, estimator code unchanged, Revision 3 chain digest). Use an estimator-unchanged head. Name W1 and then W2, with no confounded session and with `--d125-ruling`. Keep both custody roots in place.
+      - **NITs:** the cross-check script is now kept as `10-w2-harvest/manual-battery-crosscheck.py`. Item 7's "(i)" label for the pin advance is the runbook's own (i), "§2.0 done / ledger at head-equals-pin", which is where the pin advance sits, as at W1. The probe-plist render/install digest pattern and the runbook's missing merge-commit-only rule go to the lane list (HARVEST-RUNBOOK-MERGE-METHOD-01, PROBE-PLIST-DIGEST-PATTERN-01).
