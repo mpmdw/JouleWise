@@ -96,3 +96,11 @@
       - mutant (b), guard A removed: RED, 17 failures, "failed attempt contains measurand bytes" did not match "unknown non-null …";
       - mutant (c), guard B removed: RED, 17 failures, "not raised".
     - **Next for S1:** ONE refuter pass on the merge candidate, then the S1 merge gate (full tier), on an integration tree with main `b69c39eb`.
+19. **S1 merge candidate.** `origin/main` was merged into `feat/2026-09-26-bfgs-s1-bundles`, giving `4aefdd12`. Its tree `6e0dfda7` is identical to the integration tree. The ONE refuter pass (Sol 6.0 xhigh) was launched on it under 61 (c)/66 plus the three reading tasks ([brief](35-s1-refuter/01-refuter-brief.txt)).
+20. **Bookkeeping.**
+    - RUN_STATE top block `a609bf65`.
+    - A lanes seat (Sol high, [brief](70-lanes-brief.txt)) registered A316–A329, 14 lanes: 263 + 14 = 277. `gen_state --check` passes, `tests.test_gen_state` is OK (44 tests), commit `f25bae33`.
+    - **PR #435** is open from `docs/2026-09-26-22784e38` @ `f25bae33`, light tier.
+    - **Row 1:** Sol high, **AUDIT: PASS** with 0 findings ([brief](80-pr435-audit-brief.txt), [report](81-pr435-audit-report.md)).
+    - **Row 9** is running on worktree `JouleWise-wt-bk435-row9-77b1bee2` @ `f25bae33`, which contains main `b69c39eb`.
+    - Further records of this activation go on branch `docs/2026-09-27-77b1bee2` (worktree `JouleWise-wt-bk-77b1bee2`), so #435's head stays fixed.

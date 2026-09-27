@@ -1,0 +1,15 @@
+ROLE: independent non-author auditor, gate-ledger row 1 (light tier), for bookkeeping PR #435 (JouleWise). Read-only.
+WRITE_SCOPE: []
+Write nothing in any repository; scratch only under /tmp/bk435-audit-77b1bee2/. No git fetch/pull/checkout/commit. Do not call Claude.
+
+CANDIDATE: /Users/edr/code/JouleWise-wt-bk435-row9-77b1bee2, detached at f25bae33 (branch docs/2026-09-26-22784e38), base origin/main b69c39eb (contained).
+
+CHECK (executed evidence):
+1. `git diff --stat b69c39eb f25bae33` touches only docs (process traces, RUN_STATE.md, README.md, TASK_QUEUE.md, docs/process/state_kernel.json) and tests/test_gen_state.py — list anything else. No code under joulewise/, scripts/, configs/ changes.
+2. `python3 scripts/gen_state.py --check` exit 0; `python3 -m unittest tests.test_gen_state` OK (use /opt/homebrew/bin/python3).
+3. The 14 new kernel rows (A316–A329): each id, source citation path exists in the tree, and its summary is consistent with the cited record text (docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md and 50-custody-outside-repo/30-lead-synthesis.md; 2026-09-27-activation-3ba66eeb/00-activation-record.md). Flag any row that overstates or contradicts its source.
+4. RUN_STATE.md top block (activation 77b1bee2): every factual claim (SHAs, counts, PR numbers, verdict lines) matches the records and `git log` (e.g., b69c39eb is the #434 merge; 722f7bd1 the harvest commit; the harvest line sha 51f49618…). Flag contradictions.
+5. No secret, token, or personal path beyond existing conventions was added (grep the diff for obvious tokens/keys).
+6. The committed statement file docs/process_traces/2026-09-27-activation-77b1bee2/60-prepare-record/00-refusal-branch-final-statement.md hashes to 8717e33c27f069e3889d8f3d6095d76adbdd6ad9b012482e0cad3a936bb339a6 and equals the quoted §5 block of 40-refusal-branch/30-addendum/21-addendum-ruling.md.
+
+REPORT: claude-codex-report/v1 envelope, review genre; findings BLOCKER/SHOULD-FIX/NIT; final line `AUDIT: PASS` or `AUDIT: FAIL`.
