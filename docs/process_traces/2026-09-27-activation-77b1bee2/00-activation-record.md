@@ -258,3 +258,19 @@
     - **No group** is a historical-set exemption.
     - **Why no gate caught it:** V1/V2 selected none of the 42 legacy modules.
     - **Next (not this slice):** a consult with a cold ruling on G2 (the mock-workflow contract) and G9 (repin authority and order). Then a fixture-repair round under an enforced WRITE_SCOPE, then a delta re-audit, then row 9 again. **This is a new lesson for every lane: full tier requires a full-suite row 9 on EVERY fix head before the final pass, never targeted suites alone.** It is registered for the council (not ratified here).
+46. **Cold science gate SCI-25G83-CANDIDATE-01** (Fable 5.1, ≈16:35–16:53; [ruling](70-science-gate/21-science-gate-ruling.md)): **VERDICT: PROCEED TO ISSUANCE** (to the D-138 transaction, which has its own gate).
+    - **What holds:**
+      - Membership is exact.
+      - S, C, the level screen and headroom all reproduce.
+      - The sealed Revision 5 text removes the screen-challenge veto (three places are quoted), and it was sealed before W1.
+      - No retained value shows an artifact. W2 running higher than W1 is not a real effect (permutation p = 0.19).
+      - **No mark applies:** neither `excursion_limited` nor `zero_headroom`.
+    - **New findings:**
+      - **8 of the 12 exclusions came from the estimator's 165,000-cell work cap**, which was sized for ≈120 ms frames; this epoch runs at 128–130 ms. The cap selected on cadence (r = +0.82), not on B (r = −0.05, p = 0.44).
+      - **3 exclusions came from wall-clock steps** of 52.0, 35.9 and 5.8 ms (`wall_minus_monotonic_span_exceeded`). They were excluded as ordinary-invalid under the judge's structural reading (§2.4), which matches statement item 4(iii). **The strict reading would refuse issuance. The owner may overrule**, and that would be recorded as made after the outcome was known.
+    - **Mandatory disclosures D1–D6** (§7) travel with the D-138 record and the paper.
+    - **Recommendations (§8):**
+      - **Re-size the cap** before measurement windows run at scale; about one bracket in four would complete as things stand. Re-sizing changes a pinned estimator file, which stales the calibration and forces a re-issue. The council should rule *first* on which captures a re-issue may contain; the judge's view is the same 12.
+      - **Find what steps the wall clock.**
+      - **Packet erratum** on item 04.
+    - The paired Opus refuter is pending. **D-138 is not started in this turn** (runbook §4.4).
