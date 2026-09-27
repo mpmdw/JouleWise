@@ -80,4 +80,10 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
     - **Fixed at the bench** (`2b4f0a86` on `test/2026-09-27-census-multiline-argv`): a whole-output `pgrep -lf` recorded-service check that also covers continuation lines, at least as strong as the original per-line check. With the live newline decoy the test is OK.
     - **Bench slip:** `pkill -f 'scripts/run_campaign'` killed the background job whose own command line held that string, so the module run died (rc 144). Kill decoys by PID only. The full suite (row 9) was running at the time; any `run_campaign`-spawning test failure in its tail is suspect and gets a module rerun.
 
+19. **Census lane: rule-11 same-signature consult.** The delta re-audit of `2b4f0a86` returned `REVIEW: FAIL` ([12-sol-delta.md](50-census/12-sol-delta.md)): a hit that exits between the `-f` and `-lf` snapshots still slips. That is the same signature as round 1 (an exit-between-snapshots window), so the next spend was a consult, not a third bench round.
+    - Sol consult ([13-sol-consult.md](50-census/13-sol-consult.md)): **RECOMMEND c**. Deterministic negative decoys for all nine recorded service identities, checked in the same `pgrep -f` snapshot as the positives. The live-hit basename checks are dropped. Its stated trade: the nine recorded identities get deterministic coverage, and the incidental transient-hit check is given up.
+    - Implemented at `3a346c46`. Focused test OK with a live newline decoy (killed by PID).
+    - **Mutation:** with `watchdogd|` added to `_MONITOR_CENSUS_PATTERN`, the test FAILS on marker `/usr/libexec/watchdogd`. The mutation was reverted.
+    - Final-head independent review `REVIEW: PASS` ([14-sol-final-review.md](50-census/14-sol-final-review.md)).
+
 **Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
