@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import contextlib
+import io
 import shutil
 import subprocess
 import tempfile
@@ -160,6 +162,129 @@ class ReaderTestCase(unittest.TestCase):
 
 
 class StrictAccessorTests(ReaderTestCase):
+    def _witness_fixture(self, root: Path):
+        from joulewise.detection_floor import complete_bundle_sha256
+        fixture = REPO_ROOT / "tests/fixtures/d078_r01"
+        run_id = json.loads((fixture / "metadata.json").read_text())["run_id"]
+        digest = complete_bundle_sha256(fixture)
+        tracked = root / "tracked"
+        tracked.mkdir()
+        source = "df-ph-decode-floor-mint1.json"
+        (tracked / source).write_text(json.dumps({"bundle_sha256": digest}))
+        runs = root / "runs"
+        runs.mkdir()
+        bundle = runs / run_id
+        shutil.copytree(fixture, bundle)
+        row = {"complete_bundle_sha256": digest, "run_id": run_id, "source": source}
+        return tracked, source, runs, bundle, row
+
+    def _witness_output(self, tracked: Path, source: str, roots: list[Path],
+                        rows: list[dict]) -> str:
+        from scripts.build_battery_float_historical_bundles import witness
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            witness(tracked, [source], roots, rows)
+        return out.getvalue()
+
+    def test_witness_intact_and_renamed_copy_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tracked, source, runs, bundle, row = self._witness_fixture(Path(tmp))
+            output = self._witness_output(tracked, source, [runs], [row])
+            self.assertIn("witness_entry matched complete", output)
+            self.assertNotIn("witness namesake", output)
+            bundle.rename(runs / (row["run_id"] + "_attempt1"))
+            output = self._witness_output(tracked, source, [runs], [row])
+            self.assertIn("witness_entry matched complete", output)
+            self.assertNotIn("witness namesake", output)
+
+    def test_witness_changed_copy_is_named_only_and_fails_for_citation(self) -> None:
+        from scripts.build_battery_float_historical_bundles import witness
+        with tempfile.TemporaryDirectory() as tmp:
+            tracked, source, runs, bundle, row = self._witness_fixture(Path(tmp))
+            (bundle / "power_trace.csv").write_bytes(
+                (bundle / "power_trace.csv").read_bytes() + b"x"
+            )
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), self.assertRaisesRegex(ValueError, "named_only"):
+                witness(tracked, [source], [runs], [row])
+            output = out.getvalue()
+            self.assertIn("witness_entry named_only complete", output)
+            self.assertIn("witness namesake complete", output)
+            self.assertIn("expected=" + row["complete_bundle_sha256"] + " observed=", output)
+
+    def test_witness_changed_and_intact_copies_match_without_failing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tracked, source, runs, bundle, row = self._witness_fixture(root)
+            second = root / "second"
+            second.mkdir()
+            changed = second / row["run_id"]
+            shutil.copytree(bundle, changed)
+            (changed / "power_trace.csv").write_bytes(
+                (changed / "power_trace.csv").read_bytes() + b"x"
+            )
+            output = self._witness_output(tracked, source, [runs, second], [row])
+            self.assertIn("witness_entry matched complete", output)
+            self.assertEqual(output.count("witness namesake complete"), 1)
+
+    def test_witness_fixture_named_only_is_reported_without_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tracked, source, runs, bundle, row = self._witness_fixture(Path(tmp))
+            row["source"] = "tests/fixtures/d078_r01/metadata.json"
+            (bundle / "power_trace.csv").write_bytes(
+                (bundle / "power_trace.csv").read_bytes() + b"x"
+            )
+            output = self._witness_output(tracked, source, [runs], [row])
+            self.assertIn("witness_entry named_only complete", output)
+
+    def test_witness_metadata_name_is_used_for_changed_copy(self) -> None:
+        from scripts.build_battery_float_historical_bundles import witness
+        with tempfile.TemporaryDirectory() as tmp:
+            tracked, source, runs, bundle, row = self._witness_fixture(Path(tmp))
+            bundle = bundle.rename(runs / (row["run_id"] + "_attempt1"))
+            (bundle / "power_trace.csv").write_bytes(
+                (bundle / "power_trace.csv").read_bytes() + b"x"
+            )
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), self.assertRaisesRegex(ValueError, "named_only"):
+                witness(tracked, [source], [runs], [row])
+            self.assertIn("witness_entry named_only complete", out.getvalue())
+            self.assertIn("witness namesake complete", out.getvalue())
+
+    def test_witness_unreadable_metadata_uses_directory_name(self) -> None:
+        from scripts.build_battery_float_historical_bundles import witness
+        for raw in ("{not json", '{"run_id": 7}'):
+            with self.subTest(raw=raw), tempfile.TemporaryDirectory() as tmp:
+                tracked, source, runs, bundle, row = self._witness_fixture(Path(tmp))
+                (bundle / "metadata.json").write_text(raw)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out), self.assertRaisesRegex(ValueError, "named_only"):
+                    witness(tracked, [source], [runs], [row])
+                output = out.getvalue()
+                self.assertIn(f"witness metadata_unreadable {bundle}", output)
+                self.assertIn("witness_entry named_only complete", output)
+                self.assertIn("witness namesake complete", output)
+
+    def test_witness_digest_hit_rejects_wrong_entry_run_id(self) -> None:
+        from scripts.build_battery_float_historical_bundles import witness
+        with tempfile.TemporaryDirectory() as tmp:
+            tracked, source, runs, _, row = self._witness_fixture(Path(tmp))
+            row["run_id"] = "some-other-run"
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(
+                ValueError, "included digest run_id mismatch"
+            ):
+                witness(tracked, [source], [runs], [row])
+
+    def test_witness_allows_prose_html_citation_of_included_digest(self) -> None:
+        from scripts.build_battery_float_historical_bundles import witness
+        with tempfile.TemporaryDirectory() as tmp:
+            tracked, source, runs, _, row = self._witness_fixture(Path(tmp))
+            (tracked / "other.html").write_text(row["complete_bundle_sha256"])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                witness(tracked, [source, "other.html"], [runs], [row])
+            self.assertIn("witness listed complete", out.getvalue())
+
     def test_historical_sources_and_builder_forward_check(self) -> None:
         rows = json.loads((REPO_ROOT / "configs/battery_float/historical_bundles.json").read_text())
         self.assertEqual(len(rows), 69)
@@ -187,6 +312,104 @@ class StrictAccessorTests(ReaderTestCase):
             self.assertEqual(listed, [("other.json", "bundle_sha256", "complete",
                                        "a" * 64, "source not named by amendment 40")])
 
+    def test_text_candidates_use_nearest_key_and_classify_prose(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lines = ("bundle_tree_sha256: " + "a" * 64,
+                     "b" * 64 + " bundle_tree_sha256")
+            (root / "other.md").write_text("\n".join(lines))
+            rows, listed = build(root, ["other.md"])
+            self.assertEqual(rows, [])
+            self.assertEqual(listed, [
+                ("other.md", "bundle_tree_sha256", "quoted", digest,
+                 "quoted in text, not a citation source") for digest in ("a" * 64, "b" * 64)
+            ])
+
+    def test_unclassified_text_candidate_refuses(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "other.toml").write_text("bundle_tree_sha256: " + "a" * 64)
+            with self.assertRaisesRegex(ValueError, "unclassified candidate pair"):
+                build(root, ["other.toml"])
+
+    def test_invalid_json_falls_back_to_text_scanner(self) -> None:
+        from scripts.build_battery_float_historical_bundles import _candidates
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "broken.json").write_text("{\nbundle_tree_sha256: " + "a" * 64)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                candidates = list(_candidates(root, ["broken.json"]))
+            self.assertEqual(candidates, [
+                ("broken.json", "bundle_tree_sha256", "broken.json", "a" * 64, "")
+            ])
+            self.assertIn("unparseable broken.json", err.getvalue())
+
+    def test_non_utf8_scan_skip_is_named(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "binary.txt").write_bytes(b"\xff")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(build(root, ["binary.txt"]), ([], []))
+            self.assertIn("skipped non-utf8 binary.txt", err.getvalue())
+
+    def test_builder_listing_classes_and_duplicates(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build, tracked_snapshot
+        root, temp, names = tracked_snapshot()
+        self.addCleanup(temp.cleanup)
+        rows, listed = build(root, names)
+        self.assertEqual(len(rows), 69)
+        self.assertEqual(len([row for row in listed
+                              if row[0] == "analysis/rpt001-v2/artifact_manifest.json"
+                              and row[2] == "tree_nul_v1"]), 6)
+        self.assertTrue(all(row[4] == "duplicate of included citation" for row in listed
+                            if row[0] == "analysis/rpt001-v2/artifact_manifest.json"
+                            and row[2] == "tree_nul_v1"))
+        pinned = "6945160964bc8667f4bfcc1ba7b500f81045fce8301ef7aadce45a188d3e06e9"
+        self.assertIn(("scripts/issue_dg071_dg075_statistics.py", "PINNED_BUNDLE_SHA256",
+                       "file_digest", pinned, "file digest, not a bundle"), listed)
+        self.assertFalse(any(pinned in row.values() for row in rows))
+
+    def test_builder_lists_wider_key_quotes_in_real_docs(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build, tracked_snapshot
+        root, temp, names = tracked_snapshot()
+        self.addCleanup(temp.cleanup)
+        _, listed = build(root, names)
+        for name in (
+            "docs/legacy/strategy/2026-08-07-paper-portfolio/proposals/prop-param-scaling-energy.md",
+            "docs/process_traces/2026-08-07-plan-factory/DRAFT-NEVERZERO.md",
+            "docs/site/run_state.html",
+        ):
+            self.assertTrue(any(item[0] == name and item[2] == "quoted" for item in listed), name)
+
+    def test_witness_ruled_corpus_counts_when_available(self) -> None:
+        from scripts.build_battery_float_historical_bundles import build, tracked_snapshot, witness
+        corpus = sorted(Path("/Users/edr/code/JouleWise").glob("runs*"))
+        if not corpus:
+            self.skipTest("controlled runs corpus unavailable")
+        root, temp, names = tracked_snapshot()
+        self.addCleanup(temp.cleanup)
+        rows, _ = build(root, names)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            witness(root, names, corpus, rows)
+        output = out.getvalue()
+        for line in (
+            "witness bundles=1402",
+            "witness_entry_count matched 56",
+            "witness_entry_count named_only 9",
+            "witness_entry_count absent 4",
+            "witness_namesake_count lines=206 bundles=177",
+        ):
+            self.assertIn(line + "\n", output)
+        self.assertNotIn("witness metadata_unreadable", output)
+        self.assertEqual(len([line for line in output.splitlines()
+                              if line.startswith("witness_entry ")]), 69)
+
     def test_rpt001_tree_entry_and_mutation(self) -> None:
         from scripts.make_figures import bundle_tree_sha256
         source = REPO_ROOT.parent / "JouleWise/runs/example-mac-mlx-local__r1"
@@ -204,18 +427,36 @@ class StrictAccessorTests(ReaderTestCase):
             with self.assertRaisesRegex(BatteryStatusRefusal, "prospective bundle"):
                 BundleReader(bundle).metadata()
 
-    def test_historical_set_rejects_wrong_tree_identity_and_duplicate(self) -> None:
+    def test_historical_set_rejects_wrong_tree_identity(self) -> None:
         from unittest.mock import patch
         from joulewise import bundle_read
         original = (REPO_ROOT / "configs/battery_float/historical_bundles.json").read_bytes()
         rows = json.loads(original)
-        for bad in (dict(rows[-1], tree_identity="other"), rows[0]):
-            modified = rows + [bad]
+        fresh = dict(next(row for row in rows if "bundle_tree_sha256" in row),
+                     bundle_tree_sha256="b" * 64)
+        self.assertNotIn(fresh["bundle_tree_sha256"], {
+            row.get("complete_bundle_sha256", row.get("bundle_tree_sha256")) for row in rows
+        })
+        for identity in ("other", "joulewise.bundle-tree.nul-v1"):
+            modified = rows + [dict(fresh, tree_identity=identity)]
             data = (json.dumps(modified) + "\n").encode()
-            with self.subTest(bad=bad), patch.object(bundle_read, "HISTORICAL_BUNDLE_SET_SHA256", hashlib.sha256(data).hexdigest()), \
+            with self.subTest(identity=identity), patch.object(bundle_read, "HISTORICAL_BUNDLE_SET_SHA256", hashlib.sha256(data).hexdigest()), \
                  patch.object(bundle_read, "read_authentication_input", return_value=data):
-                with self.assertRaisesRegex(BundleReadError, "invalid entries"):
-                    _historical_bundles()
+                if identity == "other":
+                    with self.assertRaisesRegex(BundleReadError, "invalid entries"):
+                        _historical_bundles()
+                else:
+                    self.assertIn("b" * 64, _historical_bundles().tree)
+
+    def test_historical_set_rejects_duplicate_digest(self) -> None:
+        from unittest.mock import patch
+        from joulewise import bundle_read
+        rows = json.loads((REPO_ROOT / "configs/battery_float/historical_bundles.json").read_bytes())
+        data = (json.dumps(rows + [rows[0]]) + "\n").encode()
+        with patch.object(bundle_read, "HISTORICAL_BUNDLE_SET_SHA256", hashlib.sha256(data).hexdigest()), \
+             patch.object(bundle_read, "read_authentication_input", return_value=data):
+            with self.assertRaisesRegex(BundleReadError, "invalid entries"):
+                _historical_bundles()
 
     def test_status_refusals_are_typed_and_unreadable_metadata_is_not(self) -> None:
         from joulewise.detection_floor import complete_bundle_sha256
@@ -264,6 +505,21 @@ class StrictAccessorTests(ReaderTestCase):
                 with self.assertRaisesRegex(BatteryStatusRefusal,
                                             r"^battery_float_evidence_missing: prospective bundle \("):
                     BundleReader(writer.path).metadata()
+
+    def test_digest_bound_config_that_fails_revalidation_is_status_refusal(self) -> None:
+        writer = self.make_bundle("invalid-bound-config")
+        self.write_metadata(writer, ["mock"])
+        config_path = writer.path / "config.json"
+        config_path.write_text("[]")
+        metadata_path = writer.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        metadata_path.write_text(json.dumps(metadata))
+        with self.assertRaisesRegex(
+            BatteryStatusRefusal,
+            r"^battery_float_evidence_missing: prospective bundle \(config\.json does not re-validate",
+        ):
+            BundleReader(writer.path).metadata()
 
     def test_marker_config_digest_mismatch_has_not_bound_prefix(self) -> None:
         writer = self.make_bundle("marker-mismatch")

@@ -18,7 +18,7 @@ BASE = "1417c0c4caf36f7ac132410b3cd3ebc7aefbd9e7"
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from joulewise.detection_floor import complete_bundle_sha256  # noqa: E402
-from joulewise.bundle_read import _bundle_tree_sha256  # noqa: E402
+from joulewise.bundle_read import BundleReadError, BundleReader, _bundle_tree_sha256  # noqa: E402
 
 OUTPUT = ROOT / "configs/battery_float/historical_bundles.json"
 INCLUDED_SOURCES = frozenset({
@@ -30,9 +30,7 @@ HEX = re.compile(r"^[0-9a-f]{64}$")
 HEX_ANY = re.compile(r"\b[0-9a-f]{64}\b")
 HEX_ANY_BYTES = re.compile(rb"\b[0-9a-f]{64}\b")
 KEY = re.compile(r"(?i)(?:bundle.*(?:sha256|digest|tree)|(?:sha256|digest|tree).*bundle)")
-TEXT_CANDIDATE = re.compile(
-    r"(?i)\b(bundle_sha256|complete_bundle_sha256)\b.{0,128}?\b([0-9a-f]{64})\b"
-)
+TEXT_TOKEN = re.compile(r"[A-Za-z0-9_]+")
 # (key, producing schema) -> (class, producing code). Every observed pair is named.
 CLASSIFICATION = {
     ("bundle_sha256", "joulewise.detection_floor_artifact.v2"):
@@ -53,10 +51,6 @@ CLASSIFICATION = {
         ("file_digest", "joulewise/output_identity.py:102"),
     ("PINNED_BUNDLE_SHA256", "scripts/issue_dg071_dg075_statistics.py"):
         ("file_digest", "scripts/issue_dg071_dg075_statistics.py:537-539"),
-    ("bundle_sha256", "prose"):
-        ("complete", "joulewise/detection_floor.py:558"),
-    ("complete_bundle_sha256", "prose"):
-        ("complete", "joulewise/detection_floor.py:558"),
 }
 
 
@@ -113,6 +107,8 @@ def _classified(name: str, key: str, schema: str) -> tuple[str, str]:
     if key == "/spec_on_bundle/requests_artifact_sha256":
         lookup = (key, "tests/goldens/output_identity_*.patch.json")
     if lookup not in CLASSIFICATION:
+        if schema == name and name.endswith((".md", ".html", ".txt")):
+            return "quoted", ""
         raise ValueError(f"unclassified candidate pair: key={key} schema={schema} file={name}")
     return CLASSIFICATION[lookup]
 
@@ -125,25 +121,26 @@ def _candidates(root: Path, names: list[str]):
         try:
             content = path.read_text()
         except UnicodeError:
+            print(f"skipped non-utf8 {name}", file=sys.stderr)
             continue
+        parsed = False
         if name.endswith((".json", ".jsonl")):
             try:
                 objects = ([json.loads(line) for line in content.splitlines() if line.strip()]
                            if name.endswith(".jsonl") else [json.loads(content)])
             except ValueError as exc:
                 print(f"unparseable {name}: {type(exc).__name__}", file=sys.stderr)
-                continue
-            for obj in objects:
-                schema = _schema(obj, name)
-                for key, digest, run_id in _walk(obj):
-                    yield name, key, schema, digest, run_id
-        else:
+            else:
+                parsed = True
+                for obj in objects:
+                    schema = _schema(obj, name)
+                    for key, digest, run_id in _walk(obj):
+                        yield name, key, schema, digest, run_id
+        if not parsed:
             # Assignment and prose lines. Markdown tables are attributed to
             # their header column, rather than to nearby prose on the line.
             header: list[str] = []
             for line in content.splitlines():
-                for key, digest in TEXT_CANDIDATE.findall(line):
-                    yield name, key, "prose", digest, ""
                 if line.lstrip().startswith("|"):
                     cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
                     if (len(cells) >= 2 and all(len(cell) < 80 for cell in cells)
@@ -155,10 +152,16 @@ def _candidates(root: Path, names: list[str]):
                         if index < len(header) and KEY.search(header[index]):
                             for digest in HEX_ANY.findall(cell):
                                 yield name, header[index], name, digest, ""
-                match = re.search(r"\b(PINNED_BUNDLE_SHA256)\b", line)
-                if match:
-                    for digest in HEX_ANY.findall(line):
-                        yield name, match.group(1), name, digest, ""
+                    continue
+                if name == "scripts/issue_dg071_dg075_statistics.py" and "PINNED_BUNDLE_SHA256" in line:
+                    continue
+                keys = [(token.start(), token.group()) for token in TEXT_TOKEN.finditer(line)
+                        if not HEX.fullmatch(token.group()) and KEY.fullmatch(token.group())]
+                if keys:
+                    for match in HEX_ANY.finditer(line):
+                        before = [item for item in keys if item[0] < match.start()]
+                        key = (before[-1] if before else keys[0])[1]
+                        yield name, key, name, match.group(), ""
             if name == "scripts/issue_dg071_dg075_statistics.py":
                 match = re.search(r"PINNED_BUNDLE_SHA256\s*=\s*\(\s*\"([0-9a-f]{64})\"", content)
                 if match:
@@ -167,7 +170,7 @@ def _candidates(root: Path, names: list[str]):
 
 def build(root: Path, names: list[str]):
     rows: dict[str, dict[str, str]] = {}
-    listed: list[tuple[str, str, str, str, str]] = []
+    pending: list[tuple[str, str, str, str]] = []
     tracked = set(names)
     for name in names:
         if not name.endswith("/metadata.json") or not name.startswith(("tests/fixtures/", "docs/process_traces/")):
@@ -199,12 +202,16 @@ def build(root: Path, names: list[str]):
                             "tree_identity": "joulewise.bundle-tree.nul-v1",
                             "run_id": run_id, "source": name}
         else:
-            reason = ("duplicate of included citation" if digest in rows and name in (
-                          "df-ph-decode-floor-mint1.json", "analysis/rpt001-v2/artifact_manifest.json")
-                      else "source not named by amendment 40" if kind in ("complete", "tree_nul_v1")
-                      else "file digest, not a bundle" if kind == "file_digest" else
-                      "retired tree fold" if kind == "tree_legacy" else "not a bundle")
-            listed.append((name, key, kind, digest, reason))
+            pending.append((name, key, kind, digest))
+    listed = []
+    for name, key, kind, digest in pending:
+        reason = ("duplicate of included citation" if digest in rows and name in (
+                      "df-ph-decode-floor-mint1.json", "analysis/rpt001-v2/artifact_manifest.json")
+                  else "source not named by amendment 40" if kind in ("complete", "tree_nul_v1")
+                  else "quoted in text, not a citation source" if kind == "quoted"
+                  else "file digest, not a bundle" if kind == "file_digest" else
+                  "retired tree fold" if kind == "tree_legacy" else "not a bundle")
+        listed.append((name, key, kind, digest, reason))
     ordered = sorted(rows.values(), key=lambda row: ("complete" if "complete_bundle_sha256" in row else "tree",
                                                    row.get("complete_bundle_sha256", row.get("bundle_tree_sha256"))))
     return ordered, listed
@@ -226,25 +233,67 @@ def witness(root: Path, names: list[str], roots: list[Path], rows: list[dict[str
         bundles.extend(p.parent for p in run_root.rglob("metadata.json") if p.is_file())
     print(f"witness bundles={len(bundles)}")
     hit_count = Counter()
+    matched: set[str] = set()
+    named: set[str] = set()
+    namesake_lines = 0
+    namesake_bundles: set[Path] = set()
     for bundle in sorted(set(bundles)):
         complete = complete_bundle_sha256(bundle)
         tree = _bundle_tree_sha256(bundle)
+        bundle_names = {bundle.name}
+        try:
+            metadata = BundleReader(bundle)._strict_json("metadata.json")
+        except BundleReadError:
+            metadata = None
+        if isinstance(metadata, dict) and isinstance(metadata.get("run_id"), str):
+            bundle_names.add(metadata["run_id"])
+        else:
+            print(f"witness metadata_unreadable {bundle}")
+        observed = {"complete": complete, "tree": tree}
         for kind, digest in (("complete", complete), ("tree", tree)):
             for source in sorted(citations.get(digest, ())):
                 status = "included" if digest in included and included[digest]["source"] == source else "listed"
                 print(f"witness {status} {kind} {bundle} {digest} {source}")
                 hit_count[(kind, source, status)] += 1
-            if digest in included and included[digest]["run_id"] != bundle.name:
+            if digest in included and included[digest]["run_id"] not in bundle_names:
                 raise ValueError(f"included digest run_id mismatch: {bundle} {digest}")
             if digest in included and not citations.get(digest):
                 raise ValueError(f"included digest has no tracked citation: {bundle} {digest}")
+        for row in rows:
+            kind = "complete" if "complete_bundle_sha256" in row else "tree"
+            digest = row.get("complete_bundle_sha256", row.get("bundle_tree_sha256"))
+            if observed[kind] == digest:
+                matched.add(digest)
+            elif row["run_id"] in bundle_names:
+                named.add(digest)
+                namesake_lines += 1
+                namesake_bundles.add(bundle)
+                print(f"witness namesake {kind} {bundle} {row['run_id']} "
+                      f"expected={digest} observed={observed[kind]}")
+    fails = False
+    entry_counts = Counter()
+    for row in rows:
+        kind = "complete" if "complete_bundle_sha256" in row else "tree"
+        digest = row.get("complete_bundle_sha256", row.get("bundle_tree_sha256"))
+        state = "matched" if digest in matched else "named_only" if digest in named else "absent"
+        entry_counts[state] += 1
+        print(f"witness_entry {state} {kind} {row['run_id']} {digest} {row['source']}")
+        if state == "named_only" and row["source"] in {
+            "df-ph-decode-floor-mint1.json", "analysis/rpt001-v2/input_manifest.json"
+        }:
+            fails = True
+    for state in ("matched", "named_only", "absent"):
+        print(f"witness_entry_count {state} {entry_counts[state]}")
+    print(f"witness_namesake_count lines={namesake_lines} bundles={len(namesake_bundles)}")
     for (kind, source, status), count in sorted(hit_count.items()):
         print(f"witness_count {status} {kind} {source} {count}")
     unexpected = [source for _, source, status in hit_count if status == "listed"
-                  and not source.endswith(".md")
+                  and not source.endswith((".md", ".html", ".txt"))
                   and source != "analysis/rpt001-v2/artifact_manifest.json"]
     if unexpected:
         raise ValueError(f"witness non-prose listed hits: {sorted(set(unexpected))}")
+    if fails:
+        raise ValueError("witness named_only included citation")
 
 
 def main() -> int:

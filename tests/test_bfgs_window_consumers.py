@@ -104,6 +104,27 @@ class WindowMembersTests(unittest.TestCase):
                              [(label, "battery_float_evidence_missing", complete_bundle_sha256(path))
                               for label, path in members])
 
+    def test_digest_bound_invalid_config_is_window_status_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = RunBundleWriter.create(
+                Path(tmp), load_config(run_id="invalid-bound-window"), FakeClock()
+            )
+            writer.write_metadata({})
+            config_path = writer.path / "config.json"
+            config_path.write_text("[]")
+            metadata_path = writer.path / "metadata.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["config_sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+            metadata_path.write_text(json.dumps(metadata))
+            with self.assertRaises(WindowBatteryRefusal) as caught:
+                authenticate_window_members((("invalid-bound-window", writer.path),))
+            self.assertEqual(caught.exception.members[0]["label"], "invalid-bound-window")
+            self.assertEqual(caught.exception.members[0]["status"], "battery_float_evidence_missing")
+            self.assertRegex(
+                caught.exception.members[0]["reasons"][0],
+                r"^prospective bundle \(config\.json does not re-validate",
+            )
+
     def test_confounded_then_prospective_names_both(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
