@@ -21,3 +21,9 @@ All paths are relative to `docs/process_traces/2026-09-26-activation-92472459/30
 1. Nine older collector tests call the real `ioreg`.
 2. Three custody messages do not name the envelope; one of them is pinned by F8.
 3. `scripts/bench_replay_start_drift.py` wording.
+
+## Addendum: row 9 (integration tree `11c2f89d` = `d3f904d6` + main `97a48451`)
+
+`scripts/shard_tests.py --workers 6` in `JouleWise-wt-s2integ-92472459`, 20:12–21:24 PDT, under heavy load from parallel seats: **7,525 tests, 1 failure, 1 error, 109 skipped** (tail: `row9-fullsuite-11c2f89d-tail.txt`; full log: `row9-fullsuite-11c2f89d.log.gz`). Both cases are diagnosed as environmental, and neither module is touched by S2 (`git diff --stat 1417c0c4 d3f904d6` names neither file):
+1. `test_calibration_ledger_custody…test_one_budget_is_shared_by_several_observations`: a 3.0 s custody budget exceeded at 3.002 s under load (each `instrument_evidence.json` read took about 1.4 s). **Rerun of the whole module on the integration tree: `Ran 62 tests … OK`.**
+2. `test_arm_readiness_evidence_t0…test_g4_real_ruled_census_pgrep_dialect`: a live `pgrep` census over the real process table hit the magistrate's own running Codex seat, whose multi-line argv contains `run_campaign`, and the test's parser fails on the continuation line (`ValueError: invalid literal for int() … ''`). **It fails identically on the main-equivalent tree `5bf920e4` while that seat is alive.** It gets a clean rerun once no seat is live (below). The parser fragility is registered as lane TEST-CENSUS-MULTILINE-ARGV-01.
