@@ -153,6 +153,7 @@ def build_derivation_ledger(
     root: Path,
     slots: Sequence[Slot],
     *,
+    custody_parent: Path | None = None,
     session_id: str = SESSION_ID,
     session_kind: str = SESSION_KIND_DERIVATION,
     second_session: tuple[str, Sequence[Slot]] | None = None,
@@ -186,6 +187,13 @@ def build_derivation_ledger(
         (REPO_ROOT / "joulewise" / "battery_float.py").read_bytes())
     runs = root / "runs"
     runs.mkdir()
+    if custody_parent is not None:
+        custody_parent.mkdir(parents=True, exist_ok=True)
+        custody_parent = custody_parent.resolve()
+    def session_runs(session_id: str) -> Path:
+        path = (custody_parent / session_id / "runs") if custody_parent else runs
+        path.mkdir(parents=True, exist_ok=True)
+        return path
     ledger = runs / "calibration_observation_ledger.jsonl"
     pin = root / "configs/calibration/calibration_ledger_head.json"
     pin.parent.mkdir(parents=True, exist_ok=True)
@@ -201,13 +209,13 @@ def build_derivation_ledger(
     # A bracket-kind session's slot list is fixed at ("pre", "post"); only a
     # derivation session declares an arbitrary ordered list.
     _write_session(
-        ledger, runs, pin, session_id, slots, session_kind, fill_slots, abort_reason,
+        ledger, session_runs(session_id), pin, session_id, slots, session_kind, fill_slots, abort_reason,
         session_epoch or TARGET_EPOCH,
         t1_bindings or T1_BINDINGS,
     )
     if second_session is not None:
         _write_session(
-            ledger, runs, pin, second_session[0], second_session[1],
+            ledger, session_runs(second_session[0]), pin, second_session[0], second_session[1],
             SESSION_KIND_DERIVATION,
             None,
             None,
@@ -216,10 +224,12 @@ def build_derivation_ledger(
         )
     if third_session is not None:
         _write_session(
-            ledger, runs, pin, third_session[0], third_session[1],
+            ledger, session_runs(third_session[0]), pin, third_session[0], third_session[1],
             SESSION_KIND_DERIVATION, None, None, TARGET_EPOCH, t1_bindings or T1_BINDINGS,
         )
     fixture = {"root": root, "ledger": ledger, "pin": pin, "runs": runs}
+    if custody_parent is not None:
+        fixture["custody_parent"] = custody_parent
     written = [session_id, *(extra[0] for extra in (second_session, third_session) if extra)]
     _terminal_pin(fixture, written if verdict_records else (), preregistration_sha256)
     return fixture
@@ -240,7 +250,10 @@ def add_session(
     """
 
     _write_session(
-        fixture["ledger"], fixture["runs"], fixture["pin"], session_id, slots,
+        fixture["ledger"],
+        (fixture["custody_parent"] / session_id / "runs"
+         if "custody_parent" in fixture else fixture["runs"]),
+        fixture["pin"], session_id, slots,
         SESSION_KIND_DERIVATION, None, None, TARGET_EPOCH, T1_BINDINGS,
     )
     _terminal_pin(fixture, (session_id,) if verdict_records else (), preregistration_sha256)

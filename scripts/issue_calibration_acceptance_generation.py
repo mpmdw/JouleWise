@@ -80,6 +80,7 @@ import json
 import math
 from pathlib import Path
 import re
+import stat
 import statistics as std_statistics
 import subprocess
 import sys
@@ -124,6 +125,7 @@ from joulewise.uncertainty_evidence import (  # noqa: E402
     CLOCK_METHOD_V3,
 )
 from joulewise.adapters.powermetrics import parse_powermetrics_records  # noqa: E402
+from joulewise.authentication_io import _read_nofollow_bytes  # noqa: E402
 
 
 WATCH_FIELDS = ("os_build", "hardware_model", "powermetrics_sha256", "mlx_version")
@@ -912,6 +914,52 @@ def _repo_relative_custody(custody_locator: str, attempt_id: str, repo_root: Pat
         ) from error
 
 
+def _canonical_relative_parts(value: str, label: str) -> tuple[str, ...]:
+    """Check a stored POSIX name before pathlib can normalize its spelling."""
+
+    if (not isinstance(value, str) or not value or value.startswith("/")
+            or "\\" in value or any(part in ("", ".", "..") for part in value.split("/"))):
+        raise PrepareRefusal(f"{label}: noncanonical relative custody path {value!r}")
+    return tuple(value.split("/"))
+
+
+def _corpus_relative_custody(
+    custody_locator: str, attempt_id: str, session_id: str, corpus_root: Path,
+) -> str:
+    """Name a canonical capture beneath its session in the declared corpus."""
+
+    label = f"member {attempt_id}: custody {custody_locator}"
+    try:
+        if not Path(corpus_root).is_dir():
+            raise ValueError("declared corpus root is missing or not a directory")
+        root = Path(corpus_root).resolve(strict=True)
+        if not root.is_dir():
+            raise ValueError("declared corpus root is not a directory")
+        if (not isinstance(custody_locator, str) or not custody_locator.startswith("/")
+                or custody_locator.startswith("//") or "\\" in custody_locator
+                or any(part in ("", ".", "..") for part in custody_locator[1:].split("/"))):
+            raise ValueError("recorded locator is not a canonical absolute POSIX path")
+        path = Path(custody_locator)
+        if not path.is_dir() or path.resolve(strict=True) != path:
+            raise ValueError("recorded locator is missing, non-directory, or follows a symlink")
+        try:
+            relative = path.relative_to(root)
+        except ValueError as error:
+            raise ValueError("lies outside the declared corpus root") from error
+        parts = relative.parts
+        if len(parts) < 2 or parts[0] != session_id:
+            raise ValueError("first path part does not equal the session id")
+        if parts[-1] != attempt_id:
+            raise ValueError("last path part does not equal the capture id")
+        for name in ("manifest.json", "instrument_evidence.json"):
+            primary = path / name
+            if not stat.S_ISREG(primary.lstat().st_mode) or primary.resolve(strict=True) != primary:
+                raise ValueError(f"primary file {name} is not a canonical regular file")
+        return relative.as_posix()
+    except (OSError, ValueError) as error:
+        raise PrepareRefusal(f"{label}: {error}") from error
+
+
 def _plain(value: Decimal) -> str:
     """A Decimal in plain notation; `str` would give "1E-15" for a quantum."""
 
@@ -1204,6 +1252,7 @@ def _select_members(
     observations: Iterable[LedgerObservation],
     repo_root: Path,
     level_screen_threshold: Decimal,
+    corpus_root: Path | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[dict[str, Any]]]:
     """Split the registration's VALID rows into members and named exclusions.
 
@@ -1214,7 +1263,17 @@ def _select_members(
     members: list[dict[str, Any]] = []
     excluded: list[dict[str, str]] = []
     comparisons: list[dict[str, Any]] = []
-    for observation in sorted(observations, key=lambda row: row.sequence):
+    ordered = sorted(observations, key=lambda row: row.sequence)
+    corpus_paths = {}
+    if corpus_root is not None:
+        # Check every valid row's path before opening any member evidence.
+        corpus_paths = {
+            row.attempt_id: _corpus_relative_custody(
+                row.custody_locator, row.attempt_id, row.bracket_session_id, corpus_root,
+            )
+            for row in ordered if row.classification_disposition == "valid"
+        }
+    for observation in ordered:
         if observation.classification_disposition != "valid":
             continue
         evidence, _manifest = _read_member_evidence(observation)
@@ -1241,7 +1300,8 @@ def _select_members(
                 "match the ledger row's exact bound lexeme"
             )
         members.append({**entry, "b_fiducial_s": lexeme,
-                        "source_directory": _repo_relative_custody(
+                        "source_directory": corpus_paths[observation.attempt_id]
+                        if corpus_root is not None else _repo_relative_custody(
                             observation.custody_locator, observation.attempt_id,
                             repo_root,
                         ),
@@ -1825,7 +1885,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "registration is void"
         )
     members, excluded, comparisons = _select_members(
-        observations, Path(args.repo_root), level_screen_threshold
+        observations, Path(args.repo_root), level_screen_threshold, args.corpus_root
     )
     n = len(members)
     if revision_five and len(session_ids) == 3:
@@ -2091,6 +2151,11 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         },
     }
     derivation_notes = {
+        **({"member_custody": (
+            "Stored member paths are relative to the directory holding one directory "
+            "per session. Verify with issue_calibration_acceptance_generation.py "
+            "verify-members --artifact <file> --corpus-root <dir>."
+        )} if args.corpus_root is not None else {}),
         **({"battery_confounded_sessions": [
             {"session_id": verdict.session_id, "status": verdict.status,
              "verdict_file_sha256": verdict.file_sha256,
@@ -2296,6 +2361,75 @@ def derivation_input_sha256(payload: Mapping[str, Any]) -> str:
     ).hexdigest()
 
 
+def _verify_corpus_member(
+    member: Mapping[str, Any], prior_rows: list[Any], corpus_root: Path,
+) -> bool:
+    """Authenticate primary bytes and their session-bound prior-set identity."""
+
+    member_id = member.get("member_id")
+    stored = member.get("source_directory")
+    if not isinstance(member_id, str) or not member_id or not isinstance(stored, str):
+        return False
+    try:
+        parts = _canonical_relative_parts(stored, f"member {member_id}")
+        expected = {
+            "manifest.json": member.get("manifest_sha256"),
+            "instrument_evidence.json": member.get("instrument_evidence_sha256"),
+        }
+        content_id = content_id_from_artifact_hashes(expected)
+        matches = [row for row in prior_rows if isinstance(row, Mapping)
+                   and row.get("content_id") == content_id
+                   and row.get("attempt_id") == member_id
+                   and row.get("session_id") == parts[0]
+                   and row.get("disposition") == "valid"]
+        if content_id is None or len(matches) != 1:
+            return False
+        root = Path(corpus_root).resolve(strict=True)
+        canonical = _corpus_relative_custody(
+            str(root.joinpath(*parts)), member_id, parts[0], root,
+        )
+        if canonical != stored:
+            return False
+        evidence_raw = b""
+        for name, digest in expected.items():
+            raw = _read_nofollow_bytes(root, f"{stored}/{name}")
+            if hashlib.sha256(raw).hexdigest() != digest:
+                return False
+            if name == "instrument_evidence.json":
+                evidence_raw = raw
+        evidence = json.loads(evidence_raw, parse_float=str, parse_int=str)
+        if not isinstance(evidence, Mapping) or evidence.get("b_fiducial_s") != member.get(
+            "b_fiducial_s"
+        ):
+            return False
+        return True
+    except (OSError, ValueError, PrepareRefusal):
+        return False
+
+
+def verify_members(args: argparse.Namespace) -> int:
+    """Read-only primary-file verification; this does not issue an artifact."""
+
+    try:
+        artifact = json.loads(Path(args.artifact).read_text(encoding="utf-8"))
+        members = artifact["derivation_corpus"]["members"]
+        prior_rows = artifact["prior_observation_set"]["observations"]
+        if not isinstance(members, list) or not members or not isinstance(prior_rows, list):
+            raise ValueError("malformed corpus tables")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(f"REFUSED: artifact unreadable or malformed ({type(error).__name__})")
+        return 3
+    all_pass = True
+    for member in members:
+        member_id = member.get("member_id") if isinstance(member, Mapping) else None
+        passed = isinstance(member, Mapping) and _verify_corpus_member(
+            member, prior_rows, args.corpus_root,
+        )
+        print(f"member {json.dumps(member_id)}: {'PASS' if passed else 'FAIL'}")
+        all_pass &= passed
+    return 0 if all_pass else 3
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -2391,6 +2525,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     prepare.add_argument(
+        "--corpus-root", type=Path, default=None,
+        help="parent of session custody directories; only member paths use it",
+    )
+    prepare.add_argument(
         "--preregistration", type=Path, required=True,
         help="the pre-registration this corpus was captured under",
     )
@@ -2476,6 +2614,13 @@ def build_parser() -> argparse.ArgumentParser:
             "omission"
         ),
     )
+    verify = commands.add_parser(
+        "verify-members", help="read-only authentication of a candidate's corpus members",
+    )
+    verify.add_argument("--artifact", type=Path, required=True,
+                        help="candidate or acceptance JSON file to check")
+    verify.add_argument("--corpus-root", type=Path, required=True,
+                        help="directory holding one custody directory per session")
     return parser
 
 
@@ -2483,6 +2628,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "prepare-candidate":
         return prepare_candidate(args)
+    if args.command == "verify-members":
+        return verify_members(args)
     if args.command == "battery-verdict":
         return battery_verdict(args)
     return check(args)
