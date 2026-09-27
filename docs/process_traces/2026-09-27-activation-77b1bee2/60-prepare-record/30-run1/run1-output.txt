@@ -1,0 +1,5 @@
+candidate written (NOT ISSUED): /Users/edr/night-archive/prepare-25g83-77b1bee2/candidate_acceptance_25g83.json
+corpus n: 12
+screen_rule: floored_range_envelope_screen
+rc=0
+2026-09-27T16:26:39-0700

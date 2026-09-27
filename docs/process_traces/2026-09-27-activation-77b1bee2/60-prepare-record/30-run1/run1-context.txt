@@ -1,0 +1,4 @@
+/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2
+2026-09-27T16:25:42-0700
+e7c8bcc68d9a1c4f20e11c1904e49552c81ffcd1
+OUT_IS_NEW
