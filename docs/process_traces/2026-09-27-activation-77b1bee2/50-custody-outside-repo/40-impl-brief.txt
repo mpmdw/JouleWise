@@ -1,0 +1,30 @@
+ROLE: implementation seat, lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01 (JouleWise), design C as adopted.
+WRITE_SCOPE: ["scripts/issue_calibration_acceptance_generation.py", "tests/test_issue_calibration_acceptance_generation.py", "tests/fixtures/epoch_bootstrap/build.py", "tests/test_issuer_corpus_root.py"]
+WRITE_SCOPE is exhaustive. If anything else must change, stop and return NEEDS_SCOPE with the reason. Do not commit; the lead commits. Scratch only under /tmp/corpus-root-impl-77b1bee2/.
+Bridge depth is one hop: do not call Claude by any route. No git fetch/pull/checkout/reset/commit in any checkout.
+
+WORKING TREE: /Users/edr/code/JouleWise-wt-corpus-root-77b1bee2 (branch fix/2026-09-27-issuer-corpus-root at origin/main 670756f3).
+
+OUTCOME-BLIND (binding, constraint R1): open no measured value of epoch 25G83 W1/W2 — no B / b_fiducial_s, no ledger row value fields, no manifest.json / instrument_evidence.json content under /Users/edr/night-custody. All tests use synthetic fixtures. The only permitted touch of real custody is the R8 probe below (path strings and file existence only).
+
+READ FIRST (all under /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-77b1bee2/):
+- 50-custody-outside-repo/30-lead-synthesis.md — THE CONTRACT (design C + rulings 1–5). Where it and a consult differ, the synthesis wins.
+- 50-custody-outside-repo/14-fable-consult.md §4.1, §5 (sites 1–8), §7 (tests), §9 P4 (the naming function it ran) — the specification.
+- 50-custody-outside-repo/13-opus-consult.md (tests + mutation cuts) and 12-astra-consult.md F3 (path-hardening refusal matrix).
+- 60-prepare-record/00-refusal-branch-final-statement.md item 6(d), constraints R1–R9 — binding.
+
+IMPLEMENT (design C):
+1. New naming function beside `_repo_relative_custody` (which stays byte-identical): inputs recorded locator, attempt (capture) id, session id, corpus root. Steps per Fable §5.1 site 1, PLUS the synthesis ruling 4 hardening (raw-string canonical POSIX checks before normalization; locator must be canonical — no symlink/`..` hop; containment; first part == session id; last part == capture id; ≥2 parts). Refusals are REFUSED-style errors naming the path, never a value.
+2. `_select_members`: `corpus_root: Path | None = None`; old function when None, new otherwise, no fallback. Where the existing order allows, perform the path/naming check for every candidate member BEFORE any member value is parsed (if the current order reads evidence first at ~:1220/:1237, restructure minimally so naming for all members is validated first, or report why not).
+3. Call site (~:1828) passes `args.corpus_root`; parser adds `--corpus-root` (type path, default None). **Guard F2: `--corpus-root` reaches the naming function and NOTHING else** — ledger, head pin, battery verdicts, git lookups stay on the run checkout/--repo-root. Add a test that proves it (e.g. corpus root pointing at a directory with no ledger/pin/git still works while repo-root holds them; and repo-root uses are unaffected).
+4. `derivation_notes["member_custody"]`: fixed text only when `--corpus-root` is given (no absolute path): stored paths are relative to the directory holding one directory per session; verify with `issue_calibration_acceptance_generation.py verify-members --artifact <file> --corpus-root <dir>`.
+5. New read-only subcommand `verify-members --artifact <file> --corpus-root <dir>` per Fable site 5, with ruling-4 hardening (no-follow primary-file reads/containment). Prints one PASS/FAIL line per member id, no values; exit 0 only if all pass.
+6. Fixture builder: optional custody parent so sessions write under `<parent>/<session id>/runs/instrument_validation/` (Fable site 7).
+7. Tests (new file tests/test_issuer_corpus_root.py and/or existing test file): defect-shaped RED-before/GREEN-after two-sibling-night-root fixture (prove RED on origin/main code, GREEN after); refusal cases: undeclared/wrong corpus root (too high, too low), absolute stored path, `..`, symlinked locator, directory symlink escape, primary-file symlink escape, wrong session first part, wrong capture last part, missing file/root refuses whole run (no member dropped), one-byte primary mutation; relocation (copy fixture to another parent, verify-members passes with identical artifact); `--corpus-root` absent → byte-identical behaviour to today (existing tests unchanged and green, incl. `test_custody_outside_the_repository_refuses`); guard F2 test. Each new test must fail under a named mutation cut (list the cuts: e.g. drop session check, drop capture check, drop containment, follow symlinks, fall back to old function) — run each cut and show RED.
+8. R6 (history unchanged): record sha256 of configs/calibration/calibration_acceptance_*.json before and after (must be identical; you do not edit them).
+
+R8 PROBE (real path strings, value-blind): from /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2, project ONLY `custody_locator`, `attempt_id`, `session_id` from runs/calibration_observation_ledger.jsonl rows of sessions d079-epoch-25g83-derivation-w1-20260927 and -w2-20260927 (e.g. python json load per line, print only those three keys), and call your new naming function (imported from your worktree's issuer) with corpus root /Users/edr/night-custody on all 24: expect 24 accepted stored strings of shape `<session>/runs/instrument_validation/<attempt>`; also show corpus roots /Users/edr and /Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927 refuse. Print no other field.
+
+VERIFY (use /opt/homebrew/bin/python3; never .venv; macOS has no `timeout`, use perl alarm): the new test file; tests.test_issue_calibration_acceptance_generation; tests.test_reissue_calibration_acceptance; tests.test_calibration_bracketing; exact last five lines each.
+
+REPORT: claude-codex-report/v1 envelope, implementation genre: diff summary per site, the RED-before evidence, mutation-cut table, R8 probe output, verification tails, R6 digests, any NEEDS_SCOPE/NEEDS_RULING.
