@@ -153,3 +153,86 @@ The rule is the ruled mechanism; the row is its witness and must agree with it. 
 - **N-7** folds into Q3's `behind_gate` class.
 
 **Recommended fix round 3 contents (Section A view):** Q1 member-set text and rows; Q2 marker and windowless rows; Q3 sweep detector, `behind_gate` class, the 24-row ruling, self-tests; Q4 handler rule and removal of the collection gate; Q5 corrected R47-4/4b; S-3 behavioural rows per consumer; S-4, S-5, N-1–N-5 (revert), N-8. Then round F as ruled (amendment 38).
+
+---
+
+## Section B — refutation of `21-coldgate-fable-ruling.md` (amendments 49 to 54)
+
+Read after Section A was written. New probes (all at `49d77c74`, in `/tmp/oc2/head`): `/tmp/oc2/sweep_holes.py` (the ruling's own prototype `/tmp/cg_r2/sweep49.py` on six new sources) and `/tmp/oc2/gate_try.py` (every `try` in tracked `joulewise/` and `scripts/` whose body calls the gate or `_prepare` directly, with a broad handler).
+
+**Agreement first.** On every question, the ruling and Section A reach the same verdict: Q1 upheld, Q2 marker admitted for no status, Q3 re-specified detector with a checked `behind_gate` class, Q4 S-1 a breach and S-2 remove, Q5 the rule governs, Q6 test fixes. Amendment 50 matches my outcome table row for row, and I have no finding against it beyond one NIT. The findings below are about places where the ruled text still lets custody become a status, or still lets an ungated read count as gated.
+
+### BLOCKER
+
+**RB-1. Amendment 49 (c): a deleted or altered quarantined bundle turns into a verdict-row condition, not custody. R49-3 is placed where it cannot see this.**
+
+49 (c) says "A quarantined bundle is never skipped because it is absent: the record says it exists, so its absence is a custody failure", and §11 says it "raises through the gate's existing custody path (E4)". That holds only at the helper, with a hand-built resolution. On the production path, item 4 includes only records that pass `validate_occurrence_supersession_entry` (49 (b) 4, "Valid' means the record passes …"). That function returns `False` when the quarantine path does not resolve (`whole_window.py:2823-2826`, `resolve(strict=True)` under `except (OSError, RuntimeError): return False`) or when any of its three recorded digests fails to match (`:2828-2845`). The resolver then does the following:
+- `_resolve_ordinary_occurrence` marks the id `ambiguous` (`run_campaign.py:5471-5478`);
+- the membership candidate is skipped (`:5852-5853`, `if failed: continue`);
+- the fallback membership carries the condition `whole_window_campaign_membership_ambiguous` or `whole_window_campaign_membership_unresolved` (`:5934-5958`);
+- `_run_whole_window_verdict_locked` gates the fallback list, which never holds the quarantine, adds the condition to `core["conditions"]` (`:6349`), and writes a verdict row with `status` `failed` (production) or `flagged` (exploratory) (`:6372-6379`).
+
+On `inputs.py`, the same invalid record gives the member `refusal_payload` (`:2425-2429`), which is a per-member reason. In both cases the bytes the record digest-binds are missing or changed, which is the ruling's own definition of custody (§1), and the result is a status string. No number is released, since the status is `failed` or the member is refused. The kept-intact claim is still false, and the charge lists "turn custody into a status" as a refutation ground. (Read, not run: I did not build a full campaign log. The helper-level R49-3 passes by construction.)
+
+Replacement text, appended to 49 (c):
+> "The record's validity and the quarantined bundle's custody are decided separately. `validate_occurrence_supersession_entry` decides validity from the record's own fields only (schema, record type, runs root, ids, reason, occurrence descriptors, `entry_sha256`, `quarantine.path` a non-empty string naming a location outside the runs directory, three 64-hex digests). For a record valid in that sense, the quarantined bundle is a member under item 4 whatever the state of its directory. Its absence, a symlink, or a mismatch between a recorded digest and the file's bytes is a custody failure: the resolver passes the recorded path to the gate, which raises `CustodyUnreadable` for absence or a symlink, and the resolver raises `CustodyFailure` labelled `superseded:<bundle_id>:<recorded path>` for a digest mismatch. It never resolves the id `ambiguous` or `unresolved` on those grounds."
+
+Rows (production call sites, not the helper):
+- **R49-3b.** `run_whole_window_verdict`, where the log holds a record written by `_run_record_supersession_locked` and the quarantine directory is deleted afterwards. Expected: `CustodyUnreadable` with `window_member` starting `superseded:`, and no verdict row appended. Must fail under the code at `49d77c74`, which appends a `failed` row carrying `whole_window_campaign_membership_ambiguous`.
+- **R49-3c.** The same record, with one byte appended to the quarantined `summary_metrics.json`. Expected: `CustodyFailure`, no row. Same counterfactual.
+- **R49-7b.** `load_analysis_inputs`, with the quarantine deleted. Expected: custody raised. Must fail under the code at `49d77c74`, which gives the member `refusal_payload`.
+
+### SHOULD-FIX
+
+**RS-1. Amendment 51 (d) counts a gate inside a `try` or `with` body as dominating, even when a handler swallows it. A read inside the `except` handler counts as gated.** The ruling's own prototype (`/tmp/cg_r2/sweep49.py`) on new sources:
+```text
+silent    H1 gate swallowed by try/except Exception, read after []
+silent    H2 gate under contextlib.suppress []
+silent    H4 gate in try body, read in except handler []
+REPORTED  H5 early return before gate on a branch, read after [...]
+```
+H4 is the worst case: the read runs exactly when the gate raised. Amendment 52 closes H1 and H2 only in the eight consumer modules, but the sweep covers every tracked file. Replacement for 51 (d), last sentence:
+> "The body of a `try` counts as a branch unless every handler of that `try` whose caught types include `CustodyFailure`, `WindowBatteryRefusal` or an ancestor of either (or that names no type) is preceded by `except GATE_EXCEPTIONS: raise` or ends in a bare `raise`. A read site inside a handler, `else` or `finally` of a `try` whose body holds the gate call is never gated by that call. The body of a `with` counts as a branch when its context expression is a call named `suppress`."
+
+Rows: R51-18 (H1), R51-19 (H2) and R51-20 (H4) are each reported. Counterfactual: rule (d) as ruled (the prototype output above).
+
+**RS-2. Amendment 52 stops at the eight modules. At least one ninth site converts the gate's exceptions into a refusal code.** `/tmp/oc2/gate_try.py`:
+```text
+joulewise/analysis_manifest_v3.py:3712 handler ['KeyError', 'OSError', 'RuntimeError', 'TypeError', 'ValueError'] bare_reraise=False gate_line=3704 (_prepare)
+scripts/run_campaign.py:8996 handler ['BaseException'] bare_reraise=True gate_line=8928 (authenticate_window_members)
+```
+`analysis_manifest_v3.py:3704-3716` calls `session._prepare` (whose gate is `whole_window.py:679`). It catches `RuntimeError` and re-raises the failure as `AnalysisManifestFinalizationError("analysis_finalization_attachment_invalid", …)`. That is custody turned into a finalization code. `:4499` does the same through `except Exception`, returning a `ManifestRefusal` (the Opus round-2 lens noted both). Both fail closed. §11's sentence "Amendment 52 removes the one place found where a custody failure became a reason string" is therefore not accurate. The file is outside S1's WRITE_SCOPE. Replacement: add to 52:
+> "(g) Residual, stated: `joulewise/analysis_manifest_v3.py:3712` and `:4499` catch the gate's exceptions through `_prepare` and convert them to finalization refusals. They are outside S1's WRITE_SCOPE. They are either added to S1 by name, with the clause of (c), or registered as a lane that must close before any analysis manifest is finalized over a post-S1 bundle."
+
+R52-4's syntax-tree check should also run over every tracked module that calls `authenticate_window_members` or `_prepare` directly. Where such a module is out of scope, the check lists it as the named residual rather than skipping it.
+
+**RS-3. Amendment 53 (b) ("over every evaluated member whose bundle directory exists") and 49 (b) keep member lists that come from the disk, not from the record.** A recorded, finalized member whose directory is gone is dropped before the gate, although E4 shows the gate would raise custody for it:
+- `run_campaign.py:8931` (`if evaluation.bundle_path.is_dir()`);
+- `inputs.py:3133` (`if path.is_dir()`), after which `_read_bundle` gives the member the per-bundle reason `bundle_missing` (`inputs.py:2770-2783`), so the analysis continues without it;
+- items 3 and 49 (e), which enumerate AXI attempts by `rglob`/`finalized_bundles` and not by the attempt-ledger rows that text 12 names ("every attempt the attempt ledger records").
+
+A confounded bundle deleted after finalization would therefore be an exclusion, not custody. That is the path the charge names ("a custody-failed bundle reach a number"). Whether the remaining members then yield a number is NOT EXECUTED. `bundle_missing` is also the honest state of a run that never finalized, so the replacement keys on the record:
+> "A member whose record carries a digest of its bytes (a campaign provenance row, an evaluation-basis occurrence, an attempt-ledger row naming a finalized run, a supersession record) is finalized. If its directory is absent it is passed to the gate, which raises `CustodyUnreadable`. `bundle_missing` and `terminal_absent` remain only for members that no such record names. In 53 (b), 'whose bundle directory exists' is replaced by 'whose evaluation recorded a finalized bundle'. In 49 (b) 3 and (e), the attempts are the attempt ledger's rows, each at the path the ledger names."
+
+Row: R53-4. `run_campaign`, member 2 finalized and evaluated, its directory deleted before the final gate. Expected: `CustodyUnreadable` naming it. Must fail under the `is_dir()` filter.
+
+**RS-4. The premise of 49 (b) for `run_campaign` ("a supersession is recorded only after collection") hides the rerun's own final analysis.** The ruled operator workflow is printed by `run_campaign.py:8509-8511`: "quarantine the failed fragment, rerun, and record ordinary occurrence supersession". The rerun is a `run_campaign` invocation, and its final analysis (`:8928`) runs while the first occurrence is already outside the runs directory and **no record yet exists**. So that final analysis gates a list without the (possibly confounded) first occurrence. The whole-window verdict run afterwards is covered by 49. The rerun's collection-level row is not. The replacement follows from RS-3's rule: the campaign log's provenance row for occurrence 1 carries its digests (`_basis_member_occurrences`), so under RS-3 the rerun's final analysis raises custody for the moved copy. That would stop the ruled workflow. The smaller alternative text:
+> "`run_campaign`'s final analysis licenses no claim for a member id that the campaign log records with more than one occurrence. Only the whole-window verdict, under item 4, may license it."
+
+Test: rerun after a manual quarantine, with the first occurrence charging. The final analysis output carries no claim licence for that id. Must fail under the code at `49d77c74`. NOT EXECUTED.
+
+**RS-5. The `BundleReader` gate form in 51 (c) does not bind the reader to the read.** The prototype on `BundleReader(a).metadata(); return BundleReader(b).raw_summary()` gives `silent H6`. The four tolerant accessors are read through a reader object, so the smallest fix is:
+> "A tolerant-accessor read site (b) 1 is gated by the `BundleReader` form only if its receiver is the same name, or the same `self`, whose `.metadata()` call is the gate."
+
+A read through `authenticate_window_members` (member list against read path) stays unbound. State that as a residual in (h).
+
+### NIT
+
+- **RN-1 (amendment 50, R50-8).** The expected text says the producer at `49d77c74` "emits five markers". On the row's own named fixture, `_terminal_night(width=2, kind="ceiling_violation")`, I count six (`/tmp/oc2/q2.py`: voided `cut_off` 2, voided `completed` 2, terminal `completed` 2). The Opus lens counted four for `completed`. Replace the count with "emits at least one marker", or name the fixture that gives five.
+- **RN-2 (amendment 49 (f)).** A set consumer relies on the verdict row having gated the superseded runs. Consumption-time revalidation (`whole_window._prepare`, `:679`) re-gates only the referenced members, so a verdict row written by pre-49 code is not re-checked for superseded runs. Today this is harmless, because every bundle collected after the base is refused as a prospective bundle until S1 merges, and E5 shows the seven existing supersessions are all refused. Add one sentence to (f) saying so, so that the reasoning survives if the historical set ever grows.
+- **RN-3 (amendment 51 (f), `non_claim` (ii)).** Clause (ii) lets an energy read be `non_claim` on the claim that "nothing the function returns or writes is consumed by a claim artifact". That claim is about downstream use, and no test checks it. For example, `scripts/check_window_provenance.py::_run_assertions.check_a3` reads `gross_energy_j`. Require the reason for (ii) to name the output path, and require the refuter to check each (ii) row by grep for consumers of that path.
+- **RN-4 (amendment 53 (e)).** Agreed as flagged. Round F should be told that R53-1-shaped fixtures replace the MOCK campaigns that used to abort at member 1, so that no one "fixes" the new refusal by re-adding a collection-time gate.
+
+### Tier summary
+
+BLOCKER RB-1 (49 (c): custody of the quarantined bundle becomes a verdict condition; add R49-3b, R49-3c, R49-7b at the production call sites). SHOULD-FIX RS-1 (51 (d): swallowed gates count as dominating; H1, H2, H4 silent in the ruling's own prototype), RS-2 (52 is limited to the eight modules; `analysis_manifest_v3.py:3712/:4499`), RS-3 (disk-driven member lists in 53 (b), `inputs.py:3133` and 49 (b) 3/(e)), RS-4 (the rerun's final analysis runs before any supersession record exists), RS-5 (the `BundleReader` gate is not bound to its reader). NIT RN-1 to RN-4. No finding against amendments 50 (beyond RN-1) or 54.
