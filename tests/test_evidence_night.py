@@ -1644,13 +1644,11 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "skipped")
         # The same candidate with an evidence chain: the observer is spent once.
         self.evidence_chain()
-        with self.assertRaisesRegex(entry.Refused, "battery_brackets"):
-            entry.check(**dict(self.kw, quiet_observer=spy))
-        record = json.loads(self.journal("check.json").read_text())
+        record = entry.check(**dict(self.kw, quiet_observer=spy))
         self.assertEqual(calls, ["observed"])
         self.assertEqual(record["checks"]["machine_quiet"]["verdict"], "pass")
-        self.assertEqual(record["checks"]["battery_brackets"]["verdict"], "fail")
-        self.assertFalse(record["rehearsal_ready"])
+        self.assertEqual(record["checks"]["battery_brackets"]["verdict"], "pass")
+        self.assertTrue(record["rehearsal_ready"])
         # The module guard: with no injected observer, the check reaches the
         # production sampler, which raises here instead of sampling.
         with self.assertRaises(ProductionSamplerInvoked):
@@ -1726,16 +1724,24 @@ class LifecycleTests(unittest.TestCase):
         self.assertFalse(written["armable"])
         self.assertFalse(written["rehearsal_ready"])
 
-    def test_qpe_candidate_is_not_armable_before_s2(self):
+    def test_qpe_candidate_is_armable_by_battery_fence_after_s2(self):
         self.evidence_chain()
-        with self.assertRaisesRegex(entry.Refused, "battery_brackets"):
-            entry.check(**self.kw)
-        written = json.loads(self.journal("check.json").read_text())
-        self.assertEqual(written["checks"]["battery_brackets"]["verdict"], "fail")
+        from joulewise.night_kinds import NIGHT_KINDS
+        before = {**NIGHT_KINDS, "quiet_predicate_evidence": replace(
+            NIGHT_KINDS["quiet_predicate_evidence"], battery_brackets=False)}
+        with patch.object(entry, "NIGHT_KINDS", before):
+            with self.assertRaisesRegex(entry.Refused, "battery_brackets"):
+                entry.check(**self.kw)
+        self.assertEqual(json.loads(self.journal("check.json").read_text())
+                         ["checks"]["battery_brackets"]["verdict"], "fail")
+        written = entry.check(**self.kw)
+        self.assertEqual(written["checks"]["battery_brackets"]["verdict"], "pass")
         self.assertEqual(written["checks"]["corecaptured"]["verdict"], "pass")
         self.assertEqual(written["checks"]["machine_quiet"]["verdict"], "pass")
+        # This fixture uses fake launchctl, so passing the fence yields a
+        # rehearsal-ready candidate rather than a live arm decision.
+        self.assertTrue(written["rehearsal_ready"])
         self.assertFalse(written["armable"])
-        self.assertFalse(written["rehearsal_ready"])
 
     def test_discovery_span_fence_reuses_the_watchdog_rule(self):
         from scripts.magistrate_watchdog import COURIER_DEADLINE_S

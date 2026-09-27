@@ -1,0 +1,156 @@
+# Activation f8d6cab1: magistrate record 00
+
+The magistrate was relaunched headless at 11:43:29 PDT on 2026-09-26 (Opus 5.5, pid 28186, supervisor pid 28182, watchdog attempt 106). Its predecessor, 6bec2aa6, exited at about 11:40 under D-183: its fast-forward of canonical to `5d5a0b75` had left the resident supervisor stale. Nothing is armed.
+
+1. **Launch.**
+   - The heartbeat was written first (in the three-line format of the prior file).
+   - `notice_pending` was `[]`.
+   - `from:claude2.glaring610@passmail.net is:unread` returned no threads, so there are no pending owner instructions.
+   - The open directives are #422, #421, #417, #416, #408 and #405. All are already applied or standing; none is new since the predecessor.
+   - The launch email was accepted as Gmail `1a0df083046ddf6c`. `notice.ack` was then written.
+   - Canonical is at `5d5a0b75`, equal to `origin/main` and clean, so no fast-forward was needed. `com.joulewise.magistrate` is the only JouleWise label, and no night plist is on disk.
+2. **W1 is still blocked.** The interactive `claude` pid 46048 (ttys000, started Thu 09-24 17:47) is alive. Ed has no unread reply. The launch email restates the blocker in plain words.
+3. **PR #427 (bookkeeping, light tier).**
+   - Row 1: a fresh Opus reviewer read `58e21ebf` read-only and returned **MERGE with no blockers**. It checked the tier, `gen_state --check` (exit 0), every cited SHA and branch head, and links.
+   - Four NITs: N1, A309 is still `queued` in the kernel although it is merged (retire it as `62bbbc52` did for A291); N2, the A310 evidence list has three tails for four replays; N3, point item 29.4 at the existing lane TEST-PGREP-DIALECT-MULTILINE-01; N4, an imprecise "08:3x" time.
+   - N1–N3 are fixed on this branch, after #427 merges.
+   - Row 9 (`scripts/shard_tests.py --workers 6` at `58e21ebf`) is running.
+4. **S0: merge of main and the pin regeneration exposed a freeze-fence breach.** Main `5d5a0b75` merged cleanly into `feat/2026-09-26-bfgs-s0-helper-fence` (a merge, not a rebase, so the cited seat commits stay reachable).
+   - I regenerated `FROZEN_FUNCTION_SOURCE_SHA256` from the **base** file (`git show 5d5a0b75:joulewise/battery_float.py`), the way the test hashes it: roots through `inspect.getsource`, the rest through `ast.get_source_segment`.
+   - Two entries differed from the table:
+     - `load_committed_verdict`: expected, since A309 changed it. The new pin is `43900752…`, whose baseline is ex-01 M-1.
+     - `CustodyFailure`: the head's bytes differed from the base's. Round 3 (`aa90f349`) had widened the frozen `CustodyFailure.__init__` to accept a `str`, and had pinned its own modified bytes (`6e0e7ea1…`). The table's comment claimed these were base bytes. So the pin test certified the head, not the base, and could not catch the edit.
+   - **Root cause: the lead's own round-3 contract.** C1, C3 and C4 dictated `CustodyFailure("<str>")` without noticing that `CustodyFailure` is in the frozen closure.
+   - **Bench closure (`783a09be`):**
+     - `CustodyFailure` is restored byte-identical to main, verified by `diff`.
+     - A new subclass, `CustodyUnreadable(CustodyFailure)`, carries the five string-detail raises, so every consumer that refuses on `CustodyFailure` still refuses.
+     - The pins now equal main `5d5a0b75`, and the pin comment says to regenerate only from the base.
+     - A subclass test was added.
+     - `tests.test_battery_float`, `tests.test_battery_float_consumers` and `tests.test_battery_float_sweep`: 119 OK, then 4/4 OK on the freeze class after the new test.
+   - Pushed.
+   - This is a bench fix under rule 9's threshold: five one-word call-site changes plus the restored class are smaller than a contract. It is **not** a second fix round on a defect already reviewed: the defect class (freeze fence) is new, and the delta re-audit in item 5 covers it.
+5. **S0 delta re-audit of rounds 3, 3b and bench `783a09be`** (charge [10-s0-delta/00](10-s0-delta/00-delta-charge.md), with a mandatory same-signature statement for the round-3 BLOCKER class and freeze-fence verification):
+   - EXECUTION: Sol 6.0 xhigh (`codex-run-v3`, `--genre review`, WRITE_SCOPE `[]`, worktree `JouleWise-wt-s0delta-sol-f8d6cab1`).
+   - CONTRACT: an Opus subagent (worktree `JouleWise-wt-s0delta-opus-f8d6cab1`).
+   - Both are running.
+6. **A310 PR #428 opened** (light tier, test-only). The integration head is `d8aed7cd` (seat `37f9b935` plus main `5d5a0b75`, merged in the existing worktree `JouleWise-wt-flake-6bec2aa6`). The row-1 fresh Opus reviewer is running.
+   - A near-miss, recorded: a `cd` into a worktree that did not exist failed, and the `&&` guard skipped the following merge and push. Only a `git log` ran in canonical, and canonical was verified clean at `5d5a0b75` afterwards.
+7. **Lane bookkeeping** (`5802743f`):
+   - A309 BFGD-VERDICT-MERGE-LIVENESS-01 is retired after #426 merged.
+   - Registered A311 HISTORICAL-BATTERY-STATE-01 (P1; it blocks the paper's claim renderers mechanically; weekly `pmset -g log` re-archive duty) and A312 SCORED-CEILING-BATTERY-01 (P2; it blocks the scored campaign's arm), both under Final texts v1.1 text 19.
+   - The A310 note now points the pgrep defect at TEST-PGREP-DIALECT-MULTILINE-01 and adds the `80fe9969` replay as evidence (#427 NITs N1–N3).
+   - Count: 260 − 1 + 2 = 261. `gen_state --check` exits 0; `tests.test_gen_state` OK.
+8. **PR #428, row 1:** a fresh Opus reviewer at `d8aed7cd` returned **MERGE with no blockers**.
+   - The only production cleanup (`scripts/sample_quiet_predicate_evidence.py:1399-1406`) is unchanged.
+   - Mutation checks: removing TERM turns the test RED (−9 ≠ −15). Removing KILL still passes, but that gap already exists on main (no fixture child survives TERM), and this PR neither creates nor widens it.
+   - Three runs of the module: 79/79 OK each.
+   - NITs:
+     - say in a comment that the post-KILL `join(1)` is widened too, which is harmless because TERM has already failed by then;
+     - a follow-up is needed for a SIGTERM-ignoring fixture child, so that a test covers KILL. That follow-up is noted here for the next bookkeeping pass. It is not a merge condition.
+9. **S0 delta re-audit returned, with a split verdict** ([10](10-s0-delta/10-sol-execution-lens.md), [11](10-s0-delta/11-opus-contract-lens.md)).
+   - **Sol execution:** two BLOCKERs, "same signature: yes".
+     - F1: an unreadable `session.json`, `metadata.json` or `instrument_evidence.json` becomes `{}`, which turns a deleted-raw `CustodyFailure` into a status.
+     - F2: deleting `rounds.jsonl` turns a recorded-digest mismatch into `pass`, because C1 ruled "Missing: zero rows".
+   - **Opus contract:** no BLOCKERs, "same signature: no" (it reads F1's case as ruled by text 2(a)). Every C1–C13 item and in-scope amendment is CLOSED. The freeze fence is verified: all 39 closure definitions are byte-identical to `5d5a0b75`, and all 39 pins equal the base.
+     - SHOULD-FIX S-1: the pins are blind to decorators and nested rebinding.
+     - SHOULD-FIX S-2: the C8(ii) guard misses `copy.replace` and `__replace__`.
+   - **Magistrate reading.**
+     - F2 is a real accepting path: the journal is the only digest recorded before finalization for a mutable `session.json`.
+     - F1 converts a whole-computation refusal into a per-member exclusion wherever a consumer excludes on `evidence_missing`, which text 2(b) forbids for custody.
+     - Both closures need ruled text changed (C1 and text 2(a)), and this is a second consecutive round with the same class. That is rule 11's mandatory trigger plus the standing escalation trigger, so a **cold gate**, not fix round 4.
+   - **Addendum 3 convened** (charge [20-coldgate/00](10-s0-delta/20-coldgate/00-charge.md), packet commit `b08b4adc`):
+     - cold Fable judge: `claude -p --model fable --effort high` in `JouleWise-wt-s0cg-fable-f8d6cab1`, output `/tmp/f8d6-coldgate-fable.out`;
+     - Opus paired contract refuter: independent answers first, then refutation, in `JouleWise-wt-s0cg-opus-f8d6cab1`.
+   - Sol's reproducer is preserved as `10-s0-delta/10-sol-repro.py`.
+10. **Addendum 3 ruled** ([20-coldgate/10](10-s0-delta/20-coldgate/10-coldgate-fable-ruling.md), cold Fable, rc 0, about 11 minutes).
+    - F1 and F2 are upheld as BLOCKERs, and two new members of the class were found: E2, an emptied journal on a completed envelope, and E5, non-object `events.jsonl` lines.
+    - Amendment 29: a mandatory container that is unreadable, missing or not an object is `CustodyUnreadable`.
+    - Amendment 30: the journal row count must equal `len(round_workers)` in the refusal and completed shapes.
+    - Amendment 31: `events.jsonl` is a mandatory container.
+    - Amendment 32 (S2): the quiet summary authenticates before its `incomplete_interior_support` exclusion.
+    - S-1 and S-2 are confirmed.
+    - **The Opus lens's "same signature: no" is rejected.** Fable prevails, and the Opus dissent is recorded here.
+11. **Paired Opus refuter** ([20-coldgate/11](10-s0-delta/20-coldgate/11-opus-contract-refuter.md); its independent answers were written at 12:17:56, before the ruling at 12:23:12).
+    - Q2, Q3 and Q4 are agreed.
+    - **BLOCKER R-1:** an honest `sampler.json` fault between the two collector appends leaves the journal rows fewer than `round_workers`. It was run through the real `collect`. Amendment 30 would make that a false custody failure, and amendment 32 would then lose the night. The proposed fix is an S2-recorded `journal_rows`.
+    - **BLOCKER R-2:** an executor-killed envelope (shape iii) has provisional rows with empty digest maps, which gives `CustodyFailure`, not the `evidence_missing` the ruling's own table states.
+    - SHOULD-FIX R-3 (non-atomic `write_json`; a collector that dies before its first write), R-4 (`summarize` discovers envelopes by `rounds.jsonl`) and R-5 (two sentences for the S1 brief).
+    - This changes ruled text, so **erratum convened**: cold Fable, charge [30-erratum/00](10-s0-delta/20-coldgate/30-erratum/00-charge.md), packet commit `eefd5523`, worktree `JouleWise-wt-s0err-fable-f8d6cab1`.
+    - The paired refuter caught blocker-grade gaps in a cold ruling again, as on 2026-09-15. The pairing earns its cost.
+12. **#427 row 9** is still running: shard 6 is in `test_scored_reduce.test_differential_oracle_200_nights` (CPU-bound, 200 generated nights) under concurrent seat load. Shards 1–5 have finished.
+13. **Erratum ruled** ([30-erratum/21](10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md), cold Fable, about 9 minutes). All five refuter points were upheld, and each was reproduced on the real `collect`.
+    - **Amendment 30 is re-issued:**
+      - shape (i) (refusal) must have zero rows;
+      - shape (ii) (completed) must match an S2-recorded `session["journal_rows"]` (new amendment 33) instead of `round_workers`;
+      - in shape (iii) the provisional journal is not an input at all.
+    - **Amendment 32 is restated:** a `collect_error` carve-out for a collector with non-zero exit and no recorded output, and `summarize`'s enumeration becomes the union of the parents of `session.json` and `rounds.jsonl`.
+    - **Amendment 26 gains a sentence:** a `BundleReadError` at the window gate is re-raised as `CustodyUnreadable`.
+    - **Amendment 31's S1 clause** now covers a missing `events.jsonl` on a `battery_float` bundle.
+    - **New amendment 34 (S2):** atomic collector writes.
+    - Amendment 29 is unchanged.
+    - **Flagged, not ruled:** under text 6, one timed-out collector (shape iii) blanks a whole night's numbers, while a collector that crashed before writing anything is excluded. Changing that is a text-6 cold-gate question. It is noted as a candidate lane for S2 planning.
+14. **S0 fix round 4 launched:**
+    - Sol 6.0 xhigh, implementation genre.
+    - Brief [40](10-s0-delta/40-seat-brief-round4.txt): amendments 29, 30 (erratum) and 31 (S0 part), S-1 and S-2, and the T16/T30 tests with RED proofs.
+    - WRITE_SCOPE: `battery_float.py` and the three battery test modules.
+    - Report: `41-seat-report-round4.md`.
+    - Deferred Opus NITs N-3, N-4 and N-5 (the ruling says they need no ruling) are kept out of this round to hold its scope.
+    - This round is ordered by the cold gate, so rule 11's trigger is satisfied. A recurrence of the same signature after it returns to a cold gate, not to round 5.
+15. **#427 row 9 PASS:** 7,384 tests, 0 failures, 0 errors, 109 skipped, at `58e21ebf` ([80-pr427-ledger](80-pr427-ledger/00-ledger-evidence.md), `38e0d6b8`). Rows 1, 9, 11 and 12 are RUN in the PR body, and the gate-ledger check passes.
+    - **The merge is blocked by branch protection.** The required contexts `test (3.13, 1..6)` never report on a docs-only diff, because the `changes` job's docs-only filter skips the matrix. #411 merged because its tests ran; #425 merged because it touched `tests/test_gen_state.py`. `enforce_admins` is false, but **I did not use `--admin`**: bypassing protection is not this seat's call.
+    - Route instead: #427's content lands inside this activation's bookkeeping PR from `docs/2026-09-26-f8d6cab1`. That branch stacks on `58e21ebf` and changes `tests/test_gen_state.py` (`5802743f`), so the hosted matrix runs. #427 carries a comment saying so and will be closed as superseded when that PR opens.
+    - Structural note for CI-DOCS-ONLY-SKIP-MASKS-RED-01: every pure-docs PR is now unmergeable without admin.
+16. **#428:** hosted CI is green except `test (3.13, 3)` (pending) and gate-ledger (not yet updated). The row-9 full suite at `d8aed7cd` is running in `JouleWise-wt-flake-6bec2aa6` (`/tmp/f8d6-row9-428.log`).
+    - **Canonical fast-forward timing.** Merging #428 moves `origin/main`. Fast-forwarding canonical then makes the supervisor stale (the predecessor's lesson), which obliges an exit.
+    - I will fast-forward canonical once, at a durable boundary: after the S0 round-4 seat returns and its result is committed. The alternative, exiting mid-seat, would kill the running Sol child. W1 is blocked in any case by the live interactive pid 46048, so no arm is lost by the delay.
+17. **S0 round 4 returned complete** ([41](10-s0-delta/41-seat-report-round4.md), Sol xhigh, about 18 minutes).
+    - The RED run gave 32 failures and 6 errors, then GREEN; the seat reports "same signature: no". Its V3 failure is the sandbox's `sysctl` live probe only.
+    - **Bench:** V1 134 OK, V2 181 OK.
+    - Independent recomputation: all 39 frozen definitions are byte-identical to `5d5a0b75`, both decorator-inclusive pins equal the base segments under the test's rule, and S0 removes no line of base `battery_float.py`.
+    - Committed unchanged as `c9081c6e` and pushed.
+    - **Round-4 delta pair launched** (charge [50](10-s0-delta/50-delta-r4-charge.md)): Astra 6 high (execution, a different model family from the Sol implementer) and Opus (contract). Both are charged with the same-signature class and with the honest-failure side (P-A, P-B, shape iii).
+18. **Round-4 delta returned, with a split verdict** ([51](10-s0-delta/51-astra-execution-lens.md), [52](10-s0-delta/52-opus-contract-lens.md)).
+    - **Opus contract: PASS**, "same signature: no", five NITs.
+      - Everything is CLOSED: all 39 frozen definitions are byte-identical, and the new tests RED against round 3.
+      - P-A and P-B were driven through the real collector with no raise.
+    - **Astra execution: R1 BLOCKER and R2 SHOULD-FIX**, "same signature: yes".
+      - R1: `json.loads(bytes)` auto-detects UTF-16/32, so a re-encoded container passed. Amendment 29 names non-UTF-8 as custody.
+      - R2: a pre-only shape-(iii) envelope gives `post evidence missing: phase not recorded`, not "quiet span unavailable".
+    - **Magistrate synthesis.**
+      - R1 is a conformance gap against amendment 29's enumeration. It is *not* the ruled idiom (a failure turned into an empty value), and the content is semantically identical, so no number changes. It is a new defect and smaller than a contract, so it was fixed at the bench as `b7df341b`: a strict `body.decode("utf-8")` in `_required_object`, plus a test that re-encodes each passing container as UTF-16 and UTF-32 (RED 6/6, then GREEN; battery suites OK). The journals already decoded UTF-8 strictly.
+      - R2 is the same non-pass status. The erratum also keeps rung order (a)–(f), and rung (a) precedes the span rung (f), so the code stands. The reading is carried to the Fable final pass for ruling.
+      - Opus NITs 1–4 are deferred to a follow-up lane.
+      - No cold gate is needed for R1: it is not a recurrence of the ruled class, and it is the first round on this defect.
+19. **The S0 cold Fable final pass is convened** on `b7df341b` (charge [60-s0-gate/20](60-s0-gate/20-fable-final-pass-charge.md), worktree `JouleWise-wt-s0fp-f8d6cab1`). It is also the row-10 fresh-eyes review of the bench commit. It must rule on the R2 reading and the deferrals.
+20. **S0 cold Fable final pass** ([60-s0-gate/21](60-s0-gate/21-fable-final-pass.md), on `b7df341b`) returned **FIX-FIRST (test-only), then MERGE without a further lens round**.
+    - It recomputed all 39 pins from base and found the frozen closure byte-identical.
+    - `b7df341b` is correct and complete, and nothing else in S0 auto-detects an encoding: 25 of 25 encoding cells refuse.
+    - The R2 reading is made the ruled reading: `evidence_missing`, and when a phase is absent, rung (a)'s reason stands.
+    - It accepts the NIT deferrals and the Opus residual (D-161).
+    - The one FIX is the dictated T30-f pre-only first-write row. It was applied verbatim as `747596a3` (`tests.test_battery_float` OK).
+    - Design notes D-1 to D-5; none stops S0. D-1: S1/S2 must pass real directories, never a symlink.
+21. **PR #429 opened** (S0, full tier). Rows 1–8 and 10 are RUN, with evidence in [60-s0-gate/30](60-s0-gate/30-ledger-evidence.md) (`d76d136d`). Row 9 (full suite at `747596a3`) is running, and rows 11 and 12 are pending.
+22. **#428 row 9 PASS:** 7,384 tests, 0 failures, 0 errors at `d8aed7cd`, under heavy concurrent load (a second full suite, a Sol seat, two lenses). The ladder test passed. Evidence is in [81-pr428-ledger](81-pr428-ledger/00-ledger-evidence.md) (`b3de15a3`), and all hosted jobs are green.
+    - The gate-ledger check first failed on `Tier: light (test-only; TIER-01)`. The checker needs the bare `Tier: light`, and that was fixed.
+    - **#428 MERGED → main `560914be`** (`--match-head-commit d8aed7cd`).
+23. **S0 row 9 moved to the integration tree.** Main moved with #428, so the branch-only suite at `747596a3` was stopped (exit 144, killed by me, not a test failure).
+    - A local integration merge, `1eeebc40` = `747596a3` + main `560914be`, differs from the candidate only by #428's test file.
+    - The full suite runs there (`JouleWise-wt-s0integ-f8d6cab1`, `/tmp/f8d6-row9-s0integ.log`).
+    - The PR head stays `747596a3`, so this creates no post-review commit. GitHub's merge commit will carry the same tree.
+    - **Canonical is behind `origin/main`** (it is at `5d5a0b75`). The plan is one fast-forward after #429 merges, then exit so that a fresh supervisor starts (D-183). W1 stays blocked by pid 46048 in the meantime.
+24. **#429 (S0) MERGED → main `1417c0c4`** (full tier, 12/12; `--match-head-commit 747596a3`).
+    - Row 9 on the integration tree `1eeebc40`: 7,454 tests, 0 failures, 0 errors.
+    - All hosted jobs are green.
+    - **Post-merge look:** the tree of `1417c0c4` is `fb277a15…`, identical to the tree of `1eeebc40`, so main is exactly the tree that passed.
+    - A308 BATTERY-FLOAT-GATE-01 continues with S1 ∥ S2, after QPE-SHAPE3-NIGHT-BLANK-01 is ruled.
+25. **Exit (D-183).** Main now contains #428 and #429.
+    - The canonical fast-forward from `5d5a0b75` to `1417c0c4` happens after this commit, once the checks confirm no `com.joulewise.night*` label is loaded and no such plist is on disk. That leaves the resident supervisor stale for arming, so this session exits for the watchdog's successor.
+    - This branch becomes the bookkeeping PR, which supersedes #427; #427 is closed with a pointer.
+    - Lanes this activation: retired A309 and A310; registered A311–A312 and BFGS-S0-FOLLOWUPS-01, QPE-SHAPE3-NIGHT-BLANK-01 and TEST-LOAD-LADDER-KILL-COVERAGE-01.
+    - No Codex child or background process is left running at exit.
+26. **Exit done.**
+    - #430 opened, superseding #427; #427 is closed with a pointer.
+    - The checks found no `com.joulewise.night*` label loaded and no such plist. Canonical was clean and was fast-forwarded `5d5a0b75 → 1417c0c4` (`pull --ff-only`).
+    - Exit email accepted as Gmail `1a0dfdefe67d05d6`.
+    - No Codex seat, suite or judge is running. The only remaining process is the harness's own Codex MCP server, which ends with the session.
+    - **Successor's next exact action:** the RUN_STATE top block on this branch, step 1: merge #430 under the light tier, running rows 1, 9, 11 and 12.

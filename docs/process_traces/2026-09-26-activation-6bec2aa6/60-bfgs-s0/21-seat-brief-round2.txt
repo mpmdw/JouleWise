@@ -1,0 +1,41 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S0, round 2 (continuation). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s0-6bec2aa6 (branch feat/2026-09-26-bfgs-s0-helper-fence at 8b4e1bd4 = your round-1 work, committed unchanged by the lead).
+WRITE_SCOPE: ["joulewise/battery_float.py","joulewise/night_kinds.py","joulewise/evidence_night.py","tests/test_battery_float.py","tests/test_battery_float_consumers.py","tests/test_battery_float_sweep.py","tests/test_evidence_night.py","tests/test_night_kinds.py"]
+(Exhaustive. NEEDS_SCOPE / NEEDS_RULING early returns as before.)
+
+1. CONTEXT. Your round-1 brief is /Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/00-seat-brief.txt, and your round-1 report is .../60-bfgs-s0/10-seat-report.md. Both still govern. Your NEEDS_RULING F1 (the bundle span domain) is now RULED; the ruling follows verbatim.
+
+2. RULING (verbatim):
+**Decision: option (a), the seat's recommendation.** The span comes from monotonic bounds that the controller records in `events.jsonl`. There is no wall-to-monotonic conversion.
+
+1. **S1 (controller) must write** `metadata.monotonic_ns = time.monotonic_ns()` on two events:
+   - the `idle_baseline` stage-**start** event;
+   - the `idle_drift_sentinel` stage-**end** event.
+
+   `time.monotonic_ns()` is the clock that `battery_float.observe` stamps. S1 edits no other event.
+2. **`authenticate_bundle(bundle_path)`** (S0) derives `span = (start, end)`:
+   - `start` is the `metadata.monotonic_ns` of the FIRST `idle_baseline` stage-start event;
+   - `end` is that of the LAST `idle_drift_sentinel` stage-end event.
+
+   It passes `span` to `authenticate_pair`. If either event, or either field, is absent or not a non-negative int, or if end < start, the verdict is `battery_float_evidence_missing` with reason `bundle span unavailable`. This applies at the span rung only, after every earlier rung (text 2 order).
+3. **Pair ownership follows text 7.** A bundle whose `events.jsonl` has no `idle_baseline` start owes no pair. That case is `not_reached`, which the reader handles under text 8. `authenticate_bundle` is then not asked to judge a span.
+4. **Why not a conversion.** Converting wall time to monotonic reintroduces the clock-anchoring hazard that the monotonic check exists to avoid: the wall clock can step during a run. Event metadata is written by the same process as the probe records, so it adds no new trust assumption.
+5. **Authority.** This fills a gap and does not amend the ruled text. It is flagged explicitly to the S0 and S1 cold Fable final passes, and any disagreement goes to a cold gate.
+
+3. TASK. Implement `authenticate_bundle(bundle_path)` exactly as ruled, as a thin wrapper that calls `authenticate_pair` only (guard text 4). Complete the bundle-wrapper portion of T1/T2:
+   - span pass;
+   - pre outside span → evidence_missing;
+   - post outside span → evidence_missing;
+   - missing start event, end event or field → evidence_missing "bundle span unavailable";
+   - end < start → the same;
+   - span-rung precedence below the custody, probe, parse and predicate rungs (one test each where new);
+   - FIRST idle_baseline start and LAST idle_drift_sentinel end chosen when repeats exist.
+   Use fixture bundles built in tests (events.jsonl + metadata.json + raw files). Do not touch controller.py; S1 writes the events.
+
+4. VERIFY. Paste the last 5 lines of each:
+   - V1: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_battery_float_sweep (must be green now);
+   - V2: tests.test_evidence_night tests.test_night_kinds;
+   - every other test module importing joulewise.battery_float, joulewise.night_kinds or joulewise.evidence_night, found with grep -l (as round 1).
+   tests.test_issue_calibration_acceptance_generation's live sysctl probe fails only in your sandbox; the lead reruns it at the bench.
+
+5. DO NOT commit, push, or run the full suite. REPORT in the claude-codex-report/v1 envelope, with RED proofs for the new span tests.

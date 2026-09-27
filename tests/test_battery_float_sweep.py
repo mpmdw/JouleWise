@@ -75,6 +75,9 @@ OBSERVE_CALLERS = {
         "bundle_pre: battery_runner or observe's bounded bytes subprocess.run",
         "bundle_post: battery_runner or observe's bounded bytes subprocess.run",
     ],
+    "scripts/sample_quiet_predicate_evidence.py": [
+        "quiet_pre: battery_read uses observe's own bytes subprocess.run or an injected bytes runner",
+        "quiet_post: battery_read uses observe's own bytes subprocess.run or an injected bytes runner"],
     "joulewise/night_gate.py": ["t0: probes.run (run_night._probe_runner captures bytes)"],
     "joulewise/evidence_night.py": ["arm_check: probe_command (bytes for the ioreg argv)",
                                     "publish_install: probe_command (bytes for the ioreg argv)"],
@@ -134,7 +137,7 @@ class SweepGuardTests(unittest.TestCase):
                     self.assertEqual(ast.unparse(phase), "f'slot_{phase}'")
                     self.assertTrue({"slot_pre", "slot_post"} <= set(battery_float.PHASES))
                     seen.update(("slot_pre", "slot_post"))
-        self.assertEqual(seen, set(battery_float.PHASES[:7]) | {"bundle_pre", "bundle_post"})
+        self.assertEqual(seen, set(battery_float.PHASES))
 
     def test_aliased_out_of_set_phase_is_visible(self):
         forms = (

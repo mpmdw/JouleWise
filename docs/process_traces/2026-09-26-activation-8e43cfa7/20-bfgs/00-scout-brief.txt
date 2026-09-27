@@ -1,0 +1,24 @@
+LANE: BATTERY-FLOAT-GATE-01, PR "BFG-S" (JouleWise). Role: read-only SCOUT that builds the implementation packet. Seat: Sol 6.0, xhigh.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-scout-8e43cfa7 (detached at origin/main 64e39bb9; BFG-D, PR #424, is merged there).
+WRITE_SCOPE: []
+(WRITE_SCOPE is exhaustive and empty: edit no file. Scratch files go under /tmp/8e43cfa7-bfgs-scout/ only.)
+
+BACKGROUND. Ed's binding directive #421 requires a battery-float gate for every measurement window: external power connected, not charging, |InstantAmperage| <= 200 mA, and a fresh gauge UpdateTime. PR BFG-D (merged, 64e39bb9) covers derivation (calibration) windows. BFG-S must cover every other window kind before any non-derivation window arms. The ruled text is in the exhibits below; the ruling itself says BFG-S sites are "to be pinned to line numbers in the BFG-S packet". You are building that packet.
+
+AUTHORITY EXHIBITS (read in full; absolute paths):
+- /Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-8e43cfa7/20-bfgs/ex-01-bfg-final-texts-v1.1.md (cold ruling final texts v1.1; §5.3 BFG-S row, §5.4 schema, §5.5 consumers/issuer, §5.6 test obligations, X2 on calibration_bracketing)
+- /Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-8e43cfa7/20-bfgs/ex-02-harvest-final-addendum.md (§4.11: abs(update_age_s) <= 180 predicate change and custody clause; note WHEN each may land)
+- /Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-8e43cfa7/20-bfgs/ex-03-bfgd-fable-final-pass.md (§8 F-1: controller attachment keys on REVISION_FIVE_EPOCH, not on the battery_float key)
+- /Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-8e43cfa7/20-bfgs/ex-04-consumer-drift-final-texts.md (CONSUMER-DRIFT final texts v1.1: the one seam + AST guard that BFG-S must reuse)
+Also read the merged BFG-D implementation on main: joulewise/battery_float.py, and how it is wired into night_gate, evidence_night, night_agent_install, arm_readiness_evidence_t0, scripts/validate_powermetrics_fiducial.py, and the consumers; plus its tests (tests/test_battery_float*.py).
+
+DELIVERABLE (your final report IS the packet; be exact):
+1. For EACH BFG-S item in ex-01 §5.3 (quiet-predicate collect brackets; summarize / quiet_predicate_campaign.pilot_summary consumers; controller._run_lifecycle brackets before _stage_idle_baseline and after _stage_idle_drift_sentinel; metadata.json.battery_float plus raw files in the bundle; BundleReader.metadata() validation so reduce_bundle fails closed; scored_reduce.reduce taking authenticated window evidence; the two calibration_bracketing.py consumers per X2; the arm_readiness.sources re-freeze of every transaction-pack campaign): give the file:line insertion site at 64e39bb9. Name every clock stamp the site must stay outside, with its file:line. Say which BFG-D seam or helper it reuses, and quote the current code at the site (<= 8 lines).
+2. List every campaign under configs/ whose arm_readiness.sources pins a file BFG-S will change. Give the current pin value and the re-freeze mechanism (script/command), and say whether re-freezing moves any registered digest that needs Ed's or a cold gate's approval.
+3. Resolve the F-1 closure (ex-03 §8) and the §4.11 items (ex-02) into concrete statements: what changes, in which file, and whether it is in BFG-S scope NOW or gated on a later event. Quote the gating sentence.
+4. Test obligations: map ex-01 §5.6 to concrete test names and production call sites for BFG-S, in the defect-shaped style: each must be RED on 64e39bb9 for a stated reason.
+5. Frozen-source pins, AST guard, registry pins (e.g. docs/paper/results-fill-registry.md): list every one that BFG-S edits would trip, and how BFG-D handled the same thing.
+6. Ambiguities: every point where the ruled text does not determine the implementation, with the options and your recommendation. Do not resolve silently.
+7. A proposed WRITE_SCOPE list for the implementation seat(s), and whether to split into 2+ PRs (with the split line and ordering).
+
+Do not implement anything. Quote code and cite file:line instead of paraphrasing. Report in the claude-codex-report/v1 envelope.
