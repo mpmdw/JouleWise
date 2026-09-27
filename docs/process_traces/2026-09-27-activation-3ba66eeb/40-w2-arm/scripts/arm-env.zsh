@@ -1,6 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
-export H='__H__' T0_EPOCH_S='__T0__'
+export H='a71a5e7999b5364e8477685b13c6a1e440fa7b27' T0_EPOCH_S='1790524800'
 export TZ=America/Los_Angeles PYTHONDONTWRITEBYTECODE=1
 unset PYTHONPATH
 export WINDOW_ID=w2
