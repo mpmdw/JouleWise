@@ -1,0 +1,23 @@
+LANE: TEST-LOAD-JOIN-LADDER-FLAKE-01 (A310, JouleWise). Seat: Sol 6.0 (gpt-6-sol), effort high, implementation genre. Tier: LIGHT (test-only; directive #415).
+WORKTREE: /Users/edr/code/JouleWise-wt-flake-6bec2aa6 (branch test/2026-09-26-load-join-ladder-flake, at origin/main 64e39bb9).
+WRITE_SCOPE: ["tests/test_sample_quiet_predicate_evidence.py"]
+(WRITE_SCOPE is exhaustive. If the right fix needs production code (scripts/sample_quiet_predicate_evidence.py) or CI config, STOP and return NEEDS_SCOPE with the exact diff you propose and why; do not edit it.)
+
+1. GOAL. tests.test_sample_quiet_predicate_evidence.LoadTests.test_load_join_ladder_accepts_slow_exit_and_escalates_a_stuck_child, subtest exit_delay=60, failed in three or four full-suite replays on 2026-09-25/26 while other Codex seats loaded the machine. Each time the child's exitcode was -SIGKILL where the test expects -SIGTERM. Each isolated rerun passed. Make the test robust under concurrent machine load WITHOUT changing what it asserts: the real join ladder in harness.load() still escalates a stuck child, and the report still names the escalation.
+
+2. ROOT CAUSE FIRST. Read harness.load() and its join ladder (join_grace_s, the TERM then KILL steps) in scripts/sample_quiet_predicate_evidence.py, and delayed_exit_load_worker in the test module. State precisely why a loaded machine turns TERM into KILL. The expected shape: with join_grace_s=0.2, a spawn-context child that has not yet installed or returned to its default SIGTERM disposition, or that has not been scheduled within 0.2 s after TERM, is KILLed. Confirm or refute that with code citations (file:line). Reproduce it by loading the machine, e.g. 12 `yes > /dev/null` processes for at most 60 s (kill them afterwards), and run the test in a loop. Report the RED count out of N.
+
+3. FIX (test file only). Choose the smallest fix that keeps the assertion semantics:
+   - Preferred: derive the grace from a measured budget instead of the magic 0.2 s (for example, wait for the child to signal readiness before the ladder starts, or use a grace large enough that a scheduled child always handles TERM, while keeping the test well under 10 s).
+   - Acceptable: accept that SIGTERM delivery was attempted and the child ended by the ladder, but ONLY if the report proves TERM was sent first. Do not weaken it to "any negative exit code" unless the report records the TERM step.
+   Explain your choice.
+
+4. VERIFY. Paste the exact last 5 lines of each run:
+   - the test module alone;
+   - 20 loop iterations of the single test under the same artificial load (all must pass, versus the RED count from step 2);
+   - python3 -m unittest tests.test_git_fixture_maintenance (guards test-module conventions).
+   Kill every load process you started.
+
+5. DO NOT: commit, push, edit any other file, or run the full suite. The lead commits.
+
+6. REPORT in the claude-codex-report/v1 envelope: the root cause with citations, the RED reproduction count, the diff, the verification tails, and anything you could not do literally.

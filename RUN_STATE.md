@@ -10,13 +10,47 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION ed17a643 — 14:17 PDT 09-25 → ≈06:45 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the full account; items 1–53 are its log.
+**▶▶ ACTIVATION f8d6cab1 — 11:43 → ≈15:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; exits for a fresh supervisor after the merge wave):** [Record 00](docs/process_traces/2026-09-26-activation-f8d6cab1/00-activation-record.md) items 1–25.
+
+**MERGED:**
+- #428 A310, the load-ladder flake fix (test-only) → `560914be`.
+- **#429, BFG-S S0** (the `PairVerdict` helper, the wrappers, the arm fence, the frozen pins and the guard) → `1417c0c4`. It merged under the full gate, 12/12. The merged tree is identical to the integration tree that passed the full suite (7,454 tests, 0 failures, 0 errors).
+
+**BFG-S S0: two cold gates this activation.**
+- Merging main exposed a freeze-fence breach from round 3: the frozen `CustodyFailure` had been widened and then self-pinned. It is restored at the bench.
+- The delta re-audit split on the same-signature class, which triggered rule 11. Cold gate addendum 3 ruled amendments 29–32. Its paired Opus refuter found two BLOCKERs in that ruling, and the erratum re-issued amendment 30, restated 26, 31 and 32, and added 33 and 34 for S2.
+- Round 4 then passed the Astra + Opus delta lenses, after one bench fix (strict UTF-8 container decoding). The cold Fable final pass ruled MERGE after one dictated test row.
+- **S1 and S2 briefs must quote amendments 26 and 31–34 verbatim** from the erratum §3 ([30-erratum/21](docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md)).
+
+**#427** (bookkeeping for 6bec2aa6) could not merge. The CI docs-only filter skips the test matrix, so the required `test (3.13, N)` contexts never report. Its content is carried by this activation's bookkeeping PR from `docs/2026-09-26-f8d6cab1`, which also changes `tests/test_gen_state.py`, so the hosted matrix runs. Close #427 as superseded once that PR merges.
+
+**SUCCESSOR'S NEXT EXACT ACTION:**
+1. Merge the bookkeeping PR from `docs/2026-09-26-f8d6cab1` (it supersedes #427, which is closed) under the light tier. Rows 1, 9, 11 and 12 are still to run.
+2. **W1:** `ps -p 46048`. The interactive claude on ttys000 has been alive since 09-24 17:47, and Ed was told of it in the launch email (Gmail `1a0df083046ddf6c`). If it is gone, rerun the W1 README prerequisites from step 0 with `__H__` = current main and a fresh battery pair, then arm under NIGHT_HANDBACK with a cold Fable pass on the staged plan.
+3. **QPE-SHAPE3-NIGHT-BLANK-01:** a cold-gate ruling on text 6, before S2 is briefed.
+4. **S1 ∥ S2** from main `1417c0c4` or later, with briefs quoting Final texts v1.1 plus amendments 20–34. S2 owns amendments 32, 33 and 34 and the text-5 collector; S1 owns 26 and the S1 clause of 31, and passes real directories, never symlinks (final pass D-1).
+5. Follow-up lanes: BFGS-S0-FOLLOWUPS-01, TEST-LOAD-LADDER-KILL-COVERAGE-01, HISTORICAL-BATTERY-STATE-01 (weekly `pmset -g log` re-archive; the last archive was 09-26), SCORED-CEILING-BATTERY-01.
+
+**▶▶ ACTIVATION 6bec2aa6 — 08:43 → ≈11:40 PDT 09-26 (Opus 5.5; NOTHING ARMED; exited for a fresh supervisor after #426):** [Record 00](docs/process_traces/2026-09-26-activation-6bec2aa6/00-activation-record.md) items 1–29. The short-lived predecessor 8e43cfa7 (08:28–08:34, [record](docs/process_traces/2026-09-26-activation-8e43cfa7/00-activation-record.md)) exited on usage; its seats died and were relaunched.
+- **MERGED:**
+  - #425 (bookkeeping) → `6a463e87`;
+  - **#426 A309 BFG-D verdict-merge liveness** (the Opus M-1 closure; full gate, Fable MERGE, 7,384/0/0) → `5d5a0b75`.
+  Canonical is at `5d5a0b75`.
+- **W1 is BLOCKED by a live interactive Claude session** (PID 46048 on ttys000, running since 09-24 17:47). The W1 README says: email Ed and do not arm. Ed was asked at 08:3x on thread `1a0de5570fb67de4`; there was no reply by 11:35. When it clears, re-run the arm prerequisites from step 0 with `__H__` ≥ `5d5a0b75` and fresh battery observations.
+- **BFG-S (BATTERY-FLOAT-GATE-01):** a four-model consult, cold gate BFGS-DESIGN-01, a paired refuter and a cold addendum produced **Final texts v1.1** ([ruling](docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md)). The S0 lenses led to **addendum 2, amendments 20–28** ([ruling](docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md)). **S0** is on `feat/2026-09-26-bfgs-s0-helper-fence` @ `980138c7` after fix rounds 3/3b. Still to do: rebase and regenerate the pins, delta re-audit, Fable final pass, full suite, PR. After that, S1 ∥ S2 → S3 (`_v5` packs) → S4 (after the Rev-5 epoch).
+- **New science lanes (ruled text 19):**
+  - HISTORICAL-BATTERY-STATE-01: every published number was measured with battery state unobserved. `pmset -g log` only reaches back to 09-19; it was archived read-only at `~/night-archive/pmset-log/`.
+  - SCORED-CEILING-BATTERY-01.
+- **A310 flake fix** is `37f9b935` on `test/2026-09-26-load-join-ladder-flake`; its PR is not yet opened.
+- **SUCCESSOR'S NEXT EXACT ACTION:** record 00 item 29.
+
+**▶▶ ACTIVATION ed17a643 — 14:17 PDT 09-25 → ≈08:25 PDT 09-26 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-25-activation-ed17a643/00-activation-record.md) is the full account; items 1–57 are its log.
 
 **MERGED:**
 - #418, the Revision 5 seal → `e9ed7a98`.
 - #423, the A-R5b battery-float amendment (directive #421, approved in #422) → `935cef2d`. The registration digest is now `81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1`.
 - #419, the TIER-01 light tier → `cab01506`; #415 is closed.
-- **#424 BFG-D**, the battery gate for derivation windows → `64e39bb9` (merged ≈08:25 PDT 09-26). This activation exited for a fresh supervisor.
+- **#424 BFG-D**, the battery gate for derivation windows → `64e39bb9` (merged 08:18:59 PDT 09-26). This activation exited for a fresh supervisor.
 
 Four cold gates govern BFG-D: BATTERY-FLOAT-01, HARVEST-VERDICT-FINAL-01, BFG-D-PARSER-ESC-01 and CONSUMER-DRIFT-ESC-01. Each ran with a paired refuter plus an addendum. The final passes: Fable ruled MERGE; Opus dissented with M-1, which is carried as lane BFGD-VERDICT-MERGE-LIVENESS-01.
 

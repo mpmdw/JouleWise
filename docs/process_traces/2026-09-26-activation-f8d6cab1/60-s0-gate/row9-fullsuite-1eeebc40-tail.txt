@@ -1,0 +1,8 @@
+SHARD SUMMARY index=1/6 modules=38 tests=666 failures=0 errors=0 skipped=5 result=PASS
+SHARD SUMMARY index=2/6 modules=42 tests=1085 failures=0 errors=0 skipped=46 result=PASS
+SHARD SUMMARY index=3/6 modules=47 tests=1873 failures=0 errors=0 skipped=14 result=PASS
+SHARD SUMMARY index=4/6 modules=46 tests=855 failures=0 errors=0 skipped=3 result=PASS
+SHARD SUMMARY index=5/6 modules=46 tests=1179 failures=0 errors=0 skipped=8 result=PASS
+SHARD SUMMARY index=6/6 modules=47 tests=1796 failures=0 errors=0 skipped=33 result=PASS
+WORKERS SUMMARY shards=6 modules=266 tests=7454 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+EXIT=0

@@ -1,0 +1,30 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S0, fix round 3 (continuation after your early return). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s0-6bec2aa6 (branch feat/2026-09-26-bfgs-s0-helper-fence at aa90f349 = your round-3 work, committed unchanged).
+WRITE_SCOPE: ["joulewise/battery_float.py","joulewise/night_kinds.py","joulewise/evidence_night.py","tests/test_battery_float.py","tests/test_battery_float_consumers.py","tests/test_battery_float_sweep.py","tests/test_evidence_night.py","tests/test_night_kinds.py"]
+
+Your round-3 brief (/Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/42-seat-brief-round3.txt) and your report 43 still govern. The lead rules your two early-return questions as follows (verbatim):
+
+# S0 round 3: lead rulings on the seat's early return (report 43, F1 and F2). Magistrate 6bec2aa6.
+
+Both questions concern the lead's own fix contract `41`. Neither amends cold-ruled text.
+
+**R-F1 (C8(ii) is too broad). Amend C8(ii) to read:**
+
+> (ii) Any call to `dataclasses.replace` (however imported) in a production module that imports `joulewise.battery_float` is flagged **unless** it is in `REPLACE_CALL_ALLOWLIST`: a test-module constant listing the pre-existing calls at base `64e39bb9`. There are nine. Each entry is keyed by `(repo-relative path, enclosing function qualname, ast.unparse(call))`, so an entry does not depend on line numbers.
+> - Each entry's reason is `"predates PairVerdict (64e39bb9); cannot receive a PairVerdict"`.
+> - The seat verifies that reason for each entry by showing that the replaced object's type is not `PairVerdict`: it quotes the first argument's type or origin at each site.
+> - A self-test shows that (a) a new `dataclasses.replace` call in a module importing `battery_float` is flagged; (b) an allowlisted call is not; and (c) an allowlist entry that no longer matches any call fails the test, so the list can only shrink.
+
+No production file outside WRITE_SCOPE is edited.
+
+**R-F2 (the RED-proof rule for C10).** The C10 tests are **regression guards** for properties already true at `26ab7234`: no `skipped` state, no exemption, and the unreadable-kind branch.
+- The universal RED-proof instruction applies to closures that change behaviour, not to guards over existing behaviour.
+- Mark these tests in the report as "baseline-green guard (C10)".
+- To show that each guard is not vacuous, give a mutation proof: temporarily introduce the property violation in a scratch copy (e.g. add `"battery_brackets"` to the exemption tuple), run the guard, show it RED, and revert. Paste the three mutation runs.
+
+TASK: apply R-F1 and R-F2, then re-verify. Paste the exact last 5 lines of each:
+- V1: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_battery_float_sweep (must be green now);
+- V2: tests.test_evidence_night tests.test_night_kinds;
+- every other importer module of joulewise.battery_float, joulewise.night_kinds or joulewise.evidence_night.
+Also paste the three C10 mutation runs and the nine allowlist entries, each with its type evidence.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. REPORT in the claude-codex-report/v1 envelope.

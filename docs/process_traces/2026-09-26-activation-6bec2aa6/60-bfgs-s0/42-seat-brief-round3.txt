@@ -1,0 +1,84 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S0, FIX ROUND 3. Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s0-6bec2aa6 (branch feat/2026-09-26-bfgs-s0-helper-fence at 26ab7234 = your round-2 work, committed unchanged).
+WRITE_SCOPE: ["joulewise/battery_float.py","joulewise/night_kinds.py","joulewise/evidence_night.py","tests/test_battery_float.py","tests/test_battery_float_consumers.py","tests/test_battery_float_sweep.py","tests/test_evidence_night.py","tests/test_night_kinds.py"]
+(Exhaustive. NEEDS_SCOPE / NEEDS_RULING early returns as before. Never guess.)
+
+0. PRECEDENCE. Cold addendum 2's amendments 20–28 (quoted verbatim in §2) govern over the lead's fix contract (§1) wherever they differ. In particular:
+   - amendment 22 supersedes contract C2: span=None for quiet or bundle RAISES ValueError; a malformed span is "<kind> span unavailable";
+   - amendments 24, 25 and 27 replace C12 and C13;
+   - amendment 26 is S1's, not yours.
+   The lens reports that motivate this round are 31/32/33 in /Users/edr/code/JouleWise-wt-bk-8e43cfa7/docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/.
+
+1. LEAD FIX CONTRACT (verbatim; implement C1, C3–C11 exactly; C2/C12/C13 per §0):
+## Closures (dictated)
+
+- **C1 (Sol F3 / Astra R1, BLOCKER): an unreadable round journal.** In `authenticate_quiet_session`, `rounds.jsonl` is handled by what it contains:
+  - **Missing:** zero rows. The refusal-shape envelope writes it empty.
+  - **Empty:** zero rows.
+  - **Any non-empty line that is not a JSON object, or a file that cannot be read:** raise `CustodyFailure("round journal unreadable: <reason>")`.
+
+  A journal that cannot be parsed is never converted to zero rows.
+  - Regression 1: a digest-mismatch journal raises.
+  - Regression 2: the same journal replaced with malformed JSON also raises, where it currently passes.
+- **C2 (Sol F2 / Astra R2, BLOCKER): spans.** **[ADD2 Q1]** governs the quiet span source. In `authenticate_pair`, whenever `span` is given, it must be a 2-tuple of non-bool ints with `0 ≤ start ≤ end`; anything else is `battery_float_evidence_missing: span malformed`. This applies at the span rung only, after custody, probe, parse and predicate, so a malformed span never preempts `CustodyFailure` (Astra R2's second half).
+  - For kinds `bundle` and `quiet`, `span` is **required**: `span=None` is `evidence_missing: span required` (Opus N-1).
+  - Regressions: a reversed span; a bool span; a float span; custody that raises despite a malformed span; bundle and quiet authenticated with `span=None`.
+- **C3 (Sol F4 / Astra R5): symlinks.** Before reading a raw file, `lstat` every path component from the container root down to the file. Any symlink, or a resolved path outside the container, raises `CustodyFailure("raw path traverses a symlink: <component>")`. Open the file with `os.O_NOFOLLOW`.
+  - Regression: a symlink to an outside file with matching bytes raises.
+- **C4 (Sol F5 / Astra R3): duplicate keys.** Every JSON decode in the wrappers (`session.json`, `metadata.json`, `events.jsonl` lines, `rounds.jsonl` lines, `instrument_evidence.json`) uses an `object_pairs_hook` that raises `CustodyFailure("duplicate JSON key <k> in <file>")`.
+  - Regression: a foreign value followed by the expected value raises.
+- **C5 (Sol F6 / Astra R6 / Opus N-4): the fence and a missing flag.** In `evidence_night.check`, the fence evaluates `getattr(row, "battery_brackets", None) is True`. A missing attribute is a failed inspection that journals the normal refusal record; it never raises.
+  - Regression: an injected kind without the attribute is refused, with the check journal written.
+- **C6 (Opus S-4): stale `check.json`.** `require_fresh_check` also requires `checked["checks"]["battery_brackets"]["verdict"] == "pass"`, and otherwise refuses with `"check.json predates the battery_brackets fence"`.
+  - Regression: a hand-written armable `check.json` without the row is refused.
+- **C7 (Opus S-1): pins cover dependencies.** Extend the text-3 pins to each frozen function's module-level dependency closure. Compute the transitive closure over the `Name` loads that resolve to module-level functions, classes or assignments in `battery_float.py`. Pin `ast.get_source_segment` of each closure member in the same regenerable `FROZEN_FUNCTION_SOURCE_SHA256` table, keyed by name.
+  - A self-test mutates `_signed` in a copy of the module and shows the pin RED.
+- **C8 (Opus S-2): guard evasions.** Extend the text-4 guard. Outside `joulewise/battery_float.py`, over `joulewise/` and `scripts/`, flag:
+  - (i) any load of `PairVerdict`, whether a bare from-imported name or an attribute through a `battery_float` module alias, except as the second argument of `isinstance`/`issubclass` or inside an annotation;
+  - (ii) any call to `dataclasses.replace` (however imported) in a module that imports `joulewise.battery_float`;
+  - (iii) any `getattr(<battery_float alias>, <str>)` call;
+  - (iv) any `type(<expr>)(...)` call in a module that imports `joulewise.battery_float`.
+
+  Self-tests: each of the four forgeries Opus executed (E7) is flagged, and the legitimate `isinstance` use is not.
+- **C9 (Opus N-2): exit code.** Rung (c) treats `exit_code` as success only when `type(exit_code) is int and exit_code == 0`.
+  - Regression: `False` and `0.0` are `evidence_missing`.
+- **C10 (Opus N-5): fence tests.** Add dedicated tests that no `skipped` state exists for `battery_brackets`, and that it is not in the `("machine_quiet", "corecaptured")` exemption. Add a test for the unreadable-kind branch.
+- **C11 (Opus N-6): the `PHASES` sweep.** Resolve aliased imports: `from joulewise import battery_float as bf`, `import joulewise.battery_float as x`, and `from joulewise.battery_float import observe [as o]`.
+  - Self-test: an aliased out-of-set phase literal is flagged.
+- **C12 [ADD2 Q2]: `bundle_sha256` and `authenticate_window_members`.** Placement and field as ruled.
+- **C13 [ADD2 Q3]: capture identity binding.** As ruled.
+
+## Out of scope for round 3 (the lead handles these)
+
+- Recomputing the pins after rebasing onto A309 (#426) is lead bench work after #426 merges.
+- The pin test must name `10-liveness/ex-01-dictated-closure-M1.md` as the `load_committed_verdict` baseline (A309 Fable obligation 2). The seat adds that docstring now.
+
+2. COLD ADDENDUM 2, AMENDMENTS 20–28 (verbatim):
+20. **Conversion and refusal-class constants (amends text 2, text 5).** `battery_float.py` gains `monotonic_ns_from_s(seconds: float) -> int`, defined as `math.floor(seconds * 1_000_000_000)`, raising `ValueError` for `bool`, non-finite or negative input; and `QUIET_REFUSAL_ERROR_CLASS = "network_time_provenance"`. S2 passes `monotonic_ns=lambda: battery_float.monotonic_ns_from_s(clock.monotonic())` to every `observe` call in the collector, where `clock` is the `Clock` instance whose `stamp()` writes `start_stamp` and `end_stamp`; the collector never passes `time.monotonic_ns` or its own conversion. T5 gains: a scripted `Clock` whose `monotonic` returns a fixed sequence yields `pre.monotonic_after_ns ≤ monotonic_ns_from_s(start_stamp.monotonic_before_s)` and `post.monotonic_before_ns ≥ monotonic_ns_from_s(end_stamp.monotonic_after_s)`, and `authenticate_quiet_session` is `pass` on the capture path and on the refusal path; and `sample_quiet_predicate_evidence.NETWORK_TIME_REFUSAL == battery_float.QUIET_REFUSAL_ERROR_CLASS`.
+
+21. **Quiet span (fills the gap Opus B-1 names; amends text 2(f) for kind quiet).** `authenticate_quiet_session` derives `span = (start, end)`: `start = monotonic_ns_from_s(session["start_stamp"]["monotonic_before_s"])`; `end = monotonic_ns_from_s(session["end_stamp"]["monotonic_after_s"])` when `end_stamp` is present; when `end_stamp` is absent and `session["error_class"] == QUIET_REFUSAL_ERROR_CLASS` and `rounds.jsonl` exists and contains no row, `end = monotonic_ns_from_s(session["start_stamp"]["monotonic_after_s"])`. In every other case, including any `ValueError` from the conversion, the wrapper passes the sentinel `(None, None)`, and the verdict is `battery_float_evidence_missing` with the single reason `quiet span unavailable`, at the span rung only. Tests (S0): the refusal-shape envelope with a bracketing pair is `pass`; a capture-shape envelope with `end_stamp` deleted is `evidence_missing` with exactly one reason `quiet span unavailable`; a refusal-shape envelope whose `rounds.jsonl` holds a row is `quiet span unavailable`; the quiet span rung sits below custody, probe, parse and predicate (one test per rung, mirroring the bundle rung tests).
+
+22. **Span validity for every kind (amends text 2(f); supersedes the bundle-only guard).** At rung (f), for kind quiet, bundle and capture alike: if `span` is not `None`, it must be a 2-tuple of non-`bool` `int`s ≥ 0 with `span[1] ≥ span[0]`; otherwise the single reason `<kind> span unavailable` (`quiet` / `bundle` / `capture`) is appended once and the per-phase comparison is skipped. This check never raises and runs only after rungs (a)–(e) have completed for both phases. `authenticate_pair` raises `ValueError("<kind> pairs owe a span")` when kind is quiet or bundle and `span is None`. Tests: `span=(80, 20)` and `span=42` on a quiet pair are `evidence_missing: quiet span unavailable`; `span=42` on a bundle pair whose post raw file is deleted raises `CustodyFailure`, not `TypeError`; `authenticate_pair(..., phases=("bundle_pre","bundle_post"), span=None)` raises `ValueError`.
+
+23. **Pair stamp order (adds to text 2(f), every kind).** At rung (f), before any span comparison, each phase's `monotonic_before_ns` and `monotonic_after_ns` must be non-`bool` `int`s ≥ 0 with `before ≤ after`, and `pre["monotonic_after_ns"] ≤ post["monotonic_before_ns"]`; otherwise the single reason `pair stamps malformed` is appended. Tests: a post read stamped before the pre read is `evidence_missing: pair stamps malformed` for a capture pair with no span; a negative or boolean stamp likewise; every fixture pair in the S0 tests still passes.
+
+24. **`bundle_sha256` field (amends text 2's field list and text 9).** `PairVerdict` gains a ninth, last field `bundle_sha256: str | None = None`. `authenticate_bundle` fills it with `complete_bundle_sha256(bundle_path)` after `authenticate_pair` returns and for every status, importing `complete_bundle_sha256` inside the function body (module-level import would cycle through `detection_floor → calibration_bracketing / whole_window → battery_float` after S1); a raise from the digest function propagates unchanged. `authenticate_quiet_session` and `authenticate_capture` leave it `None`. Text 9's "carrying `bundle_sha256` = `complete_bundle_sha256`" refers to this field. `BundleReader.metadata()` (text 8) may use the returned `bundle_sha256` for its state (ii) lookup so that a bundle is hashed once. Tests (S0): a fixture bundle's verdict `bundle_sha256` equals `complete_bundle_sha256(path)` computed independently; a bundle containing a symlink raises from `authenticate_bundle` with the digest function's own exception; the quiet and capture wrappers return `None`.
+
+25. **Status factories (adds to text 2; amends text 4).** `battery_float.py` gains `unobserved_historical_verdict(kind: str, *, bundle_sha256: str | None = None) -> PairVerdict` and `not_applicable_verdict(kind: str, *, bundle_sha256: str | None = None) -> PairVerdict`, returning `reasons=()` and `None` for both digests, both ages and `delta_q_mah`. The text-4 guard flags a call to either factory in any production file other than `joulewise/battery_float.py` and `joulewise/bundle_read.py`; the `bundle_read.py` exemption is one named allowlist row with reason `text 8 reader states`. Guard self-tests: a factory call from `joulewise/x.py` is flagged; from `joulewise/bundle_read.py` it is not; the seven `parse` rows of text 4 are unchanged.
+
+26. **Window-level verdict location and contract (amends text 12, first sentence; amends T12).** Replace "calls `battery_float.authenticate_window_members(members)`" with "calls `bundle_read.authenticate_window_members(members)`". Contract, S1-owned in `joulewise/bundle_read.py`: `authenticate_window_members(members: Iterable[tuple[str, Path]]) -> dict[str, PairVerdict]`; each member is classified through the same code path as `BundleReader.metadata()` (text 8's three states, `not_reached` obligation from `events.jsonl`, `not_applicable` only from the digest-bound `config.json`), producing a `PairVerdict` via `authenticate_bundle` or the text-25 factories, never `PairVerdict(...)` directly; it then raises `WindowBatteryRefusal` naming **every** member whose status is `battery_float_confounded`, `battery_float_evidence_missing` or `not_applicable`, or that is `not_reached` with obligation, each entry carrying label, status, reasons and `bundle_sha256`; `CustodyFailure` propagates; `unobserved_historical` members are returned, not refused. The rest of text 12 (members definition, the eight consumers, the AST sweep and its allowlist) is unchanged; the sweep matches the function name and `BundleReader.metadata()`, not a module. `joulewise/battery_float.py` is **not** added to S1's WRITE_SCOPE.
+
+27. **Capture identity (amends text 2(a) for kind capture; amends text 10, text 11, T10).** `authenticate_capture(capture_dir, *, expected: Mapping[str, str | None] | None = None)`. Rung (a) for kind capture, in order, each a `battery_float_evidence_missing` reason: `instrument_evidence.validation_id` not a non-empty `str` → `capture identity missing`; pre and post differing on any of `session_id`, `slot`, `attempt_id` → `pair identity disagreement`; non-null `attempt_id` ≠ `validation_id` → `attempt identity mismatch`; null `attempt_id` with non-null `session_id` or `slot` → `partial identity`; when `expected` is given (keys exactly `attempt_id`, `session_id`, `slot`; `None` means "must be null"), `validation_id ≠ expected["attempt_id"]` or record `session_id`/`slot` ≠ the expected values → `ledger identity mismatch`. The identity passed to `authenticate_pair` is the agreed `session_id`. Text 10's predicate passes `expected={"attempt_id": observation.attempt_id, "session_id": observation.bracket_session_id, "slot": observation.bracket_slot}` after its evidence-digest check. Text 11's attachment call passes no `expected`. Tests (S0): E6's mismatched pair is `pair identity disagreement`; a bracket-shaped pair with `attempt_id ≠ validation_id` is `attempt identity mismatch`; the ordinary null-identity shape with a `validation_id` passes; `expected` with a different attempt refuses `ledger identity mismatch`; a missing `validation_id` refuses `capture identity missing`. T10 gains rows (e)–(h) of §4.7.
+
+28. **S0 round 3 scope and order (amends text 15 and §F).** S0 round 3 implements amendments 20–25 and 27 within S0's existing WRITE_SCOPE (no path added); its tests are T2 (span and stamp rungs extended), a new **T15 (S0)**: quiet span (21), kind-wide span validity (22), stamp order (23), `bundle_sha256` (24), factories and guard rows (25), capture identity (27). The ten text-3 pin values do not change; the `observe` golden does not change. S1 implements amendments 24's reader reuse, 26 and 27's S1 clauses; S2 implements amendment 20's collector clause and T5 rows. S1's and S2's WRITE_SCOPEs are unchanged.
+
+
+3. TESTS. Every closure and amendment gets a defect-shaped regression that is RED on 26ab7234 for the stated reason; paste the RED proofs. This includes T15 as ruled in amendment 28.
+
+4. VERIFY. Paste the exact last 5 lines of each:
+   - python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_battery_float_sweep
+   - python3 -m unittest tests.test_evidence_night tests.test_night_kinds
+   - EVERY other test module importing joulewise.battery_float, joulewise.night_kinds or joulewise.evidence_night (grep -l over tests/*.py).
+   The sandbox sysctl live probe in test_issue_calibration_acceptance_generation fails only in your sandbox; the lead reruns it.
+
+5. DO NOT commit, push, run the full suite, or touch any path outside WRITE_SCOPE. REPORT in the claude-codex-report/v1 envelope: map every closure (C1–C11) and amendment (20–25, 27) to its diff and tests.
