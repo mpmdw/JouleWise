@@ -59,3 +59,17 @@
     - SF-3: the claim that the tool enforces (b) holds only against unnamed rows; the issuer should refuse a registration that names a disposed session.
     - **Adjudication:** the refuter's amendments change the ratified text, so they go to a **cold addendum** (Fable) rather than the magistrate. The statement is recorded only after that addendum.
     - **New lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01** (science-bearing issuer code, full tier). A design scout starts now. The design consult and the fix must land, blind to B values, before `prepare-candidate` first runs.
+13. **ISSUANCE-CUSTODY-OUTSIDE-REPO-01 scout** (Sol 6.0 xhigh, outcome-blind; [brief](50-custody-outside-repo/01-scout-brief.txt), [report](50-custody-outside-repo/11-sol-scout-report.md)).
+    - **The refusal is certain.** The issuer's `_repo_relative_custody` was run on all 24 W1/W2 locators and refused on all 24.
+    - **It was latent in the plan.** The runbook puts night custody at `/Users/edr/night-custody/<PLAN_ID>` and forbids moving it. The issuer test `test_custody_outside_the_repository_refuses` asserts the refusal, and r6/r7 used gitignored in-repo `runs_window_*` paths.
+    - **The other non-mirrored checks pass value-blind:**
+      - the r7 predecessor pin matches;
+      - the registration pins are well formed;
+      - two nights with W1 then W2 is permitted, and the 12-slot count holds;
+      - W1 futility is passed at 6.
+      Only the plateau inset (value-dependent) is left unprobed.
+    - **Designs:**
+      - **A (recommended):** an artifact-level, generation-specific logical `source_root` descriptor plus a `--custody-root` flag. Members stay relative and contained. The verifier and reissue take a caller-supplied archive location, the validator accepts only the declared descriptor, and r6/r7 repo-root resolution is kept.
+      - **B:** per-night logical roots.
+      - Neither design moves, copies or symlinks custody, and neither lets a choice depend on values.
+    - **Next:** the design ruling (who rules is the addendum's Q4), then implementation under the full gate, then `prepare-candidate`.
