@@ -86,4 +86,20 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
     - **Mutation:** with `watchdogd|` added to `_MONITOR_CENSUS_PATTERN`, the test FAILS on marker `/usr/libexec/watchdogd`. The mutation was reverted.
     - Final-head independent review `REVIEW: PASS` ([14-sol-final-review.md](50-census/14-sol-final-review.md)).
 
+20. **The SWEEPCLASS-SAMESIG-01 cold ruling** ([21](30-sweepclass-samesig/21-coldgate-fable-ruling.md)) narrows the sweep's promise to accidental-edit coverage (amendment 61).
+    - B-1 and B-5 are closed (62).
+    - B-2 and B-3 are limitations. B-3 also gets lane BFGS-READER-ROOT-01 after S1.
+    - B-4 gets a gated helper in `envelope_gate.py` (63), the only production change inside S1. The consensus inline edit was rejected by execution (Z8).
+    - The inventory failure is fixed by the already-ruled detector replacement plus rule (d) 6 (64), not by key edits.
+    - Fix round 3 is restated as §8.2 steps 1–12. The stop predicate is A1–A5 plus one refuter pass. Gated `summary()` becomes lane BFGS-GATED-SUMMARY-01, after S1, blocking nothing.
+    
+    **The paired Opus refuter** ([22](30-sweepclass-samesig/22-opus-paired-refuter.md)) raised F1, a BLOCKER tree finding (the cooldown anchor carries a pre-gate `idle_baseline` into later campaigns' admission reasons); SHOULD-FIX F2–F4; NITs F5–F6.
+    
+    **The S1 fix-round-3 seat** was launched on §8.2 steps 1–12 (Sol 6.0 xhigh; [brief](60-s1-fix3/10-fix-brief.txt) at `77d71d93`). It was told to return F1 with executed evidence and not to add F2/F4 rows.
+21. **SAMESIG erratum ruling** ([31](30-sweepclass-samesig/31-coldgate-fable-erratum-ruling.md); [charge](30-sweepclass-samesig/30-erratum-charge.md) at `2daf10a8`).
+    - **F1 is TRUE by execution** (E1–E3: a charging bundle's 9.99 W idle baseline becomes the stored anchor; the next campaign reads it and decides `recovered` or `cooldown_cap_hit` from it).
+    - **It is pre-existing** (same on main; S1 changes no line of the route), so it does not block S1. It becomes lane **BFGS-COOLDOWN-ANCHOR-01**, which opens now and **must merge before the next scored campaign**. Until then the lead runs the read-only §4.6 anchor pre-check before every scored campaign. W2, a derivation window, is not a scored campaign.
+    - F2–F6 are upheld as amendments 66–71. Test-only delta steps 13–19 go to the seat after steps 1–12.
+    - **This erratum is not paired with a further refuter.** The ruled stop rule (61 (c)) prescribes exactly one refuter pass, on the final merge candidate, which will exercise amendments 61–71. Pairing each ruling is the mechanism that produced the same-signature spiral. This is a magistrate call, recorded here for Ed and the next cold gate.
+
 **Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
