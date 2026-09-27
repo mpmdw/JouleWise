@@ -110,3 +110,10 @@
       - **F1:** the cooldown-anchor route. It exists on main too, but S1 added lines in `evaluate_member` and `campaign_cooldown_before_member`, so the refuter says 66 (a) row 1c cannot exempt it.
       - **F2:** reduction does not recheck an attached calibration capture's own battery pair. The bound still flows to whole-window preparation, and S1 changed that function.
     - **Rule 11 is mandatory:** deciding whether the prior ruling's row-1c exemption applies is a reinterpretation of a verdict, and the magistrate may not adjudicate blocker severity downward. **Cold gate S1-A3-ROUTE-01** (Fable, [charge](35-s1-refuter/20-coldgate/20-coldgate-charge.md)) and a paired Opus refuter were convened. S1 is not on the issuance path; the custody repair continues in parallel.
+22. **Custody repair implemented** (Sol 6.0 xhigh; [report](50-custody-outside-repo/41-impl-seat-report.md)). The lead committed it unchanged as `cc8346c2`, merged main to give **`c84b1dc2`**, and pushed `fix/2026-09-27-issuer-corpus-root`.
+    - **What changed:** the issuer only, plus the fixture builder and a new `tests/test_issuer_corpus_root.py` (8 tests). `_repo_relative_custody` is byte-identical.
+    - **Mutation cuts:** 11 named cuts, all RED.
+    - **R8 probe:** all 24 real locators map to `<session>/runs/instrument_validation/<attempt>`. `/Users/edr` and the W1 night directory as roots refuse 24/24.
+    - **R6:** all seven `calibration_acceptance_*.json` are byte-identical, and so are the four estimator-code files.
+    - **The seat's one suite failure** is the sandbox denying `sysctl`. The lead is re-running the issuer, reissue and bracketing suites outside the sandbox.
+    - **Lenses launched on `c84b1dc2`:** Sol xhigh (execution, rows 1 and 2) and Opus 5.5 (contract, rows 2 and 6), [brief](50-custody-outside-repo/50-lens-brief.txt). Next come the fresh cold gate on the final diff (row 7 and statement item 6(c)) and row 9.
