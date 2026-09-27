@@ -90,3 +90,22 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
     - Machine state at arm is in [10-w1-arm/arm-machine-state.txt](10-w1-arm/arm-machine-state.txt): no Wispr; AC, 100 %, charged.
     - **Notice accepted** as Gmail `1a0e180925850ff6` at 23:14:55 PDT (epoch 1790489695), sent to `claude2.glaring610@passmail.net`. No NO on any thread; directives unchanged; no standdown or STOP. `notice.json` was filled from the observed acceptance and `notice-evidence.txt` written.
     - Also harvested: the SWEEPCLASS erratum's paired Opus refuter. No BLOCKER; B-1..B-5 are SHOULD-FIX against the ruling, and B-4 proposes a production gate in `envelope_gate.py`. **They go to a second erratum cold gate after W1.**
+16. **W1 ARMED** (23:16:40 PDT 09-26). Frozen triple: (`d079-epoch-25g83-derivation-w1-20260927`, `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w1`, `97082508f3648ff8575c94b0cdfcf657ba440142`).
+    - **Step 4 `STEP4 OK`:**
+      - standdown and STOP absent; directives unchanged;
+      - clone = H and clean; H is an ancestor of `origin/main`; the wrapper was re-verified;
+      - final census: foreign PIDs are only this session's Codex MCP children;
+      - **second battery gate PASS** (0 mA, gauge age 2 s);
+      - `retry_allowed: allowed`; PUBLISHED at 1790489747.3;
+      - **live launchd probe OK:** 300 frames in 40.4 s, median 131.8 ms, p95 135.1 ms, max 136.8 ms, bound 55 s; cleanup proven; receipt v2;
+      - install done.
+    - Loaded labels: `com.joulewise.night`, `com.joulewise.night.deadman` (plus `com.joulewise.magistrate`).
+    - **Step 5 `STEP5 OK`:** calendars night 09-27 00:30, dead-man 04:05; argv, interpreter and working directory as rendered; `night/` baseline empty.
+    - Digests: plan `388420b5…02f5`, chain `ccaeac64…b956`, probe receipt `996f05bd…7b8d`. Install-time probe plist `4dea8cce…df0b`, versus the staged render `562e4341…` in the notice, as arm-gate NIT-5 predicted (its paths derive from the plan directory).
+    - The evidence copies are in [10-w1-arm/attempt-000001/](10-w1-arm/attempt-000001/).
+    - **Exit rule:** the magistrate and all owned agents exit before 00:22:00 PDT (epoch 1790493720). The LaunchAgent is now the wake source.
+17. **Next exact action (successor):**
+    1. **Harvest W1** after the courier (deadline 03:05 PDT). Run the README HARVEST CHECK: `calibration_cadence_report.py … --session "W1=$SESSION_ID"` with its `battery_float.validate_window` verdict. Only `status=pass` admits W1. Carry the arm-gate NITs: NIT-1 (the 09-16 78-row fork), NIT-6 (n1/n2 25G83 rows are diagnostics, not members), NIT-3 (A-R5b replacement is per epoch). Then plan W2 at least 6 h after W1 ends.
+    2. **Second SWEEPCLASS erratum cold gate** on the Opus refuter's B-1..B-5 plus NITs (`20-coldgate-sweep-erratum/11-opus-contract-refuter.md` Section B; B-4 proposes a production gate in `envelope_gate.py`). Then **S1 fix round 3 resume** (amendment 51 as amended by 57–60 and that erratum).
+    3. **TEST-CENSUS-MULTILINE-ARGV-01:** light-tier test fix per [30-census-argv/11-scout-report.md](30-census-argv/11-scout-report.md) (PID-only `pgrep -f`; reconcile the lane text). New observation for a lane: `scripts/magistrate_watchdog.py:226` drops `ps` continuation lines, so a role token after an argv newline can be missed by handoff classification.
+    4. Bookkeeping PR for branches `docs/2026-09-26-92472459` + `docs/2026-09-26-22784e38`. It must touch `tests/test_gen_state.py` so that CI runs.
