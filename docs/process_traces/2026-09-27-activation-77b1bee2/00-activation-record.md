@@ -88,3 +88,11 @@
     - Astra's path-hardening is folded in. Five lanes are registered (synthesis ruling 5).
     - The implementation seat (Sol 6.0 xhigh) was launched on branch `fix/2026-09-27-issuer-corpus-root`, worktree `JouleWise-wt-corpus-root-77b1bee2`, [brief](50-custody-outside-repo/40-impl-brief.txt).
 16. **PR #434 row 9.** `python3 scripts/shard_tests.py --workers 6` ran on the integration tree `2a4416c4` (the merge of `722f7bd1` into origin/main `670756f3`, worktree `JouleWise-wt-harvest-integ-77b1bee2`, `/opt/homebrew/bin/python3`). **7,525 tests, 0 failures, 0 errors, 109 skipped; result PASS; rc 0** ([tail](20-harvest-gate/31-row9-fullsuite-tail.txt), [log](20-harvest-gate/31-row9-fullsuite.log.gz)). The run took about 68 minutes, contending with the concurrent S1 V1/V2 seat.
+17. **PR #434 MERGED** at 12:52 PDT with a merge commit, `b69c39eb`. All checks were green, including the gate ledger. Canonical was fast-forwarded to `b69c39eb`, and the verdict path's only non-merge commit is `722f7bd1`.
+18. **S1 ruling §7 steps 2–3: `S1 STEPS 2-3: GREEN+RED AS RULED`** (Sol 6.0 high; [brief](30-s1-steps23/01-seat-brief.txt), [report](30-s1-steps23/11-seat-report.md)). The seat edited nothing and HEAD stayed at `204424e6`, clean.
+    - Green on the tree: the test method (1 test, 333 s), V1 (477 OK), V2 (343 OK), and B1 and B2 (`byte-identical entries=69`).
+    - On `git archive` copies of the real committed test (the unmutated control copy is GREEN, 423 s):
+      - mutant (a), both guards removed: RED, 17 failures, "SalvageAuthorizationError not raised";
+      - mutant (b), guard A removed: RED, 17 failures, "failed attempt contains measurand bytes" did not match "unknown non-null …";
+      - mutant (c), guard B removed: RED, 17 failures, "not raised".
+    - **Next for S1:** ONE refuter pass on the merge candidate, then the S1 merge gate (full tier), on an integration tree with main `b69c39eb`.
