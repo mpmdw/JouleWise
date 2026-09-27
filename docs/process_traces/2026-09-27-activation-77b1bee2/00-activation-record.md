@@ -174,3 +174,4 @@
       - **S4:** the run checkout is still at `722f7bd1`. Advance it after the merge and recheck the item 2(d) digests.
     - The ruling's §8 lists 11 value-blind prepare checks.
     - **Row 9** is running on `f783a3fd`, which contains main `b69c39eb`.
+31. **PR #435 gate complete.** Row 9 ran `python3 scripts/shard_tests.py --workers 6` on `f25bae33`, which contains main `b69c39eb`: **7,525 tests, 0 failures, 0 errors, PASS** ([tail](82-pr435-row9-tail.txt)). Hosted CI is green on `f25bae33`, apart from the ledger check awaiting this evidence. **Row 12**, magistrate terminal review of `f25bae33`: docs, state and the test count only; the audit passed; the full suite is green. MERGE.
