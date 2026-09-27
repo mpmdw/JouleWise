@@ -104,3 +104,9 @@
     - **Row 1:** Sol high, **AUDIT: PASS** with 0 findings ([brief](80-pr435-audit-brief.txt), [report](81-pr435-audit-report.md)).
     - **Row 9** is running on worktree `JouleWise-wt-bk435-row9-77b1bee2` @ `f25bae33`, which contains main `b69c39eb`.
     - Further records of this activation go on branch `docs/2026-09-27-77b1bee2` (worktree `JouleWise-wt-bk-77b1bee2`), so #435's head stays fixed.
+21. **S1 one refuter pass** (Sol 6.0 xhigh, [report](35-s1-refuter/11-refuter-report.md)): **`S1 REFUTER: A3 FAILS`**.
+    - A1, A2 (119 keys, no false class or kind), A5 and all three reading tasks hold. No class (4) form was found.
+    - **Two BLOCKERs of class (1), A3:**
+      - **F1:** the cooldown-anchor route. It exists on main too, but S1 added lines in `evaluate_member` and `campaign_cooldown_before_member`, so the refuter says 66 (a) row 1c cannot exempt it.
+      - **F2:** reduction does not recheck an attached calibration capture's own battery pair. The bound still flows to whole-window preparation, and S1 changed that function.
+    - **Rule 11 is mandatory:** deciding whether the prior ruling's row-1c exemption applies is a reinterpretation of a verdict, and the magistrate may not adjudicate blocker severity downward. **Cold gate S1-A3-ROUTE-01** (Fable, [charge](35-s1-refuter/20-coldgate/20-coldgate-charge.md)) and a paired Opus refuter were convened. S1 is not on the issuance path; the custody repair continues in parallel.
