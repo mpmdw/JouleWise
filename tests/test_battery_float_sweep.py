@@ -133,7 +133,7 @@ class SweepGuardTests(unittest.TestCase):
                     self.assertEqual(ast.unparse(phase), "f'slot_{phase}'")
                     self.assertTrue({"slot_pre", "slot_post"} <= set(battery_float.PHASES))
                     seen.update(("slot_pre", "slot_post"))
-        self.assertEqual(seen, set(battery_float.PHASES[:7]))
+        self.assertEqual(seen, set(battery_float.PHASES[:7]) | {"quiet_pre", "quiet_post"})
 
     def test_aliased_out_of_set_phase_is_visible(self):
         forms = (
