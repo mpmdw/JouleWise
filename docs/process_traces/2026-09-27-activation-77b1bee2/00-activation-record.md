@@ -24,3 +24,9 @@
 
    **W2 is ADMITTED.**
 8. **Science consequence.** W1 and W2 together hold **12 valid** derivation captures. That is the n ≥ 12 the registration needs for issuance, so on count W3 is not needed, and REV5-POST-W3-SHORTFALL-01 is moot unless issuance is blocked for another reason. Directive #416 is now live: a blind full-system audit by three model families (Astra xhigh, Fable, Opus xhigh) must come after W1/W2 pass and before any claim-bearing run. Ed must be pinged to close interactive sessions before any t0. The next science steps are `prepare-candidate`/issuance under Revision 5 and the #416 audit. Their order and gates are for the next slice to read from the registration and the directive.
+9. **Correction to item 8 (directive #416 trigger).** In #416 as amended, the audit trigger is "CLAIM-RUN WORK COMPLETE", which means W1/W2 are **issued** and the headline pipeline is frozen. It is not triggered merely by W1/W2 passing. So the order is:
+   1. The harvest PR merges.
+   2. `prepare-candidate` runs under Revision 5, then the cold science gate, then the D-138 issuance transaction. The runbook's §4 text is the three-night FAIL route, so the Revision 5 flag set comes from the registration text; the contract lens was asked about it.
+   3. The headline pipeline freezes, after S1–S4 and BFGS-COOLDOWN-ANCHOR-01.
+   4. The #416 audit follows, and its auditors re-derive W1/W2 from the raw bundles.
+   5. Only then does a claim-bearing run happen.
