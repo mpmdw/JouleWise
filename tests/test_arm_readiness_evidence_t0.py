@@ -2757,11 +2757,28 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 ("/usr/libexec/watchdogd", "/usr/local/bin/stopwatch"),
             ),
         )
+        # Every recorded service identity is a deterministic negative decoy,
+        # checked in the same pgrep snapshot as the positives, so the check
+        # does not depend on a live service surviving a later read. Full
+        # executable paths are rebuilt where the recorded argv was truncated.
+        service_paths = tuple(
+            str(
+                Path(
+                    next(
+                        argv.split(" ", 1)[0]
+                        for argv in _RECORDED_CENSUS_SERVICE_ARGV
+                        if basename in argv
+                    )
+                ).parent / basename
+            )
+            for basename in _RECORDED_CENSUS_SERVICE_BASENAMES
+        )
         for pattern, positives, negatives in cases:
             with self.subTest(pattern=pattern):
+                negative_markers = negatives + service_paths
                 decoys = [
                     subprocess.Popen([marker, "30"], executable="/bin/sleep")
-                    for marker in positives + negatives
+                    for marker in positives + negative_markers
                 ]
                 try:
                     time.sleep(0.5)
@@ -2769,30 +2786,24 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     # holds a newline prints continuation lines with no PID,
                     # which no line parser can tell from a new row. Matching
                     # is unchanged (``-f`` still matches the full argv); each
-                    # hit's full argv is then read back per PID for the text
-                    # checks (lane TEST-CENSUS-MULTILINE-ARGV-01).
+                    # hit's full argv is then read back per PID for a pattern
+                    # check (lane TEST-CENSUS-MULTILINE-ARGV-01).
                     probes, _source = self._real_probe_source(
                         "PROCESS_CENSUS", (("/usr/bin/pgrep", "-f", pattern),)
                     )
                     probe = probes[0]
                     self.assertEqual(probe.exit_code, 0, probe.stderr)
                     reported = {int(line) for line in probe.stdout.splitlines()}
-                    for decoy, marker in zip(decoys, positives + negatives, strict=True):
+                    for decoy in decoys:
+                        self.assertIsNone(decoy.poll())
+                    for decoy, marker in zip(
+                        decoys, positives + negative_markers, strict=True
+                    ):
                         with self.subTest(marker=marker):
                             if marker in positives:
                                 self.assertIn(decoy.pid, reported, probe.stdout)
                             else:
                                 self.assertNotIn(decoy.pid, reported, probe.stdout)
-                    # The recorded-service check also runs over the whole
-                    # ``-lf`` text, continuation lines included, so a hit that
-                    # exits before its ``ps`` read below cannot hide a service.
-                    listed = subprocess.run(
-                        ["/usr/bin/pgrep", "-lf", pattern],
-                        capture_output=True, text=True, check=False,
-                    )
-                    self.assertIn(listed.returncode, (0, 1), listed.stderr)
-                    for basename in _RECORDED_CENSUS_SERVICE_BASENAMES:
-                        self.assertNotIn(basename, listed.stdout)
                     for pid in sorted(reported):
                         shown = subprocess.run(
                             ["/bin/ps", "-ww", "-o", "command=", "-p", str(pid)],
@@ -2802,8 +2813,6 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                             continue  # an unrelated hit exited after pgrep ran
                         self.assertEqual(shown.returncode, 0, shown.stderr)
                         self.assertIsNotNone(re.search(pattern, shown.stdout), shown.stdout)
-                        for basename in _RECORDED_CENSUS_SERVICE_BASENAMES:
-                            self.assertNotIn(basename, shown.stdout)
                 finally:
                     for decoy in decoys:
                         decoy.terminate()
