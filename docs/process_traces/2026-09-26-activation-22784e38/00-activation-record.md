@@ -69,3 +69,11 @@ Magistrate activation `22784e38-8bb5-4497-a9f6-ab53e291ee58`, launched by the wa
 11. **(c) applied under item 10's licence; step 2 re-run.** It passed the epoch watch (`mismatched fields: os_build`, sampler `b762e5bf… match`), the digests, the frozen-plan copy, identity-epoch and T1 JSON, the staged plan (`/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w1-20260927/night_plan.json`), and wrapper generation and verification (chain sha256 `ccaeac64…b956`). Preflight OK ×2. Validated pins: repo_head = measurement_head = `97082508`.
     - **It stopped at the render-only assertion.** The script expects exactly the night and dead-man plists, but the installer's render mode has also emitted `com.joulewise.night-probe.<PLAN_ID>` since `d1aadecc` (`night_agent_install.py` `main()`: `target.labels += (probe_label(...),)`). All three render `ProcessType=Interactive`: night `d082e61c…`, probe `562e4341…`, dead-man `f2074d38…`. Step 3 has the same two-label set.
 12. **(d) DENIED by the classifier**, despite item 10's licence: widen the step-2 and step-3 render label sets to require the probe plist too (equally strict: exact set, Interactive, digest recorded). The magistrate does not pursue it. It will ask Ed for (d) together with anything else a read-only Sol dry-scan of steps 2–5 finds (`40-w1-script-scan/`), in one batch.
+13. **Read-only Sol dry-scan of steps 2–5** ([40-w1-script-scan/11-scan-report.md](40-w1-script-scan/11-scan-report.md)).
+    - F1/F2 = (d), confirmed.
+    - F3: step 3's notice header names the retired `claude.ai.copper531` address.
+    - F4 (make `arm_census` final output blocking) and F5 (block on any open directive) are **rejected by the magistrate**:
+      - F4 would count the live magistrate as foreign at publication; the production t0 census (`arm_readiness_evidence_t0`/`night_gate`) is the fail-closed gate.
+      - F5 would block on the six benign open directives; the README makes directive review a lead act.
+    - No other stale flag, key or receipt field was found. The scan notes step 2 cannot be re-run over an existing staged plan.
+    - Ed was asked for "(d) probe plist in the render sets, (e) the address fix, (f) move tonight's partial W1 outputs (staged plan, rendered-agents, the `NIGHT_ROOT` folder) to `~/night-archive/` and re-run step 2" (Gmail `1a0e1735d1f7d166`).
