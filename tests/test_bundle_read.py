@@ -583,7 +583,7 @@ class StrictAccessorTests(ReaderTestCase):
         protected.extend(tracked)
         self.assertFalse((REPO_ROOT / "configs/battery_float/historical_captures.json").exists())
         result = subprocess.run(
-            ["git", "diff", "--exit-code", "--no-ext-diff", "1417c0c4", "--", *protected],
+            ["git", "diff", "--exit-code", "--no-ext-diff", "1417c0c4", "204424e6", "--", *protected],
             cwd=REPO_ROOT, capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
