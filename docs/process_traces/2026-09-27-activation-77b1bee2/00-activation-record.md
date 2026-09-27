@@ -126,3 +126,12 @@
     - "Land the lane first" is circular, because both fixes call gates that only S1 provides.
     - **Question 4:** this is not the SWEEPCLASS class. But F1 has now been to three gates with no new fact, and F1, F2 and the salvage licence share one shape (a verdict fed by sources that are not window members). The ruling lists five items for one consult on the two lanes.
     - The paired Opus refuter is pending. The lead's **A4** (V1, V2, builder ×2 on `4aefdd12`) is running.
+25. **Custody repair lenses on `c84b1dc2`.**
+    - **Opus 5.5 contract lens** ([52](50-custody-outside-repo/52-opus-contract-lens.md)): **LENS: PASS**.
+      - Design C is exact with no scope creep, and output without the flag is byte-identical to base.
+      - The flag changes only `member_custody` and `derivation_sha256`.
+      - It passed the lens's own 23 + 16 adversarial inputs, and R8 was re-run: 24 accepted, and five wrong roots each refused 24/24.
+      - **S1:** guard F2 is untested on the Revision-5 path. Plus 8 NITs.
+    - **Sol 6.0 xhigh execution lens** ([51](50-custody-outside-repo/51-sol-execution-lens.md)): **LENS: FAIL**, with **F1 BLOCKER**: a nested capture `P/s/s/runs/instrument_validation/s-d01` is accepted under both `P` and `P/s`, so the stored name is ambiguous. The real 24 locators are unaffected.
+    - **Lead ruling on F1:** require exactly `<session_id>/runs/instrument_validation/<attempt_id>`. This is the fixed middle part of Fable consult §4.1's diagram, and it makes the root unique. It is a design-C closure, not a new design.
+    - **Fix round 1** (Sol xhigh, [brief](50-custody-outside-repo/60-fix1-brief.txt)) covers C1 (exact shape), C2 (a Revision-5 guard-F2 test plus a flag-equivalence test) and C3 (the nits). A delta re-audit follows, then the fresh cold gate on the final diff.
