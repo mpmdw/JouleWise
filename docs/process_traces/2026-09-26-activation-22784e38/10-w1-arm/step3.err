@@ -1,0 +1,7 @@
+CHECK: D-166 registration digest equals the gate pin
+CHECK: A-R5b amended Revision 5 digest equals the arm pin
+CHECK: frozen calibration plan digest equals the arm pin
+CHECK: render evidence contains night, dead-man and this plan's probe ((d), Ed Gmail 1a0e17772e3044ca)
+CHECK: com.joulewise.night has Interactive and unchanged rendered digest
+CHECK: com.joulewise.night-probe.d079-epoch-25g83-derivation-w1-20260927 has Interactive and unchanged rendered digest
+CHECK: com.joulewise.night.deadman has Interactive and unchanged rendered digest
