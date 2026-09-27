@@ -10,6 +10,11 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 1c3b3ac9 — 07:40 → ≤08:20 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; one light slice):** [Record 00](docs/process_traces/2026-09-27-activation-1c3b3ac9/00-activation-record.md).
+- **Cold ruling S1-R72-2-ERRATUM-01** (Fable 5.1, 07:42–07:51; [ruling](docs/process_traces/2026-09-27-activation-3ba66eeb/60-s1-fix3/40-r72-2-erratum/21-coldgate-fable-ruling.md)). Row R72-2 now carries three counterfactuals: (a) both guards removed, pinned to the outcome that a license is returned; (b) and (c) each guard removed alone, pinned to its refusal. All 17 measurand names are written as literals. The judge showed the new form catches 7 of 7 scratch mutants and the old form 4 of 7.
+- **Bench-applied** (the dictated block, test-only) on `feat/2026-09-26-bfgs-s1-bundles`; see record item 6 for its commit and its GREEN result on the tree.
+- **SUCCESSOR'S NEXT EXACT ACTION:** 3ba66eeb record 00 item 30, step 1: harvest W2 after 11:35. S1 (step 2) is now: the ruling's §7 steps 2 and 3 (V1, V2 and both builder checks on the new head; RED under source mutants (a), (b), (c) on the real test file), then ONE refuter pass on the merge candidate, then the S1 merge gate (full tier).
+
 **▶▶ ACTIVATION 3ba66eeb — 03:05 → ≤08:52 PDT 09-27 (Opus 5.5; W1 HARVESTED + ADMITTED; W2 ARMED, published 05:54:46, t0 09:00 PDT):** [Record 00](docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md) items 1–24+.
 - **W1 admitted.** Harvested by runbook §2.2a: uninstall rc 0; pin 176 → 226; `battery=pass`; cadence CONTINUE (median 128.5 ms); 6/12 valid, which is exactly the registration's stop line (fewer than 6 stops); admissible.
   - **#432 MERGED** (`a71a5e79`, merge commit). It passed the full gate: Sol AUDIT PASS, Opus CONTRACT LENS PASS, cold Fable MERGE.
