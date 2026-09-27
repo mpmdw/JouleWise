@@ -1,10 +1,10 @@
 """Inventory supported ungated bundle reads in tracked production Python.
 
 **51 (0). What a GREEN sweep means.**
-**Promised,** at the commit the sweep runs on, for every tracked Python file under `joulewise/` and `scripts/`:
+**Promised,** at the commit the sweep runs on, for every tracked Python file under the **swept roots**: `joulewise/`, `scripts/`, `docs/paper/`, `configs/`:
 1. Every read site written in a supported form (51 (b), as extended by 57 (d) 5), in any scope (51 (b) 0), is either gated in its own scope by a gate call that dominates it (51 (c), (d)), or has an allowlist row.
 2. Every allowlist row carries a class whose condition holds. The sweep checks the condition where the class table gives it a check. The refuter checks it by reading otherwise.
-3. Five closed lists equal the tree: the gate bodies (57 (b) 6), the tolerant definitions (57 (d)), the reader's public methods (58 (b)), the journal readers (58 (e)), the raw-capture readers (58 (f)).
+3. Five closed lists equal the tree under `joulewise/` and `scripts/` only: the gate bodies (57 (b) 6), the tolerant definitions (57 (d)), the reader's public methods (58 (b)), the journal readers (58 (e)), the raw-capture readers (58 (f)).
 
 **Assumed.** The code was written to do its job. Its author, a person or a model, was not trying to get past the battery check. (D-161: one trusted operator; an adversary inside the process is outside the threat model.)
 
@@ -12,14 +12,14 @@
 1. That no Python program can read energy from a refused bundle.
 2. Anything about a form in the deliberate class (61 (b)).
 3. Anything about a blind spot listed in 51 (h).
-4. Anything about code outside `joulewise/` and `scripts/`: the tests, a notebook, a shell command.
+4. Anything about code outside the swept roots: tracked Python under `tests/`, `docs/process_traces/` and `docs/legacy/`; a notebook; a shell command. And, under `docs/paper/` and `configs/`, anything about the stage journal or the raw capture. One function there reads a raw capture at the commit of this text: `docs/paper/figures/reproduce_worked_examples.py::historical`, which reads `raw/powermetrics.plist` of a capture directory that is not a bundle.
 5. That a bundle's bytes are the bytes that were measured. That is custody's duty, not the sweep's.
 
 A GREEN sweep is therefore read as: "no ordinary code in the tree reads energy past the gate without a checked reason". It is not read as: "no ungated read can exist".
 
 **(b) The deliberate class.** A latent form is in the deliberate class if its source, between the scope it starts in and the read it reaches, does at least one of:
 
-1. reads or writes an attribute whose name begins with `_`, on an object whose class or module is defined under `joulewise/`, from outside the module that defines it (`r._path = b`; `r._cache.update(…)`);
+1. writes or deletes an attribute whose name begins with `_`, or reads `_cache`, `_path` or a name-mangled attribute (`_<Class>__<name>`), on an object whose class or module is defined under `joulewise/`, from outside the module that defines it (`r._path = b`; `r._cache.update(…)`; `r._BundleReader__root`). A **call** of a private function or method is not in the class. Where it reads a watched file it is a supported form and the sweep reports it (51 (b) 2).
 2. assigns to, or deletes, an attribute of a module, class or function defined under `joulewise/` (`battery_float.authenticate_bundle = f`; `BundleReader.metadata = f`);
 3. calls `setattr`, `delattr`, `object.__setattr__`, `vars`, `exec`, `eval`, `compile`, `__import__`, `importlib.import_module`, or `type` with three arguments; or names `__dict__`, `__code__`, `__class__` or `sys.modules`;
 4. builds the name of a tolerant accessor or of a gate while the program runs (`getattr(r, "raw_" + "summary")`).
@@ -27,6 +27,43 @@ A GREEN sweep is therefore read as: "no ordinary code in the tree reads energy p
 A form in the class is **never a finding against the sweep**. It is added to 51 (h) by name if it is not there. A watched **file** name built at run time is not in the class; it is a blind spot (51 (h), "a read that never names the file").
 
 Rules already ruled that guard forms of the class stay as ruled: 57 (b) 1 (iii) and 57 (b) 4. They are written, GREEN on the tree, and cost the seat one check each. **No new rule is added for the class, by this ruling or by any later review of this lane.**
+
+**The class table, `non_claim` clause (i) (amendment 72).** No energy-class value that the function reads from the file, and no value computed from one, **leaves** the function. A value leaves a function when the function returns it, writes it to a file, stores it on an object that outlives the call, or puts it in the message of an exception it raises. A field whose value the function only **tests** (is it absent or null; does it parse as a number; is it finite) and then drops does not leave. A reason under (i) states the fields whose values leave. If it tests and drops an energy-class field, it names that field and its test.
+
+**61 (c), the stop rule, as amended by 66.** The review ends when A1 to A5
+hold at one merge candidate, each shown by execution:
+
+- A1, the matrix: every named test row is GREEN on the tree and RED under its
+  counterfactual applied in memory.
+- A2, the inventory: reported keys equal the allowlist keys, with a stated
+  count; one refuter checks every allowlist class and every closed-list kind.
+- A3, the tree: the same refuter pass finds no energy-class value that reaches
+  a claim artifact without a gate, on the routes through the eight consumers
+  and through the envelope gate, other than by a pre-existing route returned
+  under row 1c of 61 (c).
+- A4, the suites: V1, V2, and the builder's forward check are GREEN.
+- A5, the fences: battery_float.py has hash prefix 4b4d7bb20625; it,
+  reduce.py, and bundle.py are byte-identical to base; none of the eight
+  consumers imports battery_float.
+
+There is one refuter pass. Its findings have these dispositions:
+
+| Finding | Disposition | Another refuter pass? |
+|---|---|---|
+| 1a: a failure of A1, A2, A4 or A5; or a failure of A3 whose fix is a change ruled in §5 of the SAMESIG ruling or in its erratum | the seat fixes it; the lead re-runs the affected rows | no |
+| 1b: a failure of A3 whose fix is production code that no ruling covers, on a route that S1 introduced or changed | the seat returns it; a cold gate rules an S1 fix; it blocks S1's merge | yes, one pass on the fix only |
+| 1c: the same on a pre-existing route | the seat returns it; the lead opens a lane with an order and a standing check; it does not block S1's merge | not for S1 |
+| a latent deliberate-class form | named in 51 (h); it is never a finding | no |
+| a 51 (h) blind spot | nothing | no |
+| a missed supported form | closed if the closure is GREEN on the tree | no |
+| three or more missed supported forms in that one pass | rule 11; S1 merges and lane BFGS-GATED-SUMMARY-01 is next | no |
+
+For row 1c, pre-existing means an executed probe drives the value to the claim
+artifact, the unchanged probe gives the same result on main, and the route's
+functions have no changed line between main and the merge candidate. The
+number of latent forms never blocks S1's merge; A1 to A5 do.
+
+**58 (f) 6, as replaced by 75 (a).** A member of kind `energy` that has no gate is not given a gate by the seat. The seat returns it. A cold gate then rules one of two things. If the member lies on a route through the eight consumers or the envelope gate, amendment 66 (a) applies, rows 1b and 1c. If it lies on no such route and its file is byte-identical to main, it may take the entry `("energy", ("lane", "<lane name>"))`.
 """
 from __future__ import annotations
 
@@ -37,6 +74,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SWEEP_ROOTS = ("joulewise/", "scripts/", "docs/paper/", "configs/")
+EXCLUDED_ROOTS = ("tests/", "docs/process_traces/", "docs/legacy/")
 SWEEP_LIMITATIONS = (
     "A read that never names the file: a loop over a directory listing, a copy of a whole directory, a digest of a whole bundle.",
     "A path that reaches a function inside an object the sweep did not see stored.",
@@ -52,6 +91,8 @@ SWEEP_LIMITATIONS = (
     "A reader pointed at another bundle after metadata() passed: deliberate class; not swept; lane BFGS-READER-ROOT-01.",
     "The same through the interpreter's tables: importlib.import_module, sys.modules, __code__, vars and __dict__; deliberate class; not swept.",
     "A gate in a callee. A gate call inside a function that the row's function calls is not seen. At the merge candidate no read is known to rely on one: the envelope gate's two reads relied on one until amendment 63.",
+    "A value that a campaign stores for the next one. The cooldown anchor in a campaign's provenance holds the idle power of a bundle that the later campaign's gate never sees (executed, SAMESIG erratum E1 to E3). The sweep reads source text and does not follow a value through a file. Lane BFGS-COOLDOWN-ANCHOR-01.",
+    "A calibration capture parsed by a script. Five functions in four scripts under scripts/ refit power pulses from a capture directory with no battery check (amendment 75 (b)). The capture directory is not a bundle, so no bundle gate applies. A capture enters a measured run or a calibration bracket only through the capture form of the gate (controller.py:448, calibration_bracketing.py:1909). Lane BFGS-RAWCAPTURE-01.",
 )
 WATCHED = ("summary_metrics.json", "metadata.json", "power_trace.csv")
 TOLERANT = {"raw_metadata", "raw_config", "raw_summary", "raw_artifact_bytes"}
@@ -335,8 +376,17 @@ def sweep(path, source, global_consts):
                             rows.append((path, q, "store:" + ast.unparse(t), w, n.lineno))
     return rows
 def tracked(root, rev=None):
-    names = subprocess.check_output(["git","ls-files","joulewise","scripts"], cwd=root, text=True).split("\n")
-    return [n for n in names if n.endswith(".py")]
+    names = subprocess.check_output(["git", "ls-files", "*.py"], cwd=root, text=True).splitlines()
+    return [n for n in names if n.startswith(SWEEP_ROOTS)]
+
+
+def swept_file_violations(names):
+    return [f"tracked Python outside swept or excluded roots: {name}" for name in names
+            if name.endswith(".py") and not name.startswith(SWEEP_ROOTS + EXCLUDED_ROOTS)]
+
+
+def all_tracked_python(root=ROOT):
+    return subprocess.check_output(["git", "ls-files", "*.py"], cwd=root, text=True).splitlines()
 def run(root):
     files = {n: (Path(root)/n).read_text() for n in tracked(root)}
     return sweep_files(files)
@@ -366,7 +416,35 @@ def site_keys(rows):
 
 
 # Static four-part keys: path, qualified scope, operation, watched file.
+CAMPAIGN_VERDICT_USES = (
+    ("scripts/run_campaign.py::run_campaign", "classify_campaign_members"),
+    ("scripts/run_campaign.py::run_axi_spec_campaign", "_idle_admission_core_evaluation"),
+    ("scripts/run_campaign.py::run_axi_spec_campaign", "classify_campaign_members"),
+)
+CAMPAIGN_COLLECTION_USES = (
+    ("scripts/run_campaign.py::run_campaign", "campaign_cooldown_before_member"),
+    ("scripts/run_campaign.py::run_campaign", "_first_eligible_cooldown_anchor"),
+    ("scripts/run_campaign.py::run_campaign", "record_campaign_member_provenance"),
+    ("scripts/run_campaign.py::run_campaign", "evaluation_failure_detail"),
+    ("scripts/run_campaign.py::run_campaign", "to_log"),
+    ("scripts/run_campaign.py::run_axi_spec_campaign", "campaign_cooldown_before_member"),
+    ("scripts/run_campaign.py::run_axi_spec_campaign", "_first_eligible_cooldown_anchor"),
+    ("scripts/run_campaign.py::run_axi_spec_campaign", "record_campaign_member_provenance"),
+)
+CAMPAIGN_PRODUCERS = ("evaluate_member", "evaluate_members")
+CAMPAIGN_CONSUMERS_EVIDENCE = {
+    "consumers": CAMPAIGN_VERDICT_USES,
+    "collection_uses": CAMPAIGN_COLLECTION_USES,
+    "producers": CAMPAIGN_PRODUCERS,
+}
+CAMPAIGN_CONSUMERS_REASON = (
+    "consumers form, amendment 66 (c); verdict uses are gated; collection uses are listed; "
+    "`_first_eligible_cooldown_anchor` stores a value another campaign reads: "
+    "lane BFGS-COOLDOWN-ANCHOR-01"
+)
 ALLOWLIST = {
+    ('docs/paper/figures/reproduce_worked_examples.py', 'historical', 'direct:read_bytes', 'power_trace.csv'): ('non_claim', 'clause (i), fields read: interval_start_s, interval_end_s; the bytes are hashed and compared with the digest in docs/process_traces/2026-08-09-prefill-phase-proof/results.json'),
+    ('docs/paper/figures/reproduce_worked_examples.py', 'synthetic', 'direct:read_bytes', 'power_trace.csv'): ('non_claim', 'clause (i), fields read: none; the bytes are hashed into fixture_fingerprints'),
     ('joulewise/analysis_engine/registry.py', 'validate_attempt_ledger', 'direct:read_authentication_input', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata.run_id and launch and target model identity fields in the attempt ledger'),
     ('joulewise/analysis_engine/registry.py', 'validate_manifest_target_evidence', 'direct:read_authentication_input', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata.runtime.target_model_artifact_sha256'),
     ('joulewise/analysis_manifest_v3.py', '_derive_arms_and_entries', 'direct:_read_manifest_input', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata.workload_provenance.model.artifact_identity and tokenizer; adapters.runtime.prepare_metadata and adapters.telemetry; device, model and quantization identities'),
@@ -412,11 +490,11 @@ ALLOWLIST = {
     ('joulewise/determinism_gate.py', '_inspect_strict_valid_bundle', 'raw_config', '-'): ('strict_validation', 'validates duplicate JSON keys; appends problem strings only'),
     ('joulewise/envelope_gate.py', '_bundle_hashes', 'direct:encode', 'metadata.json'): ('non_claim', 'clause (i), fields read: no parsed field; hashes artifact bytes as opaque custody evidence'),
     ('joulewise/envelope_gate.py', '_bundle_hashes', 'direct:read_bytes', 'metadata.json'): ('non_claim', 'clause (i), fields read: no parsed field; hashes artifact bytes as opaque custody evidence'),
-    ('joulewise/floor_extraction.py', '_cpu_admission_bundle_reasons', 'direct:_strict_admission_json_file', 'metadata.json'): ('behind_gate', 'callers form: _cpu_admission_bundle_reasons returns or passes bundle content only to the listed gated chain', {'callers': ('joulewise/floor_extraction.py::_evaluate_member', 'joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
-    ('joulewise/floor_extraction.py', '_evaluate_member', 'direct:_strict_admission_json_file', 'metadata.json'): ('behind_gate', 'callers form: _evaluate_member returns or passes bundle content only to the listed gated chain', {'callers': ('joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
-    ('joulewise/floor_extraction.py', '_read_summary', 'direct:_strict_admission_json_value', 'summary_metrics.json'): ('behind_gate', 'callers form: _read_summary returns or passes bundle content only to the listed gated chain', {'callers': ('joulewise/floor_extraction.py::_evaluate_member', 'joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
-    ('joulewise/floor_extraction.py', '_read_summary', 'direct:read_authentication_input', 'summary_metrics.json'): ('behind_gate', 'callers form: _read_summary returns or passes bundle content only to the listed gated chain', {'callers': ('joulewise/floor_extraction.py::_evaluate_member', 'joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
-    ('joulewise/idle_dependence.py', 'derive_idle_mean_uncertainty', 'raw_artifact_bytes', '-'): ('behind_gate', 'callers form: derive_idle_mean_uncertainty returns or passes bundle content only to the listed gated chain', {'callers': ('joulewise/reduce.py::_reduce', 'joulewise/reduce.py::_reduce_v060', 'joulewise/reduce.py::reduce_bundle')}),
+    ('joulewise/floor_extraction.py', '_cpu_admission_bundle_reasons', 'direct:_strict_admission_json_file', 'metadata.json'): ('behind_gate', 'callers form: _cpu_admission_bundle_reasons has the listed gated caller chain', {'callers': ('joulewise/floor_extraction.py::_evaluate_member', 'joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
+    ('joulewise/floor_extraction.py', '_evaluate_member', 'direct:_strict_admission_json_file', 'metadata.json'): ('behind_gate', 'callers form: _evaluate_member has the listed gated caller chain', {'callers': ('joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
+    ('joulewise/floor_extraction.py', '_read_summary', 'direct:_strict_admission_json_value', 'summary_metrics.json'): ('behind_gate', 'callers form: _read_summary has the listed gated caller chain', {'callers': ('joulewise/floor_extraction.py::_evaluate_member', 'joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
+    ('joulewise/floor_extraction.py', '_read_summary', 'direct:read_authentication_input', 'summary_metrics.json'): ('behind_gate', 'callers form: _read_summary has the listed gated caller chain', {'callers': ('joulewise/floor_extraction.py::_evaluate_member', 'joulewise/floor_extraction.py::extract_absolute_cell', 'joulewise/floor_extraction.py::extract_comparative_cell', 'joulewise/floor_extraction.py::extract_cells')}),
+    ('joulewise/idle_dependence.py', 'derive_idle_mean_uncertainty', 'raw_artifact_bytes', '-'): ('behind_gate', 'callers form: derive_idle_mean_uncertainty has the listed gated caller chain', {'callers': ('joulewise/reduce.py::_reduce', 'joulewise/reduce.py::_reduce_v060', 'joulewise/reduce.py::reduce_bundle')}),
     ('joulewise/output_identity.py', '_bundle_reference', 'direct:_hash_file', 'summary_metrics.json'): ('non_claim', 'clause (i), fields read: no summary value; hashes summary bytes as opaque custody evidence'),
     ('joulewise/output_identity.py', '_bundle_reference', 'direct:_json_object', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata.run_id and runtime.target_tokenizer_identity'),
     ('joulewise/output_identity.py', '_bundle_reference', 'direct:_json_object', 'summary_metrics.json'): ('non_claim', 'clause (i), fields read: no summary value; checks object presence and hashes the bytes'),
@@ -433,6 +511,8 @@ ALLOWLIST = {
     ('joulewise/report.py', '_discover_bundles', 'raw_metadata', '-'): ('non_claim', 'clause (ii), output: returns _Bundle browser records to generate_report; that function writes output_dir/index.html, output_dir/run/<run_id>.html and chart PNGs for the static run browser; no tracked paper claim consumes them'),
     ('joulewise/report.py', '_discover_bundles', 'raw_summary', '-'): ('non_claim', 'clause (ii), output: returns _Bundle browser records to generate_report; that function writes output_dir/index.html, output_dir/run/<run_id>.html and chart PNGs for the static run browser; no tracked paper claim consumes them'),
     ('joulewise/salvage_dangler.py', '_inspect_preworkload_abort', 'direct:_read_json_object', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata.run_id and environment_admission decision, attempts and claim_reason'),
+    ('joulewise/salvage_dangler.py', '_inspect_preworkload_abort', 'direct:_read_json_object', 'summary_metrics.json'): ('non_claim', 'clause (i), fields that leave: `failure_reason`; tested and dropped: `status`, the 17 names of `_MEASURAND_FIELDS`, every other key; test: `status` equals `failed`, each measurand is null, each other key is null or named in `_ALLOWED_FAILED_SUMMARY_NONNULL`'),
+    ('joulewise/salvage_dangler.py', '_telemetry_timestamp_bounds', 'direct:open_authentication_input', 'power_trace.csv'): ('non_claim', 'clause (i), fields that leave: `timestamp_s`, `interval_start_s`, `interval_end_s`, as their minimum and maximum; tested and dropped: `power_w`, `source`, `rail`; test: `power_w` parses as a number and is finite, `source` and `rail` hold no workload marker'),
     ('joulewise/salvage_dangler.py', 'inspect_salvage_attempt', 'direct:_read_json_object', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata.run_id for bundle identity'),
     ('joulewise/whole_window.py', '_authenticated_bundle_launch_lineage_set', 'direct:_read_json_object', 'metadata.json'): ('strict_validation', 'validates launch-lineage identity and completion; returns the shared lineage identity'),
     ('joulewise/whole_window.py', '_consumption_provenance_valid', 'direct:_read_json_object', 'summary_metrics.json'): ('strict_validation', 'validates whole-window provenance and current strict validity; returns identity, boolean, digest or problems'),
@@ -472,12 +552,9 @@ ALLOWLIST = {
     ('scripts/run_campaign.py', '_basis_member_occurrences', 'direct:read_bytes', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata run identity and launch lineage for member occurrence binding'),
     ('scripts/run_campaign.py', '_run_record_supersession_locked', 'direct:read_bytes', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata run identity for supersession'),
     ('scripts/run_campaign.py', 'authenticate_campaign_child_launch_lineage', 'direct:read_bytes', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata launch lineage and completion identity'),
-    # 64(b)'s declared consumers pass the syntax check below. The refuter's
-    # cooldown-anchor use of this pre-gate record disputes all three rows;
-    # step 11 returns that conflict instead of expanding the consumers rule.
-    ('scripts/run_campaign.py', 'evaluate_member', 'direct:read_text', 'metadata.json'): ('behind_gate', 'consumers form: evaluate_member returns or passes bundle content only to the listed gated chain', {'consumers': (('scripts/run_campaign.py::run_campaign', 'classify_campaign_members'), ('scripts/run_campaign.py::run_axi_spec_campaign', '_idle_admission_core_evaluation'), ('scripts/run_campaign.py::run_axi_spec_campaign', 'classify_campaign_members'))}),
-    ('scripts/run_campaign.py', 'evaluate_member', 'direct:read_text', 'summary_metrics.json'): ('behind_gate', 'consumers form: evaluate_member returns or passes bundle content only to the listed gated chain', {'consumers': (('scripts/run_campaign.py::run_campaign', 'classify_campaign_members'), ('scripts/run_campaign.py::run_axi_spec_campaign', '_idle_admission_core_evaluation'), ('scripts/run_campaign.py::run_axi_spec_campaign', 'classify_campaign_members'))}),
-    ('scripts/run_campaign.py', 'evaluate_member', 'direct:summary_status', 'summary_metrics.json'): ('behind_gate', 'consumers form: evaluate_member returns or passes bundle content only to the listed gated chain', {'consumers': (('scripts/run_campaign.py::run_campaign', 'classify_campaign_members'), ('scripts/run_campaign.py::run_axi_spec_campaign', '_idle_admission_core_evaluation'), ('scripts/run_campaign.py::run_axi_spec_campaign', 'classify_campaign_members'))}),
+    ('scripts/run_campaign.py', 'evaluate_member', 'direct:read_text', 'metadata.json'): ('behind_gate', CAMPAIGN_CONSUMERS_REASON, CAMPAIGN_CONSUMERS_EVIDENCE),
+    ('scripts/run_campaign.py', 'evaluate_member', 'direct:read_text', 'summary_metrics.json'): ('behind_gate', CAMPAIGN_CONSUMERS_REASON, CAMPAIGN_CONSUMERS_EVIDENCE),
+    ('scripts/run_campaign.py', 'evaluate_member', 'direct:summary_status', 'summary_metrics.json'): ('behind_gate', CAMPAIGN_CONSUMERS_REASON, CAMPAIGN_CONSUMERS_EVIDENCE),
     ('scripts/run_campaign.py', 'existing_state', 'direct:summary_status', 'summary_metrics.json'): ('non_claim', 'clause (i), fields read: summary.status only'),
     ('scripts/run_campaign.py', 'run_axi_spec_campaign', 'direct:read_bytes', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata.batch.admitted_request_count for dispatch receipt'),
     ('scripts/run_campaign.py', 'suite_order_evidence', 'direct:_load_json_object', 'metadata.json'): ('non_claim', 'clause (i), fields read: metadata suite order, run identity and seed'),
@@ -517,8 +594,19 @@ JOURNAL_ENERGY_READERS = {
 }
 
 # 58(f): checked inventory, including names reached through cross-module constants.
-# Energy members without a gate are returned and have no entry in this table.
+# Capture functions are classified by what leaves them; energy entries need a gate.
 RAW_CAPTURE_READERS = {
+    "joulewise/calibration_bracketing.py::_load_calibration_candidate_unbounded": (
+        "energy", ("capture_chain", (
+            "joulewise/calibration_bracketing.py::load_calibration_candidate.inspect",
+            "joulewise/calibration_bracketing.py::load_calibration_candidate",
+            "joulewise/calibration_bracketing.py::_candidate_from_observation",
+            "joulewise/calibration_bracketing.py::discover_calibration_candidates"))),
+    "joulewise/cli.py::_strict_rich_telemetry_problems": ("validation", None),
+    "joulewise/cli.py::_strict_uncertainty_evidence_problems": ("validation", None),
+    "joulewise/cli.py::_verify_powermetrics_raw_to_trace": ("validation", None),
+    "joulewise/controller.py::_load_instrument_calibration_attachment": ("energy", "capture_in_function"),
+    "joulewise/environment_admission.py::_window_thermal_pressure_refusals": ("validation", None),
     "joulewise/calibration_ledger.py::_artifact_hashes_unbounded": ("custody", None),
     "joulewise/calibration_ledger.py::_custody_state": ("custody", None),
     "joulewise/calibration_ledger.py::_custody_state_unbounded": ("custody", None),
@@ -536,6 +624,10 @@ RAW_CAPTURE_READERS = {
     "joulewise/publication_privacy.py::_path_policy": ("names", None),
     "joulewise/receipt_oracle.py::derive_bracket_session_receipt_oracle": ("names", None),
     "joulewise/reduce.py::_derive_anchor_context": ("energy", ("joulewise/reduce.py::_reduce", "joulewise/reduce.py::_reduce_v060", "joulewise/reduce.py::reduce_bundle")),
+    "joulewise/reduce.py::_verify_instrument_calibration": (
+        "energy", ("joulewise/reduce.py::_derive_anchor_context",
+                   "joulewise/whole_window.py::AuthenticatedConsumptionSession._prepare",
+                   "joulewise/whole_window.py::_current_core_rederivation_reasons")),
     "joulewise/salvage_dangler.py::_expected_idle_artifact_sets": ("names", None),
     "joulewise/schemas.py::SummaryMetrics.json_schema": ("names", None),
     "joulewise/uncertainty_evidence.py::derive_idle_drift_evidence": ("names", None),
@@ -543,6 +635,7 @@ RAW_CAPTURE_READERS = {
     "scripts/calibration_cadence_report.py::capture_paths": ("custody", None),
     "scripts/calibration_cadence_report.py::report_window": ("timing", None),
     "scripts/check_paper_replay_fence.py::locate_raw_powermetrics": ("custody", None),
+    "scripts/check_paper_replay_fence.py::derive_from_artifacts": ("energy", ("lane", "BFGS-RAWCAPTURE-01")),
     "scripts/check_paper_round7_artifacts.py::_required_corpus_paths": ("names", None),
     "scripts/floor_reconciliation_receipt.py::_anchored_records": ("energy", ("scripts/floor_reconciliation_receipt.py::_bundle_row",)),
     "scripts/floor_reconciliation_receipt.py::_bundle_row": ("energy", "in_function"),
@@ -552,26 +645,21 @@ RAW_CAPTURE_READERS = {
     "scripts/issue_calibration_acceptance_generation.py::_derivation_frame_cadence": ("timing", None),
     "scripts/package_d117_fixture.py::load_census_bytes": ("names", None),
     "scripts/paper_anchor_correction_quantified.py::locate_raw_powermetrics": ("custody", None),
+    "scripts/paper_anchor_correction_quantified.py::analyse_capture": ("energy", ("lane", "BFGS-RAWCAPTURE-01")),
     "scripts/paper_excursion_decomposition.py::build_payload": ("names", None),
     "scripts/paper_excursion_decomposition.py::locate_raw_powermetrics": ("custody", None),
+    "scripts/paper_excursion_decomposition.py::rederive": ("energy", ("lane", "BFGS-RAWCAPTURE-01")),
     "scripts/run_campaign.py::assert_production_uncertainty": ("custody", None),
+    "scripts/validate_powermetrics_fiducial.py::main": ("energy", ("lane", "BFGS-RAWCAPTURE-01")),
+    "scripts/validate_powermetrics_fiducial.py::rederive_artifact": ("energy", ("lane", "BFGS-RAWCAPTURE-01")),
 }
 
-RETURNED_RAW_CAPTURE_ENERGY = {
-    "joulewise/calibration_bracketing.py::_load_calibration_candidate_unbounded",
-    "joulewise/cli.py::_strict_rich_telemetry_problems",
-    "joulewise/cli.py::_strict_uncertainty_evidence_problems",
-    "joulewise/cli.py::_verify_powermetrics_raw_to_trace",
-    "joulewise/controller.py::_load_instrument_calibration_attachment",
-    "joulewise/reduce.py::_verify_instrument_calibration",
+RAW_CAPTURE_LANE_MEMBERS = {
     "scripts/check_paper_replay_fence.py::derive_from_artifacts",
     "scripts/paper_anchor_correction_quantified.py::analyse_capture",
     "scripts/paper_excursion_decomposition.py::rederive",
     "scripts/validate_powermetrics_fiducial.py::main",
     "scripts/validate_powermetrics_fiducial.py::rederive_artifact",
-}
-RETURNED_RAW_CAPTURE_UNCLASSIFIED = {
-    "joulewise/environment_admission.py::_window_thermal_pressure_refusals",
 }
 
 CAPTURE_PATTERN = re.compile(r"^(raw/)?(powermetrics[A-Za-z0-9_]*\.plist|nvidia_smi[^ /]*\.csv)$")
@@ -579,6 +667,8 @@ CAPTURE_PATTERN = re.compile(r"^(raw/)?(powermetrics[A-Za-z0-9_]*\.plist|nvidia_
 
 def capture_readers(files):
     """58(f)2-3: exact screen by literal and module/class capture names."""
+    files = {path: source for path, source in files.items()
+             if path.startswith(("joulewise/", "scripts/"))}
     trees = {path: ast.parse(source, filename=path) for path, source in files.items()}
     names = set()
     def is_capture(n):
@@ -608,6 +698,133 @@ def capture_readers(files):
                    for n, _ in nodes):
                 found.add(f"{path}::{qualname}")
     return found
+
+
+def validation_shape(files, key):
+    path, qualname = key.split("::", 1)
+    fn = dict(qualified(ast.parse(files[path]))).get(qualname)
+    return (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and fn.returns is not None and ast.unparse(fn.returns) in
+            {"list[str]", "tuple[str, ...]", "set[str]", "bool"})
+
+
+def capture_in_function_violations(files, key):
+    path, qualname = key.split("::", 1)
+    fn = dict(qualified(ast.parse(files[path]))).get(qualname)
+    if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return [f"{key}: capture function missing"]
+    body = fn.body
+    for index, stmt in enumerate(body[:-1]):
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name)
+                and isinstance(stmt.value, ast.Call)
+                and ast.unparse(stmt.value.func) == "battery_float.authenticate_capture"):
+            continue
+        verdict = stmt.targets[0].id
+        refusal = body[index + 1]
+        test = refusal.test if isinstance(refusal, ast.If) else None
+        valid_test = (isinstance(test, ast.Compare) and len(test.ops) == 1
+                      and isinstance(test.ops[0], ast.NotEq)
+                      and len(test.comparators) == 1
+                      and isinstance(test.comparators[0], ast.Constant)
+                      and test.comparators[0].value == "pass"
+                      and isinstance(test.left, ast.Attribute) and test.left.attr == "status"
+                      and isinstance(test.left.value, ast.Name) and test.left.value.id == verdict)
+        if not (valid_test
+                and refusal.body and isinstance(refusal.body[-1], ast.Raise)):
+            continue
+        capture_mentions = [i for i, item in enumerate(body)
+                            if any((isinstance(node, ast.Constant)
+                                    and isinstance(node.value, str)
+                                    and CAPTURE_PATTERN.fullmatch(node.value))
+                                   or (isinstance(node, ast.Name) and node.id.isupper()
+                                       and ("POWERMETRICS" in node.id or "NVIDIA_SMI" in node.id))
+                                   for node in ast.walk(item))]
+        if any(i <= index + 1 for i in capture_mentions):
+            return [f"{key}: capture named before refusal"]
+        return []
+    return [f"{key}: capture gate/refusal missing or malformed"]
+
+
+def capture_chain_violations(files, key, chain):
+    problems = []
+    names = [key.split("::", 1)[1].split(".")[-1]]
+    for scope in chain:
+        sites = call_sites(files, names[-1], include_references=True)
+        # `inspect` is a local nested closure; unrelated functions of that
+        # common name in other modules are not references to this binding.
+        if names[-1] == "inspect":
+            sites = [site for site in sites if site[0] == key.split("::", 1)[0]]
+        if not sites or any(f"{path}::{qualname}" != scope for path, qualname, _, _ in sites):
+            problems.append(f"{key}: capture chain caller/reference of {names[-1]} outside {scope}: "
+                            + ", ".join(f"{path}::{qualname}" for path, qualname, _, _ in sites))
+        names.append(scope.split("::", 1)[1].split(".")[-1])
+    final_path, final_scope = chain[-1].split("::", 1)
+    fn = dict(qualified(ast.parse(files[final_path]))).get(final_scope)
+    if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return problems + [f"{key}: capture chain final scope missing"]
+    expected_name = names[-2]
+    found = False
+    for block in ast.walk(fn):
+        if not isinstance(block, (ast.Module, ast.If, ast.For, ast.While, ast.Try,
+                                  ast.With, ast.AsyncFor, ast.AsyncWith,
+                                  ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = getattr(block, "body", ())
+        if not isinstance(body, list):
+            continue
+        for first, second in zip(body, body[1:]):
+            if not (isinstance(first, ast.If) and len(first.body) == 1
+                    and isinstance(first.body[0], ast.Continue)):
+                continue
+            test = first.test
+            if not (isinstance(test, ast.Compare) and len(test.ops) == 1
+                    and isinstance(test.ops[0], ast.IsNot)
+                    and len(test.comparators) == 1
+                    and isinstance(test.comparators[0], ast.Constant)
+                    and test.comparators[0].value is None
+                    and isinstance(test.left, ast.Call)
+                    and name_of(test.left) == "_battery_exclusion_for_observation"
+                    and len(test.left.args) == 1
+                    and isinstance(test.left.args[0], ast.Name)):
+                continue
+            observation = test.left.args[0].id
+            if any(isinstance(n, ast.Call) and name_of(n) == expected_name
+                   and n.args and isinstance(n.args[0], ast.Name)
+                   and n.args[0].id == observation for n in ast.walk(second)):
+                found = True
+    if not found:
+        problems.append(f"{key}: {final_scope} lacks adjacent battery exclusion and {expected_name} call")
+    for scope, expected in (
+        ("_battery_exclusion_for_observation", "_battery_classification_for_observation"),
+        ("_battery_classification_for_observation", "authenticate_capture"),
+    ):
+        fn = dict(qualified(ast.parse(files[final_path]))).get(scope)
+        if fn is None or not any(isinstance(n, ast.Call) and name_of(n) == expected
+                                 for n in ast.walk(fn)):
+            problems.append(f"{key}: {scope} lacks {expected}")
+    return problems
+
+
+def raw_capture_callers_violations(files, key, listed):
+    helper = key.split("::", 1)[1].split(".")[-1]
+    sites = call_sites(files, helper, include_references=True)
+    problems = []
+    for path, qualname, node, chain in sites:
+        scope = f"{path}::{qualname}"
+        if scope not in listed:
+            problems.append(f"{key}: unlisted raw-capture caller/reference {scope}")
+            continue
+        fn = dict(qualified(ast.parse(files[path]))).get(qualname)
+        if gate_dominates_call(path, fn, node, chain):
+            continue
+        member = RAW_CAPTURE_READERS.get(scope)
+        if member is not None and member[0] == "energy" and member[1] is not None:
+            continue
+        if validation_shape(files, scope):
+            continue
+        problems.append(f"{key}: ungated raw-capture caller {scope}")
+    return problems
 
 
 def tracked_sources(root=ROOT, replacements=None):
@@ -720,6 +937,37 @@ def consumers_violations(files, consumers):
     return problems
 
 
+def consumers_form_violations(files, key, evidence, reason):
+    if not isinstance(evidence, dict) or set(evidence) != {
+            "consumers", "collection_uses", "producers"}:
+        return [f"{key}: consumers form fields missing"]
+    problems = []
+    if reason != CAMPAIGN_CONSUMERS_REASON:
+        problems.append(f"{key}: consumers reason differs from amendment 76")
+    if evidence["consumers"] != CAMPAIGN_VERDICT_USES:
+        problems.append(f"{key}: verdict uses differ")
+    problems += consumers_violations(files, evidence["consumers"])
+    if not evidence["collection_uses"] or evidence["collection_uses"] != CAMPAIGN_COLLECTION_USES:
+        problems.append(f"{key}: collection uses missing or differ")
+    scopes_by_key = {f"{p}::{q}": fn for p, q, fn in scopes(files)}
+    for scope, callee in evidence["collection_uses"]:
+        fn = scopes_by_key.get(scope)
+        if fn is None or not any(isinstance(n, ast.Call) and name_of(n) == callee
+                                 for n, _ in own_nodes(fn)):
+            problems.append(f"{key}: collection use {scope}::{callee} missing")
+    producers = evidence["producers"]
+    if producers != CAMPAIGN_PRODUCERS:
+        problems.append(f"{key}: producers differ")
+    allowed = {scope for scope, _ in evidence["consumers"]}
+    allowed.update(f"scripts/run_campaign.py::{name}" for name in producers)
+    for producer in producers:
+        for path, qualname, node, _ in call_sites(files, producer, include_references=True):
+            scope = f"{path}::{qualname}"
+            if scope not in allowed:
+                problems.append(f"{key}: producer {producer} has unlisted caller/reference {scope}")
+    return problems
+
+
 def content_violations(path, source, qualname):
     """57(b)3: source content must not leave before a dominating verdict."""
     fn = dict(qualified(ast.parse(source))).get(qualname)
@@ -771,6 +1019,10 @@ def gate_binding_violations(files):
     problems = []
     gate_names = {"authenticate_window_members", "BundleReader"}
     for path, source in files.items():
+        # 68(d) widens read sites and callers, not the closed 57(b) gate-body
+        # binding rule. Paper code may import a re-exported BundleReader.
+        if not path.startswith(("joulewise/", "scripts/")):
+            continue
         tree = ast.parse(source, filename=path)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
@@ -809,6 +1061,8 @@ def cache_violations(files):
     """57(b)4: no other code can populate the metadata cache slot."""
     problems = []
     for path, source in files.items():
+        if not path.startswith(("joulewise/", "scripts/")):
+            continue
         tree = ast.parse(source, filename=path)
         for node in ast.walk(tree):
             if (isinstance(node, ast.Constant) and node.value == "_cache") or (
@@ -933,6 +1187,8 @@ def journal_energy_readers(files):
     out = set()
     pattern = re.compile(r"power_w|energy|idle_power|joules|_j$")
     for path, qualname, fn in functions(files):
+        if not path.startswith(("joulewise/", "scripts/")):
+            continue
         nodes = own_nodes(fn)
         has_journal = any(
             isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
@@ -952,6 +1208,7 @@ def allowlist_violations(files, allowlist=ALLOWLIST):
     actual = site_keys(rows)
     expected = set(allowlist)
     problems = [f"unlisted read {key}" for key in sorted(actual - expected)]
+    problems += swept_file_violations(all_tracked_python())
     problems += [f"stale allowlist row {key}" for key in sorted(expected - actual)]
     classes = {"strict_validation", "non_claim", "historical", "behind_gate",
                "gate_body", "tolerant_definition"}
@@ -961,9 +1218,14 @@ def allowlist_violations(files, allowlist=ALLOWLIST):
             continue
         cls, reason = entry[:2]
         third = entry[2] if len(entry) == 3 else None
+        if "only to" in reason.lower() or "reach only" in reason.lower():
+            problems.append(f"R58-5 unsupported exclusive reason {key}")
         if cls == "non_claim":
             if "clause (i)" not in reason and "clause (ii)" not in reason:
                 problems.append(f"non_claim clause missing {key}")
+            if "tested and dropped" in reason and not all(
+                    marker in reason for marker in ("fields that leave:", "test:")):
+                problems.append(f"non_claim tested-and-dropped evidence missing {key}")
             if "clause (ii)" in reason and "output:" not in reason:
                 problems.append(f"non_claim output missing {key}")
             if isinstance(third, dict) and third.get("callers") == ():
@@ -976,13 +1238,15 @@ def allowlist_violations(files, allowlist=ALLOWLIST):
             if cls != "non_claim" or "clause (ii)" not in reason:
                 problems.append(f"R58-5 energy-return class invalid {key}")
         if cls == "behind_gate":
-            if not isinstance(third, dict) or len(third) != 1:
+            if not isinstance(third, dict):
                 problems.append(f"behind_gate evidence missing {key}")
             elif "callers" in third:
+                if set(third) != {"callers"}:
+                    problems.append(f"behind_gate callers fields differ {key}")
                 problems += callers_violations(files, key[1].split(".")[-1],
                                                third["callers"], allowlist)
             elif "consumers" in third:
-                problems += consumers_violations(files, third["consumers"])
+                problems += consumers_form_violations(files, key, third, reason)
             else:
                 problems.append(f"unknown behind_gate form {key}")
     gate_keys = {key for key, value in allowlist.items() if value[0] == "gate_body"}
@@ -1007,21 +1271,41 @@ def allowlist_violations(files, allowlist=ALLOWLIST):
     return problems
 
 
-def capture_violations(files):
+def capture_violations(files, inventory=RAW_CAPTURE_READERS):
     actual = capture_readers(files)
-    expected = set(RAW_CAPTURE_READERS)
+    expected = set(inventory)
     problems = [f"unlisted raw capture reader {key}" for key in sorted(actual - expected)]
     problems += [f"stale raw capture reader {key}" for key in sorted(expected - actual)]
-    for key, (kind, gate) in RAW_CAPTURE_READERS.items():
-        if kind not in {"names", "custody", "timing", "energy"}:
+    lane_members = {key for key, (kind, gate) in inventory.items()
+                    if kind == "energy" and isinstance(gate, tuple)
+                    and len(gate) == 2 and gate[0] == "lane"}
+    if lane_members != RAW_CAPTURE_LANE_MEMBERS:
+        problems.append("raw-capture lane members differ: " + repr(sorted(lane_members ^ RAW_CAPTURE_LANE_MEMBERS)))
+    for key, (kind, gate) in inventory.items():
+        if kind not in {"names", "custody", "timing", "validation", "energy"}:
             problems.append(f"{key}: unknown raw-capture kind {kind}")
+        elif kind == "validation":
+            if not validation_shape(files, key):
+                problems.append(f"{key}: validation shape missing")
         elif kind == "energy" and gate is None:
             problems.append(f"{key}: energy reader has no gate")
         elif kind == "energy" and gate != "in_function" and not isinstance(gate, tuple):
-            problems.append(f"{key}: invalid energy gate declaration")
+            if gate == "capture_in_function":
+                problems += capture_in_function_violations(files, key)
+            else:
+                problems.append(f"{key}: invalid energy gate declaration")
         elif kind == "energy" and isinstance(gate, tuple):
-            problems += callers_violations(files, key.split("::", 1)[1].split(".")[-1],
-                                           gate, ALLOWLIST)
+            if len(gate) == 2 and gate == ("lane", "BFGS-RAWCAPTURE-01"):
+                pass
+            elif len(gate) == 2 and gate[0] == "lane":
+                problems.append(f"{key}: unruled raw-capture lane {gate[1]}")
+            elif len(gate) == 2 and gate[0] == "capture_chain":
+                problems += capture_chain_violations(files, key, gate[1])
+            elif key == "joulewise/reduce.py::_verify_instrument_calibration":
+                problems += raw_capture_callers_violations(files, key, gate)
+            else:
+                problems += callers_violations(files, key.split("::", 1)[1].split(".")[-1],
+                                               gate, ALLOWLIST)
         elif kind == "energy" and gate == "in_function":
             path, qualname = key.split("::", 1)
             fn = dict(qualified(ast.parse(files[path]))).get(qualname)
@@ -1093,11 +1377,85 @@ class DetectorExamples(unittest.TestCase):
         self.check('class K:\n DATA = open("b/summary_metrics.json").read()', "direct:open", scope="K.<body>", watched="summary_metrics.json")  # R51-26
         self.check('if __name__ == "__main__":\n open("b/summary_metrics.json")', "direct:open", scope="<module>", watched="summary_metrics.json")  # R51-26
         self.check('def f(r: BundleReader):\n r.metadata()\n get = r.raw_summary', "ref:raw_summary", watched="-")
+        self.check('def f(r: BundleReader):\n r.metadata()\n g = lambda: r.raw_summary()\n return g()',
+                   "raw_summary", scope="f", watched="-")  # R51-23b RED for inherited lambda gate
+        self.check('import os\ndef f(r: BundleReader):\n r.metadata()\n if os.environ.get("X"):\n  def inner(): return r.raw_summary()\n return inner',
+                   "raw_summary", scope="f.inner", watched="-")  # R51-23c RED for inherited nested gate
 
 
 class ConsumerSweepTests(unittest.TestCase):
     def test_all_supported_ungated_reads_have_checked_reasons(self):
         self.assertEqual(allowlist_violations(tracked_sources()), [])
+
+    def test_salvage_non_claim_rows(self):
+        """R72-1..3: discarded power and absent measurands never enter a license."""
+        import csv
+        import json
+        import shutil
+        import tempfile
+        from joulewise import salvage_dangler
+        from joulewise.salvage_dangler import SalvageAuthorizationError, inspect_preworkload_abort
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ROOT / "tests/fixtures/salvage_dangler/r5a_idle_abort"
+            original = Path(temp) / "original"
+            changed = Path(temp) / "changed"
+            shutil.copytree(fixture, original)
+            for telemetry_name, rows in (
+                ("rich_telemetry_idle.jsonl", [
+                    {"index": 1, "processor_combined_power_w": 0.19, "timestamp_s": 99.81},
+                    {"index": 2, "processor_combined_power_w": 0.21, "timestamp_s": 99.91},
+                ]),
+                ("rich_telemetry_idle_attempt_2.jsonl", [
+                    {"index": 1, "processor_combined_power_w": 0.22, "timestamp_s": 99.92},
+                    {"index": 2, "processor_combined_power_w": 0.24, "timestamp_s": 100.05},
+                ]),
+            ):
+                (original / telemetry_name).write_text(
+                    "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            shutil.copytree(original, changed)
+            trace = changed / "power_trace.csv"
+            with trace.open(newline="", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                fields, rows = reader.fieldnames, list(reader)
+            for row in rows:
+                row["power_w"] = str(float(row["power_w"]) * 1000 + 7)
+            with trace.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(rows)
+            base_license = inspect_preworkload_abort(original)
+            self.assertEqual(base_license, inspect_preworkload_abort(changed))  # R72-1 GREEN
+            # R72-1 RED: a computed power escaping in the license changes it.
+            def power_leaking_license(path):
+                license = inspect_preworkload_abort(path)
+                with (path / "power_trace.csv").open(newline="", encoding="utf-8") as handle:
+                    license["mean_power_w"] = sum(float(row["power_w"]) for row in csv.DictReader(handle)) / 2
+                return license
+            with self.assertRaises(AssertionError):
+                self.assertEqual(power_leaking_license(original), power_leaking_license(changed))
+
+            summary_path = changed / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["gross_energy_j"] = 12.5
+            summary_path.write_text(json.dumps(summary), encoding="utf-8")
+            with self.assertRaisesRegex(SalvageAuthorizationError, "measurand bytes"):
+                inspect_preworkload_abort(changed)  # R72-2 GREEN
+            # R72-2 RED under removal of the named test: the exact refusal
+            # contract fails. The separate unknown-field check still refuses.
+            with patch.object(salvage_dangler, "_MEASURAND_FIELDS", ()):
+                with self.assertRaises(AssertionError):
+                    with self.assertRaisesRegex(SalvageAuthorizationError, "measurand bytes"):
+                        inspect_preworkload_abort(changed)
+
+        salvage_rows = [key for key, row in ALLOWLIST.items()
+                        if key[0] == "joulewise/salvage_dangler.py" and "tested and dropped" in row[1]]
+        self.assertEqual(len(salvage_rows), 2)
+        for key in salvage_rows:
+            bad = dict(ALLOWLIST)
+            bad[key] = ("non_claim", "clause (i), fields that leave: time; tested and dropped: power_w")
+            self.assertIn(str(key), " ".join(allowlist_violations(tracked_sources(), bad)))  # R72-3 RED
 
     def test_allowlist_membership_counterfactuals(self):
         files = tracked_sources()
@@ -1139,11 +1497,25 @@ class ConsumerSweepTests(unittest.TestCase):
         rows, _ = run(ROOT)
         self.assertEqual((len(rows), len(site_keys(rows)), len({(p, q) for p, q, *_ in rows}),
                           len({(p, line) for p, _, _, _, line in rows})),
-                         (123, 117, 86, 123))
+                         (125, 119, 88, 125))
         self.assertFalse([row for row in rows if row[2].startswith("ref:")])
         self.assertFalse([row for row in rows if row[1] == "<module>" or row[1].endswith(".<body>")])
         source = 'P = "power_trace.csv"\ndef f(b):\n p = b / P\n return p'
         self.assertFalse(site_keys(sweep_source("scripts/zz_new.py", source)))
+
+    def test_swept_roots_are_closed(self):
+        names = all_tracked_python()
+        self.assertEqual(swept_file_violations(names), [])
+        self.assertIn("tools/zz_new.py", " ".join(
+            swept_file_violations(names + ["tools/zz_new.py"])))  # R61-1 RED
+        files = tracked_sources()
+        source = ('import json\n'
+                  'def fig(b): return json.loads((b / "summary_metrics.json").read_text())["gross_energy_j"]\n')
+        path = "docs/paper/figures/zz_new.py"
+        self.assertIn((path, "fig", "direct:read_text", "summary_metrics.json"),
+                      site_keys(sweep_source(path, source)))
+        self.assertIn(path, " ".join(allowlist_violations(
+            dict(files, **{path: source}))))  # R61-2 RED
 
     def test_closed_gate_and_reader_definitions(self):
         files = tracked_sources()
@@ -1372,6 +1744,8 @@ class ConsumerSweepTests(unittest.TestCase):
              '            pass'),
             ("policy_parameter_rebound", '        finalized_bundles = _axi_discover_finalized_bundles(runs_dir, manifest)',
              '        policy_binding = policy_binding or _default_binding()\n        finalized_bundles = _axi_discover_finalized_bundles(runs_dir, manifest)'),
+            ("nested_policy_parameter_rebound", '        finalized_bundles = _axi_discover_finalized_bundles(runs_dir, manifest)',
+             '        def _reset_policy_binding():\n            nonlocal policy_binding\n            policy_binding = None\n        _reset_policy_binding()\n        finalized_bundles = _axi_discover_finalized_bundles(runs_dir, manifest)'),
             ("policy_test_widened", '        if policy_binding is not None:\n            gate_paths =',
              '        if policy_binding is not None and receipts:\n            gate_paths ='),
             ("gate_in_else", '        if policy_binding is not None:\n            gate_paths =',
@@ -1382,11 +1756,37 @@ class ConsumerSweepTests(unittest.TestCase):
                 changed = dict(files, **{"scripts/run_campaign.py": src.replace(before, after, 1)})
                 self.assertTrue(consumers_violations(changed, consumers))  # R51-17, R51-28
 
+    def test_campaign_consumers_form_is_closed(self):
+        files = tracked_sources()
+        key = ("scripts/run_campaign.py", "evaluate_member", "direct:read_text", "metadata.json")
+        self.assertEqual(consumers_form_violations(
+            files, key, CAMPAIGN_CONSUMERS_EVIDENCE, CAMPAIGN_CONSUMERS_REASON), [])  # R51-17d GREEN
+        for source, expected in (
+            ('def f(p, i): return evaluate_member(p, info=i, waivers={}).summary\n',
+             'scripts/zz_new.py::f'),
+            ('def g(): h = evaluate_members; return h\n', 'scripts/zz_new.py::g'),
+        ):
+            changed = dict(files, **{"scripts/zz_new.py": source})
+            self.assertIn(expected, " ".join(consumers_form_violations(
+                changed, key, CAMPAIGN_CONSUMERS_EVIDENCE,
+                CAMPAIGN_CONSUMERS_REASON)))  # R51-17b/c RED
+        incomplete = dict(CAMPAIGN_CONSUMERS_EVIDENCE, producers=("evaluate_member",))
+        self.assertIn("scripts/run_campaign.py::evaluate_members", " ".join(consumers_form_violations(
+            files, key, incomplete, CAMPAIGN_CONSUMERS_REASON)))  # R51-17d RED
+        no_collection = dict(CAMPAIGN_CONSUMERS_EVIDENCE)
+        del no_collection["collection_uses"]
+        self.assertIn("fields missing", " ".join(consumers_form_violations(
+            files, key, no_collection, CAMPAIGN_CONSUMERS_REASON)))  # R51-17e RED
+        old_reason = "consumers form: evaluate_member returns or passes bundle content only to the listed gated chain"
+        self.assertIn("reason differs", " ".join(consumers_form_violations(
+            files, key, CAMPAIGN_CONSUMERS_EVIDENCE, old_reason)))  # R76-1 RED
+        self.assertNotIn("only to", CAMPAIGN_CONSUMERS_REASON)
+        self.assertNotIn("reach only", CAMPAIGN_CONSUMERS_REASON)
+
     def test_raw_capture_screen_mutants(self):
         files = tracked_sources()
         self.assertEqual(len(capture_readers(files)), 48)
-        self.assertEqual(capture_readers(files) - set(RAW_CAPTURE_READERS),
-                         RETURNED_RAW_CAPTURE_ENERGY | RETURNED_RAW_CAPTURE_UNCLASSIFIED)
+        self.assertEqual(capture_readers(files), set(RAW_CAPTURE_READERS))
         extra = 'def new_reader(p):\n    return (p / "raw" / "powermetrics.plist").read_bytes()\n'
         changed = dict(files, **{"joulewise/aggregate.py": files["joulewise/aggregate.py"] + extra})
         self.assertIn("joulewise/aggregate.py::new_reader", capture_readers(changed))  # R58-7
@@ -1398,6 +1798,114 @@ class ConsumerSweepTests(unittest.TestCase):
         self.assertIn("joulewise/aggregate.py::named_reader", capture_readers(changed))  # R58-8
         self.assertIn("joulewise/aggregate.py::named_reader", " ".join(
             capture_violations(changed)))  # R58-8 RED
+
+    def test_raw_capture_validation_shape(self):
+        files = tracked_sources()
+        members = {key for key, (kind, _) in RAW_CAPTURE_READERS.items()
+                   if kind == "validation"}
+        self.assertEqual(members, {
+            "joulewise/cli.py::_verify_powermetrics_raw_to_trace",
+            "joulewise/cli.py::_strict_rich_telemetry_problems",
+            "joulewise/cli.py::_strict_uncertainty_evidence_problems",
+            "joulewise/environment_admission.py::_window_thermal_pressure_refusals",
+        })
+        for key in members:
+            path, qualname = key.split("::", 1)
+            fn = dict(qualified(ast.parse(files[path])))[qualname]
+            self.assertIn(ast.unparse(fn.returns), {"list[str]", "tuple[str, ...]", "set[str]", "bool"})
+        path = "joulewise/cli.py"
+        before = "def _verify_powermetrics_raw_to_trace("  # R73-1 counterfactual
+        self.assertIn(before, files[path])
+        import re as _re
+        mutant = _re.sub(r"(def _verify_powermetrics_raw_to_trace\([\s\S]*?\)) -> list\[str\]:",
+                         r"\1 -> list[float]:", files[path], count=1)
+        self.assertNotEqual(mutant, files[path])
+        self.assertIn("_verify_powermetrics_raw_to_trace: validation shape missing",
+                      " ".join(capture_violations(dict(files, **{path: mutant}))))  # RED
+
+    def test_capture_gate_forms(self):
+        files = tracked_sources()
+        controller = "joulewise/controller.py"
+        attachment = "joulewise/controller.py::_load_instrument_calibration_attachment"
+        self.assertEqual(capture_in_function_violations(files, attachment), [])  # R74-1 GREEN
+        source = files[controller]
+        before = ('    verdict = battery_float.authenticate_capture(root)\n'
+                  '    if verdict.status != "pass":\n'
+                  '        raise ValueError(f"instrument calibration {verdict.status}: {\'; \'.join(verdict.reasons)}")\n')
+        self.assertIn(before, source)
+        removed = dict(files, **{controller: source.replace(before, "", 1)})
+        self.assertIn(attachment, " ".join(capture_in_function_violations(removed, attachment)))
+        wrong = dict(files, **{controller: source.replace('if verdict.status != "pass":',
+                                                        'if verdict.status == "confounded":', 1)})
+        self.assertIn(attachment, " ".join(capture_in_function_violations(wrong, attachment)))  # R74-1 RED
+        early = dict(files, **{controller: source.replace(
+            '    verdict = battery_float.authenticate_capture(root)',
+            '    capture_name = RAW_POWERMETRICS_NAME\n'
+            '    verdict = battery_float.authenticate_capture(root)', 1)})
+        self.assertIn("capture named before refusal", " ".join(
+            capture_in_function_violations(early, attachment)))  # R74-1 RED
+
+        calibration = "joulewise/calibration_bracketing.py"
+        candidate = "joulewise/calibration_bracketing.py::_load_calibration_candidate_unbounded"
+        chain = RAW_CAPTURE_READERS[candidate][1][1]
+        self.assertEqual(capture_chain_violations(files, candidate, chain), [])  # R74-2 GREEN
+        before = ('        if _battery_exclusion_for_observation(observation) is not None:\n'
+                  '            continue\n')
+        self.assertIn(before, files[calibration])
+        removed = dict(files, **{calibration: files[calibration].replace(before, "", 1)})
+        self.assertIn("discover_calibration_candidates", " ".join(
+            capture_chain_violations(removed, candidate, chain)))  # R74-2 RED
+        extra = dict(files, **{"joulewise/zz_new.py":
+                     'def f(d, r): return load_calibration_candidate(d, runs_root=r)\n'})
+        self.assertIn("joulewise/zz_new.py::f", " ".join(
+            capture_chain_violations(extra, candidate, chain)))  # R74-2 RED
+
+        verifier = "joulewise/reduce.py::_verify_instrument_calibration"
+        callers = RAW_CAPTURE_READERS[verifier][1]
+        self.assertEqual(raw_capture_callers_violations(files, verifier, callers), [])  # R74-3 GREEN
+        window = "joulewise/whole_window.py"
+        gate = ('        battery_verdicts = authenticate_window_members(\n'
+                '            (bundle_id, path) for bundle_id, path in sorted(bundle_paths.items())\n'
+                '        )\n')
+        self.assertIn(gate, files[window])
+        removed = dict(files, **{window: files[window].replace(gate, '        battery_verdicts = {}\n', 1)})
+        self.assertIn("AuthenticatedConsumptionSession._prepare", " ".join(
+            raw_capture_callers_violations(removed, verifier, callers)))  # R74-3 RED
+        annotation = 'def _current_core_rederivation_reasons('
+        self.assertIn(annotation, files[window])
+        import re as _re
+        changed = _re.sub(r'(def _current_core_rederivation_reasons\([\s\S]*?\)) -> set\[str\]:',
+                          r'\1 -> dict[str, float]:', files[window], count=1)
+        self.assertNotEqual(changed, files[window])
+        mutant = dict(files, **{window: changed})
+        self.assertIn("_current_core_rederivation_reasons", " ".join(
+            raw_capture_callers_violations(mutant, verifier, callers)))  # R74-3 RED
+
+    def test_raw_capture_lane_is_closed(self):
+        files = tracked_sources()
+        self.assertEqual({key for key, (kind, gate) in RAW_CAPTURE_READERS.items()
+                          if kind == "energy" and gate == ("lane", "BFGS-RAWCAPTURE-01")},
+                         RAW_CAPTURE_LANE_MEMBERS)
+        extra = dict(RAW_CAPTURE_READERS,
+                     **{"joulewise/aggregate.py::zz_new": ("energy", ("lane", "BFGS-RAWCAPTURE-01"))})
+        self.assertIn("joulewise/aggregate.py::zz_new", " ".join(
+            capture_violations(files, extra)))  # R75-1 RED
+
+    def test_raw_capture_lane_files_match_main(self):
+        if subprocess.run(["git", "cat-file", "-e", "97082508^{commit}"], cwd=ROOT,
+                          capture_output=True).returncode:
+            self.skipTest("R75-2: commit 97082508 absent")
+        lane_files = sorted({key.split("::", 1)[0] for key in RAW_CAPTURE_LANE_MEMBERS})
+        for path in lane_files:
+            with self.subTest(path=path):
+                self.assertEqual(subprocess.run(
+                    ["git", "diff", "--quiet", "97082508", "--", path], cwd=ROOT).returncode,
+                    0, path)  # R75-2 GREEN; any changed file is RED
+        path = lane_files[0]
+        baseline = subprocess.check_output(["git", "show", f"97082508:{path}"], cwd=ROOT)
+        self.assertEqual((ROOT / path).read_bytes(), baseline)
+        mutated = (ROOT / path).read_bytes() + b"\n# counterfactual change\n"
+        self.assertNotEqual(mutated, baseline)  # R75-2 RED without writing a production file
 
     def test_raw_capture_inventory(self):
         files = tracked_sources()
@@ -1429,6 +1937,9 @@ class ConsumerSweepTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         bundle = fixture.make_bundle()
         ordinary = envelope_gate.analyze_envelope_gate([bundle], lambda _: [])
+        if subprocess.run(["git", "cat-file", "-e", "315364b2^{commit}"], cwd=ROOT,
+                          capture_output=True).returncode:
+            self.skipTest("R60-7: commit 315364b2 absent")
         old_source = subprocess.check_output(
             ["git", "show", "315364b2:joulewise/envelope_gate.py"],
             cwd=ROOT, text=True)
