@@ -2765,23 +2765,35 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 ]
                 try:
                     time.sleep(0.5)
+                    # PID-only output: with ``-lf`` a live process whose argv
+                    # holds a newline prints continuation lines with no PID,
+                    # which no line parser can tell from a new row. Matching
+                    # is unchanged (``-f`` still matches the full argv); each
+                    # hit's full argv is then read back per PID for the text
+                    # checks (lane TEST-CENSUS-MULTILINE-ARGV-01).
                     probes, _source = self._real_probe_source(
-                        "PROCESS_CENSUS", (("/usr/bin/pgrep", "-lf", pattern),)
+                        "PROCESS_CENSUS", (("/usr/bin/pgrep", "-f", pattern),)
                     )
                     probe = probes[0]
                     self.assertEqual(probe.exit_code, 0, probe.stderr)
-                    lines = probe.stdout.splitlines()
-                    reported = {int(line.split(" ", 1)[0]) for line in lines}
+                    reported = {int(line) for line in probe.stdout.splitlines()}
                     for decoy, marker in zip(decoys, positives + negatives, strict=True):
                         with self.subTest(marker=marker):
                             if marker in positives:
                                 self.assertIn(decoy.pid, reported, probe.stdout)
                             else:
                                 self.assertNotIn(decoy.pid, reported, probe.stdout)
-                    for line in lines:
-                        self.assertIsNotNone(re.search(pattern, line))
+                    for pid in sorted(reported):
+                        shown = subprocess.run(
+                            ["/bin/ps", "-ww", "-o", "command=", "-p", str(pid)],
+                            capture_output=True, text=True, check=False,
+                        )
+                        if shown.returncode != 0 and pid not in {d.pid for d in decoys}:
+                            continue  # an unrelated hit exited after pgrep ran
+                        self.assertEqual(shown.returncode, 0, shown.stderr)
+                        self.assertIsNotNone(re.search(pattern, shown.stdout), shown.stdout)
                         for basename in _RECORDED_CENSUS_SERVICE_BASENAMES:
-                            self.assertNotIn(basename, line)
+                            self.assertNotIn(basename, shown.stdout)
                 finally:
                     for decoy in decoys:
                         decoy.terminate()
