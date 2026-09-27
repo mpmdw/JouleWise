@@ -10,6 +10,38 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATIONS e6f06c96 + 92472459 — 15:48 → ≈22:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; 92472459 exits so a fresh supervisor can arm W1):** e6f06c96 exited on usage at 16:11 ([record](docs/process_traces/2026-09-26-activation-e6f06c96/00-activation-record.md)). 92472459's [record 00](docs/process_traces/2026-09-26-activation-92472459/00-activation-record.md), items 1–33, is the full account.
+
+**MERGED:**
+- #430, the bookkeeping PR for 8e43cfa7, 6bec2aa6 and f8d6cab1 (light tier) → `97a48451`.
+- **#431, BFG-S S2** → `97082508`. It carries the quiet-night collector's battery brackets, the custody-first night summary that blanks a night on any non-pass, and the flip of the QPE fence. It merged under the full gate, 12/12. The cold Fable final pass ruled MERGE. The row-9 integration suite ran 7,525 tests; its two environmental cases both passed on rerun.
+- Canonical is at `97082508`.
+
+**W1 IS UNBLOCKED:** interactive PID 46048 was gone at 22:13, and no interactive Claude session remains.
+
+**Cold gates this block** (each ruled by a cold Fable judge, with a paired Opus refuter and then an erratum):
+- QPE-SHAPE3 erratum (amendment 35 restated).
+- BFGS-S1-SCOPE-01 plus erratum (amendments 36–43; the historical set grows to 69 = 13 fixtures + 50 floor-file bundles + 6 RPT001 tree digests).
+- BFGS-SAMESIG-01 plus erratum (amendments 44–48; a rule-11 same-signature consult).
+- BFGS-S1-R2-01 plus erratum (amendments 49–56).
+- BFGS-S1-SWEEPCLASS-01 (amendments 57–59; its refuter's section B may be missing if the activation exited first; check the file).
+
+**BFG-S S1** is on `feat/2026-09-26-bfgs-s1-bundles` @ `315364b2` (fix round 3 partial `cbfa9dc3` + main `97082508` merged; the sweep line is `set(PHASES)`). Amendments 36–50 and 52–56 are implemented. **Amendment 51 (the read sweep) is not yet done**; amendments 57–59 now unblock it.
+
+**SUCCESSOR'S NEXT EXACT ACTION:**
+1. **Arm W1** under NIGHT_HANDBACK. First make sure no seat or agent process is alive, since W1 needs a quiet machine and the resident supervisor must have started after the `97082508` fast-forward. Then rerun the W1 README prerequisites (`docs/2026-09-25-817355d2-w1arm` @ `c79816c9`, `scripts/README-sequence.md`) from step 0:
+   - `__H__` = current main (`97082508` or later), which now carries S0's `battery_brackets` fence and S2's QPE flip. Re-verify that `evidence_night.check` passes for the derivation kind.
+   - A fresh battery pair.
+   - `__PREREG__` = `81b65f08…ddf1`.
+   - Get a cold Fable pass on the staged plan, email Ed, arm, and exit by the request deadline.
+2. After the window: **S1 fix round 3 resume.** Implement amendment 51 as amended by 57–59 (`20-bfgs-s1/90-coldgate-sweep/21-coldgate-fable-ruling.md` §7 and §11). Also apply the §9 N-1 comment fix in `tests/test_battery_float_consumers.py`, which is authorized. Then: delta lenses (contract lens checks every allowlist row, per the S1-R2 erratum §14 step 2) → round F (amendment 38 plus magistrate-named test paths; V3 had A 146 / B 362) → the supply-map receipt → full gate → PR.
+3. **Lanes registered this block:**
+   - BFGS-MANIFEST-CUSTODY-01 (`analysis_manifest_v3.py` converts gate exceptions; must close before any analysis manifest is finalized over a post-S1 bundle).
+   - BFGS-S2-FOLLOWUPS-01 (three final-pass NITs).
+   - TEST-CENSUS-MULTILINE-ARGV-01 (the live `pgrep` census test breaks on a multi-line argv).
+   - HISTORICAL-7B-IDENTITY (the fifty 7B floor runs named only by file hashes; they need their own cold gate inside HISTORICAL-BATTERY-STATE-01).
+   - Two open questions named by the S1-R2 erratum: an unreadable campaign log as custody (49 (b)), and a digest-differing present member (56 (d)).
+
 **▶▶ ACTIVATION f8d6cab1 — 11:43 → ≈15:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; exits for a fresh supervisor after the merge wave):** [Record 00](docs/process_traces/2026-09-26-activation-f8d6cab1/00-activation-record.md) items 1–25.
 
 **MERGED:**

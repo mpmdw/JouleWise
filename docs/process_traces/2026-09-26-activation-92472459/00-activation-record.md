@@ -64,3 +64,11 @@ Launched by the watchdog at 16:18:44 PDT 09-26 (attempt 108; last exit class `us
     - The seat's F2 (the §9 N-1 comment in `tests/test_battery_float_consumers.py`) is **authorized by the magistrate**: the ruling's own §9 names that fix, and the restriction was the lead brief's.
     
     → **cold gate BFGS-S1-SWEEPCLASS-01** convened.
+33. **BFGS-S1-SWEEPCLASS-01 ruled** (cold Fable, rc 0, 22:16; [ruling](20-bfgs-s1/90-coldgate-sweep/21-coldgate-fable-ruling.md)). Amendments 57–59 change test code only:
+    - a self-verifying gate-implementation class for exactly three named functions;
+    - `raw_summary` stays a deliberately tolerant accessor (text 8), backed by a closed list of `BundleReader`'s 30 public methods and a pin on the four gated ones;
+    - a caller that returns energy cannot be filed as a validator;
+    - two sweep-rule amendments so that the idle-uncertainty derivation's gate is provable.
+    
+    The paired Opus refuter was still in phase B at exit. **S1 integration:** main `97082508` (S2) was merged into the S1 branch at the bench, giving `315364b2`; the only conflict was the shared sweep line, which is now `set(battery_float.PHASES)` with both callers' rows (5 OK).
+34. **PID 46048 gone** (22:13), with no interactive Claude session left, so **W1 is unblocked**. Arming needs a supervisor started after this activation's canonical fast-forward (`evidence_night_entry.md` item 2) and a quiet machine. This activation therefore makes everything durable and exits so the watchdog's successor arms W1 (RUN_STATE top block, next exact action 1).
