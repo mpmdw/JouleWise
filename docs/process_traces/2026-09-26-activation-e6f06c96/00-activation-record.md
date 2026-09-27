@@ -1,0 +1,19 @@
+# Activation e6f06c96 (magistrate, Opus 5.5): record 00
+
+Launched by the watchdog at 15:48:41 PDT 09-26 (attempt 107) after f8d6cab1's clean exit. Nothing armed. The branch `docs/2026-09-26-e6f06c96` continues from `docs/2026-09-26-f8d6cab1` @ `5bf920e4` (PR #430's head).
+
+1. **Launch.** The heartbeat was written first (pid 93158). `notice_pending` = [] and there was no standdown request. Gmail `from:claude2.glaring610@passmail.net is:unread` returned **none**. The open directives are #421 and #422, both standing and neither new. Canonical is clean at `1417c0c4` = `origin/main`, so no fast-forward was needed. No `com.joulewise.night*` label is loaded. **PID 46048** (interactive claude, ttys000, since 09-24 17:47) is **still alive**, so W1 stays blocked. The launch email was accepted as Gmail `1a0dfe90464272a3`, and `notice.ack` was written.
+2. **PR #430, rows 1 and 9 started** at head `5bf920e4`. That head already contains main `1417c0c4`, so the head is the integration tree.
+   - **Row 1** (a fresh Opus reviewer, read-only) returned **MERGE, no blockers**. The tier is correct: five non-trace paths, and the test change is only the gen_state pin, 260 → 263. `gen_state --check` exits 0, and 44 `test_gen_state` tests are OK. The four SHAs are verified and all 7 links resolve. The lane changes match the body.
+   - Its NITs are fixed on this branch, not on the PR head: RUN_STATE:25 ("close #427 once merged", but #427 is already closed), and a README "and and" typo that predates the PR.
+   - **Row 9** is a full suite at `5bf920e4` (`JouleWise-wt-pr430-e6f06c96`, `/tmp/row9-pr430-5bf920e4.log`).
+3. **QPE-SHAPE3-NIGHT-BLANK-01, the cold gate convened** (packet [10-qpe-shape3/](10-qpe-shape3/00-charge.md)). The magistrate's bench fact behind the charge: today `pilot_summary` (`quiet_predicate_campaign.py:1150`) excludes every entry with `collector_exit != 0` as `collect_error`. The executor books a collector that outruns `envelope_s + 30` as exit 124 (`:1566-1567`). So today one timed-out envelope costs only itself. Under text 6 plus amendment 32 (erratum), the same envelope, if it holds `session.json`, is authenticated as shape (iii), returns `evidence_missing`, and blanks the whole night. The seats: a cold Fable judge, a paired Opus contract refuter (independent answers first), and a Sol 6.0 high execution seat (independent answers with executed probes). Astra is not seated. No number escapes under either option, so this is a campaign-cost text change, not a major science change under D-184; the omission is recorded here for the council.
+4. **Cold gate seats launched** (charge `a30385e8`):
+   - The Fable judge runs detached from `JouleWise-wt-qpe3cg-e6f06c96` (pid 35513; convene script `~/.claude/jobs/e6f06c96/tmp/convene-coldgate-qpe3.sh`).
+   - The Opus paired refuter runs as a background Agent: independent answers first, then the refutation once the ruling exists.
+   - The Sol 6.0 high execution seat (`12-sol-execution-seat.md`) was relaunched once, because the wrapper requires a literal `WRITE_SCOPE:` line in the prompt (exit 64, zero spend).
+5. **BFG-S S1 round 1 launched.** The brief is [20-bfgs-s1/10](20-bfgs-s1/10-seat-brief-round1.txt). The seat is Sol 6.0 xhigh, running in worktree `JouleWise-wt-bfgs-s1-e6f06c96`, branch `feat/2026-09-26-bfgs-s1-bundles` @ main `1417c0c4`.
+   - **S1 is split into two sequential rounds on one branch and one PR.** Round 1 covers texts 7, 8, 11, 16 (bundle half), 18 and T13, plus amendments 24–27 and 31 (S1 clause). Round 2 covers text 9, text 10 and text 12's consumer and sweep clauses.
+   - The split exists because 13 ruled texts over 25 files exceed a single seat's proven ceiling.
+   - Round 1's WRITE_SCOPE is a subset of the ruled S1 scope (§E), so no ruled scope grows.
+   - S1 does not depend on QPE-SHAPE3 (that is S2's text 6), so it runs alongside the cold gate.

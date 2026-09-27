@@ -1,0 +1,14 @@
+ROLE: root-cause scout (read-only). Lane TEST-CENSUS-MULTILINE-ARGV-01, JouleWise.
+
+WRITE_SCOPE: []
+WORKTREE: /Users/edr/code/JouleWise-wt-census-22784e38 (detached @ 97082508 = main). Edit no file. Scratch goes only under /tmp/census22784e38/.
+
+FACT (observed 09-26 during a full-suite run): the test `test_arm_readiness_evidence_t0…test_g4_real_ruled_census_pgrep_dialect` ran a live `pgrep` census over the real process table. It hit a running Codex seat whose argv spans several lines (a prompt containing newlines and the word `run_campaign`). The parser then failed on a continuation line with `ValueError: invalid literal for int() … ''`. The test passes once no such process is alive.
+
+QUESTIONS:
+1. Locate the test and every parser of `pgrep`/`ps` output it exercises. Is the fragile parser test-only, or is it PRODUCTION code used by the t0/arm census (the quiet-machine gate before a measurement window)? Give file:line for every parser of `pgrep -l`/`pgrep -fl`/`ps` output in joulewise/ and scripts/.
+2. For each production parser, what happens at a real t0 if ANY process on the machine has a newline in its argv? The outcomes are: a crash (and whether the crash fails closed, meaning it refuses the window, or fails open, meaning it lets the window run); a silently skipped process; or a misattributed PID. Demonstrate with an executed probe. Spawn a harmless process with a multi-line argv, e.g. `python3 -c $'import time\ntime.sleep(60)' &` under /tmp, run the parser function on real output, then kill the probe process.
+3. Propose the minimal fix, with exact diff text (do not apply it), plus test rows and a counterfactual for each row. Options include `pgrep -l` or `ps -o pid=,comm=` for the PID/name split, `-a` with NUL separators, or parsing only lines that start with a PID. Say whether the fix changes what the census detects: it must never let a process escape the census.
+4. Classify the fix: test-only (light gate) or production census code (full gate), and why.
+
+Report with executed evidence, marking anything not run as NOT EXECUTED.

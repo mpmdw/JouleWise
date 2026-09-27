@@ -1,0 +1,258 @@
+[B] ERROR: test_calibration_attachment_refuses_runtime_executable_digest_mismatch (tests.test_p2038_production_path.P2038ProductionPathTests.test_calibration_attachment_refuses_runtime_executable_digest_mismatch)
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_extreme_post_idle_sentinel_cannot_leak_into_measured_trace_or_energy (tests.test_p2038_production_path.P2038ProductionPathTests.test_extreme_post_idle_sentinel_cannot_leak_into_measured_trace_or_energy)
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible (tests.test_p2038_production_path.P2038ProductionPathTests.test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible)
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits (tests.test_p2038_production_path.P2038ProductionPathTests.test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits) (mode='inconsistent')
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits (tests.test_p2038_production_path.P2038ProductionPathTests.test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits) (mode='contaminated_post')
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits (tests.test_p2038_production_path.P2038ProductionPathTests.test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits) (mode='wide')
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_real_powermetrics_evidence_path_passes_p2029_p2040_gates (tests.test_p2038_production_path.P2038ProductionPathTests.test_real_powermetrics_evidence_path_passes_p2029_p2040_gates)
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_strict_rederivation_rejects_evidence_raw_and_marker_tampering (tests.test_p2038_production_path.P2038ProductionPathTests.test_strict_rederivation_rejects_evidence_raw_and_marker_tampering)
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[B] ERROR: test_bundle_producer_seals_sources_and_reports_fixture_comparison (tests.test_phase_share.PhaseBoundaryEnvelopeTests.test_bundle_producer_seals_sources_and_reports_fixture_comparison)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json cannot be read: [Errno 2] No such file or directory: '/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1e2m758y/bundle-1/config.json')
+
+[B] ERROR: test_changed_source_bytes_change_a_pinned_sha256_digest (tests.test_phase_share.PhaseBoundaryEnvelopeTests.test_changed_source_bytes_change_a_pinned_sha256_digest)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json cannot be read: [Errno 2] No such file or directory: '/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpqn28zj5j/bundle-1/config.json')
+
+[B] ERROR: test_retained_r01_current_wire_marginals_define_the_box (tests.test_phase_share.PhaseBoundaryEnvelopeTests.test_retained_r01_current_wire_marginals_define_the_box)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json cannot be read: [Errno 2] No such file or directory: '/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp5oz0u10t/bundle-1/config.json')
+
+[B] ERROR: test_d079_real_selector_to_real_reducer_embeds_allowance_once (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_d079_real_selector_to_real_reducer_embeds_allowance_once)
+ValueError: instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded
+
+[A] ERROR: test_reducer_0_6_2_uses_the_same_authenticated_override_path (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_reducer_0_6_2_uses_the_same_authenticated_override_path)
+KeyError: 'energy_anchor_shift_envelopes'
+
+[B] ERROR: test_authoritative_input_invalid_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_authoritative_input_invalid_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_closed_schema_rejects_unknown_keys (tests.test_window_duration_margins.WindowDurationMarginsTests.test_closed_schema_rejects_unknown_keys)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_duplicate_present_member_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_duplicate_present_member_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_duplicate_registered_member_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_duplicate_registered_member_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_hand_computed_numeric_oracle (tests.test_window_duration_margins.WindowDurationMarginsTests.test_hand_computed_numeric_oracle)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_member_config_mismatch_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_member_config_mismatch_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_missing_member_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_missing_member_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_negative_margin_is_still_pass (tests.test_window_duration_margins.WindowDurationMarginsTests.test_negative_margin_is_still_pass)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_non_unique_phase_boundaries_refuse_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_non_unique_phase_boundaries_refuse_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_nonfinite_arithmetic_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_nonfinite_arithmetic_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_pack_identity_invalid_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_pack_identity_invalid_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_pack_pin_invalid_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_pack_pin_invalid_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_recorder_cli_is_deterministic_across_independent_processes (tests.test_window_duration_margins.WindowDurationMarginsTests.test_recorder_cli_is_deterministic_across_independent_processes)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_recorder_cli_refuses_republication_in_same_namespace (tests.test_window_duration_margins.WindowDurationMarginsTests.test_recorder_cli_refuses_republication_in_same_namespace)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_registered_membership_invalid_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_registered_membership_invalid_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_second_record_call_refuses_and_preserves_first_receipt_bytes (tests.test_window_duration_margins.WindowDurationMarginsTests.test_second_record_call_refuses_and_preserves_first_receipt_bytes)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_summary_precheck_is_cross_check_not_copy_source (tests.test_window_duration_margins.WindowDurationMarginsTests.test_summary_precheck_is_cross_check_not_copy_source)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_synthetic_arithmetic_fixture_derives_three_cells (tests.test_window_duration_margins.WindowDurationMarginsTests.test_synthetic_arithmetic_fixture_derives_three_cells)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_tampered_events_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_tampered_events_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_tampered_power_trace_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_tampered_power_trace_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_two_derivations_are_byte_identical (tests.test_window_duration_margins.WindowDurationMarginsTests.test_two_derivations_are_byte_identical)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_unavailable_b_operative_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_unavailable_b_operative_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_unknown_b_operative_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_unknown_b_operative_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[B] ERROR: test_unrecordable_minimum_refuses_without_output (tests.test_window_duration_margins.WindowDurationMarginsTests.test_unrecordable_minimum_refuses_without_output)
+joulewise.bundle_read.BatteryStatusRefusal: battery_float_evidence_missing: prospective bundle (config.json digest does not match metadata.config_sha256)
+
+[A] FAIL: test_b4_salvage_floor_binder_accepts_correct_pair_after_real_row_validation (tests.test_analysis_integration.AnalysisIntegrationTests.test_b4_salvage_floor_binder_accepts_correct_pair_after_real_row_validation)
+AssertionError: True is not false
+
+[B] FAIL: test_allowlisted_legacy_identity_allows_missing_workload_provenance (tests.test_audit_amplification.StrictGateInteractionAmplification.test_allowlisted_legacy_identity_allows_missing_workload_provenance)
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_legacy_summary_tolerance_does_not_hide_raw_to_trace_order_drift (tests.test_audit_amplification.StrictGateInteractionAmplification.test_legacy_summary_tolerance_does_not_hide_raw_to_trace_order_drift)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_raw_to_trace_rejects_interval_support_drift (tests.test_audit_amplification.StrictGateInteractionAmplification.test_raw_to_trace_rejects_interval_support_drift)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_raw_to_trace_rejects_sub_epsilon_numeric_drift (tests.test_audit_amplification.StrictGateInteractionAmplification.test_raw_to_trace_rejects_sub_epsilon_numeric_drift)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[D] FAIL: test_campaign_prebundle_process_failure_retains_identity_receipt_and_row (tests.test_axi_controller_events.AxiControllerEventTests.test_campaign_prebundle_process_failure_retains_identity_receipt_and_row)
+AssertionError: 2 != 1
+
+[D] FAIL: test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure (tests.test_axi_controller_events.AxiControllerEventTests.test_campaign_zero_exit_without_finalized_bundle_is_dispatch_failure)
+AssertionError: 2 != 1
+
+[D] FAIL: test_v2_campaign_refuses_eligible_receipt_after_bundle_store_deletion (tests.test_axi_mock_spec.AxiMockSpecTests.test_v2_campaign_refuses_eligible_receipt_after_bundle_store_deletion)
+AssertionError: 2 != 0
+
+[D] FAIL: test_v2_campaign_writes_complete_immutable_ledger_and_pair_reports (tests.test_axi_mock_spec.AxiMockSpecTests.test_v2_campaign_writes_complete_immutable_ledger_and_pair_reports)
+AssertionError: 2 != 0
+
+[A] FAIL: test_reduce_default_replays_recorded_060_and_051_versions (tests.test_cli.CliTests.test_reduce_default_replays_recorded_060_and_051_versions) (expected_version='0.5.1')
+AssertionError: 3 != 0
+
+[B] FAIL: test_settled_marker_reduce_before_completion_carries_full_lineage (tests.test_cli_run.ReduceVerbTests.test_settled_marker_reduce_before_completion_carries_full_lineage)
+AssertionError: 3 != 0 : 
+
+[B] FAIL: test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics (tests.test_cli_run.StrictValidateTests.test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics) (identity=('example-mac-mlx-local__r1', 'ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5'))
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics (tests.test_cli_run.StrictValidateTests.test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics) (identity=('example-mac-mlx-local__r2', '08144a7be4a10d887babbd5fcd1a93f391c1db2d11c63d3131afad80b59cb373'))
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics (tests.test_cli_run.StrictValidateTests.test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics) (identity=('example-mac-mlx-local__r3', 'fe75fc3bafe0af7485fdf98b70ac3d07ccc1db502230bf1b180b94689ab54652'))
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics (tests.test_cli_run.StrictValidateTests.test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics) (identity=('example-mac-mlx-qwen35-122b-512t__r1', '74761e420520e0d6d979be7d3d08aa6ff7e0f5f8ac8e48109d3dedc08d8d0b7a'))
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics (tests.test_cli_run.StrictValidateTests.test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics) (identity=('example-mac-mlx-qwen35-122b-512t__r2', '8808632f0235b412d30563747283c397ad534edb711e4cec784712182cbe3b60'))
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics (tests.test_cli_run.StrictValidateTests.test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics) (identity=('example-mac-mlx-qwen35-122b-512t__r3', '8be8dd955219a8631c8e37a1b3467f368f37624d07acebd2d52924137dff69f4'))
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_allowlisted_legacy_fresh_idle_metadata_mismatch_fails_strict (tests.test_cli_run.StrictValidateTests.test_allowlisted_legacy_fresh_idle_metadata_mismatch_fails_strict)
++  '(idle_metadata_mismatch)']
+
+[B] FAIL: test_allowlisted_legacy_present_non_object_provenance_fails_strict (tests.test_cli_run.StrictValidateTests.test_allowlisted_legacy_present_non_object_provenance_fails_strict) (value='legacy')
+AssertionError: False is not true : ['summary provenance is not null or an object', 'strict: battery_float_evidence_missing: not_applicable not bound (config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_allowlisted_legacy_present_non_object_provenance_fails_strict (tests.test_cli_run.StrictValidateTests.test_allowlisted_legacy_present_non_object_provenance_fails_strict) (value=['legacy'])
+AssertionError: False is not true : ['summary provenance is not null or an object', 'strict: battery_float_evidence_missing: not_applicable not bound (config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_allowlisted_legacy_present_null_provenance_fails_strict (tests.test_cli_run.StrictValidateTests.test_allowlisted_legacy_present_null_provenance_fails_strict)
+AssertionError: False is not true : ['strict: battery_float_evidence_missing: not_applicable not bound (config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_allowlisted_legacy_recorded_value_mutations_fail_strict (tests.test_cli_run.StrictValidateTests.test_allowlisted_legacy_recorded_value_mutations_fail_strict) (field='energy_token_j')
+AssertionError: False is not true : ['strict: battery_float_evidence_missing: not_applicable not bound (config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_allowlisted_legacy_recorded_value_mutations_fail_strict (tests.test_cli_run.StrictValidateTests.test_allowlisted_legacy_recorded_value_mutations_fail_strict) (field='measurement_quality.token_count_source')
+AssertionError: False is not true : ['strict: battery_float_evidence_missing: not_applicable not bound (config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_allowlisted_legacy_recorded_value_mutations_fail_strict (tests.test_cli_run.StrictValidateTests.test_allowlisted_legacy_recorded_value_mutations_fail_strict) (field='gross_energy_j')
+AssertionError: False is not true : ['strict: battery_float_evidence_missing: not_applicable not bound (config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_config_powermetrics_missing_raw_plist_fails_strict (tests.test_cli_run.StrictValidateTests.test_config_powermetrics_missing_raw_plist_fails_strict)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_current_bundle_spoofed_as_legacy_with_absent_provenance_passes (tests.test_cli_run.StrictValidateTests.test_current_bundle_spoofed_as_legacy_with_absent_provenance_passes)
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_legacy_dispatch_tolerates_governed_additive_absence (tests.test_cli_run.StrictValidateTests.test_legacy_dispatch_tolerates_governed_additive_absence)
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_legacy_summary_missing_additive_null_keys_passes_strict (tests.test_cli_run.StrictValidateTests.test_legacy_summary_missing_additive_null_keys_passes_strict)
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_legacy_summary_missing_honesty_fields_keeps_strict_tolerance (tests.test_cli_run.StrictValidateTests.test_legacy_summary_missing_honesty_fields_keeps_strict_tolerance)
+-  '(config.json digest does not match metadata.config_sha256)']
+
+[B] FAIL: test_powermetrics_raw_to_trace_formatting_only_variant_passes_strict (tests.test_cli_run.StrictValidateTests.test_powermetrics_raw_to_trace_formatting_only_variant_passes_strict)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_powermetrics_raw_to_trace_matching_bundle_passes_strict (tests.test_cli_run.StrictValidateTests.test_powermetrics_raw_to_trace_matching_bundle_passes_strict)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_powermetrics_raw_to_trace_value_tamper_fails_with_row_and_rail (tests.test_cli_run.StrictValidateTests.test_powermetrics_raw_to_trace_value_tamper_fails_with_row_and_rail)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_raw_to_trace_ignores_tampered_metadata_adapter_name (tests.test_cli_run.StrictValidateTests.test_raw_to_trace_ignores_tampered_metadata_adapter_name)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_raw_to_trace_runs_without_metadata_adapters_block (tests.test_cli_run.StrictValidateTests.test_raw_to_trace_runs_without_metadata_adapters_block)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[B] FAIL: test_raw_to_trace_unregistered_production_backend_hard_fails_strict (tests.test_cli_run.StrictValidateTests.test_raw_to_trace_unregistered_production_backend_hard_fails_strict)
+AssertionError: False is not true : ["metadata.config_sha256 mismatch: metadata has 'c055d1ee4b759c6cbda83085214e1923bf506d344c81b7deea89537cf71ea384', config.json bytes hash to 'fca4a3bc68d3596cab9fcbb1851a49d9e22516de8ec6fabdadd3ea06a04df505'", 'strict: battery_float_evidence_missing: not_applicable not bound (config.json digest does not match metadata.config_sha256)']
+
+[A] FAIL: test_bracket_max_exceeding_minted_member_bound_refuses (tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_bracket_max_exceeding_minted_member_bound_refuses)
+AssertionError: 'calibration_bracket_exceeds_minted_bound' not found in {'environment_admission_missing'}
+
+[A] FAIL: test_current_neg8_summary_disagreement_maps_to_whole_window_conflict (tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_current_neg8_summary_disagreement_maps_to_whole_window_conflict)
+-  'whole_window_verdict_provenance_invalid')
+
+[A] FAIL: test_current_whole_window_rederives_cpu_and_adapter_labels (tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_current_whole_window_rederives_cpu_and_adapter_labels)
+'environment_admission_missing'
+
+[A] FAIL: test_floor_cpu_ledger_rejects_duplicates_reordering_mismatch_and_absence (tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_floor_cpu_ledger_rejects_duplicates_reordering_mismatch_and_absence)
++ ()
+
+[A] FAIL: test_inflated_metadata_effective_bound_is_provenance_invalid (tests.test_floor_extraction.CpuAndWholeWindowClaimBarrierTests.test_inflated_metadata_effective_bound_is_provenance_invalid)
+AssertionError: 'whole_window_verdict_provenance_invalid' not found in {'environment_admission_missing'}
+
+[B] FAIL: test_calibration_attachment_refuses_config_only_power_policy (tests.test_p2038_production_path.P2038ProductionPathTests.test_calibration_attachment_refuses_config_only_power_policy)
+AssertionError: "runtime-observed power policy" does not match "instrument calibration battery_float_evidence_missing: pre evidence missing: phase not recorded; post evidence missing: phase not recorded"
+
+[B] FAIL: test_powermetrics_raw_plist_is_omitted_but_source_hash_is_recorded (tests.test_package_bundle_pack.BundlePackTests.test_powermetrics_raw_plist_is_omitted_but_source_hash_is_recorded)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[D] FAIL: test_d173_is_only_evidence_entry_and_fixture_cannot_render (tests.test_paper_reported_energy.ReportedEnergyTests.test_d173_is_only_evidence_entry_and_fixture_cannot_render)
+AssertionError: stale supply-map receipt digest: reported_energy_parents
+
+[A] FAIL: test_strict_validation_tamper_refuses_without_enclosure (tests.test_partial_record_enclosure.PartialRecordEnclosureTests.test_strict_validation_tamper_refuses_without_enclosure)
++ bundle_strict_validation_failed
+
+[B] FAIL: test_run_bundle_metadata_records_dropped_powermetrics_tail_diagnostic (tests.test_powermetrics.PowermetricsAdapterTests.test_run_bundle_metadata_records_dropped_powermetrics_tail_diagnostic)
+AssertionError: <RunStatus.FAILED: 'failed'> != <RunStatus.SUCCEEDED: 'succeeded'>
+
+[A] FAIL: test_b1_r1_explicit_minted_fresh_valid_session_is_prepared_and_accepted (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_b1_r1_explicit_minted_fresh_valid_session_is_prepared_and_accepted)
++ ()
+
+[A] FAIL: test_b1_r4_implicit_minted_fresh_valid_session_matches_explicit (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_b1_r4_implicit_minted_fresh_valid_session_matches_explicit)
++ ()
+
+[A] FAIL: test_minted_semantics_loads_and_refuses_pending_ledger_snapshot (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_minted_semantics_loads_and_refuses_pending_ledger_snapshot)
+AssertionError: False is not true
+
+[A] FAIL: test_explicit_salvage_dispatch_selects_only_salvage (tests.test_whole_window_selection.SalvageSemanticsDispatchTests.test_explicit_salvage_dispatch_selects_only_salvage)
+KILLED 3 renderer AST mutations: wrapper deletion, widened annotation, unregistered renderer
+

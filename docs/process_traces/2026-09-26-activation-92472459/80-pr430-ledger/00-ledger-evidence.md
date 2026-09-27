@@ -1,0 +1,9 @@
+# PR #430 gate-ledger evidence (light tier, head `5bf920e4`)
+
+**Row 1: independent audit.** A fresh Opus reviewer (read-only), convened by activation e6f06c96, returned **MERGE, no blockers** at `5bf920e4` ([e6f06c96 record 00 item 2](../../2026-09-26-activation-e6f06c96/00-activation-record.md)). It checked the tier (five non-trace paths; the only test change is the gen_state pin 260 → 263), `gen_state --check` (exit 0), 44 `test_gen_state` tests OK, the four SHAs, all 7 links, and the lane changes against the body. Its two NITs (RUN_STATE's "close #427 once merged"; a README "and and") are fixed on `docs/2026-09-26-e6f06c96`, not on this head.
+
+**Row 9: full-suite replay on the integration tree.** `5bf920e4` already contains main `1417c0c4` (= `origin/main` at replay time), so the head is the integration tree. `scripts/shard_tests.py --workers 6` in `JouleWise-wt-pr430-e6f06c96`: **7,454 tests, 0 failures, 0 errors, 109 skipped: PASS** (rc 0). Tail: [row9-fullsuite-5bf920e4-tail.txt](row9-fullsuite-5bf920e4-tail.txt); full log `row9-fullsuite-5bf920e4.log.gz`. The predecessor's first replay died with its session (empty log); this is the rerun, 16:21–17:48 PDT under load from parallel seats.
+
+**Row 11: CI on `5bf920e4`.** Every job passes except `gate-ledger`, which fails only because rows 1, 9, 11 and 12 were NOT-RUN in the body; it re-runs on this body edit.
+
+**Row 12: magistrate terminal review** (activation 92472459). Non-trace diff vs main: README.md, RUN_STATE.md, TASK_QUEUE.md, docs/process/state_kernel.json, tests/test_gen_state.py (170+/38−). `python3 scripts/gen_state.py --check` exits 0 at the head. Content is bookkeeping for activations 8e43cfa7, 6bec2aa6 and f8d6cab1 plus lane rows; no code, registration, estimator or claim surface changes (impact lines i–vi all "none", confirmed by the diff paths). MERGE.

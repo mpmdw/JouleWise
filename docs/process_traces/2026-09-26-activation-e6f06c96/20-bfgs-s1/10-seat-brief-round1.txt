@@ -1,0 +1,40 @@
+LANE: BATTERY-FLOAT-GATE-01, PR S1 (bundles and their consumers), implementation round 1 of 2. Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 (branch feat/2026-09-26-bfgs-s1-bundles at main 1417c0c4, where S0 is merged: PairVerdict, authenticate_pair, authenticate_bundle, authenticate_capture, the status factories, CustodyFailure / CustodyUnreadable, and the arm fence).
+WRITE_SCOPE: ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/publication_privacy.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_bfgs_publication_privacy.py","tests/test_bfgs_window_consumers.py","tests/test_battery_float_sweep.py"]
+
+SPLIT. S1's ruled WRITE_SCOPE (Final texts v1.1 §E) is delivered in two rounds on this one branch. Round 1 (this brief) is the controller, the bundle reader, the historical set, window-member authentication, publication privacy and the F-1 attachment. Round 2 (a later brief) is the scored reducer (text 9), bracketing (text 10), and the eight consumers with the AST sweep (text 12's consumer and sweep clauses). Round 2's files are NOT yours: scored_reduce.py, calibration_bracketing.py, whole_window.py, floor_extraction.py, analysis_engine/inputs.py, aggregate.py, window_duration_margins.py, the three scripts other than the builder, and their tests.
+
+AUTHORITY: the ruled texts only, quoted by path and number. Implement them exactly; do not reinterpret them. Paths are under /Users/edr/code/JouleWise-wt-bk-e6f06c96/docs/process_traces/.
+- FT = 2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md §4 ("Final texts v1.1").
+- AD2 = 2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md §5 (amendments 20–28).
+- AD3 = 2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/10-coldgate-fable-ruling.md §3 (amendment 29; read-only context: S0 implemented it).
+- ERR = 2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md §3 (amendments 26 and 31 as re-issued; these REPLACE AD2's 26).
+- FP = 2026-09-26-activation-f8d6cab1/60-s0-gate/21-fable-final-pass.md, design note D-1.
+
+YOURS IN ROUND 1:
+1. FT text 7 (controller brackets, salvage post, not_reached, the MOCK not_applicable rule, the injectable battery_runner defaulting to the real bounded probe). Phases and identity come from FT text 1: bundle_pre and bundle_post, session_id = metadata.json run_id, raw_path = raw/battery_float.<pre|post>.ioreg relative to the bundle.
+2. FT text 8 (BundleReader.metadata()'s three admitted states; the four energy accessors gated; the historical set, its enumeration, its builder script, and the HISTORICAL_BUNDLE_SET_SHA256 pin; a prospective bundle refuses). reduce.py and bundle.py stay byte-identical.
+3. ERR amendment 26 (bundle_read.authenticate_window_members: its contract, and the BundleReadError → CustodyUnreadable re-raise). Build the function and its tests (T12's function rows, including the amendment-26 two-member `{` row) in tests/test_bfgs_window_consumers.py. Wiring it into the eight consumers is round 2.
+4. ERR amendment 31, S1 clause only (BundleReader.events() raises BundleReadError("events.jsonl missing") for a battery_float bundle; not_reached is decided only from a parsed events.jsonl; the T8 rows it names).
+5. FT text 11 (F-1 attachment in controller.py:439-450), with AD2 amendment 27 (capture identity: pass `expected` where the controller knows the attempt identity).
+6. FT text 13's T13 (publication privacy admits the battery_float record and the two raw paths; an unclassified extra key still refuses) in publication_privacy.py.
+7. FT text 18 (hermeticity: every controller test reaching _stage_reduce on a battery-less host injects a runner or uses a MOCK config).
+8. FT text 16, bundle half (an injected 2 s probe leaves b_fiducial_s and every stamp difference unchanged; each record's monotonic_before_ns / monotonic_after_ns is journaled per bundle).
+9. tests/test_battery_float_sweep.py: add S1's OBSERVE_CALLERS row(s) for the controller's observe(phase="bundle_pre"/"bundle_post") calls. S2 will rebase onto this.
+10. AD2 amendments 24 and 25 as they affect bundles: fill bundle_sha256 = complete_bundle_sha256; build unobserved_historical and not_applicable verdicts ONLY through the S0 factories, never by calling PairVerdict(...) (the S0 guard flags that call outside battery_float.py).
+Tests: T7, T8, T11, T13, plus T12's authenticate_window_members rows, from FT §F.
+
+HARD CONSTRAINTS:
+- joulewise/battery_float.py is NOT in your scope and must not change (its frozen closure is pinned by S0's tests). If you believe it needs a change, early-return with NEEDS_RULING.
+- Also byte-identical (S1's pin test in FT §E; add or extend that pin test in tests/test_bundle_read.py): joulewise/reduce.py, joulewise/bundle.py, the four ESTIMATOR_CODE_PATHS, scripts/paper_excursion_decomposition.py, scripts/paper_anchor_correction_quantified.py, scripts/render_results_fills.py, every configs/campaigns/d117_* tree, every file under configs/calibration/, pilot_protocol_v3.json. Do not create configs/battery_float/historical_captures.json.
+- FP D-1: pass the real bundle directory to authenticate_bundle, never a `latest` symlink or any symlinked path.
+- Custody is never a status. CustodyFailure / CustodyUnreadable from authenticate_bundle propagate through metadata() and authenticate_window_members unchanged. No reader converts a read or decode failure into an empty value; amendment 31's events() rule is the named instance.
+- The historical set: generate it with the builder script from the committed artifacts at your base (1417c0c4) exactly as FT text 8 enumerates them. Report the number of entries, and each `source` class with its count. If a committed artifact names a digest whose bundle you cannot resolve, list it rather than dropping it.
+- Every test that the ruling marks "RED today", or whose behaviour your change creates, must be shown RED before and GREEN after: at minimum one T8 prospective-bundle row, the amendment-26 `{` row, the amendment-31 missing-events row, and the T11 charging-capture refusal.
+
+VERIFY (paste the exact last 5 lines of each):
+- V1: python3 -m unittest tests.test_controller tests.test_bundle_read tests.test_reduce tests.test_revision_five_b_readers tests.test_bfgs_publication_privacy tests.test_bfgs_window_consumers tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_evidence_night tests.test_night_kinds
+- V3: every other test module that imports joulewise.bundle_read or joulewise.controller (list them with grep, then run them). Report any failure verbatim with your diagnosis. Do not edit a module outside WRITE_SCOPE to fix it; name it for round 2 or for the lead.
+
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. If a ruled text is ambiguous or conflicts with the code, finish the independent authorized work, then early-return with NEEDS_RULING (question, options, recommendation, blocked work). If you need a path outside WRITE_SCOPE, early-return with NEEDS_SCOPE naming the path and why. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope, and include a per-text table (text or amendment number → files and functions changed → tests → RED/GREEN evidence).

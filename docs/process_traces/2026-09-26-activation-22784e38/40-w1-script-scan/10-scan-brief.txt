@@ -1,0 +1,30 @@
+ROLE: read-only scout. JouleWise W1 arm scripts, dry static check.
+
+WRITE_SCOPE: []
+Edit no file, and do NOT run any step script. Do NOT run install_night_agent.sh, launchctl, gh, git push, or any command that writes outside /tmp/w1scan22784e38/. Scratch goes only there.
+
+CONTEXT:
+- Arm scripts (filled for tonight): /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-26-activation-22784e38/10-w1-arm/scripts/ (arm-env.zsh, step0..step5, README-sequence.md).
+- They were written 09-25 at c79816c9 and never executed past step 2 before tonight.
+- Code under test: the measurement clone /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w1 (= main 97082508). Read it; do not modify it.
+- Current staged state: /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w1-20260927/ (night_plan.json, battery-gate.txt, rendered-agents/ with THREE plists: night, night.deadman, night-probe.<PLAN_ID>). /Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/ holds calibration_plan.json, identity-epoch.json, t1-bindings.json and chain.zsh.
+- Step outputs so far: ../step0.out, ../step1.out, ../step2.out (step 2 failed at its render-only assertion, which expects only two plists).
+
+Defects already found tonight (do not re-report; confirm or refute only if relevant):
+- (a) LEDGER_SOURCE was stale (fixed).
+- (c) the step-2 epoch-watch expectation (fixed).
+- (d) the step-2 and step-3 render label sets must include com.joulewise.night-probe.<PLAN_ID> (pending).
+
+TASK: for each of step2 (after its render assertion), step3, step4 and step5, walk every assertion, grep and command against the ACTUAL code at 97082508 and the ACTUAL staged files. List every line that WILL fail, or is likely to fail, when run tonight, because the script's expectation is stale relative to main or to the staged state. Examples: renamed CLI flags, changed JSON keys, changed outputs, label sets, receipt fields, and required files that a step expects to exist or not exist.
+
+For each finding give:
+- file:line;
+- the exact current text;
+- why it fails, with code file:line evidence;
+- the exact minimal replacement text, which must stay equally strict.
+
+Also flag anything that would weaken a science gate: battery, census, digest pins, ledger authentication, epoch watch, probe receipt.
+
+Separately, note any step that emails, or that names the address claude.ai.copper531@passmail.net. That address is retired; the only owner address is claude2.glaring610@passmail.net.
+
+Be fast: the budget is 15 minutes. Mark anything not verified as NOT EXECUTED.

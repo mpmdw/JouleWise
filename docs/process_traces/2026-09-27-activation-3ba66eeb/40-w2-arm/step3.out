@@ -1,0 +1,273 @@
+CHECK: attempt 000001 created exclusively; staged bytes copied
+CHECK: byte equality /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/night_plan.json /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/arm-attempts/000001/plan.json
+{"diagnostics": [], "discovery_argv": ["/usr/bin/pgrep", "-f", "[c]odex|[c]laude|[t]3"], "foreign_pids": [38443, 38458, 38918, 38959, 38964, 39044, 39508, 56804, 81076, 81095, 81096], "own_pids": [59895, 59907, 59914, 81059, 81063], "plan_sha256": "0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce", "receipt_class": "DIAGNOSTIC_NO_PACK", "sessions": [{"descendant_pids": [38443, 38458, 38918, 38959, 38963, 38964, 39039, 39040, 39044, 39065, 39508, 56804, 57247, 57250, 59868, 59895, 59907, 59914, 59915, 81076, 81095, 81096], "exempt": false, "root_pid": 81063, "workloads": [[38918, "codex_exec"], [38964, "codex_exec"]]}], "workloads": [[38918, "codex_exec"], [38964, "codex_exec"]]}
+diagnostic only; existing all-agents-closed rule still applies
+{"diagnostics": [], "discovery_argv": ["/usr/bin/pgrep", "-f", "[c]odex|[c]laude|[t]3"], "foreign_pids": [38443, 38458, 38918, 38959, 38964, 39044, 39508, 56804, 81076, 81095, 81096], "own_pids": [59895, 59907, 59929, 81059, 81063], "plan_sha256": "0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce", "receipt_class": "DIAGNOSTIC_NO_PACK", "sessions": [{"descendant_pids": [38443, 38458, 38918, 38959, 38963, 38964, 39039, 39040, 39044, 39065, 39508, 56804, 57247, 57250, 59895, 59907, 59926, 59928, 59929, 59930, 81076, 81095, 81096], "exempt": false, "root_pid": 81063, "workloads": [[38918, "codex_exec"], [38964, "codex_exec"]]}], "workloads": [[38918, "codex_exec"], [38964, "codex_exec"]]}
+diagnostic only; existing all-agents-closed rule still applies
+38443 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1790503510551-u93hj8.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'cd /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 && git status --porcelain | head -3; B=/Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/60-s1-fix3/10-fix-brief.txt; ~/.local/bin/codex-run-v3 /tmp/harvest-3ba66eeb/s1-fix3-report.md -C /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 -s workspace-write -m gpt-6-sol --effort xhigh --genre implementation --role s1-fix3-resume --write-scope "$(sed -n '"'"'s/^WRITE_SCOPE: //p'"'"' $B)" --timeout 14400 "$(cat $B)
+
+Trust anchor: this brief is committed at 77d71d93 on branch docs/2026-09-26-22784e38." > /tmp/harvest-3ba66eeb/s1-fix3.stdout 2>&1; echo "rc=$?" >> /tmp/harvest-3ba66eeb/s1-fix3.stdout; tail -3 /tmp/harvest-3ba66eeb/s1-fix3.stdout' < /dev/null && pwd -P >| /tmp/claude-e20c-cwd
+38458 bash /Users/edr/.local/bin/codex-run-v3 /tmp/harvest-3ba66eeb/s1-fix3-report.md -C /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 -s workspace-write -m gpt-6-sol --effort xhigh --genre implementation --role s1-fix3-resume --write-scope ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"] --timeout 14400 LANE: BATTERY-FLOAT-GATE-01, PR S1, FIX ROUND 3 RESUMED (amendment 51 as amended by 57–65). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 (branch feat/2026-09-26-bfgs-s1-bundles @ 315364b2; the partial round-3 commit cbfa9dc3 already implements amendments 49, 50, 52–56).
+
+WRITE_SCOPE: ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"]
+(= fix round 3's WRITE_SCOPE plus joulewise/envelope_gate.py, which is ONLY for amendment 63 (a)'s three changes, as ruled. Put the R60-* rows in tests/test_bfgs_consumer_sweep.py. tests/test_battery_float_consumers.py only under amendment 36's round-2 rule. No other path.)
+
+AUTHORITY: the latest text holds where texts differ.
+- The cold-gate ruling SWEEPCLASS-SAMESIG-01: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/30-sweepclass-samesig/21-coldgate-fable-ruling.md. §5 holds amendments 61–65 (exact text); §8.2 is YOUR ORDERED STEP LIST 1–12, which you implement in that order; §6/§7 hold dispositions and reasons; §2 holds executed probes (/tmp/cg_samesig/).
+- It amends: amendments 57–60 as they stand in §6 of /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-26-activation-22784e38/20-coldgate-sweep-erratum/21-coldgate-fable-erratum-ruling.md, and amendment 51 as it stands in §10 of /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/20-bfgs-s1/80-coldgate-r2/30-erratum/21-coldgate-fable-erratum-ruling.md.
+- Read §0–§4 of the SAMESIG ruling first: the sweep's promise is NARROWED (amendment 61 (a)). The deliberate-evasion class of 61 (b) is a limitation, never a finding; do not add rules for it.
+
+DELIVERABLES: every row named in §8.2's table shown RED under its stated counterfactual and GREEN after; step 3's count (the prototype predicts 126 sites / 120 rows at 315364b2, 118 rows after step 1, 0 added by scope coverage, 0 ref: rows; a different count is reported with the differing rows listed); the allowlist table with class and reason per row (step 9); the raw-capture inventory with a kind per member (step 6, 48 members predicted); V1 and V2 green; the builder's forward check "byte-identical entries=69" twice.
+
+RETURNS (step 11; do NOT fix these, return them): a row or raw-capture member that fits no class; a member of kind energy with no gate; any text that conflicts with the code. In particular: the paired refuter of the ruling reports (from reading, not executed) that `scripts/run_campaign.py` `_first_eligible_cooldown_anchor` freezes `summary["idle_baseline"]` from `evaluate_member`'s pre-gate record into campaign provenance, and a later campaign reuses it through `prior_campaign_cooldown_anchor` to decide admission reasons such as `cooldown_cap_hit` without authenticating the source bundle. When your step 8/9 classification reaches that path, state with executed evidence whether it is true and return it (with scope, what it returns, callers); do NOT change it. Two refuter test-row additions (a reference clause for the consumers form; a lambda-inside-gated-scope row R51-23b) are with a cold gate; do NOT add them.
+
+HARD CONSTRAINTS: joulewise/battery_float.py and FT §E's excluded list byte-identical to 1417c0c4; custody is never a status; authentication precedes every exclusion decision; the eight consumers do not import battery_float; verdicts only through S0 factories; FP D-1 real directories; envelope_gate.py gains no battery_float import and changes nothing but 63 (a). Early return: finish the independent work, then NEEDS_RULING.
+
+VERIFY (paste the exact last 5 lines of each):
+- V1: python3 -m unittest tests.test_controller tests.test_bundle_read tests.test_reduce tests.test_revision_five_b_readers tests.test_scored_reduce tests.test_bfgs_calibration_bracketing tests.test_bfgs_window_consumers tests.test_bfgs_consumer_sweep tests.test_bfgs_publication_privacy tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_evidence_night tests.test_night_kinds tests.test_envelope_gate
+- The builder forward check twice (byte-identical).
+TIME: the machine must be agent-free before 08:40 PDT today; if you are not done by 08:00 PDT, stop at a clean step boundary and report exactly which steps are complete.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with a per-step table (step -> amendment -> files/functions -> rows -> RED evidence with counterfactual -> GREEN evidence), the allowlist table and the returns list.
+
+Trust anchor: this brief is committed at 77d71d93 on branch docs/2026-09-26-22784e38.
+38918 node /opt/homebrew/bin/codex exec -m gpt-6-sol -c model_reasoning_effort=xhigh -c service_tier=fast -C /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 -s workspace-write -o /tmp/harvest-3ba66eeb/s1-fix3-report.md LANE: BATTERY-FLOAT-GATE-01, PR S1, FIX ROUND 3 RESUMED (amendment 51 as amended by 57–65). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 (branch feat/2026-09-26-bfgs-s1-bundles @ 315364b2; the partial round-3 commit cbfa9dc3 already implements amendments 49, 50, 52–56).
+
+WRITE_SCOPE: ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"]
+(= fix round 3's WRITE_SCOPE plus joulewise/envelope_gate.py, which is ONLY for amendment 63 (a)'s three changes, as ruled. Put the R60-* rows in tests/test_bfgs_consumer_sweep.py. tests/test_battery_float_consumers.py only under amendment 36's round-2 rule. No other path.)
+
+AUTHORITY: the latest text holds where texts differ.
+- The cold-gate ruling SWEEPCLASS-SAMESIG-01: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/30-sweepclass-samesig/21-coldgate-fable-ruling.md. §5 holds amendments 61–65 (exact text); §8.2 is YOUR ORDERED STEP LIST 1–12, which you implement in that order; §6/§7 hold dispositions and reasons; §2 holds executed probes (/tmp/cg_samesig/).
+- It amends: amendments 57–60 as they stand in §6 of /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-26-activation-22784e38/20-coldgate-sweep-erratum/21-coldgate-fable-erratum-ruling.md, and amendment 51 as it stands in §10 of /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/20-bfgs-s1/80-coldgate-r2/30-erratum/21-coldgate-fable-erratum-ruling.md.
+- Read §0–§4 of the SAMESIG ruling first: the sweep's promise is NARROWED (amendment 61 (a)). The deliberate-evasion class of 61 (b) is a limitation, never a finding; do not add rules for it.
+
+DELIVERABLES: every row named in §8.2's table shown RED under its stated counterfactual and GREEN after; step 3's count (the prototype predicts 126 sites / 120 rows at 315364b2, 118 rows after step 1, 0 added by scope coverage, 0 ref: rows; a different count is reported with the differing rows listed); the allowlist table with class and reason per row (step 9); the raw-capture inventory with a kind per member (step 6, 48 members predicted); V1 and V2 green; the builder's forward check "byte-identical entries=69" twice.
+
+RETURNS (step 11; do NOT fix these, return them): a row or raw-capture member that fits no class; a member of kind energy with no gate; any text that conflicts with the code. In particular: the paired refuter of the ruling reports (from reading, not executed) that `scripts/run_campaign.py` `_first_eligible_cooldown_anchor` freezes `summary["idle_baseline"]` from `evaluate_member`'s pre-gate record into campaign provenance, and a later campaign reuses it through `prior_campaign_cooldown_anchor` to decide admission reasons such as `cooldown_cap_hit` without authenticating the source bundle. When your step 8/9 classification reaches that path, state with executed evidence whether it is true and return it (with scope, what it returns, callers); do NOT change it. Two refuter test-row additions (a reference clause for the consumers form; a lambda-inside-gated-scope row R51-23b) are with a cold gate; do NOT add them.
+
+HARD CONSTRAINTS: joulewise/battery_float.py and FT §E's excluded list byte-identical to 1417c0c4; custody is never a status; authentication precedes every exclusion decision; the eight consumers do not import battery_float; verdicts only through S0 factories; FP D-1 real directories; envelope_gate.py gains no battery_float import and changes nothing but 63 (a). Early return: finish the independent work, then NEEDS_RULING.
+
+VERIFY (paste the exact last 5 lines of each):
+- V1: python3 -m unittest tests.test_controller tests.test_bundle_read tests.test_reduce tests.test_revision_five_b_readers tests.test_scored_reduce tests.test_bfgs_calibration_bracketing tests.test_bfgs_window_consumers tests.test_bfgs_consumer_sweep tests.test_bfgs_publication_privacy tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_evidence_night tests.test_night_kinds tests.test_envelope_gate
+- The builder forward check twice (byte-identical).
+TIME: the machine must be agent-free before 08:40 PDT today; if you are not done by 08:00 PDT, stop at a clean step boundary and report exactly which steps are complete.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with a per-step table (step -> amendment -> files/functions -> rows -> RED evidence with counterfactual -> GREEN evidence), the allowlist table and the returns list.
+
+Trust anchor: this brief is committed at 77d71d93 on branch docs/2026-09-26-22784e38.
+RUNNER-OWNED REPORT CONTRACT — mandatory for this out-file
+ADAPTER: claude-codex-report/v1
+GENRE: implementation
+
+Start the response with exactly one fenced JSON object and no introductory prose. The object must be UTF-8 and at most 8192 bytes. Follow it only with applicable prose sections below.
+
+ENVELOPE SCHEMA:
+```json
+{
+  "schema": "claude-codex-report/v1",
+  "genre": "implementation",
+  "status": "clean|findings|blocked",
+  "completion": "complete|partial|none",
+  "summary": "nonempty one-line summary",
+  "workspace": {"base_requested":"string|null","base_mode":"exact|descendant|informational|null","head_start":"string|null","head_end":"string|null","upstream_end":"string|null","branch":"string|null"},
+  "pathspec": ["only repository-relative paths modified by this session"],
+  "unowned_dirty": ["pre-existing or concurrent paths"],
+  "verdict": {},
+  "verification": [{"id":"V1","kind":"suite|test|lint|build|smoke|inspection|other","cmd":"exact replay command","cwd":".","observed":{"result":"pass|fail|not_run","exit_code":0,"tail":["stable exact tail"]},"expected":{"exit_code":0,"tail_regex":"stable regex"}}],
+  "flags": [{"id":"F1","kind":"lead_ruling|verification_gap|baseline_drift|scope_deviation|environment|residual_risk","level":"blocking|nonblocking","text":"what happened","needs":"lead action or empty string"}]
+}
+```
+
+VERDICT VOCABULARY: verdict is {"implementation":"implemented|partial|no_change","acceptance":"ready|pending_verification|needs_ruling"}.
+
+WRITE-SCOPE RULING: if work would require expanding an allowlist, first finish independent already-authorized work, do not modify out-of-scope paths, return partial completion when appropriate, and add a blocking scope_deviation flag.
+
+OPTIONAL SCOPE-EXPANSION ENVELOPE FIELD:
+
+```json
+{"scope_expansion":{"requested_paths":["exact/path","directory/**"],"reason":"why needed","blocked_work":"what cannot finish","minimal_change":"smallest proposed change"}}
+```
+
+WRITE_SCOPE IS EXHAUSTIVE. Repository instructions and completion needs cannot expand it.
+For an unlisted necessary path: do not write it; return partial with a blocking,
+machine-readable scope_expansion request. Only a lead-issued resumed prompt can expand scope.
+
+PROSE TEMPLATE:
+## Change
+What changed and why, without repeating pathspec.
+
+## Verification notes
+Only failures, deviations, or interpretation; do not repeat clean tails.
+
+## Residual risk
+Omit when empty.
+
+RUNNER AUTHORITATIVE WRITE_SCOPE (JSON; exhaustive): ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"]
+38959 bash /Users/edr/.local/bin/codex-run-v3 /tmp/harvest-3ba66eeb/s1-fix3-report.md -C /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 -s workspace-write -m gpt-6-sol --effort xhigh --genre implementation --role s1-fix3-resume --write-scope ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"] --timeout 14400 LANE: BATTERY-FLOAT-GATE-01, PR S1, FIX ROUND 3 RESUMED (amendment 51 as amended by 57–65). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 (branch feat/2026-09-26-bfgs-s1-bundles @ 315364b2; the partial round-3 commit cbfa9dc3 already implements amendments 49, 50, 52–56).
+
+WRITE_SCOPE: ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"]
+(= fix round 3's WRITE_SCOPE plus joulewise/envelope_gate.py, which is ONLY for amendment 63 (a)'s three changes, as ruled. Put the R60-* rows in tests/test_bfgs_consumer_sweep.py. tests/test_battery_float_consumers.py only under amendment 36's round-2 rule. No other path.)
+
+AUTHORITY: the latest text holds where texts differ.
+- The cold-gate ruling SWEEPCLASS-SAMESIG-01: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/30-sweepclass-samesig/21-coldgate-fable-ruling.md. §5 holds amendments 61–65 (exact text); §8.2 is YOUR ORDERED STEP LIST 1–12, which you implement in that order; §6/§7 hold dispositions and reasons; §2 holds executed probes (/tmp/cg_samesig/).
+- It amends: amendments 57–60 as they stand in §6 of /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-26-activation-22784e38/20-coldgate-sweep-erratum/21-coldgate-fable-erratum-ruling.md, and amendment 51 as it stands in §10 of /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/20-bfgs-s1/80-coldgate-r2/30-erratum/21-coldgate-fable-erratum-ruling.md.
+- Read §0–§4 of the SAMESIG ruling first: the sweep's promise is NARROWED (amendment 61 (a)). The deliberate-evasion class of 61 (b) is a limitation, never a finding; do not add rules for it.
+
+DELIVERABLES: every row named in §8.2's table shown RED under its stated counterfactual and GREEN after; step 3's count (the prototype predicts 126 sites / 120 rows at 315364b2, 118 rows after step 1, 0 added by scope coverage, 0 ref: rows; a different count is reported with the differing rows listed); the allowlist table with class and reason per row (step 9); the raw-capture inventory with a kind per member (step 6, 48 members predicted); V1 and V2 green; the builder's forward check "byte-identical entries=69" twice.
+
+RETURNS (step 11; do NOT fix these, return them): a row or raw-capture member that fits no class; a member of kind energy with no gate; any text that conflicts with the code. In particular: the paired refuter of the ruling reports (from reading, not executed) that `scripts/run_campaign.py` `_first_eligible_cooldown_anchor` freezes `summary["idle_baseline"]` from `evaluate_member`'s pre-gate record into campaign provenance, and a later campaign reuses it through `prior_campaign_cooldown_anchor` to decide admission reasons such as `cooldown_cap_hit` without authenticating the source bundle. When your step 8/9 classification reaches that path, state with executed evidence whether it is true and return it (with scope, what it returns, callers); do NOT change it. Two refuter test-row additions (a reference clause for the consumers form; a lambda-inside-gated-scope row R51-23b) are with a cold gate; do NOT add them.
+
+HARD CONSTRAINTS: joulewise/battery_float.py and FT §E's excluded list byte-identical to 1417c0c4; custody is never a status; authentication precedes every exclusion decision; the eight consumers do not import battery_float; verdicts only through S0 factories; FP D-1 real directories; envelope_gate.py gains no battery_float import and changes nothing but 63 (a). Early return: finish the independent work, then NEEDS_RULING.
+
+VERIFY (paste the exact last 5 lines of each):
+- V1: python3 -m unittest tests.test_controller tests.test_bundle_read tests.test_reduce tests.test_revision_five_b_readers tests.test_scored_reduce tests.test_bfgs_calibration_bracketing tests.test_bfgs_window_consumers tests.test_bfgs_consumer_sweep tests.test_bfgs_publication_privacy tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_evidence_night tests.test_night_kinds tests.test_envelope_gate
+- The builder forward check twice (byte-identical).
+TIME: the machine must be agent-free before 08:40 PDT today; if you are not done by 08:00 PDT, stop at a clean step boundary and report exactly which steps are complete.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with a per-step table (step -> amendment -> files/functions -> rows -> RED evidence with counterfactual -> GREEN evidence), the allowlist table and the returns list.
+
+Trust anchor: this brief is committed at 77d71d93 on branch docs/2026-09-26-22784e38.
+38964 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex exec -m gpt-6-sol -c model_reasoning_effort=xhigh -c service_tier=fast -C /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 -s workspace-write -o /tmp/harvest-3ba66eeb/s1-fix3-report.md LANE: BATTERY-FLOAT-GATE-01, PR S1, FIX ROUND 3 RESUMED (amendment 51 as amended by 57–65). Seat: Sol 6.0 (gpt-6-sol), effort xhigh, implementation genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96 (branch feat/2026-09-26-bfgs-s1-bundles @ 315364b2; the partial round-3 commit cbfa9dc3 already implements amendments 49, 50, 52–56).
+
+WRITE_SCOPE: ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"]
+(= fix round 3's WRITE_SCOPE plus joulewise/envelope_gate.py, which is ONLY for amendment 63 (a)'s three changes, as ruled. Put the R60-* rows in tests/test_bfgs_consumer_sweep.py. tests/test_battery_float_consumers.py only under amendment 36's round-2 rule. No other path.)
+
+AUTHORITY: the latest text holds where texts differ.
+- The cold-gate ruling SWEEPCLASS-SAMESIG-01: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/30-sweepclass-samesig/21-coldgate-fable-ruling.md. §5 holds amendments 61–65 (exact text); §8.2 is YOUR ORDERED STEP LIST 1–12, which you implement in that order; §6/§7 hold dispositions and reasons; §2 holds executed probes (/tmp/cg_samesig/).
+- It amends: amendments 57–60 as they stand in §6 of /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-26-activation-22784e38/20-coldgate-sweep-erratum/21-coldgate-fable-erratum-ruling.md, and amendment 51 as it stands in §10 of /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/20-bfgs-s1/80-coldgate-r2/30-erratum/21-coldgate-fable-erratum-ruling.md.
+- Read §0–§4 of the SAMESIG ruling first: the sweep's promise is NARROWED (amendment 61 (a)). The deliberate-evasion class of 61 (b) is a limitation, never a finding; do not add rules for it.
+
+DELIVERABLES: every row named in §8.2's table shown RED under its stated counterfactual and GREEN after; step 3's count (the prototype predicts 126 sites / 120 rows at 315364b2, 118 rows after step 1, 0 added by scope coverage, 0 ref: rows; a different count is reported with the differing rows listed); the allowlist table with class and reason per row (step 9); the raw-capture inventory with a kind per member (step 6, 48 members predicted); V1 and V2 green; the builder's forward check "byte-identical entries=69" twice.
+
+RETURNS (step 11; do NOT fix these, return them): a row or raw-capture member that fits no class; a member of kind energy with no gate; any text that conflicts with the code. In particular: the paired refuter of the ruling reports (from reading, not executed) that `scripts/run_campaign.py` `_first_eligible_cooldown_anchor` freezes `summary["idle_baseline"]` from `evaluate_member`'s pre-gate record into campaign provenance, and a later campaign reuses it through `prior_campaign_cooldown_anchor` to decide admission reasons such as `cooldown_cap_hit` without authenticating the source bundle. When your step 8/9 classification reaches that path, state with executed evidence whether it is true and return it (with scope, what it returns, callers); do NOT change it. Two refuter test-row additions (a reference clause for the consumers form; a lambda-inside-gated-scope row R51-23b) are with a cold gate; do NOT add them.
+
+HARD CONSTRAINTS: joulewise/battery_float.py and FT §E's excluded list byte-identical to 1417c0c4; custody is never a status; authentication precedes every exclusion decision; the eight consumers do not import battery_float; verdicts only through S0 factories; FP D-1 real directories; envelope_gate.py gains no battery_float import and changes nothing but 63 (a). Early return: finish the independent work, then NEEDS_RULING.
+
+VERIFY (paste the exact last 5 lines of each):
+- V1: python3 -m unittest tests.test_controller tests.test_bundle_read tests.test_reduce tests.test_revision_five_b_readers tests.test_scored_reduce tests.test_bfgs_calibration_bracketing tests.test_bfgs_window_consumers tests.test_bfgs_consumer_sweep tests.test_bfgs_publication_privacy tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_evidence_night tests.test_night_kinds tests.test_envelope_gate
+- The builder forward check twice (byte-identical).
+TIME: the machine must be agent-free before 08:40 PDT today; if you are not done by 08:00 PDT, stop at a clean step boundary and report exactly which steps are complete.
+DO NOT commit, push, run the full suite, or leave WRITE_SCOPE. Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with a per-step table (step -> amendment -> files/functions -> rows -> RED evidence with counterfactual -> GREEN evidence), the allowlist table and the returns list.
+
+Trust anchor: this brief is committed at 77d71d93 on branch docs/2026-09-26-22784e38.
+RUNNER-OWNED REPORT CONTRACT — mandatory for this out-file
+ADAPTER: claude-codex-report/v1
+GENRE: implementation
+
+Start the response with exactly one fenced JSON object and no introductory prose. The object must be UTF-8 and at most 8192 bytes. Follow it only with applicable prose sections below.
+
+ENVELOPE SCHEMA:
+```json
+{
+  "schema": "claude-codex-report/v1",
+  "genre": "implementation",
+  "status": "clean|findings|blocked",
+  "completion": "complete|partial|none",
+  "summary": "nonempty one-line summary",
+  "workspace": {"base_requested":"string|null","base_mode":"exact|descendant|informational|null","head_start":"string|null","head_end":"string|null","upstream_end":"string|null","branch":"string|null"},
+  "pathspec": ["only repository-relative paths modified by this session"],
+  "unowned_dirty": ["pre-existing or concurrent paths"],
+  "verdict": {},
+  "verification": [{"id":"V1","kind":"suite|test|lint|build|smoke|inspection|other","cmd":"exact replay command","cwd":".","observed":{"result":"pass|fail|not_run","exit_code":0,"tail":["stable exact tail"]},"expected":{"exit_code":0,"tail_regex":"stable regex"}}],
+  "flags": [{"id":"F1","kind":"lead_ruling|verification_gap|baseline_drift|scope_deviation|environment|residual_risk","level":"blocking|nonblocking","text":"what happened","needs":"lead action or empty string"}]
+}
+```
+
+VERDICT VOCABULARY: verdict is {"implementation":"implemented|partial|no_change","acceptance":"ready|pending_verification|needs_ruling"}.
+
+WRITE-SCOPE RULING: if work would require expanding an allowlist, first finish independent already-authorized work, do not modify out-of-scope paths, return partial completion when appropriate, and add a blocking scope_deviation flag.
+
+OPTIONAL SCOPE-EXPANSION ENVELOPE FIELD:
+
+```json
+{"scope_expansion":{"requested_paths":["exact/path","directory/**"],"reason":"why needed","blocked_work":"what cannot finish","minimal_change":"smallest proposed change"}}
+```
+
+WRITE_SCOPE IS EXHAUSTIVE. Repository instructions and completion needs cannot expand it.
+For an unlisted necessary path: do not write it; return partial with a blocking,
+machine-readable scope_expansion request. Only a lead-issued resumed prompt can expand scope.
+
+PROSE TEMPLATE:
+## Change
+What changed and why, without repeating pathspec.
+
+## Verification notes
+Only failures, deviations, or interpretation; do not repeat clean tails.
+
+## Residual risk
+Omit when empty.
+
+RUNNER AUTHORITATIVE WRITE_SCOPE (JSON; exhaustive): ["joulewise/controller.py","joulewise/bundle_read.py","joulewise/calibration_bracketing.py","joulewise/scored_reduce.py","joulewise/whole_window.py","joulewise/floor_extraction.py","joulewise/analysis_engine/inputs.py","joulewise/aggregate.py","joulewise/window_duration_margins.py","joulewise/publication_privacy.py","scripts/mint_floor_artifact.py","scripts/extract_detection_floors.py","scripts/run_campaign.py","scripts/build_battery_float_historical_bundles.py","configs/battery_float/historical_bundles.json","tests/test_controller.py","tests/test_bundle_read.py","tests/test_reduce.py","tests/test_revision_five_b_readers.py","tests/test_scored_reduce.py","tests/test_bfgs_calibration_bracketing.py","tests/test_bfgs_window_consumers.py","tests/test_bfgs_consumer_sweep.py","tests/test_bfgs_publication_privacy.py","tests/test_battery_float_sweep.py","tests/test_battery_float_consumers.py","joulewise/envelope_gate.py"]
+39044 node scripts/claude-bridge-mcp.mjs
+39508 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex-code-mode-host
+56804 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1790503510551-u93hj8.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'for i in $(seq 1 60); do for f in standdown.request STOP; do [ -e /Users/edr/night-custody/magistrate/$f ] && { echo "PRESENT: $f"; exit 0; }; done; sleep 10; done' < /dev/null && pwd -P >| /tmp/claude-ddd6-cwd
+81076 npm exec @openai/codex@0.153.3 mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false HOME=/Users/edr LOGNAME=edr PATH=/Users/edr/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin SHELL=/bin/zsh USER=edr OSLogRateLimit=64 MAGISTRATE_SESSION_BIN=/Users/edr/.local/bin/claude MAGISTRATE_WATCHDOG_CUSTODY_ROOT=/Users/edr/night-custody/magistrate XPC_SERVICE_NAME=0 SSH_AUTH_SOCK=/var/run/com.apple.launchd.0wjjIwnQda/Listeners
+81095 node /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/.bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+81096 /Users/edr/.npm/_npx/d3e0db43a6e4314a/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+CHECK: raw pgrep rc=0 (1 means empty; 0 requires ancestry review)
+WROTE notice.json TEMPLATE; record actual Gmail acceptance and fresh checks before step 4
+To: claude.ai.copper531@passmail.net
+Subject: NIGHT NOTICE — d079-epoch-25g83-derivation-w2-20260927 (DIAGNOSTIC_NO_PACK) — attempt 1
+
+Ed,
+
+Launch needs no action from you unless you reply NO. Your NO overrides.
+Arm attempt 1; earlier abort for this new candidate: none.
+The calibration campaign for macOS 25G83 is now two 12-slot windows at least 6 hours apart, at least 12 retained captures, a third window only on count. July's calibration is not continued: its ceiling was set with shorter sampling frames than the machine now delivers, so the equivalence check you proposed in issue 316 would not be able to tell the two apart. Reply NO to the arm notice to stop.
+W2 derivation window two: 600 s settle, 12 slots at 600 s cadence, 480 s capture budgets; window 9000 s. It starts at least 6 h after W1's window end (03:00 PDT 09-27).
+W1 harvest: d079-epoch-25g83-derivation-w1-20260927: battery=pass verdict_sha256=07bcc13b6f476c72280a74e21bfc2499b9085f5bf380cf891afa7f341fa535a2 verdict_commit=c5088b871dac4a3e75773f645c6293ffde1568b9 (merged by PR #432). W1 counted 6 valid of 12, the registration's stop line is fewer than 6, so W1 counts; if W1+W2 hold fewer than 12 valid, a third window W3 follows on count.
+Carried from the W1 arm gate: the 09-16 78-row ledger fork is not in this ledger's chain (NIT-1); the n1/n2 25G83 rows are diagnostics, never members (NIT-6); the A-R5b replacement is one per epoch and is unused (NIT-3). W1 harvest ordering departure: the chain log's per-slot valid/non-valid lines were read before the battery verdict was committed; no measured value was opened and the verdict is computed only from bytes fingerprinted at capture. A second early touch: one cadence-report call before the pin advance, which refused on the pin mismatch and returned no statistics. Slot d11's gauge charge rose 9 mAh between its readings: a gauge re-estimate (its maximum capacity moved with it) at 0 mA current, inside the verdict's pass.
+The arm required the battery to be connected, not charging, within 200 mA of zero current and with a battery-gauge reading no older than 180 s. Every slot records a battery reading before and after it, and a window with any failing or missing reading is not used and is replaced at most once (registration amendment A-R5b).
+No model runs or measurement pack. No member values read before the session is terminal.
+receipt_class: DIAGNOSTIC_NO_PACK attempt: 1
+plan_id: d079-epoch-25g83-derivation-w2-20260927
+repo_head = measurement_head = handback commit: a71a5e7999b5364e8477685b13c6a1e440fa7b27
+H again: a71a5e7999b5364e8477685b13c6a1e440fa7b27
+clone: /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2
+custody: /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927 
+runs: /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/runs
+plan sha256: 0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce
+authored_epoch_s: 1790508480.0
+install close EXCLUDED 2026-09-27T08:50:00-07:00 2026-09-27T15:50:00+00:00 epoch 1790524200.0
+REQUEST / exit BEFORE 2026-09-27T08:52:00-07:00 2026-09-27T15:52:00+00:00 epoch 1790524320.0
+TERM 2026-09-27T08:54:00-07:00 2026-09-27T15:54:00+00:00 epoch 1790524440.0
+KILL 2026-09-27T08:55:00-07:00 2026-09-27T15:55:00+00:00 epoch 1790524500.0
+t0 2026-09-27T09:00:00-07:00 2026-09-27T16:00:00+00:00 epoch 1790524800.0
+window end 2026-09-27T11:30:00-07:00 2026-09-27T18:30:00+00:00 epoch 1790533800.0
+completion / courier deadline 2026-09-27T11:35:00-07:00 2026-09-27T18:35:00+00:00 epoch 1790534100.0
+daily dead-man 2026-09-27T12:35:00-07:00 2026-09-27T19:35:00+00:00 epoch 1790537700.0
+install span 1 open 2026-09-27T00:00:00-07:00 2026-09-27T07:00:00+00:00 epoch 1790492400.0
+install span 1 close EXCLUDED 2026-09-28T00:00:00-07:00 2026-09-28T07:00:00+00:00 epoch 1790578800.0
+Notice-send open: actual acceptance of this message, retained in the arm record.
+A-R5b amended Revision 5 preregistration sha256: 81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1
+frozen calibration plan source: configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json sha256 9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072
+D-166 registration: /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json sha256 dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265
+protocol_v3: /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/calibration/powermetrics_fiducial/protocol_v3.json sha256 9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1
+PR-L merge commit: 9b750bf3cb0abc4c0a4474a2b5bb1e1e4ec52c87
+PR-L night/dead-man template sha256: e62a461b9f739be6aa57588219674cbb27f574dc40930ee1ee706f230442e5c8
+PR-L probe template sha256: 1570b74587075445ee64fff9b14b718a4b753ec3432db9363455636a2d2fc1fd
+evidence_root_id: evidence-d079-epoch-25g83-derivation-w2-20260927
+/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/night_plan.json sha256 0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/calibration_plan.json sha256 9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/chain.zsh sha256 e27978bd9c84ad8f1081984347e9fc568160d539509b9635d8620d95b1477c01
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/identity-epoch.json sha256 b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/t1-bindings.json sha256 8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98
+/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/scripts/night_chains/calibration_derivation_only.zsh sha256 b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb
+/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/calibration/preregistration_d079_epoch_25g83_rev1.md sha256 81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1
+Wrapper sidecar: /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/chain.zsh.sha256
+Interactive render-only evidence:
+com.joulewise.night ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/rendered-agents/com.joulewise.night.plist sha256 1ed0240a3534e388a89deeefc23c57fa1ae93ab9c8f96718cffaa875da29ba09
+com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927 ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/rendered-agents/com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927.plist sha256 da82415f8f2cd6b001441fd9d316079edb0c04da591bd36d4e5a2bcce1ddd69c
+com.joulewise.night.deadman ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/rendered-agents/com.joulewise.night.deadman.plist sha256 9183da2e5b5e301a6b1bfd1a0db220c93e72be4ed1db449ef29879cdadb62581
+Probe template is Interactive and installer render-only validates all three launch contexts; the probe receipt records all three rendered digests at install.
+Keep agent applications closed and the machine untouched from REQUEST through completion; longer if the night remains active.
+Reply NO to stop.
+NO may be on this thread or relayed through an owner-authored directive. No reply is required.
+The magistrate checks readable NO/directive/stop channels before publication and exits before REQUEST.
+STEP3 prepared only: magistrate sends notice and fills notice.json + notice-evidence.txt
+STEP3 OK

@@ -1,0 +1,98 @@
+== pre-publication observations 2026-09-27T05:54:42-0700
+CHECK: test ! -e /Users/edr/night-custody/magistrate/standdown.request; echo "standdown.request: absent"
+standdown.request: absent
+CHECK: test ! -e /Users/edr/night-custody/magistrate/STOP; echo "STOP: absent"
+STOP: absent
+[{"author":{"id":"MDQ6VXNlcjY5MDMyMjYx","is_bot":false,"login":"mpmdw","name":""},"number":422,"title":"Directive (Ed, 2026-09-25): A-R5b v1.1 approved — append §5.8 text to the 25G83 pre-registration after #418 merges; narrow permission rule added"},{"author":{"id":"MDQ6VXNlcjY5MDMyMjYx","is_bot":false,"login":"mpmdw","name":""},"number":421,"title":"Directive (Ed, 2026-09-25): battery-float gate mandatory for every window; anything germane to the verity of the science is mandatory"},{"author":{"id":"MDQ6VXNlcjY5MDMyMjYx","is_bot":false,"login":"mpmdw","name":""},"number":417,"title":"Directive (Ed, 2026-09-25): stop asking Ed to turn off auto-updates — macOS OS updates are not auto-installed (verified); request retired"},{"author":{"id":"MDQ6VXNlcjY5MDMyMjYx","is_bot":false,"login":"mpmdw","name":""},"number":416,"title":"Directive (Ed, 2026-09-25, amended): fresh three-family full-system audit (Astra 6 xhigh, Fable 5.1, Opus 5.5 xhigh) after W1/W2 pass and before any claim-bearing run"},{"author":{"id":"MDQ6VXNlcjY5MDMyMjYx","is_bot":false,"login":"mpmdw","name":""},"number":408,"title":"Directive: after the Claude and Codex usage reset (next few hours from 04:40 PDT 09-24), fan out maximally to accelerate results"},{"author":{"id":"MDQ6VXNlcjY5MDMyMjYx","is_bot":false,"login":"mpmdw","name":""},"number":405,"title":"Directive: Ed's 22:19 PDT 09-23 rulings on E1–E4 (missed by two activations); E1 and O-21 answers to follow here"}]
+CHECK: test -s "$ATTEMPT_DIR/notice-evidence.txt"
+CHECK: test "$(git rev-parse HEAD)" = "$H"
+CHECK: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+From https://github.com/mpmdw/JouleWise
+ * branch              main       -> FETCH_HEAD
+   a71a5e79..670756f3  main       -> origin/main
+CHECK: H is an ancestor of fetched origin/main
+CHECK: byte equality /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/night_plan.json /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/arm-attempts/000001/plan.json
+VERIFIED /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/chain.zsh sha256=e27978bd9c84ad8f1081984347e9fc568160d539509b9635d8620d95b1477c01
+CHECK: plan.repo_head == plan.measurement_head == os.environ['H']
+CHECK: plan.measurement_root == os.environ['MEASUREMENT_ROOT']
+CHECK: plan.custody_root == os.environ['NIGHT_ROOT']
+CHECK: plan.receipt_class == 'DIAGNOSTIC_NO_PACK'
+CHECK: plan.window_max_s == 9000
+CHECK: plan.chain_path == os.environ['NIGHT_ROOT'] + '/chain.zsh'
+CHECK: plan.chain_sha256_path == plan.chain_path + '.sha256'
+CHECK: plan.registration_path == night_gate.D166_REGISTRATION_PATH
+CHECK: hashlib.sha256((Path(os.environ['MEASUREMENT_ROOT']) / night_gate.D166_REGISTRATION_PATH).read_bytes()).hexdigest() == night_gate.D166_REGISTRATION_SHA256
+CHECK: 0 <= time.time() - plan.authored_epoch_s <= 36 * 3600
+CHECK: 0 <= plan.t0_epoch_s - plan.authored_epoch_s <= 36 * 3600
+CHECK: time.time() < install_close_epoch(plan)
+CHECK: Path(os.environ['STAGE']).stat().st_dev == Path(os.environ['NIGHT_ROOT']).stat().st_dev
+staged plan checks PASS
+{"preflight": "ok", "python": "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+{"input_digests": {"/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/calibration_plan.json": "sha256:9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/identity-epoch.json": "sha256:b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/t1-bindings.json": "sha256:8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98", "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/calibration/calibration_ledger_head.json": "sha256:47a77dbc5ece307e612f294bd29f17662442c562ee3a8d04e33c653c9cb9b467", "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/runs/calibration_observation_ledger.jsonl": "sha256:b03be93867ceffe69bbd277fc83829600414d9cc5d53b0a28ced2d5a56abc63f", "/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/night_plan.json": "sha256:0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce"}}
+validated pins: repo_head=a71a5e7999b5364e8477685b13c6a1e440fa7b27 measurement_root=/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2 measurement_head=a71a5e7999b5364e8477685b13c6a1e440fa7b27
+{"launch_context": {"com.joulewise.night": {"ProcessType": "Interactive", "rendered_plist_sha256": "1ed0240a3534e388a89deeefc23c57fa1ae93ab9c8f96718cffaa875da29ba09"}, "com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927": {"ProcessType": "Interactive", "rendered_plist_sha256": "da82415f8f2cd6b001441fd9d316079edb0c04da591bd36d4e5a2bcce1ddd69c"}, "com.joulewise.night.deadman": {"ProcessType": "Interactive", "rendered_plist_sha256": "9183da2e5b5e301a6b1bfd1a0db220c93e72be4ed1db449ef29879cdadb62581"}}}
+CHECK: com.joulewise.night rendered bytes, label and Interactive context match pre-notice evidence
+CHECK: com.joulewise.night still renders ProcessType Interactive
+CHECK: com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927 rendered bytes, label and Interactive context match pre-notice evidence
+CHECK: com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927 still renders ProcessType Interactive
+CHECK: com.joulewise.night.deadman rendered bytes, label and Interactive context match pre-notice evidence
+CHECK: com.joulewise.night.deadman still renders ProcessType Interactive
+== final arm census
+{"diagnostics": [], "discovery_argv": ["/usr/bin/pgrep", "-f", "[c]odex|[c]laude|[t]3"], "foreign_pids": [81076, 81095, 81096], "own_pids": [67292, 67295, 67340, 81059, 81063], "plan_sha256": "0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce", "receipt_class": "DIAGNOSTIC_NO_PACK", "sessions": [{"descendant_pids": [67292, 67295, 67340, 67341, 81076, 81095, 81096], "exempt": false, "root_pid": 81063, "workloads": []}], "workloads": []}
+diagnostic only; existing all-agents-closed rule still applies
+CHECK: fresh battery gate including gauge age immediately before publication; retain raw values
+CHECK: ioreg -r -c AppleSmartBattery supplies one fresh, top-level battery observation
+CHECK: battery gate observed at 2026-09-27T12:54:46Z
+CHECK: exactly one AppleSmartBattery object; count=1
+CHECK: exactly one complete top-level object; close_count=1
+CHECK: exactly one top-level quoted ExternalConnected; raw=['Yes']
+CHECK: exactly one top-level quoted IsCharging; raw=['No']
+CHECK: exactly one top-level quoted InstantAmperage; raw=['0']
+CHECK: exactly one top-level quoted UpdateTime; raw=['1790513685']
+CHECK: exactly one top-level quoted AppleRawCurrentCapacity; raw=['7584']
+CHECK: exactly one top-level quoted AppleRawMaxCapacity; raw=['7584']
+CHECK: exactly one top-level quoted Amperage; raw=['0']
+CHECK: exactly one top-level quoted Voltage; raw=['12891']
+CHECK: exactly one top-level quoted Temperature; raw=['3012']
+CHECK: exactly one top-level quoted FullyCharged; raw=['Yes']
+CHECK: exactly one top-level quoted CurrentCapacity; raw=['100']
+CHECK: InstantAmperage is signed or unsigned 64-bit two-s complement
+CHECK: InstantAmperage raw=0 signed=0 mA; unsigned64_conversion=False
+CHECK: UpdateTime raw=1790513685 wall_epoch_s=1790513686 age_s=1; 0 <= age <= 180
+CHECK: ExternalConnected=Yes, IsCharging=No, abs(signed InstantAmperage)<=200 mA
+BATTERY GATE PASS
+CHECK: two passing battery observations are retained
+== publication
+CHECK: n["attempt"]==int(e["ARM_ATTEMPT"])
+CHECK: attempts == [], "fresh W2 candidate; no predecessor successor licence"
+CHECK: not any("__" in str(n[k]) for k in ("message_id", "thread_id", "sent_epoch_s")), "unfilled notice template"
+retry_allowed: Decision(allowed=True, reason='allowed')
+CHECK: r.allowed, r.reason
+CHECK: not target.exists() and not target.is_symlink()
+PUBLISHED /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/night_plan.json 1790513686.3946218
+VERIFIED /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/chain.zsh sha256=e27978bd9c84ad8f1081984347e9fc568160d539509b9635d8620d95b1477c01
+== launchd probe 05:54:46
+{"preflight": "ok", "python": "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+launchd probe ok; bootout and process census clear: com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927
+== probe receipt 05:55:32
+{"ProcessType": "Interactive", "cadence": {"argv": ["sudo", "-n", "/usr/bin/powermetrics", "-n", "300", "-b", "0", "-i", "100", "--samplers", "cpu_power,gpu_power,ane_power,thermal", "--format", "plist", "-o", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/night-probe-supervisor-5zafu699/night-probe-7mkkfx0a/powermetrics-idle.plist"], "bound_s": 55.0, "count": 300, "elapsed_s": 40.24627054203302, "max_ms": 137.419291, "median_ms": 131.1166245, "p95_ms": 135.162, "passed": true}, "chain_pgid": 67367, "chain_python": {"path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/.venv/bin/python", "sha256": "d483cfdc272ddd1bfd8f6f595b65cdc2f00b8e503f0deab65b20e8faeb986132", "version": "3.13.1"}, "chain_sha256": "e27978bd9c84ad8f1081984347e9fc568160d539509b9635d8620d95b1477c01", "chain_source_sha256": "b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb", "cleanup_proven": true, "code_digests": {"joulewise/calibration_custody_worker.py": "sha256:16f048032a036cf33ee54a53418763115f50f42165e3852a50acd0d91fd7330a", "joulewise/calibration_ledger.py": "sha256:8e022d73ea9ae1123adb1078514d74d7130a4cf414b0c9c740071eb3ea238db7", "scripts/reserve_calibration_window_bracket.py": "sha256:bcfdb7227fbd58fac9822df023ecb3058a7eec12ce30f8d0240c3c121cfed94e", "scripts/run_night.py": "sha256:2709f6aff4d60ecf8f9d3e2f2c568dbbafd3869ab1c2f71ebda2a8fd77cd6b7d", "scripts/validate_powermetrics_fiducial.py": "sha256:12caf5676b99a50c0ccd4ab0f9c187b08aa40d495fd83191528d50f80e68caf0"}, "custody_budget_s": 120.0, "custody_elapsed_s": 2.89953108294867, "driver_pid": 67364, "driver_python": {"path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/.venv/bin/python", "sha256": "d483cfdc272ddd1bfd8f6f595b65cdc2f00b8e503f0deab65b20e8faeb986132", "version": "3.13.1"}, "finished_epoch_s": 1790513731.9426959, "input_digests": {"/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/calibration_plan.json": "sha256:9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/identity-epoch.json": "sha256:b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/night_plan.json": "sha256:0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce", "/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/t1-bindings.json": "sha256:8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98", "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/calibration/calibration_ledger_head.json": "sha256:47a77dbc5ece307e612f294bd29f17662442c562ee3a8d04e33c653c9cb9b467", "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/runs/calibration_observation_ledger.jsonl": "sha256:b03be93867ceffe69bbd277fc83829600414d9cc5d53b0a28ced2d5a56abc63f"}, "launch_context": {"com.joulewise.night": {"ProcessType": "Interactive", "rendered_plist_sha256": "1ed0240a3534e388a89deeefc23c57fa1ae93ab9c8f96718cffaa875da29ba09"}, "com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927": {"ProcessType": "Interactive", "rendered_plist_sha256": "418bbf2a6e6655ca7eaedb669d831d25ea53f38a87db1babddf2a22e2c17f918"}, "com.joulewise.night.deadman": {"ProcessType": "Interactive", "rendered_plist_sha256": "9183da2e5b5e301a6b1bfd1a0db220c93e72be4ed1db449ef29879cdadb62581"}}, "launchd_label": "com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927", "ledger_head_sha256": "bd7aee7ab969e58d4c08992a3af0b0a1fed88cc9a911a65d1200ed0220a46693", "ledger_pin_sha256": "47a77dbc5ece307e612f294bd29f17662442c562ee3a8d04e33c653c9cb9b467", "ledger_sha256": "b03be93867ceffe69bbd277fc83829600414d9cc5d53b0a28ced2d5a56abc63f", "measurement_head": "a71a5e7999b5364e8477685b13c6a1e440fa7b27", "observations": 74, "outcome": "ok", "phase": "cadence", "plan_id": "d079-epoch-25g83-derivation-w2-20260927", "plan_sha256": "0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce", "powermetrics_pgid": 67427, "refusal_code": null, "schema": "joulewise.night_probe_receipt.v2", "started_epoch_s": 1790513687.5251951}
+{"custody_budget_s": 120.0, "custody_elapsed_s": 2.89953108294867, "observations": 74, "outcome": "ok"}
+CHECK: r["schema"] == "joulewise.night_probe_receipt.v2"
+CHECK: r["outcome"]=="ok"
+CHECK: cadence passed with exactly 300 frames
+CHECK: cadence elapsed and bound are <=55 s and exactly 55 s
+CHECK: cadence median <=150 ms, p95 present, max <=200 ms
+CHECK: probe receipt top-level ProcessType is Interactive
+CHECK: launch_context contains exactly night, dead-man and this plan probe labels
+CHECK: all three launch_context entries are Interactive with rendered digests
+CHECK: r["custody_elapsed_s"]*3*1.5<=r["custody_budget_s"], (r["custody_elapsed_s"], r["custody_budget_s"])
+PROBE ADMITS
+== install 05:55:32
+{"preflight": "ok", "python": "/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+validated pins: repo_head=a71a5e7999b5364e8477685b13c6a1e440fa7b27 measurement_root=/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2 measurement_head=a71a5e7999b5364e8477685b13c6a1e440fa7b27
+{"launch_context": {"com.joulewise.night": {"ProcessType": "Interactive", "rendered_plist_sha256": "1ed0240a3534e388a89deeefc23c57fa1ae93ab9c8f96718cffaa875da29ba09"}, "com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927": {"ProcessType": "Interactive", "rendered_plist_sha256": "418bbf2a6e6655ca7eaedb669d831d25ea53f38a87db1babddf2a22e2c17f918"}, "com.joulewise.night.deadman": {"ProcessType": "Interactive", "rendered_plist_sha256": "9183da2e5b5e301a6b1bfd1a0db220c93e72be4ed1db449ef29879cdadb62581"}}}
+== verify
+-	0	com.joulewise.night
+-	0	com.joulewise.magistrate
+-	0	com.joulewise.night.deadman
+STEP4 OK

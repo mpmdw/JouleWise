@@ -1,0 +1,58 @@
+To: claude.ai.copper531@passmail.net
+Subject: NIGHT NOTICE — d079-epoch-25g83-derivation-w2-20260927 (DIAGNOSTIC_NO_PACK) — attempt 1
+
+Ed,
+
+Launch needs no action from you unless you reply NO. Your NO overrides.
+Arm attempt 1; earlier abort for this new candidate: none.
+The calibration campaign for macOS 25G83 is now two 12-slot windows at least 6 hours apart, at least 12 retained captures, a third window only on count. July's calibration is not continued: its ceiling was set with shorter sampling frames than the machine now delivers, so the equivalence check you proposed in issue 316 would not be able to tell the two apart. Reply NO to the arm notice to stop.
+W2 derivation window two: 600 s settle, 12 slots at 600 s cadence, 480 s capture budgets; window 9000 s. It starts at least 6 h after W1's window end (03:00 PDT 09-27).
+W1 harvest: d079-epoch-25g83-derivation-w1-20260927: battery=pass verdict_sha256=07bcc13b6f476c72280a74e21bfc2499b9085f5bf380cf891afa7f341fa535a2 verdict_commit=c5088b871dac4a3e75773f645c6293ffde1568b9 (merged by PR #432). W1 counted 6 valid of 12, the registration's stop line is fewer than 6, so W1 counts; if W1+W2 hold fewer than 12 valid, a third window W3 follows on count.
+Carried from the W1 arm gate: the 09-16 78-row ledger fork is not in this ledger's chain (NIT-1); the n1/n2 25G83 rows are diagnostics, never members (NIT-6); the A-R5b replacement is one per epoch and is unused (NIT-3). W1 harvest ordering departure: the chain log's per-slot valid/non-valid lines were read before the battery verdict was committed; no measured value was opened and the verdict is computed only from bytes fingerprinted at capture. A second early touch: one cadence-report call before the pin advance, which refused on the pin mismatch and returned no statistics. Slot d11's gauge charge rose 9 mAh between its readings: a gauge re-estimate (its maximum capacity moved with it) at 0 mA current, inside the verdict's pass.
+The arm required the battery to be connected, not charging, within 200 mA of zero current and with a battery-gauge reading no older than 180 s. Every slot records a battery reading before and after it, and a window with any failing or missing reading is not used and is replaced at most once (registration amendment A-R5b).
+No model runs or measurement pack. No member values read before the session is terminal.
+receipt_class: DIAGNOSTIC_NO_PACK attempt: 1
+plan_id: d079-epoch-25g83-derivation-w2-20260927
+repo_head = measurement_head = handback commit: a71a5e7999b5364e8477685b13c6a1e440fa7b27
+H again: a71a5e7999b5364e8477685b13c6a1e440fa7b27
+clone: /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2
+custody: /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927 
+runs: /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/runs
+plan sha256: 0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce
+authored_epoch_s: 1790508480.0
+install close EXCLUDED 2026-09-27T08:50:00-07:00 2026-09-27T15:50:00+00:00 epoch 1790524200.0
+REQUEST / exit BEFORE 2026-09-27T08:52:00-07:00 2026-09-27T15:52:00+00:00 epoch 1790524320.0
+TERM 2026-09-27T08:54:00-07:00 2026-09-27T15:54:00+00:00 epoch 1790524440.0
+KILL 2026-09-27T08:55:00-07:00 2026-09-27T15:55:00+00:00 epoch 1790524500.0
+t0 2026-09-27T09:00:00-07:00 2026-09-27T16:00:00+00:00 epoch 1790524800.0
+window end 2026-09-27T11:30:00-07:00 2026-09-27T18:30:00+00:00 epoch 1790533800.0
+completion / courier deadline 2026-09-27T11:35:00-07:00 2026-09-27T18:35:00+00:00 epoch 1790534100.0
+daily dead-man 2026-09-27T12:35:00-07:00 2026-09-27T19:35:00+00:00 epoch 1790537700.0
+install span 1 open 2026-09-27T00:00:00-07:00 2026-09-27T07:00:00+00:00 epoch 1790492400.0
+install span 1 close EXCLUDED 2026-09-28T00:00:00-07:00 2026-09-28T07:00:00+00:00 epoch 1790578800.0
+Notice-send open: actual acceptance of this message, retained in the arm record.
+A-R5b amended Revision 5 preregistration sha256: 81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1
+frozen calibration plan source: configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json sha256 9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072
+D-166 registration: /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json sha256 dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265
+protocol_v3: /Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/calibration/powermetrics_fiducial/protocol_v3.json sha256 9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1
+PR-L merge commit: 9b750bf3cb0abc4c0a4474a2b5bb1e1e4ec52c87
+PR-L night/dead-man template sha256: e62a461b9f739be6aa57588219674cbb27f574dc40930ee1ee706f230442e5c8
+PR-L probe template sha256: 1570b74587075445ee64fff9b14b718a4b753ec3432db9363455636a2d2fc1fd
+evidence_root_id: evidence-d079-epoch-25g83-derivation-w2-20260927
+/Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/night_plan.json sha256 0395a6054f13f568fe622a26a1a82ba1857d7174f14c6240f2f8a03d70fdc0ce
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/calibration_plan.json sha256 9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/chain.zsh sha256 e27978bd9c84ad8f1081984347e9fc568160d539509b9635d8620d95b1477c01
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/identity-epoch.json sha256 b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607
+/Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/t1-bindings.json sha256 8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98
+/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/scripts/night_chains/calibration_derivation_only.zsh sha256 b5beea464d392621631d9e5060e2c63c804676b28a5b2aea58b714c5cbead6fb
+/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2/configs/calibration/preregistration_d079_epoch_25g83_rev1.md sha256 81b65f08b19127a106307b9b94616dfeb49d04c3c69f72615cf316792e36ddf1
+Wrapper sidecar: /Users/edr/night-custody/d079-epoch-25g83-derivation-w2-20260927/chain.zsh.sha256
+Interactive render-only evidence:
+com.joulewise.night ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/rendered-agents/com.joulewise.night.plist sha256 1ed0240a3534e388a89deeefc23c57fa1ae93ab9c8f96718cffaa875da29ba09
+com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927 ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/rendered-agents/com.joulewise.night-probe.d079-epoch-25g83-derivation-w2-20260927.plist sha256 da82415f8f2cd6b001441fd9d316079edb0c04da591bd36d4e5a2bcce1ddd69c
+com.joulewise.night.deadman ProcessType=Interactive /Users/edr/night-plan-staging/d079-epoch-25g83-derivation-w2-20260927/rendered-agents/com.joulewise.night.deadman.plist sha256 9183da2e5b5e301a6b1bfd1a0db220c93e72be4ed1db449ef29879cdadb62581
+Probe template is Interactive and installer render-only validates all three launch contexts; the probe receipt records all three rendered digests at install.
+Keep agent applications closed and the machine untouched from REQUEST through completion; longer if the night remains active.
+Reply NO to stop.
+NO may be on this thread or relayed through an owner-authored directive. No reply is required.
+The magistrate checks readable NO/directive/stop channels before publication and exits before REQUEST.

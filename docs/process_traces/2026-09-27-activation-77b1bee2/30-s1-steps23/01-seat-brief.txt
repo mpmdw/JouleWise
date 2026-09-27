@@ -1,0 +1,24 @@
+ROLE: execution seat for BFG-S stream S1, cold ruling S1-R72-2-ERRATUM-01 §7 steps 2 and 3 (verification only).
+WRITE_SCOPE: []
+Edit NO tracked file. Scratch only under /tmp/s1-steps23-77b1bee2/. Commit nothing.
+Bridge depth is one hop: do not call Claude by any route. No git fetch/pull/checkout/reset in any checkout.
+
+WORKING TREE: /Users/edr/code/JouleWise-wt-bfgs-s1-e6f06c96, branch feat/2026-09-26-bfgs-s1-bundles at 204424e6 (step 1, the dictated R72-2 block, is already applied there by the lead as commit 204424e6). Confirm HEAD = 204424e6 and `git status --porcelain` empty before and after.
+
+RULING (read §3, §6 and §7 first): /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/60-s1-fix3/40-r72-2-erratum/21-coldgate-fable-ruling.md
+Round-3b seat report, for V1/V2/builder precedent: /Users/edr/code/JouleWise-wt-22784e38/docs/process_traces/2026-09-27-activation-3ba66eeb/60-s1-fix3/31-seat-report-round3b.md
+
+Use /opt/homebrew/bin/python3 for everything (NEVER the .venv interpreter: user site is off there and the battery fixture fails). macOS has no `timeout`; use `perl -e 'alarm N; exec @ARGV' …` if you need a bound. Run long commands in the foreground.
+
+STEP 2 — GREEN on the tree at 204424e6, exact last five lines of each:
+- T: python3 -m unittest tests.test_bfgs_consumer_sweep.ConsumerSweepTests.test_salvage_non_claim_rows   (≈250 s)
+- V1: python3 -m unittest tests.test_controller tests.test_bundle_read tests.test_reduce tests.test_revision_five_b_readers tests.test_scored_reduce tests.test_bfgs_calibration_bracketing tests.test_bfgs_window_consumers tests.test_bfgs_consumer_sweep tests.test_bfgs_publication_privacy tests.test_battery_float_sweep
+- V2: python3 -m unittest tests.test_battery_float tests.test_battery_float_consumers tests.test_evidence_night tests.test_night_kinds tests.test_envelope_gate
+- B1, B2: python3 scripts/build_battery_float_historical_bundles.py --check   (twice; expect tail "forward check: byte-identical entries=69")
+
+STEP 3 — RED under source mutants (a), (b), (c) of the REAL committed test method (not a scratch copy of the test): build three scratch copies of the repository tree outside the repo (e.g. `git worktree`-free: `git archive 204424e6 | tar -x -C /tmp/s1-steps23-77b1bee2/mut_X`), and in each delete, in the salvage module the ruling §3 quotes: (a) both guard A's lines and guard B's `if` block; (b) guard A's lines only; (c) guard B's `if` block only. `/tmp/cg_r722/make_mutants.py` builds such copies and may be reused or adapted (read it first). In each copy run ONLY the test method T with PYTHONPATH/cwd pointing at that copy (prove by printing the imported module's __file__ that the mutant is what ran). Report for each: RED or GREEN, and the failing assertion's message. Expected per ruling: all three RED; (a) pinned to "a license is returned", (b)/(c) pinned to which refusal message appears.
+Also show the unmutated copy (git archive of 204424e6, no deletion) is GREEN under the same harness, so the harness itself is not the cause of RED.
+
+STEP 4 — return. If any expected GREEN is RED or any expected RED is GREEN, return that with the output (NEEDS_RULING); change nothing.
+
+REPORT (claude-codex-report/v1 envelope, implementation-free verification): per check id, command, cwd, exit code, exact last five lines; mutant diffs (unified diff of each mutant vs the original module); verdict line `S1 STEPS 2-3: GREEN+RED AS RULED` or `S1 STEPS 2-3: DEVIATION`.

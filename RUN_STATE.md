@@ -10,6 +10,131 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**▶▶ ACTIVATION 77b1bee2 — from 11:36 PDT 09-27 (Opus 5.5; NOTHING ARMED; W2 HARVESTED + ADMITTED, #434 MERGED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) is the running log.
+
+**W2 is ADMITTED.** It passed the battery check and the cadence check (CONTINUE, 128.5 ms). **#434 merged as `b69c39eb`**, a merge commit that passed the full gate: Sol AUDIT PASS, Opus CONTRACT LENS PASS, cold Fable MERGE, and row 9 at 7,525/0/0.
+- Harvest line: `…w2-20260927: battery=pass verdict_sha256=51f49618…46ec verdict_commit=722f7bd1`.
+- With W1 and W2 together, 12 captures are valid. That is **exactly the Revision 5 floor**, and **W3 is not permitted**.
+
+**Issuance is BLOCKED on a value-blind tool fault.** `prepare-candidate` refuses whenever custody lies outside a git checkout, and all 24 W1/W2 locators are under `/Users/edr/night-custody` (lane ISSUANCE-CUSTODY-OUTSIDE-REPO-01).
+- **What happens if issuance refuses** is now fixed in writing, before the run. Statement REV5-REFUSAL-BRANCH-01 was settled by a cold gate, a paired refuter and a cold addendum; its sha256 is `8717e33c…39a6`, at `60-prepare-record/00-refusal-branch-final-statement.md`. Ed was emailed.
+- **The repair's design is C**, chosen by the four-model council (Fable and Opus for C, Sol for A, Astra for B; [synthesis](docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md)). C changes the issuer only: it adds `--corpus-root`, a naming function bound to the session and the capture, and a read-only `verify-members` command.
+- **The implementation seat** (Sol xhigh) is on `fix/2026-09-27-issuer-corpus-root`, worktree `JouleWise-wt-corpus-root-77b1bee2`.
+
+**S1:** steps 2–3 came back GREEN on the tree, with mutants (a), (b) and (c) all RED. The merge candidate is `4aefdd12` (S1 with main merged in), and the one refuter pass (Sol xhigh) is running.
+
+**SUCCESSOR'S NEXT EXACT ACTION:** read record 00 from its last item. Then:
+1. **Custody repair:** harvest the implementation seat (report `/tmp/corpus-root-impl-77b1bee2/report.md`). Then run the Opus and Sol lenses, then the **fresh cold gate on the final diff** (addendum §6.1, which also serves as statement item 6(c)), then a full-tier PR.
+2. **S1:** harvest the refuter (`/tmp/s1-refuter-77b1bee2/report.md`), classify its findings by the 61 (c)/66 table, then the S1 merge gate (full tier; A4 = V1/V2 re-run by the lead).
+3. **Prepare step,** only after the repair merges:
+   - bring the W2 measurement root to main by digest (statement item 2(d)/(e));
+   - check Ed's replies immediately before (S4) and re-run the dry run (S5);
+   - run `prepare-candidate` with the flag set in the refuter's A.5 plus `--corpus-root /Users/edr/night-custody`;
+   - then the cold science gate (runbook §4.3), then D-138.
+4. **Bookkeeping:** register today's lanes (synthesis ruling 5; record items 10–12) in the state kernel, TASK_QUEUE and `tests/test_gen_state.py`, then merge this branch's bookkeeping PR (light tier).
+
+**▶▶ ACTIVATION 896d11e2 — 08:35 → ≈08:38 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-896d11e2/00-activation-record.md), items 1–5. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
+
+**▶▶ ACTIVATION 121316f6 — 08:25 → ≈08:30 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-121316f6/00-activation-record.md), items 1–5. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
+
+**▶▶ ACTIVATION f179383b — 08:15 → ≈08:22 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-f179383b/00-activation-record.md), items 1–5. A `git fetch` ran in canonical again (item 2, fourth occurrence; refs only, HEAD unmoved); a mechanical guard is proposed for the cold gate or Ed. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
+
+**▶▶ ACTIVATION d881cd7b — 08:05 → ≈08:10 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; quiet bookkeeping slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-d881cd7b/00-activation-record.md), items 1–4. No git operation touched the canonical root. The next exact action is unchanged: the 1c3b3ac9 block below (harvest W2 after 11:35 first).
+
+**▶▶ ACTIVATION 1c3b3ac9 — 07:40 → ≤08:20 PDT 09-27 (Opus 5.5; W2 ARMED, t0 09:00; one light slice):** [Record 00](docs/process_traces/2026-09-27-activation-1c3b3ac9/00-activation-record.md).
+- **Cold ruling S1-R72-2-ERRATUM-01** (Fable 5.1, 07:42–07:51; [ruling](docs/process_traces/2026-09-27-activation-3ba66eeb/60-s1-fix3/40-r72-2-erratum/21-coldgate-fable-ruling.md)). Row R72-2 now carries three counterfactuals: (a) both guards removed, pinned to the outcome that a license is returned; (b) and (c) each guard removed alone, pinned to its refusal. All 17 measurand names are written as literals. The judge showed the new form catches 7 of 7 scratch mutants and the old form 4 of 7.
+- **Bench-applied** (the dictated block, test-only) as `204424e6` on `feat/2026-09-26-bfgs-s1-bundles`; tree GREEN on the test method (253 s). The mutant REDs and V1/V2/builders are deferred past W2.
+- **SUCCESSOR'S NEXT EXACT ACTION:** 3ba66eeb record 00 item 30, step 1: harvest W2 after 11:35. S1 (step 2) is now: the ruling's §7 steps 2 and 3 (V1, V2 and both builder checks on the new head; RED under source mutants (a), (b), (c) on the real test file), then ONE refuter pass on the merge candidate, then the S1 merge gate (full tier).
+
+**▶▶ ACTIVATION 3ba66eeb — 03:05 → ≤08:52 PDT 09-27 (Opus 5.5; W1 HARVESTED + ADMITTED; W2 ARMED, published 05:54:46, t0 09:00 PDT):** [Record 00](docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md) items 1–24+.
+- **W1 admitted.** Harvested by runbook §2.2a: uninstall rc 0; pin 176 → 226; `battery=pass`; cadence CONTINUE (median 128.5 ms); 6/12 valid, which is exactly the registration's stop line (fewer than 6 stops); admissible.
+  - **#432 MERGED** (`a71a5e79`, merge commit). It passed the full gate: Sol AUDIT PASS, Opus CONTRACT LENS PASS, cold Fable MERGE.
+  - The harvest line is `…w1-20260927: battery=pass verdict_sha256=07bcc13b… verdict_commit=c5088b87`.
+- **W2** (`d079-epoch-25g83-derivation-w2-20260927`, H `a71a5e79`, t0 09:00 PDT). Steps 0–3 passed; cold Fable arm gate ARM; Opus lens ARM; notice accepted as Gmail `1a0e2a7251f65ea8`. **Steps 4 and 5 OK (item 27): W2 ARMED.** The frozen triple is (`d079-epoch-25g83-derivation-w2-20260927`, `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2`, `a71a5e79`); canonical `670756f3` must not move until W2 is harvested and uninstalled. **This is the epoch's first daytime window: Ed was asked to leave the Mac untouched 08:52–11:35.**
+- **SWEEPCLASS** (the S1 static read-site sweep) was escalated by rule 11 after two same-signature rounds.
+  - A four-model consult (Sol, Astra, Opus, then a cold Fable judge) produced **SWEEPCLASS-SAMESIG-01**: the promise narrows to accidental edits; amendments 61–65; fix round 3 restated as steps 1–12, with a finite stop rule (A1–A5 plus one refuter pass).
+  - Its erratum (refuter F1–F6; amendments 66–71) adds steps 13–19.
+  - **The S1 fix-round-3 seat** (Sol xhigh) is on steps 1–12; its report is `/tmp/harvest-3ba66eeb/s1-fix3-report.md`, copied into the record when harvested.
+- **New lane BFGS-COOLDOWN-ANCHOR-01** (the cold erratum found by execution that a charging bundle's idle baseline can become a stored cooldown anchor that decides later admissions). It is pre-existing, does not block S1, and **must merge before the next scored campaign.** Until then, run the §4.6 anchor pre-check before every scored campaign. The scout is in record `70-cooldown-anchor/`.
+- **#433 MERGED** (`670756f3`, before W2's publication): the census test survives multiline argv, with deterministic recorded-service decoys.
+- **S1:** the returns ruling S1-FIX3-RETURNS-01 needs no production code in S1 and opens lane BFGS-RAWCAPTURE-01. **Seat round 3b is done and committed as `00b0dc68`**: all steps green, with one return (R72-2 counterfactual) for a small erratum gate. Then one refuter pass, then the S1 merge gate.
+- **SUCCESSOR'S NEXT EXACT ACTION:** record 00 item 30. **Harvest W2 after 11:35 by runbook §2.2a, not the README**, with the manual `probe_error`/`passed` cross-check; then the R72-2 erratum; the cooldown-anchor cold gate; the bookkeeping PR (only while unarmed).
+- **Other lanes registered by this activation's rulings:**
+  - BATTERY-VALIDATOR-PROBE-ERROR-01: the frozen validator ignores recorded `probe_error`/`passed`. **Until it lands, every harvest cross-checks those fields by hand.**
+  - REV5-POST-W3-SHORTFALL-01: Revision 5 is silent if n < 12 after W3; that goes to Ed or a cold gate before W3.
+  - BFGS-READER-ROOT-01, BFGS-GATED-SUMMARY-01: both after S1 merges.
+- **Lessons:**
+  - Run the suite with `python3`, never the venv interpreter (user site is off there, so the battery fixture fails 50 tests).
+  - Kill decoys by PID, never with `pkill -f` on a string the calling shell contains.
+  - Never `git fetch` in canonical while a plan is armed (self-report, item 3).
+
+**▶▶ ACTIVATION 267afda6 — 00:14 → ≈00:17 PDT 09-27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-267afda6/00-activation-record.md), items 1–7. It did bookkeeping only (the sixth quiet relaunch, 16 minutes before t0). No git operation touched the canonical root. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
+**▶▶ ACTIVATION cef6d3f5 — 00:04 → ≈00:08 PDT 09-27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-27-activation-cef6d3f5/00-activation-record.md), items 1–8. It did bookkeeping only (the fifth quiet relaunch, 26 minutes before t0; see item 7). No git operation touched the canonical root. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
+**▶▶ ACTIVATION 2d9ded9c — 23:54 → ≈00:00 PDT 09-26/27 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-2d9ded9c/00-activation-record.md), items 1–8. It did bookkeeping only (the fourth quiet relaunch between arm and harvest). Item 5 self-reports a `git fetch` in the canonical root (remote-tracking refs only; HEAD and tree unmoved). The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
+**▶▶ ACTIVATION 96b6f4cb — 23:44 → ≈23:50 PDT 09-26 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-96b6f4cb/00-activation-record.md), items 1–7. It did bookkeeping only (the third quiet relaunch between arm and harvest; see 9e0367a1 item 6). The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
+**▶▶ ACTIVATION 9e0367a1 — 23:34 → ≈23:45 PDT 09-26 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-9e0367a1/00-activation-record.md), items 1–7. It did bookkeeping only and exited before the t0 settle. Item 6 records that the watchdog relaunches between arm and harvest; that is a process question for the cold gate or Ed. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
+**▶▶ ACTIVATION 3930fc49 — 23:24 → ≈23:55 PDT 09-26 (Opus 5.5; W1 ARMED, quiet slice, no seats):** [Record 00](docs/process_traces/2026-09-26-activation-3930fc49/00-activation-record.md), items 1–6. It was relaunched by the watchdog after 22784e38 exited cleanly. It did bookkeeping only and exited before the t0 settle. The next exact action is unchanged: 22784e38 record item 17, harvesting W1 first.
+
+**▶▶ ACTIVATION 22784e38 — 22:34 PDT 09-26 → exit before 00:22 PDT 09-27 (Opus 5.5; W1 ARMED, t0 00:30 PDT 09-27):** [Record 00](docs/process_traces/2026-09-26-activation-22784e38/00-activation-record.md), items 1–17.
+
+**W1 ARMED** at 23:16:40 PDT. Triple: (`d079-epoch-25g83-derivation-w1-20260927`, `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w1`, `97082508`).
+- Window: t0 00:30, window end 03:00, courier deadline 03:05, dead-man 04:05.
+- Notice accepted: Gmail `1a0e180925850ff6`.
+- Arm gate: cold Fable **ARM** plus Opus lens **ARM** (NITs only).
+- Both battery gates passed at 0 mA.
+- Live probe: median 131.8 ms.
+
+Getting there took four arm-script fixes, each approved by Ed by email (record items 4–14):
+- the ledger source moved to the n2 176-row ledger, with a digest pin;
+- the refused clone was archived;
+- the epoch-watch expectation;
+- the probe plist in the render sets.
+
+The auto-mode classifier denied each fix until Ed approved that change by name.
+
+**SUCCESSOR'S NEXT EXACT ACTION:** record 00, item 17:
+1. Harvest W1 (the HARVEST CHECK with the battery verdict).
+2. The second SWEEPCLASS erratum cold gate on the Opus refuter's B-1..B-5, then the S1 fix round 3 resume.
+3. The TEST-CENSUS-MULTILINE-ARGV-01 test fix.
+4. The bookkeeping PR (92472459 + 22784e38; touch `tests/test_gen_state.py`).
+
+**▶▶ ACTIVATIONS e6f06c96 + 92472459 — 15:48 → ≈22:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; 92472459 exits so a fresh supervisor can arm W1):** e6f06c96 exited on usage at 16:11 ([record](docs/process_traces/2026-09-26-activation-e6f06c96/00-activation-record.md)). 92472459's [record 00](docs/process_traces/2026-09-26-activation-92472459/00-activation-record.md), items 1–35, is the full account.
+
+**MERGED:**
+- #430, the bookkeeping PR for 8e43cfa7, 6bec2aa6 and f8d6cab1 (light tier) → `97a48451`.
+- **#431, BFG-S S2** → `97082508`. It carries the quiet-night collector's battery brackets, the custody-first night summary that blanks a night on any non-pass, and the flip of the QPE fence. It merged under the full gate, 12/12. The cold Fable final pass ruled MERGE. The row-9 integration suite ran 7,525 tests; its two environmental cases both passed on rerun.
+- Canonical is at `97082508`.
+
+**W1 IS UNBLOCKED:** interactive PID 46048 was gone at 22:13, and no interactive Claude session remains.
+
+**Cold gates this block** (each ruled by a cold Fable judge, with a paired Opus refuter and then an erratum):
+- QPE-SHAPE3 erratum (amendment 35 restated).
+- BFGS-S1-SCOPE-01 plus erratum (amendments 36–43; the historical set grows to 69 = 13 fixtures + 50 floor-file bundles + 6 RPT001 tree digests).
+- BFGS-SAMESIG-01 plus erratum (amendments 44–48; a rule-11 same-signature consult).
+- BFGS-S1-R2-01 plus erratum (amendments 49–56).
+- BFGS-S1-SWEEPCLASS-01 (amendments 57–59). Its paired refuter found no BLOCKER but five SHOULD-FIXes (RSW-1..5); **the erratum is not yet convened.**
+
+**BFG-S S1** is on `feat/2026-09-26-bfgs-s1-bundles` @ `315364b2` (fix round 3 partial `cbfa9dc3` + main `97082508` merged; the sweep line is `set(PHASES)`). Amendments 36–50 and 52–56 are implemented. **Amendment 51 (the read sweep) is not yet done**; amendments 57–59 now unblock it.
+
+**SUCCESSOR'S NEXT EXACT ACTION:**
+1. **Arm W1** under NIGHT_HANDBACK. First make sure no seat or agent process is alive, since W1 needs a quiet machine and the resident supervisor must have started after the `97082508` fast-forward. Then rerun the W1 README prerequisites (`docs/2026-09-25-817355d2-w1arm` @ `c79816c9`, `scripts/README-sequence.md`) from step 0:
+   - `__H__` = current main (`97082508` or later), which now carries S0's `battery_brackets` fence and S2's QPE flip. Re-verify that `evidence_night.check` passes for the derivation kind.
+   - A fresh battery pair.
+   - `__PREREG__` = `81b65f08…ddf1`.
+   - Get a cold Fable pass on the staged plan, email Ed, arm, and exit by the request deadline.
+2. After the window: first convene the **SWEEPCLASS erratum cold gate** on RSW-1..RSW-9 (packet: `20-bfgs-s1/90-coldgate-sweep/`, where `11-opus-contract-refuter.md` holds sections A and B; the judge's worktree is detached @ `cbfa9dc3`). Then the **S1 fix round 3 resume.** Implement amendment 51 as amended by 57–59 (`20-bfgs-s1/90-coldgate-sweep/21-coldgate-fable-ruling.md` §7 and §11). Also apply the §9 N-1 comment fix in `tests/test_battery_float_consumers.py`, which is authorized. Then: delta lenses (contract lens checks every allowlist row, per the S1-R2 erratum §14 step 2) → round F (amendment 38 plus magistrate-named test paths; V3 had A 146 / B 362) → the supply-map receipt → full gate → PR.
+3. **Lanes registered this block:**
+   - BFGS-MANIFEST-CUSTODY-01 (`analysis_manifest_v3.py` converts gate exceptions; must close before any analysis manifest is finalized over a post-S1 bundle).
+   - BFGS-S2-FOLLOWUPS-01 (three final-pass NITs).
+   - TEST-CENSUS-MULTILINE-ARGV-01 (the live `pgrep` census test breaks on a multi-line argv).
+   - HISTORICAL-7B-IDENTITY (the fifty 7B floor runs named only by file hashes; they need their own cold gate inside HISTORICAL-BATTERY-STATE-01).
+   - Two open questions named by the S1-R2 erratum: an unreadable campaign log as custody (49 (b)), and a digest-differing present member (56 (d)).
+
 **▶▶ ACTIVATION f8d6cab1 — 11:43 → ≈15:30 PDT 09-26 (Opus 5.5; NOTHING ARMED; exits for a fresh supervisor after the merge wave):** [Record 00](docs/process_traces/2026-09-26-activation-f8d6cab1/00-activation-record.md) items 1–25.
 
 **MERGED:**
@@ -22,7 +147,7 @@ file instead.
 - Round 4 then passed the Astra + Opus delta lenses, after one bench fix (strict UTF-8 container decoding). The cold Fable final pass ruled MERGE after one dictated test row.
 - **S1 and S2 briefs must quote amendments 26 and 31–34 verbatim** from the erratum §3 ([30-erratum/21](docs/process_traces/2026-09-26-activation-f8d6cab1/10-s0-delta/20-coldgate/30-erratum/21-coldgate-fable-erratum-ruling.md)).
 
-**#427** (bookkeeping for 6bec2aa6) could not merge. The CI docs-only filter skips the test matrix, so the required `test (3.13, N)` contexts never report. Its content is carried by this activation's bookkeeping PR from `docs/2026-09-26-f8d6cab1`, which also changes `tests/test_gen_state.py`, so the hosted matrix runs. Close #427 as superseded once that PR merges.
+**#427** (bookkeeping for 6bec2aa6) could not merge. The CI docs-only filter skips the test matrix, so the required `test (3.13, N)` contexts never report. Its content is carried by this activation's bookkeeping PR from `docs/2026-09-26-f8d6cab1`, which also changes `tests/test_gen_state.py`, so the hosted matrix runs. #427 is closed as superseded.
 
 **SUCCESSOR'S NEXT EXACT ACTION:**
 1. Merge the bookkeeping PR from `docs/2026-09-26-f8d6cab1` (it supersedes #427, which is closed) under the light tier. Rows 1, 9, 11 and 12 are still to run.

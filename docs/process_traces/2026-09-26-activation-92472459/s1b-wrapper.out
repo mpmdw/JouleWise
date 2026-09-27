@@ -1,0 +1,5 @@
+codex-run-v3: another scoped runner holds the worktree lock
+rc=75
+stale lock (dead pid 80129) removed 16:27; relaunch
+codex-run exit: OK -> /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/20-bfgs-s1/11-seat-report-round1b.md
+rc=65

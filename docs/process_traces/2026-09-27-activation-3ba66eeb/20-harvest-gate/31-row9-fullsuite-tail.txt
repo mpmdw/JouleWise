@@ -1,0 +1,13 @@
+SHARD SUMMARY index=6/6 modules=47 tests=1796 failures=0 errors=0 skipped=33 result=PASS
+WORKERS SUMMARY shards=6 modules=266 tests=7525 failures=50 errors=0 skipped=103 failed_shards=2,3,5 result=FAIL
+rc=1
+SHARD SUMMARY index=1/6 modules=38 tests=691 failures=0 errors=0 skipped=4 result=PASS
+MODULE FAIL tests.test_install_night_agent tests=65 failures=4 errors=0 skipped=0 seconds=71.225
+SHARD SUMMARY index=2/6 modules=42 tests=1085 failures=4 errors=0 skipped=46 result=FAIL
+MODULE FAIL tests.test_run_night tests=237 failures=8 errors=0 skipped=0 seconds=188.812
+SHARD SUMMARY index=3/6 modules=47 tests=1919 failures=8 errors=0 skipped=11 result=FAIL
+SHARD SUMMARY index=4/6 modules=46 tests=855 failures=0 errors=0 skipped=1 result=PASS
+MODULE FAIL tests.test_evidence_night tests=166 failures=23 errors=0 skipped=0 seconds=165.558
+MODULE FAIL tests.test_night_kinds tests=15 failures=15 errors=0 skipped=0 seconds=0.343
+SHARD SUMMARY index=5/6 modules=46 tests=1179 failures=38 errors=0 skipped=8 result=FAIL
+SHARD SUMMARY index=6/6 modules=47 tests=1796 failures=0 errors=0 skipped=33 result=PASS

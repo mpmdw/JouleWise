@@ -1,0 +1,18 @@
+Sun Sep 27 04:28:10 PDT 2026
+no Wispr
+	Error: unknown indexing state.
+2026-09-27 04:28:10 -0700 
+Assertion status system-wide:
+   BackgroundTask                 0
+   ApplePushServiceTask           0
+   UserIsActive                   1
+   PreventUserIdleDisplaySleep    0
+   SoftwareUpdateTask             0
+   PreventSystemSleep             0
+   ExternalMedia                  0
+   PreventUserIdleSystemSleep     1
+   NetworkClientActive            0
+Listed by owning process:
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=23003235)	100%; charged; 0:00 remaining present: true
+ 4:28  up 8 days, 10:47, 1 user, load averages: 3.25 2.68 2.51
