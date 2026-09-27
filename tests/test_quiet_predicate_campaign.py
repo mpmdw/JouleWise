@@ -2368,7 +2368,7 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         self.assertIsInstance(harness.execute_error, battery_float.CustodyFailure)
         self.assertIn("round journal missing", str(harness.execute_error))
 
-    def test_L2_a_replay_night_that_wrote_no_session_still_refuses(self):
+    def test_L2_exit_zero_deleted_sessions_raise_custody(self):
         """Exit-zero entries with deleted sessions now raise custody."""
         from unittest.mock import patch
         from scripts import sample_quiet_predicate_evidence as sampler
@@ -2390,6 +2390,50 @@ class BenchReplayFailClosedTests(unittest.TestCase):
         harness.exercise(spy=spy, tolerate_raise=True)
         self.assertIsInstance(harness.execute_error, battery_float.CustodyFailure)
         self.assertIn("session.json unreadable: missing", str(harness.execute_error))
+
+    def test_L2_replay_collectors_crash_before_any_record_still_refuses(self):
+        from scripts import sample_quiet_predicate_evidence as sampler
+        harness = FrozenExecutorTests()
+        def spy(stack, module):
+            stack.enter_context(patch.dict(module.os.environ, {sampler.REPLAY_ENV: 'replay'}))
+            real = module.pilot_summary
+            def no_records(directory, protocol, envelopes, observer_cpu_s=None):
+                for out in directory.glob('envelope-*'):
+                    (out / 'session.json').unlink()
+                    (out / 'rounds.jsonl').unlink()
+                    shutil.rmtree(out / 'raw')
+                for row in envelopes:
+                    row['collector_exit'] = 124
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, 'pilot_summary', side_effect=no_records))
+        rc, summary, outcome, *_ = harness.exercise(spy=spy)
+        self.assertIsInstance(summary, dict)
+        self.assertEqual(outcome['outcome'], 'refused')
+        self.assertEqual(outcome['recorder_kind'], 'replay')
+        self.assertEqual(rc, 2)
+
+    def test_replay_with_battery_nonpass_refuses_at_harvest(self):
+        harness = FrozenExecutorTests()
+        def spy(stack, module):
+            real = module.pilot_summary
+            def first_write(directory, protocol, envelopes, observer_cpu_s=None):
+                out = directory / 'envelope-05'
+                session = json.loads((out / 'session.json').read_text())
+                session['battery_float'].pop('post')
+                (out / 'raw/battery_float.post.ioreg').unlink()
+                for key in ('end_stamp', 'journal_rows', 'whole_envelope_observer_cpu_s', 'interior'):
+                    session.pop(key)
+                (out / 'session.json').write_text(json.dumps(session))
+                return real(directory, protocol, envelopes, observer_cpu_s)
+            stack.enter_context(patch.object(module, 'pilot_summary', side_effect=first_write))
+        rc, summary, outcome, *_ = harness.exercise(recorder_kind='replay', spy=spy)
+        self.assertEqual(summary['status'], 'BATTERY_FLOAT_EVIDENCE_MISSING')
+        self.assertEqual(summary['envelopes'][4]['collector_exit'], 0)
+        self.assertEqual(len(summary['replay_recorder_envelopes']), 12)
+        self.assertIn('power.recorder_kind', summary['replay_recorder_reason'])
+        self.assertEqual(outcome['outcome'], 'refused')
+        self.assertEqual(outcome['recorder_kind'], 'replay')
+        self.assertEqual(rc, 2)
 
     def test_D1_a_bench_abort_keeps_its_own_error_beside_the_replay_marker(self):
         """Delta lenses (execution SHOULD-FIX 1, contract N1): no clobber.
@@ -3878,6 +3922,9 @@ class BatteryFloatSummaryTests(unittest.TestCase):
             self.assertTrue({'collect_error', 'incomplete_interior_support'}
                             <= set(report['envelopes'][4]['excluded']))
             self.assertIsNone(report['envelopes'][4]['joules'])
+            self.assertEqual(len(report['battery_float_envelopes']), 1)
+            self.assertEqual(report['battery_float_envelopes'][0]['status'],
+                             'battery_float_evidence_missing')
             self.assertEqual(report['battery_float_envelopes'][0]['disposition'], 'excluded_collect_error')
             self.assertIn('Envelope 5 excused', (evidence / 'summary.md').read_text())
             self.assertEqual(night_gate.QPE01_PILOT_REGISTRATION_SHA256, V3_REGISTRATION_SHA256)
@@ -3942,6 +3989,8 @@ class BatteryFloatSummaryTests(unittest.TestCase):
                                     <= set(report['envelopes'][4]['excluded']))
                     self.assertTrue(report['envelopes'][4]['error'].startswith('collector refused before capture'))
                     self.assertFalse(report['battery_float_envelopes'])
+                    self.assertNotIn(report['status'],
+                                     ('BATTERY_FLOAT_CONFOUNDED', 'BATTERY_FLOAT_EVIDENCE_MISSING'))
                     self.assertIn('Envelope 5 refused', (evidence / 'summary.md').read_text())
 
     def test_t6_q_s_completed_digest_disagreement_and_shape_downgrade(self):
@@ -3958,10 +4007,36 @@ class BatteryFloatSummaryTests(unittest.TestCase):
             self.assertFalse((evidence / 'summary.json').exists())
             session.pop('end_stamp')
             self.save(out, session, [row])
-            self.assertEqual(self.summarize(evidence, entries)['status'], 'BATTERY_FLOAT_EVIDENCE_MISSING')
+            report = self.summarize(evidence, entries)
+            self.assertEqual(report['status'], 'BATTERY_FLOAT_EVIDENCE_MISSING')
+            self.assertEqual(report['battery_float_envelopes'][0]['disposition'], 'blanks_night')
             session['battery_float'].pop('post')
             self.save(out, session, [row])
-            self.assertEqual(self.summarize(evidence, entries)['status'], 'BATTERY_FLOAT_EVIDENCE_MISSING')
+            report = self.summarize(evidence, entries)
+            self.assertEqual(report['status'], 'BATTERY_FLOAT_EVIDENCE_MISSING')
+            self.assertEqual(report['battery_float_envelopes'][0]['disposition'], 'blanks_night')
+
+    def test_replay_markdown_names_excused_and_refused_envelopes(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            self.first_write(evidence, entries, index=5, exit_code=124)
+            out = evidence / 'envelope-06'
+            session = json.loads((out / 'session.json').read_text())
+            session.pop('end_stamp')
+            session.pop('journal_rows')
+            session['error_class'] = battery_float.QUIET_REFUSAL_ERROR_CLASS
+            self.save(out, session, [])
+            entries[5]['collector_exit'] = 3
+            for out in evidence.glob('envelope-*'):
+                session = json.loads((out / 'session.json').read_text())
+                if isinstance(session.get('power'), dict):
+                    session['power']['recorder_kind'] = 'replay'
+                    (out / 'session.json').write_text(json.dumps(session))
+            report = self.summarize(evidence, entries)
+            self.assertEqual(report['status'], campaign.REPLAY_NEVER_EVIDENCE)
+            markdown = (evidence / 'summary.md').read_text()
+            self.assertIn('Envelope 5 excused', markdown)
+            self.assertIn('Envelope 6 refused', markdown)
 
     def test_t6_l_provisional_journal_is_not_read(self):
         for journal in (None, '{"round": 1, "ra', '', '{"raw":{"sha256":{"x":"y"}}}\n'):
@@ -4096,12 +4171,82 @@ class BatteryFloatSummaryTests(unittest.TestCase):
                 out = evidence / 'envelope-05'
                 (out / 'session.json').unlink()
                 (out / 'rounds.jsonl').unlink()
+                for raw_file in (out / 'raw').iterdir():
+                    raw_file.unlink()
                 if pre:
                     (out / 'raw/battery_float.pre.ioreg').write_bytes(b'unrecorded')
                 entries[4]['collector_exit'] = 1
+                entries[4]['cleanup'] = {'cleanup_proven': False}
                 report = self.summarize(evidence, entries)
                 self.assertIn('collect_error', report['envelopes'][4]['excluded'])
+                self.assertIn('cleanup_unproven', report['envelopes'][4]['excluded'])
+                self.assertIn('busy_cores', report['envelopes'][4])
+                self.assertIn('busy_cores_samples', report['envelopes'][4])
+                self.assertIn('recorder_observer_cpu_s', report['envelopes'][4])
                 self.assertEqual(report['retained'], 11)
+
+    def test_carveout_requires_absent_journal_and_round_directories(self):
+        for survivor in ('journal', 'round_dir', 'dangling_session'):
+            with self.subTest(survivor=survivor), tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+                evidence, entries = self.night(Path(tmp))
+                out = evidence / 'envelope-05'
+                (out / 'session.json').unlink()
+                if survivor != 'journal':
+                    (out / 'rounds.jsonl').unlink()
+                if survivor == 'round_dir':
+                    (out / 'raw/round-0001').mkdir()
+                if survivor == 'dangling_session':
+                    shutil.rmtree(out / 'raw')
+                    (out / 'session.json').symlink_to('absent.json')
+                entries[4]['collector_exit'] = 1
+                with self.assertRaises(battery_float.CustodyFailure):
+                    self.summarize(evidence, entries)
+                self.assertFalse((evidence / 'summary.json').exists())
+
+    def test_completed_record_with_refusal_marker_uses_observer_floor(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            out = evidence / 'envelope-05'
+            session = json.loads((out / 'session.json').read_text())
+            session['error_class'] = battery_float.QUIET_REFUSAL_ERROR_CLASS
+            (out / 'session.json').write_text(json.dumps(session))
+            entries[4]['collector_exit'] = 1
+            report = self.summarize(evidence, entries)
+            self.assertIn('observer_floor_components', report['envelopes'][4])
+            self.assertFalse(str(report['envelopes'][4].get('error', '')).startswith('collector refused'))
+
+    def test_authenticated_session_swap_raises_before_pilot_routing(self):
+        real = battery_float.authenticate_quiet_session
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            entries[4]['collector_exit'] = 1
+            def swap(out):
+                verdict = real(out)
+                if out.name == 'envelope-05':
+                    path = out / 'session.json'
+                    session = json.loads(path.read_text())
+                    session.pop('end_stamp')
+                    session['error_class'] = battery_float.QUIET_REFUSAL_ERROR_CLASS
+                    path.write_text(json.dumps(session))
+                return verdict
+            with patch.object(battery_float, 'authenticate_quiet_session', side_effect=swap):
+                with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                            'envelope-05: session.json changed during authentication'):
+                    self.summarize(evidence, entries)
+            self.assertFalse((evidence / 'summary.json').exists())
+
+    def test_missing_historical_journal_is_custody_with_accurate_message(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            out = evidence / 'envelope-05'
+            session = json.loads((out / 'session.json').read_text())
+            session.pop('battery_float')
+            (out / 'session.json').write_text(json.dumps(session))
+            (out / 'rounds.jsonl').unlink()
+            with self.assertRaisesRegex(battery_float.CustodyUnreadable,
+                                        '^rounds.jsonl unreadable:'):
+                self.summarize(evidence, entries)
+            self.assertFalse((evidence / 'summary.json').exists())
 
     def test_t6_m_summarize_has_no_executor_excuse(self):
         from scripts import sample_quiet_predicate_evidence as harness
@@ -4153,6 +4298,26 @@ class BatteryFloatSummaryTests(unittest.TestCase):
                 self.assertEqual(len(report['battery_float_envelopes']), 12)
                 self.assertTrue(all(row['joules'] is None for row in report['envelopes']))
 
+    def test_synthetic_legacy_twelve_envelopes_are_evidence_missing(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            for out in evidence.glob('envelope-*'):
+                session = json.loads((out / 'session.json').read_text())
+                session.pop('battery_float')
+                (out / 'session.json').write_text(json.dumps(session))
+            report = self.summarize(evidence, entries)
+            self.assertEqual(report['status'], 'BATTERY_FLOAT_EVIDENCE_MISSING')
+            self.assertEqual(len(report['battery_float_envelopes']), 12)
+
+    def test_t6_h_exact_first_write_missing_pre_raw_raises_custody(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            evidence, entries = self.night(Path(tmp))
+            out, _ = self.first_write(evidence, entries, exit_code=124)
+            (out / 'raw/battery_float.pre.ioreg').unlink()
+            with self.assertRaises(battery_float.CustodyFailure):
+                self.summarize(evidence, entries)
+            self.assertFalse((evidence / 'summary.json').exists())
+
 
 class BatteryFloatExecuteTests(unittest.TestCase):
     def test_x1_custody_is_printed_and_reraised_without_refusal_documents(self):
@@ -4179,6 +4344,26 @@ class BatteryFloatExecuteTests(unittest.TestCase):
         self.assertIsInstance(self.execute_error, battery_float.CustodyFailure)
         self.assertIn('custody_failure: journal changed', output.getvalue())
         self.assertEqual(observed[-1], {'summary': False, 'outcome': False, 'refusal': False})
+
+    def test_x1_flushes_custody_line(self):
+        class Output:
+            def __init__(self):
+                self.text = ''
+                self.flushed = []
+            def write(self, value):
+                self.text += value
+            def flush(self):
+                self.flushed.append(self.text)
+        from contextlib import redirect_stdout
+        output = Output()
+        def spy(stack, module):
+            stack.enter_context(patch.object(module, 'pilot_summary',
+                                             side_effect=battery_float.CustodyUnreadable('journal changed')))
+        with redirect_stdout(output):
+            FrozenExecutorTests.exercise(self, spy=spy, tolerate_raise=True)
+        self.assertIsInstance(self.execute_error, battery_float.CustodyFailure)
+        self.assertTrue(any('custody_failure: journal changed\n' in text
+                            for text in output.flushed))
 
 
 class BatteryFloatInterruptedCollectorTests(unittest.TestCase):

@@ -1106,8 +1106,8 @@ def collect(args, *, clock=None, round_runner=production_round, recorder_factory
         session["error_class"] = NETWORK_TIME_REFUSAL
         session["error_rounds"] = 0
         battery_read("post")
-        write_json(out / "session.json", session)
         (out / "rounds.jsonl").write_text("")
+        write_json(out / "session.json", session)
         return session, []
     write_json(out / "session.json", session)
     recorder = None
@@ -1494,15 +1494,39 @@ def summarize(directory, reference_state=None, load_logs=()):
                             for path in directory.rglob(name)})
     paths = []
     rows = []
+    sessions = {}
     reports = [(Path(path), json.loads(Path(path).read_text())) for path in load_logs]
+    def snapshot(path):
+        try:
+            return path.read_bytes()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            return exc
     for envelope_dir in envelope_dirs:
+        session_bytes = snapshot(envelope_dir / "session.json")
+        journal_bytes = snapshot(envelope_dir / "rounds.jsonl")
         verdict = battery_float.authenticate_quiet_session(envelope_dir)
+        session_after = snapshot(envelope_dir / "session.json")
+        journal_after = snapshot(envelope_dir / "rounds.jsonl")
+        for name, value in (("session.json", session_bytes), ("rounds.jsonl", journal_bytes),
+                            ("session.json", session_after), ("rounds.jsonl", journal_after)):
+            if isinstance(value, OSError):
+                raise battery_float.CustodyUnreadable(
+                    f"{envelope_dir.name}: {name} unreadable: {value}")
+        if session_after != session_bytes:
+            raise battery_float.CustodyUnreadable(
+                f"{envelope_dir.name}: session.json changed during authentication")
+        if journal_after != journal_bytes:
+            raise battery_float.CustodyUnreadable(
+                f"{envelope_dir.name}: rounds.jsonl changed during authentication")
         if verdict.status != "pass":
             raise ValueError(f"{envelope_dir}: {verdict.status}: {', '.join(verdict.reasons)}")
         path = envelope_dir / "rounds.jsonl"
         paths.append(path)
-        session = json.loads((envelope_dir / "session.json").read_text())
-        for line in path.read_text().splitlines():
+        session = json.loads(session_bytes)
+        sessions[envelope_dir] = session
+        for line in journal_bytes.decode("utf-8").splitlines():
             if not line.strip():
                 continue
             row = json.loads(line)
@@ -1571,9 +1595,8 @@ def summarize(directory, reference_state=None, load_logs=()):
                 if bound is not None and ref_bound is not None else None)
         groups.append(reasons(entry, "reference or finite alignment evidence unavailable"))
     provenance = []
-    for path in sorted(directory.rglob("session.json")):
-        session = json.loads(path.read_text())
-        provenance.append({"source": str(path.relative_to(directory)),
+    for envelope_dir, session in sorted(sessions.items()):
+        provenance.append({"source": str((envelope_dir / "session.json").relative_to(directory)),
                            **{key: session[key] for key in (
                                "evidence_status", "alignment_model", "network_time_provenance",
                                "network_time_provenance_reason") if key in session}})

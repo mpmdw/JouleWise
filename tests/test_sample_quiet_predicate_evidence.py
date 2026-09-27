@@ -364,6 +364,62 @@ class BatteryCollectorTests(NetworkTimeOffMixin, unittest.TestCase):
             self.assertTrue(all(json.loads(line)["raw"]["sha256"] == {} for line in provisional))
             self.assertFalse(any(out.glob(".rounds.jsonl.*")))
 
+    def test_atomic_session_and_final_journal_fsync_before_replace(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            out = Path(tmp) / 'collector'
+            events = []
+            real_fsync, real_replace = harness.os.fsync, harness.os.replace
+            def fsync(fd):
+                events.append(('fsync', fd))
+                return real_fsync(fd)
+            def replace(source, target):
+                self.assertEqual(events[-1][0], 'fsync')
+                events.append(('replace', str(source), str(target)))
+                return real_replace(source, target)
+            with patch.object(harness.os, 'fsync', side_effect=fsync), \
+                 patch.object(harness.os, 'replace', side_effect=replace):
+                self.collect(out)
+            for target in ('session.json', 'rounds.jsonl'):
+                replacements = [(i, event) for i, event in enumerate(events)
+                                if event[0] == 'replace' and Path(event[2]).name == target]
+                self.assertTrue(replacements)
+                for index, event in replacements:
+                    self.assertNotIn(Path(event[1]).name, ('session.json', 'rounds.jsonl'))
+                    self.assertEqual(events[index - 1][0], 'fsync')
+
+    def test_refusal_journal_precedes_session_even_if_session_write_fails(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as tmp:
+            out = Path(tmp) / 'refusal'
+            real_write = harness.write_json
+            def fail_session(path, value):
+                if Path(path).name == 'session.json':
+                    raise OSError('session write failed')
+                return real_write(path, value)
+            with patch.dict(os.environ, {harness.NETWORK_TIME_RECORD_ENV: '/absent'}), \
+                 patch.object(harness, 'write_json', side_effect=fail_session):
+                with self.assertRaisesRegex(OSError, 'session write failed'):
+                    self.collect(out)
+            self.assertEqual((out / 'rounds.jsonl').read_bytes(), b'')
+
+    def test_summarize_detects_session_changed_during_authentication(self):
+        root = Path(tempfile.mkdtemp(dir='/tmp'))
+        self.addCleanup(lambda: __import__('shutil').rmtree(root))
+        write_authentic_rounds(root, [SummaryTests().fixture_row('idle', '1', 1)])
+        real = battery_float.authenticate_quiet_session
+        def swap(out):
+            verdict = real(out)
+            session_path = out / 'session.json'
+            session = json.loads(session_path.read_text())
+            session.pop('end_stamp')
+            session['error_class'] = battery_float.QUIET_REFUSAL_ERROR_CLASS
+            session_path.write_text(json.dumps(session))
+            return verdict
+        with patch.object(battery_float, 'authenticate_quiet_session', side_effect=swap):
+            with self.assertRaisesRegex(battery_float.CustodyFailure,
+                                        'session.json changed during authentication'):
+                harness.summarize(root)
+        self.assertFalse((root / 'summary.json').exists())
+
     def test_t5_two_second_pre_probe_moves_start_drift_only(self):
         frame = placed(aligned_fixture()[0], 1000., 1600., elapsed_s=600)
         observations = []
