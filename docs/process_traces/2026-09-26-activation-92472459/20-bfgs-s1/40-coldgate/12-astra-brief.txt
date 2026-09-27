@@ -1,0 +1,13 @@
+LANE: BATTERY-FLOAT-GATE-01, cold gate BFGS-S1-SCOPE-01, independent execution seat (cross-family). Seat: Astra 6, effort high, scout genre.
+WORKTREE: /Users/edr/code/JouleWise-wt-s1cg-92472459 (detached @ 24b79db3, S1 rounds 1/1b over main 1417c0c4). Base for comparisons: 1417c0c4 via `git archive 1417c0c4 | tar -x -C /tmp/<dir>`.
+WRITE_SCOPE: []
+You edit NO repository file. Scratch under /tmp only.
+
+Read the charge: /Users/edr/code/JouleWise-wt-bk-92472459/docs/process_traces/2026-09-26-activation-92472459/20-bfgs-s1/40-coldgate/00-charge.md (packet paths inside are absolute). A cold judge and a contract-lens refuter are answering the same questions independently; you are the EXECUTION lens and must not coordinate with them.
+
+Answer Q2 and Q3 of the charge with executed evidence only (commands and exact output tails):
+- Q2: for a sample of at least 3 class-B `config.json digest does not match metadata.config_sha256` failures and 2 class-A failures (see 20-bfgs-s1/bfgs-s1-v3-failure-index.txt), trace the exact code path in joulewise/bundle_read.py at 24b79db3 that raises, and the ruled sentence (Final texts v1.1 text 8, amendments 24–25) that requires it for THAT bundle. State for each whether the refusal is ruled behaviour or S1 overreach.
+- Q3: enumerate every committed artifact in the tree at 1417c0c4 that cites a bundle by any digest (complete-bundle digest, tree digest, manifest digest, run id) — manifests, statistics scripts, paper supply maps, figure scripts, fixtures. For each class: count, whether its bundles are present in the repo, whether they are in configs/battery_float/historical_bundles.json at 24b79db3, and whether a production route (script or CLI that a paper figure or number depends on) now refuses them. Specifically for RPT001: show whether each retained bundle's complete-bundle digest can be recomputed from committed bytes and matched to the manifest's bundle_tree_sha256, and run scripts/make_figures.py's validate step at base and head.
+- Then give your recommendation on Q3 (admit as unobserved_historical, keep refused, or other) with the science reason: can admission let a battery-confounded number reach a published claim, given the lane HISTORICAL-BATTERY-STATE-01 that mechanically blocks claim renderers on an empty battery_state column (Final texts v1.1 text 19)?
+
+Do not end your turn until the report is complete. REPORT in the claude-codex-report/v1 envelope with one table per question.
