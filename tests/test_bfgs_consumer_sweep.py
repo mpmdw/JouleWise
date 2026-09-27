@@ -1437,17 +1437,40 @@ class ConsumerSweepTests(unittest.TestCase):
                 self.assertEqual(power_leaking_license(original), power_leaking_license(changed))
 
             summary_path = changed / "summary_metrics.json"
-            summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            summary["gross_energy_j"] = 12.5
-            summary_path.write_text(json.dumps(summary), encoding="utf-8")
-            with self.assertRaisesRegex(SalvageAuthorizationError, "measurand bytes"):
-                inspect_preworkload_abort(changed)  # R72-2 GREEN
-            # R72-2 RED under removal of the named test: the exact refusal
-            # contract fails. The separate unknown-field check still refuses.
-            with patch.object(salvage_dangler, "_MEASURAND_FIELDS", ()):
-                with self.assertRaises(AssertionError):
-                    with self.assertRaisesRegex(SalvageAuthorizationError, "measurand bytes"):
-                        inspect_preworkload_abort(changed)
+            clean_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            measurands = (
+                "decode_latency_s", "energy_bound_terms_j", "energy_output_token_j",
+                "energy_request_j", "energy_token_j", "energy_uncertainty_status",
+                "energy_variance_terms_j2", "gross_energy_j", "idle_mean_uncertainty",
+                "idle_subtracted_energy_j", "inter_token_throughput_tokens_s",
+                "phase_energy_j", "suite_metrics", "throughput_tokens_s", "ttft_s",
+                "uncertainty", "window_evidence_precheck",
+            )
+            self.assertEqual(len(set(measurands)), 17)
+            measurand_refusal = r"^failed attempt contains measurand bytes$"
+            for name in measurands:
+                with self.subTest(measurand=name):
+                    summary_path.write_text(
+                        json.dumps({**clean_summary, name: 12.5}), encoding="utf-8")
+                    unknown_refusal = r"^unknown non-null failed-summary fields: " + name + r"$"
+                    no_null_test = patch.object(
+                        salvage_dangler, "_MEASURAND_FIELDS", frozenset())
+                    no_unknown_test = patch.object(
+                        salvage_dangler, "_ALLOWED_FAILED_SUMMARY_NONNULL",
+                        salvage_dangler._ALLOWED_FAILED_SUMMARY_NONNULL | {name})
+                    with self.assertRaisesRegex(SalvageAuthorizationError, measurand_refusal):
+                        inspect_preworkload_abort(changed)  # R72-2 GREEN
+                    with no_null_test:  # R72-2 (b), (c): the unknown-field test refuses alone
+                        with self.assertRaisesRegex(SalvageAuthorizationError, unknown_refusal):
+                            inspect_preworkload_abort(changed)
+                    with no_unknown_test:  # the null test refuses alone
+                        with self.assertRaisesRegex(SalvageAuthorizationError, measurand_refusal):
+                            inspect_preworkload_abort(changed)
+                    with no_null_test, no_unknown_test:  # R72-2 (a) RED: a license is returned
+                        with self.assertRaises(AssertionError):
+                            with self.assertRaises(SalvageAuthorizationError):
+                                inspect_preworkload_abort(changed)
+                        self.assertIs(inspect_preworkload_abort(changed)["licensed"], True)
 
         salvage_rows = [key for key, row in ALLOWLIST.items()
                         if key[0] == "joulewise/salvage_dangler.py" and "tested and dropped" in row[1]]
