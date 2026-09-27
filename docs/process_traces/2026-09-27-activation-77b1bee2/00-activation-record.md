@@ -220,3 +220,13 @@
     - A synthetic trial showed that only the stored path string and the whole-file digest differ, and every substitution of different content was refused.
     - This is recorded as a **disclosed amendment made before any measured value was read**. Ed's reply (asked as Gmail `1a0e4ac6d73738a2`; none yet) takes precedence if it arrives before the prepare step.
     - The final pass's §4.6 N-1 rewording of "land the lane first" is noted against item 24's wording ("gates that only S1 provides").
+40. **PR #436 MERGED** at 16:23 PDT as `e7c8bcc6` (merge commit). All hosted checks were green. Canonical was fast-forwarded.
+41. **Prepare step: done, one run, a candidate was written.**
+    - **Before the run:** the owner was told under C4 (Gmail `1a0e52ead28598fe`). The run checkout was advanced from `722f7bd1` to `e7c8bcc6`. All value-blind pre-checks passed ([20-prechecks](60-prepare-record/20-prechecks/00-prechecks.md)).
+    - **The run** (16:25:42–16:26:39): rc 0, **candidate `dbad7cc7…b5b2`, n = 12, NOT ISSUED** ([30-run1](60-prepare-record/30-run1/00-run1-record.md)).
+    - **After the run:** 12/12 `verify-members` PASS; no absolute string; the predecessor note is relative; the custody tree is byte-identical before and after (R3).
+    - **Rule outcomes:** S = 0.013701 s; level screen 0.038079 s; positive headroom; excursion members 0; **2 screen-challenge members above r6's 0.0329 s**; new maximum not above the prior maximum plus range.
+42. **Cold science gate (runbook §4.3, adapted to two windows)** under the four-model shape:
+    - Sol 6.0 high mechanically assembles the packet on side branch `docs/2026-09-27-77b1bee2-packet` ([brief](70-science-gate/01-packet-brief.txt)).
+    - Astra 6 xhigh independently re-derives every operative from the raw members ([brief](70-science-gate/02-rederivation-brief.txt)).
+    - Next: a cold Fable 5.1 science judge with a paired Opus refuter. **The D-138 issuance transaction is out of scope for this turn** (runbook §4.4).
