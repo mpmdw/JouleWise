@@ -1,0 +1,87 @@
+{
+  "schema": "joulewise.calibration_cadence_report.v1",
+  "windows": [
+    {
+      "window": "W",
+      "captures": [
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d01/raw/powermetrics.plist",
+          "interval_count": 1583,
+          "median_native_frame_ms": 129.652291,
+          "max_native_frame_ms": 139.01875
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d02/raw/powermetrics.plist",
+          "interval_count": 1583,
+          "median_native_frame_ms": 129.64875,
+          "max_native_frame_ms": 136.199875
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d03/raw/powermetrics.plist",
+          "interval_count": 1581,
+          "median_native_frame_ms": 129.649416,
+          "max_native_frame_ms": 136.5685
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d04/raw/powermetrics.plist",
+          "interval_count": 1586,
+          "median_native_frame_ms": 127.97660400000001,
+          "max_native_frame_ms": 136.787416
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d05/raw/powermetrics.plist",
+          "interval_count": 1593,
+          "median_native_frame_ms": 127.5795,
+          "max_native_frame_ms": 136.64025
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d06/raw/powermetrics.plist",
+          "interval_count": 1584,
+          "median_native_frame_ms": 129.7590825,
+          "max_native_frame_ms": 140.908791
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d07/raw/powermetrics.plist",
+          "interval_count": 1584,
+          "median_native_frame_ms": 127.99116649999999,
+          "max_native_frame_ms": 138.348791
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d08/raw/powermetrics.plist",
+          "interval_count": 1584,
+          "median_native_frame_ms": 129.6087915,
+          "max_native_frame_ms": 138.8795
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d09/raw/powermetrics.plist",
+          "interval_count": 1578,
+          "median_native_frame_ms": 129.803583,
+          "max_native_frame_ms": 141.644583
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d10/raw/powermetrics.plist",
+          "interval_count": 1592,
+          "median_native_frame_ms": 127.78604150000001,
+          "max_native_frame_ms": 136.422208
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d11/raw/powermetrics.plist",
+          "interval_count": 1585,
+          "median_native_frame_ms": 127.842791,
+          "max_native_frame_ms": 138.164125
+        },
+        {
+          "path": "/Users/edr/night-custody/d079-epoch-25g83-derivation-w1-20260927/runs/instrument_validation/d079-epoch-25g83-derivation-w1-20260927-d12/raw/powermetrics.plist",
+          "interval_count": 1589,
+          "median_native_frame_ms": 127.985708,
+          "max_native_frame_ms": 136.529833
+        }
+      ],
+      "median_native_frame_ms": 128.4634165,
+      "max_native_frame_ms": 141.644583,
+      "median_of_capture_medians_ms": 128.799979,
+      "r5_n_verdict": "CONTINUE",
+      "r5_n_threshold_ms": 150.0
+    }
+  ]
+}
