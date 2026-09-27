@@ -54,3 +54,13 @@ Launched by the watchdog at 16:18:44 PDT 09-26 (attempt 108; last exit class `us
     - NITs accepted. Amendments 49–56 are restated in §10; order in §14.
     - Two open questions are named for the lead: an unreadable campaign log as custody (49 (b)), and a present member whose bytes differ from an earlier verdict row (56 (d)).
 30. **S1 fix round 3 launched** ([85-fix3/10-fix-brief.txt](20-bfgs-s1/85-fix3/10-fix-brief.txt); Sol 6.0 xhigh on `49d77c74`; amendments 49–56 in §14 order).
+31. **S2 row 9:** integration tree `11c2f89d` gave 7,525 tests with 1 failure and 1 error, both environmental.
+    - A custody time budget blown under load; its module reruns `Ran 62 … OK`.
+    - A live `pgrep` census test tripped by the magistrate's own seat's multi-line argv containing `run_campaign`. It fails identically on the main-equivalent tree while the seat lives; with no seat alive it reruns clean, `Ran 78 … OK`.
+    
+    New lane: TEST-CENSUS-MULTILINE-ARGV-01. Row 11: all hosted jobs green. **PR #431 (S2) MERGED → `97082508`** (full tier, 12/12; [ledger](30-bfgs-s2/90-gate/30-ledger-evidence.md)). The canonical root was fast-forwarded `97a48451 → 97082508` (no night label or plist).
+32. **S1 fix round 3, partial** → `cbfa9dc3`: amendments 49, 50, 52–56 are implemented (focused rows GREEN, V2 OK, builder 69 byte-identical). Amendment 51 is blocked:
+    - **NEEDS_RULING:** three reported reads (inside `battery_float.authenticate_bundle`, `BundleReader.metadata`, and `BundleReader.raw_summary`) fit no allowlist class. The last may be an ungated energy read.
+    - The seat's F2 (the §9 N-1 comment in `tests/test_battery_float_consumers.py`) is **authorized by the magistrate**: the ruling's own §9 names that fix, and the restriction was the lead brief's.
+    
+    → **cold gate BFGS-S1-SWEEPCLASS-01** convened.
