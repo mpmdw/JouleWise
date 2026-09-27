@@ -249,3 +249,12 @@
     - **Root of the miss:** every S1 round and every S1 gate ran only the targeted V1/V2 suites. No full suite ran on any S1 head until this row 9. The final pass listed "full V1 in one run" as not executed, and inferred the rest was green.
     - **The gate worked:** row 9 caught what the lenses did not.
     - **Next:** a classification scout (Sol high) over all 533 failures, then a consult on the fix shape. The options are fixture battery evidence, the historical-exemption scope, or gate placement. S1 is off the issuance critical path. No fix round runs before the scout.
+45. **S1 regression scout** (Sol 6.0 high; [brief](35-s1-refuter/61-regression-scout-brief.txt), [report](35-s1-refuter/62-regression-scout-report.md), inventory `62-regression-inventory.jsonl`).
+    - **Coverage:** 533 outcomes across 478 test ids and 42 modules, in 11 groups. Every group's representative fails on S1 and passes on main.
+    - **Fixture/test scope, (a):** G1 and G3–G8 plus G10. These are synthetic fixtures that lack battery pairs, digest-bound config/metadata, resolvable custody, or an injected battery runner.
+    - **G2 (42 F / 56 E) needs a ruling:** mock (`not_applicable`) members now refuse at window scope, including campaign completion. Preserving successful non-claim mock workflows would need a separately ruled production path; passing `not_applicable` would weaken the gate.
+    - **G9 (23 F) needs authority:** stale paper supply-map receipt digests (`d165_closeout`, `reported_energy_parents`, `whole_window_verdict`), because S1 changed pinned sources. The repin reaches `configs/paper_supply/` outside S1's ruled scope.
+    - **G11 (36):** secondary; these need a re-run after the other closures.
+    - **No group** is a historical-set exemption.
+    - **Why no gate caught it:** V1/V2 selected none of the 42 legacy modules.
+    - **Next (not this slice):** a consult with a cold ruling on G2 (the mock-workflow contract) and G9 (repin authority and order). Then a fixture-repair round under an enforced WRITE_SCOPE, then a delta re-audit, then row 9 again. **This is a new lesson for every lane: full tier requires a full-suite row 9 on EVERY fix head before the final pass, never targeted suites alone.** It is registered for the council (not ratified here).
