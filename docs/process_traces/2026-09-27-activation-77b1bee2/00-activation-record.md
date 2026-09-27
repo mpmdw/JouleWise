@@ -135,3 +135,17 @@
     - **Sol 6.0 xhigh execution lens** ([51](50-custody-outside-repo/51-sol-execution-lens.md)): **LENS: FAIL**, with **F1 BLOCKER**: a nested capture `P/s/s/runs/instrument_validation/s-d01` is accepted under both `P` and `P/s`, so the stored name is ambiguous. The real 24 locators are unaffected.
     - **Lead ruling on F1:** require exactly `<session_id>/runs/instrument_validation/<attempt_id>`. This is the fixed middle part of Fable consult §4.1's diagram, and it makes the root unique. It is a design-C closure, not a new design.
     - **Fix round 1** (Sol xhigh, [brief](50-custody-outside-repo/60-fix1-brief.txt)) covers C1 (exact shape), C2 (a Revision-5 guard-F2 test plus a flag-equivalence test) and C3 (the nits). A delta re-audit follows, then the fresh cold gate on the final diff.
+26. **Paired Opus refuter on S1-A3-ROUTE-01** ([22](35-s1-refuter/20-coldgate/22-opus-refuter.md)): **REFUTER: CONCUR**, 0 BLOCKER.
+    - Section A independently found the same four answers:
+      - S1's only lines in the route functions are the two `except GATE_EXCEPTIONS: raise` handlers.
+      - F1 reproduces on main.
+      - F2 is pre-existing and *worse* on main: main's own production fixture has no capture battery pair.
+      - This is not the SWEEPCLASS signature.
+    - **Five SHOULD-FIX items are against the amendment texts:**
+      1. 77 (a) form 1 is too broad: argument-building lines that narrow the member filter would still count as off-route.
+      2. 77 (a) has no refusal-only form.
+      3. F2's test (i) was relaxed without saying so.
+      4. 77 (b) has no channel to correct a false premise.
+      5. The 78 (b) pre-check script exits 1 on the historical exemption.
+    - **Disposition:** the S1 merge stands unblocked. The five items go to a cold erratum, **combined into S1's cold Fable final pass** (row 7), which rules on them before 77 binds a later pass.
+    - **Outside the charge:** the 69-entry historical pin list has no `202609` bundles, so how W1/W2 bundles are admitted after S1 must be confirmed. W1/W2 are calibration captures, not scored bundles; this goes to the final pass as a question.
