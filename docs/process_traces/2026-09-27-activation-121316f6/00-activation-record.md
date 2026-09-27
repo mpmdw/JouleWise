@@ -5,3 +5,4 @@
 3. **Launch email** accepted: Gmail `1a0e3792fddf10ec`. `notice.ack` written.
 4. **Slice decision:** bookkeeping only, as in f179383b item 4. It is 35 minutes to t0, and Ed asked for the Mac to be left untouched from 08:52. No Codex seat, no `claude -p` judge and no background job were started.
 5. **Exit** (≈08:30). **Next exact action:** unchanged. Follow the RUN_STATE 1c3b3ac9 block: harvest W2 after 11:35 by runbook §2.2a with the manual `probe_error`/`passed` cross-check; then S1 per ruling §7 steps 2–3, one refuter pass, and the merge gate.
+6. **Exit email** accepted: Gmail `1a0e379ac8bcdb91` (thread `1a0e3792fddf10ec`).
