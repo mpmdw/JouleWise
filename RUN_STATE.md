@@ -10,17 +10,18 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION 3ba66eeb — 03:05 → ≤08:52 PDT 09-27 (Opus 5.5; W1 HARVESTED + ADMITTED; W2 ARMING for t0 09:00 PDT):** [Record 00](docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md) items 1–24+.
+**▶▶ ACTIVATION 3ba66eeb — 03:05 → ≤08:52 PDT 09-27 (Opus 5.5; W1 HARVESTED + ADMITTED; W2 ARMED, published 05:54:46, t0 09:00 PDT):** [Record 00](docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md) items 1–24+.
 - **W1 admitted.** Harvested by runbook §2.2a: uninstall rc 0; pin 176 → 226; `battery=pass`; cadence CONTINUE (median 128.5 ms); 6/12 valid, which is exactly the registration's stop line (fewer than 6 stops); admissible.
   - **#432 MERGED** (`a71a5e79`, merge commit). It passed the full gate: Sol AUDIT PASS, Opus CONTRACT LENS PASS, cold Fable MERGE.
   - The harvest line is `…w1-20260927: battery=pass verdict_sha256=07bcc13b… verdict_commit=c5088b87`.
-- **W2** (`d079-epoch-25g83-derivation-w2-20260927`, H `a71a5e79`, t0 09:00 PDT). Steps 0–3 passed; cold Fable arm gate ARM; Opus lens ARM; notice accepted as Gmail `1a0e2a7251f65ea8`. Step 4/5 status is in record item 25. **This is the epoch's first daytime window: Ed was asked to leave the Mac untouched 08:52–11:35.**
+- **W2** (`d079-epoch-25g83-derivation-w2-20260927`, H `a71a5e79`, t0 09:00 PDT). Steps 0–3 passed; cold Fable arm gate ARM; Opus lens ARM; notice accepted as Gmail `1a0e2a7251f65ea8`. **Steps 4 and 5 OK (item 27): W2 ARMED.** The frozen triple is (`d079-epoch-25g83-derivation-w2-20260927`, `/Users/edr/night-custody/measurement/JouleWise-measurement-20260927-derivation-w2`, `a71a5e79`); canonical `670756f3` must not move until W2 is harvested and uninstalled. **This is the epoch's first daytime window: Ed was asked to leave the Mac untouched 08:52–11:35.**
 - **SWEEPCLASS** (the S1 static read-site sweep) was escalated by rule 11 after two same-signature rounds.
   - A four-model consult (Sol, Astra, Opus, then a cold Fable judge) produced **SWEEPCLASS-SAMESIG-01**: the promise narrows to accidental edits; amendments 61–65; fix round 3 restated as steps 1–12, with a finite stop rule (A1–A5 plus one refuter pass).
   - Its erratum (refuter F1–F6; amendments 66–71) adds steps 13–19.
   - **The S1 fix-round-3 seat** (Sol xhigh) is on steps 1–12; its report is `/tmp/harvest-3ba66eeb/s1-fix3-report.md`, copied into the record when harvested.
 - **New lane BFGS-COOLDOWN-ANCHOR-01** (the cold erratum found by execution that a charging bundle's idle baseline can become a stored cooldown anchor that decides later admissions). It is pre-existing, does not block S1, and **must merge before the next scored campaign.** Until then, run the §4.6 anchor pre-check before every scored campaign. The scout is in record `70-cooldown-anchor/`.
-- **#433** (TEST-CENSUS-MULTILINE-ARGV-01, light tier): final review PASS; the row-9 suite is running on the integration tree `a441703a`. **Do not merge while W2 is armed.**
+- **#433 MERGED** (`670756f3`, before W2's publication): the census test survives multiline argv, with deterministic recorded-service decoys.
+- **S1:** the returns ruling S1-FIX3-RETURNS-01 needs no production code in S1 and opens lane BFGS-RAWCAPTURE-01. Seat round 3b (steps 20–23, 13–19) is test-only. After it: one refuter pass, then the S1 merge gate.
 - **Other lanes registered by this activation's rulings:**
   - BATTERY-VALIDATOR-PROBE-ERROR-01: the frozen validator ignores recorded `probe_error`/`passed`. **Until it lands, every harvest cross-checks those fields by hand.**
   - REV5-POST-W3-SHORTFALL-01: Revision 5 is silent if n < 12 after W3; that goes to Ed or a cold gate before W3.

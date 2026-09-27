@@ -146,4 +146,14 @@ The predecessor's next action was record 22784e38 item 17, beginning with **harv
     - Evidence is in [40-w2-arm/attempt-000001/](40-w2-arm/attempt-000001/) and `step4.out`/`step5.out`. The armed email to Ed was accepted as Gmail `1a0e2efcaf043edb`.
     - **Exit rule:** every child is stopped by about 08:20, and the magistrate exits before 08:52 (REQUEST, epoch 1790524320).
 
+28. **Cold ruling S1-FIX3-RETURNS-01** ([21](60-s1-fix3/21-coldgate-fable-ruling.md); [charge](60-s1-fix3/20-coldgate-charge.md) at `ccf9aa9b`; judge tree `8953c7a5`). **No production code inside S1.**
+    - The two salvage reads become `non_claim` (i) under a corrected clause (72).
+    - Four raw-capture members get the new kind `validation` (73).
+    - Three calibration readers are gated today and get the capture form of the gate (74).
+    - Five ungated script functions go to the new lane **BFGS-RAWCAPTURE-01**, which opens at S1's merge and merges before the paper's timing numbers are frozen (75).
+    - The 64(b) conflict is disposed by 66; the `evaluate_member` reason text is corrected (76).
+    - The ordered seat list is steps 20–23 then 13–19, all test-only. Then one refuter pass on the merge candidate.
+    
+    **Seat round 3b** was launched at 06:18 ([brief](60-s1-fix3/30-seat-brief-round3b.txt) at `9b923643`; Sol xhigh; test files only; hard stop 08:00; codex timeout 6300 s). Its report goes to `/tmp/harvest-3ba66eeb/s1-fix3b-report.md`.
+
 **Next exact action:** open the harvest PR (FULL tier) and run its gate: independent re-derivation audit, contract lens plus execution lens, Opus counter-review, cold Fable final pass, and a full suite on the integration tree. After the merge, plan W2 with t0 at least 6 h after W1's end, under NIGHT_HANDBACK.
