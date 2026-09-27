@@ -73,3 +73,12 @@
       - **B:** per-night logical roots.
       - Neither design moves, copies or symlinks custody, and neither lets a choice depend on values.
     - **Next:** the design ruling (who rules is the addendum's Q4), then implementation under the full gate, then `prepare-candidate`.
+14. **Cold addendum REV5-REFUSAL-BRANCH-01-A1** (Fable 5.1, 12:25–12:34; [charge](40-refusal-branch/30-addendum/20-addendum-charge.md), [ruling](40-refusal-branch/30-addendum/21-addendum-ruling.md)): **ADDENDUM: FINAL STATEMENT ISSUED**.
+    - It verified SF-1 by execution: the refusal is certain.
+    - It adopted all seven refuter items, adding J-1 (the override window ends at the first value-dependent result) and J-2 (the custody fault is not a #416 clause-3 finding).
+    - **BLOCKER B1:** the issuance step must not run until the custody repair lands.
+    - **Who rules the repair:** the four-model council (D-184) designs it; a fresh cold gate, shown no B value, rules on the final diff. The owner is not required. Constraints R1–R9 are in statement item 6(d).
+    - **S1 done:** the statement is recorded verbatim at [60-prepare-record/00-refusal-branch-final-statement.md](60-prepare-record/00-refusal-branch-final-statement.md) (`b2eae0ab`), sha256 `8717e33c27f069e3889d8f3d6095d76adbdd6ad9b012482e0cad3a936bb339a6`.
+    - **S1/S2 email to Ed:** Gmail `1a0e45d2f203a0cb`.
+    - **Still owed before the issuance step:** S4 (check Ed's replies immediately before) and S5 (re-run the dry run at the run's commit).
+    - **Council seats** (all blind, on [20-consult-charge.md](50-custody-outside-repo/20-consult-charge.md)): Sol 6.0 xhigh (scout, recommends A), Astra 6 high, Opus 5.5 and Fable 5.1 (cold `claude -p`), all running.
