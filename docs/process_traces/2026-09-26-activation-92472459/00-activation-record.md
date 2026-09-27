@@ -45,3 +45,12 @@ Launched by the watchdog at 16:18:44 PDT 09-26 (attempt 108; last exit class `us
     The paired Opus refuter is pending.
 27. **S2 cold Fable final pass: MERGE** (rc 0, 20:32; [verdict](30-bfgs-s2/90-gate/21-fable-final-pass.md)): no BLOCKER, no SHOULD-FIX; N-1 fail-closed upheld; the F7 revert endorsed; nothing stops S2 merging before S1. Three NITs go to lane BFGS-S2-FOLLOWUPS-01. **PR #431 opened** (full tier; rows 9 and 11 pending; [ledger evidence](30-bfgs-s2/90-gate/30-ledger-evidence.md)).
 28. **S1-R2 paired Opus refuter:** agrees on all six questions. Against the ruling it finds **BLOCKER RB-1**: under 49(c), a deleted or altered quarantined bundle resolves `ambiguous` on the production path and is written as a `failed` status, not custody, and R49-3's hand-built resolution cannot see it. It also finds RS-1 (sweep holes: `try/except`, `suppress`, a read in the handler), RS-2 (`analysis_manifest_v3.py:3712/:4499` convert gate exceptions; outside S1 scope), RS-3 (members from the disk, so a deleted recorded member becomes `bundle_missing`), RS-4 (a rerun's own final analysis precedes its supersession record), RS-5 (gate bound to a different reader), and RN-1..4. → **erratum cold gate** convened (charge `a24c2f7d`, pid 35048, same pinned worktree `JouleWise-wt-s1r2cg-92472459` @ `49d77c74`).
+29. **S1-R2 erratum ruled** (cold Fable, rc 0, 21:03; [ruling](20-bfgs-s1/80-coldgate-r2/30-erratum/21-coldgate-fable-erratum-ruling.md)).
+    - **RB-1 UPHELD**, reproduced on the real path. New amendment 55 separates the log entry's field validity from the quarantined folder's custody, and the gate raises naming the folder.
+    - **RS-3 UPHELD**. New amendment 56: a member an earlier record proves was written must exist, or the computation stops; the real loader's list went 30 → 29 on a deleted run.
+    - RS-1 and RS-5 UPHELD (sweep).
+    - **RS-2 becomes lane BFGS-MANIFEST-CUSTODY-01** (`analysis_manifest_v3.py`; must close before any analysis manifest is finalized over a post-S1 bundle).
+    - **RS-4 REJECTED**, with tests (the rerun's own report licenses nothing).
+    - NITs accepted. Amendments 49–56 are restated in §10; order in §14.
+    - Two open questions are named for the lead: an unreadable campaign log as custody (49 (b)), and a present member whose bytes differ from an earlier verdict row (56 (d)).
+30. **S1 fix round 3 launched** ([85-fix3/10-fix-brief.txt](20-bfgs-s1/85-fix3/10-fix-brief.txt); Sol 6.0 xhigh on `49d77c74`; amendments 49–56 in §14 order).
