@@ -877,6 +877,151 @@
       "status_note": "Registered 2026-09-26 (activation ed17a643). BFG-D is PR #424, merged 64e39bb9; BFG-S: four-seat consult + cold gate BFGS-DESIGN-01 ruled (Final texts v1.1, docs/process_traces/2026-09-26-activation-6bec2aa6/40-bfgs-consult/50-coldgate/30-addendum/21-coldgate-fable-addendum-ruling.md); addendum 2 (amendments 20-28, docs/process_traces/2026-09-26-activation-6bec2aa6/60-bfgs-s0/40-addendum2/21-coldgate-fable-addendum2-ruling.md); S0 at 980138c7 on feat/2026-09-26-bfgs-s0-helper-fence awaiting rebase, delta re-audit, Fable final pass and full suite (activation 6bec2aa6 record item 29). Required before any non-derivation window arms. 2026-09-26 activation f8d6cab1: S0 delta re-audit split -> cold gate addendum 3 (amendments 29-32) + erratum (30 re-issued, 26/31/32 restated, 33/34 new for S2); round 4 c9081c6e; bench 783a09be (frozen CustodyFailure restored), b7df341b (strict UTF-8), 747596a3 (Fable-dictated T30-f row); cold Fable final pass MERGE; PR #429. S1/S2 briefs must quote amendments 26 and 31-34 verbatim from the erratum §3 and decide QPE-SHAPE3-NIGHT-BLANK-01 first.",
       "stop_card": null
     },
+    "BATTERY-VALIDATOR-PROBE-ERROR-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md item 13 F1/F2; item 17 manual cross-check"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BATTERY-VALIDATOR-PROBE-ERROR-01/acceptance",
+          "label": "BATTERY-VALIDATOR-PROBE-ERROR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Validation refuses readings with probe_error true or passed false; verdict comparison is assessed for the recorded subset gap. Regression covers false-pass records."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: item 13 F1/F2; item 17 manual cross-check",
+        "path": "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make the frozen battery validator honor recorded probe_error and passed fields.",
+      "id": "BATTERY-VALIDATOR-PROBE-ERROR-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 326,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Until merged, every harvest manually cross-checks probe_error=false and passed=true for every reading.",
+      "stop_card": null
+    },
+    "BFGS-COOLDOWN-ANCHOR-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md items 20–21; erratum §4.6"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BFGS-COOLDOWN-ANCHOR-01/acceptance",
+          "label": "BFGS-COOLDOWN-ANCHOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The cooldown-anchor route refuses or excludes an unauthenticated charging baseline before it can decide later recovered or cooldown_cap_hit results; regression covers the executed 9.99 W witness. Merge before the next scored campaign."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: items 20–21; erratum §4.6",
+        "path": "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Prevent a charging bundle idle baseline from becoming the stored cooldown anchor for later scored admissions.",
+      "id": "BFGS-COOLDOWN-ANCHOR-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 325,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Pre-existing on main; does not block S1. Until merged, the lead runs the read-only §4.6 anchor pre-check before every scored campaign.",
+      "stop_card": null
+    },
+    "BFGS-GATED-SUMMARY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md item 20, gated summary() disposition"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BFGS-GATED-SUMMARY-01/acceptance",
+          "label": "BFGS-GATED-SUMMARY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "summary() uses the ruled gated path with regression evidence and keeps S1's narrowed accidental-edit promise."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: item 20, gated summary() disposition",
+        "path": "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Gate summary() as a follow-up to S1.",
+      "id": "BFGS-GATED-SUMMARY-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 329,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). After S1 merges; blocks nothing.",
+      "stop_card": null
+    },
+    "BFGS-RAWCAPTURE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md item 28, ruling 75"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BFGS-RAWCAPTURE-01/acceptance",
+          "label": "BFGS-RAWCAPTURE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The five functions named by ruling 75 receive the ruled raw-capture gate and defect-shaped tests. Open after S1 merges and merge before the paper timing numbers are frozen."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: item 28, ruling 75",
+        "path": "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Gate the five raw-capture script functions deferred by S1-FIX3-RETURNS-01.",
+      "id": "BFGS-RAWCAPTURE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 327,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Opens at S1 merge; before paper timing numbers freeze.",
+      "stop_card": null
+    },
+    "BFGS-READER-ROOT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md item 20, B-3 limitation"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BFGS-READER-ROOT-01/acceptance",
+          "label": "BFGS-READER-ROOT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A reviewed reader-root rule and regression close limitation B-3 without broadening S1's accidental-edit coverage claim."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: item 20, B-3 limitation",
+        "path": "docs/process_traces/2026-09-27-activation-3ba66eeb/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Resolve the pre-existing B-3 reader-root limitation after S1.",
+      "id": "BFGS-READER-ROOT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 328,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). After S1 merges; not a blocker for S1.",
+      "stop_card": null
+    },
     "BFGS-S0-FOLLOWUPS-01": {
       "acceptance": {
         "evidence": [
@@ -2093,6 +2238,64 @@
       "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
       "stop_card": null
     },
+    "CORPUS-PATH-GUARD-READERS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md ruling 5, CORPUS-PATH-GUARD-READERS-01; activation item 15"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CORPUS-PATH-GUARD-READERS-01/acceptance",
+          "label": "CORPUS-PATH-GUARD-READERS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The verifier and reissue tool refuse absolute and .. stored paths before resolving members, including containment escapes. Land before any reissue of the new generation."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: ruling 5, CORPUS-PATH-GUARD-READERS-01; activation item 15",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Reject absolute or parent-traversing stored member paths in the verifier and reissue tool.",
+      "id": "CORPUS-PATH-GUARD-READERS-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 317,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). After issuer repair; before any reissue of the new generation.",
+      "stop_card": null
+    },
+    "CORPUS-RAW-REPLAY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md ruling 5, CORPUS-RAW-REPLAY-01; activation item 15"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CORPUS-RAW-REPLAY-01/acceptance",
+          "label": "CORPUS-RAW-REPLAY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Member checks authenticate every required raw file in addition to manifest.json and instrument_evidence.json; missing or changed raw bytes refuse."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: ruling 5, CORPUS-RAW-REPLAY-01; activation item 15",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the raw-file replay gap in corpus member authentication.",
+      "id": "CORPUS-RAW-REPLAY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 318,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Follow-up outside design C; not a condition on the issuer-only repair.",
+      "stop_card": null
+    },
     "COURIER-DIAGNOSTIC-PERSISTENCE-01": {
       "acceptance": {
         "evidence": [
@@ -3080,6 +3283,35 @@
       "status": "shelved",
       "stop_card": null
     },
+    "DRYRUN-MEMBER-CUSTODY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md ruling 5, DRYRUN-MEMBER-CUSTODY-01; activation item 15"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/DRYRUN-MEMBER-CUSTODY-01/acceptance",
+          "label": "DRYRUN-MEMBER-CUSTODY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The dry run checks member custody paths value-blind and reports invalid paths before a value-dependent issuance attempt; it does not inspect B values."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: ruling 5, DRYRUN-MEMBER-CUSTODY-01; activation item 15",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Add member custody-path validation to the count-only dry run.",
+      "id": "DRYRUN-MEMBER-CUSTODY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 321,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Follow-up to the issuance repair; the existing dry run does not mirror the outside-repo custody check.",
+      "stop_card": null
+    },
     "ED-D118-NA-TIER-E2-01": {
       "acceptance": {
         "evidence": [
@@ -3776,6 +4008,64 @@
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five. The audit's argument for sequence: the unowned floor-producer finding from the companion audit becomes a small task instead of a risky one only if this lands first, because under the current design owning it means hand-copying about 2900 lines twice. Ordered last of the five on cost, but it gates the cheapness of the others.",
       "stop_card": null
     },
+    "HARVEST-ORDER-SIMPLIFY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md item 2 (Ed reply and lead disposition)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/HARVEST-ORDER-SIMPLIFY-01/acceptance",
+          "label": "HARVEST-ORDER-SIMPLIFY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed or a cold gate ratifies the exact runbook change permitted by Ed's 2026-09-27 reply; only then edit the runbook. The W1 ordering slip is already accepted, and the documented order remains operative meanwhile."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: item 2 (Ed reply and lead disposition)",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Decide whether to relax the runbook read-after-verdict-commit ordering.",
+      "id": "HARVEST-ORDER-SIMPLIFY-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 322,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Ruling-first process change; no runbook amendment has been made.",
+      "stop_card": null
+    },
+    "HARVEST-RUNBOOK-MERGE-METHOD-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 10–11 (contract lens S1 and cold final-pass S1)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/HARVEST-RUNBOOK-MERGE-METHOD-01/acceptance",
+          "label": "HARVEST-RUNBOOK-MERGE-METHOD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Runbook §2.2a says harvest verdict commits merge with a merge commit, not squash or rebase, preserving the published verdict_commit SHA."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: items 10–11 (contract lens S1 and cold final-pass S1)",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "State the merge-commit-only harvest rule in runbook §2.2a.",
+      "id": "HARVEST-RUNBOOK-MERGE-METHOD-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 323,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Follow-up to #434 harvest review; rule was followed for #434.",
+      "stop_card": null
+    },
     "HEADLINE-AFFINE-LADDER-LEG-01": {
       "acceptance": {
         "evidence": [
@@ -4403,6 +4693,65 @@
       "rank": 182,
       "status": "queued",
       "status_note": "2026-09-10: registered by activation 96bfeca7 because the ruled-not-installed sweep found the adopted rule installed nowhere with no tracked obligation; blocked on Ed's veto window (email 2026-09-10), then a lieutenant seat installs it.",
+      "stop_card": null
+    },
+    "ISSUANCE-ARCHIVE-PACKET-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md ruling 5, ISSUANCE-ARCHIVE-PACKET-01; activation item 15"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ISSUANCE-ARCHIVE-PACKET-01/acceptance",
+          "label": "ISSUANCE-ARCHIVE-PACKET-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The archive contains the gitignored ledger, head pin, and verdicts beside both night directories, preserving <plan_id>/runs/instrument_validation/<id> layout and verifiable member paths. Complete before any offload of W1/W2 custody."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: ruling 5, ISSUANCE-ARCHIVE-PACKET-01; activation item 15",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Preserve a complete post-issuance archive for W1/W2 custody.",
+      "id": "ISSUANCE-ARCHIVE-PACKET-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 319,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Before any W1/W2 custody offload; do not move or re-root original night custody as an issuer repair.",
+      "stop_card": null
+    },
+    "ISSUANCE-CUSTODY-OUTSIDE-REPO-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md items 12–15; synthesis ruling 1–4",
+          "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md rulings 1–5 (design C adopted)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ISSUANCE-CUSTODY-OUTSIDE-REPO-01/acceptance",
+          "label": "ISSUANCE-CUSTODY-OUTSIDE-REPO-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The issuer alone gains --corpus-root, session- and capture-bound stored-path naming, a read-only verify-members command, and fixed member_custody text. Keep the ledger, head pin, battery records, and git lookups on the run checkout. Land the full-tier repair before first prepare-candidate for epoch 25G83."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: items 12–15; synthesis ruling 1–4",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Repair prepare-candidate refusal for W1/W2 custody outside the git checkout under adopted design C.",
+      "id": "ISSUANCE-CUSTODY-OUTSIDE-REPO-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 316,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Implementation on fix/2026-09-27-issuer-corpus-root; blocks issuance of epoch 25G83 until reviewed and merged.",
       "stop_card": null
     },
     "ISSUER-CHECK-CONTINUATION-AWARE-01": {
@@ -7007,6 +7356,35 @@
       "status_note": "2026-09-17 activation 9853dd2b: magistrate registration from the NIGHT-RESERVE-HANG-01 review round, not a ruling; not started; hardening, not night-critical. The residual is narrower than the cured F3 defect: it requires an uncommitted edit in the driver checkout between a successful probe and the night. Lands under the twelve-row gate.",
       "stop_card": null
     },
+    "PROBE-PLIST-DIGEST-PATTERN-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md item 10 NITs; item 11 NITs"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PROBE-PLIST-DIGEST-PATTERN-01/acceptance",
+          "label": "PROBE-PLIST-DIGEST-PATTERN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The render/install digest difference observed in both windows is explained and the probe-plist verification procedure records the expected binding; no unexplained digest mismatch is treated as equality."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: item 10 NITs; item 11 NITs",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Document or resolve the probe-plist digest difference between staged render and install.",
+      "id": "PROBE-PLIST-DIGEST-PATTERN-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 324,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Contract-lens nit in both W1 and W2 windows.",
+      "stop_card": null
+    },
     "PROMPT-AUDIT-01": {
       "acceptance": {
         "evidence": [
@@ -7611,6 +7989,35 @@
       "rank": 164,
       "status": "queued",
       "status_note": "2026-09-08: READY; 99co registers the D-165 allowlist line-keying follow-up. FLAG: dictated evidence 99fa concerns GO refusal-code registry validity, not row-pin drift; retain that citation in the T38c report without treating it as proof.",
+      "stop_card": null
+    },
+    "REISSUE-HISTORICAL-LEXEME-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md ruling 5, REISSUE-HISTORICAL-LEXEME-01; activation item 15"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REISSUE-HISTORICAL-LEXEME-01/acceptance",
+          "label": "REISSUE-HISTORICAL-LEXEME-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A separately reviewed rule and regression evidence establish how historical r6/r7 reissue handles stored-lexeme equality without treating it as member-value authority."
+      },
+      "authority": {
+        "label": "2026-09-27 activation source: ruling 5, REISSUE-HISTORICAL-LEXEME-01; activation item 15",
+        "path": "docs/process_traces/2026-09-27-activation-77b1bee2/50-custody-outside-repo/30-lead-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Reconcile pre-existing reissue stored-lexeme equality with r6/r7 non-member-value semantics.",
+      "id": "REISSUE-HISTORICAL-LEXEME-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 320,
+      "status": "queued",
+      "status_note": "Registered 2026-09-27 (activation 77b1bee2). Pre-existing follow-up; not part of the issuer-only design C repair.",
       "stop_card": null
     },
     "REISSUE-V3-GENERATION-GUARD-01": {
