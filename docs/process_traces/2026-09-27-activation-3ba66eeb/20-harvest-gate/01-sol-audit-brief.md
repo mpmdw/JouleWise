@@ -1,7 +1,8 @@
 # Harvest PR gate — rows 1 + 2 (execution lens): independent re-derivation audit of commit c5088b87
 
 ROLE: independent, non-author auditor. You did not produce this commit. Read-only.
-WRITE_SCOPE: [] (write nothing in any repository; scratch only under /tmp/sol-harvest-audit-3ba66eeb/).
+WRITE_SCOPE: []
+Write nothing in any repository; scratch only under /tmp/sol-harvest-audit-3ba66eeb/.
 Bridge depth is one hop: do not call Claude by any route.
 
 ## The candidate
