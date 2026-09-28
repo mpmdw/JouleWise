@@ -517,6 +517,72 @@ class D117MintConsumptionProfileTests(
         self.assertEqual(validate_d117_mint_consumption_report(actual), [])
         self.assertEqual(actual, expected)
 
+    def _report_with_passing_members(self) -> dict:
+        report = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+        report["battery_float_members"] = {
+            f"golden-r{index:02d}": "pass" for index in range(1, 6)
+        }
+        return report
+
+    def test_battery_float_members_accepts_passing_members(self) -> None:
+        self.assertEqual(
+            validate_d117_mint_consumption_report(
+                self._report_with_passing_members()
+            ),
+            [],
+        )
+
+    def test_battery_float_members_accepts_historical_member(self) -> None:
+        report = self._report_with_passing_members()
+        report["battery_float_members"]["golden-r01"] = "unobserved_historical"
+        self.assertEqual(validate_d117_mint_consumption_report(report), [])
+
+    def test_battery_float_members_refuses_not_applicable(self) -> None:
+        report = self._report_with_passing_members()
+        report["battery_float_members"]["golden-r01"] = "not_applicable"
+        self.assertEqual(
+            validate_d117_mint_consumption_report(report),
+            [
+                "extraction report.battery_float_members['golden-r01']: "
+                "status must be one of ['pass', 'unobserved_historical']"
+            ],
+        )
+
+    def test_battery_float_members_refuses_confounded(self) -> None:
+        report = self._report_with_passing_members()
+        report["battery_float_members"]["golden-r02"] = "battery_float_confounded"
+        self.assertEqual(
+            validate_d117_mint_consumption_report(report),
+            [
+                "extraction report.battery_float_members['golden-r02']: "
+                "status must be one of ['pass', 'unobserved_historical']"
+            ],
+        )
+
+    def test_battery_float_members_refuses_missing_cell_member(self) -> None:
+        report = self._report_with_passing_members()
+        del report["battery_float_members"]["golden-r01"]
+        self.assertEqual(
+            validate_d117_mint_consumption_report(report),
+            [
+                "extraction report.battery_float_members: "
+                "cells[0] member 'golden-r01' has no status"
+            ],
+        )
+
+    def test_battery_float_members_refuses_non_object(self) -> None:
+        report = self._report_with_passing_members()
+        report["battery_float_members"] = []
+        self.assertEqual(
+            validate_d117_mint_consumption_report(report),
+            ["extraction report.battery_float_members: must be an object"],
+        )
+
+    def test_battery_float_members_allows_extra_bundle(self) -> None:
+        report = self._report_with_passing_members()
+        report["battery_float_members"]["outside-cell"] = "pass"
+        self.assertEqual(validate_d117_mint_consumption_report(report), [])
+
     def test_closed_profile_rejects_unknown_keys_at_every_level(self) -> None:
         fixture = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
         mutations = (
