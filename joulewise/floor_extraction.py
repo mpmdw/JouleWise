@@ -1471,7 +1471,11 @@ _D117_MINT_REPORT_KEYS = {
 _D117_MINT_REPORT_OPTIONAL_KEYS = {
     "launch_lineage",
     "single_count_discipline",
+    "battery_float_members",
 }
+# The governed extractor's window gate is strict, so a report it emits can
+# name only these two statuses; any other status was not written by it.
+_D117_MINT_BATTERY_FLOAT_STATUSES = ("pass", "unobserved_historical")
 _D117_MINT_CELL_KEYS = {
     "cell_id",
     "kind",
@@ -1666,6 +1670,41 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
                 and isinstance(member.get("launch_lineage"), Mapping)
                 else None
             )
+    if "battery_float_members" in value:
+        battery_members = value["battery_float_members"]
+        if not isinstance(battery_members, Mapping):
+            errors.append(
+                "extraction report.battery_float_members: must be an object"
+            )
+        else:
+            for label in sorted(battery_members, key=str):
+                if (
+                    not isinstance(label, str)
+                    or battery_members[label]
+                    not in _D117_MINT_BATTERY_FLOAT_STATUSES
+                ):
+                    errors.append(
+                        "extraction report.battery_float_members"
+                        f"[{label!r}]: status must be one of "
+                        f"{list(_D117_MINT_BATTERY_FLOAT_STATUSES)}"
+                    )
+            for cell_index, cell in enumerate(cells):
+                members = cell.get("members") if isinstance(cell, Mapping) else None
+                for member in members if isinstance(members, list) else ():
+                    bundle_id = (
+                        member.get("bundle_id")
+                        if isinstance(member, Mapping)
+                        else None
+                    )
+                    if (
+                        not isinstance(bundle_id, str)
+                        or bundle_id not in battery_members
+                    ):
+                        errors.append(
+                            "extraction report.battery_float_members: "
+                            f"cells[{cell_index}] member {bundle_id!r} "
+                            "has no status"
+                        )
     report_launch_lineage = value.get("launch_lineage")
     if report_launch_lineage is not None and not isinstance(
         report_launch_lineage, Mapping
