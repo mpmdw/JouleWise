@@ -85,6 +85,7 @@ from joulewise.whole_window import (
 from joulewise.uncertainty_evidence import CLOCK_METHOD_V3, SCHEMA_VERSION_V3
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 TOL = 1e-12
 HEX_A = "a" * 64
@@ -3589,6 +3590,15 @@ class TestArtifactEmitValidate(unittest.TestCase):
                 return_value=WholeWindowDriftAllowanceResult("absent", {}),
             ),
         ):
+            bundle = Path(tmp) / "A"
+            bundle.mkdir()
+            config = json.loads((Path(__file__).parent / "fixtures" / "d078_r01" / "config.json").read_text())
+            config["run_id"] = "A"
+            (bundle / "config.json").write_text(json.dumps(config) + "\n")
+            (bundle / "metadata.json").write_text(json.dumps({"run_id": "A"}) + "\n")
+            (bundle / "summary_metrics.json").write_text(json.dumps({"status": "succeeded"}) + "\n")
+            rebind_config(bundle)
+            write_passing_pair(bundle)
             extracted = extract_cells(Path(tmp), spec)
         self.assertFalse(extracted["all_cells_extractable"])
         self.assertIn(

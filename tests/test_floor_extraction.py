@@ -990,6 +990,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             for phase in ("before_attempt_1", "after_attempt_1")
         ]
         metadata = {
+            "run_id": bundle_id,
             "config_sha256": hashlib.sha256(config_raw).hexdigest(),
             "adapters": {"telemetry": {"name": "powermetrics"}},
             "environment_admission": {
@@ -1043,6 +1044,10 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             json.dumps(metadata, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        from tests.bfgs_fixtures import rebind_config, write_passing_pair
+
+        rebind_config(bundle)
+        write_passing_pair(bundle)
         return cpu, scientific_sha256
 
     def _current_core_fixture(
@@ -4826,6 +4831,28 @@ class FloorMintSpecValidationTests(unittest.TestCase):
             ready=False,
             refusal_reasons=("common_mode_nonseparable_window_domain",),
         )
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        runs_root = Path(temporary.name)
+        from tests.bfgs_fixtures import rebind_config, write_passing_pair
+
+        config_template = json.loads(
+            (Path(__file__).parent / "fixtures" / "d078_r01" / "config.json").read_text()
+        )
+        for bundle_id in ("a1", "b1", "b2", "a2"):
+            write_bundle(
+                runs_root, bundle_id,
+                make_summary(40.0, metric="phase_energy_j.decode"),
+            )
+            bundle = runs_root / bundle_id
+            config = copy.deepcopy(config_template)
+            config["run_id"] = bundle_id
+            (bundle / "config.json").write_text(json.dumps(config) + "\n")
+            metadata = json.loads((bundle / "metadata.json").read_text())
+            metadata["run_id"] = bundle_id
+            (bundle / "metadata.json").write_text(json.dumps(metadata) + "\n")
+            rebind_config(bundle)
+            write_passing_pair(bundle)
         with (
             mock.patch(
                 "joulewise.floor_extraction.campaign_cooldown_evidence",
@@ -4844,7 +4871,7 @@ class FloorMintSpecValidationTests(unittest.TestCase):
                 return_value=dummy,
             ) as extraction,
         ):
-            extract_cells(Path("uncollected-domain-evidence"), spec)
+            extract_cells(runs_root, spec)
         self.assertNotIn(
             "common_mode_strict_noncollapse_admitted",
             extraction.call_args.kwargs,

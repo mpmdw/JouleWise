@@ -37,6 +37,7 @@ from joulewise.analysis_engine.registry import (
 )
 from joulewise.bundle_read import BundleReader
 from tests.git_fixture import init_git_fixture
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
     STACK_IDENTITY_DOMAIN,
@@ -476,10 +477,14 @@ def _write_bundle(
     (bundle / "config.json").write_text(
         json.dumps(config, sort_keys=True), encoding="utf-8"
     )
-    (bundle / "metadata.json").write_text("{}", encoding="utf-8")
+    (bundle / "metadata.json").write_text(
+        json.dumps({"run_id": bundle_id}), encoding="utf-8"
+    )
     (bundle / "summary_metrics.json").write_text(
         json.dumps(summary, sort_keys=True), encoding="utf-8"
     )
+    rebind_config(bundle)
+    write_passing_pair(bundle)
     return (
         complete_bundle_sha256(bundle),
         hashlib.sha256((bundle / "config.json").read_bytes()).hexdigest(),
@@ -550,6 +555,15 @@ def _install_component_fixture(
                         "reasons": [],
                     }
                 )
+    for bundle_id in mint1._spec_member_ids(component.spec):
+        if not (root / bundle_id).exists():
+            _write_bundle(
+                root,
+                bundle_id=bundle_id,
+                metric_value_j=0.0,
+                half_width_j=0.0,
+                plan_sha256=component.order_manifest["calibration_plan_sha256"],
+            )
     cell = copy.deepcopy(component.cell)
     cell["floor"]["whole_window_drift_allowance_provenance"] = dict(
         component.whole_window_drift_allowance

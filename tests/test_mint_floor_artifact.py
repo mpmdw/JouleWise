@@ -25,6 +25,7 @@ from joulewise.whole_window import (
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
 )
 from scripts import mint_floor_artifact as mint
+from tests.bfgs_fixtures import rebind_config, write_passing_pair
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -76,6 +77,21 @@ def stack_identity() -> dict:
         "measurement_boundary_label": "phase-decode",
         "telemetry_backend": "powermetrics",
     }
+
+
+def _install_support_bundle(root: Path, bundle_id: str) -> None:
+    """Authenticate spec members outside the target report cell."""
+    bundle = root / bundle_id
+    bundle.mkdir(parents=True)
+    config = {"run_id": bundle_id, "hardware_target": {"telemetry_backend": "powermetrics"}}
+    (bundle / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    (bundle / "metadata.json").write_text(json.dumps({"run_id": bundle_id}), encoding="utf-8")
+    (bundle / "summary_metrics.json").write_text(
+        json.dumps({"status": "succeeded", "phase_energy_j": {"decode": 0.0}}),
+        encoding="utf-8",
+    )
+    rebind_config(bundle)
+    write_passing_pair(bundle)
 
 
 class StackIdentityParityTests(unittest.TestCase):
@@ -630,6 +646,10 @@ class AuthenticationTests(unittest.TestCase):
         )
 
     def test_no_argument_mint_consumer_does_not_infer_salvage_dispatch(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        runs_root = Path(temporary.name)
+        _install_support_bundle(runs_root, "member")
         class PendingSession:
             ready = False
             refusal_reasons = ()
@@ -652,7 +672,7 @@ class AuthenticationTests(unittest.TestCase):
             ),
         ):
             mint._authenticated_consumption_summaries(
-                Path("/unused"),
+                runs_root,
                 {"member"},
                 "a" * 64,
                 target_bundle_ids={"member"},
@@ -754,10 +774,14 @@ class AuthenticationTests(unittest.TestCase):
             (bundle / "config.json").write_text(
                 json.dumps(config), encoding="utf-8"
             )
-            (bundle / "metadata.json").write_text("{}", encoding="utf-8")
+            (bundle / "metadata.json").write_text(
+                json.dumps({"run_id": bundle_id}), encoding="utf-8"
+            )
             (bundle / "summary_metrics.json").write_text(
                 json.dumps(summary), encoding="utf-8"
             )
+            rebind_config(bundle)
+            write_passing_pair(bundle)
             member_rows.append(
                 {
                     "bundle_id": bundle_id,
@@ -805,6 +829,9 @@ class AuthenticationTests(unittest.TestCase):
         report_path = Path(tmp) / "a10-report.json"
         report_path.write_text(json.dumps(report), encoding="utf-8")
         all_spec_ids = mint._spec_member_ids(spec)
+        for bundle_id in all_spec_ids:
+            if not (root / bundle_id).exists():
+                _install_support_bundle(root, bundle_id)
         order = {
             "manifest_id": mint.A10_ORDER_MANIFEST_ID,
             "plan_id": "p2-015-window-a-m3max-qwen25-1p5b-v1",
@@ -912,11 +939,13 @@ class AuthenticationTests(unittest.TestCase):
                     json.dumps(config), encoding="utf-8"
                 )
                 (bundle / "metadata.json").write_text(
-                    "{}", encoding="utf-8"
+                    json.dumps({"run_id": bundle_id}), encoding="utf-8"
                 )
                 (bundle / "summary_metrics.json").write_text(
                     json.dumps(summary), encoding="utf-8"
                 )
+                rebind_config(bundle)
+                write_passing_pair(bundle)
                 member_rows.append(
                     {
                         "bundle_id": bundle_id,
@@ -968,6 +997,9 @@ class AuthenticationTests(unittest.TestCase):
         report_path = Path(tmp) / "window-c-report.json"
         report_path.write_text(json.dumps(report), encoding="utf-8")
         all_spec_ids = mint._spec_member_ids(spec)
+        for bundle_id in all_spec_ids:
+            if not (root / bundle_id).exists():
+                _install_support_bundle(root, bundle_id)
         order = {
             "manifest_id": mint.WINDOW_C_ORDER_MANIFEST_ID,
             "plan_id": "p2-015-window-a-m3max-qwen25-1p5b-v1",
@@ -1010,6 +1042,10 @@ class AuthenticationTests(unittest.TestCase):
     def test_authenticated_replay_does_not_import_prefill_refusal(
         self,
     ) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        runs_root = Path(temporary.name)
+        _install_support_bundle(runs_root, "member")
         class LocalRefusalSession:
             ready = True
             refusal_reasons: tuple[str, ...] = ()
@@ -1043,7 +1079,7 @@ class AuthenticationTests(unittest.TestCase):
         ):
             summaries, semantics = (
                 mint._authenticated_consumption_summaries(
-                    Path("/unused"),
+                    runs_root,
                     {"member"},
                     "a" * 64,
                     target_bundle_ids={"member"},
@@ -1058,6 +1094,10 @@ class AuthenticationTests(unittest.TestCase):
     def test_authenticated_replay_rejects_unrecorded_target_envelope(
         self,
     ) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        runs_root = Path(temporary.name)
+        _install_support_bundle(runs_root, "member")
         class LocalRefusalSession:
             ready = True
             refusal_reasons: tuple[str, ...] = ()
@@ -1095,7 +1135,7 @@ class AuthenticationTests(unittest.TestCase):
             ),
         ):
             mint._authenticated_consumption_summaries(
-                Path("/unused"),
+                runs_root,
                 {"member"},
                 "a" * 64,
                 target_bundle_ids={"member"},
@@ -1673,11 +1713,13 @@ class BinderTests(unittest.TestCase):
             json.dumps(config, sort_keys=True), encoding="utf-8"
         )
         (bundle / "metadata.json").write_text(
-            json.dumps({"stack": stack}, sort_keys=True), encoding="utf-8"
+            json.dumps({"run_id": row["bundle_id"], "stack": stack}, sort_keys=True), encoding="utf-8"
         )
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, sort_keys=True), encoding="utf-8"
         )
+        rebind_config(bundle)
+        write_passing_pair(bundle)
         row["config_sha256"] = hashlib.sha256(
             (bundle / "config.json").read_bytes()
         ).hexdigest()
