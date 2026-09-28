@@ -73,6 +73,23 @@ class CommittedPackDigestTests(unittest.TestCase):
                 finally:
                     temporary.cleanup()
 
+    def test_pack_with_zero_committed_files_refuses_instead_of_hashing_nothing(self) -> None:
+        # A130 / audit 13 section 2.2 M6: counterfactual guard for the
+        # "pack contains no committed files" refusal. An existing directory
+        # inside a committed Git worktree, holding nothing on disk and nothing
+        # at HEAD, passes every later check vacuously (no untracked entry, no
+        # missing entry, no byte mismatch); without the refusal the function
+        # would return sha256(PACK_DIGEST_DOMAIN), a digest that authenticates
+        # no pack at all.
+        temporary, repo, _pack = self.make_repo()
+        self.addCleanup(temporary.cleanup)
+        empty_pack = repo / "empty-pack"
+        empty_pack.mkdir()
+        with self.assertRaises(ArmReadinessError) as caught:
+            committed_pack_tree_sha256(empty_pack)
+        self.assertEqual(caught.exception.reason_code, "readiness_pack_not_committed")
+        self.assertIn("no committed files", str(caught.exception))
+
     def test_non_utf8_git_tree_path_refuses_without_filesystem_construction(self) -> None:
         temporary, repo, pack = self.make_repo()
         self.addCleanup(temporary.cleanup)
