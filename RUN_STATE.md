@@ -10,7 +10,7 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**▶▶ ACTIVATION 77b1bee2 — 11:36 → evening PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
+**▶▶ ACTIVATION 77b1bee2 — 11:36 → ≈17:35 PDT 09-27 (Opus 5.5; NOTHING ARMED):** [Record 00](docs/process_traces/2026-09-27-activation-77b1bee2/00-activation-record.md) items 1–47+, on branch `docs/2026-09-27-77b1bee2`.
 
 **MERGED today:**
 - #434, the W2 harvest → `b69c39eb`. W2 was admitted, and W1 + W2 hold 12 valid captures, exactly the floor. **W3 is NOT permitted.**
@@ -27,7 +27,7 @@ file instead.
 
 **S1 (BFG-S) is NOT mergeable.** Its cold final pass said MERGE, but row 9 on the integration tree gave **115 failures and 418 errors**. The regression is S1's own; its gates ran targeted suites only.
 - The scout (item 45) found 11 groups: fixture debt (most); **G2**, the mock `not_applicable` contract (needs a ruling); **G9**, the paper supply-map repin (needs authority).
-- Consult **S1-REGRESSION-01** is running: Sol xhigh (relaunched), Astra (done: "hold S1 …"), Opus. A cold Fable ruling follows.
+- Consult **S1-REGRESSION-01** is RULED: hold, repair on S1's branch, rule 12a (keyword, two non-claim flows), text 10a (backup-root replay fix), and the G9 bench repin. An addendum on the refuter's SF-1 to SF-4 is pending.
 
 **SUCCESSOR'S NEXT EXACT ACTION:**
 1. **Read record 00 from its last item.** Search Gmail for Ed's replies (the clock-step reading, the predecessor path).
@@ -36,7 +36,9 @@ file instead.
    - it binds A1 B1–B4 (estimator pins unchanged; none of the four unmerged estimator branches);
    - it carries D1–D6 and the R9 / PREDECESSOR-PATH disclosures.
 3. **Council on the estimator cap** (A1 SF-3; §8 of the science ruling): the sizing rule (no B value), the membership of the re-issue, and the sequencing. **This is required before any claim-bearing window.** It is a lane item, not yet registered in the kernel.
-4. **S1:** harvest the consult (`36-s1-regression-consult/`), then a cold ruling on G2/G9 and the fixture plan, then fix rounds with **a full suite on every fix head**.
+4. **S1:** cold ruling S1-REGRESSION-01 is ISSUED, the earlier MERGE is void, and the Opus refuter CONCURs with SF-1 to SF-4 (record items 49–50).
+   - **Next:** a cold addendum on SF-1 to SF-4.
+   - **Then the ruling's plan:** reference run on main → production seat (12a keyword and 10a resolver) ∥ fixture-helper seat → 4 repair seats → the lead's 8 checks → the lead's bench repin of 3 supply-map roles (NOT `repin.py`) → the full suite on the head merged with main → refuter, cold gate and final pass, each preceded by a full-suite record.
 5. **Bookkeeping:**
    - register the new lanes: the cap re-size, the clock-step source, S1-REGRESSION-01, and the archive-lane session-id correction (custody ruling S2);
    - merge `docs/2026-09-27-77b1bee2` (light tier, touching `tests/test_gen_state.py`);

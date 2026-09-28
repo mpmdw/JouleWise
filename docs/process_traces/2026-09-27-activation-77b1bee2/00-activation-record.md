@@ -300,3 +300,10 @@
         6. the full suite.
       - **Standing rule within this lane:** no refuter, cold gate or final pass is charged without a full-suite record on the exact head merged with the day's main. Skips are compared by test id.
     - The paired Opus refuter is pending.
+50. **Paired Opus refuter on S1-REGRESSION-01** ([22](36-s1-regression-consult/22-opus-refuter.md)): **REFUTER: CONCUR**, 0 BLOCKER. The keyword design of 12a is better than the seat's own. The grant covers every failing non-G9 module. Four SHOULD-FIX items **amend the ruling** and so go to a **cold addendum before any repair seat is briefed**:
+    - **SF-1:** ban a battery pair on a mock-config fixture. Check 2 gains this, helper H refuses it with a counterfactual self-test, and the reader-side admission goes to a lane.
+    - **SF-2:** rule `run_campaign.py:7848`, the AXI completion gate. Either add it to 12a (c) with a T12a-8 AXI row, or record why it is claim-bearing.
+    - **SF-3:** 12a (d) is already met. `claim_readiness_for` returns `ready_for_analysis` for mock campaigns, per main's documented contract. The refuter prefers (a): keep main's semantics, since the loader stays strict.
+    - **SF-4:** add a fence limiting the repair diff's test paths, because check 7's commit-to-commit fence cannot see the repair.
+    - Plus three NITs.
+51. **Wrap-up.** This activation stops here, so that **D-138 runs in a fresh turn** (runbook §4.4). No Codex seat, `claude -p` judge or subagent of this activation is still running; each finished and was harvested. The durable pointer is the RUN_STATE top block on `docs/2026-09-27-77b1bee2`.
