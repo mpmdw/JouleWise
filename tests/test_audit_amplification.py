@@ -17,7 +17,8 @@ from joulewise.adapters.powermetrics import (
     samples_from_raw_powermetrics,
 )
 from joulewise.clock import FakeClock
-from joulewise.cli import validate_bundle
+from joulewise.bundle_read import BundleReader
+from joulewise.cli import _strict_raw_to_trace_problems, validate_bundle
 from joulewise.controller import run_benchmark
 from joulewise.provenance import (
     prompt_provenance,
@@ -33,6 +34,10 @@ POWERMETRICS_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "powermetrics_sample.p
 LEGACY_ALLOWLIST_PAIR = (
     "example-mac-mlx-local__r1",
     "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
+)
+SPOOFED_LEGACY_BATTERY_PROBLEM = (
+    "strict: battery_float_evidence_missing: not_applicable not bound "
+    "(config.json digest does not match metadata.config_sha256)"
 )
 
 
@@ -150,17 +155,28 @@ class StrictGateInteractionAmplification(unittest.TestCase):
         self._rewrite_json(bundle / "metadata.json", metadata)
 
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
-            self.assertEqual(validate_bundle(bundle, strict=True), [])
+            self.assertEqual(
+                validate_bundle(bundle, strict=True),
+                [SPOOFED_LEGACY_BATTERY_PROBLEM],
+            )
 
     def test_legacy_summary_tolerance_does_not_hide_raw_to_trace_order_drift(self) -> None:
-        bundle = self._powermetrics_bundle("amp-pm-legacy-order")
+        bundle = self._mock_bundle("amp-legacy-order-spoof")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary.pop("summary_provenance")
-        summary.pop("uncertainty")
         self._rewrite_json(bundle / "summary_metrics.json", summary)
         metadata = json.loads((bundle / "metadata.json").read_text())
         metadata["run_id"], metadata["config_sha256"] = LEGACY_ALLOWLIST_PAIR
         self._rewrite_json(bundle / "metadata.json", metadata)
+
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            self.assertEqual(
+                validate_bundle(bundle, strict=True),
+                [SPOOFED_LEGACY_BATTERY_PROBLEM],
+            )
+
+    def test_legacy_raw_to_trace_order_drift_diagnostic_directly(self) -> None:
+        bundle = self._powermetrics_bundle("amp-pm-legacy-order-direct")
 
         rows = self._trace_rows(bundle)
         self.assertEqual(rows[1][3], "cpu_power")
@@ -168,8 +184,7 @@ class StrictGateInteractionAmplification(unittest.TestCase):
         rows[1], rows[2] = rows[2], rows[1]
         self._write_trace_rows(bundle, rows)
 
-        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
-            problems = validate_bundle(bundle, strict=True)
+        problems = _strict_raw_to_trace_problems(BundleReader(bundle))
         raw_problem = next((p for p in problems if "strict: raw-to-trace:" in p), None)
         self.assertIsNotNone(raw_problem, problems)
         assert raw_problem is not None
