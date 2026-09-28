@@ -1,0 +1,92 @@
+{
+  "reason": "issued by the D-138 transaction of epoch 25G83 under design ruling D138-25G83-DESIGN-01, after cold science gate SCI-25G83-CANDIDATE-01 (PROCEED TO ISSUANCE) and addenda SCI-25G83-CANDIDATE-01-A1 and -A2 (PROCEED); identity and publication approved by the owner on 2026-09-27 (activation d528efb2 record item 17)",
+  "required_verification": "complete: cold science gate SCI-25G83-CANDIDATE-01 over exclusions, per-night diagnostics, the screen-challenge outcome and the D-125 default; addenda A1 and A2; design ruling D138-25G83-DESIGN-01 and the gate of its section 9",
+  "network_time_provenance": {
+    "state": "on_during_both_capture_windows",
+    "disclosure_id": "D8",
+    "source_ruling": {
+      "relative_path": "docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md",
+      "file_sha256": "b35d072bb58f25eda711b6a0db1bbfc480781dd139cb144faa877d906391ba9c"
+    },
+    "text": "D8. Network time was ON during both capture windows. The macOS time daemon `timed` was correcting the wall clock from network time throughout W1 and W2 on 2026-09-27. Between 00:00–03:00 and 08:30–11:30 PDT the system log records 42 applied corrections: 8 of millisecond size (1.3 to 53.2 ms; one immediate step and seven gradual slews, 27 to 46 minutes apart, each also changing the clock's standing rate within ±7.5 parts per million) and 34 of microsecond size (under 0.1 ms). Four of the 12 excluded captures were lost to these corrections: W1-d08 (+53.2 ms step during the capture), W1-d11 (+4.39 ms slew during the capture), W2-d07 (−35.9 ms slew during the capture), and W1-d01 (a −1.26 ms slew applied 16 s before the capture, of which 0.47 ms was delivered during it). Of the 12 members, ten had no correction during the capture, and their wall clock followed a straight line against the monotonic clock to within 4 µs. Two were touched: W1-d12 (three slews of +23.5, +34.0 and +39.8 µs applied 28 s into the capture; the clock moved +40.1 µs) and W2-d01 (the tail, −11.6 µs, of a −45.3 µs slew applied 22 s before the capture). Both movements lie inside the 250 µs allowance that the clock method adds in full to every capture, and inside each capture's charged drift term. S and the level screen are unaffected, because the members that set them were untouched; C is 8.9 µs (0.05 %) smaller than it would be with the two movements removed. No registered requirement was breached: the registration, the runbook and the capture chain say nothing about network time, and the clock method requires network time OFF only of claim-bearing captures. This calibration was therefore derived with network time ON and will be applied to captures taken with network time OFF. That the two states give the same population of B is inferred from the clock readings and has not been measured. The candidate file carries no network-time provenance field; this disclosure is that provenance, per member. Evidence: `docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md`."
+  },
+  "issuance_record": {
+    "transaction": "D-138 issuance of epoch 25G83, design ruling D138-25G83-DESIGN-01",
+    "source_candidate": {
+      "relative_path": "docs/process_traces/2026-09-27-activation-77b1bee2/60-prepare-record/30-run1/candidate_acceptance_25g83.json",
+      "file_sha256": "dbad7cc782945691701c2ee11188179a61b333dbd0a5588b970636716554b5b2",
+      "derivation_sha256": "fac6e6f89e764dc4b00516d9a35f5d1c1eaca9821e76725f5f1fb66b5b206073"
+    },
+    "rulings": [
+      {
+        "id": "SCI-25G83-CANDIDATE-01",
+        "relative_path": "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/21-science-gate-ruling.md",
+        "file_sha256": "f9de51b7bf78307ca9239e6750bb13f30f67004483070544fee57c395331f4a4"
+      },
+      {
+        "id": "SCI-25G83-CANDIDATE-01-A1",
+        "relative_path": "docs/process_traces/2026-09-27-activation-77b1bee2/70-science-gate/31-addendum-ruling.md",
+        "file_sha256": "be13ccbae89d67fd7de55231cfbba9ac1d3ff289700fae77910389690fab9d3d"
+      },
+      {
+        "id": "SCI-25G83-CANDIDATE-01-A2",
+        "relative_path": "docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md",
+        "file_sha256": "b35d072bb58f25eda711b6a0db1bbfc480781dd139cb144faa877d906391ba9c"
+      }
+    ],
+    "disclosures": [
+      {
+        "id": "D1",
+        "text": "D1. Yield and causes. 12 of 24 captures are members. The 12 others: 8 stopped by the 165,000-cell work cap, and 4 lost to network-time corrections of the wall clock, of which 3 are recorded as a wall-clock movement above 5 ms during capture and 1 as an infeasible clock fit."
+      },
+      {
+        "id": "D2",
+        "text": "D2. The cap is mis-sized for this epoch. It was sized at ≈120 ms frames; this epoch runs at 128–130 ms and needs 144,037–170,965 cells. The cap excluded on cadence (r = +0.82), not on B (r = −0.05; p = 0.44). The corpus under-represents the longer-cadence group, 25 % against 45 %."
+      },
+      {
+        "id": "D3",
+        "text": "D3. Three exclusions carry an alignment reason other than the registered class. `wall_minus_monotonic_span_exceeded`, spans 52.0, 5.8 and 35.9 ms. They were excluded by the writer as `ordinary-invalid`, under the structural reading ruled in §2.4. The cause of the three movements is known: corrections applied by the time daemon with network time ON (D8). W1-d01, recorded under the registered class, has the same cause."
+      },
+      {
+        "id": "D4",
+        "text": "D4. Eight diagnostic B values exist for excluded captures (§2.3 table), computed by this gate with the cap lifted. Never members; disclosed design inputs for any successor."
+      },
+      {
+        "id": "D5",
+        "text": "D5. Tool repair. The issuing tool was repaired after capture and before any B was read (statement item 6(d) R9)."
+      },
+      {
+        "id": "D6",
+        "text": "D6. Known conditions. Display state unconstrained and unrecorded; battery gauge steps in both windows with no current flow; n = 12; predecessor-screen count 2."
+      },
+      {
+        "id": "D7",
+        "text": "D7. the cap stops a capture according to how much work the estimator needs, and that work rises with the length of the sampler's frames (r = +0.82, about 7,500 cells per millisecond). In a measurement window a stopped calibration capture abandons its bracket, so the measurements that survive are mostly those taken while the machine delivered shorter frames. Whether the workload's energy differs between those machine states has not been measured, and W1 and W2 cannot measure it. This bears on whether a reported energy is true."
+      },
+      {
+        "id": "D8",
+        "text": "D8. Network time was ON during both capture windows. The macOS time daemon `timed` was correcting the wall clock from network time throughout W1 and W2 on 2026-09-27. Between 00:00–03:00 and 08:30–11:30 PDT the system log records 42 applied corrections: 8 of millisecond size (1.3 to 53.2 ms; one immediate step and seven gradual slews, 27 to 46 minutes apart, each also changing the clock's standing rate within ±7.5 parts per million) and 34 of microsecond size (under 0.1 ms). Four of the 12 excluded captures were lost to these corrections: W1-d08 (+53.2 ms step during the capture), W1-d11 (+4.39 ms slew during the capture), W2-d07 (−35.9 ms slew during the capture), and W1-d01 (a −1.26 ms slew applied 16 s before the capture, of which 0.47 ms was delivered during it). Of the 12 members, ten had no correction during the capture, and their wall clock followed a straight line against the monotonic clock to within 4 µs. Two were touched: W1-d12 (three slews of +23.5, +34.0 and +39.8 µs applied 28 s into the capture; the clock moved +40.1 µs) and W2-d01 (the tail, −11.6 µs, of a −45.3 µs slew applied 22 s before the capture). Both movements lie inside the 250 µs allowance that the clock method adds in full to every capture, and inside each capture's charged drift term. S and the level screen are unaffected, because the members that set them were untouched; C is 8.9 µs (0.05 %) smaller than it would be with the two movements removed. No registered requirement was breached: the registration, the runbook and the capture chain say nothing about network time, and the clock method requires network time OFF only of claim-bearing captures. This calibration was therefore derived with network time ON and will be applied to captures taken with network time OFF. That the two states give the same population of B is inferred from the clock readings and has not been measured. The candidate file carries no network-time provenance field; this disclosure is that provenance, per member. Evidence: `docs/process_traces/2026-09-27-activation-d528efb2/40-sci-a2-network-time/21-ruling.md`."
+      }
+    ],
+    "holds": [
+      {
+        "id": "H1",
+        "text": "H1. No claim-bearing window is armed at 25G83 until a written ruling closes this question by route R or route M. The hold is written into the issuing transaction's record and into the arm material of every 25G83 window. Windows that carry no claim may run."
+      },
+      {
+        "id": "H5",
+        "text": "H5. Network time OFF for every window. Before any window at 25G83 is armed, claim-bearing or not, network time is set OFF before settle begins, by the set command above, and the command's arguments, exit status, exact output and time are saved in the window's custody. After the last capture network time is set back ON and that receipt is saved too. For claim-bearing windows this is the clock method's existing requirement. For non-claim windows it is new, for three reasons: with it ON one capture in six is lost to a cause one command removes; calibration captures should be taken in the state of the captures they will be applied to; and captures of unrecorded state cannot later be told apart. Setting the state from the arming session, outside the capture chain, satisfies H5 and changes no pinned file."
+      },
+      {
+        "id": "H6",
+        "text": "H6. Per-capture attestation from the log. For every capture of every window, the `timed` log is queried from 300 s before the capture's first paired reading to 1 s after its last, with `/usr/bin/log show --info --debug --style syslog --predicate 'process == \"timed\"'`, and the query, its output digest and the count of applied corrections (lines containing `cmd,apply,src,`, `ntp_adjtime` or `settimeofday`) are saved with the capture. The 300 s lead is required because a correction keeps moving the clock after its log line: at a decay of e per 16.5 s, a 53 ms correction takes 180 s to fall below 1 µs. The query may be run at harvest; the log was still complete 16 hours after W1. A capture with a count above zero, or with no readable log, is not a calibration member, not a bracket capture and not claim-bearing; it is recorded with its named reason. An output that lacks the log's column header is a failed query, not a clean one."
+      },
+      {
+        "id": "H7",
+        "text": "H7. First comparison of the two states. The first calibration captures taken with network time OFF at 25G83 are compared with the 12 members on two quantities, the drift term and B, and the comparison is reported with the first claim-bearing results. This measures what D8 says is inferred."
+      }
+    ],
+    "claim_eligible_meaning": "these bytes are an authentic issued calibration, and its numbers may serve as the timing-uncertainty basis of a reported result. It is a property of the file. It is not permission to start a window. Permission to start a claim-bearing window is separate; H1 withholds it, and H5 to H7 condition it.",
+    "hold_enforcement": "H1 is enforced outside these bytes, at the arm admission list; lifting it changes no byte of this file"
+  }
+}
