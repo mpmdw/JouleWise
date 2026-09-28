@@ -1,6 +1,6 @@
 # S1 round 3: pilots P-1, P-2, P-3 at the bench (lead, scratch, nothing committed)
 
-Activation d528efb2, 2026-09-28 ≈09:00–09:40 PDT. The pilots are ruled in addendum S1-REPAIR-ROUTE-01-A1 §5.3 (`83-coldgate-pilot-ruling.md`).
+Activation d528efb2, 2026-09-28 ≈08:10–08:50 PDT (corrected from a mistyped "09:00–09:40"). The pilots are ruled in addendum S1-REPAIR-ROUTE-01-A1 §5.3 (`83-coldgate-pilot-ruling.md`).
 
 **Setup:**
 - Scratch worktree `JouleWise-wt-s1bench-d528efb2`, detached at `f0766620` (seat H3's commit on `fix/2026-09-28-s1-r3-H3`).

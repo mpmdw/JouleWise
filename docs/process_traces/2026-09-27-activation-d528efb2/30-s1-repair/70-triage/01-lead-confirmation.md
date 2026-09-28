@@ -32,7 +32,7 @@ Activation d528efb2, 2026-09-28 ≈03:25 PDT. The script's proposal is `table-pr
 
 Then R3-3, the pilot: one each of T2, T4 (or "bind + pair"), and T5 in scratch, each with the planted "charging pair" turning it RED.
 
-## Confirmed at the bench, 2026-09-28 ≈09:45–10:30 PDT (activation d528efb2, items 120–121)
+## Confirmed at the bench, 2026-09-28 ≈08:50–09:00 PDT (corrected from a mistyped "09:45–10:30") (activation d528efb2, items 120–121)
 
 5. **T2 (29 test IDs, 33 outcomes): confirmed T2, none T3.** An AST scan of each test body finds no mention of mock telemetry, mock configs, `production_predicate`, exemption or `telemetry_claim_ineligible`. The ID list is `87-bench-rules/t2-ids.txt`.
 6. **T1, `test_floor_cpu_ledger_rejects_duplicates_reordering_mismatch_and_absence`: stays T1.** In scratch, the fixture's final bundle gets `run_id` plus `write_passing_pair`, and the test is GREEN. With the charging pair it is RED (`environment_admission_missing`; the floor's CPU-admission check does not admit a bundle whose pair fails).
