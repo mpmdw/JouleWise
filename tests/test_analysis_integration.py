@@ -2069,6 +2069,109 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(evidence.inclusion_status, "included")
         self.assertNotIn("config_hash_mismatch", evidence.base_reason_codes)
 
+    @staticmethod
+    def _real_identity_made_to_look_mock():
+        """The one permitted stand-in (ruling S1-REPAIR-ROUTE-01 §5.3).
+
+        It returns the real identity with ``config_backend_class`` set to
+        ``"mock"``; it can only make a real bundle look mock.
+        """
+        from dataclasses import replace
+        from joulewise.whole_window import custody_telemetry_identity
+
+        def looks_mock(*args, **kwargs):
+            return replace(
+                custody_telemetry_identity(*args, **kwargs),
+                config_backend_class="mock",
+            )
+
+        return looks_mock
+
+    def test_mock_barrier_sibling_registered_bundle_read_refuses_real_bundle_made_to_look_mock(
+        self,
+    ):
+        # Sibling for the mock barrier at the registered-bundle read of
+        # joulewise/analysis_engine/inputs.py (ruling §5.3). The bundle is the
+        # class corpus's produced bundle: physical config, pair, gate `pass`.
+        from joulewise.bundle_read import authenticate_window_members
+
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = manifest["entries"][0]
+        verdicts = authenticate_window_members(
+            ((target["run_id"], self.runs_root / target["run_id"]),)
+        )
+        self.assertEqual(verdicts[target["run_id"]].status, "pass")
+
+        real = load_analysis_inputs(
+            self.manifest_path,
+            self.runs_root,
+            self.floor_path,
+            strict_validator=validate_bundle,
+        )
+        self.assertNotIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            real.registered[target["entry_id"]].base_reason_codes,
+        )
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            side_effect=self._real_identity_made_to_look_mock(),
+        ):
+            looks_mock = load_analysis_inputs(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+        self.assertIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            looks_mock.registered[target["entry_id"]].base_reason_codes,
+        )
+
+    def test_mock_barrier_sibling_floor_member_read_refuses_real_bundle_made_to_look_mock(
+        self,
+    ):
+        # Sibling for the mock barrier at the floor-member read of
+        # joulewise/analysis_engine/inputs.py (ruling §5.3). The members are
+        # the class corpus's produced floor bundles: physical config, pair,
+        # gate `pass`.
+        from joulewise.bundle_read import authenticate_window_members
+
+        floor_artifact = json.loads(self.floor_path.read_text(encoding="utf-8"))
+        members = sorted(self.runs_root.glob("cell-1-*"))
+        self.assertTrue(members)
+        verdicts = authenticate_window_members(
+            (member.name, member) for member in members
+        )
+        self.assertEqual(
+            {verdict.status for verdict in verdicts.values()}, {"pass"}
+        )
+        roots = {"a10": self.runs_root, "window_c": self.runs_root}
+
+        real = bind_floor_artifact_evidence(
+            floor_artifact,
+            self.floor_path,
+            roots,
+            strict_validator=validate_bundle,
+        )
+        self.assertNotIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            real.problems_by_cell.get("cell-1", ()),
+        )
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            side_effect=self._real_identity_made_to_look_mock(),
+        ):
+            looks_mock = bind_floor_artifact_evidence(
+                floor_artifact,
+                self.floor_path,
+                roots,
+                strict_validator=validate_bundle,
+            )
+        self.assertIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            looks_mock.problems_by_cell["cell-1"],
+        )
+
     def test_real_controller_pinned_model_matches_canonical_bytes_and_is_included(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
