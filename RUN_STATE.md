@@ -19,7 +19,7 @@ file instead.
   - loader repair and promotion tool;
   - issued bytes `80c23036…351b` (input seal `e7363bdd…` unchanged);
   - the pin swap and the H1 hold in the arm admission list;
-  - the issuing record and draft decision **D-185**;
+  - the issuing record and the draft decision-log entry (numbered on that branch only);
   - fix round 1 (the mutation survivors).
 - **Gates so far:** the independent replay PASSED (Astra).
 - **STOPPED:** the hold refuter (Astra) and the contract refuter (Opus) each found an open route around H1. A manual no-pack campaign, and packs declaring R7/r6, are judged by the moved default. A cold design addendum **D138-25G83-DESIGN-01-A1** has been convened. It also rules on:
