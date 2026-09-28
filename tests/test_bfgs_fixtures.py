@@ -11,10 +11,12 @@ import unittest
 from joulewise import battery_float
 from joulewise.bundle import RunBundleWriter
 from joulewise.bundle_read import BundleReader, WindowBatteryRefusal, authenticate_window_members
+from joulewise.cli import validate_bundle
 from joulewise.clock import FakeClock
 from tests.bfgs_fixtures import (
     FIXTURES, injected_battery_runner, injected_battery_runner_at, rebind_config,
-    write_capture_evidence, write_charging_pair, write_passing_pair,
+    produce_strict_bundle, write_capture_evidence, write_charging_pair,
+    write_passing_pair,
 )
 from tests.test_bundle_read import load_config
 
@@ -119,6 +121,42 @@ class BfgsFixtureTests(unittest.TestCase):
                          runner(battery_float.IOREG_BATTERY_ARGV).stdout)
         with self.assertRaises(AssertionError):
             runner(("/usr/bin/true",))
+
+    def test_h8_produced_bundle_passes_gate_and_strict_validation(self) -> None:
+        bundle = produce_strict_bundle(self.root, "strict-h8")
+        self.assertEqual(authenticate_window_members((("member", bundle),))["member"].status,
+                         "pass")
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        self.assertEqual(set(metadata["battery_float"]), {"pre", "post"})
+
+    def test_h9_produced_bundle_with_charging_reading_is_confounded(self) -> None:
+        bundle = produce_strict_bundle(self.root, "strict-h9")
+        rebind_config(bundle)
+        write_charging_pair(bundle)
+        with self.assertRaises(WindowBatteryRefusal) as caught:
+            authenticate_window_members((("member", bundle),))
+        self.assertEqual(caught.exception.members[0]["label"], "member")
+        self.assertEqual(caught.exception.members[0]["status"],
+                         "battery_float_confounded")
+
+    def test_h10_missing_raw_powermetrics_refuses_strict_validation(self) -> None:
+        bundle = produce_strict_bundle(self.root, "strict-h10")
+        (bundle / "raw" / "powermetrics.plist").unlink()
+        self.assertTrue(validate_bundle(bundle, strict=True))
+
+    def test_h11_mock_mutation_refused_before_bundle_creation(self) -> None:
+        def set_mock(config):
+            config["hardware_target"]["telemetry_backend"] = "mock"
+
+        with self.assertRaisesRegex(ValueError, "^strict bundle on mock backend$"):
+            produce_strict_bundle(self.root, "strict-h11", mutate_config=set_mock)
+        self.assertFalse((self.root / "strict-h11").exists())
+
+    def test_h12_stale_reading_fails_the_controller_run(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "strict bundle run failed"):
+            produce_strict_bundle(self.root, "strict-h12",
+                                  clock_start=1790373526.0 + 3600)
 
     def test_h13_runner_at_rewrites_only_the_update_time_line(self) -> None:
         runner = injected_battery_runner_at(lambda: 1790568378.9)
