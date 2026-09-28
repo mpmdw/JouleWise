@@ -305,3 +305,8 @@ Launched by the watchdog at 17:36:30 PDT (attempt 124) after a usage back-off; t
     - **Bench:** `test_network_time_window`, `test_night_gate` and `test_arm_retry` are OK.
     - **Seat flag:** three 8 s watchdog timeouts in `test_run_night` BindSupervisionProcessTests. This is the known load-flake family, worse in the sandbox. The lead is running `test_run_night` outside the sandbox.
     - **Next:** review lenses and the full gate for N1 (measurement code, full tier), then merge. **After the merge no night launches until N2/N3 add their kinds.**
+104. **D-138 contract refuter 3 (Opus, fresh): REFUTER: DISSENT** ([report](50-d138-issuance-seat/refuters/contract-refuter-3-opus.md)). **B1:** four test files from main fail at `b953f4b0` (they pass at `9eab16f8` and `8458f797`), all fail-closed and not routes:
+    - `test_floor_mint_pinsets_schema:66`: the held id's screen is `None` by design;
+    - `test_validate_powermetrics_fiducial` ×2, `test_powermetrics_fiducial` ×2 cases and `test_calibration_exits` ×4: the identity seam rejects `--identity-epoch-json-for-test` without the test sampler.
+
+    Every cure edits a main test, so "is it weakening?" needs a ruling (§6.2's last row); the lead must not decide it. **SHOULD-FIX:** S1 C-5 misses registry-routed readers; S2 C-6 misses renamed pass sites; S3 P8 omits two §5.1 probes; S4 the tool accepts content substitutions; S5 the records state the superseded mechanism and digest. The transaction is already STOPPED pending Ed. These findings **raise the cost of option (b)**, so Ed gets a short correction.
